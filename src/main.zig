@@ -1,10 +1,13 @@
 const sdl3 = @import("sdl3");
 const std = @import("std");
 
+const time = @import("./time.zig");
+
 const screen_width: c_int = 800;
 const screen_height: c_int = 600;
 
 const fps = 60;
+const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
 const GameState = struct { text_textures: [60]*const sdl3.render.Texture };
 
@@ -12,12 +15,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    var text_buffer: [32]u8 = undefined;
-    const time: u32 = 35;
-    const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{time});
-
     const log_app = sdl3.log.Category.application;
-    try log_app.logInfo("{s}", .{x});
 
     try sdl3.init(.{ .video = true, .events = true });
     defer sdl3.quit(.{ .video = true, .events = true });
@@ -39,24 +37,26 @@ pub fn main() !void {
         frame_capper.mode = .{ .limited = fps };
     };
 
-    const font_path = "assets/fonts/Kenney Mini Square.ttf";
     var font = try sdl3.ttf.Font.init(font_path, 24);
     defer font.deinit();
 
-    try log_app.logInfo("Font properties: {}\n", .{try font.getProperties()});
-
     const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
-    // const yellow: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 0, .a = 255 };
-    // const cyan: sdl3.ttf.Color = .{ .r = 0, .g = 255, .b = 255, .a = 255 };
-    // const magenta: sdl3.ttf.Color = .{ .r = 255, .g = 0, .b = 255, .a = 255 };
-
-    const solid_texture = try textureFromSurface(renderer, try font.renderTextSolid(x, white));
-    defer solid_texture.deinit();
 
     var quit_app = false;
+    var counter = time.Counter.init(0.0);
+    var timer = time.Timer.init(30.0, null);
+    var text_buffer: [256]u8 = undefined;
     while (!quit_app) {
         const dt = frame_capper.delay();
-        _ = dt;
+        counter.update(dt);
+        var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{counter.get()});
+        const counter_texture = try textureFromSurface(renderer, try font.renderTextSolid(x, white));
+        defer counter_texture.deinit();
+
+        timer.update(dt);
+        x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{timer.get()});
+        const timer_texture = try textureFromSurface(renderer, try font.renderTextSolid(x, white));
+        defer timer_texture.deinit();
 
         while (sdl3.events.poll()) |event| {
             switch (event) {
@@ -69,6 +69,8 @@ pub fn main() !void {
                 .mouse_button_down => |mbutton| {
                     if (mbutton.button == .left) {
                         try log_app.logInfo("Mouse clicked!", .{});
+                        counter.set(0.0);
+                        timer.reset();
                     }
                 },
                 else => {},
@@ -81,8 +83,8 @@ pub fn main() !void {
 
         var y_pos: f32 = 10;
         const textures_to_render = [_]*const sdl3.render.Texture{
-            &solid_texture,
-            // &shaded_texture,
+            &counter_texture,
+            &timer_texture,
             // &blended_texture,
             // &styled_texture,
             // &outlined_texture,
