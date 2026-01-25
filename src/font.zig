@@ -1,3 +1,6 @@
+const sdl3 = @import("sdl3");
+
+pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
 // try log_app.logInfo("Font Family: {s}", .{font.getFamilyName()});
 // try log_app.logInfo("Font Style: {s}", .{font.getStyleName()});
