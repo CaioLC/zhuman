@@ -16,6 +16,22 @@ const log_app = sdl3.log.Category.application;
 const zfont = @import("./font.zig");
 const white = zfont.white;
 
+const Resources = struct {
+    quit_app: bool,
+    font: sdl3.ttf.Font,
+
+    pub fn init() !Resources {
+        return .{
+            .quit_app = false,
+            .font = try sdl3.ttf.Font.init(font_path, 24)
+        };
+    }
+
+    pub fn deinit(self: *Resources) void {
+        self.font.deinit();
+    }
+};
+
 const Objects = struct {
     counter: time.Counter,
     timer: time.Timer,
@@ -39,33 +55,31 @@ pub fn main() !void {
         frame_capper.mode = .{ .limited = fps };
     };
 
-    var font = try sdl3.ttf.Font.init(font_path, 24);
-    defer font.deinit();
-
-    var quit_app = false;
+    // Resources
+    var res = try Resources.init();
 
     // Objects
     const counter = time.Counter.init(0.0);
     const timer = time.Timer.init(30.0, null);
-    var objects: Objects = .{
+    var obj: Objects = .{
         .counter = counter,
         .timer = timer,
     };
 
-    while (!quit_app) {
-        try events(&quit_app, &objects);
-        try update(frame_capper.delay(), &objects);
-        try render(renderer, font, objects);
+    while (!res.quit_app) {
+        try events(&res, &obj);
+        try update(frame_capper.delay(), &obj);
+        try render(renderer, res, obj);
     }
 }
 
-fn events(quit_app: *bool, obj: *Objects) !void {
+fn events(res: *Resources, obj: *Objects) !void {
     while (sdl3.events.poll()) |event| {
         switch (event) {
-            .quit, .terminating => quit_app.* = true,
+            .quit, .terminating => res.quit_app = true,
             .key_down => |key| {
                 if (key.key == .escape) {
-                    quit_app.* = true;
+                    res.quit_app = true;
                 }
             },
             .mouse_button_down => |mbutton| {
@@ -85,31 +99,37 @@ fn update(dt: f32, obj: *Objects) !void {
     obj.timer.update(dt);
 }
 
-fn render(renderer: Renderer, font: sdl3.ttf.Font, obj: Objects) !void {
+fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
     var text_buffer: [256]u8 = undefined;
     var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{obj.counter.get()});
-    const counter_texture = try textureFromSurface(renderer, try font.renderTextSolid(x, white));
+    const counter_texture = try textureFromSurface(renderer, try res.font.renderTextSolid(x, white));
     defer counter_texture.deinit();
 
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
-    const timer_texture = try textureFromSurface(renderer, try font.renderTextSolid(x, white));
+    const timer_texture = try textureFromSurface(renderer, try res.font.renderTextSolid(x, white));
     defer timer_texture.deinit();
 
     // --- Rendering ---
     try renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
     try renderer.clear();
 
+    // You are in the dark
+    const energy_texture = try textureFromSurface(renderer, try res.font.renderTextSolid("You are in the dark", white));
+    defer energy_texture.deinit();
+    // You are hungry
+    const food_texture = try textureFromSurface(renderer, try res.font.renderTextSolid("You are hungry", white));
+    defer food_texture.deinit();
+    // You are alone
+    const humans_texture = try textureFromSurface(renderer, try res.font.renderTextSolid("You are alone", white));
+    defer humans_texture.deinit();
+
     var y_pos: f32 = 10;
     const textures_to_render = [_]*const sdl3.render.Texture{
         &counter_texture,
         &timer_texture,
-        // &blended_texture,
-        // &styled_texture,
-        // &outlined_texture,
-        // &outlined_miter_texture,
-        // &props_texture,
-        // &truncated_texture,
-        // &wrapped_texture,
+        &energy_texture,
+        &food_texture,
+        &humans_texture,
     };
     for (textures_to_render) |tex_ptr| {
         const tex = tex_ptr.*;
