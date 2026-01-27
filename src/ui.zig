@@ -1,0 +1,120 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const Anchor = enum {
+    top_left,
+    top_center,
+    top_right,
+    center_left,
+    center,
+    center_right,
+    bottom_left,
+    bottom_center,
+    bottom_right,
+};
+
+const Node = struct {
+    parent: ?*Node,
+    children: std.ArrayList(*Node),
+    width: f32,
+    height: f32,
+    anchor: Anchor,
+    global_x: ?f32,
+    global_y: ?f32,
+
+    fn init(
+        width: f32,
+        height: f32,
+        anchor: Anchor,
+    ) Node {
+        return .{
+            .parent = null,
+            .children = .{},
+            .width = width,
+            .height = height,
+            .anchor = anchor,
+            .global_x = null,
+            .global_y = null,
+        };
+    }
+
+    fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
+        child.parent = self;
+        try self.children.append(allocator, child);
+    }
+
+    fn deinit(self: *Node, allocator: std.mem.Allocator) void {
+        for (self.children.items) |child| {
+            child.deinit(allocator);
+        }
+        self.children.deinit(allocator);
+        self.allocator.destroy(self);
+    }
+
+    fn global_pos(self: *Node) void {
+        var pw: f32 = 0.0;
+        var ph: f32 = 0.0;
+        var px: f32 = 0.0;
+        var py: f32 = 0.0;
+        if (self.parent) |p| {
+            pw = p.width;
+            ph = p.height;
+            px = p.global_x orelse 0.0;
+            py = p.global_y orelse 0.0;
+        }
+
+        var x: f32 = 0;
+        var y: f32 = 0;
+
+        switch (self.anchor) {
+            .top_left => {},
+            .top_center => x = pw * 0.5 - self.width * 0.5,
+            .top_right => x = pw - self.width,
+            .center_left => y = ph * 0.5 - self.height * 0.5,
+            .center => {
+                x = pw * 0.5 - self.width * 0.5;
+                y = ph * 0.5 - self.height * 0.5;
+            },
+            .center_right => {
+                x = pw - self.width;
+                y = ph * 0.5 - self.height * 0.5;
+            },
+            .bottom_left => y = ph - self.height,
+            .bottom_center => {
+                x = pw * 0.5 - self.width * 0.5;
+                y = ph - self.height;
+            },
+            .bottom_right => {
+                x = pw - self.width;
+                y = ph - self.height;
+            },
+        }
+
+        self.global_x = px + x;
+        self.global_y = py + y;
+
+        for (self.children.items) |c| {
+            c.global_pos();
+        }
+    }
+};
+
+test "node tree layout" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var root = try allocator.create(Node);
+    root.* = Node.init(800, 600, .top_left);
+    root.global_x = 0;
+    root.global_y = 0;
+
+    const child = try allocator.create(Node);
+    child.* = Node.init(100, 50, .center);
+    try root.add_child(allocator, child);
+
+    root.global_pos();
+
+    try std.testing.expect(child.global_x.? == 350.0); // (800/2 - 100/2)
+    try std.testing.expect(child.global_y.? == 275.0); // (600/2 - 50/2)
+}

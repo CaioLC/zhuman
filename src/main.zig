@@ -1,8 +1,10 @@
+const std = @import("std");
+
 const sdl3 = @import("sdl3");
 const Renderer = sdl3.render.Renderer;
 
-const std = @import("std");
 const time = @import("./time.zig");
+const ui = @import("./ui.zig");
 
 const screen_width: c_int = 800;
 const screen_height: c_int = 600;
@@ -134,7 +136,8 @@ fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
     for (textures_to_render) |tex_ptr| {
         const tex = tex_ptr.*;
         const width, const height = try tex.getSize();
-        const dst = sdl3.rect.FRect{ .x = 10, .y = y_pos, .w = width, .h = height };
+        const center: f32 = @as(f32, screen_width) * 0.5 - width * 0.5;
+        const dst = sdl3.rect.FRect{ .x = center, .y = y_pos, .w = width, .h = height };
         try renderer.renderTexture(tex, null, dst);
         y_pos += height + 5;
     }
