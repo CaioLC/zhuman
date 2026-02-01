@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Anchor = enum {
+pub const Anchor = enum {
     top_left,
     top_center,
     top_right,
@@ -13,7 +13,7 @@ const Anchor = enum {
     bottom_right,
 };
 
-const Node = struct {
+pub const Node = struct {
     parent: ?*Node,
     children: std.ArrayList(*Node),
     width: f32,
@@ -22,7 +22,7 @@ const Node = struct {
     global_x: ?f32,
     global_y: ?f32,
 
-    fn init(
+    pub fn init(
         width: f32,
         height: f32,
         anchor: Anchor,
@@ -38,12 +38,12 @@ const Node = struct {
         };
     }
 
-    fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
+    pub fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
         child.parent = self;
         try self.children.append(allocator, child);
     }
 
-    fn deinit(self: *Node, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Node, allocator: Allocator) void {
         for (self.children.items) |child| {
             child.deinit(allocator);
         }
@@ -51,7 +51,7 @@ const Node = struct {
         self.allocator.destroy(self);
     }
 
-    fn global_pos(self: *Node) void {
+    pub fn set_global_pos(self: *Node) void {
         var pw: f32 = 0.0;
         var ph: f32 = 0.0;
         var px: f32 = 0.0;
@@ -94,7 +94,14 @@ const Node = struct {
         self.global_y = py + y;
 
         for (self.children.items) |c| {
-            c.global_pos();
+            c.set_global_pos();
+        }
+    }
+
+    pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
+        try list.append(allocator, self);
+        for (self.children.items) |child| {
+            try child.collect(allocator, list);
         }
     }
 };
@@ -113,8 +120,15 @@ test "node tree layout" {
     child.* = Node.init(100, 50, .center);
     try root.add_child(allocator, child);
 
-    root.global_pos();
+    const child2 = try allocator.create(Node);
+    child2.* = Node.init(100, 50, .bottom_center);
+    try root.add_child(allocator, child2);
+
+    root.set_global_pos();
 
     try std.testing.expect(child.global_x.? == 350.0); // (800/2 - 100/2)
     try std.testing.expect(child.global_y.? == 275.0); // (600/2 - 50/2)
+
+    try std.testing.expect(child2.global_x.? == 350.0); // (800/2 - 100/2)
+    try std.testing.expect(child2.global_y.? == 550.0); // (600/2 - 50/2)
 }

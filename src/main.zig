@@ -129,9 +129,9 @@ fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
     const textures_to_render = [_]*const sdl3.render.Texture{
         &counter_texture,
         &timer_texture,
-        &energy_texture,
-        &food_texture,
-        &humans_texture,
+        // &energy_texture,
+        // &food_texture,
+        // &humans_texture,
     };
     for (textures_to_render) |tex_ptr| {
         const tex = tex_ptr.*;
@@ -140,6 +140,30 @@ fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
         const dst = sdl3.rect.FRect{ .x = center, .y = y_pos, .w = width, .h = height };
         try renderer.renderTexture(tex, null, dst);
         y_pos += height + 5;
+    }
+
+    var buf: [32*@sizeOf(*ui.Node)]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
+    const allocator = fba.allocator();
+
+    var node_stack: std.ArrayList(*ui.Node) = .empty;
+
+    var node_tree = ui.Node.init(screen_width, screen_height, .top_left);
+    const e_w, const e_h = try energy_texture.getSize();
+    var energy_node = ui.Node.init(e_w, e_h, .bottom_right);
+    
+    try node_tree.add_child(allocator, &energy_node);
+    node_tree.set_global_pos();
+    try node_tree.collect(allocator, &node_stack);
+    for (node_stack.items) |node| {
+        const dst = sdl3.rect.FRect{
+            .x = node.global_x.?,
+            .y = node.global_y.?,
+            .h = node.height,
+            .w = node.width,
+        };
+        try renderer.renderTexture(energy_texture, null, dst);
+
     }
 
     try renderer.present();
