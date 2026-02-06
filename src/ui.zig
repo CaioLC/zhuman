@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const sdl3 = @import("sdl3");
+
 pub const Anchor = enum {
     top_left,
     top_center,
@@ -22,19 +24,24 @@ pub const Node = struct {
     global_x: ?f32,
     global_y: ?f32,
 
+    // Attributes
+    surface: ?sdl3.surface.Surface,
+
     pub fn init(
+        allocator: Allocator,
         width: f32,
         height: f32,
         anchor: Anchor,
-    ) Node {
+    ) !Node {
         return .{
             .parent = null,
-            .children = .{},
+            .children = try .initCapacity(allocator, 0),
             .width = width,
             .height = height,
             .anchor = anchor,
             .global_x = null,
             .global_y = null,
+            .surface = null,
         };
     }
 
@@ -43,12 +50,15 @@ pub const Node = struct {
         try self.children.append(allocator, child);
     }
 
+    /// NOTE: doing this recursively gives a segmentation fault.
+    /// should be fixed if we have nested nodes
     pub fn deinit(self: *Node, allocator: Allocator) void {
         for (self.children.items) |child| {
+            std.log.debug("child free", .{});
             child.deinit(allocator);
+            allocator.destroy(child);
         }
-        self.children.deinit(allocator);
-        self.allocator.destroy(self);
+        self.children.clearAndFree(allocator);
     }
 
     pub fn set_global_pos(self: *Node) void {
