@@ -99,6 +99,8 @@ fn events(res: *Resources, obj: *Objects) !void {
             .window_resized => |e| {
                 res.screen_height = e.height;
                 res.screen_width = e.width;
+                res.ui_root.?.height = @floatFromInt(e.height);
+                res.ui_root.?.width = @floatFromInt(e.width);
             },
             .key_down => |key| {
                 if (key.key == .escape) {
@@ -119,23 +121,39 @@ fn events(res: *Resources, obj: *Objects) !void {
 
 fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Node {
     const root = try allocator.create(ui.Node);
-    root.* = try ui.Node.init(allocator, screen_width, screen_height, .top_left);
+    root.* = try ui.Node.init(allocator, "root", screen_width, screen_height, .top_left);
 
     // Counter
     var text_buffer: [256]u8 = undefined;
-    const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{obj.counter.get()});
-    const surface = try res.font.renderTextSolid(x, white);
+    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
+    const counter_surface = try res.font.renderTextSolid(x, white);
     const surf_node = try allocator.create(ui.Node);
     surf_node.* = try ui.Node.init(
         allocator,
-        @floatFromInt(surface.getWidth()),
-        @floatFromInt(surface.getHeight()),
-        .bottom_right,
+        "cntr",
+        @floatFromInt(counter_surface.getWidth()),
+        @floatFromInt(counter_surface.getHeight()),
+        .center,
     );
-    surf_node.surface = surface;
+    surf_node.surface = counter_surface;
     try root.add_child(allocator, surf_node);
-    for (root.children.items, 0..) |_, i| {
-        std.log.debug("children {}", .{i});
+
+    // Timer
+    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
+    const timer_surface = try res.font.renderTextSolid(x, white);
+    const timer_node = try allocator.create(ui.Node);
+    timer_node.* = try ui.Node.init(
+        allocator,
+        "timr",
+        @floatFromInt(timer_surface.getWidth()),
+        @floatFromInt(timer_surface.getHeight()),
+        .center,
+    );
+    timer_node.surface = timer_surface;
+    try root.add_child(allocator, timer_node);
+
+    for (root.children.items, 0..) |child, i| {
+        std.log.debug("{}: {s}", .{i, child.id});
     }
 
     return root;
@@ -147,22 +165,24 @@ fn update(dt: f32, obj: *Objects) !void {
 }
 
 // build UI elements
-fn update_ui(_: std.mem.Allocator, res: *Resources, _: Objects) !void {
+fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
     if (res.ui_root) |root| {
         root.set_global_pos();
+
+        // update surface text
+        if (root.get_id("cntr")) |counter| {
+            counter.surface.?.deinit();
+            var text_buffer: [256]u8 = undefined;
+            const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
+            const surface = try res.font.renderTextSolid(x, white);
+            counter.surface = surface;
+            counter.width = @floatFromInt(surface.getWidth());
+            counter.height = @floatFromInt(surface.getHeight());
+        }
     }
 }
 
-fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
-    var text_buffer: [256]u8 = undefined;
-    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{obj.counter.get()});
-    const counter_texture = try renderer.createTextureFromSurface(try res.font.renderTextSolid(x, white));
-    defer counter_texture.deinit();
-
-    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
-    const timer_texture = try renderer.createTextureFromSurface(try res.font.renderTextSolid(x, white));
-    defer timer_texture.deinit();
-
+fn render(renderer: Renderer, res: Resources, _: Objects) !void {
     // --- Rendering ---
     try renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
     try renderer.clear();
@@ -176,23 +196,6 @@ fn render(renderer: Renderer, res: Resources, obj: Objects) !void {
     // You are alone
     const humans_texture = try renderer.createTextureFromSurface(try res.font.renderTextSolid("You are alone", white));
     defer humans_texture.deinit();
-
-    var y_pos: f32 = 10;
-    const textures_to_render = [_]*const sdl3.render.Texture{
-        &counter_texture,
-        &timer_texture,
-        // &energy_texture,
-        // &food_texture,
-        // &humans_texture,
-    };
-    for (textures_to_render) |tex_ptr| {
-        const tex = tex_ptr.*;
-        const width, const height = try tex.getSize();
-        const center: f32 = @as(f32, screen_width) * 0.5 - width * 0.5;
-        const dst = sdl3.rect.FRect{ .x = center, .y = y_pos, .w = width, .h = height };
-        try renderer.renderTexture(tex, null, dst);
-        y_pos += height + 5;
-    }
 
     if (res.ui_root) |root| {
         var buf: [@sizeOf(*ui.Node) * 256]u8 = undefined;

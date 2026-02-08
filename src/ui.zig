@@ -23,17 +23,20 @@ pub const Node = struct {
     anchor: Anchor,
     global_x: ?f32,
     global_y: ?f32,
+    id: *const[4:0]u8,
 
     // Attributes
     surface: ?sdl3.surface.Surface,
 
     pub fn init(
         allocator: Allocator,
+        id: *const[4:0]u8,
         width: f32,
         height: f32,
         anchor: Anchor,
     ) !Node {
         return .{
+            .id = id,
             .parent = null,
             .children = try .initCapacity(allocator, 0),
             .width = width,
@@ -113,6 +116,18 @@ pub const Node = struct {
         for (self.children.items) |child| {
             try child.collect(allocator, list);
         }
+    }
+
+    pub fn get_id(self: *Node, id: *const [4:0]u8) ?*Node {
+        if (std.mem.eql(u8, self.id, id)) {
+            return self;
+        }
+        for (self.children.items) |child| {
+            if (child.get_id(id)) |found| {
+                return found;
+            }
+        }
+        return null;
     }
 };
 
