@@ -3,25 +3,6 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    // const linkage = b.option(
-    //     std.builtin.LinkMode,
-    //     "linkage",
-    //     "`.static` or `.dynamic` (default is `.dynamic`)",
-    // ) orelse .dynamic;
-
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // My lib
-    const ha_mod = b.addModule("human_action", .{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe_mod.addImport("ha", ha_mod);
 
     // SDL dependency
     const sdl3 = b.dependency("sdl3", .{
@@ -60,7 +41,23 @@ pub fn build(b: *std.Build) void {
         // .image_enable_xpm = true,
         // .image_enable_xv = true,
     });
-    exe_mod.addImport("sdl3", sdl3.module("sdl3"));
+
+    // My lib
+    const ha_mod = b.addModule("human_action", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ha_mod.addImport("sdl3", sdl3.module("sdl3"));
+
+    // Executable
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe_mod.addImport("ha", ha_mod);
 
     // Build for desktop.
     const exe = b.addExecutable(.{

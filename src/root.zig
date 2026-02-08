@@ -2,6 +2,7 @@
 comptime {
     // This will ensure that the file 'api.zig' is always discovered (as long as this file is discovered).
     // It is useful if 'api.zig' contains important exported declarations.
+    _ = @import("sdl3");
     _ = @import("./ui.zig");
 }
 const std = @import("std");

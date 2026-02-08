@@ -137,16 +137,16 @@ test "node tree layout" {
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = Node.init(800, 600, .top_left);
+    root.* = try Node.init(allocator, "root", 800, 600, .top_left);
     root.global_x = 0;
     root.global_y = 0;
 
     const child = try allocator.create(Node);
-    child.* = Node.init(100, 50, .center);
+    child.* = try Node.init(allocator, "chd1", 100, 50, .center);
     try root.add_child(allocator, child);
 
     const child2 = try allocator.create(Node);
-    child2.* = Node.init(100, 50, .bottom_center);
+    child2.* = try Node.init(allocator, "chd2", 100, 50, .bottom_center);
     try root.add_child(allocator, child2);
 
     root.set_global_pos();
