@@ -3,6 +3,11 @@ const Allocator = std.mem.Allocator;
 
 const sdl3 = @import("sdl3");
 
+pub const Placement = struct {
+    anchor: Anchor,
+    alignment: Alignment,
+};
+
 pub const Anchor = enum {
     top_left,
     top_center,
@@ -15,36 +20,44 @@ pub const Anchor = enum {
     bottom_right,
 };
 
+pub const Alignment = enum {
+    self,
+    parent,
+};
+
 pub const Node = struct {
+    id: *const[4:0]u8,
     parent: ?*Node,
-    children: std.ArrayList(*Node),
+    placement: Placement,
     width: f32,
     height: f32,
-    anchor: Anchor,
-    global_x: ?f32,
-    global_y: ?f32,
-    id: *const[4:0]u8,
+    _global_x: ?f32,
+    _global_y: ?f32,
+    _children_indep: std.ArrayList(*Node),
+    _children_dep: std.ArrayList(*Node),
 
     // Attributes
     surface: ?sdl3.surface.Surface,
 
     pub fn init(
         allocator: Allocator,
-        id: *const[4:0]u8,
+        id: []const u8,
+        placement: Placement,
         width: f32,
         height: f32,
-        anchor: Anchor,
+        surface: ?sdl3.surface.Surface,
     ) !Node {
         return .{
             .id = id,
             .parent = null,
-            .children = try .initCapacity(allocator, 0),
+            .placement = placement,
             .width = width,
             .height = height,
-            .anchor = anchor,
-            .global_x = null,
-            .global_y = null,
-            .surface = null,
+            .surface = surface,
+            ._global_x = null,
+            ._global_y = null,
+            ._children_indep = try .init_with_capacity(allocator),
+            ._children_dep = try .init_with_capacity(allocator),
         };
     }
 

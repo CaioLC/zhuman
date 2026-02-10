@@ -119,6 +119,21 @@ fn events(res: *Resources, obj: *Objects) !void {
     }
 }
 
+fn text_node(allocator: Allocator,) !Node {
+    var text_buffer: [256]u8 = undefined;
+    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
+    const counter_surface = try res.font.renderTextSolid(x, white);
+    const surf_node = try allocator.create(ui.Node);
+    surf_node.* = try ui.Node.init(
+        allocator,
+        "cntr",
+        @floatFromInt(counter_surface.getWidth()),
+        @floatFromInt(counter_surface.getHeight()),
+        .center,
+    );
+    surf_node.surface = counter_surface;
+}
+
 fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Node {
     const root = try allocator.create(ui.Node);
     root.* = try ui.Node.init(allocator, "root", screen_width, screen_height, .top_left);
