@@ -119,29 +119,28 @@ fn events(res: *Resources, obj: *Objects) !void {
     }
 }
 
-
-        // allocator: Allocator,
-        // id: []const u8,
-        // placement: Placement,
-        // width: f32,
-        // height: f32,
-        // surface: ?sdl3.surface.Surface,
-
+// allocator: Allocator,
+// id: []const u8,
+// placement: Placement,
+// width: f32,
+// height: f32,
+// surface: ?sdl3.surface.Surface,
 
 fn text_node(
-    allocator: Allocator,
+    allocator: std.mem.Allocator,
+    res: Resources,
     id: []const u8,
     text: []const u8,
     placement: ui.Placement,
-) !*Node {
-    const surface = try res.font.renderTextSolid(x, white);
+) !*ui.Node {
+    const surface = try res.font.renderTextSolid(text, white);
     const node = try allocator.create(ui.Node);
     node.* = try ui.Node.init(
         allocator,
         id,
         placement,
-        @floatFromInt(counter_surface.getWidth()),
-        @floatFromInt(counter_surface.getHeight()),
+        @floatFromInt(surface.getWidth()),
+        @floatFromInt(surface.getHeight()),
         surface,
     );
     return node;
@@ -149,39 +148,46 @@ fn text_node(
 
 fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Node {
     const root = try allocator.create(ui.Node);
-    root.* = try ui.Node.init(allocator, "root", screen_width, screen_height, .top_left);
+    root.* = try ui.Node.init(
+        allocator,
+        "root",
+        .{ .alignment = .self, .anchor = .top_left },
+        screen_width,
+        screen_height,
+        null,
+    );
 
     // Counter
     var text_buffer: [256]u8 = undefined;
-    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
-    const counter_surface = try res.font.renderTextSolid(x, white);
-    const surf_node = try allocator.create(ui.Node);
-    surf_node.* = try ui.Node.init(
+    const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
+    const surf_node = try text_node(
         allocator,
+        res,
         "cntr",
-        @floatFromInt(counter_surface.getWidth()),
-        @floatFromInt(counter_surface.getHeight()),
-        .center,
+        x,
+        .{ .alignment = .self, .anchor = .center },
     );
-    surf_node.surface = counter_surface;
     try root.add_child(allocator, surf_node);
 
     // Timer
-    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
-    const timer_surface = try res.font.renderTextSolid(x, white);
-    const timer_node = try allocator.create(ui.Node);
-    timer_node.* = try ui.Node.init(
-        allocator,
-        "timr",
-        @floatFromInt(timer_surface.getWidth()),
-        @floatFromInt(timer_surface.getHeight()),
-        .center,
-    );
-    timer_node.surface = timer_surface;
-    try root.add_child(allocator, timer_node);
+    // x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
+    // const timer_surface = try res.font.renderTextSolid(x, white);
+    // const timer_node = try allocator.create(ui.Node);
+    // timer_node.* = try ui.Node.init(
+    //     allocator,
+    //     "timr",
+    //     @floatFromInt(timer_surface.getWidth()),
+    //     @floatFromInt(timer_surface.getHeight()),
+    //     .center,
+    // );
+    // timer_node.surface = timer_surface;
+    // try root.add_child(allocator, timer_node);
 
-    for (root.children.items, 0..) |child, i| {
-        std.log.debug("{}: {s}", .{i, child.id});
+    for (root._children_indep.items, 0..) |child, i| {
+        std.log.debug("Indep Node {}: {s}", .{ i, child.id });
+    }
+    for (root._children_dep.items, 0..) |child, i| {
+        std.log.debug("Dep {}: {s}", .{ i, child.id });
     }
 
     return root;
@@ -231,12 +237,12 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
         const allocator = bfa.allocator();
         var node_stack: std.ArrayList(*ui.Node) = .empty;
         defer node_stack.clearRetainingCapacity();
-        try root.collect(allocator, &node_stack);
+        try root.collect_independent(allocator, &node_stack);
 
         for (node_stack.items) |node| {
             const dst = sdl.rect.FRect{
-                .x = node.global_x.?,
-                .y = node.global_y.?,
+                .x = node._global_x.?,
+                .y = node._global_y.?,
                 .h = node.height,
                 .w = node.width,
             };
