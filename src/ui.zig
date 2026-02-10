@@ -69,8 +69,6 @@ pub const Node = struct {
         }
     }
 
-    /// NOTE: doing this recursively gives a segmentation fault.
-    /// should be fixed if we have nested nodes
     pub fn deinit(self: *Node, allocator: Allocator) void {
         for (self._children_indep.items) |child| {
             std.log.debug("child free", .{});
@@ -86,7 +84,7 @@ pub const Node = struct {
         self._children_dep.clearAndFree(allocator);
     }
 
-    pub fn set_global_pos(self: *Node) void {
+    pub fn set_global_pos(self: *Node, index: ?usize) !void {
         var pw: f32 = 0.0;
         var ph: f32 = 0.0;
         var px: f32 = 0.0;
@@ -98,6 +96,26 @@ pub const Node = struct {
             py = p._global_y orelse 0.0;
         }
 
+        const x, const y = switch (self.placement.alignment) {
+            .self => self.set_indep_global_pos(pw, ph),
+            .parent => blk: {
+                const idx = index orelse return error.NoIndexForParentAlignment;
+                break :blk try self.set_dep_global_pos(idx, pw, ph);
+            },
+        };
+
+        self._global_x = px + x;
+        self._global_y = py + y;
+
+        for (self._children_indep.items) |c| {
+            try c.set_global_pos(null);
+        }
+        for (self._children_dep.items, 0..) |c, idx| {
+            try c.set_global_pos(idx);
+        }
+    }
+
+    fn set_indep_global_pos(self: Node, pw: f32, ph: f32) struct { f32, f32 } {
         var x: f32 = 0;
         var y: f32 = 0;
 
@@ -124,12 +142,49 @@ pub const Node = struct {
                 y = ph - self.height;
             },
         }
+        return .{ x, y };
+    }
 
-        self._global_x = px + x;
-        self._global_y = py + y;
+    fn set_dep_global_pos(self: Node, idx: usize, _: f32, _: f32) !struct { f32, f32 } {
+        const p = self.parent orelse return error.NoParent;
+        var x: f32 = 0.0;
+        const y: f32 = 0.0;
+        var sib_x: f32 = 0.0;
+        var sib_y: f32 = 0.0;
+        var sib_wid: f32 = 0.0;
+        var sib_hei: f32 = 0.0;
+        if (idx != 0) {
+            const sibling = p._children_dep.items[idx - 1];
+            sib_x = sibling._global_x.?;
+            sib_y = sibling._global_y.?;
+            sib_wid = sibling.width;
+            sib_hei = sibling.height;
+        }
 
-        for (self._children_indep.items) |c| {
-            c.set_global_pos();
+        switch (self.placement.anchor) {
+            .top_left => x = sib_x + sib_wid,
+            .top_center => {},
+            .top_right => {},
+            .center_left => {},
+            .center => {},
+            .center_right => {},
+            .bottom_left => {},
+            .bottom_center => {},
+            .bottom_right => {},
+        }
+        return .{ x, y };
+    }
+    // fn set_dep_nodes_global_pos(self: Node, pw: *f32, ph: *f32, x: *f32, y: *f32) void {}
+    pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
+        try list.append(allocator, self);
+        try self.collect_independent(allocator, list);
+        try self.collect_dependent(allocator, list);
+    }
+
+    pub fn collect_dependent(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
+        try list.append(allocator, self);
+        for (self._children_dep.items) |child| {
+            try child.collect_dependent(allocator, list);
         }
     }
 

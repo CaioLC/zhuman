@@ -84,10 +84,10 @@ pub fn main() !void {
     const ui_root = try setup_ui(allocator, res, obj);
     res.ui_root = ui_root;
 
+    try update_ui(allocator, &res, obj);
     while (!res.quit_app) {
         try events(&res, &obj);
         try update(frame_capper.delay(), &obj);
-        try update_ui(allocator, &res, obj);
         try render(renderer, res, obj);
     }
 }
@@ -159,29 +159,26 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
 
     // Counter
     var text_buffer: [256]u8 = undefined;
-    const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
+    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
     const surf_node = try text_node(
         allocator,
         res,
         "cntr",
         x,
-        .{ .alignment = .self, .anchor = .center },
+        .{ .alignment = .parent, .anchor = .top_left },
     );
     try root.add_child(allocator, surf_node);
 
     // Timer
-    // x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
-    // const timer_surface = try res.font.renderTextSolid(x, white);
-    // const timer_node = try allocator.create(ui.Node);
-    // timer_node.* = try ui.Node.init(
-    //     allocator,
-    //     "timr",
-    //     @floatFromInt(timer_surface.getWidth()),
-    //     @floatFromInt(timer_surface.getHeight()),
-    //     .center,
-    // );
-    // timer_node.surface = timer_surface;
-    // try root.add_child(allocator, timer_node);
+    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
+    const timer_node = try text_node(
+        allocator,
+        res,
+        "timr",
+        "Timer template",
+        .{ .alignment = .parent, .anchor = .top_left },
+    );
+    try root.add_child(allocator, timer_node);
 
     for (root._children_indep.items, 0..) |child, i| {
         std.log.debug("Indep Node {}: {s}", .{ i, child.id });
@@ -198,10 +195,11 @@ fn update(dt: f32, obj: *Objects) !void {
     obj.timer.update(dt);
 }
 
-// build UI elements
 fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
+    // build UI elements
     if (res.ui_root) |root| {
-        root.set_global_pos();
+        try root.set_global_pos(null);
+        std.log.debug("root X: {}, root Y: {}", .{ root._global_x.?, root._global_y.? });
 
         // update surface text
         if (root.get_id("cntr")) |counter| {
@@ -212,6 +210,10 @@ fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
             counter.surface = surface;
             counter.width = @floatFromInt(surface.getWidth());
             counter.height = @floatFromInt(surface.getHeight());
+            std.log.debug("counter X: {}, counter Y: {}", .{ counter._global_x.?, counter._global_y.? });
+        }
+        if (root.get_id("timr")) |timer| {
+            std.log.debug("timer X: {}, timer Y: {}", .{ timer._global_x.?, timer._global_y.? });
         }
     }
 }
@@ -237,7 +239,7 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
         const allocator = bfa.allocator();
         var node_stack: std.ArrayList(*ui.Node) = .empty;
         defer node_stack.clearRetainingCapacity();
-        try root.collect_independent(allocator, &node_stack);
+        try root.collect(allocator, &node_stack);
 
         for (node_stack.items) |node| {
             const dst = sdl.rect.FRect{
