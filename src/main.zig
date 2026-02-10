@@ -119,19 +119,32 @@ fn events(res: *Resources, obj: *Objects) !void {
     }
 }
 
-fn text_node(allocator: Allocator,) !Node {
-    var text_buffer: [256]u8 = undefined;
-    var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
-    const counter_surface = try res.font.renderTextSolid(x, white);
-    const surf_node = try allocator.create(ui.Node);
-    surf_node.* = try ui.Node.init(
+
+        // allocator: Allocator,
+        // id: []const u8,
+        // placement: Placement,
+        // width: f32,
+        // height: f32,
+        // surface: ?sdl3.surface.Surface,
+
+
+fn text_node(
+    allocator: Allocator,
+    id: []const u8,
+    text: []const u8,
+    placement: ui.Placement,
+) !*Node {
+    const surface = try res.font.renderTextSolid(x, white);
+    const node = try allocator.create(ui.Node);
+    node.* = try ui.Node.init(
         allocator,
-        "cntr",
+        id,
+        placement,
         @floatFromInt(counter_surface.getWidth()),
         @floatFromInt(counter_surface.getHeight()),
-        .center,
+        surface,
     );
-    surf_node.surface = counter_surface;
+    return node;
 }
 
 fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Node {
