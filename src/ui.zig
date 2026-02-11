@@ -1,11 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
 const sdl3 = @import("sdl3");
 
-pub const Placement = struct {
-    anchor: Anchor,
-    alignment: Alignment,
+pub const ChildrenPosInfo = struct {
+    x_offset: f32,
+    y_offset: f32,
 };
 
 pub const Anchor = enum {
@@ -18,10 +17,10 @@ pub const Anchor = enum {
     bottom_left,
     bottom_center,
     bottom_right,
+    relative,
 };
 
-pub const Alignment = enum {
-    absolute,
+pub const ChildrenAlign = enum {
     horizontal,
     horizontal_wrapped,
     horizontal_reverse,
@@ -39,7 +38,8 @@ pub const Alignment = enum {
 pub const Node = struct {
     id: []const u8,
     parent: ?*Node,
-    placement: Placement,
+    anchor: Anchor,
+    children_align: ChildrenAlign,
     width: f32,
     height: f32,
     _global_x: ?f32,
@@ -53,15 +53,18 @@ pub const Node = struct {
     pub fn init(
         allocator: Allocator,
         id: []const u8,
-        placement: Placement,
+        anchor: Anchor,
+        children_align: ?ChildrenAlign,
         width: f32,
         height: f32,
         surface: ?sdl3.surface.Surface,
     ) !Node {
+        const ch_align = children_align orelse ChildrenAlign.horizontal;
         return .{
             .id = id,
             .parent = null,
-            .placement = placement,
+            .anchor = anchor,
+            .children_align = ch_align,
             .width = width,
             .height = height,
             .surface = surface,
@@ -74,10 +77,10 @@ pub const Node = struct {
 
     pub fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
         child.parent = self;
-        if (child.placement.alignment == .absolute) {
-            try self._children_indep.append(allocator, child);
-        } else {
+        if (child.anchor == .relative) {
             try self._children_dep.append(allocator, child);
+        } else {
+            try self._children_indep.append(allocator, child);
         }
     }
 
@@ -96,7 +99,8 @@ pub const Node = struct {
         self._children_dep.clearAndFree(allocator);
     }
 
-    pub fn set_global_pos(self: *Node, index: ?usize) !void {
+    pub fn set_global_pos(self: *Node, children_info: ?ChildrenPosInfo) !void {
+        // set position for self
         var pw: f32 = 0.0;
         var ph: f32 = 0.0;
         var px: f32 = 0.0;
@@ -109,21 +113,47 @@ pub const Node = struct {
         }
 
         var x: f32, var y: f32 = .{ undefined, undefined };
-        if (self.placement.alignment == .absolute) {
+        if (self.anchor != .relative) {
             x, y = self.set_indep_global_pos(pw, ph);
         } else {
-            const idx = index orelse return error.NoIndexForParentAlignment;
-            x, y = try self.set_dep_global_pos(idx, pw, ph);
+            const my_offsets = children_info orelse return error.NoInfoForChildren;
+            x = my_offsets.x_offset;
+            y = my_offsets.y_offset;
         }
 
         self._global_x = px + x;
         self._global_y = py + y;
 
+        // set position for children
+        // independent children is simple
         for (self._children_indep.items) |c| {
             try c.set_global_pos(null);
         }
-        for (self._children_dep.items, 0..) |c, idx| {
-            try c.set_global_pos(idx);
+
+        // dependent children have position defined at parent level and just accept it
+        if (self._children_dep.items.len > 0) {
+            var x_offset: f32 = 0.0;
+            var y_offset: f32 = 0.0;
+            for (self._children_dep.items) |c| {
+                switch (self.children_align) {
+                    .horizontal => {
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
+                        y_offset = 0.0;
+                        x_offset += c.width;
+                    },
+                    .horizontal_wrapped => {},
+                    .horizontal_reverse => {},
+                    .horizontal_reverse_wrapped => {},
+                    .vertical => {},
+                    .vertical_wrapped => {},
+                    .vertical_reverse => {},
+                    .vertical_reverse_wrapped => {},
+                    .centered => {},
+                    .centered_wrapped => {},
+                    .centered_expand => {},
+                    .centered_expand_wrapped => {},
+                }
+            }
         }
     }
 
@@ -131,7 +161,7 @@ pub const Node = struct {
         var x: f32 = 0;
         var y: f32 = 0;
 
-        switch (self.placement.anchor) {
+        switch (self.anchor) {
             .top_left => {},
             .top_center => x = pw * 0.5 - self.width * 0.5,
             .top_right => x = pw - self.width,
@@ -153,33 +183,11 @@ pub const Node = struct {
                 x = pw - self.width;
                 y = ph - self.height;
             },
+            .relative => unreachable,
         }
         return .{ x, y };
     }
-
-    fn set_dep_global_pos(self: Node, idx: usize, _: f32, _: f32) !struct { f32, f32 } {
-        const p = self.parent orelse return error.NoParent;
-        // const p_alignment = p.placement.alignment;
-        var x: f32 = 0.0;
-        const y: f32 = 0.0;
-        var sib_x: f32 = 0.0;
-        var sib_y: f32 = 0.0;
-        var sib_wid: f32 = 0.0;
-        var sib_hei: f32 = 0.0;
-        if (idx != 0) {
-            const sibling = p._children_dep.items[idx - 1];
-            sib_x = sibling._global_x.?;
-            sib_y = sibling._global_y.?;
-            sib_wid = sibling.width;
-            sib_hei = sibling.height;
-        }
-
-        switch (self.placement.alignment) {
-            .horizontal => x = sib_x + sib_wid,
-            else => {},
-        }
-        return .{ x, y };
-    }
+    
     // fn set_dep_nodes_global_pos(self: Node, pw: *f32, ph: *f32, x: *f32, y: *f32) void {}
     pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
         try list.append(allocator, self);

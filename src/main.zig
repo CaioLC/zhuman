@@ -119,26 +119,21 @@ fn events(res: *Resources, obj: *Objects) !void {
     }
 }
 
-// allocator: Allocator,
-// id: []const u8,
-// placement: Placement,
-// width: f32,
-// height: f32,
-// surface: ?sdl3.surface.Surface,
 
 fn text_node(
     allocator: std.mem.Allocator,
     res: Resources,
     id: []const u8,
     text: []const u8,
-    placement: ui.Placement,
+    anchor: ui.Anchor,
 ) !*ui.Node {
     const surface = try res.font.renderTextSolid(text, white);
     const node = try allocator.create(ui.Node);
     node.* = try ui.Node.init(
         allocator,
         id,
-        placement,
+        anchor,
+        null,
         @floatFromInt(surface.getWidth()),
         @floatFromInt(surface.getHeight()),
         surface,
@@ -151,7 +146,8 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     root.* = try ui.Node.init(
         allocator,
         "root",
-        .{ .alignment = .absolute, .anchor = .top_left },
+        .top_left,
+        null,
         screen_width,
         screen_height,
         null,
@@ -165,7 +161,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         res,
         "cntr",
         x,
-        .{ .alignment = .horizontal, .anchor = .top_left },
+        .relative,
     );
     try root.add_child(allocator, surf_node);
 
@@ -176,9 +172,21 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         res,
         "timr",
         "Timer template",
-        .{ .alignment = .horizontal, .anchor = .top_left },
+        .relative,
     );
     try root.add_child(allocator, timer_node);
+
+    // another text element
+    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
+    const other_node = try text_node(
+        allocator,
+        res,
+        "othr",
+        "Yet another node",
+        .relative,
+    );
+    try root.add_child(allocator, other_node);
+
 
     for (root._children_indep.items, 0..) |child, i| {
         std.log.debug("Indep Node {}: {s}", .{ i, child.id });
