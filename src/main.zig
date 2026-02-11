@@ -84,10 +84,10 @@ pub fn main() !void {
     const ui_root = try setup_ui(allocator, res, obj);
     res.ui_root = ui_root;
 
-    try update_ui(allocator, &res, obj);
     while (!res.quit_app) {
         try events(&res, &obj);
         try update(frame_capper.delay(), &obj);
+        try update_ui(allocator, &res, obj);
         try render(renderer, res, obj);
     }
 }
@@ -119,7 +119,6 @@ fn events(res: *Resources, obj: *Objects) !void {
     }
 }
 
-
 fn text_node(
     allocator: std.mem.Allocator,
     res: Resources,
@@ -147,7 +146,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         allocator,
         "root",
         .top_left,
-        null,
+        .horizontal_wrapped,
         screen_width,
         screen_height,
         null,
@@ -187,7 +186,6 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     );
     try root.add_child(allocator, other_node);
 
-
     for (root._children_indep.items, 0..) |child, i| {
         std.log.debug("Indep Node {}: {s}", .{ i, child.id });
     }
@@ -207,7 +205,7 @@ fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
     // build UI elements
     if (res.ui_root) |root| {
         try root.set_global_pos(null);
-        std.log.debug("root X: {}, root Y: {}", .{ root._global_x.?, root._global_y.? });
+        // std.log.debug("root X: {}, root Y: {}", .{ root._global_x.?, root._global_y.? });
 
         // update surface text
         if (root.get_id("cntr")) |counter| {
@@ -218,11 +216,11 @@ fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
             counter.surface = surface;
             counter.width = @floatFromInt(surface.getWidth());
             counter.height = @floatFromInt(surface.getHeight());
-            std.log.debug("counter X: {}, counter Y: {}", .{ counter._global_x.?, counter._global_y.? });
+            // std.log.debug("counter X: {}, counter Y: {}", .{ counter._global_x.?, counter._global_y.? });
         }
-        if (root.get_id("timr")) |timer| {
-            std.log.debug("timer X: {}, timer Y: {}", .{ timer._global_x.?, timer._global_y.? });
-        }
+        // if (root.get_id("timr")) |timer| {
+        //     std.log.debug("timer X: {}, timer Y: {}", .{ timer._global_x.?, timer._global_y.? });
+        // }
     }
 }
 

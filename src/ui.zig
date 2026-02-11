@@ -134,15 +134,26 @@ pub const Node = struct {
         if (self._children_dep.items.len > 0) {
             var x_offset: f32 = 0.0;
             var y_offset: f32 = 0.0;
-            for (self._children_dep.items) |c| {
+            for (self._children_dep.items, 0..) |c, idx| {
                 switch (self.children_align) {
                     .horizontal => {
                         try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
-                        y_offset = 0.0;
                         x_offset += c.width;
                     },
-                    .horizontal_wrapped => {},
-                    .horizontal_reverse => {},
+                    .horizontal_wrapped => {
+                        if (x_offset + c.width > self.width) {
+                            x_offset = 0.0;
+                            if (idx != 0) {
+                                y_offset += c.height; // NOTE: this will not work with children with different heights
+                            }
+                        }
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
+                        x_offset += c.width;
+                    },
+                    .horizontal_reverse => {
+                        x_offset -= c.width;
+                        try c.set_global_pos(.{ .x_offset = self.width + x_offset, .y_offset = y_offset });
+                    },
                     .horizontal_reverse_wrapped => {},
                     .vertical => {},
                     .vertical_wrapped => {},
@@ -187,7 +198,7 @@ pub const Node = struct {
         }
         return .{ x, y };
     }
-    
+
     // fn set_dep_nodes_global_pos(self: Node, pw: *f32, ph: *f32, x: *f32, y: *f32) void {}
     pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
         try list.append(allocator, self);
