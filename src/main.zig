@@ -151,7 +151,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     root.* = try ui.Node.init(
         allocator,
         "root",
-        .{ .alignment = .self, .anchor = .top_left },
+        .{ .alignment = .absolute, .anchor = .top_left },
         screen_width,
         screen_height,
         null,
@@ -165,7 +165,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         res,
         "cntr",
         x,
-        .{ .alignment = .parent, .anchor = .top_left },
+        .{ .alignment = .horizontal, .anchor = .top_left },
     );
     try root.add_child(allocator, surf_node);
 
@@ -176,7 +176,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         res,
         "timr",
         "Timer template",
-        .{ .alignment = .parent, .anchor = .top_left },
+        .{ .alignment = .horizontal, .anchor = .top_left },
     );
     try root.add_child(allocator, timer_node);
 

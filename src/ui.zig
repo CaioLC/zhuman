@@ -21,8 +21,19 @@ pub const Anchor = enum {
 };
 
 pub const Alignment = enum {
-    self,
-    parent,
+    absolute,
+    horizontal,
+    horizontal_wrapped,
+    horizontal_reverse,
+    horizontal_reverse_wrapped,
+    vertical,
+    vertical_wrapped,
+    vertical_reverse,
+    vertical_reverse_wrapped,
+    centered,
+    centered_wrapped,
+    centered_expand,
+    centered_expand_wrapped,
 };
 
 pub const Node = struct {
@@ -63,9 +74,10 @@ pub const Node = struct {
 
     pub fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
         child.parent = self;
-        switch (child.placement.alignment) {
-            .self => try self._children_indep.append(allocator, child),
-            .parent => try self._children_dep.append(allocator, child),
+        if (child.placement.alignment == .absolute) {
+            try self._children_indep.append(allocator, child);
+        } else {
+            try self._children_dep.append(allocator, child);
         }
     }
 
@@ -96,13 +108,13 @@ pub const Node = struct {
             py = p._global_y orelse 0.0;
         }
 
-        const x, const y = switch (self.placement.alignment) {
-            .self => self.set_indep_global_pos(pw, ph),
-            .parent => blk: {
-                const idx = index orelse return error.NoIndexForParentAlignment;
-                break :blk try self.set_dep_global_pos(idx, pw, ph);
-            },
-        };
+        var x: f32, var y: f32 = .{ undefined, undefined };
+        if (self.placement.alignment == .absolute) {
+            x, y = self.set_indep_global_pos(pw, ph);
+        } else {
+            const idx = index orelse return error.NoIndexForParentAlignment;
+            x, y = try self.set_dep_global_pos(idx, pw, ph);
+        }
 
         self._global_x = px + x;
         self._global_y = py + y;
@@ -147,6 +159,7 @@ pub const Node = struct {
 
     fn set_dep_global_pos(self: Node, idx: usize, _: f32, _: f32) !struct { f32, f32 } {
         const p = self.parent orelse return error.NoParent;
+        // const p_alignment = p.placement.alignment;
         var x: f32 = 0.0;
         const y: f32 = 0.0;
         var sib_x: f32 = 0.0;
@@ -161,16 +174,9 @@ pub const Node = struct {
             sib_hei = sibling.height;
         }
 
-        switch (self.placement.anchor) {
-            .top_left => x = sib_x + sib_wid,
-            .top_center => {},
-            .top_right => {},
-            .center_left => {},
-            .center => {},
-            .center_right => {},
-            .bottom_left => {},
-            .bottom_center => {},
-            .bottom_right => {},
+        switch (self.placement.alignment) {
+            .horizontal => x = sib_x + sib_wid,
+            else => {},
         }
         return .{ x, y };
     }
