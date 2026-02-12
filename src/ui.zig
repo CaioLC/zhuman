@@ -30,9 +30,6 @@ pub const ChildrenAlign = enum {
     vertical_reverse,
     vertical_reverse_wrapped,
     centered,
-    centered_wrapped,
-    centered_expand,
-    centered_expand_wrapped,
 };
 
 pub const Node = struct {
@@ -134,6 +131,7 @@ pub const Node = struct {
         if (self._children_dep.items.len > 0) {
             var x_offset: f32 = 0.0;
             var y_offset: f32 = 0.0;
+
             for (self._children_dep.items, 0..) |c, idx| {
                 switch (self.children_align) {
                     .horizontal => {
@@ -154,15 +152,53 @@ pub const Node = struct {
                         x_offset -= c.width;
                         try c.set_global_pos(.{ .x_offset = self.width + x_offset, .y_offset = y_offset });
                     },
-                    .horizontal_reverse_wrapped => {},
-                    .vertical => {},
-                    .vertical_wrapped => {},
-                    .vertical_reverse => {},
-                    .vertical_reverse_wrapped => {},
-                    .centered => {},
-                    .centered_wrapped => {},
-                    .centered_expand => {},
-                    .centered_expand_wrapped => {},
+                    .horizontal_reverse_wrapped => {
+                        x_offset -= c.width;
+                        if (-x_offset > self.width) {
+                            x_offset = 0 - c.width; // Start new row from far right
+                            if (idx != 0) {
+                                y_offset += c.height; // NOTE: this will not work with children with different heights
+                            }
+                        }
+                        try c.set_global_pos(.{ .x_offset = self.width + x_offset, .y_offset = y_offset });
+                    },
+                    .vertical => {
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
+                        y_offset += c.height;
+                    },
+                    .vertical_wrapped => {
+                        if (y_offset + c.height > self.height) {
+                            y_offset = 0.0;
+                            if (idx != 0) {
+                                x_offset += c.width;
+                            }
+                        }
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
+                        y_offset += c.height;
+                    },
+                    .vertical_reverse => {
+                        y_offset -= c.height;
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = self.height + y_offset });
+                    },
+                    .vertical_reverse_wrapped => {
+                        y_offset -= c.height;
+                        if (-y_offset > self.height) {
+                            y_offset = 0 - c.height;
+                            if (idx != 0) {
+                                x_offset += c.width;
+                            }
+                        }
+                        try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = self.height + y_offset });
+                    },
+                    .centered => {
+                        const f_idx: f32 = @floatFromInt(idx);
+                        const n_elements: f32 = @floatFromInt(self._children_dep.items.len);
+                        const w_central_point = self.width / (1.0 + n_elements);
+                        const element_central_point: f32 = w_central_point * (f_idx + 1.0);
+                        const start_x = element_central_point - (c.width / 2);
+                        const start_y = (self.height - c.height) / 2;
+                        try c.set_global_pos(.{ .x_offset = start_x, .y_offset = start_y });
+                    },
                 }
             }
         }
@@ -237,6 +273,19 @@ pub const Node = struct {
         return null;
     }
 };
+
+fn maxAttribute(comptime attr: []const u8, nodes: []const *Node) ?f32 {
+    var max_val: ?f32 = null;
+
+    for (nodes) |node| {
+        const val = @field(node, attr);
+        if (max_val == null or val > max_val.?) {
+            max_val = val;
+        }
+    }
+
+    return max_val;
+}
 
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

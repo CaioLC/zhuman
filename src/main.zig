@@ -146,7 +146,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         allocator,
         "root",
         .top_left,
-        .horizontal_wrapped,
+        .centered,
         screen_width,
         screen_height,
         null,
@@ -185,6 +185,17 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         .relative,
     );
     try root.add_child(allocator, other_node);
+
+    // another text element
+    x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
+    const another_node = try text_node(
+        allocator,
+        res,
+        "othr",
+        "And another one",
+        .relative,
+    );
+    try root.add_child(allocator, another_node);
 
     for (root._children_indep.items, 0..) |child, i| {
         std.log.debug("Indep Node {}: {s}", .{ i, child.id });
