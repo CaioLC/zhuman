@@ -146,7 +146,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         allocator,
         "root",
         .top_left,
-        .horizontal_wrapped,
+        .centered_wrapped,
         screen_width,
         screen_height,
         null,
