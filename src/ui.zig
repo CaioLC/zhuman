@@ -131,6 +131,8 @@ pub const Node = struct {
         if (self._children_dep.items.len > 0) {
             var x_offset: f32 = 0.0;
             var y_offset: f32 = 0.0;
+            var row_max_height: f32 = 0.0;
+            var col_max_width: f32 = 0.0;
 
             for (self._children_dep.items, 0..) |c, idx| {
                 switch (self.children_align) {
@@ -141,12 +143,12 @@ pub const Node = struct {
                     .horizontal_wrapped => {
                         if (x_offset + c.width > self.width) {
                             x_offset = 0.0;
-                            if (idx != 0) {
-                                y_offset += c.height; // NOTE: this will not work with children with different heights
-                            }
+                            y_offset += row_max_height;
+                            row_max_height = 0.0;
                         }
                         try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
                         x_offset += c.width;
+                        row_max_height = @max(row_max_height, c.height);
                     },
                     .horizontal_reverse => {
                         x_offset -= c.width;
@@ -155,12 +157,12 @@ pub const Node = struct {
                     .horizontal_reverse_wrapped => {
                         x_offset -= c.width;
                         if (-x_offset > self.width) {
-                            x_offset = 0 - c.width; // Start new row from far right
-                            if (idx != 0) {
-                                y_offset += c.height; // NOTE: this will not work with children with different heights
-                            }
+                            x_offset = 0 - c.width;
+                            y_offset += row_max_height;
+                            row_max_height = 0.0;
                         }
                         try c.set_global_pos(.{ .x_offset = self.width + x_offset, .y_offset = y_offset });
+                        row_max_height = @max(row_max_height, c.height);
                     },
                     .vertical => {
                         try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
@@ -169,12 +171,12 @@ pub const Node = struct {
                     .vertical_wrapped => {
                         if (y_offset + c.height > self.height) {
                             y_offset = 0.0;
-                            if (idx != 0) {
-                                x_offset += c.width;
-                            }
+                            x_offset += col_max_width;
+                            col_max_width = 0.0;
                         }
                         try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = y_offset });
                         y_offset += c.height;
+                        col_max_width = @max(col_max_width, c.width);
                     },
                     .vertical_reverse => {
                         y_offset -= c.height;
@@ -184,11 +186,11 @@ pub const Node = struct {
                         y_offset -= c.height;
                         if (-y_offset > self.height) {
                             y_offset = 0 - c.height;
-                            if (idx != 0) {
-                                x_offset += c.width;
-                            }
+                            x_offset += col_max_width;
+                            col_max_width = 0.0;
                         }
                         try c.set_global_pos(.{ .x_offset = x_offset, .y_offset = self.height + y_offset });
+                        col_max_width = @max(col_max_width, c.width);
                     },
                     .centered => {
                         const f_idx: f32 = @floatFromInt(idx);
