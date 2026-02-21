@@ -1,4 +1,3 @@
-//! By convention, root.zig is the root source file when making a library.
 comptime {
     // This will ensure that the file 'api.zig' is always discovered (as long as this file is discovered).
     // It is useful if 'api.zig' contains important exported declarations.
@@ -8,5 +7,11 @@ pub const sdl = @import("sdl3");
 pub const ui = @import("./ui.zig");
 pub const time = @import("./time.zig");
 pub const font = @import("./font.zig");
+
+test {
+    _ = ui;
+    _ = time;
+    _ = font;
+}
 
 

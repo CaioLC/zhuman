@@ -238,14 +238,11 @@ pub const Node = struct {
     // fn set_dep_nodes_global_pos(self: Node, pw: *f32, ph: *f32, x: *f32, y: *f32) void {}
     pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
         try list.append(allocator, self);
-        try self.collect_independent(allocator, list);
-        try self.collect_dependent(allocator, list);
-    }
-
-    pub fn collect_dependent(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
-        try list.append(allocator, self);
+        for (self._children_indep.items) |child| {
+            try child.collect(allocator, list);
+        }
         for (self._children_dep.items) |child| {
-            try child.collect_dependent(allocator, list);
+            try child.collect(allocator, list);
         }
     }
 
@@ -256,7 +253,14 @@ pub const Node = struct {
         }
     }
 
-    pub fn get_id(self: *Node, id: *const [4:0]u8) ?*Node {
+    pub fn collect_dependent(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
+        try list.append(allocator, self);
+        for (self._children_dep.items) |child| {
+            try child.collect_dependent(allocator, list);
+        }
+    }
+
+    pub fn get_id(self: *Node, id: []const u8) ?*Node {
         if (std.mem.eql(u8, self.id, id)) {
             return self;
         }
@@ -274,42 +278,115 @@ pub const Node = struct {
     }
 };
 
-fn maxAttribute(comptime attr: []const u8, nodes: []const *Node) ?f32 {
-    var max_val: ?f32 = null;
-
-    for (nodes) |node| {
-        const val = @field(node, attr);
-        if (max_val == null or val > max_val.?) {
-            max_val = val;
-        }
-    }
-
-    return max_val;
-}
-
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = try Node.init(allocator, "root", 800, 600, .top_left);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
     root._global_x = 0;
     root._global_y = 0;
 
     const child = try allocator.create(Node);
-    child.* = try Node.init(allocator, "chd1", 100, 50, .center);
+    child.* = try Node.init(allocator, "chd1", .center, null, 100, 50, null);
     try root.add_child(allocator, child);
 
     const child2 = try allocator.create(Node);
-    child2.* = try Node.init(allocator, "chd2", 100, 50, .bottom_center);
+    child2.* = try Node.init(allocator, "chd2", .bottom_center, null, 100, 50, null);
     try root.add_child(allocator, child2);
 
-    root.set_global_pos();
+    try root.set_global_pos(null);
 
     try std.testing.expect(child._global_x.? == 350.0); // (800/2 - 100/2)
     try std.testing.expect(child._global_y.? == 275.0); // (600/2 - 50/2)
 
     try std.testing.expect(child2._global_x.? == 350.0); // (800/2 - 100/2)
-    try std.testing.expect(child2._global_y.? == 550.0); // (600/2 - 50/2)
+    try std.testing.expect(child2._global_y.? == 550.0); // (600 - 50)
+}
+
+test "collect returns each node exactly once" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var root = try allocator.create(Node);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+
+    const indep = try allocator.create(Node);
+    indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    try root.add_child(allocator, indep);
+
+    const dep = try allocator.create(Node);
+    dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    try root.add_child(allocator, dep);
+
+    var list: std.ArrayList(*Node) = .empty;
+    defer list.clearAndFree(allocator);
+    try root.collect(allocator, &list);
+
+    try std.testing.expectEqual(3, list.items.len);
+    try std.testing.expectEqual(root, list.items[0]);
+    try std.testing.expectEqual(indep, list.items[1]);
+    try std.testing.expectEqual(dep, list.items[2]);
+}
+
+test "collect_independent returns only independent subtree" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var root = try allocator.create(Node);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+
+    const child_indep = try allocator.create(Node);
+    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    try root.add_child(allocator, child_indep);
+
+    const grandchild_indep = try allocator.create(Node);
+    grandchild_indep.* = try Node.init(allocator, "grnd", .top_right, null, 50, 25, null);
+    try child_indep.add_child(allocator, grandchild_indep);
+
+    const child_dep = try allocator.create(Node);
+    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    try root.add_child(allocator, child_dep);
+
+    var list: std.ArrayList(*Node) = .empty;
+    defer list.clearAndFree(allocator);
+    try root.collect_independent(allocator, &list);
+
+    try std.testing.expectEqual(3, list.items.len);
+    try std.testing.expectEqual(root, list.items[0]);
+    try std.testing.expectEqual(child_indep, list.items[1]);
+    try std.testing.expectEqual(grandchild_indep, list.items[2]);
+}
+
+test "collect_dependent returns only dependent subtree" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var root = try allocator.create(Node);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+
+    const child_indep = try allocator.create(Node);
+    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    try root.add_child(allocator, child_indep);
+
+    const child_dep = try allocator.create(Node);
+    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    try root.add_child(allocator, child_dep);
+
+    const grandchild_dep = try allocator.create(Node);
+    grandchild_dep.* = try Node.init(allocator, "dep2", .relative, null, 50, 25, null);
+    try child_dep.add_child(allocator, grandchild_dep);
+
+    var list: std.ArrayList(*Node) = .empty;
+    defer list.clearAndFree(allocator);
+    try root.collect_dependent(allocator, &list);
+
+    try std.testing.expectEqual(3, list.items.len);
+    try std.testing.expectEqual(root, list.items[0]);
+    try std.testing.expectEqual(child_dep, list.items[1]);
+    try std.testing.expectEqual(grandchild_dep, list.items[2]);
 }
