@@ -50,6 +50,10 @@ pub const ChildrenAlign = enum {
     vertical_reverse_wrapped,
     centered,
     centered_wrapped,
+    centered_top,
+    centered_bottom,
+    centered_top_wrapped,
+    centered_bottom_wrapped,
 };
 
 pub const Node = struct {
@@ -236,6 +240,86 @@ pub const Node = struct {
                         const start_x = element_central_point - (c.width / 2);
                         const start_y = (self.height - c.height) / 2;
                         try c.set_global_pos(.{ .x_offset = start_x, .y_offset = start_y });
+                    },
+                    .centered_top => {
+                        const f_idx: f32 = @floatFromInt(idx);
+                        const n_elements: f32 = @floatFromInt(self._children_dep.items.len);
+                        const w_central_point = self.width / (1.0 + n_elements);
+                        const element_central_point: f32 = w_central_point * (f_idx + 1.0);
+                        const start_x = element_central_point - (c.width / 2);
+                        try c.set_global_pos(.{ .x_offset = start_x, .y_offset = 0 });
+                    },
+                    .centered_bottom => {
+                        const f_idx: f32 = @floatFromInt(idx);
+                        const n_elements: f32 = @floatFromInt(self._children_dep.items.len);
+                        const w_central_point = self.width / (1.0 + n_elements);
+                        const element_central_point: f32 = w_central_point * (f_idx + 1.0);
+                        const start_x = element_central_point - (c.width / 2);
+                        try c.set_global_pos(.{ .x_offset = start_x, .y_offset = self.height - c.height });
+                    },
+                    .centered_top_wrapped => {
+                        if (idx != 0) continue;
+                        var row_start: usize = 0;
+                        var current_y: f32 = 0.0;
+                        while (row_start < self._children_dep.items.len) {
+                            var row_end: usize = row_start + 1;
+                            var row_w: f32 = self._children_dep.items[row_start].width;
+                            var row_h: f32 = self._children_dep.items[row_start].height;
+                            while (row_end < self._children_dep.items.len) {
+                                const next = self._children_dep.items[row_end];
+                                if (row_w + next.width > self.width) break;
+                                row_w += next.width;
+                                row_h = @max(row_h, next.height);
+                                row_end += 1;
+                            }
+                            var x_row = (self.width - row_w) / 2.0;
+                            for (self._children_dep.items[row_start..row_end]) |child| {
+                                try child.set_global_pos(.{ .x_offset = x_row, .y_offset = current_y });
+                                x_row += child.width;
+                            }
+                            current_y += row_h;
+                            row_start = row_end;
+                        }
+                    },
+                    .centered_bottom_wrapped => {
+                        if (idx != 0) continue;
+                        var total_h: f32 = 0.0;
+                        var scan_start: usize = 0;
+                        while (scan_start < self._children_dep.items.len) {
+                            var scan_end: usize = scan_start + 1;
+                            var scan_w: f32 = self._children_dep.items[scan_start].width;
+                            var scan_h: f32 = self._children_dep.items[scan_start].height;
+                            while (scan_end < self._children_dep.items.len) {
+                                const next = self._children_dep.items[scan_end];
+                                if (scan_w + next.width > self.width) break;
+                                scan_w += next.width;
+                                scan_h = @max(scan_h, next.height);
+                                scan_end += 1;
+                            }
+                            total_h += scan_h;
+                            scan_start = scan_end;
+                        }
+                        var row_start: usize = 0;
+                        var current_y: f32 = self.height - total_h;
+                        while (row_start < self._children_dep.items.len) {
+                            var row_end: usize = row_start + 1;
+                            var row_w: f32 = self._children_dep.items[row_start].width;
+                            var row_h: f32 = self._children_dep.items[row_start].height;
+                            while (row_end < self._children_dep.items.len) {
+                                const next = self._children_dep.items[row_end];
+                                if (row_w + next.width > self.width) break;
+                                row_w += next.width;
+                                row_h = @max(row_h, next.height);
+                                row_end += 1;
+                            }
+                            var x_row = (self.width - row_w) / 2.0;
+                            for (self._children_dep.items[row_start..row_end]) |child| {
+                                try child.set_global_pos(.{ .x_offset = x_row, .y_offset = current_y });
+                                x_row += child.width;
+                            }
+                            current_y += row_h;
+                            row_start = row_end;
+                        }
                     },
                     .centered_wrapped => {
                         // All children are handled on idx == 0; later iterations are skipped.
