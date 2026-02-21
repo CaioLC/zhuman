@@ -7,6 +7,25 @@ pub const ChildrenPosInfo = struct {
     y_offset: f32,
 };
 
+pub const Padding = struct {
+    up: f32,
+    right: f32,
+    down: f32,
+    left: f32,
+
+    pub fn init(p: f32) Padding {
+        return .{ .up = p, .right = p, .down = p, .left = p };
+    }
+
+    pub fn initSymmetric(w: f32, h: f32) Padding {
+        return .{ .up = h, .right = w, .down = h, .left = w };
+    }
+
+    pub fn initEach(u: f32, r: f32, d: f32, l: f32) Padding {
+        return .{ .up = u, .right = r, .down = d, .left = l };
+    }
+};
+
 pub const Anchor = enum {
     top_left,
     top_center,
@@ -40,6 +59,8 @@ pub const Node = struct {
     children_align: ChildrenAlign,
     width: f32,
     height: f32,
+    inner_width: f32,
+    inner_height: f32,
     _global_x: ?f32,
     _global_y: ?f32,
     _children_indep: std.ArrayList(*Node),
@@ -47,30 +68,43 @@ pub const Node = struct {
 
     // Attributes
     surface: ?sdl3.surface.Surface,
+    padding: Padding,
 
     pub fn init(
         allocator: Allocator,
         id: []const u8,
         anchor: Anchor,
         children_align: ?ChildrenAlign,
-        width: f32,
-        height: f32,
+        inner_width: f32,
+        inner_height: f32,
         surface: ?sdl3.surface.Surface,
+        padding: ?Padding,
     ) !Node {
         const ch_align = children_align orelse ChildrenAlign.horizontal;
+        const pad = padding orelse Padding.init(0);
         return .{
             .id = id,
             .parent = null,
             .anchor = anchor,
             .children_align = ch_align,
-            .width = width,
-            .height = height,
+            .inner_width = inner_width,
+            .inner_height = inner_height,
+            .width = inner_width + pad.left + pad.right,
+            .height = inner_height + pad.up + pad.down,
             .surface = surface,
+            .padding = pad,
             ._global_x = null,
             ._global_y = null,
             ._children_indep = try .initCapacity(allocator, 1),
             ._children_dep = try .initCapacity(allocator, 1),
         };
+    }
+
+    fn recalculate_size(self: *Node) void {
+        for (self._children_indep.items) |c| c.recalculate_size();
+        for (self._children_dep.items) |c| c.recalculate_size();
+        self.width = self.inner_width + self.padding.left + self.padding.right;
+        self.height = self.inner_height + self.padding.up + self.padding.down;
     }
 
     pub fn add_child(self: *Node, allocator: std.mem.Allocator, child: *Node) !void {
@@ -98,6 +132,7 @@ pub const Node = struct {
     }
 
     pub fn set_global_pos(self: *Node, children_info: ?ChildrenPosInfo) !void {
+        if (self.parent == null) self.recalculate_size();
         // set position for self
         var pw: f32 = 0.0;
         var ph: f32 = 0.0;
@@ -330,16 +365,16 @@ test "node tree layout" {
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null, null);
     root._global_x = 0;
     root._global_y = 0;
 
     const child = try allocator.create(Node);
-    child.* = try Node.init(allocator, "chd1", .center, null, 100, 50, null);
+    child.* = try Node.init(allocator, "chd1", .center, null, 100, 50, null, null);
     try root.add_child(allocator, child);
 
     const child2 = try allocator.create(Node);
-    child2.* = try Node.init(allocator, "chd2", .bottom_center, null, 100, 50, null);
+    child2.* = try Node.init(allocator, "chd2", .bottom_center, null, 100, 50, null, null);
     try root.add_child(allocator, child2);
 
     try root.set_global_pos(null);
@@ -357,14 +392,14 @@ test "collect returns each node exactly once" {
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null, null);
 
     const indep = try allocator.create(Node);
-    indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null, null);
     try root.add_child(allocator, indep);
 
     const dep = try allocator.create(Node);
-    dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null, null);
     try root.add_child(allocator, dep);
 
     var list: std.ArrayList(*Node) = .empty;
@@ -383,18 +418,18 @@ test "collect_independent returns only independent subtree" {
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null, null);
 
     const child_indep = try allocator.create(Node);
-    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null, null);
     try root.add_child(allocator, child_indep);
 
     const grandchild_indep = try allocator.create(Node);
-    grandchild_indep.* = try Node.init(allocator, "grnd", .top_right, null, 50, 25, null);
+    grandchild_indep.* = try Node.init(allocator, "grnd", .top_right, null, 50, 25, null, null);
     try child_indep.add_child(allocator, grandchild_indep);
 
     const child_dep = try allocator.create(Node);
-    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null, null);
     try root.add_child(allocator, child_dep);
 
     var list: std.ArrayList(*Node) = .empty;
@@ -413,18 +448,18 @@ test "collect_dependent returns only dependent subtree" {
     const allocator = arena.allocator();
 
     var root = try allocator.create(Node);
-    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null);
+    root.* = try Node.init(allocator, "root", .top_left, null, 800, 600, null, null);
 
     const child_indep = try allocator.create(Node);
-    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null);
+    child_indep.* = try Node.init(allocator, "indp", .center, null, 100, 50, null, null);
     try root.add_child(allocator, child_indep);
 
     const child_dep = try allocator.create(Node);
-    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null);
+    child_dep.* = try Node.init(allocator, "dep1", .relative, null, 100, 50, null, null);
     try root.add_child(allocator, child_dep);
 
     const grandchild_dep = try allocator.create(Node);
-    grandchild_dep.* = try Node.init(allocator, "dep2", .relative, null, 50, 25, null);
+    grandchild_dep.* = try Node.init(allocator, "dep2", .relative, null, 50, 25, null, null);
     try child_dep.add_child(allocator, grandchild_dep);
 
     var list: std.ArrayList(*Node) = .empty;

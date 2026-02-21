@@ -99,8 +99,8 @@ fn events(res: *Resources, obj: *Objects) !void {
             .window_resized => |e| {
                 res.screen_height = e.height;
                 res.screen_width = e.width;
-                res.ui_root.?.height = @floatFromInt(e.height);
-                res.ui_root.?.width = @floatFromInt(e.width);
+                res.ui_root.?.inner_height = @floatFromInt(e.height);
+                res.ui_root.?.inner_width = @floatFromInt(e.width);
             },
             .key_down => |key| {
                 if (key.key == .escape) {
@@ -136,6 +136,7 @@ fn text_node(
         @floatFromInt(surface.getWidth()),
         @floatFromInt(surface.getHeight()),
         surface,
+        .initSymmetric(20.0, 10.0),
     );
     return node;
 }
@@ -149,6 +150,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
         .centered_wrapped,
         screen_width,
         screen_height,
+        null,
         null,
     );
 
@@ -225,8 +227,8 @@ fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
             const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
             const surface = try res.font.renderTextSolid(x, white);
             counter.surface = surface;
-            counter.width = @floatFromInt(surface.getWidth());
-            counter.height = @floatFromInt(surface.getHeight());
+            counter.inner_width = @floatFromInt(surface.getWidth());
+            counter.inner_height = @floatFromInt(surface.getHeight());
             // std.log.debug("counter X: {}, counter Y: {}", .{ counter._global_x.?, counter._global_y.? });
         }
         // if (root.get_id("timr")) |timer| {
@@ -260,10 +262,10 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
 
         for (node_stack.items) |node| {
             const dst = sdl.rect.FRect{
-                .x = node._global_x.?,
-                .y = node._global_y.?,
-                .h = node.height,
-                .w = node.width,
+                .x = node._global_x.? + node.padding.left,
+                .y = node._global_y.? + node.padding.up,
+                .h = node.inner_height,
+                .w = node.inner_width,
             };
             if (node.surface) |surface| {
                 // TODO: surfaces must be deinit
