@@ -4,7 +4,7 @@ comptime {
     // _ = @import("sdl3");
 }
 pub const sdl = @import("sdl3");
-pub const ui = @import("./ui.zig");
+pub const ui = @import("./ui/root.zig");
 pub const time = @import("./time.zig");
 pub const font = @import("./font.zig");
 

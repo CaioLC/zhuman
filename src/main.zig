@@ -18,12 +18,23 @@ const log_app = sdl.log.Category.application;
 // colors
 const white = zfont.white;
 
+const ResetHandler = struct {
+    obj: *Objects,
+
+    pub fn on_click(self: *ResetHandler, _: ui.clickable.ClickEvent) void {
+        self.obj.counter.set(0.0);
+        self.obj.timer.reset();
+    }
+};
+
 const Resources = struct {
     quit_app: bool,
     font: sdl.ttf.Font,
     screen_height: c_int,
     screen_width: c_int,
     ui_root: ?*ui.Node,
+    runtime: ui.runtime.Runtime,
+    reset_handler: ?*ResetHandler,
 
     pub fn init() !Resources {
         return .{
@@ -32,10 +43,14 @@ const Resources = struct {
             .screen_height = screen_height,
             .screen_width = screen_width,
             .ui_root = null,
+            .runtime = ui.runtime.Runtime.init(),
+            .reset_handler = null,
         };
     }
 
     pub fn deinit(self: *Resources, allocator: std.mem.Allocator) void {
+        self.runtime.deinit(allocator);
+        if (self.reset_handler) |h| allocator.destroy(h);
         self.font.deinit();
         if (self.ui_root) |node| {
             node.deinit(allocator);
@@ -81,7 +96,7 @@ pub fn main() !void {
     };
 
     // UI
-    const ui_root = try setup_ui(allocator, res, obj);
+    const ui_root = try setup_ui(allocator, &res, &obj);
     res.ui_root = ui_root;
 
     while (!res.quit_app) {
@@ -92,7 +107,7 @@ pub fn main() !void {
     }
 }
 
-fn events(res: *Resources, obj: *Objects) !void {
+fn events(res: *Resources, _: *Objects) !void {
     while (sdl.events.poll()) |event| {
         switch (event) {
             .quit, .terminating => res.quit_app = true,
@@ -108,11 +123,13 @@ fn events(res: *Resources, obj: *Objects) !void {
                 }
             },
             .mouse_button_down => |mbutton| {
-                if (mbutton.button == .left) {
-                    try log_app.logInfo("Mouse clicked!", .{});
-                    obj.counter.set(0.0);
-                    obj.timer.reset();
-                }
+                const button: ui.clickable.MouseButton = switch (mbutton.button) {
+                    .left => .left,
+                    .middle => .middle,
+                    .right => .right,
+                    else => .other,
+                };
+                res.runtime.dispatch_click(mbutton.x, mbutton.y, button);
             },
             else => {},
         }
@@ -141,7 +158,7 @@ fn text_node(
     return node;
 }
 
-fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Node {
+fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.Node {
     const root = try allocator.create(ui.Node);
     root.* = try ui.Node.init(
         allocator,
@@ -159,18 +176,26 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
     const surf_node = try text_node(
         allocator,
-        res,
+        res.*,
         "cntr",
         x,
         .relative,
     );
+
+    // Attach clickable feature to counter node
+    const reset_handler = try allocator.create(ResetHandler);
+    reset_handler.* = .{ .obj = obj };
+    surf_node.clickable = ui.clickable.Clickable.init(reset_handler);
+    res.reset_handler = reset_handler;
+    try res.runtime.register(allocator, surf_node);
+
     try root.add_child(allocator, surf_node);
 
     // Timer
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const timer_node = try text_node(
         allocator,
-        res,
+        res.*,
         "timr",
         "Timer template",
         .relative,
@@ -181,7 +206,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const other_node = try text_node(
         allocator,
-        res,
+        res.*,
         "othr",
         "Yet another node",
         .relative,
@@ -192,7 +217,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: Resources, obj: Objects) !*ui.Nod
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const another_node = try text_node(
         allocator,
-        res,
+        res.*,
         "othr",
         "And another one",
         .relative,
@@ -268,8 +293,8 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
                 .w = node.inner_width,
             };
             if (node.surface) |surface| {
-                // TODO: surfaces must be deinit
                 const texture = try renderer.createTextureFromSurface(surface);
+                defer texture.deinit();
                 try renderer.renderTexture(texture, null, dst);
             }
         }

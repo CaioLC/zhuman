@@ -2,6 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const sdl3 = @import("sdl3");
 
+pub const clickable = @import("clickable.zig");
+pub const runtime = @import("runtime.zig");
+
 pub const ChildrenPosInfo = struct {
     x_offset: f32,
     y_offset: f32,
@@ -74,6 +77,9 @@ pub const Node = struct {
     surface: ?sdl3.surface.Surface,
     padding: Padding,
 
+    // Features
+    clickable: ?clickable.Clickable,
+
     pub fn init(
         allocator: Allocator,
         id: []const u8,
@@ -97,6 +103,7 @@ pub const Node = struct {
             .height = inner_height + pad.up + pad.down,
             .surface = surface,
             .padding = pad,
+            .clickable = null,
             ._global_x = null,
             ._global_y = null,
             ._children_indep = try .initCapacity(allocator, 1),
