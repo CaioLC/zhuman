@@ -18,15 +18,6 @@ const log_app = sdl.log.Category.application;
 // colors
 const white = zfont.white;
 
-const ResetHandler = struct {
-    obj: *Objects,
-
-    pub fn on_click(self: *ResetHandler, _: ui.clickable.ClickEvent) void {
-        self.obj.counter.set(0.0);
-        self.obj.timer.reset();
-    }
-};
-
 const Resources = struct {
     quit_app: bool,
     font: sdl.ttf.Font,
@@ -34,7 +25,6 @@ const Resources = struct {
     screen_width: c_int,
     ui_root: ?*ui.Node,
     runtime: ui.runtime.Runtime,
-    reset_handler: ?*ResetHandler,
 
     pub fn init() !Resources {
         return .{
@@ -44,13 +34,11 @@ const Resources = struct {
             .screen_width = screen_width,
             .ui_root = null,
             .runtime = ui.runtime.Runtime.init(),
-            .reset_handler = null,
         };
     }
 
     pub fn deinit(self: *Resources, allocator: std.mem.Allocator) void {
         self.runtime.deinit(allocator);
-        if (self.reset_handler) |h| allocator.destroy(h);
         self.font.deinit();
         if (self.ui_root) |node| {
             node.deinit(allocator);
@@ -63,6 +51,12 @@ const Objects = struct {
     counter: time.Counter,
     timer: time.Timer,
 };
+
+fn reset_click(data: ?*anyopaque, _: ui.features.ClickEvent) void {
+    const obj: *Objects = @ptrCast(@alignCast(data.?));
+    obj.counter.set(0.0);
+    obj.timer.reset();
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -114,8 +108,10 @@ fn events(res: *Resources, _: *Objects) !void {
             .window_resized => |e| {
                 res.screen_height = e.height;
                 res.screen_width = e.width;
-                res.ui_root.?.inner_height = @floatFromInt(e.height);
-                res.ui_root.?.inner_width = @floatFromInt(e.width);
+                if (res.ui_root) |root| {
+                    root.position.?.inner_height = @floatFromInt(e.height);
+                    root.position.?.inner_width = @floatFromInt(e.width);
+                }
             },
             .key_down => |key| {
                 if (key.key == .escape) {
@@ -123,7 +119,7 @@ fn events(res: *Resources, _: *Objects) !void {
                 }
             },
             .mouse_button_down => |mbutton| {
-                const button: ui.clickable.MouseButton = switch (mbutton.button) {
+                const button: ui.features.MouseButton = switch (mbutton.button) {
                     .left => .left,
                     .middle => .middle,
                     .right => .right,
@@ -144,32 +140,25 @@ fn text_node(
     anchor: ui.Anchor,
 ) !*ui.Node {
     const surface = try res.font.renderTextSolid(text, white);
+    const w: f32 = @floatFromInt(surface.getWidth());
+    const h: f32 = @floatFromInt(surface.getHeight());
+
     const node = try allocator.create(ui.Node);
-    node.* = try ui.Node.init(
-        allocator,
-        id,
-        anchor,
-        null,
-        @floatFromInt(surface.getWidth()),
-        @floatFromInt(surface.getHeight()),
-        surface,
-        .initSymmetric(20.0, 10.0),
-    );
+    node.* = ui.Node.init(id);
+    _ = node.with_position(ui.Position.init(anchor, null, w, h, ui.Padding.initSymmetric(20.0, 10.0)));
+
+    // Store surface as opaque data
+    const surf = try allocator.create(@TypeOf(surface));
+    surf.* = surface;
+    node.data = @ptrCast(surf);
+
     return node;
 }
 
 fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.Node {
     const root = try allocator.create(ui.Node);
-    root.* = try ui.Node.init(
-        allocator,
-        "root",
-        .top_left,
-        .centered_wrapped,
-        screen_width,
-        screen_height,
-        null,
-        null,
-    );
+    root.* = ui.Node.init("root");
+    _ = root.with_position(ui.Position.init(.top_left, .centered_wrapped, screen_width, screen_height, null));
 
     // Counter
     var text_buffer: [256]u8 = undefined;
@@ -183,10 +172,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     );
 
     // Attach clickable feature to counter node
-    const reset_handler = try allocator.create(ResetHandler);
-    reset_handler.* = .{ .obj = obj };
-    surf_node.clickable = ui.clickable.Clickable.init(reset_handler);
-    res.reset_handler = reset_handler;
+    surf_node.on_click = ui.features.OnClick.init(reset_click, @ptrCast(obj));
     try res.runtime.register(allocator, surf_node);
 
     try root.add_child(allocator, surf_node);
@@ -224,11 +210,8 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     );
     try root.add_child(allocator, another_node);
 
-    for (root._children_indep.items, 0..) |child, i| {
-        std.log.debug("Indep Node {}: {s}", .{ i, child.id });
-    }
-    for (root._children_dep.items, 0..) |child, i| {
-        std.log.debug("Dep {}: {s}", .{ i, child.id });
+    for (root.children.items, 0..) |child, i| {
+        std.log.debug("Child {}: {s}", .{ i, child.id });
     }
 
     return root;
@@ -240,30 +223,24 @@ fn update(dt: f32, obj: *Objects) !void {
 }
 
 fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
-    // build UI elements
     if (res.ui_root) |root| {
         try root.set_global_pos(null);
-        // std.log.debug("root X: {}, root Y: {}", .{ root._global_x.?, root._global_y.? });
 
-        // update surface text
-        if (root.get_id("cntr")) |counter| {
-            counter.surface.?.deinit();
+        if (root.get_by_id("cntr")) |counter| {
+            // Update surface text
+            const surf: *sdl.surface.Surface = @ptrCast(@alignCast(counter.data.?));
+            surf.deinit();
             var text_buffer: [256]u8 = undefined;
             const x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
-            const surface = try res.font.renderTextSolid(x, white);
-            counter.surface = surface;
-            counter.inner_width = @floatFromInt(surface.getWidth());
-            counter.inner_height = @floatFromInt(surface.getHeight());
-            // std.log.debug("counter X: {}, counter Y: {}", .{ counter._global_x.?, counter._global_y.? });
+            const new_surface = try res.font.renderTextSolid(x, white);
+            surf.* = new_surface;
+            counter.position.?.inner_width = @floatFromInt(new_surface.getWidth());
+            counter.position.?.inner_height = @floatFromInt(new_surface.getHeight());
         }
-        // if (root.get_id("timr")) |timer| {
-        //     std.log.debug("timer X: {}, timer Y: {}", .{ timer._global_x.?, timer._global_y.? });
-        // }
     }
 }
 
 fn render(renderer: Renderer, res: Resources, _: Objects) !void {
-    // --- Rendering ---
     try renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
     try renderer.clear();
 
@@ -286,14 +263,16 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
         try root.collect(allocator, &node_stack);
 
         for (node_stack.items) |node| {
-            const dst = sdl.rect.FRect{
-                .x = node._global_x.? + node.padding.left,
-                .y = node._global_y.? + node.padding.up,
-                .h = node.inner_height,
-                .w = node.inner_width,
-            };
-            if (node.surface) |surface| {
-                const texture = try renderer.createTextureFromSurface(surface);
+            const pos = node.position orelse continue;
+            if (node.data) |d| {
+                const surf: *sdl.surface.Surface = @ptrCast(@alignCast(d));
+                const dst = sdl.rect.FRect{
+                    .x = pos._global_x.? + pos.padding.left,
+                    .y = pos._global_y.? + pos.padding.up,
+                    .h = pos.inner_height,
+                    .w = pos.inner_width,
+                };
+                const texture = try renderer.createTextureFromSurface(surf.*);
                 defer texture.deinit();
                 try renderer.renderTexture(texture, null, dst);
             }

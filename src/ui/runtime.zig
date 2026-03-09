@@ -1,6 +1,7 @@
 const std = @import("std");
-const Node = @import("root.zig").Node;
-const clickable = @import("clickable.zig");
+const ui = @import("root.zig");
+const Node = ui.Node;
+const clickable = @import("features/clickable.zig");
 
 pub const Runtime = struct {
     clickables: std.ArrayList(*Node),
@@ -16,7 +17,7 @@ pub const Runtime = struct {
     }
 
     pub fn register(self: *Runtime, allocator: std.mem.Allocator, node: *Node) !void {
-        std.debug.assert(node.clickable != null);
+        std.debug.assert(node.on_click != null);
         try self.clickables.append(allocator, node);
     }
 
@@ -37,13 +38,16 @@ pub const Runtime = struct {
         };
 
         for (self.clickables.items) |node| {
-            const gx = node._global_x orelse continue;
-            const gy = node._global_y orelse continue;
+            const pos = node.position orelse continue;
+            const gx = pos._global_x orelse continue;
+            const gy = pos._global_y orelse continue;
 
-            if (mx >= gx and mx <= gx + node.width and
-                my >= gy and my <= gy + node.height)
+            if (mx >= gx and mx <= gx + pos.width and
+                my >= gy and my <= gy + pos.height)
             {
-                node.clickable.?.on_click(event);
+                if (node.on_click) |oc| {
+                    oc.invoke(event);
+                }
             }
         }
     }
@@ -54,21 +58,23 @@ test "runtime dispatch click hits registered node" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const TestHandler = struct {
+    const TestCtx = struct {
         clicked: bool = false,
 
-        pub fn on_click(self: *@This(), _: clickable.ClickEvent) void {
+        fn on_click(data: ?*anyopaque, _: clickable.ClickEvent) void {
+            const self: *@This() = @ptrCast(@alignCast(data.?));
             self.clicked = true;
         }
     };
 
-    var handler = TestHandler{};
+    var ctx = TestCtx{};
 
     var node = try allocator.create(Node);
-    node.* = try Node.init(allocator, "test", .top_left, null, 100, 50, null, null);
-    node._global_x = 10;
-    node._global_y = 20;
-    node.clickable = clickable.Clickable.init(&handler);
+    node.* = Node.init("test");
+    _ = node.with_position(ui.Position.init(.top_left, null, 100, 50, null));
+    node.position.?._global_x = 10;
+    node.position.?._global_y = 20;
+    node.on_click = clickable.OnClick.init(TestCtx.on_click, @ptrCast(&ctx));
 
     var rt = Runtime.init();
     defer rt.deinit(allocator);
@@ -76,7 +82,7 @@ test "runtime dispatch click hits registered node" {
 
     // Click inside node bounds
     rt.dispatch_click(50, 40, .left);
-    try std.testing.expect(handler.clicked);
+    try std.testing.expect(ctx.clicked);
 }
 
 test "runtime dispatch click misses outside node" {
@@ -84,21 +90,23 @@ test "runtime dispatch click misses outside node" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const TestHandler = struct {
+    const TestCtx = struct {
         clicked: bool = false,
 
-        pub fn on_click(self: *@This(), _: clickable.ClickEvent) void {
+        fn on_click(data: ?*anyopaque, _: clickable.ClickEvent) void {
+            const self: *@This() = @ptrCast(@alignCast(data.?));
             self.clicked = true;
         }
     };
 
-    var handler = TestHandler{};
+    var ctx = TestCtx{};
 
     var node = try allocator.create(Node);
-    node.* = try Node.init(allocator, "test", .top_left, null, 100, 50, null, null);
-    node._global_x = 10;
-    node._global_y = 20;
-    node.clickable = clickable.Clickable.init(&handler);
+    node.* = Node.init("test");
+    _ = node.with_position(ui.Position.init(.top_left, null, 100, 50, null));
+    node.position.?._global_x = 10;
+    node.position.?._global_y = 20;
+    node.on_click = clickable.OnClick.init(TestCtx.on_click, @ptrCast(&ctx));
 
     var rt = Runtime.init();
     defer rt.deinit(allocator);
@@ -106,5 +114,5 @@ test "runtime dispatch click misses outside node" {
 
     // Click outside node bounds
     rt.dispatch_click(500, 500, .left);
-    try std.testing.expect(!handler.clicked);
+    try std.testing.expect(!ctx.clicked);
 }
