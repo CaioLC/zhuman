@@ -23,8 +23,8 @@ const Resources = struct {
     font: sdl.ttf.Font,
     screen_height: c_int,
     screen_width: c_int,
-    ui_root: ?*ui.Node,
     runtime: ui.runtime.Runtime,
+    surfaces: std.ArrayList(*sdl.surface.Surface),
 
     pub fn init() !Resources {
         return .{
@@ -32,18 +32,19 @@ const Resources = struct {
             .font = try sdl.ttf.Font.init(font_path, 24),
             .screen_height = screen_height,
             .screen_width = screen_width,
-            .ui_root = null,
             .runtime = ui.runtime.Runtime.init(),
+            .surfaces = .empty,
         };
     }
 
     pub fn deinit(self: *Resources, allocator: std.mem.Allocator) void {
         self.runtime.deinit(allocator);
-        self.font.deinit();
-        if (self.ui_root) |node| {
-            node.deinit(allocator);
-            allocator.destroy(node);
+        for (self.surfaces.items) |surf| {
+            surf.deinit();
+            allocator.destroy(surf);
         }
+        self.surfaces.clearAndFree(allocator);
+        self.font.deinit();
     }
 };
 
@@ -90,8 +91,7 @@ pub fn main() !void {
     };
 
     // UI
-    const ui_root = try setup_ui(allocator, &res, &obj);
-    res.ui_root = ui_root;
+    res.runtime.root = try setup_ui(allocator, &res, &obj);
 
     while (!res.quit_app) {
         try events(&res, &obj);
@@ -108,7 +108,7 @@ fn events(res: *Resources, _: *Objects) !void {
             .window_resized => |e| {
                 res.screen_height = e.height;
                 res.screen_width = e.width;
-                if (res.ui_root) |root| {
+                if (res.runtime.root) |root| {
                     root.position.?.inner_height = @floatFromInt(e.height);
                     root.position.?.inner_width = @floatFromInt(e.width);
                 }
@@ -134,7 +134,7 @@ fn events(res: *Resources, _: *Objects) !void {
 
 fn text_node(
     allocator: std.mem.Allocator,
-    res: Resources,
+    res: *Resources,
     id: []const u8,
     text: []const u8,
     anchor: ui.Anchor,
@@ -147,10 +147,11 @@ fn text_node(
     node.* = ui.Node.init(id);
     _ = node.with_position(ui.Position.init(anchor, null, w, h, ui.Padding.initSymmetric(20.0, 10.0)));
 
-    // Store surface as opaque data
+    // Store surface as opaque data, tracked by Resources for cleanup
     const surf = try allocator.create(@TypeOf(surface));
     surf.* = surface;
     node.data = @ptrCast(surf);
+    try res.surfaces.append(allocator, surf);
 
     return node;
 }
@@ -165,7 +166,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     var x = try std.fmt.bufPrint(&text_buffer, "Counter: {}", .{@trunc(obj.counter.get())});
     const surf_node = try text_node(
         allocator,
-        res.*,
+        res,
         "cntr",
         x,
         .relative,
@@ -181,7 +182,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const timer_node = try text_node(
         allocator,
-        res.*,
+        res,
         "timr",
         "Timer template",
         .relative,
@@ -192,7 +193,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const other_node = try text_node(
         allocator,
-        res.*,
+        res,
         "othr",
         "Yet another node",
         .relative,
@@ -203,7 +204,7 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     x = try std.fmt.bufPrint(&text_buffer, "Timer: {}", .{obj.timer.get()});
     const another_node = try text_node(
         allocator,
-        res.*,
+        res,
         "othr",
         "And another one",
         .relative,
@@ -223,7 +224,7 @@ fn update(dt: f32, obj: *Objects) !void {
 }
 
 fn update_ui(_: std.mem.Allocator, res: *Resources, obj: Objects) !void {
-    if (res.ui_root) |root| {
+    if (res.runtime.root) |root| {
         try root.set_global_pos(null);
 
         if (root.get_by_id("cntr")) |counter| {
@@ -254,7 +255,7 @@ fn render(renderer: Renderer, res: Resources, _: Objects) !void {
     const humans_texture = try renderer.createTextureFromSurface(try res.font.renderTextSolid("You are alone", white));
     defer humans_texture.deinit();
 
-    if (res.ui_root) |root| {
+    if (res.runtime.root) |root| {
         var buf: [@sizeOf(*ui.Node) * 256]u8 = undefined;
         var bfa = std.heap.FixedBufferAllocator.init(&buf);
         const allocator = bfa.allocator();

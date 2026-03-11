@@ -4,16 +4,23 @@ const Node = ui.Node;
 const clickable = @import("features/clickable.zig");
 
 pub const Runtime = struct {
+    root: ?*Node,
     clickables: std.ArrayList(*Node),
 
     pub fn init() Runtime {
         return .{
+            .root = null,
             .clickables = .empty,
         };
     }
 
     pub fn deinit(self: *Runtime, allocator: std.mem.Allocator) void {
         self.clickables.clearAndFree(allocator);
+        if (self.root) |root| {
+            root.deinit(allocator);
+            allocator.destroy(root);
+            self.root = null;
+        }
     }
 
     pub fn register(self: *Runtime, allocator: std.mem.Allocator, node: *Node) !void {
