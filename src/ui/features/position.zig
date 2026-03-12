@@ -56,7 +56,7 @@ pub const ChildrenPosInfo = struct {
 
 pub const Position = struct {
     // a function that takes the owning node and ui context, returns data_width and data_height
-    calc_pos: *const fn (*ui.Node, ?*anyopaque) .{ f32, f32 },
+    calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
     // where to place, in relation to parent
     anchor: Anchor,
     // how to place children position nodes
@@ -71,7 +71,7 @@ pub const Position = struct {
     _global_y: ?f32,
 
     pub fn init(
-        calc_pos: *const fn (*ui.Node, ?*anyopaque) .{ f32, f32 },
+        calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
         anchor: Anchor,
         children_align: ?ChildrenAlign,
         padding: ?Padding,
@@ -92,7 +92,7 @@ pub const Position = struct {
         };
     }
 
-    fn static_calc_pos(node: *ui.Node, _: ?*anyopaque) .{ f32, f32 } {
+    fn static_calc_pos(node: *ui.Node, _: ?*anyopaque) struct { f32, f32 } {
         const pos = node.position orelse return .{ 0, 0 };
         return .{ pos.data_width, pos.data_height };
     }

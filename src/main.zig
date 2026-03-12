@@ -114,7 +114,7 @@ pub fn main() !void {
         try events(&res, &obj);
         try update(frame_capper.delay(), &obj);
         try update_ui(&res);
-        try render(renderer, res);
+        try render(renderer, &res);
     }
 }
 
@@ -178,7 +178,7 @@ fn render_counter(node: *ui.Node, ctx: ?*anyopaque) void {
     ui_ctx.renderer.renderTexture(texture, null, dst) catch return;
 }
 
-fn calc_counter_pos(node: *ui.Node, ctx: ?*anyopaque) .{ f32, f32 } {
+fn calc_counter_pos(node: *ui.Node, ctx: ?*anyopaque) struct { f32, f32 } {
     const ui_ctx: *UiCtx = @ptrCast(@alignCast(ctx orelse return .{ 0, 0 }));
     const obj: *Objects = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
     var text_buffer: [64]u8 = undefined;
@@ -232,7 +232,7 @@ fn update_ui(res: *Resources) !void {
     try res.runtime.update();
 }
 
-fn render(renderer: Renderer, res: Resources) !void {
+fn render(renderer: Renderer, res: *Resources) !void {
     try renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
     try renderer.clear();
 
