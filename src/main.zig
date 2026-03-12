@@ -3,20 +3,14 @@ const std = @import("std");
 const ha = @import("ha");
 const time = ha.time;
 const ui = ha.ui;
+const widgets = ha.widgets;
 const sdl = ha.sdl;
-const zfont = ha.font;
 
 const Renderer = ha.sdl.render.Renderer;
 const screen_width: c_int = 800;
 const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
-
-// logger
-const log_app = sdl.log.Category.application;
-
-// colors
-const white = zfont.white;
 
 const Resources = struct {
     quit_app: bool,
@@ -41,25 +35,19 @@ const Resources = struct {
     }
 };
 
-const CounterObj = struct {
-    counter: time.Counter,
-    text: []const u8,
-};
-
-const TimerObj = struct {
-    timer: time.Timer,
-    text: []const u8,
-};
+fn get_counter(ptr: *anyopaque) f32 {
+    const counter: *time.Counter = @ptrCast(@alignCast(ptr));
+    return counter.get();
+}
 
 const Objects = struct {
-    counter: CounterObj,
-    timer: TimerObj,
+    counter: time.Counter,
+    timer: time.Timer,
 };
 
-fn reset_click(data: ?*anyopaque, _: ui.features.ClickEvent) void {
-    const obj: *Objects = @ptrCast(@alignCast(data.?));
-    obj.counter.counter.set(0.0);
-    obj.timer.timer.reset();
+fn reset_counter(data: ?*anyopaque, _: ui.features.ClickEvent) void {
+    const counter: *time.Counter = @ptrCast(@alignCast(data orelse return));
+    counter.set(0.0);
 }
 
 pub fn main() !void {
@@ -91,22 +79,13 @@ pub fn main() !void {
     defer res.deinit(allocator);
 
     // Objects
-    const counter: CounterObj = .{
-        .counter = time.Counter.init(0.0),
-        .text = "Counter:",
-    };
-    const timer: TimerObj = .{
-        .timer = time.Timer.init(30.0, null),
-        .text = "Timer:",
-    };
-
     var obj: Objects = .{
-        .counter = counter,
-        .timer = timer,
+        .counter = time.Counter.init(0.0),
+        .timer = time.Timer.init(30.0, null),
     };
 
     // UI
-    var ui_ctx = UiCtx{ .font = &res.font, .renderer = &renderer };
+    var ui_ctx = widgets.UiCtx{ .font = &res.font, .renderer = &renderer };
     res.runtime.bind(@ptrCast(&ui_ctx));
     res.runtime.root = try setup_ui(allocator, &res, &obj);
 
@@ -151,50 +130,7 @@ fn events(res: *Resources, _: *Objects) !void {
     }
 }
 
-const UiCtx = struct {
-    font: *sdl.ttf.Font,
-    renderer: *const Renderer,
-};
-
-fn render_counter(node: *ui.Node, ctx: ?*anyopaque) void {
-    const ui_ctx: *UiCtx = @ptrCast(@alignCast(ctx orelse return));
-    const obj: *Objects = @ptrCast(@alignCast(node.data orelse return));
-    const pos = node.position orelse return;
-    var text_buffer: [64]u8 = undefined;
-    const text = std.fmt.bufPrint(&text_buffer, "{s} {}", .{
-        obj.counter.text,
-        @trunc(obj.counter.counter.get()),
-    }) catch return;
-    const surface = ui_ctx.font.renderTextSolid(text, white) catch return;
-    defer surface.deinit();
-    const texture = ui_ctx.renderer.createTextureFromSurface(surface) catch return;
-    defer texture.deinit();
-    const dst = sdl.rect.FRect{
-        .x = (pos._global_x orelse return) + pos.padding.left,
-        .y = (pos._global_y orelse return) + pos.padding.up,
-        .w = pos.data_width,
-        .h = pos.data_height,
-    };
-    ui_ctx.renderer.renderTexture(texture, null, dst) catch return;
-}
-
-fn calc_counter_pos(node: *ui.Node, ctx: ?*anyopaque) struct { f32, f32 } {
-    const ui_ctx: *UiCtx = @ptrCast(@alignCast(ctx orelse return .{ 0, 0 }));
-    const obj: *Objects = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
-    var text_buffer: [64]u8 = undefined;
-    const text = std.fmt.bufPrint(&text_buffer, "{s} {}", .{
-        obj.counter.text,
-        @trunc(obj.counter.counter.get()),
-    }) catch return .{ 0, 0 };
-    const surface = ui_ctx.font.renderTextSolid(text, white) catch return .{ 0, 0 };
-    defer surface.deinit();
-    const width: f32 = @floatFromInt(surface.getWidth());
-    const height: f32 = @floatFromInt(surface.getHeight());
-    return .{ width, height };
-}
-
 fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.Node {
-    const widgets = ui.widgets;
     const padding = ui.Padding.initSymmetric(20.0, 10.0);
 
     const root = try allocator.create(ui.Node);
@@ -202,20 +138,29 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
     _ = root.with_position(ui.Position.initStatic(.top_left, .centered_wrapped, screen_width, screen_height, null));
 
     // Counter
+    const counter_tn = try allocator.create(widgets.TextNode);
+    counter_tn.* = .{
+        .value = &get_counter,
+        .source = @ptrCast(&obj.counter),
+        .label = "Counter:",
+        .cached_surface = null,
+        .last_value = -1.0,
+    };
+
     const counter_node = try widgets.button(
         allocator,
         "cntr",
         ui.Position.init(
-            &calc_counter_pos,
+            &widgets.calc_text_node_pos,
             .relative,
             null,
             padding,
         ),
-        ui.features.OnClick.init(reset_click, @ptrCast(obj)),
+        ui.features.OnClick.init(reset_counter, @ptrCast(&obj.counter)),
     );
     _ = counter_node
-        .with_data(@ptrCast(obj))
-        .with_render(ui.features.OnRender.init(&render_counter));
+        .with_data(@ptrCast(counter_tn))
+        .with_render(ui.features.OnRender.init(&widgets.render_text_node));
 
     try res.runtime.register(allocator, counter_node);
     try root.add_child(allocator, counter_node);
@@ -224,8 +169,8 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
 }
 
 fn update(dt: f32, obj: *Objects) !void {
-    obj.counter.counter.update(dt);
-    obj.timer.timer.update(dt);
+    obj.counter.update(dt);
+    obj.timer.update(dt);
 }
 
 fn update_ui(res: *Resources) !void {

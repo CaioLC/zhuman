@@ -5,6 +5,7 @@ comptime {
 }
 pub const sdl = @import("sdl3");
 pub const ui = @import("./ui/root.zig");
+pub const widgets = @import("./widgets.zig");
 pub const time = @import("./time.zig");
 pub const font = @import("./font.zig");
 

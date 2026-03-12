@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
 pub const runtime = @import("runtime.zig");
-pub const widgets = @import("widgets.zig");
 
 // Re-export common types for convenience
 pub const Anchor = features.Anchor;
