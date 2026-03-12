@@ -55,33 +55,66 @@ pub const ChildrenPosInfo = struct {
 };
 
 pub const Position = struct {
+    // a function that takes the owning node and ui context, returns data_width and data_height
+    calc_pos: *const fn (*ui.Node, ?*anyopaque) .{ f32, f32 },
+    // where to place, in relation to parent
     anchor: Anchor,
+    // how to place children position nodes
     children_align: ChildrenAlign,
+    // these are self explanatory
     padding: Padding,
     width: f32,
     height: f32,
-    inner_width: f32,
-    inner_height: f32,
+    data_width: f32,
+    data_height: f32,
     _global_x: ?f32,
     _global_y: ?f32,
 
     pub fn init(
+        calc_pos: *const fn (*ui.Node, ?*anyopaque) .{ f32, f32 },
         anchor: Anchor,
         children_align: ?ChildrenAlign,
-        inner_width: f32,
-        inner_height: f32,
         padding: ?Padding,
     ) Position {
         const pad = padding orelse Padding.init(0);
         const ch = children_align orelse .horizontal;
         return .{
+            .calc_pos = calc_pos,
             .anchor = anchor,
             .children_align = ch,
             .padding = pad,
-            .inner_width = inner_width,
-            .inner_height = inner_height,
-            .width = inner_width + pad.left + pad.right,
-            .height = inner_height + pad.up + pad.down,
+            .data_width = 0,
+            .data_height = 0,
+            .width = pad.left + pad.right,
+            .height = pad.up + pad.down,
+            ._global_x = null,
+            ._global_y = null,
+        };
+    }
+
+    fn static_calc_pos(node: *ui.Node, _: ?*anyopaque) .{ f32, f32 } {
+        const pos = node.position orelse return .{ 0, 0 };
+        return .{ pos.data_width, pos.data_height };
+    }
+
+    pub fn initStatic(
+        anchor: Anchor,
+        children_align: ?ChildrenAlign,
+        width: f32,
+        height: f32,
+        padding: ?Padding,
+    ) Position {
+        const pad = padding orelse Padding.init(0);
+        const ch = children_align orelse .horizontal;
+        return .{
+            .calc_pos = &static_calc_pos,
+            .anchor = anchor,
+            .children_align = ch,
+            .padding = pad,
+            .data_width = width,
+            .data_height = height,
+            .width = width + pad.left + pad.right,
+            .height = height + pad.up + pad.down,
             ._global_x = null,
             ._global_y = null,
         };
@@ -90,18 +123,19 @@ pub const Position = struct {
 
 // --- Layout functions (operate on Node, reading its Position feature) ---
 
-pub fn recalculate_size(node: *ui.Node) void {
-    for (node.children.items) |c| recalculate_size(c);
+pub fn recalculate_size(node: *ui.Node, ctx: ?*anyopaque) void {
+    for (node.children.items) |c| recalculate_size(c, ctx);
     if (node.position) |*pos| {
-        pos.width = pos.inner_width + pos.padding.left + pos.padding.right;
-        pos.height = pos.inner_height + pos.padding.up + pos.padding.down;
+        pos.data_width, pos.data_height = pos.calc_pos(node, ctx);
+        pos.width = pos.data_width + pos.padding.left + pos.padding.right;
+        pos.height = pos.data_height + pos.padding.up + pos.padding.down;
     }
 }
 
-pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
+pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo, ctx: ?*anyopaque) !void {
     const pos: *Position = &(node.position orelse return);
 
-    if (node.parent == null) recalculate_size(node);
+    if (node.parent == null) recalculate_size(node, ctx);
 
     // Get parent position info
     var pw: f32 = 0.0;
@@ -152,7 +186,7 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
 
     // Independent children position themselves
     for (indep_children) |c| {
-        try set_global_pos(c, null);
+        try set_global_pos(c, null, ctx);
     }
 
     // Dependent children are positioned by parent's children_align
@@ -166,7 +200,7 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
             const cpos = c.position.?;
             switch (pos.children_align) {
                 .horizontal => {
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset }, ctx);
                     x_offset += cpos.width;
                 },
                 .horizontal_wrapped => {
@@ -175,13 +209,13 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                         y_offset += row_max_height;
                         row_max_height = 0.0;
                     }
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset }, ctx);
                     x_offset += cpos.width;
                     row_max_height = @max(row_max_height, cpos.height);
                 },
                 .horizontal_reverse => {
                     x_offset -= cpos.width;
-                    try set_global_pos(c, .{ .x_offset = pos.width + x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = pos.width + x_offset, .y_offset = y_offset }, ctx);
                 },
                 .horizontal_reverse_wrapped => {
                     x_offset -= cpos.width;
@@ -190,11 +224,11 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                         y_offset += row_max_height;
                         row_max_height = 0.0;
                     }
-                    try set_global_pos(c, .{ .x_offset = pos.width + x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = pos.width + x_offset, .y_offset = y_offset }, ctx);
                     row_max_height = @max(row_max_height, cpos.height);
                 },
                 .vertical => {
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset }, ctx);
                     y_offset += cpos.height;
                 },
                 .vertical_wrapped => {
@@ -203,13 +237,13 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                         x_offset += col_max_width;
                         col_max_width = 0.0;
                     }
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset }, ctx);
                     y_offset += cpos.height;
                     col_max_width = @max(col_max_width, cpos.width);
                 },
                 .vertical_reverse => {
                     y_offset -= cpos.height;
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = pos.height + y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = pos.height + y_offset }, ctx);
                 },
                 .vertical_reverse_wrapped => {
                     y_offset -= cpos.height;
@@ -218,7 +252,7 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                         x_offset += col_max_width;
                         col_max_width = 0.0;
                     }
-                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = pos.height + y_offset });
+                    try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = pos.height + y_offset }, ctx);
                     col_max_width = @max(col_max_width, cpos.width);
                 },
                 .centered => {
@@ -228,7 +262,7 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                     const element_central_point: f32 = w_central_point * (f_idx + 1.0);
                     const start_x = element_central_point - (cpos.width / 2);
                     const start_y = (pos.height - cpos.height) / 2;
-                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = start_y });
+                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = start_y }, ctx);
                 },
                 .centered_top => {
                     const f_idx: f32 = @floatFromInt(idx);
@@ -236,7 +270,7 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                     const w_central_point = pos.width / (1.0 + n_elements);
                     const element_central_point: f32 = w_central_point * (f_idx + 1.0);
                     const start_x = element_central_point - (cpos.width / 2);
-                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = 0 });
+                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = 0 }, ctx);
                 },
                 .centered_bottom => {
                     const f_idx: f32 = @floatFromInt(idx);
@@ -244,21 +278,21 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo) !void {
                     const w_central_point = pos.width / (1.0 + n_elements);
                     const element_central_point: f32 = w_central_point * (f_idx + 1.0);
                     const start_x = element_central_point - (cpos.width / 2);
-                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = pos.height - cpos.height });
+                    try set_global_pos(c, .{ .x_offset = start_x, .y_offset = pos.height - cpos.height }, ctx);
                 },
                 .centered_top_wrapped => {
                     if (idx != 0) continue;
-                    try set_centered_wrapped_rows(dep_children, pos.width, 0.0);
+                    try set_centered_wrapped_rows(dep_children, pos.width, 0.0, ctx);
                 },
                 .centered_bottom_wrapped => {
                     if (idx != 0) continue;
                     const total_h = compute_wrapped_height(dep_children, pos.width);
-                    try set_centered_wrapped_rows(dep_children, pos.width, pos.height - total_h);
+                    try set_centered_wrapped_rows(dep_children, pos.width, pos.height - total_h, ctx);
                 },
                 .centered_wrapped => {
                     if (idx != 0) continue;
                     const total_h = compute_wrapped_height(dep_children, pos.width);
-                    try set_centered_wrapped_rows(dep_children, pos.width, (pos.height - total_h) / 2.0);
+                    try set_centered_wrapped_rows(dep_children, pos.width, (pos.height - total_h) / 2.0, ctx);
                 },
             }
         }
@@ -319,7 +353,7 @@ fn compute_wrapped_height(dep_children: []*ui.Node, parent_width: f32) f32 {
     return total_h;
 }
 
-fn set_centered_wrapped_rows(dep_children: []*ui.Node, parent_width: f32, start_y: f32) error{NoInfoForChildren}!void {
+fn set_centered_wrapped_rows(dep_children: []*ui.Node, parent_width: f32, start_y: f32, ctx: ?*anyopaque) error{NoInfoForChildren}!void {
     var row_start: usize = 0;
     var current_y: f32 = start_y;
     while (row_start < dep_children.len) {
@@ -336,7 +370,7 @@ fn set_centered_wrapped_rows(dep_children: []*ui.Node, parent_width: f32, start_
         }
         var x_row = (parent_width - row_w) / 2.0;
         for (dep_children[row_start..row_end]) |child| {
-            try set_global_pos(child, .{ .x_offset = x_row, .y_offset = current_y });
+            try set_global_pos(child, .{ .x_offset = x_row, .y_offset = current_y }, ctx);
             x_row += child.position.?.width;
         }
         current_y += row_h;

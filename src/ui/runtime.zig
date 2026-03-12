@@ -1,17 +1,24 @@
 const std = @import("std");
 const ui = @import("root.zig");
 const Node = ui.Node;
+const position = @import("features/position.zig");
 const clickable = @import("features/clickable.zig");
 
 pub const Runtime = struct {
     root: ?*Node,
+    ctx: ?*anyopaque,
     clickables: std.ArrayList(*Node),
 
     pub fn init() Runtime {
         return .{
             .root = null,
+            .ctx = null,
             .clickables = .empty,
         };
+    }
+
+    pub fn bind(self: *Runtime, ctx: *anyopaque) void {
+        self.ctx = ctx;
     }
 
     pub fn deinit(self: *Runtime, allocator: std.mem.Allocator) void {
@@ -33,6 +40,28 @@ pub const Runtime = struct {
             if (n == node) {
                 _ = self.clickables.swapRemove(i);
                 return;
+            }
+        }
+    }
+
+    pub fn update(self: *Runtime) !void {
+        if (self.root) |root| {
+            try position.set_global_pos(root, null, self.ctx);
+        }
+    }
+
+    pub fn render(self: *Runtime) void {
+        const root = self.root orelse return;
+        var buf: [@sizeOf(*Node) * 256]u8 = undefined;
+        var bfa = std.heap.FixedBufferAllocator.init(&buf);
+        const allocator = bfa.allocator();
+        var node_stack: std.ArrayList(*Node) = .empty;
+        defer node_stack.clearRetainingCapacity();
+        root.collect(allocator, &node_stack) catch return;
+
+        for (node_stack.items) |node| {
+            if (node.on_render) |on_render| {
+                on_render.invoke(node, self.ctx);
             }
         }
     }
@@ -78,7 +107,7 @@ test "runtime dispatch click hits registered node" {
 
     var node = try allocator.create(Node);
     node.* = Node.init("test");
-    _ = node.with_position(ui.Position.init(.top_left, null, 100, 50, null));
+    _ = node.with_position(ui.Position.initStatic(.top_left, null, 100, 50, null));
     node.position.?._global_x = 10;
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.init(TestCtx.on_click, @ptrCast(&ctx));
@@ -110,7 +139,7 @@ test "runtime dispatch click misses outside node" {
 
     var node = try allocator.create(Node);
     node.* = Node.init("test");
-    _ = node.with_position(ui.Position.init(.top_left, null, 100, 50, null));
+    _ = node.with_position(ui.Position.initStatic(.top_left, null, 100, 50, null));
     node.position.?._global_x = 10;
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.init(TestCtx.on_click, @ptrCast(&ctx));
