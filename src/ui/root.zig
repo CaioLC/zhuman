@@ -15,6 +15,7 @@ pub const Node = struct {
     parent: ?*Node,
     children: std.ArrayList(*Node),
     data: ?*anyopaque,
+    on_deinit: ?*const fn (Allocator, *anyopaque) void,
 
     // Features
     position: ?features.Position,
@@ -27,6 +28,7 @@ pub const Node = struct {
             .parent = null,
             .children = .empty,
             .data = null,
+            .on_deinit = null,
             .position = null,
             .on_click = null,
             .on_render = null,
@@ -49,10 +51,12 @@ pub const Node = struct {
         return self;
     }
 
-    pub fn with_data(self: *Node, data: ?*anyopaque) *Node {
+    pub fn with_data(self: *Node, data: *anyopaque, on_deinit: ?*const fn (Allocator, *anyopaque) void) *Node {
         self.data = data;
+        self.on_deinit = on_deinit;
         return self;
     }
+
     // --- Tree operations ---
 
     pub fn add_child(self: *Node, allocator: Allocator, child: *Node) !void {
@@ -66,6 +70,11 @@ pub const Node = struct {
             allocator.destroy(child);
         }
         self.children.clearAndFree(allocator);
+        if (self.on_deinit) |deinit_fn| {
+            if (self.data) |data| {
+                deinit_fn(allocator, data);
+            }
+        }
     }
 
     pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {

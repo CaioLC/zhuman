@@ -5,61 +5,102 @@ const zfont = @import("./font.zig");
 
 const white = zfont.white;
 
-// --- TextNode: a cached text display driven by a dynamic value ---
+// --- TextNode: dynamic text, re-rasterized every frame ---
 
-pub const TextNode = struct {
-    value: *const fn (*anyopaque) f32,
-    source: *anyopaque,
-    label: []const u8,
-    cached_surface: ?sdl.surface.Surface,
-    last_value: f32,
+pub fn TextNode(comptime Source: type, comptime Ctx: type) type {
+    return struct {
+        const Self = @This();
 
-    pub fn format_text(self: *TextNode, buf: []u8) ?[]const u8 {
-        return std.fmt.bufPrint(buf, "{s} {}", .{
-            self.label,
-            @trunc(self.value(self.source)),
-        }) catch null;
-    }
+        format: *const fn (*Source, []u8) ?[]const u8,
+        source: *Source,
 
-    pub fn refresh(self: *TextNode, font: *sdl.ttf.Font) void {
-        const current = self.value(self.source);
-        if (self.cached_surface != null and current == self.last_value) return;
-        if (self.cached_surface) |*s| s.deinit();
-        var text_buffer: [64]u8 = undefined;
-        const text = self.format_text(&text_buffer) orelse return;
-        self.cached_surface = font.renderTextSolid(text, white) catch null;
-        self.last_value = current;
-    }
+        pub fn renderSurface(self: *Self, font: *sdl.ttf.Font) ?sdl.surface.Surface {
+            var text_buffer: [256]u8 = undefined;
+            const text = self.format(self.source, &text_buffer) orelse return null;
+            return font.renderTextSolid(text, white) catch null;
+        }
 
-    pub fn deinit(self: *TextNode) void {
-        if (self.cached_surface) |*s| s.deinit();
-        self.cached_surface = null;
-    }
-};
+        pub fn deinit_node(allocator: std.mem.Allocator, data: *anyopaque) void {
+            const self: *Self = @ptrCast(@alignCast(data));
+            allocator.destroy(self);
+        }
 
-pub fn render_text_node(node: *ui.Node, ctx: ?*anyopaque) void {
-    const ui_ctx: *UiCtx = @ptrCast(@alignCast(ctx orelse return));
-    const tn: *TextNode = @ptrCast(@alignCast(node.data orelse return));
-    const pos = node.position orelse return;
-    tn.refresh(ui_ctx.font);
-    const surface = tn.cached_surface orelse return;
-    const texture = ui_ctx.renderer.createTextureFromSurface(surface) catch return;
-    defer texture.deinit();
-    const dst = sdl.rect.FRect{
-        .x = (pos._global_x orelse return) + pos.padding.left,
-        .y = (pos._global_y orelse return) + pos.padding.up,
-        .w = pos.data_width,
-        .h = pos.data_height,
+        pub fn render(node: *ui.Node, raw_ctx: ?*anyopaque) void {
+            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return));
+            const self: *Self = @ptrCast(@alignCast(node.data orelse return));
+            const pos = node.position orelse return;
+            var surface = self.renderSurface(ctx.font) orelse return;
+            defer surface.deinit();
+            const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
+            defer texture.deinit();
+            const dst = sdl.rect.FRect{
+                .x = (pos._global_x orelse return) + pos.padding.left,
+                .y = (pos._global_y orelse return) + pos.padding.up,
+                .w = pos.data_width,
+                .h = pos.data_height,
+            };
+            ctx.renderer.renderTexture(texture, null, dst) catch return;
+        }
+
+        pub fn calc_pos(node: *ui.Node, raw_ctx: ?*anyopaque) struct { f32, f32 } {
+            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return .{ 0, 0 }));
+            const self: *Self = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
+            var surface = self.renderSurface(ctx.font) orelse return .{ 0, 0 };
+            defer surface.deinit();
+            return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
+        }
     };
-    ui_ctx.renderer.renderTexture(texture, null, dst) catch return;
 }
 
-pub fn calc_text_node_pos(node: *ui.Node, ctx: ?*anyopaque) struct { f32, f32 } {
-    const ui_ctx: *UiCtx = @ptrCast(@alignCast(ctx orelse return .{ 0, 0 }));
-    const tn: *TextNode = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
-    tn.refresh(ui_ctx.font);
-    const surface = tn.cached_surface orelse return .{ 0, 0 };
-    return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
+// --- TextNodeStatic: rasterized once, reused every frame ---
+
+pub fn TextNodeStatic(comptime Ctx: type) type {
+    return struct {
+        const Self = @This();
+
+        text: []const u8,
+        surface: ?sdl.surface.Surface,
+
+        pub fn renderSurface(self: *Self, font: *sdl.ttf.Font) ?sdl.surface.Surface {
+            if (self.surface) |s| return s;
+            self.surface = font.renderTextSolid(self.text, white) catch null;
+            return self.surface;
+        }
+
+        pub fn deinit_node(allocator: std.mem.Allocator, data: *anyopaque) void {
+            const self: *Self = @ptrCast(@alignCast(data));
+            self.deinit();
+            allocator.destroy(self);
+        }
+
+        pub fn deinit(self: *Self) void {
+            if (self.surface) |*s| s.deinit();
+            self.surface = null;
+        }
+
+        pub fn render(node: *ui.Node, raw_ctx: ?*anyopaque) void {
+            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return));
+            const self: *Self = @ptrCast(@alignCast(node.data orelse return));
+            const pos = node.position orelse return;
+            const surface = self.renderSurface(ctx.font) orelse return;
+            const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
+            defer texture.deinit();
+            const dst = sdl.rect.FRect{
+                .x = (pos._global_x orelse return) + pos.padding.left,
+                .y = (pos._global_y orelse return) + pos.padding.up,
+                .w = pos.data_width,
+                .h = pos.data_height,
+            };
+            ctx.renderer.renderTexture(texture, null, dst) catch return;
+        }
+
+        pub fn calc_pos(node: *ui.Node, raw_ctx: ?*anyopaque) struct { f32, f32 } {
+            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return .{ 0, 0 }));
+            const self: *Self = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
+            const surface = self.renderSurface(ctx.font) orelse return .{ 0, 0 };
+            return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
+        }
+    };
 }
 
 // --- UiCtx: shared context bound to Runtime ---
