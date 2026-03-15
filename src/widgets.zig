@@ -6,7 +6,6 @@ const zfont = @import("./font.zig");
 const white = zfont.white;
 
 // --- TextNode: dynamic text, re-rasterized every frame ---
-
 pub fn TextNode(comptime Source: type, comptime Ctx: type) type {
     return struct {
         const Self = @This();
@@ -53,7 +52,6 @@ pub fn TextNode(comptime Source: type, comptime Ctx: type) type {
 }
 
 // --- TextNodeStatic: rasterized once, reused every frame ---
-
 pub fn TextNodeStatic(comptime Ctx: type) type {
     return struct {
         const Self = @This();
@@ -104,24 +102,7 @@ pub fn TextNodeStatic(comptime Ctx: type) type {
 }
 
 // --- UiCtx: shared context bound to Runtime ---
-
 pub const UiCtx = struct {
     font: *sdl.ttf.Font,
     renderer: *const sdl.render.Renderer,
 };
-
-// --- button: convenience constructor for clickable nodes ---
-
-pub fn button(
-    allocator: std.mem.Allocator,
-    id: []const u8,
-    position: ui.Position,
-    on_click: ui.features.OnClick,
-) !*ui.Node {
-    const node = try allocator.create(ui.Node);
-    node.* = ui.Node.init(id);
-    _ = node
-        .with_position(position)
-        .with_onclick(on_click);
-    return node;
-}

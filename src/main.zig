@@ -15,12 +15,48 @@ const font_path = "assets/fonts/Kenney Mini Square.ttf";
 const UiRuntime = ui.runtime.Runtime(widgets.UiCtx);
 const CounterTextNode = widgets.TextNode(time.Counter, widgets.UiCtx);
 
+const App = struct {
+    gpa: std.heap.GeneralPurposeAllocator(.{}),
+    window: sdl.video.Window,
+    renderer: sdl.render.Renderer,
+    frame_capper: sdl.extras.FramerateCapper(f32),
+
+    fn init() !App {
+        const gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        try sdl.init(.{ .video = true, .events = true });
+        try sdl.ttf.init();
+        const window, const renderer = try sdl.render.Renderer.initWithWindow(
+            "Human Action",
+            screen_width,
+            screen_height,
+            .{ .resizable = true },
+        );
+        var frame_capper = sdl.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
+        renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
+            frame_capper.mode = .{ .limited = fps };
+        };
+        return .{
+            .gpa = gpa,
+            .window = window,
+            .renderer = renderer,
+            .frame_capper = frame_capper,
+        };
+    }
+
+    fn deinit(self: *App) void {
+        self.renderer.deinit();
+        self.window.deinit();
+        sdl.ttf.quit();
+        sdl.quit(.{ .video = true, .events = true });
+        _ = self.gpa.deinit();
+    }
+};
+
 const Resources = struct {
     quit_app: bool,
     font: sdl.ttf.Font,
     screen_height: c_int,
     screen_width: c_int,
-    runtime: UiRuntime,
 
     pub fn init() !Resources {
         return .{
@@ -28,23 +64,13 @@ const Resources = struct {
             .font = try sdl.ttf.Font.init(font_path, 24),
             .screen_height = screen_height,
             .screen_width = screen_width,
-            .runtime = UiRuntime.init(),
         };
     }
 
-    pub fn deinit(self: *Resources, allocator: std.mem.Allocator) void {
-        self.runtime.deinit(allocator);
+    pub fn deinit(self: *Resources) void {
         self.font.deinit();
     }
 };
-
-fn format_counter(counter: *time.Counter, buf: []u8) ?[]const u8 {
-    return std.fmt.bufPrint(buf, "Counter: {}", .{@trunc(counter.get())}) catch null;
-}
-
-fn reset_counter(counter: *time.Counter, _: ui.features.ClickEvent) void {
-    counter.set(0.0);
-}
 
 const Objects = struct {
     counter: time.Counter,
@@ -52,32 +78,13 @@ const Objects = struct {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
-
-    try sdl.init(.{ .video = true, .events = true });
-    defer sdl.quit(.{ .video = true, .events = true });
-    try sdl.ttf.init();
-    defer sdl.ttf.quit();
-
-    const window, const renderer = try sdl.render.Renderer.initWithWindow(
-        "Human Action",
-        screen_width,
-        screen_height,
-        .{ .resizable = true },
-    );
-    defer renderer.deinit();
-    defer window.deinit();
-
-    var frame_capper = sdl.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
-    renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
-        frame_capper.mode = .{ .limited = fps };
-    };
+    // App Setup
+    var app = try App.init();
+    const allocator = app.gpa.allocator();
 
     // Resources
     var res = try Resources.init();
-    defer res.deinit(allocator);
+    defer res.deinit();
 
     // Objects
     var obj: Objects = .{
@@ -86,15 +93,15 @@ pub fn main() !void {
     };
 
     // UI
-    var ui_ctx = widgets.UiCtx{ .font = &res.font, .renderer = &renderer };
-    res.runtime.bind(&ui_ctx);
-    res.runtime.root = try setup_ui(allocator, &res, &obj);
+    var ui_ctx = widgets.UiCtx{ .font = &res.font, .renderer = &app.renderer };
+    var ui_runtime = UiRuntime.init(&ui_ctx);
+    try setup_ui(allocator, &ui_runtime, &res, &obj);
 
     while (!res.quit_app) {
         try events(&res, &obj);
-        try update(frame_capper.delay(), &obj);
+        try update(app.frame_capper.delay(), &obj);
         try update_ui(&res);
-        try render(renderer, &res);
+        try render(app.renderer, &ui_runtime);
     }
 }
 
@@ -131,12 +138,8 @@ fn events(res: *Resources, _: *Objects) !void {
     }
 }
 
-fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.Node {
+fn setup_ui(allocator: std.mem.Allocator, ui_runtime: *UiRuntime, _: *Resources, obj: *Objects) !void {
     const padding = ui.Padding.initSymmetric(20.0, 10.0);
-
-    const root = try allocator.create(ui.Node);
-    root.* = ui.Node.init("root");
-    _ = root.with_position(ui.Position.initStatic(.top_left, .centered_wrapped, screen_width, screen_height, null));
 
     // Counter
     const counter_tn = try allocator.create(CounterTextNode);
@@ -145,25 +148,26 @@ fn setup_ui(allocator: std.mem.Allocator, res: *Resources, obj: *Objects) !*ui.N
         .source = &obj.counter,
     };
 
-    const counter_node = try widgets.button(
-        allocator,
-        "cntr",
-        ui.Position.init(
-            &CounterTextNode.calc_pos,
-            .relative,
-            null,
-            padding,
-        ),
-        ui.features.OnClick.typed(time.Counter, &reset_counter, &obj.counter),
-    );
-    _ = counter_node
-        .with_data(@ptrCast(counter_tn), &CounterTextNode.deinit_node)
-        .with_render(ui.features.OnRender.init(&CounterTextNode.render));
+    const counter_node = try allocator.create(ui.Node);
+    counter_node.* = ui.Node.init("cntr")
+        .with_position(
+            ui.Position.init(
+                .relative,
+                null,
+                padding,
+                &CounterTextNode.calc_pos,
+            ),
+        )
+        .with_onclick(
+            ui.OnClick.typed(time.Counter, &reset_counter, &obj.counter),
+        )
+        .with_data(
+            @ptrCast(counter_tn),
+            &CounterTextNode.deinit_node,
+        )
+        .with_render(ui.OnRender.init(&CounterTextNode.render));
 
-    try res.runtime.register(allocator, counter_node);
-    try root.add_child(allocator, counter_node);
-
-    return root;
+    try ui_runtime.root.add_child(allocator, counter_node);
 }
 
 fn update(dt: f32, obj: *Objects) !void {
@@ -175,11 +179,19 @@ fn update_ui(res: *Resources) !void {
     try res.runtime.update();
 }
 
-fn render(renderer: Renderer, res: *Resources) !void {
+fn render(renderer: Renderer, ui_runtime: *UiRuntime) !void {
     try renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
     try renderer.clear();
 
-    res.runtime.render();
+    ui_runtime.render();
 
     try renderer.present();
+}
+
+fn format_counter(counter: *time.Counter, buf: []u8) ?[]const u8 {
+    return std.fmt.bufPrint(buf, "Counter: {}", .{@trunc(counter.get())}) catch null;
+}
+
+fn reset_counter(counter: *time.Counter, _: ui.features.ClickEvent) void {
+    counter.set(0.0);
 }

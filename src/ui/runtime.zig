@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const ui = @import("root.zig");
 const Node = ui.Node;
 const position = @import("features/position.zig");
@@ -8,14 +9,17 @@ pub fn Runtime(comptime Ctx: type) type {
     return struct {
         const Self = @This();
 
-        root: ?*Node,
-        ctx: ?*Ctx,
+        root: *Node,
+        ctx: *Ctx,
         clickables: std.ArrayList(*Node),
 
-        pub fn init() Self {
+        pub fn init(allocator: Allocator, ctx: *Ctx, pos: ui.Position) Self {
+            const root = try allocator.create(ui.Node);
+            root.* = ui.Node.init("root").with_position(pos);
+            root.runtime = &Self;
             return .{
                 .root = null,
-                .ctx = null,
+                .ctx = ctx,
                 .clickables = .empty,
             };
         }

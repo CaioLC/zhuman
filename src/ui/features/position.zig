@@ -71,10 +71,10 @@ pub const Position = struct {
     _global_y: ?f32,
 
     pub fn init(
-        calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
         anchor: Anchor,
         children_align: ?ChildrenAlign,
         padding: ?Padding,
+        calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
     ) Position {
         const pad = padding orelse Padding.init(0);
         const ch = children_align orelse .horizontal;

@@ -3,15 +3,23 @@ const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
 pub const runtime = @import("runtime.zig");
+pub const event = @import("event.zig");
 
 // Re-export common types for convenience
+// Features
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
 pub const Position = features.Position;
+pub const OnClick = features.OnClick;
+pub const OnRender = features.OnRender;
+
+// Events
+pub const Event = event.Event;
 
 pub const Node = struct {
     id: []const u8,
+    runtime: ?*runtime.Runtime(),
     parent: ?*Node,
     children: std.ArrayList(*Node),
     data: ?*anyopaque,
@@ -25,6 +33,7 @@ pub const Node = struct {
     pub fn init(id: []const u8) Node {
         return .{
             .id = id,
+            .runtime = null,
             .parent = null,
             .children = .empty,
             .data = null,
@@ -61,7 +70,9 @@ pub const Node = struct {
 
     pub fn add_child(self: *Node, allocator: Allocator, child: *Node) !void {
         child.parent = self;
+        child.runtime = self.runtime;
         try self.children.append(allocator, child);
+        self.runtime.?.register(allocator, child); // TODO: replace this with an Event based system.
     }
 
     pub fn deinit(self: *Node, allocator: Allocator) void {
