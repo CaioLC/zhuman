@@ -16,14 +16,15 @@ pub const OnRender = features.OnRender;
 
 // Events
 pub const Event = event.Event;
+pub const EventListener = event.EventListener;
 
 pub const Node = struct {
     id: []const u8,
-    runtime: ?*runtime.Runtime(),
     parent: ?*Node,
     children: std.ArrayList(*Node),
     data: ?*anyopaque,
     on_deinit: ?*const fn (Allocator, *anyopaque) void,
+    event_listener: ?EventListener,
 
     // Features
     position: ?features.Position,
@@ -33,11 +34,11 @@ pub const Node = struct {
     pub fn init(id: []const u8) Node {
         return .{
             .id = id,
-            .runtime = null,
             .parent = null,
             .children = .empty,
             .data = null,
             .on_deinit = null,
+            .event_listener = null,
             .position = null,
             .on_click = null,
             .on_render = null,
@@ -70,9 +71,11 @@ pub const Node = struct {
 
     pub fn add_child(self: *Node, allocator: Allocator, child: *Node) !void {
         child.parent = self;
-        child.runtime = self.runtime;
+        child.event_listener = self.event_listener;
         try self.children.append(allocator, child);
-        self.runtime.?.register(allocator, child); // TODO: replace this with an Event based system.
+        if (self.event_listener) |listener| {
+            listener.emit(.{ .node_added = child });
+        }
     }
 
     pub fn deinit(self: *Node, allocator: Allocator) void {

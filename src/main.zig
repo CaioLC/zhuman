@@ -80,6 +80,7 @@ const Objects = struct {
 pub fn main() !void {
     // App Setup
     var app = try App.init();
+    defer app.deinit();
     const allocator = app.gpa.allocator();
 
     // Resources
@@ -94,30 +95,35 @@ pub fn main() !void {
 
     // UI
     var ui_ctx = widgets.UiCtx{ .font = &res.font, .renderer = &app.renderer };
-    var ui_runtime = UiRuntime.init(&ui_ctx);
-    try setup_ui(allocator, &ui_runtime, &res, &obj);
+    var ui_runtime = try UiRuntime.init(
+        allocator,
+        &ui_ctx,
+        ui.Position.initStatic(.top_left, .centered_wrapped, screen_width, screen_height, null),
+    );
+    ui_runtime.setEventListener();
+    defer ui_runtime.deinit(allocator);
+    try setup_ui(allocator, &ui_runtime, &obj);
 
     while (!res.quit_app) {
-        try events(&res, &obj);
+        try events(&res, &ui_runtime);
         try update(app.frame_capper.delay(), &obj);
-        try update_ui(&res);
+        try update_ui(&ui_runtime);
         try render(app.renderer, &ui_runtime);
     }
 }
 
-fn events(res: *Resources, _: *Objects) !void {
+fn events(res: *Resources, ui_runtime: *UiRuntime) !void {
     while (sdl.events.poll()) |event| {
         switch (event) {
             .quit, .terminating => res.quit_app = true,
             .window_resized => |e| {
                 res.screen_height = e.height;
                 res.screen_width = e.width;
-                if (res.runtime.root) |root| {
-                    root.position.?.data_height = @floatFromInt(e.height);
-                    root.position.?.data_width = @floatFromInt(e.width);
-                    root.position.?.height = @floatFromInt(e.height);
-                    root.position.?.width = @floatFromInt(e.width);
-                }
+                const root = ui_runtime.root;
+                root.position.?.data_height = @floatFromInt(e.height);
+                root.position.?.data_width = @floatFromInt(e.width);
+                root.position.?.height = @floatFromInt(e.height);
+                root.position.?.width = @floatFromInt(e.width);
             },
             .key_down => |key| {
                 if (key.key == .escape) {
@@ -131,14 +137,14 @@ fn events(res: *Resources, _: *Objects) !void {
                     .right => .right,
                     else => .other,
                 };
-                res.runtime.dispatch_click(mbutton.x, mbutton.y, button);
+                ui_runtime.dispatch_click(mbutton.x, mbutton.y, button);
             },
             else => {},
         }
     }
 }
 
-fn setup_ui(allocator: std.mem.Allocator, ui_runtime: *UiRuntime, _: *Resources, obj: *Objects) !void {
+fn setup_ui(allocator: std.mem.Allocator, ui_runtime: *UiRuntime, obj: *Objects) !void {
     const padding = ui.Padding.initSymmetric(20.0, 10.0);
 
     // Counter
@@ -149,22 +155,16 @@ fn setup_ui(allocator: std.mem.Allocator, ui_runtime: *UiRuntime, _: *Resources,
     };
 
     const counter_node = try allocator.create(ui.Node);
-    counter_node.* = ui.Node.init("cntr")
-        .with_position(
-            ui.Position.init(
-                .relative,
-                null,
-                padding,
-                &CounterTextNode.calc_pos,
-            ),
-        )
-        .with_onclick(
-            ui.OnClick.typed(time.Counter, &reset_counter, &obj.counter),
-        )
-        .with_data(
-            @ptrCast(counter_tn),
-            &CounterTextNode.deinit_node,
-        )
+    counter_node.* = ui.Node.init("cntr");
+    _ = counter_node
+        .with_position(ui.Position.init(
+            .relative,
+            null,
+            padding,
+            &CounterTextNode.calc_pos,
+        ))
+        .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &obj.counter))
+        .with_data(@ptrCast(counter_tn), &CounterTextNode.deinit_node)
         .with_render(ui.OnRender.init(&CounterTextNode.render));
 
     try ui_runtime.root.add_child(allocator, counter_node);
@@ -175,8 +175,8 @@ fn update(dt: f32, obj: *Objects) !void {
     obj.timer.update(dt);
 }
 
-fn update_ui(res: *Resources) !void {
-    try res.runtime.update();
+fn update_ui(ui_runtime: *UiRuntime) !void {
+    try ui_runtime.update();
 }
 
 fn render(renderer: Renderer, ui_runtime: *UiRuntime) !void {

@@ -10,34 +10,47 @@ pub fn Runtime(comptime Ctx: type) type {
         const Self = @This();
 
         root: *Node,
+        allocator: Allocator,
         ctx: *Ctx,
         clickables: std.ArrayList(*Node),
 
-        pub fn init(allocator: Allocator, ctx: *Ctx, pos: ui.Position) Self {
-            const root = try allocator.create(ui.Node);
-            root.* = ui.Node.init("root").with_position(pos);
-            root.runtime = &Self;
+        pub fn init(allocator: Allocator, ctx: *Ctx, pos: ui.Position) !Self {
+            const root = try allocator.create(Node);
+            root.* = Node.init("root");
+            _ = root.with_position(pos);
             return .{
-                .root = null,
+                .root = root,
+                .allocator = allocator,
                 .ctx = ctx,
                 .clickables = .empty,
             };
         }
 
-        pub fn bind(self: *Self, ctx: *Ctx) void {
-            self.ctx = ctx;
+        pub fn setEventListener(self: *Self) void {
+            self.root.event_listener = .{
+                .ctx = @ptrCast(self),
+                .handler = &handleEvent,
+            };
         }
 
-        pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-            self.clickables.clearAndFree(allocator);
-            if (self.root) |root| {
-                root.deinit(allocator);
-                allocator.destroy(root);
-                self.root = null;
+        fn handleEvent(raw_self: *anyopaque, ev: ui.Event) void {
+            const self: *Self = @ptrCast(@alignCast(raw_self));
+            switch (ev) {
+                .node_added => |node| {
+                    if (node.on_click != null) {
+                        self.clickables.append(self.allocator, node) catch return;
+                    }
+                },
             }
         }
 
-        pub fn register(self: *Self, allocator: std.mem.Allocator, node: *Node) !void {
+        pub fn deinit(self: *Self, allocator: Allocator) void {
+            self.clickables.clearAndFree(allocator);
+            self.root.deinit(allocator);
+            allocator.destroy(self.root);
+        }
+
+        pub fn register(self: *Self, allocator: Allocator, node: *Node) !void {
             std.debug.assert(node.on_click != null);
             try self.clickables.append(allocator, node);
         }
@@ -52,21 +65,18 @@ pub fn Runtime(comptime Ctx: type) type {
         }
 
         pub fn update(self: *Self) !void {
-            if (self.root) |root| {
-                const ctx: ?*anyopaque = if (self.ctx) |c| @ptrCast(c) else null;
-                try position.set_global_pos(root, null, ctx);
-            }
+            const ctx: *anyopaque = @ptrCast(self.ctx);
+            try position.set_global_pos(self.root, null, ctx);
         }
 
         pub fn render(self: *Self) void {
-            const root = self.root orelse return;
-            const ctx: ?*anyopaque = if (self.ctx) |c| @ptrCast(c) else null;
+            const ctx: *anyopaque = @ptrCast(self.ctx);
             var buf: [@sizeOf(*Node) * 256]u8 = undefined;
             var bfa = std.heap.FixedBufferAllocator.init(&buf);
             const allocator = bfa.allocator();
             var node_stack: std.ArrayList(*Node) = .empty;
             defer node_stack.clearRetainingCapacity();
-            root.collect(allocator, &node_stack) catch return;
+            self.root.collect(allocator, &node_stack) catch return;
 
             for (node_stack.items) |node| {
                 if (node.on_render) |on_render| {
@@ -76,7 +86,7 @@ pub fn Runtime(comptime Ctx: type) type {
         }
 
         pub fn dispatch_click(self: *Self, mx: f32, my: f32, button: clickable.MouseButton) void {
-            const event = clickable.ClickEvent{
+            const ev = clickable.ClickEvent{
                 .x = mx,
                 .y = my,
                 .button = button,
@@ -91,7 +101,7 @@ pub fn Runtime(comptime Ctx: type) type {
                     my >= gy and my <= gy + pos.height)
                 {
                     if (node.on_click) |oc| {
-                        oc.invoke(event);
+                        oc.invoke(ev);
                     }
                 }
             }
@@ -121,7 +131,7 @@ test "runtime dispatch click hits registered node" {
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.typed(TestCtx, &TestCtx.on_click, &ctx);
 
-    var rt = Runtime(TestCtx).init();
+    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initStatic(.top_left, null, 800, 600, null));
     defer rt.deinit(allocator);
     try rt.register(allocator, node);
 
@@ -152,7 +162,7 @@ test "runtime dispatch click misses outside node" {
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.typed(TestCtx, &TestCtx.on_click, &ctx);
 
-    var rt = Runtime(TestCtx).init();
+    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initStatic(.top_left, null, 800, 600, null));
     defer rt.deinit(allocator);
     try rt.register(allocator, node);
 
