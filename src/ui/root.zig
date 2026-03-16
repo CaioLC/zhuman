@@ -45,6 +45,12 @@ pub const Node = struct {
         };
     }
 
+    pub fn create(allocator: Allocator, id: []const u8) !*Node {
+        const node = try allocator.create(Node);
+        node.* = Node.init(id);
+        return node;
+    }
+
     // --- Builder methods ---
     pub fn with_position(self: *Node, position: features.Position) *Node {
         self.position = position;
@@ -122,20 +128,17 @@ test "node tree layout" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var root = try allocator.create(Node);
-    root.* = Node.init("root");
-    _ = root.with_position(Position.initStatic(.top_left, null, 800, 600, null));
+    var root = try Node.create(allocator, "root");
+    _ = root.with_position(Position.initFixed(.top_left, null, 800, 600, null));
     root.position.?._global_x = 0;
     root.position.?._global_y = 0;
 
-    const child = try allocator.create(Node);
-    child.* = Node.init("chd1");
-    _ = child.with_position(Position.initStatic(.center, null, 100, 50, null));
+    const child = try Node.create(allocator, "chd1");
+    _ = child.with_position(Position.initFixed(.center, null, 100, 50, null));
     try root.add_child(allocator, child);
 
-    const child2 = try allocator.create(Node);
-    child2.* = Node.init("chd2");
-    _ = child2.with_position(Position.initStatic(.bottom_center, null, 100, 50, null));
+    const child2 = try Node.create(allocator, "chd2");
+    _ = child2.with_position(Position.initFixed(.bottom_center, null, 100, 50, null));
     try root.add_child(allocator, child2);
 
     try root.set_global_pos(null, null);
@@ -152,18 +155,15 @@ test "collect returns each node exactly once" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var root = try allocator.create(Node);
-    root.* = Node.init("root");
-    _ = root.with_position(Position.initStatic(.top_left, null, 800, 600, null));
+    var root = try Node.create(allocator, "root");
+    _ = root.with_position(Position.initFixed(.top_left, null, 800, 600, null));
 
-    const indep = try allocator.create(Node);
-    indep.* = Node.init("indp");
-    _ = indep.with_position(Position.initStatic(.center, null, 100, 50, null));
+    const indep = try Node.create(allocator, "indp");
+    _ = indep.with_position(Position.initFixed(.center, null, 100, 50, null));
     try root.add_child(allocator, indep);
 
-    const dep = try allocator.create(Node);
-    dep.* = Node.init("dep1");
-    _ = dep.with_position(Position.initStatic(.relative, null, 100, 50, null));
+    const dep = try Node.create(allocator, "dep1");
+    _ = dep.with_position(Position.initFixed(.relative, null, 100, 50, null));
     try root.add_child(allocator, dep);
 
     var list: std.ArrayList(*Node) = .empty;

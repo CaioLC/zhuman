@@ -5,104 +5,81 @@ const zfont = @import("./font.zig");
 
 const white = zfont.white;
 
-// --- TextNode: dynamic text, re-rasterized every frame ---
-pub fn TextNode(comptime Source: type, comptime Ctx: type) type {
-    return struct {
-        const Self = @This();
-
-        format: *const fn (*Source, []u8) ?[]const u8,
-        source: *Source,
-
-        pub fn renderSurface(self: *Self, font: *sdl.ttf.Font) ?sdl.surface.Surface {
-            var text_buffer: [256]u8 = undefined;
-            const text = self.format(self.source, &text_buffer) orelse return null;
-            return font.renderTextSolid(text, white) catch null;
-        }
-
-        pub fn deinit_node(allocator: std.mem.Allocator, data: *anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(data));
-            allocator.destroy(self);
-        }
-
-        pub fn render(node: *ui.Node, raw_ctx: ?*anyopaque) void {
-            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return));
-            const self: *Self = @ptrCast(@alignCast(node.data orelse return));
-            const pos = node.position orelse return;
-            var surface = self.renderSurface(ctx.font) orelse return;
-            defer surface.deinit();
-            const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
-            defer texture.deinit();
-            const dst = sdl.rect.FRect{
-                .x = (pos._global_x orelse return) + pos.padding.left,
-                .y = (pos._global_y orelse return) + pos.padding.up,
-                .w = pos.data_width,
-                .h = pos.data_height,
-            };
-            ctx.renderer.renderTexture(texture, null, dst) catch return;
-        }
-
-        pub fn calc_pos(node: *ui.Node, raw_ctx: ?*anyopaque) struct { f32, f32 } {
-            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return .{ 0, 0 }));
-            const self: *Self = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
-            var surface = self.renderSurface(ctx.font) orelse return .{ 0, 0 };
-            defer surface.deinit();
-            return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
-        }
-    };
-}
-
-// --- TextNodeStatic: rasterized once, reused every frame ---
-pub fn TextNodeStatic(comptime Ctx: type) type {
-    return struct {
-        const Self = @This();
-
-        text: []const u8,
-        surface: ?sdl.surface.Surface,
-
-        pub fn renderSurface(self: *Self, font: *sdl.ttf.Font) ?sdl.surface.Surface {
-            if (self.surface) |s| return s;
-            self.surface = font.renderTextSolid(self.text, white) catch null;
-            return self.surface;
-        }
-
-        pub fn deinit_node(allocator: std.mem.Allocator, data: *anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(data));
-            self.deinit();
-            allocator.destroy(self);
-        }
-
-        pub fn deinit(self: *Self) void {
-            if (self.surface) |*s| s.deinit();
-            self.surface = null;
-        }
-
-        pub fn render(node: *ui.Node, raw_ctx: ?*anyopaque) void {
-            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return));
-            const self: *Self = @ptrCast(@alignCast(node.data orelse return));
-            const pos = node.position orelse return;
-            const surface = self.renderSurface(ctx.font) orelse return;
-            const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
-            defer texture.deinit();
-            const dst = sdl.rect.FRect{
-                .x = (pos._global_x orelse return) + pos.padding.left,
-                .y = (pos._global_y orelse return) + pos.padding.up,
-                .w = pos.data_width,
-                .h = pos.data_height,
-            };
-            ctx.renderer.renderTexture(texture, null, dst) catch return;
-        }
-
-        pub fn calc_pos(node: *ui.Node, raw_ctx: ?*anyopaque) struct { f32, f32 } {
-            const ctx: *Ctx = @ptrCast(@alignCast(raw_ctx orelse return .{ 0, 0 }));
-            const self: *Self = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
-            const surface = self.renderSurface(ctx.font) orelse return .{ 0, 0 };
-            return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
-        }
-    };
-}
-
 // --- UiCtx: shared context bound to Runtime ---
 pub const UiCtx = struct {
     font: *sdl.ttf.Font,
     renderer: *const sdl.render.Renderer,
+    window: sdl.video.Window,
 };
+
+pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
+    const ctx: *UiCtx = @ptrCast(@alignCast(raw_ctx));
+    const width, const height = try ctx.window.getSize();
+    return .{ @floatFromInt(width), @floatFromInt(height) };
+}
+
+pub const TextData = struct {
+    buf: [64]u8,
+    fmt_text: ?[]const u8,
+    surface: ?sdl.surface.Surface,
+
+    pub fn create(allocator: std.mem.Allocator) !*TextData {
+        const self = try allocator.create(TextData);
+        self.* = .{ .buf = undefined, .fmt_text = null, .surface = null };
+        return self;
+    }
+    pub fn deinit(allocator: std.mem.Allocator, raw: *anyopaque) void {
+        const self: *TextData = @ptrCast(@alignCast(raw));
+        if (self.surface) |*surf| {
+            surf.deinit();
+        }
+        allocator.destroy(self);
+    }
+    pub fn update(self: *TextData, fmt_text: []const u8) void {
+        self.fmt_text = fmt_text;
+        if (self.surface) |surf| {
+            surf.deinit();
+        }
+        self.surface = null;
+    }
+};
+
+pub fn calc_size_text(raw_ctx: *anyopaque, node: *ui.Node) anyerror!struct { f32, f32 } {
+    const ctx: *UiCtx = @ptrCast(@alignCast(raw_ctx));
+    const data = node.data orelse {
+        std.log.err("Attempted rendering node with no text data.", .{});
+        return error.NoDataToRender;
+    };
+    const text_data: *TextData = @ptrCast(@alignCast(data));
+    const surface = text_data.surface orelse blk: {
+        const fmt = text_data.fmt_text orelse return error.NoDataToRender;
+        const surf = try ctx.font.renderTextSolid(fmt, white);
+        text_data.surface = surf;
+        break :blk surf;
+    };
+    return .{ @floatFromInt(surface.getWidth()), @floatFromInt(surface.getHeight()) };
+}
+
+pub fn sdl_render_text(raw_ctx: *anyopaque, node: *ui.Node) void {
+    const ctx: *UiCtx = @ptrCast(@alignCast(raw_ctx));
+    const pos = node.position orelse return;
+    const data = node.data orelse return;
+    const text_data: *TextData = @ptrCast(@alignCast(data));
+
+    const surface = text_data.surface orelse blk: {
+        const fmt = text_data.fmt_text orelse return;
+        const surf = ctx.font.renderTextSolid(fmt, white) catch return;
+        text_data.surface = surf;
+        break :blk surf;
+    };
+    const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
+    defer texture.deinit();
+
+    const dst = sdl.rect.FRect{
+        .x = (pos._global_x orelse return) + pos.padding.left,
+        .y = (pos._global_y orelse return) + pos.padding.up,
+        .w = pos.data_width,
+        .h = pos.data_height,
+    };
+    ctx.renderer.renderTexture(texture, null, dst) catch return;
+}

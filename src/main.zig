@@ -13,7 +13,6 @@ const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
 const UiRuntime = ui.runtime.Runtime(widgets.UiCtx);
-const CounterTextNode = widgets.TextNode(time.Counter, widgets.UiCtx);
 
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
@@ -94,11 +93,15 @@ pub fn main() !void {
     };
 
     // UI
-    var ui_ctx = widgets.UiCtx{ .font = &res.font, .renderer = &app.renderer };
+    var ui_ctx = widgets.UiCtx{
+        .font = &res.font,
+        .renderer = &app.renderer,
+        .window = app.window,
+    };
     var ui_runtime = try UiRuntime.init(
         allocator,
         &ui_ctx,
-        ui.Position.initStatic(.top_left, .centered_wrapped, screen_width, screen_height, null),
+        ui.Position.init(.top_left, .centered_wrapped, null, &widgets.screen_size),
     );
     ui_runtime.setEventListener();
     defer ui_runtime.deinit(allocator);
@@ -145,27 +148,22 @@ fn events(res: *Resources, ui_runtime: *UiRuntime) !void {
 }
 
 fn setup_ui(allocator: std.mem.Allocator, ui_runtime: *UiRuntime, obj: *Objects) !void {
-    const padding = ui.Padding.initSymmetric(20.0, 10.0);
 
     // Counter
-    const counter_tn = try allocator.create(CounterTextNode);
-    counter_tn.* = .{
-        .format = &format_counter,
-        .source = &obj.counter,
-    };
+    const counter_data = try widgets.TextData.create(allocator);
+    counter_data.fmt_text = try std.fmt.bufPrint(&counter_data.buf, "Counter: {}", .{obj.counter.get()});
 
-    const counter_node = try allocator.create(ui.Node);
-    counter_node.* = ui.Node.init("cntr");
+    const counter_node = try ui.Node.create(allocator, "cntr");
     _ = counter_node
         .with_position(ui.Position.init(
             .relative,
             null,
-            padding,
-            &CounterTextNode.calc_pos,
+            null,
+            &widgets.calc_size_text,
         ))
         .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &obj.counter))
-        .with_data(@ptrCast(counter_tn), &CounterTextNode.deinit_node)
-        .with_render(ui.OnRender.init(&CounterTextNode.render));
+        .with_data(@ptrCast(counter_data), &widgets.TextData.deinit)
+        .with_render(ui.OnRender.init(&widgets.sdl_render_text));
 
     try ui_runtime.root.add_child(allocator, counter_node);
 }

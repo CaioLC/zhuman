@@ -15,8 +15,7 @@ pub fn Runtime(comptime Ctx: type) type {
         clickables: std.ArrayList(*Node),
 
         pub fn init(allocator: Allocator, ctx: *Ctx, pos: ui.Position) !Self {
-            const root = try allocator.create(Node);
-            root.* = Node.init("root");
+            const root = try Node.create(allocator, "root");
             _ = root.with_position(pos);
             return .{
                 .root = root,
@@ -80,7 +79,7 @@ pub fn Runtime(comptime Ctx: type) type {
 
             for (node_stack.items) |node| {
                 if (node.on_render) |on_render| {
-                    on_render.invoke(node, ctx);
+                    on_render.invoke(ctx, node);
                 }
             }
         }
@@ -124,14 +123,13 @@ test "runtime dispatch click hits registered node" {
 
     var ctx = TestCtx{};
 
-    var node = try allocator.create(Node);
-    node.* = Node.init("test");
-    _ = node.with_position(ui.Position.initStatic(.top_left, null, 100, 50, null));
+    var node = try Node.create(allocator, "test");
+    _ = node.with_position(ui.Position.initFixed(.top_left, null, 100, 50, null));
     node.position.?._global_x = 10;
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.typed(TestCtx, &TestCtx.on_click, &ctx);
 
-    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initStatic(.top_left, null, 800, 600, null));
+    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initFixed(.top_left, null, 800, 600, null));
     defer rt.deinit(allocator);
     try rt.register(allocator, node);
 
@@ -155,14 +153,13 @@ test "runtime dispatch click misses outside node" {
 
     var ctx = TestCtx{};
 
-    var node = try allocator.create(Node);
-    node.* = Node.init("test");
-    _ = node.with_position(ui.Position.initStatic(.top_left, null, 100, 50, null));
+    var node = try Node.create(allocator, "test");
+    _ = node.with_position(ui.Position.initFixed(.top_left, null, 100, 50, null));
     node.position.?._global_x = 10;
     node.position.?._global_y = 20;
     node.on_click = clickable.OnClick.typed(TestCtx, &TestCtx.on_click, &ctx);
 
-    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initStatic(.top_left, null, 800, 600, null));
+    var rt = try Runtime(TestCtx).init(allocator, &ctx, ui.Position.initFixed(.top_left, null, 800, 600, null));
     defer rt.deinit(allocator);
     try rt.register(allocator, node);
 

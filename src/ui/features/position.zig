@@ -55,8 +55,8 @@ pub const ChildrenPosInfo = struct {
 };
 
 pub const Position = struct {
-    // a function that takes the owning node and ui context, returns data_width and data_height
-    calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
+    // a function that takes the ui context and the owning node, returns data_width and data_height
+    calc_size: *const fn (*anyopaque, *ui.Node) anyerror!struct { f32, f32 },
     // where to place, in relation to parent
     anchor: Anchor,
     // how to place children position nodes
@@ -74,12 +74,12 @@ pub const Position = struct {
         anchor: Anchor,
         children_align: ?ChildrenAlign,
         padding: ?Padding,
-        calc_pos: *const fn (*ui.Node, ?*anyopaque) struct { f32, f32 },
+        calc_pos: *const fn (*anyopaque, *ui.Node) anyerror!struct { f32, f32 },
     ) Position {
         const pad = padding orelse Padding.init(0);
         const ch = children_align orelse .horizontal;
         return .{
-            .calc_pos = calc_pos,
+            .calc_size = calc_pos,
             .anchor = anchor,
             .children_align = ch,
             .padding = pad,
@@ -92,12 +92,8 @@ pub const Position = struct {
         };
     }
 
-    fn static_calc_pos(node: *ui.Node, _: ?*anyopaque) struct { f32, f32 } {
-        const pos = node.position orelse return .{ 0, 0 };
-        return .{ pos.data_width, pos.data_height };
-    }
-
-    pub fn initStatic(
+    /// Creates a position with fixed dimensions using static_calc_size.
+    pub fn initFixed(
         anchor: Anchor,
         children_align: ?ChildrenAlign,
         width: f32,
@@ -107,7 +103,7 @@ pub const Position = struct {
         const pad = padding orelse Padding.init(0);
         const ch = children_align orelse .horizontal;
         return .{
-            .calc_pos = &static_calc_pos,
+            .calc_size = &static_calc_size,
             .anchor = anchor,
             .children_align = ch,
             .padding = pad,
@@ -121,21 +117,29 @@ pub const Position = struct {
     }
 };
 
+/// A calc_size that preserves existing data_width/data_height (useful for fixed-size nodes).
+pub fn static_calc_size(_: *anyopaque, node: *ui.Node) anyerror!struct { f32, f32 } {
+    const pos = node.position orelse return .{ 0, 0 };
+    return .{ pos.data_width, pos.data_height };
+}
+
 // --- Layout functions (operate on Node, reading its Position feature) ---
 
-pub fn recalculate_size(node: *ui.Node, ctx: ?*anyopaque) void {
-    for (node.children.items) |c| recalculate_size(c, ctx);
+pub fn recalculate_size(node: *ui.Node, ctx: *anyopaque) !void {
+    for (node.children.items) |c| try recalculate_size(c, ctx);
     if (node.position) |*pos| {
-        pos.data_width, pos.data_height = pos.calc_pos(node, ctx);
+        pos.data_width, pos.data_height = try pos.calc_size(ctx, node);
         pos.width = pos.data_width + pos.padding.left + pos.padding.right;
         pos.height = pos.data_height + pos.padding.up + pos.padding.down;
     }
 }
 
-pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo, ctx: ?*anyopaque) !void {
+pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo, ctx: ?*anyopaque) anyerror!void {
     const pos: *Position = &(node.position orelse return);
 
-    if (node.parent == null) recalculate_size(node, ctx);
+    if (node.parent == null) {
+        if (ctx) |c| try recalculate_size(node, c);
+    }
 
     // Get parent position info
     var pw: f32 = 0.0;
@@ -353,7 +357,7 @@ fn compute_wrapped_height(dep_children: []*ui.Node, parent_width: f32) f32 {
     return total_h;
 }
 
-fn set_centered_wrapped_rows(dep_children: []*ui.Node, parent_width: f32, start_y: f32, ctx: ?*anyopaque) error{NoInfoForChildren}!void {
+fn set_centered_wrapped_rows(dep_children: []*ui.Node, parent_width: f32, start_y: f32, ctx: ?*anyopaque) !void {
     var row_start: usize = 0;
     var current_y: f32 = start_y;
     while (row_start < dep_children.len) {

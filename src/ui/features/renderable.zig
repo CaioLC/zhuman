@@ -1,13 +1,13 @@
 const ui = @import("../root.zig");
 
 pub const OnRender = struct {
-    run: *const fn (*ui.Node, ?*anyopaque) void,
+    run: *const fn (*anyopaque, *ui.Node) void,
 
-    pub fn init(func: *const fn (*ui.Node, ?*anyopaque) void) OnRender {
+    pub fn init(func: *const fn (*anyopaque, *ui.Node) void) OnRender {
         return .{ .run = func };
     }
 
-    pub fn invoke(self: OnRender, node: *ui.Node, ctx: ?*anyopaque) void {
-        self.run(node, ctx);
+    pub fn invoke(self: OnRender, ctx: *anyopaque, node: *ui.Node) void {
+        self.run(ctx, node);
     }
 };
