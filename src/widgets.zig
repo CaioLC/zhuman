@@ -23,23 +23,17 @@ pub const TextData = struct {
     fmt_text: ?[]const u8,
     surface: ?sdl.surface.Surface,
 
-    pub fn create(allocator: std.mem.Allocator) !*TextData {
-        const self = try allocator.create(TextData);
-        self.* = .{ .buf = undefined, .fmt_text = null, .surface = null };
-        return self;
+    pub fn init() TextData {
+        return .{ .buf = undefined, .fmt_text = null, .surface = null };
     }
-    pub fn deinit(allocator: std.mem.Allocator, raw: *anyopaque) void {
-        const self: *TextData = @ptrCast(@alignCast(raw));
-        if (self.surface) |*surf| {
-            surf.deinit();
-        }
-        allocator.destroy(self);
+
+    pub fn deinit(self: *TextData) void {
+        if (self.surface) |*surf| surf.deinit();
     }
+
     pub fn update(self: *TextData, fmt_text: []const u8) void {
         self.fmt_text = fmt_text;
-        if (self.surface) |surf| {
-            surf.deinit();
-        }
+        if (self.surface) |*surf| surf.deinit();
         self.surface = null;
     }
 };

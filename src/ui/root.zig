@@ -2,11 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
-pub const runtime = @import("runtime.zig");
-pub const event = @import("event.zig");
 
-// Re-export common types for convenience
-// Features
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
@@ -14,19 +10,12 @@ pub const Position = features.Position;
 pub const OnClick = features.OnClick;
 pub const OnRender = features.OnRender;
 
-// Events
-pub const Event = event.Event;
-pub const EventListener = event.EventListener;
-
 pub const Node = struct {
     id: []const u8,
     parent: ?*Node,
     children: std.ArrayList(*Node),
     data: ?*anyopaque,
-    on_deinit: ?*const fn (Allocator, *anyopaque) void,
-    event_listener: ?EventListener,
 
-    // Features
     position: ?features.Position,
     on_click: ?features.OnClick,
     on_render: ?features.OnRender,
@@ -37,8 +26,6 @@ pub const Node = struct {
             .parent = null,
             .children = .empty,
             .data = null,
-            .on_deinit = null,
-            .event_listener = null,
             .position = null,
             .on_click = null,
             .on_render = null,
@@ -51,7 +38,6 @@ pub const Node = struct {
         return node;
     }
 
-    // --- Builder methods ---
     pub fn with_position(self: *Node, position: features.Position) *Node {
         self.position = position;
         return self;
@@ -67,34 +53,14 @@ pub const Node = struct {
         return self;
     }
 
-    pub fn with_data(self: *Node, data: *anyopaque, on_deinit: ?*const fn (Allocator, *anyopaque) void) *Node {
+    pub fn with_data(self: *Node, data: *anyopaque) *Node {
         self.data = data;
-        self.on_deinit = on_deinit;
         return self;
     }
 
-    // --- Tree operations ---
-
     pub fn add_child(self: *Node, allocator: Allocator, child: *Node) !void {
         child.parent = self;
-        child.event_listener = self.event_listener;
         try self.children.append(allocator, child);
-        if (self.event_listener) |listener| {
-            listener.emit(.{ .node_added = child });
-        }
-    }
-
-    pub fn deinit(self: *Node, allocator: Allocator) void {
-        for (self.children.items) |child| {
-            child.deinit(allocator);
-            allocator.destroy(child);
-        }
-        self.children.clearAndFree(allocator);
-        if (self.on_deinit) |deinit_fn| {
-            if (self.data) |data| {
-                deinit_fn(allocator, data);
-            }
-        }
     }
 
     pub fn collect(self: *Node, allocator: Allocator, list: *std.ArrayList(*Node)) !void {
@@ -105,23 +71,39 @@ pub const Node = struct {
     }
 
     pub fn get_by_id(self: *Node, id: []const u8) ?*Node {
-        if (std.mem.eql(u8, self.id, id)) {
-            return self;
-        }
+        if (std.mem.eql(u8, self.id, id)) return self;
         for (self.children.items) |child| {
-            if (child.get_by_id(id)) |found| {
-                return found;
-            }
+            if (child.get_by_id(id)) |found| return found;
         }
         return null;
     }
-
-    // --- Feature delegation ---
 
     pub fn set_global_pos(self: *Node, children_info: ?features.ChildrenPosInfo, ctx: ?*anyopaque) !void {
         try features.set_global_pos(self, children_info, ctx);
     }
 };
+
+pub fn dispatch_click(node: *Node, mx: f32, my: f32, button: features.MouseButton) void {
+    if (node.on_click) |oc| {
+        if (node.position) |pos| {
+            const gx = pos._global_x orelse 0;
+            const gy = pos._global_y orelse 0;
+            if (mx >= gx and mx <= gx + pos.width and my >= gy and my <= gy + pos.height) {
+                oc.invoke(.{ .x = mx, .y = my, .button = button });
+            }
+        }
+    }
+    for (node.children.items) |child| {
+        dispatch_click(child, mx, my, button);
+    }
+}
+
+pub fn render(node: *Node, ctx: *anyopaque) void {
+    if (node.on_render) |or_| or_.invoke(ctx, node);
+    for (node.children.items) |child| {
+        render(child, ctx);
+    }
+}
 
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -143,11 +125,11 @@ test "node tree layout" {
 
     try root.set_global_pos(null, null);
 
-    try std.testing.expect(child.position.?._global_x.? == 350.0); // (800/2 - 100/2)
-    try std.testing.expect(child.position.?._global_y.? == 275.0); // (600/2 - 50/2)
+    try std.testing.expect(child.position.?._global_x.? == 350.0);
+    try std.testing.expect(child.position.?._global_y.? == 275.0);
 
-    try std.testing.expect(child2.position.?._global_x.? == 350.0); // (800/2 - 100/2)
-    try std.testing.expect(child2.position.?._global_y.? == 550.0); // (600 - 50)
+    try std.testing.expect(child2.position.?._global_x.? == 350.0);
+    try std.testing.expect(child2.position.?._global_y.? == 550.0);
 }
 
 test "collect returns each node exactly once" {
