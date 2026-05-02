@@ -8,11 +8,13 @@ pub const ui = @import("./ui/root.zig");
 pub const widgets = @import("./widgets.zig");
 pub const time = @import("./time.zig");
 pub const font = @import("./font.zig");
+pub const res = @import("./res.zig");
 
 test {
     _ = ui;
     _ = time;
     _ = font;
+    _ = res;
 }
 
 

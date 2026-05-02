@@ -2,6 +2,42 @@ const sdl3 = @import("sdl3");
 
 pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
+pub const TextData = struct {
+    buf: [64]u8,
+    fmt_text: ?[]const u8,
+    surface: ?sdl3.surface.Surface,
+
+    pub fn init() TextData {
+        return .{ .buf = undefined, .fmt_text = null, .surface = null };
+    }
+
+    pub fn deinit(self: *TextData) void {
+        if (self.surface) |*surf| surf.deinit();
+    }
+
+    pub fn update(self: *TextData, fmt_text: []const u8) void {
+        self.fmt_text = fmt_text;
+        if (self.surface) |*surf| surf.deinit();
+        self.surface = null;
+    }
+};
+
+pub const TextDataStatic = struct {
+    buf: [64]u8,
+    fmt_text: ?[]const u8,
+    surface: ?sdl3.surface.Surface,
+
+    pub fn init(fmt_text: []const u8) TextDataStatic {
+        return .{ .buf = undefined, .fmt_text = fmt_text, .surface = null };
+    }
+
+    pub fn deinit(self: *TextDataStatic) void {
+        if (self.surface) |*surf| surf.deinit();
+    }
+
+    pub fn update(_: *TextDataStatic) void {}
+};
+
 // try log_app.logInfo("Font Family: {s}", .{font.getFamilyName()});
 // try log_app.logInfo("Font Style: {s}", .{font.getStyleName()});
 // try log_app.logInfo("Font is fixed width: {}", .{font.isFixedWidth()});
@@ -67,4 +103,3 @@ pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 // defer allocator.free(truncated_text);
 // const truncated_texture = try textureFromSurface(renderer, try font.renderTextBlended(truncated_text, white));
 // defer truncated_texture.deinit();
-

@@ -1,7 +1,9 @@
 const std = @import("std");
 const ha = @import("ha");
+
 const time = ha.time;
 const ui = ha.ui;
+const res = ha.res;
 const widgets = ha.widgets;
 const sdl = ha.sdl;
 
@@ -11,11 +13,38 @@ const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
+const Objects = struct {
+    counter: time.Counter,
+    counter_text: ha.font.TextData,
+    timer: time.Timer,
+
+    fn deinit(self: *Objects) void {
+        self.counter_text.deinit();
+    }
+};
+
+const UIWidgets = struct {
+    counter: ui.Node,
+
+    fn deinit(_: *UIWidgets) void {}
+};
+
+const PendingClick = struct {
+    x: f32,
+    y: f32,
+    button: features.MouseButton,
+};
+
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     window: sdl.video.Window,
     renderer: sdl.render.Renderer,
     frame_capper: sdl.extras.FramerateCapper(f32),
+    font: sdl.ttf.Font,
+    resources: res.Resources,
+    obj: Objects,
+    ui_widgets: UIWidgets,
+    frame_arena: std.heap.ArenaAllocator,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -36,10 +65,42 @@ const App = struct {
             .window = window,
             .renderer = renderer,
             .frame_capper = frame_capper,
+            .font = undefined,
+            .resources = undefined,
+            .obj = undefined,
+            .ui_widgets = undefined,
+            .frame_arena = undefined,
         };
     }
 
+    fn setup(self: *App, allocator: std.mem.Allocator) !void {
+        self.font = try sdl.ttf.Font.init(font_path, 24);
+        self.resources = .{
+            .font = &self.font,
+            .renderer = &self.renderer,
+            .window = self.window,
+        };
+        self.obj = .{
+            .counter = time.Counter.init(0.0),
+            .counter_text = ha.font.TextData.init(),
+            .timer = time.Timer.init(30.0, null),
+        };
+        self.ui_widgets = .{
+            .counter = ui.Node.init("counter"),
+        };
+        _ = self.ui_widgets.counter
+            .with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text))
+            .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter))
+            .with_data(@ptrCast(&self.obj.counter_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        self.frame_arena = std.heap.ArenaAllocator.init(allocator);
+    }
+
     fn deinit(self: *App) void {
+        self.frame_arena.deinit();
+        self.obj.deinit();
+        self.ui_widgets.deinit();
+        self.font.deinit();
         self.renderer.deinit();
         self.window.deinit();
         sdl.ttf.quit();
@@ -48,47 +109,12 @@ const App = struct {
     }
 };
 
-const Objects = struct {
-    counter: time.Counter,
-    timer: time.Timer,
-    counter_text: widgets.TextData,
-
-    fn deinit(self: *Objects) void {
-        self.counter_text.deinit();
-    }
-};
-
-const PendingClick = struct {
-    x: f32,
-    y: f32,
-    button: features.MouseButton,
-};
-
 pub fn main() !void {
     var app = try App.init();
     defer app.deinit();
-    const allocator = app.gpa.allocator();
+    try app.setup(app.gpa.allocator());
 
-    var font = try sdl.ttf.Font.init(font_path, 24);
-    defer font.deinit();
-
-    var ui_ctx = widgets.UiCtx{
-        .font = &font,
-        .renderer = &app.renderer,
-        .window = app.window,
-    };
-    const raw_ctx: *anyopaque = @ptrCast(&ui_ctx);
-
-    var obj = Objects{
-        .counter = time.Counter.init(0.0),
-        .timer = time.Timer.init(30.0, null),
-        .counter_text = widgets.TextData.init(),
-    };
-    defer obj.deinit();
-
-    var frame_arena = std.heap.ArenaAllocator.init(allocator);
-    defer frame_arena.deinit();
-
+    const raw_ctx: *anyopaque = @ptrCast(&app.resources);
     var quit = false;
     var pending_click: ?PendingClick = null;
 
@@ -114,13 +140,20 @@ pub fn main() !void {
         }
 
         const dt = app.frame_capper.delay();
-        obj.counter.update(dt);
-        obj.timer.update(dt);
+        app.obj.counter.update(dt);
+        app.obj.timer.update(dt);
+        app.obj.counter_text.update(
+            try std.fmt.bufPrint(
+                &app.obj.counter_text.buf,
+                "Counter: {d:.0}",
+                .{app.obj.counter.get()},
+            ),
+        );
 
-        _ = frame_arena.reset(.retain_capacity);
-        const fa = frame_arena.allocator();
+        _ = app.frame_arena.reset(.retain_capacity);
+        const fa = app.frame_arena.allocator();
 
-        const root = try build_ui(fa, &obj);
+        const root = try build_ui(fa, &app.ui_widgets);
         try root.set_global_pos(null, raw_ctx);
 
         if (pending_click) |click| {
@@ -135,18 +168,11 @@ pub fn main() !void {
     }
 }
 
-fn build_ui(allocator: std.mem.Allocator, obj: *Objects) !*ui.Node {
+fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
     const root = try ui.Node.create(allocator, "root");
     _ = root.with_position(ui.Position.init(.top_left, .centered_wrapped, null, &widgets.screen_size));
 
-    obj.counter_text.update(try std.fmt.bufPrint(&obj.counter_text.buf, "Counter: {d:.0}", .{obj.counter.get()}));
-    const counter = try ui.Node.create(allocator, "cntr");
-    _ = counter
-        .with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text))
-        .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &obj.counter))
-        .with_data(@ptrCast(&obj.counter_text))
-        .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-    try root.add_child(allocator, counter);
+    try root.add_child(allocator, &w.counter);
 
     return root;
 }
