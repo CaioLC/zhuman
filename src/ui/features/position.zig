@@ -38,6 +38,7 @@ pub const ChildrenAlign = enum {
     horizontal_reverse,
     horizontal_reverse_wrapped,
     vertical,
+    vertical_right,
     vertical_wrapped,
     vertical_reverse,
     vertical_reverse_wrapped,
@@ -233,6 +234,10 @@ pub fn set_global_pos(node: *ui.Node, children_info: ?ChildrenPosInfo, ctx: ?*an
                 },
                 .vertical => {
                     try set_global_pos(c, .{ .x_offset = x_offset, .y_offset = y_offset }, ctx);
+                    y_offset += cpos.height;
+                },
+                .vertical_right => {
+                    try set_global_pos(c, .{ .x_offset = pos.width - cpos.width, .y_offset = y_offset }, ctx);
                     y_offset += cpos.height;
                 },
                 .vertical_wrapped => {

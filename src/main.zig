@@ -15,16 +15,37 @@ const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
 const Objects = struct {
     counter: time.Counter,
-    counter_text: ha.font.TextData,
     timer: time.Timer,
+    counter_text: ha.font.TextData,
+    population_text: ha.font.TextData,
+    demand_text: ha.font.TextData,
+    produce_text: ha.font.TextData,
+    calories_text: ha.font.TextData,
+    stockpile_text: ha.font.TextData,
+    calendar_text: ha.font.TextData,
+    money_text: ha.font.TextData,
 
     fn deinit(self: *Objects) void {
         self.counter_text.deinit();
+        self.population_text.deinit();
+        self.demand_text.deinit();
+        self.produce_text.deinit();
+        self.calories_text.deinit();
+        self.stockpile_text.deinit();
+        self.calendar_text.deinit();
+        self.money_text.deinit();
     }
 };
 
 const UIWidgets = struct {
     counter: ui.Node,
+    population: ui.Node,
+    calendar: ui.Node,
+    money: ui.Node,
+    demand: ui.Node,
+    produce: ui.Node,
+    calories: ui.Node,
+    stockpile: ui.Node,
 
     fn deinit(_: *UIWidgets) void {}
 };
@@ -82,16 +103,50 @@ const App = struct {
         };
         self.obj = .{
             .counter = time.Counter.init(0.0),
-            .counter_text = ha.font.TextData.init(),
             .timer = time.Timer.init(30.0, null),
+            .counter_text = ha.font.TextData.init(),
+            .population_text = ha.font.TextData.init(),
+            .demand_text = ha.font.TextData.init(),
+            .produce_text = ha.font.TextData.init(),
+            .calories_text = ha.font.TextData.init(),
+            .stockpile_text = ha.font.TextData.init(),
+            .calendar_text = ha.font.TextData.init(),
+            .money_text = ha.font.TextData.init(),
         };
         self.ui_widgets = .{
             .counter = ui.Node.init("counter"),
+            .population = ui.Node.init("population"),
+            .demand = ui.Node.init("demand"),
+            .produce = ui.Node.init("produce"),
+            .calories = ui.Node.init("calories"),
+            .stockpile = ui.Node.init("stockpile"),
+            .calendar = ui.Node.init("calendar"),
+            .money = ui.Node.init("money"),
         };
         _ = self.ui_widgets.counter
-            .with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text))
             .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter))
             .with_data(@ptrCast(&self.obj.counter_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.population
+            .with_data(@ptrCast(&self.obj.population_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.demand
+            .with_data(@ptrCast(&self.obj.demand_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.produce
+            .with_data(@ptrCast(&self.obj.produce_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.calories
+            .with_data(@ptrCast(&self.obj.calories_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.stockpile
+            .with_data(@ptrCast(&self.obj.stockpile_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.calendar
+            .with_data(@ptrCast(&self.obj.calendar_text))
+            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
+        _ = self.ui_widgets.money
+            .with_data(@ptrCast(&self.obj.money_text))
             .with_render(ui.OnRender.init(&widgets.sdl_render_text));
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }
@@ -122,7 +177,9 @@ pub fn main() !void {
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
-                .key_down => |key| if (key.key == .escape) { quit = true; },
+                .key_down => |key| if (key.key == .escape) {
+                    quit = true;
+                },
                 .mouse_button_down => |mb| {
                     pending_click = .{
                         .x = mb.x,
@@ -143,11 +200,28 @@ pub fn main() !void {
         app.obj.counter.update(dt);
         app.obj.timer.update(dt);
         app.obj.counter_text.update(
-            try std.fmt.bufPrint(
-                &app.obj.counter_text.buf,
-                "Counter: {d:.0}",
-                .{app.obj.counter.get()},
-            ),
+            try std.fmt.bufPrint(&app.obj.counter_text.buf, "Counter: {d:.0}", .{app.obj.counter.get()}),
+        );
+        app.obj.population_text.update(
+            try std.fmt.bufPrint(&app.obj.population_text.buf, "Population: {d:.0}", .{0}),
+        );
+        app.obj.demand_text.update(
+            try std.fmt.bufPrint(&app.obj.demand_text.buf, "Demand: {d:.0}", .{0}),
+        );
+        app.obj.produce_text.update(
+            try std.fmt.bufPrint(&app.obj.produce_text.buf, "Produce: {d:.0}", .{0}),
+        );
+        app.obj.calories_text.update(
+            try std.fmt.bufPrint(&app.obj.calories_text.buf, "Calories: {d:.0}", .{0}),
+        );
+        app.obj.stockpile_text.update(
+            try std.fmt.bufPrint(&app.obj.stockpile_text.buf, "Stockpile: {d:.0}", .{0}),
+        );
+        app.obj.calendar_text.update(
+            try std.fmt.bufPrint(&app.obj.calendar_text.buf, "Calendar: {d:.0}", .{0}),
+        );
+        app.obj.money_text.update(
+            try std.fmt.bufPrint(&app.obj.money_text.buf, "Money: {d:.0}", .{0}),
         );
 
         _ = app.frame_arena.reset(.retain_capacity);
@@ -172,7 +246,34 @@ fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
     const root = try ui.Node.create(allocator, "root");
     _ = root.with_position(ui.Position.init(.top_left, .centered_wrapped, null, &widgets.screen_size));
 
+    _ = w.counter.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
     try root.add_child(allocator, &w.counter);
+
+    const left_panel = try ui.Node.create(allocator, "left_panel");
+    _ = left_panel.with_position(ui.Position.initFixed(.top_left, .vertical, 300, 600, null));
+
+    _ = w.population.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try left_panel.add_child(allocator, &w.population);
+    _ = w.demand.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try left_panel.add_child(allocator, &w.demand);
+    _ = w.produce.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try left_panel.add_child(allocator, &w.produce);
+    _ = w.calories.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try left_panel.add_child(allocator, &w.calories);
+    _ = w.stockpile.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try left_panel.add_child(allocator, &w.stockpile);
+
+    try root.add_child(allocator, left_panel);
+
+    const right_panel = try ui.Node.create(allocator, "right_panel");
+    _ = right_panel.with_position(ui.Position.initFixed(.top_right, .vertical_right, 300, 600, null));
+
+    _ = w.calendar.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try right_panel.add_child(allocator, &w.calendar);
+    _ = w.money.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
+    try right_panel.add_child(allocator, &w.money);
+
+    try root.add_child(allocator, right_panel);
 
     return root;
 }

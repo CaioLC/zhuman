@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(zig build:*)"
+      "Bash(zig build:*)",
+      "WebFetch(domain:www.dgtlgrove.com)",
+      "Bash(C:/Users/c4ioc/AppData/Local/zig/p/N-V-__8AAGBUxxRvh6uEWBaIB03ThSLTLf0SKQFy5Ejo15x8/zig build *)",
+      "Bash(git add *)"
     ]
   }
 }
