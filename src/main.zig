@@ -16,6 +16,14 @@ const font_path = "assets/fonts/Kenney Mini Square.ttf";
 const Objects = struct {
     counter: time.Counter,
     timer: time.Timer,
+    population: time.Accumulator(i32),
+    calendar: time.Counter,
+    money: time.Accumulator(i32),
+    demand: time.Accumulator(i32),
+    produce: time.Accumulator(i32),
+    calories: time.Accumulator(i32),
+    stockpile: time.Accumulator(i32),
+    //
     counter_text: ha.font.TextData,
     population_text: ha.font.TextData,
     demand_text: ha.font.TextData,
@@ -104,6 +112,14 @@ const App = struct {
         self.obj = .{
             .counter = time.Counter.init(0.0),
             .timer = time.Timer.init(30.0, null),
+            .population = time.Accumulator(i32).init(1),
+            .calendar = time.Counter.init(0.0),
+            .money = time.Accumulator(i32).init(500),
+            .demand = time.Accumulator(i32).init(100), // 100Wh
+            .produce = time.Accumulator(i32).init(0),
+            .calories = time.Accumulator(i32).init(1000), // 1000kcal/day
+            .stockpile = time.Accumulator(i32).init(4000), // calories stockpile
+
             .counter_text = ha.font.TextData.init(),
             .population_text = ha.font.TextData.init(),
             .demand_text = ha.font.TextData.init(),
@@ -199,29 +215,37 @@ pub fn main() !void {
         const dt = app.frame_capper.delay();
         app.obj.counter.update(dt);
         app.obj.timer.update(dt);
+        app.obj.calendar.update(dt);
+
+        // app.obj.money.update(dt);
+        // app.obj.demand.update(dt);
+        // app.obj.produce.update(dt);
+        // app.obj.calories.update(dt);
+        // app.obj.stockpile.update(dt);
+
         app.obj.counter_text.update(
             try std.fmt.bufPrint(&app.obj.counter_text.buf, "Counter: {d:.0}", .{app.obj.counter.get()}),
         );
         app.obj.population_text.update(
-            try std.fmt.bufPrint(&app.obj.population_text.buf, "Population: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.population_text.buf, "Population: {d:.0}", .{app.obj.population.get()}),
         );
         app.obj.demand_text.update(
-            try std.fmt.bufPrint(&app.obj.demand_text.buf, "Demand: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.demand_text.buf, "Demand: {d:.0}", .{app.obj.demand.get()}),
         );
         app.obj.produce_text.update(
-            try std.fmt.bufPrint(&app.obj.produce_text.buf, "Produce: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.produce_text.buf, "Produce: {d:.0}", .{app.obj.produce.get()}),
         );
         app.obj.calories_text.update(
-            try std.fmt.bufPrint(&app.obj.calories_text.buf, "Calories: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.calories_text.buf, "Calories: {d:.0}", .{app.obj.calories.get()}),
         );
         app.obj.stockpile_text.update(
-            try std.fmt.bufPrint(&app.obj.stockpile_text.buf, "Stockpile: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.stockpile_text.buf, "Stockpile: {d:.0}", .{app.obj.stockpile.get()}),
         );
         app.obj.calendar_text.update(
-            try std.fmt.bufPrint(&app.obj.calendar_text.buf, "Calendar: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.calendar_text.buf, "Calendar: {d:.0}", .{app.obj.calendar.get()}),
         );
         app.obj.money_text.update(
-            try std.fmt.bufPrint(&app.obj.money_text.buf, "Money: {d:.0}", .{0}),
+            try std.fmt.bufPrint(&app.obj.money_text.buf, "Money: {d:.0}", .{app.obj.money.get()}),
         );
 
         _ = app.frame_arena.reset(.retain_capacity);

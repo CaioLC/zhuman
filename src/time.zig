@@ -1,3 +1,25 @@
+pub fn Accumulator(comptime T: type) type {
+    return struct {
+        v: T,
+
+        pub fn init(v: T) @This() {
+            return .{ .v = v };
+        }
+
+        pub fn update(self: *@This(), dt: T) void {
+            self.v += dt;
+        }
+
+        pub fn set(self: *@This(), v: T) void {
+            self.v = v;
+        }
+
+        pub fn get(self: @This()) T {
+            return self.v;
+        }
+    };
+}
+
 /// A simple counter
 pub const Counter = struct {
     v: f32,
