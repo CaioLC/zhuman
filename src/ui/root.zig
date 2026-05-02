@@ -6,7 +6,8 @@ pub const features = @import("./features/root.zig");
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
-pub const Position = features.Position;
+pub const Size = features.Size;
+pub const Layout = features.Layout;
 pub const OnClick = features.OnClick;
 pub const OnRender = features.OnRender;
 
@@ -16,7 +17,8 @@ pub const Node = struct {
     children: std.ArrayList(*Node),
     data: ?*anyopaque,
 
-    position: ?features.Position,
+    size: ?features.Size,
+    layout: ?features.Layout,
     on_click: ?features.OnClick,
     on_render: ?features.OnRender,
 
@@ -26,7 +28,8 @@ pub const Node = struct {
             .parent = null,
             .children = .empty,
             .data = null,
-            .position = null,
+            .size = null,
+            .layout = null,
             .on_click = null,
             .on_render = null,
         };
@@ -38,8 +41,13 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn with_position(self: *Node, position: features.Position) *Node {
-        self.position = position;
+    pub fn with_size(self: *Node, size: features.Size) *Node {
+        self.size = size;
+        return self;
+    }
+
+    pub fn with_layout(self: *Node, layout: features.Layout) *Node {
+        self.layout = layout;
         return self;
     }
 
@@ -85,11 +93,13 @@ pub const Node = struct {
 
 pub fn dispatch_click(node: *Node, mx: f32, my: f32, button: features.MouseButton) void {
     if (node.on_click) |oc| {
-        if (node.position) |pos| {
-            const gx = pos._global_x orelse 0;
-            const gy = pos._global_y orelse 0;
-            if (mx >= gx and mx <= gx + pos.width and my >= gy and my <= gy + pos.height) {
-                oc.invoke(.{ .x = mx, .y = my, .button = button });
+        if (node.size) |s| {
+            if (node.layout) |l| {
+                const gx = l._global_x orelse 0;
+                const gy = l._global_y orelse 0;
+                if (mx >= gx and mx <= gx + s.width and my >= gy and my <= gy + s.height) {
+                    oc.invoke(.{ .x = mx, .y = my, .button = button });
+                }
             }
         }
     }
@@ -111,25 +121,28 @@ test "node tree layout" {
     const allocator = arena.allocator();
 
     var root = try Node.create(allocator, "root");
-    _ = root.with_position(Position.initFixed(.top_left, null, 800, 600, null));
-    root.position.?._global_x = 0;
-    root.position.?._global_y = 0;
+    _ = root.with_size(Size.initFixed(800, 600, null));
+    _ = root.with_layout(Layout.init(.top_left, null));
+    root.layout.?._global_x = 0;
+    root.layout.?._global_y = 0;
 
     const child = try Node.create(allocator, "chd1");
-    _ = child.with_position(Position.initFixed(.center, null, 100, 50, null));
+    _ = child.with_size(Size.initFixed(100, 50, null));
+    _ = child.with_layout(Layout.init(.center, null));
     try root.add_child(allocator, child);
 
     const child2 = try Node.create(allocator, "chd2");
-    _ = child2.with_position(Position.initFixed(.bottom_center, null, 100, 50, null));
+    _ = child2.with_size(Size.initFixed(100, 50, null));
+    _ = child2.with_layout(Layout.init(.bottom_center, null));
     try root.add_child(allocator, child2);
 
     try root.set_global_pos(null, null);
 
-    try std.testing.expect(child.position.?._global_x.? == 350.0);
-    try std.testing.expect(child.position.?._global_y.? == 275.0);
+    try std.testing.expect(child.layout.?._global_x.? == 350.0);
+    try std.testing.expect(child.layout.?._global_y.? == 275.0);
 
-    try std.testing.expect(child2.position.?._global_x.? == 350.0);
-    try std.testing.expect(child2.position.?._global_y.? == 550.0);
+    try std.testing.expect(child2.layout.?._global_x.? == 350.0);
+    try std.testing.expect(child2.layout.?._global_y.? == 550.0);
 }
 
 test "collect returns each node exactly once" {
@@ -138,14 +151,17 @@ test "collect returns each node exactly once" {
     const allocator = arena.allocator();
 
     var root = try Node.create(allocator, "root");
-    _ = root.with_position(Position.initFixed(.top_left, null, 800, 600, null));
+    _ = root.with_size(Size.initFixed(800, 600, null));
+    _ = root.with_layout(Layout.init(.top_left, null));
 
     const indep = try Node.create(allocator, "indp");
-    _ = indep.with_position(Position.initFixed(.center, null, 100, 50, null));
+    _ = indep.with_size(Size.initFixed(100, 50, null));
+    _ = indep.with_layout(Layout.init(.center, null));
     try root.add_child(allocator, indep);
 
     const dep = try Node.create(allocator, "dep1");
-    _ = dep.with_position(Position.initFixed(.relative, null, 100, 50, null));
+    _ = dep.with_size(Size.initFixed(100, 50, null));
+    _ = dep.with_layout(Layout.init(.relative, null));
     try root.add_child(allocator, dep);
 
     var list: std.ArrayList(*Node) = .empty;

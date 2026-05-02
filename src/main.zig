@@ -46,14 +46,14 @@ const Objects = struct {
 };
 
 const UIWidgets = struct {
-    counter: ui.Node,
-    population: ui.Node,
-    calendar: ui.Node,
-    money: ui.Node,
-    demand: ui.Node,
-    produce: ui.Node,
-    calories: ui.Node,
-    stockpile: ui.Node,
+    counter: widgets.Button,
+    population: widgets.Button,
+    calendar: widgets.Button,
+    money: widgets.Button,
+    demand: widgets.Button,
+    produce: widgets.Button,
+    calories: widgets.Button,
+    stockpile: widgets.Button,
 
     fn deinit(_: *UIWidgets) void {}
 };
@@ -130,40 +130,15 @@ const App = struct {
             .money_text = ha.font.TextData.init(),
         };
         self.ui_widgets = .{
-            .counter = ui.Node.init("counter"),
-            .population = ui.Node.init("population"),
-            .demand = ui.Node.init("demand"),
-            .produce = ui.Node.init("produce"),
-            .calories = ui.Node.init("calories"),
-            .stockpile = ui.Node.init("stockpile"),
-            .calendar = ui.Node.init("calendar"),
-            .money = ui.Node.init("money"),
+            .counter  = widgets.Button.init("counter",    ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter), @ptrCast(&self.obj.counter_text),    .text),
+            .population = widgets.Button.init("population", null, @ptrCast(&self.obj.population_text), .text),
+            .demand     = widgets.Button.init("demand",     null, @ptrCast(&self.obj.demand_text),      .text),
+            .produce    = widgets.Button.init("produce",    null, @ptrCast(&self.obj.produce_text),     .text),
+            .calories   = widgets.Button.init("calories",  null, @ptrCast(&self.obj.calories_text),    .text),
+            .stockpile  = widgets.Button.init("stockpile", null, @ptrCast(&self.obj.stockpile_text),   .text),
+            .calendar   = widgets.Button.init("calendar",  null, @ptrCast(&self.obj.calendar_text),    .text),
+            .money      = widgets.Button.init("money",     null, @ptrCast(&self.obj.money_text),        .text),
         };
-        _ = self.ui_widgets.counter
-            .with_onclick(ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter))
-            .with_data(@ptrCast(&self.obj.counter_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.population
-            .with_data(@ptrCast(&self.obj.population_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.demand
-            .with_data(@ptrCast(&self.obj.demand_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.produce
-            .with_data(@ptrCast(&self.obj.produce_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.calories
-            .with_data(@ptrCast(&self.obj.calories_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.stockpile
-            .with_data(@ptrCast(&self.obj.stockpile_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.calendar
-            .with_data(@ptrCast(&self.obj.calendar_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
-        _ = self.ui_widgets.money
-            .with_data(@ptrCast(&self.obj.money_text))
-            .with_render(ui.OnRender.init(&widgets.sdl_render_text));
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }
 
@@ -268,34 +243,37 @@ pub fn main() !void {
 
 fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
     const root = try ui.Node.create(allocator, "root");
-    _ = root.with_position(ui.Position.init(.top_left, .centered_wrapped, null, &widgets.screen_size));
+    _ = root.with_size(ui.Size.init(&widgets.screen_size, null));
+    _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
 
-    _ = w.counter.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try root.add_child(allocator, &w.counter);
+    _ = w.counter.node.with_layout(ui.Layout.init(.relative, null));
+    try root.add_child(allocator, &w.counter.node);
 
     const left_panel = try ui.Node.create(allocator, "left_panel");
-    _ = left_panel.with_position(ui.Position.initFixed(.top_left, .vertical, 300, 600, null));
+    _ = left_panel.with_size(ui.Size.initFixed(300, 600, null));
+    _ = left_panel.with_layout(ui.Layout.init(.top_left, .vertical));
 
-    _ = w.population.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try left_panel.add_child(allocator, &w.population);
-    _ = w.demand.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try left_panel.add_child(allocator, &w.demand);
-    _ = w.produce.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try left_panel.add_child(allocator, &w.produce);
-    _ = w.calories.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try left_panel.add_child(allocator, &w.calories);
-    _ = w.stockpile.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try left_panel.add_child(allocator, &w.stockpile);
+    _ = w.population.node.with_layout(ui.Layout.init(.relative, null));
+    try left_panel.add_child(allocator, &w.population.node);
+    _ = w.demand.node.with_layout(ui.Layout.init(.relative, null));
+    try left_panel.add_child(allocator, &w.demand.node);
+    _ = w.produce.node.with_layout(ui.Layout.init(.relative, null));
+    try left_panel.add_child(allocator, &w.produce.node);
+    _ = w.calories.node.with_layout(ui.Layout.init(.relative, null));
+    try left_panel.add_child(allocator, &w.calories.node);
+    _ = w.stockpile.node.with_layout(ui.Layout.init(.relative, null));
+    try left_panel.add_child(allocator, &w.stockpile.node);
 
     try root.add_child(allocator, left_panel);
 
     const right_panel = try ui.Node.create(allocator, "right_panel");
-    _ = right_panel.with_position(ui.Position.initFixed(.top_right, .vertical_right, 300, 600, null));
+    _ = right_panel.with_size(ui.Size.initFixed(300, 600, null));
+    _ = right_panel.with_layout(ui.Layout.init(.top_right, .vertical_right));
 
-    _ = w.calendar.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try right_panel.add_child(allocator, &w.calendar);
-    _ = w.money.with_position(ui.Position.init(.relative, null, null, &widgets.calc_size_text));
-    try right_panel.add_child(allocator, &w.money);
+    _ = w.calendar.node.with_layout(ui.Layout.init(.relative, null));
+    try right_panel.add_child(allocator, &w.calendar.node);
+    _ = w.money.node.with_layout(ui.Layout.init(.relative, null));
+    try right_panel.add_child(allocator, &w.money.node);
 
     try root.add_child(allocator, right_panel);
 

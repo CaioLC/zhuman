@@ -8,6 +8,26 @@ const TextData = zfont.TextData;
 const TextDataStatic = zfont.TextDataStatic;
 const Resources = res.Resources;
 
+pub const DataType = enum { text, text_static, sprite };
+
+pub const Button = struct {
+    node: ui.Node,
+
+    pub fn init(id: []const u8, on_click: ?ui.OnClick, data: *anyopaque, data_type: DataType) Button {
+        var node = ui.Node.init(id);
+        if (on_click) |oc| _ = node.with_onclick(oc);
+        _ = node.with_data(data);
+        const calc_fn, const render_fn = switch (data_type) {
+            .text => .{ &calc_size_text, &sdl_render_text },
+            .text_static => .{ &calc_size_text_static, &sdl_render_text_static },
+            .sprite => @panic("sprite not yet implemented"),
+        };
+        _ = node.with_size(ui.Size.init(calc_fn, null));
+        _ = node.with_render(ui.OnRender.init(render_fn));
+        return .{ .node = node };
+    }
+};
+
 pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
     const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
     const width, const height = try ctx.window.getSize();
@@ -40,7 +60,8 @@ pub fn calc_size_text_static(raw_ctx: *anyopaque, node: *ui.Node) anyerror!struc
 
 fn render_text_impl(comptime T: type, raw_ctx: *anyopaque, node: *ui.Node) void {
     const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
-    const pos = node.position orelse return;
+    const s = node.size orelse return;
+    const l = node.layout orelse return;
     const data = node.data orelse return;
     const text_data: *T = @ptrCast(@alignCast(data));
 
@@ -54,10 +75,10 @@ fn render_text_impl(comptime T: type, raw_ctx: *anyopaque, node: *ui.Node) void 
     defer texture.deinit();
 
     const dst = sdl.rect.FRect{
-        .x = (pos._global_x orelse return) + pos.padding.left,
-        .y = (pos._global_y orelse return) + pos.padding.up,
-        .w = pos.data_width,
-        .h = pos.data_height,
+        .x = (l._global_x orelse return) + s.padding.left,
+        .y = (l._global_y orelse return) + s.padding.up,
+        .w = s.data_width,
+        .h = s.data_height,
     };
     ctx.renderer.renderTexture(texture, null, dst) catch return;
 }

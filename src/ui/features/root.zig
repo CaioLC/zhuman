@@ -1,21 +1,19 @@
+const size_mod = @import("size.zig");
+const layout_mod = @import("layout.zig");
 const clickable = @import("clickable.zig");
-const position = @import("position.zig");
 const renderable = @import("renderable.zig");
 
-// Position types
-pub const Position = position.Position;
-pub const Anchor = position.Anchor;
-pub const ChildrenAlign = position.ChildrenAlign;
-pub const ChildrenPosInfo = position.ChildrenPosInfo;
-pub const Padding = position.Padding;
+pub const Padding = size_mod.Padding;
+pub const Size = size_mod.Size;
 
-// Position layout
-pub const set_global_pos = position.set_global_pos;
+pub const Anchor = layout_mod.Anchor;
+pub const ChildrenAlign = layout_mod.ChildrenAlign;
+pub const ChildrenPosInfo = layout_mod.ChildrenPosInfo;
+pub const Layout = layout_mod.Layout;
+pub const set_global_pos = layout_mod.set_global_pos;
 
-// Clickable types
 pub const OnClick = clickable.OnClick;
 pub const ClickEvent = clickable.ClickEvent;
 pub const MouseButton = clickable.MouseButton;
 
-// Renderable types
 pub const OnRender = renderable.OnRender;
