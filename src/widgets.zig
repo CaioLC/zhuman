@@ -10,12 +10,11 @@ const Resources = res.Resources;
 
 pub const DataType = enum { text, text_static, sprite };
 
-pub const Button = struct {
+pub const El = struct {
     node: ui.Node,
 
-    pub fn init(id: []const u8, on_click: ?ui.OnClick, data: *anyopaque, data_type: DataType) Button {
+    pub fn init(id: []const u8, data: *anyopaque, data_type: DataType) El {
         var node = ui.Node.init(id);
-        if (on_click) |oc| _ = node.with_onclick(oc);
         _ = node.with_data(data);
         const calc_fn, const render_fn = switch (data_type) {
             .text => .{ &calc_size_text, &sdl_render_text },
@@ -25,6 +24,16 @@ pub const Button = struct {
         _ = node.with_size(ui.Size.init(calc_fn, null));
         _ = node.with_render(ui.OnRender.init(render_fn));
         return .{ .node = node };
+    }
+};
+
+pub const Button = struct {
+    node: ui.Node,
+
+    pub fn init(id: []const u8, on_click: ui.OnClick, data: *anyopaque, data_type: DataType) Button {
+        var el = El.init(id, data, data_type);
+        _ = el.node.with_onclick(on_click);
+        return .{ .node = el.node };
     }
 };
 

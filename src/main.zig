@@ -47,13 +47,13 @@ const Objects = struct {
 
 const UIWidgets = struct {
     counter: widgets.Button,
-    population: widgets.Button,
-    calendar: widgets.Button,
-    money: widgets.Button,
-    demand: widgets.Button,
-    produce: widgets.Button,
-    calories: widgets.Button,
-    stockpile: widgets.Button,
+    population: widgets.El,
+    calendar: widgets.El,
+    money: widgets.El,
+    demand: widgets.El,
+    produce: widgets.El,
+    calories: widgets.El,
+    stockpile: widgets.El,
 
     fn deinit(_: *UIWidgets) void {}
 };
@@ -130,14 +130,14 @@ const App = struct {
             .money_text = ha.font.TextData.init(),
         };
         self.ui_widgets = .{
-            .counter  = widgets.Button.init("counter",    ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter), @ptrCast(&self.obj.counter_text),    .text),
-            .population = widgets.Button.init("population", null, @ptrCast(&self.obj.population_text), .text),
-            .demand     = widgets.Button.init("demand",     null, @ptrCast(&self.obj.demand_text),      .text),
-            .produce    = widgets.Button.init("produce",    null, @ptrCast(&self.obj.produce_text),     .text),
-            .calories   = widgets.Button.init("calories",  null, @ptrCast(&self.obj.calories_text),    .text),
-            .stockpile  = widgets.Button.init("stockpile", null, @ptrCast(&self.obj.stockpile_text),   .text),
-            .calendar   = widgets.Button.init("calendar",  null, @ptrCast(&self.obj.calendar_text),    .text),
-            .money      = widgets.Button.init("money",     null, @ptrCast(&self.obj.money_text),        .text),
+            .counter    = widgets.Button.init("counter",    ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter), @ptrCast(&self.obj.counter_text), .text),
+            .population = widgets.El.init("population", @ptrCast(&self.obj.population_text), .text),
+            .demand     = widgets.El.init("demand",     @ptrCast(&self.obj.demand_text),     .text),
+            .produce    = widgets.El.init("produce",    @ptrCast(&self.obj.produce_text),    .text),
+            .calories   = widgets.El.init("calories",   @ptrCast(&self.obj.calories_text),   .text),
+            .stockpile  = widgets.El.init("stockpile",  @ptrCast(&self.obj.stockpile_text),  .text),
+            .calendar   = widgets.El.init("calendar",   @ptrCast(&self.obj.calendar_text),   .text),
+            .money      = widgets.El.init("money",      @ptrCast(&self.obj.money_text),      .text),
         };
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }

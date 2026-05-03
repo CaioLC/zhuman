@@ -14,34 +14,78 @@ Requires Zig 0.15.2+. Dependencies (SDL3, SDL3 TTF) are fetched automatically vi
 
 ## Architecture
 
-**Human Action** is a Zig/SDL3 interactive application framework centered on a custom UI layout engine.
+**Human Action** is a Zig/SDL3 application built around a custom immediate-mode UI layout engine. The node tree is rebuilt from scratch every frame using a per-frame arena allocator.
 
 ### Main Loop (`src/main.zig`)
 
-The application runs at 60 FPS using SDL3. Each frame calls:
-1. `events()` — processes SDL3 events (quit, resize, keyboard, mouse)
-2. `update()` — advances game objects (Counter, Timer) with delta time
-3. `update_ui()` — recalculates UI node positions and updates SDL3 text surfaces
-4. `render()` — walks the UI node tree and draws everything
+`App` owns all state. `App.init()` handles SDL/window setup only. `App.setup()` is called once after `App` is stable on the stack — it initialises fonts, resources, game objects, and persistent UI nodes (safe because all internal pointers are set after the struct address is fixed).
 
-`setup_ui()` builds the initial UI tree at startup. `text_node()` is a helper for creating text-based nodes with an SDL3 TTF surface.
+Each frame:
+1. **Events** — SDL3 event poll; clicks are queued as `PendingClick`
+2. **Update** — advances `Objects` (counters, timers) and formats their `TextData`
+3. **Build UI** — arena reset, `build_ui()` constructs a fresh node tree
+4. **Layout** — `root.set_global_pos()` resolves all positions
+5. **Dispatch** — queued click hit-tested against the tree
+6. **Render** — `ui.render()` walks the tree and draws
 
-### UI Layout Engine (`src/ui.zig`)
+`App` fields:
+- `obj: Objects` — game state + `TextData` for each display value
+- `ui_widgets: UIWidgets` — persistent leaf nodes (El, Button)
+- `resources: res.Resources` — font, renderer, window (passed as `*anyopaque` ctx to layout/render)
+- `frame_arena` — reset each frame; used for all ephemeral node allocations
 
-The core of the project. Nodes form a tree where each `Node` has:
-- An `Anchor` enum — either one of 9 fixed positions (top_left, center, bottom_right, etc.) relative to the parent, or `relative` meaning the **parent** controls its position via `ChildrenAlign`
-- A `ChildrenAlign` mode that determines how `relative`-anchored children are arranged: `horizontal`, `vertical`, `centered`, and their `_wrapped` and `_reverse` variants
-- A `size` and optional SDL3 `surface` for rendering
+### UI System (`src/ui/`)
 
-**Key distinction:** Nodes anchored at a fixed point (`top_left`, `center`, etc.) are *independent* — they position themselves relative to their parent. Nodes with `relative` anchor are *dependent* — they are positioned by their parent's `ChildrenAlign` logic. `add_child()` automatically classifies and places new children in the correct list.
+#### Node (`src/ui/root.zig`)
 
-Position resolution happens recursively via `set_global_pos()` → `set_indep_global_pos()`. The `collect()` method flattens the tree into a render list. `get_id()` finds a node by ID.
+The atomic unit. Each `Node` has two independent feature sets:
+
+- **`size: ?Size`** — intrinsic identity: `calc` function, `data_width/height`, `width/height`, `padding`. Set once at widget init, never touched in layout.
+- **`layout: ?Layout`** — positional context: `anchor`, `children_align`, `_global_x/y`. Set each frame in `build_ui`.
+
+Nodes are either **persistent** (leaf nodes stored in `UIWidgets`, no children) or **ephemeral** (container nodes arena-allocated each frame with children added per frame).
+
+Builder methods: `with_size`, `with_layout`, `with_onclick`, `with_render`, `with_data`.
+
+Free functions: `dispatch_click(root, mx, my, button)`, `render(root, ctx)`.
+
+#### Features (`src/ui/features/`)
+
+- `size.zig` — `Size`, `Padding`, `static_calc_size`, `recalculate_size`
+- `layout.zig` — `Layout`, `Anchor`, `ChildrenAlign`, `ChildrenPosInfo`, `set_global_pos` and all layout algorithms
+- `clickable.zig` — `OnClick`, `ClickEvent`, `MouseButton`
+- `renderable.zig` — `OnRender`
+- `root.zig` — re-exports all of the above
+
+`Anchor`: 9 fixed positions (`top_left`, `center`, `top_right`, etc.) or `relative` (parent controls position via `ChildrenAlign`). Fixed-anchor nodes position themselves; `relative` nodes are positioned by their parent's `ChildrenAlign` logic.
+
+`ChildrenAlign`: `horizontal`, `vertical`, `vertical_right`, `centered`, `centered_wrapped`, and their `_wrapped`/`_reverse` variants.
+
+### Widget System (`src/widgets.zig`)
+
+Three levels of abstraction:
+
+**Features** — raw builder calls on `Node` (`with_size`, `with_onclick`, etc.)
+
+**Primitives** — single persistent node, set up once in `App.setup()`:
+- `El.init(id, data, data_type)` — minimal renderable: size + render + data
+- `Button.init(id, on_click, data, data_type)` — `El` + onclick
+
+`DataType` enum selects the render/size function pair: `.text` (dynamic `TextData`), `.text_static` (`TextDataStatic`), `.sprite` (future).
+
+**Components** — functions returning `*Node` (ephemeral, arena-allocated). Take persistent leaf nodes + any needed params, build a mini node tree, return its root. Called inside `build_ui` and composed via `add_child`:
+```zig
+try root.add_child(fa, try widgets.slider(fa, &w.track, &w.thumb, layout));
+```
+
+`UIWidgets` stores only primitives (El, Button). Components are stateless functions.
 
 ### Supporting Modules
 
-- `src/time.zig` — `Counter` (incremental) and `Timer` (countdown) utilities, updated with delta time each frame
-- `src/font.zig` — Font color constants (e.g., `font.white`)
-- `src/root.zig` — Library root that re-exports `sdl`, `ui`, `time`, `font`
+- `src/time.zig` — `Counter` (f32 accumulator), `Timer` (countdown), `Accumulator(T)` (generic)
+- `src/font.zig` — `TextData` (dynamic text + SDL surface cache), `TextDataStatic` (fixed text), color constants
+- `src/res.zig` — `Resources` struct (font, renderer, window); shared context passed as `*anyopaque` to all render/size callbacks
+- `src/root.zig` — library root, re-exports `sdl`, `ui`, `widgets`, `time`, `font`, `res`
 
 ### Assets
 
