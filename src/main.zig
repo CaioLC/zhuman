@@ -6,6 +6,7 @@ const ui = ha.ui;
 const res = ha.res;
 const widgets = ha.widgets;
 const sdl = ha.sdl;
+const sys = ha.systems;
 
 const features = ui.features;
 const screen_width: c_int = 800;
@@ -13,47 +14,15 @@ const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
-const Objects = struct {
-    counter: time.Counter,
-    timer: time.Timer,
-    population: time.Accumulator(i32),
-    calendar: time.Counter,
-    money: time.Accumulator(i32),
-    demand: time.Accumulator(i32),
-    produce: time.Accumulator(i32),
-    calories: time.Accumulator(i32),
-    stockpile: time.Accumulator(i32),
-    //
-    counter_text: ha.font.TextData,
-    population_text: ha.font.TextData,
-    demand_text: ha.font.TextData,
-    produce_text: ha.font.TextData,
-    calories_text: ha.font.TextData,
-    stockpile_text: ha.font.TextData,
-    calendar_text: ha.font.TextData,
-    money_text: ha.font.TextData,
-
-    fn deinit(self: *Objects) void {
-        self.counter_text.deinit();
-        self.population_text.deinit();
-        self.demand_text.deinit();
-        self.produce_text.deinit();
-        self.calories_text.deinit();
-        self.stockpile_text.deinit();
-        self.calendar_text.deinit();
-        self.money_text.deinit();
-    }
-};
-
 const UIWidgets = struct {
-    counter: widgets.Button,
+    counter:    widgets.Button,
     population: widgets.El,
-    calendar: widgets.El,
-    money: widgets.El,
-    demand: widgets.El,
-    produce: widgets.El,
-    calories: widgets.El,
-    stockpile: widgets.El,
+    calendar:   widgets.El,
+    money:      widgets.El,
+    demand:     widgets.El,
+    produce:    widgets.El,
+    calories:   widgets.El,
+    stockpile:  widgets.El,
 
     fn deinit(_: *UIWidgets) void {}
 };
@@ -71,7 +40,8 @@ const App = struct {
     frame_capper: sdl.extras.FramerateCapper(f32),
     font: sdl.ttf.Font,
     resources: res.Resources,
-    obj: Objects,
+    singletons: ha.singletons.Singletons,
+    world: ha.world.World,
     ui_widgets: UIWidgets,
     frame_arena: std.heap.ArenaAllocator,
 
@@ -96,7 +66,8 @@ const App = struct {
             .frame_capper = frame_capper,
             .font = undefined,
             .resources = undefined,
-            .obj = undefined,
+            .singletons = undefined,
+            .world = undefined,
             .ui_widgets = undefined,
             .frame_arena = undefined,
         };
@@ -109,42 +80,25 @@ const App = struct {
             .renderer = &self.renderer,
             .window = self.window,
         };
-        self.obj = .{
-            .counter = time.Counter.init(0.0),
-            .timer = time.Timer.init(30.0, null),
-            .population = time.Accumulator(i32).init(1),
-            .calendar = time.Counter.init(0.0),
-            .money = time.Accumulator(i32).init(500),
-            .demand = time.Accumulator(i32).init(100), // 100Wh
-            .produce = time.Accumulator(i32).init(0),
-            .calories = time.Accumulator(i32).init(1000), // 1000kcal/day
-            .stockpile = time.Accumulator(i32).init(4000), // calories stockpile
-
-            .counter_text = ha.font.TextData.init(),
-            .population_text = ha.font.TextData.init(),
-            .demand_text = ha.font.TextData.init(),
-            .produce_text = ha.font.TextData.init(),
-            .calories_text = ha.font.TextData.init(),
-            .stockpile_text = ha.font.TextData.init(),
-            .calendar_text = ha.font.TextData.init(),
-            .money_text = ha.font.TextData.init(),
-        };
+        self.singletons = ha.singletons.Singletons.init();
+        self.world = ha.world.World.init();
         self.ui_widgets = .{
-            .counter    = widgets.Button.init("counter",    ui.OnClick.typed(time.Counter, &reset_counter, &self.obj.counter), @ptrCast(&self.obj.counter_text), .text),
-            .population = widgets.El.init("population", @ptrCast(&self.obj.population_text), .text),
-            .demand     = widgets.El.init("demand",     @ptrCast(&self.obj.demand_text),     .text),
-            .produce    = widgets.El.init("produce",    @ptrCast(&self.obj.produce_text),    .text),
-            .calories   = widgets.El.init("calories",   @ptrCast(&self.obj.calories_text),   .text),
-            .stockpile  = widgets.El.init("stockpile",  @ptrCast(&self.obj.stockpile_text),  .text),
-            .calendar   = widgets.El.init("calendar",   @ptrCast(&self.obj.calendar_text),   .text),
-            .money      = widgets.El.init("money",      @ptrCast(&self.obj.money_text),      .text),
+            .counter    = widgets.Button.init("counter", ui.OnClick.typed(time.Counter, &reset_counter, &self.singletons.counter), @ptrCast(&self.singletons.counter_display), .text),
+            .population = widgets.El.init("population", @ptrCast(&self.singletons.population_display), .text),
+            .calendar   = widgets.El.init("calendar",   @ptrCast(&self.singletons.calendar_display),   .text),
+            .money      = widgets.El.init("money",      @ptrCast(&self.singletons.money_display),      .text),
+            .demand     = widgets.El.init("demand",     @ptrCast(&self.world.demand_display),          .text),
+            .produce    = widgets.El.init("produce",    @ptrCast(&self.world.produce_display),         .text),
+            .calories   = widgets.El.init("calories",   @ptrCast(&self.singletons.calories_display),   .text),
+            .stockpile  = widgets.El.init("stockpile",  @ptrCast(&self.singletons.stockpile_display),  .text),
         };
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }
 
     fn deinit(self: *App) void {
         self.frame_arena.deinit();
-        self.obj.deinit();
+        self.singletons.deinit();
+        self.world.deinit();
         self.ui_widgets.deinit();
         self.font.deinit();
         self.renderer.deinit();
@@ -188,40 +142,10 @@ pub fn main() !void {
         }
 
         const dt = app.frame_capper.delay();
-        app.obj.counter.update(dt);
-        app.obj.timer.update(dt);
-        app.obj.calendar.update(dt);
-
-        // app.obj.money.update(dt);
-        // app.obj.demand.update(dt);
-        // app.obj.produce.update(dt);
-        // app.obj.calories.update(dt);
-        // app.obj.stockpile.update(dt);
-
-        app.obj.counter_text.update(
-            try std.fmt.bufPrint(&app.obj.counter_text.buf, "Counter: {d:.0}", .{app.obj.counter.get()}),
-        );
-        app.obj.population_text.update(
-            try std.fmt.bufPrint(&app.obj.population_text.buf, "Population: {d:.0}", .{app.obj.population.get()}),
-        );
-        app.obj.demand_text.update(
-            try std.fmt.bufPrint(&app.obj.demand_text.buf, "Demand: {d:.0}", .{app.obj.demand.get()}),
-        );
-        app.obj.produce_text.update(
-            try std.fmt.bufPrint(&app.obj.produce_text.buf, "Produce: {d:.0}", .{app.obj.produce.get()}),
-        );
-        app.obj.calories_text.update(
-            try std.fmt.bufPrint(&app.obj.calories_text.buf, "Calories: {d:.0}", .{app.obj.calories.get()}),
-        );
-        app.obj.stockpile_text.update(
-            try std.fmt.bufPrint(&app.obj.stockpile_text.buf, "Stockpile: {d:.0}", .{app.obj.stockpile.get()}),
-        );
-        app.obj.calendar_text.update(
-            try std.fmt.bufPrint(&app.obj.calendar_text.buf, "Calendar: {d:.0}", .{app.obj.calendar.get()}),
-        );
-        app.obj.money_text.update(
-            try std.fmt.bufPrint(&app.obj.money_text.buf, "Money: {d:.0}", .{app.obj.money.get()}),
-        );
+        sys.tick_singletons(&app.singletons, dt);
+        sys.aggregate_produce(app.world.producers.constSlice(), &app.world.produce_display);
+        sys.aggregate_demand(app.world.consumers.constSlice(), &app.world.demand_display);
+        sys.format_singletons(&app.singletons);
 
         _ = app.frame_arena.reset(.retain_capacity);
         const fa = app.frame_arena.allocator();
