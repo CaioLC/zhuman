@@ -24,6 +24,12 @@ const UIWidgets = struct {
     calories:   widgets.El,
     stockpile:  widgets.El,
 
+    fn wire(self: *UIWidgets) void {
+        inline for (@typeInfo(UIWidgets).@"struct".fields) |f| {
+            @field(self, f.name).wire();
+        }
+    }
+
     fn deinit(_: *UIWidgets) void {}
 };
 
@@ -85,14 +91,7 @@ const App = struct {
             .calories   = widgets.El.init("calories",   .text),
             .stockpile  = widgets.El.init("stockpile",  .text),
         };
-        self.ui_widgets.counter.wire();
-        self.ui_widgets.population.wire();
-        self.ui_widgets.calendar.wire();
-        self.ui_widgets.money.wire();
-        self.ui_widgets.demand.wire();
-        self.ui_widgets.produce.wire();
-        self.ui_widgets.calories.wire();
-        self.ui_widgets.stockpile.wire();
+        self.ui_widgets.wire();
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }
 
