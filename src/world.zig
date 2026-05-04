@@ -1,5 +1,4 @@
 const time = @import("./time.zig");
-const font = @import("./font.zig");
 
 pub fn FixedList(comptime T: type, comptime cap: usize) type {
     return struct {
@@ -34,20 +33,12 @@ pub const World = struct {
     producers: FixedList(Producer, 64),
     consumers: FixedList(Consumer, 64),
 
-    produce_display: font.TextData,
-    demand_display:  font.TextData,
-
     pub fn init() World {
         return .{
             .producers = .{},
             .consumers = .{},
-            .produce_display = font.TextData.init(),
-            .demand_display  = font.TextData.init(),
         };
     }
 
-    pub fn deinit(self: *World) void {
-        self.produce_display.deinit();
-        self.demand_display.deinit();
-    }
+    pub fn deinit(_: *World) void {}
 };

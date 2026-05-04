@@ -9,7 +9,6 @@ pub const widgets = @import("./widgets.zig");
 pub const time = @import("./time.zig");
 pub const font = @import("./font.zig");
 pub const res = @import("./res.zig");
-pub const singletons = @import("./singletons.zig");
 pub const world = @import("./world.zig");
 pub const systems = @import("./systems.zig");
 
@@ -18,7 +17,7 @@ test {
     _ = time;
     _ = font;
     _ = res;
-    _ = singletons;
+
     _ = world;
     _ = systems;
 }

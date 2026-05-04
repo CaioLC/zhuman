@@ -3,7 +3,7 @@ const ha = @import("ha");
 
 const time = ha.time;
 const ui = ha.ui;
-const res = ha.res;
+const Resources = ha.res.Resources;
 const widgets = ha.widgets;
 const sdl = ha.sdl;
 const sys = ha.systems;
@@ -39,8 +39,7 @@ const App = struct {
     renderer: sdl.render.Renderer,
     frame_capper: sdl.extras.FramerateCapper(f32),
     font: sdl.ttf.Font,
-    resources: res.Resources,
-    singletons: ha.singletons.Singletons,
+    resources:  Resources,
     world: ha.world.World,
     ui_widgets: UIWidgets,
     frame_arena: std.heap.ArenaAllocator,
@@ -66,7 +65,6 @@ const App = struct {
             .frame_capper = frame_capper,
             .font = undefined,
             .resources = undefined,
-            .singletons = undefined,
             .world = undefined,
             .ui_widgets = undefined,
             .frame_arena = undefined,
@@ -75,29 +73,31 @@ const App = struct {
 
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
         self.font = try sdl.ttf.Font.init(font_path, 24);
-        self.resources = .{
-            .font = &self.font,
-            .renderer = &self.renderer,
-            .window = self.window,
-        };
-        self.singletons = ha.singletons.Singletons.init();
+        self.resources = Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         self.ui_widgets = .{
-            .counter    = widgets.Button.init("counter", ui.OnClick.typed(time.Counter, &reset_counter, &self.singletons.counter), @ptrCast(&self.singletons.counter_display), .text),
-            .population = widgets.El.init("population", @ptrCast(&self.singletons.population_display), .text),
-            .calendar   = widgets.El.init("calendar",   @ptrCast(&self.singletons.calendar_display),   .text),
-            .money      = widgets.El.init("money",      @ptrCast(&self.singletons.money_display),      .text),
-            .demand     = widgets.El.init("demand",     @ptrCast(&self.world.demand_display),          .text),
-            .produce    = widgets.El.init("produce",    @ptrCast(&self.world.produce_display),         .text),
-            .calories   = widgets.El.init("calories",   @ptrCast(&self.singletons.calories_display),   .text),
-            .stockpile  = widgets.El.init("stockpile",  @ptrCast(&self.singletons.stockpile_display),  .text),
+            .counter    = widgets.Button.init("counter", ui.OnClick.typed(time.Counter, &reset_counter, &self.resources.counter), .text),
+            .population = widgets.El.init("population", .text),
+            .calendar   = widgets.El.init("calendar",   .text),
+            .money      = widgets.El.init("money",      .text),
+            .demand     = widgets.El.init("demand",     .text),
+            .produce    = widgets.El.init("produce",    .text),
+            .calories   = widgets.El.init("calories",   .text),
+            .stockpile  = widgets.El.init("stockpile",  .text),
         };
+        self.ui_widgets.counter.wire();
+        self.ui_widgets.population.wire();
+        self.ui_widgets.calendar.wire();
+        self.ui_widgets.money.wire();
+        self.ui_widgets.demand.wire();
+        self.ui_widgets.produce.wire();
+        self.ui_widgets.calories.wire();
+        self.ui_widgets.stockpile.wire();
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
     }
 
     fn deinit(self: *App) void {
         self.frame_arena.deinit();
-        self.singletons.deinit();
         self.world.deinit();
         self.ui_widgets.deinit();
         self.font.deinit();
@@ -142,10 +142,15 @@ pub fn main() !void {
         }
 
         const dt = app.frame_capper.delay();
-        sys.tick_singletons(&app.singletons, dt);
-        sys.aggregate_produce(app.world.producers.constSlice(), &app.world.produce_display);
-        sys.aggregate_demand(app.world.consumers.constSlice(), &app.world.demand_display);
-        sys.format_singletons(&app.singletons);
+        sys.tick_singletons(&app.resources, dt);
+        sys.aggregate_produce(app.world.producers.constSlice(), &app.ui_widgets.produce.data.text);
+        sys.aggregate_demand(app.world.consumers.constSlice(), &app.ui_widgets.demand.data.text);
+        sys.format_counter(&app.resources.counter, &app.ui_widgets.counter.data.text);
+        sys.format_population(&app.resources.population, &app.ui_widgets.population.data.text);
+        sys.format_calendar(&app.resources.calendar, &app.ui_widgets.calendar.data.text);
+        sys.format_money(&app.resources.money, &app.ui_widgets.money.data.text);
+        sys.format_calories(&app.resources.calories, &app.ui_widgets.calories.data.text);
+        sys.format_stockpile(&app.resources.stockpile, &app.ui_widgets.stockpile.data.text);
 
         _ = app.frame_arena.reset(.retain_capacity);
         const fa = app.frame_arena.allocator();
@@ -167,7 +172,7 @@ pub fn main() !void {
 
 fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
     const root = try ui.Node.create(allocator, "root");
-    _ = root.with_size(ui.Size.init(&widgets.screen_size, null));
+    _ = root.with_size(ui.Size.init(&screen_size, null));
     _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
 
     _ = w.counter.node.with_layout(ui.Layout.init(.relative, null));
@@ -206,4 +211,10 @@ fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
 
 fn reset_counter(counter: *time.Counter, _: features.ClickEvent) void {
     counter.set(0.0);
+}
+
+pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
+    const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
+    const width, const height = try ctx.window.getSize();
+    return .{ @floatFromInt(width), @floatFromInt(height) };
 }

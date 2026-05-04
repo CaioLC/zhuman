@@ -1,105 +1,47 @@
+const std = @import("std");
 const sdl3 = @import("sdl3");
+const ui = @import("./ui/root.zig");
+const Resources = @import("./res.zig").Resources;
 
 pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
 pub const TextData = struct {
     buf: [64]u8,
     fmt_text: ?[]const u8,
-    surface: ?sdl3.surface.Surface,
 
     pub fn init() TextData {
-        return .{ .buf = undefined, .fmt_text = null, .surface = null };
-    }
-
-    pub fn deinit(self: *TextData) void {
-        if (self.surface) |*surf| surf.deinit();
+        return .{ .buf = undefined, .fmt_text = null };
     }
 
     pub fn update(self: *TextData, fmt_text: []const u8) void {
         self.fmt_text = fmt_text;
-        if (self.surface) |*surf| surf.deinit();
-        self.surface = null;
+    }
+
+    pub fn calc_size(raw_ctx: *anyopaque, node: *ui.Node) anyerror!struct { f32, f32 } {
+        const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
+        const data: *const TextData = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
+        const fmt = data.fmt_text orelse return .{ 0, 0 };
+        const w, const h = try ctx.font.getStringSize(fmt);
+        return .{ @floatFromInt(w), @floatFromInt(h) };
+    }
+
+    pub fn render_text(raw_ctx: *anyopaque, node: *ui.Node) void {
+        const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
+        const data: *const TextData = @ptrCast(@alignCast(node.data orelse return));
+        const s = node.size orelse return;
+        const l = node.layout orelse return;
+        const fmt = data.fmt_text orelse return;
+        var surface = ctx.font.renderTextSolid(fmt, white) catch return;
+        defer surface.deinit();
+        const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
+        defer texture.deinit();
+
+        const dst = sdl3.rect.FRect{
+            .x = (l._global_x orelse return) + s.padding.left,
+            .y = (l._global_y orelse return) + s.padding.up,
+            .w = s.data_width,
+            .h = s.data_height,
+        };
+        ctx.renderer.renderTexture(texture, null, dst) catch return;
     }
 };
-
-pub const TextDataStatic = struct {
-    buf: [64]u8,
-    fmt_text: ?[]const u8,
-    surface: ?sdl3.surface.Surface,
-
-    pub fn init(fmt_text: []const u8) TextDataStatic {
-        return .{ .buf = undefined, .fmt_text = fmt_text, .surface = null };
-    }
-
-    pub fn deinit(self: *TextDataStatic) void {
-        if (self.surface) |*surf| surf.deinit();
-    }
-
-    pub fn update(_: *TextDataStatic) void {}
-};
-
-// try log_app.logInfo("Font Family: {s}", .{font.getFamilyName()});
-// try log_app.logInfo("Font Style: {s}", .{font.getStyleName()});
-// try log_app.logInfo("Font is fixed width: {}", .{font.isFixedWidth()});
-// try log_app.logInfo("Font is scalable: {}", .{font.isScalable()});
-// try log_app.logInfo("Font height: {d}", .{font.getHeight()});
-// try log_app.logInfo("Font ascent: {d}", .{font.getAscent()});
-// try log_app.logInfo("Font descent: {d}", .{font.getDescent()});
-// try log_app.logInfo("Font lineskip: {d}", .{font.getLineSkip()});
-// try log_app.logInfo("Font faces: {d}", .{font.getNumFaces()});
-// try log_app.logInfo("Font kerning enabled: {}", .{font.getKerning()});
-// try log_app.logInfo("Font has glyph 'A': {}", .{font.hasGlyph('A')});
-// if (font.getGlyphMetrics('A')) |metrics| {
-//     try log_app.logInfo("Glyph 'A' metrics: minx={d}, maxx={d}, miny={d}, maxy={d}, advance={d}", .{
-//         metrics.minx, metrics.maxx, metrics.miny, metrics.maxy, metrics.advance,
-//     });
-// } else |err| {
-//     try log_app.logWarn("Could not get glyph metrics for 'A': {s}", .{@errorName(err)});
-// }
-// if (font.getGlyphKerning('V', 'A')) |kerning| {
-//     try log_app.logInfo("Kerning for 'VA': {d}", .{kerning});
-// } else |err| {
-//     try log_app.logWarn("Could not get glyph kerning for 'VA': {s}", .{@errorName(err)});
-// }
-
-// const solid_texture = try textureFromSurface(renderer, try font.renderTextSolid("Solid Text", white));
-// defer solid_texture.deinit();
-
-// const shaded_texture = try textureFromSurface(renderer, try font.renderTextShaded("Shaded Text", yellow, .{ .r = 50, .g = 50, .b = 50, .a = 255 }));
-// defer shaded_texture.deinit();
-
-// const blended_texture = try textureFromSurface(renderer, try font.renderTextBlended("Blended Text", cyan));
-// defer blended_texture.deinit();
-
-// const wrapped_text = "This is a looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong text that will be wrapped.";
-// const wrapped_texture = try textureFromSurface(renderer, try font.renderTextBlendedWrapped(wrapped_text, magenta, 400));
-// defer wrapped_texture.deinit();
-
-// font.setStyle(.{ .bold = true, .italic = true });
-// const styled_texture = try textureFromSurface(renderer, try font.renderTextBlended("Bold and Italic", white));
-// defer styled_texture.deinit();
-// font.setStyle(.{}); // Reset.
-
-// try font.setOutline(2);
-// const outlined_texture = try textureFromSurface(renderer, try font.renderTextBlended("Outlined (Round)", yellow));
-// defer outlined_texture.deinit();
-
-// // https://freetype.org/freetype2/docs/reference/ft2-glyph_stroker.html#ft_stroker_linejoin
-// try font.setProperties(.{ .outline_line_join = 2 }); // MITER
-// const outlined_miter_texture = try textureFromSurface(renderer, try font.renderTextBlended("Outlined (Miter)", magenta));
-// defer outlined_miter_texture.deinit();
-// try font.setProperties(.{ .outline_line_join = 0 }); // ROUND
-// try font.setOutline(0); // Reset.
-
-// const font_with_props: sdl3.ttf.Font = try .initWithProperties(.{ .filename = font_path, .size = 36 });
-// defer font_with_props.deinit();
-// const props_texture = try textureFromSurface(renderer, try font_with_props.renderTextBlended("Font from Properties", white));
-// defer props_texture.deinit();
-
-// const long_text = "This is a very long string that we want to fit into a small space.";
-// const max_width = 200;
-// _, const measured_length = try font.measureString(long_text, max_width);
-// const truncated_text = try std.fmt.allocPrint(allocator, "{s}...", .{long_text[0..measured_length]});
-// defer allocator.free(truncated_text);
-// const truncated_texture = try textureFromSurface(renderer, try font.renderTextBlended(truncated_text, white));
-// defer truncated_texture.deinit();
