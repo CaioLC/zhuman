@@ -209,7 +209,7 @@ fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
 }
 
 fn reset_counter(counter: *time.Counter, _: features.ClickEvent) void {
-    counter.set(0.0);
+    counter.v = 0.0;
 }
 
 pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {

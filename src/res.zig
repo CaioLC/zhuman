@@ -21,13 +21,13 @@ pub const Resources = struct {
             .renderer = r,
             .window   = w,
 
-            .counter    = time.Counter.init(0.0),
-            .timer      = time.Timer.init(30.0, null),
-            .population = time.Accumulator(i32).init(1),
-            .calendar   = time.Counter.init(0.0),
-            .money      = time.Accumulator(i32).init(500),
-            .calories   = time.Accumulator(i32).init(1000),
-            .stockpile  = time.Accumulator(i32).init(4000),
+            .counter    = .{ .v = 0.0 },
+            .timer      = .{ .v = 30.0, .start = 30.0, .end = 0.0 },
+            .population = .{ .v = 1 },
+            .calendar   = .{ .v = 0.0 },
+            .money      = .{ .v = 500 },
+            .calories   = .{ .v = 1000 },
+            .stockpile  = .{ .v = 4000 },
         };
     }
 };
