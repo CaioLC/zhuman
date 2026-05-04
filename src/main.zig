@@ -1,7 +1,7 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const time = ha.time;
+const comp = ha.comp;
 const ui = ha.ui;
 const Resources = ha.res.Resources;
 const widgets = ha.widgets;
@@ -82,7 +82,7 @@ const App = struct {
         self.resources = Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         self.ui_widgets = .{
-            .counter    = widgets.Button.init("counter", ui.OnClick.typed(time.Counter, &reset_counter, &self.resources.counter), .text),
+            .counter    = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, &self.resources.counter), .text),
             .population = widgets.El.init("population", .text),
             .calendar   = widgets.El.init("calendar",   .text),
             .money      = widgets.El.init("money",      .text),
@@ -142,8 +142,6 @@ pub fn main() !void {
 
         const dt = app.frame_capper.delay();
         sys.tick_singletons(&app.resources, dt);
-        sys.aggregate_produce(app.world.producers.constSlice(), &app.ui_widgets.produce.data.text);
-        sys.aggregate_demand(app.world.consumers.constSlice(), &app.ui_widgets.demand.data.text);
         sys.format_counter(&app.resources.counter, &app.ui_widgets.counter.data.text);
         sys.format_population(&app.resources.population, &app.ui_widgets.population.data.text);
         sys.format_calendar(&app.resources.calendar, &app.ui_widgets.calendar.data.text);
@@ -208,7 +206,7 @@ fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
     return root;
 }
 
-fn reset_counter(counter: *time.Counter, _: features.ClickEvent) void {
+fn reset_counter(counter: *comp.Counter, _: features.ClickEvent) void {
     counter.v = 0.0;
 }
 
