@@ -1,7 +1,7 @@
 //! Bevy-style ECS system parameters and dispatcher.
 //!
 //! Systems declare their needs as parameter types:
-//!     fn update_counter(time: Res(Time), q: Query(.{Counter, With(tag.Player)})) void
+//!     fn update_counter(res: *Resources, q: Query(.{Counter, With(tag.Player)})) void
 //!
 //! `run(world, res, system_fn)` introspects the function at comptime and
 //! builds each parameter from the world / resources before invoking it.
@@ -12,19 +12,8 @@ const World = world_mod.World;
 const Entity = world_mod.Entity;
 const Resources = @import("./res.zig").Resources;
 
-const ParamKind = enum { res, query, single, maybe_single };
+const ParamKind = enum { query, single, maybe_single };
 const FilterKind = enum { with, without, maybe };
-
-pub fn Res(comptime T: type) type {
-    return struct {
-        ptr: *T,
-        pub const _system_param_kind: ParamKind = .res;
-        pub const _inner: type = T;
-        pub fn get(self: @This()) *T {
-            return self.ptr;
-        }
-    };
-}
 
 pub fn With(comptime T: type) type {
     return struct {
@@ -232,19 +221,10 @@ pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {
 }
 
 fn extract(comptime PT: type, world: *World, res: *Resources) PT {
+    if (PT == *Resources) return res;
+    if (PT == *const Resources) return res;
     if (!@hasDecl(PT, "_system_param_kind")) {
-        @compileError("system param must be Res / Query / Single / MaybeSingle, got " ++ @typeName(PT));
-    }
-    const kind: ParamKind = PT._system_param_kind;
-    if (kind == .res) {
-        const InnerT: type = PT._inner;
-        const RT = @TypeOf(res.*);
-        inline for (@typeInfo(RT).@"struct".fields) |f| {
-            if (f.type == InnerT) {
-                return .{ .ptr = &@field(res, f.name) };
-            }
-        }
-        @compileError("no Resources field of type " ++ @typeName(InnerT));
+        @compileError("system param must be *Resources / Query / Single / MaybeSingle, got " ++ @typeName(PT));
     }
     return .{ .world = world };
 }

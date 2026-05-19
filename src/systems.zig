@@ -4,11 +4,15 @@ const tag = @import("./tags.zig");
 const ecs = @import("./ecs.zig");
 const res_mod = @import("./res.zig");
 
+const Resources = res_mod.Resources;
+const Query = ecs.Query;
+const With = ecs.With;
+
 pub fn update_counter(
-    time: ecs.Res(res_mod.Time),
-    q: ecs.Query(.{ comp.Counter, ecs.With(tag.Player) }),
+    res: *Resources,
+    q: Query(.{ comp.Counter }),
 ) void {
-    const dt = time.get().dt;
+    const dt = res.time.dt;
     var it = q.iter();
     while (it.next()) |c| {
         c.buffer += dt;
