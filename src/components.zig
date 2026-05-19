@@ -9,7 +9,7 @@
 pub const Counter = struct {
     v: f32,
     multiplier: f32,
-    _buffer: f32,
+    buffer: f32,
 };
 
 pub const Timer = struct {

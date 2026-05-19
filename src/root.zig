@@ -11,6 +11,7 @@ pub const tag = @import("./tags.zig");
 pub const font = @import("./font.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
+pub const ecs = @import("./ecs.zig");
 pub const systems = @import("./systems.zig");
 
 test {
@@ -21,6 +22,7 @@ test {
     _ = res;
 
     _ = world;
+    _ = ecs;
     _ = systems;
 }
 

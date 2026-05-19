@@ -94,7 +94,7 @@ pub const World = struct {
         return e;
     }
 
-    fn storageOf(self: *World, comptime T: type) *SparseSet(T) {
+    pub fn storageOf(self: *World, comptime T: type) *SparseSet(T) {
         inline for (@typeInfo(@TypeOf(self.components)).@"struct".fields) |f| {
             if (f.type == SparseSet(T)) return &@field(self.components, f.name);
         }

@@ -2,11 +2,13 @@ const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
+const tag = ha.tag;
 const ui = ha.ui;
 const Resources = ha.res.Resources;
 const widgets = ha.widgets;
 const sdl = ha.sdl;
 const sys = ha.systems;
+const ecs = ha.ecs;
 
 const features = ui.features;
 const screen_width: c_int = 800;
@@ -47,6 +49,7 @@ const App = struct {
     font: sdl.ttf.Font,
     resources:  Resources,
     world: ha.world.World,
+    player: ha.world.Entity,
     ui_widgets: UIWidgets,
     frame_arena: std.heap.ArenaAllocator,
 
@@ -72,6 +75,7 @@ const App = struct {
             .font = undefined,
             .resources = undefined,
             .world = undefined,
+            .player = 0,
             .ui_widgets = undefined,
             .frame_arena = undefined,
         };
@@ -81,8 +85,14 @@ const App = struct {
         self.font = try sdl.ttf.Font.init(font_path, 24);
         self.resources = Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
+
+        self.player = self.world.spawn();
+        self.world.add(self.player, comp.Counter{ .v = 0, .multiplier = 1.0, .buffer = 0 });
+        self.world.add(self.player, tag.Player{});
+        const player_counter = self.world.get(self.player, comp.Counter).?;
+
         self.ui_widgets = .{
-            .counter    = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, &self.resources.counter), .text),
+            .counter    = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, player_counter), .text),
             .population = widgets.El.init("population", .text),
             .calendar   = widgets.El.init("calendar",   .text),
             .money      = widgets.El.init("money",      .text),
@@ -140,14 +150,13 @@ pub fn main() !void {
             }
         }
 
-        const dt = app.frame_capper.delay();
-        sys.tick_singletons(&app.resources, dt);
-        sys.format_counter(&app.resources.counter, &app.ui_widgets.counter.data.text);
-        sys.format_population(&app.resources.population, &app.ui_widgets.population.data.text);
-        sys.format_calendar(&app.resources.calendar, &app.ui_widgets.calendar.data.text);
-        sys.format_money(&app.resources.money, &app.ui_widgets.money.data.text);
-        sys.format_calories(&app.resources.calories, &app.ui_widgets.calories.data.text);
-        sys.format_stockpile(&app.resources.stockpile, &app.ui_widgets.stockpile.data.text);
+        app.resources.time.dt = app.frame_capper.delay();
+        ecs.run(&app.world, &app.resources, sys.update_counter);
+
+        if (app.world.get(app.player, comp.Counter)) |c| {
+            const txt = &app.ui_widgets.counter.data.text;
+            txt.update(std.fmt.bufPrint(&txt.buf, "Counter: {d:.0}", .{c.v}) catch "?");
+        }
 
         _ = app.frame_arena.reset(.retain_capacity);
         const fa = app.frame_arena.allocator();
@@ -208,6 +217,7 @@ fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
 
 fn reset_counter(counter: *comp.Counter, _: features.ClickEvent) void {
     counter.v = 0.0;
+    counter.buffer = 0.0;
 }
 
 pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
