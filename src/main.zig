@@ -17,14 +17,14 @@ const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
 const UIWidgets = struct {
-    counter:    widgets.Button,
+    counter: widgets.Button,
     population: widgets.El,
-    calendar:   widgets.El,
-    money:      widgets.El,
-    demand:     widgets.El,
-    produce:    widgets.El,
-    calories:   widgets.El,
-    stockpile:  widgets.El,
+    calendar: widgets.El,
+    money: widgets.El,
+    demand: widgets.El,
+    produce: widgets.El,
+    calories: widgets.El,
+    stockpile: widgets.El,
 
     fn wire(self: *UIWidgets) void {
         inline for (@typeInfo(UIWidgets).@"struct".fields) |f| {
@@ -47,7 +47,7 @@ const App = struct {
     renderer: sdl.render.Renderer,
     frame_capper: sdl.extras.FramerateCapper(f32),
     font: sdl.ttf.Font,
-    resources:  Resources,
+    resources: Resources,
     world: ha.world.World,
     player: ha.world.Entity,
     ui_widgets: UIWidgets,
@@ -92,14 +92,14 @@ const App = struct {
         const player_counter = self.world.get(self.player, comp.Counter).?;
 
         self.ui_widgets = .{
-            .counter    = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, player_counter), .text),
+            .counter = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, player_counter), .text),
             .population = widgets.El.init("population", .text),
-            .calendar   = widgets.El.init("calendar",   .text),
-            .money      = widgets.El.init("money",      .text),
-            .demand     = widgets.El.init("demand",     .text),
-            .produce    = widgets.El.init("produce",    .text),
-            .calories   = widgets.El.init("calories",   .text),
-            .stockpile  = widgets.El.init("stockpile",  .text),
+            .calendar = widgets.El.init("calendar", .text),
+            .money = widgets.El.init("money", .text),
+            .demand = widgets.El.init("demand", .text),
+            .produce = widgets.El.init("produce", .text),
+            .calories = widgets.El.init("calories", .text),
+            .stockpile = widgets.El.init("stockpile", .text),
         };
         self.ui_widgets.wire();
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
