@@ -10,19 +10,12 @@ const sdl = ha.sdl;
 const sys = ha.systems;
 const ecs = ha.ecs;
 
-const features = ui.features;
 const screen_width: c_int = 800;
 const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
 const ROOT_SEED: u64 = 0;
-
-const PendingClick = struct {
-    x: f32,
-    y: f32,
-    button: features.MouseButton,
-};
 
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
@@ -97,26 +90,23 @@ pub fn main() !void {
 
     const raw_ctx: *anyopaque = @ptrCast(&app.ui);
     var quit = false;
-    var pending_click: ?PendingClick = null;
 
     while (!quit) {
+        app.ui.input.mouse_down = false; // edge: true only on a press this frame
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
                 .key_down => |key| if (key.key == .escape) {
                     quit = true;
                 },
+                .mouse_motion => |mm| {
+                    app.ui.input.mouse_x = mm.x;
+                    app.ui.input.mouse_y = mm.y;
+                },
                 .mouse_button_down => |mb| {
-                    pending_click = .{
-                        .x = mb.x,
-                        .y = mb.y,
-                        .button = switch (mb.button) {
-                            .left => .left,
-                            .middle => .middle,
-                            .right => .right,
-                            else => .other,
-                        },
-                    };
+                    app.ui.input.mouse_x = mb.x;
+                    app.ui.input.mouse_y = mb.y;
+                    if (mb.button == .left) app.ui.input.mouse_down = true;
                 },
                 else => {},
             }
@@ -130,11 +120,7 @@ pub fn main() !void {
 
         const root = try build_ui(&app.ui, &app.world, app.player);
         try root.set_global_pos(null, raw_ctx);
-
-        if (pending_click) |click| {
-            ui.dispatch_click(root, click.x, click.y, click.button);
-            pending_click = null;
-        }
+        widgets.capture_rects(&app.ui, root); // store rects for next-frame hit-testing
 
         try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
         try app.renderer.clear();
@@ -152,42 +138,35 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
     _ = root.with_size(ui.Size.init(&screen_size, null));
     _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
 
-    // Counter: clickable, shows the live component value.
+    // Counter: clickable, shows the live component value. Click resets it —
+    // mutating the component inline (Fork 2), no callback.
     const c = world.get(player, comp.Counter).?;
     var cbuf: [64]u8 = undefined;
     const ctext = std.fmt.bufPrint(&cbuf, "Counter: {d:.0}", .{c.v}) catch "?";
-    const counter = try widgets.button(u, ROOT_SEED, "counter", ctext, ui.OnClick.typed(comp.Counter, &reset_counter, c));
-    _ = counter.with_layout(ui.Layout.init(.relative, null));
-    try root.add_child(a, counter);
+    if ((try widgets.button(u, root, ROOT_SEED, "counter", ctext)).clicked) {
+        c.v = 0;
+        c.buffer = 0;
+    }
 
     const left = try ui.Node.create(a, "left_panel");
     _ = left.with_size(ui.Size.initFixed(300, 600, null));
     _ = left.with_layout(ui.Layout.init(.top_left, .vertical));
+    try root.add_child(a, left);
     const left_seed = ui.key(ROOT_SEED, "left_panel");
     inline for (.{ "population", "demand", "produce", "calories", "stockpile" }) |id| {
-        const n = try widgets.label(u, left_seed, id, "");
-        _ = n.with_layout(ui.Layout.init(.relative, null));
-        try left.add_child(a, n);
+        try widgets.label(u, left, left_seed, id, "");
     }
-    try root.add_child(a, left);
 
     const right = try ui.Node.create(a, "right_panel");
     _ = right.with_size(ui.Size.initFixed(300, 600, null));
     _ = right.with_layout(ui.Layout.init(.top_right, .vertical_right));
+    try root.add_child(a, right);
     const right_seed = ui.key(ROOT_SEED, "right_panel");
     inline for (.{ "calendar", "money" }) |id| {
-        const n = try widgets.label(u, right_seed, id, "");
-        _ = n.with_layout(ui.Layout.init(.relative, null));
-        try right.add_child(a, n);
+        try widgets.label(u, right, right_seed, id, "");
     }
-    try root.add_child(a, right);
 
     return root;
-}
-
-fn reset_counter(counter: *comp.Counter, _: features.ClickEvent) void {
-    counter.v = 0.0;
-    counter.buffer = 0.0;
 }
 
 pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {

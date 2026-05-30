@@ -15,21 +15,23 @@ pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
 pub const Size = features.Size;
 pub const Layout = features.Layout;
-pub const OnClick = features.OnClick;
+pub const MouseButton = features.MouseButton;
 pub const OnRender = features.OnRender;
 
 pub const Node = struct {
     id: []const u8,
     parent: ?*Node,
     children: std.ArrayList(*Node),
-    /// Type-erased handle (pool index) into the UI cache. The render/size
-    /// callbacks supply the concrete state type when resolving it. `null` for
-    /// pure layout containers. See docs/ui-building-language-plan.md.
+    /// Type-erased handle (pool index) into the UI cache for this node's render
+    /// state. The render/size callbacks supply the concrete state type when
+    /// resolving it. `null` for pure layout containers.
     state: ?u32,
+    /// Widget key, for interaction state lookup (rect capture + comm). Non-null
+    /// only for input-handling widgets; `null` for labels and containers.
+    key: ?u64,
 
     size: ?features.Size,
     layout: ?features.Layout,
-    on_click: ?features.OnClick,
     on_render: ?features.OnRender,
 
     pub fn init(id: []const u8) Node {
@@ -38,9 +40,9 @@ pub const Node = struct {
             .parent = null,
             .children = .empty,
             .state = null,
+            .key = null,
             .size = null,
             .layout = null,
-            .on_click = null,
             .on_render = null,
         };
     }
@@ -58,11 +60,6 @@ pub const Node = struct {
 
     pub fn with_layout(self: *Node, layout: features.Layout) *Node {
         self.layout = layout;
-        return self;
-    }
-
-    pub fn with_onclick(self: *Node, on_click: features.OnClick) *Node {
-        self.on_click = on_click;
         return self;
     }
 
@@ -95,23 +92,6 @@ pub const Node = struct {
         try features.set_global_pos(self, children_info, ctx);
     }
 };
-
-pub fn dispatch_click(node: *Node, mx: f32, my: f32, button: features.MouseButton) void {
-    if (node.on_click) |oc| {
-        if (node.size) |s| {
-            if (node.layout) |l| {
-                const gx = l._global_x orelse 0;
-                const gy = l._global_y orelse 0;
-                if (mx >= gx and mx <= gx + s.width and my >= gy and my <= gy + s.height) {
-                    oc.invoke(.{ .x = mx, .y = my, .button = button });
-                }
-            }
-        }
-    }
-    for (node.children.items) |child| {
-        dispatch_click(child, mx, my, button);
-    }
-}
 
 pub fn render(node: *Node, ctx: *anyopaque) void {
     if (node.on_render) |or_| or_.invoke(ctx, node);

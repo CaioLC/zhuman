@@ -12,8 +12,6 @@ pub const ChildrenPosInfo = layout_mod.ChildrenPosInfo;
 pub const Layout = layout_mod.Layout;
 pub const set_global_pos = layout_mod.set_global_pos;
 
-pub const OnClick = clickable.OnClick;
-pub const ClickEvent = clickable.ClickEvent;
 pub const MouseButton = clickable.MouseButton;
 
 pub const OnRender = renderable.OnRender;

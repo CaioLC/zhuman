@@ -9,6 +9,15 @@
 const std = @import("std");
 const cache_mod = @import("cache.zig");
 
+/// Per-frame mouse state, fed by the host event loop and read by `comm` during
+/// build (against the previous frame's cached widget rects).
+pub const Input = struct {
+    mouse_x: f32 = 0,
+    mouse_y: f32 = 0,
+    /// A press occurred during this frame's event poll (one-frame edge).
+    mouse_down: bool = false,
+};
+
 pub fn Ui(comptime StateNs: type, comptime Res: type) type {
     const PoolsT = cache_mod.Pools(StateNs);
 
@@ -20,9 +29,10 @@ pub fn Ui(comptime StateNs: type, comptime Res: type) type {
         arena: std.mem.Allocator, // per-frame — owns the node tree
         frame: u64,
         pools: PoolsT,
+        input: Input,
 
         pub fn init(res: *Res, gpa: std.mem.Allocator, arena: std.mem.Allocator) Self {
-            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{} };
+            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .input = .{} };
         }
 
         pub fn deinit(self: *Self) void {

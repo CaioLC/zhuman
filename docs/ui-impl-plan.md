@@ -97,21 +97,32 @@ Coupled changes — land together.
 - *Commit:* `feat: cache-backed widget functions; drop UIWidgets/El/Button`
 
 ## Step 3 — Comm + inline build; delete callbacks (Fork 2)
-- [ ] **Input:** in `main.zig`, feed mouse position + button-down into `ui.input` each frame
+- [x] **Input:** in `main.zig`, feed mouse position + button-down into `ui.input` each frame
   (replaces `pending_click`). Add an `input` field to `Ui`.
-- [ ] **Rect persistence:** after `set_global_pos`, store each interactive node's resolved
+- [x] **Rect persistence:** after `set_global_pos`, store each interactive node's resolved
   rect into its pool slot so next frame's build can hit-test last frame's rect.
   - *Sub-decision (decide here):* add `rect` to interactive widgets' state vs a shared small
     state pool keyed by widget key.
-- [ ] **`Comm`:** `pub const Comm = struct { clicked: bool, hovering: bool, ... }`;
+- [x] **`Comm`:** `pub const Comm = struct { clicked: bool, hovering: bool, ... }`;
   `ui.comm(key) Comm` looks up the widget's last-frame rect and tests it against `ui.input`.
-- [ ] **`button`:** drop the `on_click` param; return `Comm`.
-- [ ] **Delete:** `OnClick` usage, `dispatch_click` (`ui/root.zig`), `reset_counter` (`main.zig`),
+- [x] **`button`:** drop the `on_click` param; return `Comm`.
+- [x] **Delete:** `OnClick` usage, `dispatch_click` (`ui/root.zig`), `reset_counter` (`main.zig`),
   `pending_click`. Trim `clickable.zig` to just `MouseButton` (used by input) if anything remains.
-- [ ] **build:** `if (button(ui, s, "counter", txt).clicked) { c.v = 0; c.buffer = 0; }` —
+- [x] **build:** `if (button(ui, s, "counter", txt).clicked) { c.v = 0; c.buffer = 0; }` —
     inline mutation of the `Counter` via `world.get`. `build` now takes `*World`.
 - **Acceptance:** `zig build test` green; counter increments and resets on click in `zig build run`.
 - *Commit:* `feat: immediate-mode comm + inline clicks; drop OnClick/dispatch`
+
+### Decisions made during Step 3
+- **Rect storage → shared `Rect` pool keyed by widget key** (not a field on per-widget state).
+  `Node` gains `key: ?u64` (non-null only for interactive widgets); `capture_rects` walks the
+  tree post-layout and writes each keyed node's rect into the `Rect` pool. `comm(u, k)` reads it.
+- **Widgets attach to a parent** (`label`/`button` take `parent: *Node`, set `.relative`, and
+  `add_child` themselves) rather than returning `*Node` for the caller to wire. This lets
+  `button` return `Comm` for the intended inline `if ((try button(..)).clicked)` ergonomics.
+- **`acquire` zero-initializes new slots** (`std.mem.zeroes`) so first-frame `comm` reads an
+  empty rect (no false hit) and fresh `TextData` reads as empty.
+- **`Node.on_click` removed; `Input` added to `Ui`.** `clickable.zig` trimmed to `MouseButton`.
 
 ---
 

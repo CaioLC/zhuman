@@ -49,16 +49,18 @@ pub fn Pool(comptime T: type) type {
                 self.slots.items[idx].touched = frame;
                 return idx;
             }
-            // Reuse a hole if one exists, else append a fresh slot.
+            // Reuse a hole if one exists, else append a fresh slot. New slots are
+            // zero-initialized so a reader (e.g. comm reading a rect on the first
+            // frame, before it's written) sees a safe empty value, not garbage.
             if (self.free.items.len != 0) {
                 const idx = self.free.items[self.free.items.len - 1];
                 self.free.items.len -= 1;
-                self.slots.items[idx] = .{ .value = undefined, .key = k, .touched = frame, .live = true };
+                self.slots.items[idx] = .{ .value = std.mem.zeroes(T), .key = k, .touched = frame, .live = true };
                 try self.index.put(alloc, k, idx);
                 return idx;
             }
             const idx: u32 = @intCast(self.slots.items.len);
-            try self.slots.append(alloc, .{ .value = undefined, .key = k, .touched = frame, .live = true });
+            try self.slots.append(alloc, .{ .value = std.mem.zeroes(T), .key = k, .touched = frame, .live = true });
             try self.index.put(alloc, k, idx);
             return idx;
         }
