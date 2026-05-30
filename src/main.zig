@@ -52,6 +52,7 @@ const App = struct {
     player: ha.world.Entity,
     ui_widgets: UIWidgets,
     frame_arena: std.heap.ArenaAllocator,
+    ui: widgets.Ui,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -78,6 +79,7 @@ const App = struct {
             .player = 0,
             .ui_widgets = undefined,
             .frame_arena = undefined,
+            .ui = undefined,
         };
     }
 
@@ -103,9 +105,11 @@ const App = struct {
         };
         self.ui_widgets.wire();
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
+        self.ui = widgets.Ui.init(&self.resources, allocator, self.frame_arena.allocator());
     }
 
     fn deinit(self: *App) void {
+        self.ui.deinit();
         self.frame_arena.deinit();
         self.world.deinit();
         self.ui_widgets.deinit();

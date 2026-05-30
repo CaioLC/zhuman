@@ -2,6 +2,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
+pub const cache = @import("./cache.zig");
+
+pub const Ui = @import("./ui.zig").Ui;
+pub const key = cache.key;
+pub const key_i = cache.key_i;
+pub const Pool = cache.Pool;
+pub const Pools = cache.Pools;
 
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
@@ -113,6 +120,11 @@ pub fn render(node: *Node, ctx: *anyopaque) void {
     for (node.children.items) |child| {
         render(child, ctx);
     }
+}
+
+test {
+    _ = cache;
+    _ = @import("./ui.zig");
 }
 
 test "node tree layout" {

@@ -22,17 +22,22 @@
   system; no command queue. `OnClick`/`dispatch_click` deleted.
 - **`Ui`/`Pools` are parametrized** over a state-registry namespace, bound concretely in
   `src/root.zig` (keeps generic `ui` from importing `font`; avoids circular dep).
+  - *Refinement during impl:* `Ui` is parametrized over **both** `StateNs` **and** the `Res`
+    type (`ui.Ui(StateNs, Res)`), so the generic `ui` module imports neither `font` nor `res`.
+    The concrete binding `pub const Ui = ui.Ui(UiState, Resources)` lives in **`widgets.zig`**
+    (re-exported from `root.zig` as `ha.Ui`), and the text render/size callbacks will move
+    there in Step 2 so `font.zig` stays a leaf data module (breaks the font↔ui cycle).
 
 ---
 
 ## Step 0 — Clean the tree (Track C)
-- [ ] Commit or discard the `zig fmt` whitespace diff in `src/main.zig` + `.claude/settings.local.json`.
+- [x] Commit or discard the `zig fmt` whitespace diff in `src/main.zig` + `.claude/settings.local.json`.
 - *Commit:* `chore: zig fmt`
 
 ## Step 1 — Cache substrate (additive; build & output unchanged)
 Nothing is wired into rendering yet, so this cannot change visible behavior.
 
-- [ ] **New `src/ui/cache.zig`:**
+- [x] **New `src/ui/cache.zig`:**
   - `pub fn key(seed: u64, id: []const u8) u64` (Wyhash); `pub fn key_i(seed, id, i: usize) u64`.
   - `pub fn Pool(comptime T: type) type`:
     - `slots: std.ArrayList(struct { value: T, key: u64, touched: u64 })`
@@ -46,20 +51,20 @@ Nothing is wired into rendering yet, so this cannot change visible behavior.
   - `pub fn Pools(comptime ns: type) type` — comptime struct of `Pool(T)` per decl in `ns`
     (mirror `World.Storages`), with `poolOf(comptime T) *Pool(T)`, `cache(key, T, frame) u32`,
     `pruneAll(frame)`, `deinit`.
-- [ ] **New `src/ui/ui.zig`:** `pub fn Ui(comptime StateNs: type) type` holding
+- [x] **New `src/ui/ui.zig`:** `pub fn Ui(comptime StateNs: type) type` holding
   `res: *Resources`, `frame: u64`, `pools: Pools(StateNs)`, `gpa: Allocator` (persistent,
   for pools), `arena: Allocator` (per-frame node tree). Methods: `cache(key, T) u32`
   (→ `pools.cache(key, T, frame)`), `pool(T) *Pool(T)`, `beginFrame()` (`frame += 1`),
   `endFrame()` (`pools.pruneAll(frame)`), `deinit`.
-- [ ] **`src/ui/root.zig`:** re-export `cache` helpers + `Ui`.
-- [ ] **`src/root.zig`:** bind the concrete Ui where both `ui` and `font` are visible:
+- [x] **`src/ui/root.zig`:** re-export `cache` helpers + `Ui`.
+- [x] **`src/root.zig`:** bind the concrete Ui where both `ui` and `font` are visible:
   ```zig
   pub const UiState = struct { pub const TextData = font.TextData; };
   pub const Ui = ui.Ui(UiState);
   ```
-- [ ] **`src/main.zig`:** construct the `Ui` instance in `App` (pass `&self.resources`, gpa,
+- [x] **`src/main.zig`:** construct the `Ui` instance in `App` (pass `&self.resources`, gpa,
   frame-arena allocator). Leave it dormant — not yet used by render. Add `deinit`.
-- [ ] **Tests in `cache.zig`:** same key twice → same idx; distinct keys → distinct idx;
+- [x] **Tests in `cache.zig`:** same key twice → same idx; distinct keys → distinct idx;
   `prune` frees an untouched slot; a freed slot is reused on next `acquire`; a value written
   to slot A survives an `acquire` of key B that grows `slots` (pointer-stability via index).
 - **Acceptance:** `zig build test` green; `zig build run` visually identical.

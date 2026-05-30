@@ -4,6 +4,16 @@ const sdl = @import("sdl3");
 const zfont = @import("./font.zig");
 const Resources = @import("./res.zig").Resources;
 
+/// The registry of widget-state types kept in the UI cache. One `Pool(T)` is
+/// generated per declaration. This is where the generic `ui` engine meets the
+/// concrete state types — see docs/ui-building-language-plan.md.
+pub const UiState = struct {
+    pub const TextData = zfont.TextData;
+};
+
+/// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
+pub const Ui = ui.Ui(UiState, Resources);
+
 pub const DataType = enum { text, sprite };
 
 pub const Data = union(DataType) {
