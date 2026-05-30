@@ -22,7 +22,10 @@ pub const Node = struct {
     id: []const u8,
     parent: ?*Node,
     children: std.ArrayList(*Node),
-    data: ?*anyopaque,
+    /// Type-erased handle (pool index) into the UI cache. The render/size
+    /// callbacks supply the concrete state type when resolving it. `null` for
+    /// pure layout containers. See docs/ui-building-language-plan.md.
+    state: ?u32,
 
     size: ?features.Size,
     layout: ?features.Layout,
@@ -34,7 +37,7 @@ pub const Node = struct {
             .id = id,
             .parent = null,
             .children = .empty,
-            .data = null,
+            .state = null,
             .size = null,
             .layout = null,
             .on_click = null,
@@ -65,11 +68,6 @@ pub const Node = struct {
 
     pub fn with_render(self: *Node, on_render: features.OnRender) *Node {
         self.on_render = on_render;
-        return self;
-    }
-
-    pub fn with_data(self: *Node, data: *anyopaque) *Node {
-        self.data = data;
         return self;
     }
 

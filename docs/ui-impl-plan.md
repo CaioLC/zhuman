@@ -73,20 +73,20 @@ Nothing is wired into rendering yet, so this cannot change visible behavior.
 ## Step 2 — Data layer → pools+handles; ctx → `*Ui`; widget functions (output unchanged)
 Coupled changes — land together.
 
-- [ ] **`src/ui/root.zig` — Node:** replace `data: ?*anyopaque` with `state: ?u32`; remove
+- [x] **`src/ui/root.zig` — Node:** replace `data: ?*anyopaque` with `state: ?u32`; remove
   `with_data`. (Set `state` directly inside widget fns.)
-- [ ] **ctx value becomes `&ui`.** Keep callback signatures `*anyopaque`; they cast to `*Ui`
+- [x] **ctx value becomes `&ui`.** Keep callback signatures `*anyopaque`; they cast to `*Ui`
   instead of `*Resources`. No signature changes to `set_global_pos`/`render`/`Size.calc`/`OnRender`.
-- [ ] **`src/font.zig` — TextData:** `calc_size`/`render_text` cast ctx → `*Ui`; resolve
+- [x] **`src/font.zig` — TextData:** `calc_size`/`render_text` cast ctx → `*Ui`; resolve
   `const td = ui.pool(TextData).get(node.state.?)`; draw via `ui.res.font` / `ui.res.renderer`.
-- [ ] **`src/widgets.zig`:** delete `El`, `Button`, `Data`, `DataType`, `wire_data_node`. Add:
+- [x] **`src/widgets.zig`:** delete `El`, `Button`, `Data`, `DataType`, `wire_data_node`. Add:
   - `pub fn label(ui: *Ui, seed: u64, id: []const u8, text: []const u8) *Node` —
     `k = key(seed,id)`; `idx = ui.cache(k, TextData)`; `ui.pool(TextData).get(idx).update(text)`;
     create node from `ui.arena` with `id`, `with_size(TextData.calc_size)`,
     `with_render(TextData.render_text)`, set `node.state = idx`; return node.
   - `pub fn button(ui, seed, id, text, on_click) *Node` — `label` + `with_onclick`.
     (Click model still OnClick in this step; changes in Step 3.)
-- [ ] **`src/main.zig`:**
+- [x] **`src/main.zig`:**
   - Delete `UIWidgets`, its `App` fields, `wire()`, and the persistent widget inits in `setup()`.
   - `build_ui` → builds inline by calling `label`/`button` with seeds from `ROOT_SEED`,
     composing via `add_child`. Read `world.get(player, Counter)` and pass the formatted string

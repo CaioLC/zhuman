@@ -16,24 +16,7 @@ const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
-const UIWidgets = struct {
-    counter: widgets.Button,
-    population: widgets.El,
-    calendar: widgets.El,
-    money: widgets.El,
-    demand: widgets.El,
-    produce: widgets.El,
-    calories: widgets.El,
-    stockpile: widgets.El,
-
-    fn wire(self: *UIWidgets) void {
-        inline for (@typeInfo(UIWidgets).@"struct".fields) |f| {
-            @field(self, f.name).wire();
-        }
-    }
-
-    fn deinit(_: *UIWidgets) void {}
-};
+const ROOT_SEED: u64 = 0;
 
 const PendingClick = struct {
     x: f32,
@@ -50,7 +33,6 @@ const App = struct {
     resources: Resources,
     world: ha.world.World,
     player: ha.world.Entity,
-    ui_widgets: UIWidgets,
     frame_arena: std.heap.ArenaAllocator,
     ui: widgets.Ui,
 
@@ -77,7 +59,6 @@ const App = struct {
             .resources = undefined,
             .world = undefined,
             .player = 0,
-            .ui_widgets = undefined,
             .frame_arena = undefined,
             .ui = undefined,
         };
@@ -91,19 +72,7 @@ const App = struct {
         self.player = self.world.spawn();
         self.world.add(self.player, comp.Counter{ .v = 0, .multiplier = 1.0, .buffer = 0 });
         self.world.add(self.player, tag.Player{});
-        const player_counter = self.world.get(self.player, comp.Counter).?;
 
-        self.ui_widgets = .{
-            .counter = widgets.Button.init("counter", ui.OnClick.typed(comp.Counter, &reset_counter, player_counter), .text),
-            .population = widgets.El.init("population", .text),
-            .calendar = widgets.El.init("calendar", .text),
-            .money = widgets.El.init("money", .text),
-            .demand = widgets.El.init("demand", .text),
-            .produce = widgets.El.init("produce", .text),
-            .calories = widgets.El.init("calories", .text),
-            .stockpile = widgets.El.init("stockpile", .text),
-        };
-        self.ui_widgets.wire();
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = widgets.Ui.init(&self.resources, allocator, self.frame_arena.allocator());
     }
@@ -112,7 +81,6 @@ const App = struct {
         self.ui.deinit();
         self.frame_arena.deinit();
         self.world.deinit();
-        self.ui_widgets.deinit();
         self.font.deinit();
         self.renderer.deinit();
         self.window.deinit();
@@ -127,7 +95,7 @@ pub fn main() !void {
     defer app.deinit();
     try app.setup(app.gpa.allocator());
 
-    const raw_ctx: *anyopaque = @ptrCast(&app.resources);
+    const raw_ctx: *anyopaque = @ptrCast(&app.ui);
     var quit = false;
     var pending_click: ?PendingClick = null;
 
@@ -157,15 +125,10 @@ pub fn main() !void {
         app.resources.time.dt = app.frame_capper.delay();
         ecs.run(&app.world, &app.resources, sys.update_counter);
 
-        if (app.world.get(app.player, comp.Counter)) |c| {
-            const txt = &app.ui_widgets.counter.data.text;
-            txt.update(std.fmt.bufPrint(&txt.buf, "Counter: {d:.0}", .{c.v}) catch "?");
-        }
-
+        app.ui.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity);
-        const fa = app.frame_arena.allocator();
 
-        const root = try build_ui(fa, &app.ui_widgets);
+        const root = try build_ui(&app.ui, &app.world, app.player);
         try root.set_global_pos(null, raw_ctx);
 
         if (pending_click) |click| {
@@ -177,44 +140,47 @@ pub fn main() !void {
         try app.renderer.clear();
         ui.render(root, raw_ctx);
         try app.renderer.present();
+
+        app.ui.endFrame();
     }
 }
 
-fn build_ui(allocator: std.mem.Allocator, w: *UIWidgets) !*ui.Node {
-    const root = try ui.Node.create(allocator, "root");
+fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*ui.Node {
+    const a = u.arena;
+
+    const root = try ui.Node.create(a, "root");
     _ = root.with_size(ui.Size.init(&screen_size, null));
     _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
 
-    _ = w.counter.node.with_layout(ui.Layout.init(.relative, null));
-    try root.add_child(allocator, &w.counter.node);
+    // Counter: clickable, shows the live component value.
+    const c = world.get(player, comp.Counter).?;
+    var cbuf: [64]u8 = undefined;
+    const ctext = std.fmt.bufPrint(&cbuf, "Counter: {d:.0}", .{c.v}) catch "?";
+    const counter = try widgets.button(u, ROOT_SEED, "counter", ctext, ui.OnClick.typed(comp.Counter, &reset_counter, c));
+    _ = counter.with_layout(ui.Layout.init(.relative, null));
+    try root.add_child(a, counter);
 
-    const left_panel = try ui.Node.create(allocator, "left_panel");
-    _ = left_panel.with_size(ui.Size.initFixed(300, 600, null));
-    _ = left_panel.with_layout(ui.Layout.init(.top_left, .vertical));
+    const left = try ui.Node.create(a, "left_panel");
+    _ = left.with_size(ui.Size.initFixed(300, 600, null));
+    _ = left.with_layout(ui.Layout.init(.top_left, .vertical));
+    const left_seed = ui.key(ROOT_SEED, "left_panel");
+    inline for (.{ "population", "demand", "produce", "calories", "stockpile" }) |id| {
+        const n = try widgets.label(u, left_seed, id, "");
+        _ = n.with_layout(ui.Layout.init(.relative, null));
+        try left.add_child(a, n);
+    }
+    try root.add_child(a, left);
 
-    _ = w.population.node.with_layout(ui.Layout.init(.relative, null));
-    try left_panel.add_child(allocator, &w.population.node);
-    _ = w.demand.node.with_layout(ui.Layout.init(.relative, null));
-    try left_panel.add_child(allocator, &w.demand.node);
-    _ = w.produce.node.with_layout(ui.Layout.init(.relative, null));
-    try left_panel.add_child(allocator, &w.produce.node);
-    _ = w.calories.node.with_layout(ui.Layout.init(.relative, null));
-    try left_panel.add_child(allocator, &w.calories.node);
-    _ = w.stockpile.node.with_layout(ui.Layout.init(.relative, null));
-    try left_panel.add_child(allocator, &w.stockpile.node);
-
-    try root.add_child(allocator, left_panel);
-
-    const right_panel = try ui.Node.create(allocator, "right_panel");
-    _ = right_panel.with_size(ui.Size.initFixed(300, 600, null));
-    _ = right_panel.with_layout(ui.Layout.init(.top_right, .vertical_right));
-
-    _ = w.calendar.node.with_layout(ui.Layout.init(.relative, null));
-    try right_panel.add_child(allocator, &w.calendar.node);
-    _ = w.money.node.with_layout(ui.Layout.init(.relative, null));
-    try right_panel.add_child(allocator, &w.money.node);
-
-    try root.add_child(allocator, right_panel);
+    const right = try ui.Node.create(a, "right_panel");
+    _ = right.with_size(ui.Size.initFixed(300, 600, null));
+    _ = right.with_layout(ui.Layout.init(.top_right, .vertical_right));
+    const right_seed = ui.key(ROOT_SEED, "right_panel");
+    inline for (.{ "calendar", "money" }) |id| {
+        const n = try widgets.label(u, right_seed, id, "");
+        _ = n.with_layout(ui.Layout.init(.relative, null));
+        try right.add_child(a, n);
+    }
+    try root.add_child(a, right);
 
     return root;
 }
@@ -225,7 +191,7 @@ fn reset_counter(counter: *comp.Counter, _: features.ClickEvent) void {
 }
 
 pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
-    const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
-    const width, const height = try ctx.window.getSize();
+    const u: *widgets.Ui = @ptrCast(@alignCast(raw_ctx));
+    const width, const height = try u.res.window.getSize();
     return .{ @floatFromInt(width), @floatFromInt(height) };
 }
