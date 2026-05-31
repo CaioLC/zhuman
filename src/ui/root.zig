@@ -20,7 +20,6 @@ pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
 pub const Size = features.Size;
 pub const Layout = features.Layout;
-pub const MouseButton = features.MouseButton;
 pub const OnRender = features.OnRender;
 
 pub const Node = struct {
@@ -31,12 +30,10 @@ pub const Node = struct {
     /// state. The render/size callbacks supply the concrete state type when
     /// resolving it. `null` for pure layout containers.
     state: ?u32,
-    /// Widget key, for interaction-state lookup. Non-null only for input-handling
-    /// widgets; `null` for labels and containers (which are never marked).
+    /// Widget key (opt-in). Non-null only for interactive widgets; `null` for
+    /// labels and containers. Carrying a key is what makes a node markable and
+    /// queryable — its interaction state lives in `Ui`'s keyed store, not here.
     key: ?u64,
-    /// Interaction flags for this node this frame. Stamped at build time from the
-    /// keyed interaction store (`Ui.interactionOf`); set by the `mark_*` walks.
-    interaction: Interaction,
 
     size: ?features.Size,
     layout: ?features.Layout,
@@ -49,7 +46,6 @@ pub const Node = struct {
             .children = .empty,
             .state = null,
             .key = null,
-            .interaction = .{},
             .size = null,
             .layout = null,
             .on_render = null,
@@ -128,13 +124,13 @@ fn node_rect(node: *Node) ?geometry.Rect {
 /// can read it back. `u` is duck-typed (the concrete `Ui`) to keep this module
 /// free of the binding. Mechanism only: userland supplies the point — from a
 /// mouse, a touch, a gamepad cursor, whatever — and decides what the flag means.
-pub fn mark_point(u: anytype, node: *Node, comptime flag: InteractionFlag, x: f32, y: f32) void {
+pub fn mark_at(u: anytype, node: *Node, comptime flag: InteractionFlag, x: f32, y: f32) void {
     if (node.key) |k| {
         if (node_rect(node)) |r| {
             if (r.contains(x, y)) u.setFlag(k, flag, true);
         }
     }
-    for (node.children.items) |child| mark_point(u, child, flag, x, y);
+    for (node.children.items) |child| mark_at(u, child, flag, x, y);
 }
 
 test {

@@ -106,7 +106,6 @@ test "interaction store: active latches, transient flags clear each frame" {
 /// inherent one-frame delay). Read inline: `if ((try button(..)).clicked)`.
 pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !ui.Interaction {
     const node = try make_text(u, parent, seed, id, text);
-    node.key = ui.key(seed, id); // enables marking
-    node.interaction = u.interactionOf(node.key.?);
-    return node.interaction;
+    node.key = ui.key(seed, id); // opt-in: only keyed nodes are marked/queryable
+    return u.interactionOf(node.key.?); // read-through: allocates/keeps the slot
 }

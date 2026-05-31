@@ -122,8 +122,8 @@ pub fn main() !void {
         // release; left out until there's a real use (no release tracking yet).
         if (app.prev_root) |prev| {
             const in = app.resources.input;
-            ui.mark_point(&app.ui, prev, .hovering, in.mouse_x, in.mouse_y);
-            if (in.mouse_down) ui.mark_point(&app.ui, prev, .clicked, in.mouse_x, in.mouse_y);
+            ui.mark_at(&app.ui, prev, .hovering, in.mouse_x, in.mouse_y);
+            if (in.mouse_down) ui.mark_at(&app.ui, prev, .clicked, in.mouse_x, in.mouse_y);
         }
 
         app.resources.time.dt = app.frame_capper.delay();
