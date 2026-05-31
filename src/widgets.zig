@@ -54,9 +54,10 @@ fn text_render(raw_ctx: *anyopaque, node: *ui.Node) void {
 
 // --- Widget functions --------------------------------------------------------
 // Each takes `(parent, seed, id)`, computes its own key `k`, self-serves
-// persistent state from the cache, builds an ephemeral arena node, and attaches
-// itself to `parent`. Interactive widgets carry a `key` (so the event-stage
-// `mark_*` walks can flag them) and stamp their `Interaction` from the store.
+// persistent state from the cache, builds an ephemeral arena node, attaches it
+// to `parent`, and returns the `*Node`. Interactive widgets also carry an
+// `interaction_key` (so the event-stage `mark_*` walks can flag them); read
+// their state with `node.query(u)`.
 
 /// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
 /// Returns the node and its key `k = ui.key(seed, id)`, so an interactive caller
@@ -77,8 +78,9 @@ fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const 
 
 /// A non-interactive text leaf. `text` is copied into the cached `TextData`, so
 /// a build-time slice (e.g. a stack `bufPrint`) is safe to pass.
-pub fn label(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !void {
-    _ = try make_text(u, parent, seed, id, text);
+pub fn label(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
+    const node, _ = try make_text(u, parent, seed, id, text);
+    return node;
 }
 
 test "interaction store: active latches, transient flags clear each frame" {
@@ -103,12 +105,12 @@ test "interaction store: active latches, transient flags clear each frame" {
 }
 
 /// An interactive text leaf. Carries an `interaction_key` so the event-stage
-/// `mark_*` walks can flag it, and returns its `Interaction` from the store. The
-/// flags reflect the previous frame's geometry against this frame's input
-/// (immediate-mode's inherent one-frame delay). Read inline:
-/// `if ((try button(..)).clicked)`.
-pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !ui.Interaction {
+/// `mark_*` walks can flag it. Returns the `*Node`; read its interaction with
+/// `node.query(u)` — the flags reflect the previous frame's geometry against this
+/// frame's input (immediate-mode's inherent one-frame delay):
+/// `const b = try button(..); if (b.query(u).clicked) ...`.
+pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
     const node, const k = try make_text(u, parent, seed, id, text);
     node.interaction_key = k; // opt-in: only keyed nodes are marked/queryable
-    return u.interactionOf(k); // read-through: allocates/keeps the slot
+    return node;
 }

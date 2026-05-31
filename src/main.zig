@@ -157,7 +157,8 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
     const c = world.get(player, comp.Counter).?;
     var cbuf: [64]u8 = undefined;
     const ctext = std.fmt.bufPrint(&cbuf, "Counter: {d:.0}", .{c.v}) catch "?";
-    if ((try widgets.button(u, root, ROOT_SEED, "counter", ctext)).clicked) {
+    const counter = try widgets.button(u, root, ROOT_SEED, "counter", ctext);
+    if (counter.query(u).clicked) {
         c.v = 0;
         c.buffer = 0;
     }
@@ -168,7 +169,7 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
     try root.add_child(a, left);
     const left_seed = ui.key(ROOT_SEED, "left_panel");
     inline for (.{ "population", "demand", "produce", "calories", "stockpile" }) |id| {
-        try widgets.label(u, left, left_seed, id, "");
+        _ = try widgets.label(u, left, left_seed, id, "");
     }
 
     const right = try ui.Node.create(a, "right_panel");
@@ -177,7 +178,7 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
     try root.add_child(a, right);
     const right_seed = ui.key(ROOT_SEED, "right_panel");
     inline for (.{ "calendar", "money" }) |id| {
-        try widgets.label(u, right, right_seed, id, "");
+        _ = try widgets.label(u, right, right_seed, id, "");
     }
 
     return root;

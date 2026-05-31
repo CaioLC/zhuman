@@ -96,6 +96,14 @@ pub const Node = struct {
     pub fn set_global_pos(self: *Node, children_info: ?features.ChildrenPosInfo, ctx: ?*anyopaque) !void {
         try features.set_global_pos(self, children_info, ctx);
     }
+
+    /// This node's interaction state this frame (read-through: allocates/keeps
+    /// its store slot). Returns all-false for a non-interactive node (no
+    /// `interaction_key`). `u` is duck-typed (the concrete `Ui`).
+    pub fn query(self: *Node, u: anytype) Interaction {
+        const k = self.interaction_key orelse return .{};
+        return u.interactionOf(k);
+    }
 };
 
 pub fn render(node: *Node, ctx: *anyopaque) void {

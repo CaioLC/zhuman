@@ -11,8 +11,9 @@ fields.
 ## Design philosophy
 
 - **Immediate mode.** Widgets are *functions called during build*, not retained
-  objects you wire once and mutate. `if ((try button(..)).clicked) counter = 0;`
-  — behaviour is read inline and acts inline; no callbacks, no command queue.
+  objects you wire once and mutate. A widget returns its `*Node`; you read
+  interaction off it and act inline — `if (btn.query(u).clicked) counter = 0;` —
+  no callbacks, no command queue.
 - **The tree is ephemeral; the cache is persistent.** Every frame the tree is
   arena-allocated fresh. Anything that must survive between frames (a text
   surface, a widget's interaction state) is stored in a `Pool(T)` keyed by a
@@ -137,8 +138,8 @@ where it came from. (Containment semantics: nested nodes all under the point are
 all flagged — the ancestor stack, like CSS `:hover`.)
 
 **Host (policy):** decides the conditions and reads the result. `button` sets an
-`interaction_key` and returns `u.interactionOf(k)`; the host writes
-`if ((try button(..)).clicked)`.
+`interaction_key` and returns the node; the host reads `node.query(u)` (a
+read-through query) and writes `if (btn.query(u).clicked)`.
 The only place input is read is the host's event stage and its widgets — the
 generic engine stays input-agnostic (works for mouse, touch, gamepad, anything).
 
@@ -195,13 +196,21 @@ fn make_text(u, parent, seed, id, text) !struct { *Node, u64 } {
     return .{ node, k };                        // hand the key back so callers needn't re-hash
 }
 
-pub fn label(u, parent, seed, id, text) !void { _ = try make_text(...); }
+// Every widget returns its *Node (uniform). Interactive ones also set a key.
+pub fn label(u, parent, seed, id, text) !*Node {
+    const node, _ = try make_text(u, parent, seed, id, text);
+    return node;
+}
 
-pub fn button(u, parent, seed, id, text) !ui.Interaction {
+pub fn button(u, parent, seed, id, text) !*Node {
     const node, const k = try make_text(u, parent, seed, id, text);
     node.interaction_key = k;                  // opt-in: now markable & queryable
-    return u.interactionOf(k);                  // read-through: allocates/keeps the slot
+    return node;
 }
+
+// read interaction off the node (read-through: allocates/keeps the slot):
+//   const btn = try button(u, root, s, "ok", "OK");
+//   if (btn.query(u).clicked) { ... }
 ```
 
 Render/size callbacks receive the ctx as `*anyopaque`, cast it to `*Ui`, and
