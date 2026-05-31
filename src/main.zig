@@ -28,6 +28,9 @@ const App = struct {
     player: ha.world.Entity,
     frame_arena: std.heap.ArenaAllocator,
     ui: widgets.Ui,
+    /// Last frame's (laid-out) node tree, kept across the frame boundary so the
+    /// event stage can mark it before the arena is reset. `null` on frame 0.
+    prev_root: ?*ui.Node,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -54,6 +57,7 @@ const App = struct {
             .player = 0,
             .frame_arena = undefined,
             .ui = undefined,
+            .prev_root = null,
         };
     }
 
@@ -92,7 +96,7 @@ pub fn main() !void {
     var quit = false;
 
     while (!quit) {
-        app.ui.input.mouse_down = false; // edge: true only on a press this frame
+        app.resources.input.mouse_down = false; // edge: true only on a press this frame
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
@@ -100,27 +104,37 @@ pub fn main() !void {
                     quit = true;
                 },
                 .mouse_motion => |mm| {
-                    app.ui.input.mouse_x = mm.x;
-                    app.ui.input.mouse_y = mm.y;
+                    app.resources.input.mouse_x = mm.x;
+                    app.resources.input.mouse_y = mm.y;
                 },
                 .mouse_button_down => |mb| {
-                    app.ui.input.mouse_x = mb.x;
-                    app.ui.input.mouse_y = mb.y;
-                    if (mb.button == .left) app.ui.input.mouse_down = true;
+                    app.resources.input.mouse_x = mb.x;
+                    app.resources.input.mouse_y = mb.y;
+                    if (mb.button == .left) app.resources.input.mouse_down = true;
                 },
                 else => {},
             }
+        }
+
+        // Event stage: pepper last frame's (laid-out) tree with interaction flags
+        // from this frame's input. Conditions are userland — the engine just walks
+        // and stamps. `active` would be latched here on a press and cleared on a
+        // release; left out until there's a real use (no release tracking yet).
+        if (app.prev_root) |prev| {
+            const in = app.resources.input;
+            ui.mark_point(&app.ui, prev, .hovering, in.mouse_x, in.mouse_y);
+            if (in.mouse_down) ui.mark_point(&app.ui, prev, .clicked, in.mouse_x, in.mouse_y);
         }
 
         app.resources.time.dt = app.frame_capper.delay();
         ecs.run(&app.world, &app.resources, sys.update_counter);
 
         app.ui.beginFrame();
-        _ = app.frame_arena.reset(.retain_capacity);
+        _ = app.frame_arena.reset(.retain_capacity); // prev_root's memory dies here
 
         const root = try build_ui(&app.ui, &app.world, app.player);
         try root.set_global_pos(null, raw_ctx);
-        widgets.capture_rects(&app.ui, root); // store rects for next-frame hit-testing
+        app.prev_root = root; // retain for next frame's event-stage marking
 
         try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
         try app.renderer.clear();

@@ -3,8 +3,13 @@ const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
 pub const cache = @import("./cache.zig");
+pub const geometry = @import("./geometry.zig");
+pub const interaction = @import("./interaction.zig");
 
 pub const Ui = @import("./ui.zig").Ui;
+pub const Rect = geometry.Rect;
+pub const Interaction = interaction.Interaction;
+pub const InteractionFlag = interaction.Flag;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
 pub const Pool = cache.Pool;
@@ -26,9 +31,12 @@ pub const Node = struct {
     /// state. The render/size callbacks supply the concrete state type when
     /// resolving it. `null` for pure layout containers.
     state: ?u32,
-    /// Widget key, for interaction state lookup (rect capture + comm). Non-null
-    /// only for input-handling widgets; `null` for labels and containers.
+    /// Widget key, for interaction-state lookup. Non-null only for input-handling
+    /// widgets; `null` for labels and containers (which are never marked).
     key: ?u64,
+    /// Interaction flags for this node this frame. Stamped at build time from the
+    /// keyed interaction store (`Ui.interactionOf`); set by the `mark_*` walks.
+    interaction: Interaction,
 
     size: ?features.Size,
     layout: ?features.Layout,
@@ -41,6 +49,7 @@ pub const Node = struct {
             .children = .empty,
             .state = null,
             .key = null,
+            .interaction = .{},
             .size = null,
             .layout = null,
             .on_render = null,
@@ -98,6 +107,34 @@ pub fn render(node: *Node, ctx: *anyopaque) void {
     for (node.children.items) |child| {
         render(child, ctx);
     }
+}
+
+/// A node's resolved screen rect from its layout + size, or null if it hasn't
+/// been laid out yet. Pure geometry read straight off the node.
+fn node_rect(node: *Node) ?geometry.Rect {
+    const s = node.size orelse return null;
+    const l = node.layout orelse return null;
+    return .{
+        .x = l._global_x orelse return null,
+        .y = l._global_y orelse return null,
+        .w = s.width,
+        .h = s.height,
+    };
+}
+
+/// Walk the tree and set `flag` on every keyed node whose rect contains (x, y).
+/// Called at the event stage against the *previous* frame's (already laid-out)
+/// tree; writes the flag into the keyed interaction store so this frame's build
+/// can read it back. `u` is duck-typed (the concrete `Ui`) to keep this module
+/// free of the binding. Mechanism only: userland supplies the point — from a
+/// mouse, a touch, a gamepad cursor, whatever — and decides what the flag means.
+pub fn mark_point(u: anytype, node: *Node, comptime flag: InteractionFlag, x: f32, y: f32) void {
+    if (node.key) |k| {
+        if (node_rect(node)) |r| {
+            if (r.contains(x, y)) u.setFlag(k, flag, true);
+        }
+    }
+    for (node.children.items) |child| mark_point(u, child, flag, x, y);
 }
 
 test {

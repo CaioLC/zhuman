@@ -4,21 +4,12 @@ const sdl = @import("sdl3");
 const zfont = @import("./font.zig");
 const Resources = @import("./res.zig").Resources;
 
-/// A widget's last-laid-out screen rect, cached for next-frame hit-testing.
-pub const Rect = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
-
-/// Interaction result for a widget this frame (read inline at build time).
-pub const Comm = struct {
-    clicked: bool = false,
-    hovering: bool = false,
-};
-
 /// The registry of widget-state types kept in the UI cache. One `Pool(T)` is
 /// generated per declaration. This is where the generic `ui` engine meets the
-/// concrete state types — see docs/ui-building-language-plan.md.
+/// concrete state types — see docs/ui-building-language-plan.md. (Interaction
+/// state is engine-owned on `Ui`, not registered here.)
 pub const UiState = struct {
     pub const TextData = zfont.TextData;
-    pub const InteractionRect = Rect;
 };
 
 /// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
@@ -64,7 +55,8 @@ fn text_render(raw_ctx: *anyopaque, node: *ui.Node) void {
 // --- Widget functions --------------------------------------------------------
 // Each takes `(parent, seed, id)`, computes its own key `k`, self-serves
 // persistent state from the cache, builds an ephemeral arena node, and attaches
-// itself to `parent`. Interactive widgets read input inline and return a `Comm`.
+// itself to `parent`. Interactive widgets carry a `key` (so the event-stage
+// `mark_*` walks can flag them) and stamp their `Interaction` from the store.
 
 /// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
 fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
@@ -87,37 +79,34 @@ pub fn label(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const 
     _ = try make_text(u, parent, seed, id, text);
 }
 
-/// A clickable text leaf. Returns this frame's `Comm`, hit-tested against the
-/// previous frame's cached rect — read it inline: `if ((try button(..)).clicked)`.
-pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !Comm {
+test "interaction store: active latches, transient flags clear each frame" {
+    // res/arena are untouched by the interaction methods, so `undefined` is safe.
+    var u = Ui.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const k = ui.key(0, "btn");
+    u.setFlag(k, .hovering, true);
+    u.setFlag(k, .clicked, true);
+    u.setFlag(k, .active, true);
+
+    const on = u.interactionOf(k);
+    try std.testing.expect(on.hovering and on.clicked and on.active);
+
+    u.clearTransient();
+    const after = u.interactionOf(k);
+    try std.testing.expect(!after.hovering);
+    try std.testing.expect(!after.clicked);
+    try std.testing.expect(after.active); // latched — survives the frame boundary
+}
+
+/// An interactive text leaf. Carries a `key` so the event-stage `mark_*` walks
+/// can flag it, and stamps its `Interaction` from the store. The flags reflect
+/// the previous frame's geometry against this frame's input (immediate-mode's
+/// inherent one-frame delay). Read inline: `if ((try button(..)).clicked)`.
+pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !ui.Interaction {
     const node = try make_text(u, parent, seed, id, text);
-    const k = ui.key(seed, id);
-    node.key = k; // enables rect capture + comm
-    return comm(u, k);
-}
-
-/// Hit-test a widget's previous-frame rect against the current mouse state.
-fn comm(u: *Ui, k: u64) Comm {
-    const idx = u.cache(k, Rect); // ensure the slot exists and is kept alive
-    const r = u.pool(Rect).get(idx).*; // zeroed on the first frame → no hit
-    const inside = u.input.mouse_x >= r.x and u.input.mouse_x <= r.x + r.w and
-        u.input.mouse_y >= r.y and u.input.mouse_y <= r.y + r.h;
-    return .{ .hovering = inside, .clicked = inside and u.input.mouse_down };
-}
-
-/// Post-layout: store each interactive node's resolved rect into the cache, for
-/// next frame's `comm` to hit-test against. Call once after `set_global_pos`.
-pub fn capture_rects(u: *Ui, node: *ui.Node) void {
-    if (node.key) |k| {
-        if (node.size) |s| if (node.layout) |l| {
-            const idx = u.cache(k, Rect);
-            u.pool(Rect).get(idx).* = .{
-                .x = l._global_x orelse 0,
-                .y = l._global_y orelse 0,
-                .w = s.width,
-                .h = s.height,
-            };
-        };
-    }
-    for (node.children.items) |child| capture_rects(u, child);
+    node.key = ui.key(seed, id); // enables marking
+    node.interaction = u.interactionOf(node.key.?);
+    return node.interaction;
 }

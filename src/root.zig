@@ -17,6 +17,7 @@ pub const systems = @import("./systems.zig");
 
 test {
     _ = ui;
+    _ = widgets;
     _ = comp;
     _ = tag;
     _ = font;
