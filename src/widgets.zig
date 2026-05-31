@@ -59,7 +59,9 @@ fn text_render(raw_ctx: *anyopaque, node: *ui.Node) void {
 // `mark_*` walks can flag them) and stamp their `Interaction` from the store.
 
 /// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
-fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
+/// Returns the node and its key `k = ui.key(seed, id)`, so an interactive caller
+/// can reuse the key without re-hashing.
+fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !struct { *ui.Node, u64 } {
     const k = ui.key(seed, id);
     const idx = u.cache(k, TextData);
     u.pool(TextData).get(idx).update(text);
@@ -70,7 +72,7 @@ fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const 
     _ = node.with_layout(ui.Layout.init(.relative, null));
     node.state = idx;
     try parent.add_child(u.arena, node);
-    return node;
+    return .{ node, k };
 }
 
 /// A non-interactive text leaf. `text` is copied into the cached `TextData`, so
@@ -100,12 +102,13 @@ test "interaction store: active latches, transient flags clear each frame" {
     try std.testing.expect(after.active); // latched — survives the frame boundary
 }
 
-/// An interactive text leaf. Carries a `key` so the event-stage `mark_*` walks
-/// can flag it, and stamps its `Interaction` from the store. The flags reflect
-/// the previous frame's geometry against this frame's input (immediate-mode's
-/// inherent one-frame delay). Read inline: `if ((try button(..)).clicked)`.
+/// An interactive text leaf. Carries an `interaction_key` so the event-stage
+/// `mark_*` walks can flag it, and returns its `Interaction` from the store. The
+/// flags reflect the previous frame's geometry against this frame's input
+/// (immediate-mode's inherent one-frame delay). Read inline:
+/// `if ((try button(..)).clicked)`.
 pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !ui.Interaction {
-    const node = try make_text(u, parent, seed, id, text);
-    node.key = ui.key(seed, id); // opt-in: only keyed nodes are marked/queryable
-    return u.interactionOf(node.key.?); // read-through: allocates/keeps the slot
+    const node, const k = try make_text(u, parent, seed, id, text);
+    node.interaction_key = k; // opt-in: only keyed nodes are marked/queryable
+    return u.interactionOf(k); // read-through: allocates/keeps the slot
 }

@@ -85,7 +85,7 @@ Node {
     id: []const u8,          // human-readable, for debugging
     parent, children,
     state: ?u32,             // handle into a render-state pool (e.g. TextData); null for containers
-    key:   ?u64,             // opt-in interaction identity; null = non-interactive
+    interaction_key: ?u64,   // opt-in interaction identity; null = non-interactive
     size:  ?Size,            // intrinsic: calc fn, width/height, padding
     layout: ?Layout,         // positional: anchor + children alignment
     on_render: ?OnRender,    // draw callback
@@ -118,7 +118,7 @@ slot-map:
 
 ## Interaction: marking the tree
 
-Interaction is **opt-in** (only a node with a `key` participates) and follows the
+Interaction is **opt-in** (only a node with an `interaction_key` participates) and follows the
 mechanism/policy split strictly.
 
 ```zig
@@ -136,8 +136,9 @@ into the keyed interaction store. The point is passed *in*; the engine never ask
 where it came from. (Containment semantics: nested nodes all under the point are
 all flagged — the ancestor stack, like CSS `:hover`.)
 
-**Host (policy):** decides the conditions and reads the result. `button` sets a
-key and returns `u.interactionOf(k)`; the host writes `if ((try button(..)).clicked)`.
+**Host (policy):** decides the conditions and reads the result. `button` sets an
+`interaction_key` and returns `u.interactionOf(k)`; the host writes
+`if ((try button(..)).clicked)`.
 The only place input is read is the host's event stage and its widgets — the
 generic engine stays input-agnostic (works for mouse, touch, gamepad, anything).
 
@@ -181,7 +182,7 @@ A widget is a function that takes `(u, parent, seed, id, …)`, self-serves any
 persistent state from the cache, builds an ephemeral node, and attaches itself:
 
 ```zig
-fn make_text(u, parent, seed, id, text) !*Node {
+fn make_text(u, parent, seed, id, text) !struct { *Node, u64 } {
     const k = ui.key(seed, id);
     const idx = u.cache(k, TextData);          // handle into the TextData pool
     u.pool(TextData).get(idx).update(text);    // copy text into the cached slot
@@ -191,15 +192,15 @@ fn make_text(u, parent, seed, id, text) !*Node {
     _ = node.with_layout(ui.Layout.init(.relative, null));
     node.state = idx;
     try parent.add_child(u.arena, node);
-    return node;
+    return .{ node, k };                        // hand the key back so callers needn't re-hash
 }
 
 pub fn label(u, parent, seed, id, text) !void { _ = try make_text(...); }
 
 pub fn button(u, parent, seed, id, text) !ui.Interaction {
-    const node = try make_text(u, parent, seed, id, text);
-    node.key = ui.key(seed, id);               // opt-in: now markable & queryable
-    return u.interactionOf(node.key.?);         // read-through: allocates/keeps the slot
+    const node, const k = try make_text(u, parent, seed, id, text);
+    node.interaction_key = k;                  // opt-in: now markable & queryable
+    return u.interactionOf(k);                  // read-through: allocates/keeps the slot
 }
 ```
 

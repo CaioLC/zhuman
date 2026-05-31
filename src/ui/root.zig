@@ -30,10 +30,10 @@ pub const Node = struct {
     /// state. The render/size callbacks supply the concrete state type when
     /// resolving it. `null` for pure layout containers.
     state: ?u32,
-    /// Widget key (opt-in). Non-null only for interactive widgets; `null` for
-    /// labels and containers. Carrying a key is what makes a node markable and
+    /// Interaction key (opt-in). Non-null only for interactive widgets; `null`
+    /// for labels and containers. Carrying it is what makes a node markable and
     /// queryable — its interaction state lives in `Ui`'s keyed store, not here.
-    key: ?u64,
+    interaction_key: ?u64,
 
     size: ?features.Size,
     layout: ?features.Layout,
@@ -45,7 +45,7 @@ pub const Node = struct {
             .parent = null,
             .children = .empty,
             .state = null,
-            .key = null,
+            .interaction_key = null,
             .size = null,
             .layout = null,
             .on_render = null,
@@ -125,7 +125,7 @@ fn node_rect(node: *Node) ?geometry.Rect {
 /// free of the binding. Mechanism only: userland supplies the point — from a
 /// mouse, a touch, a gamepad cursor, whatever — and decides what the flag means.
 pub fn mark_at(u: anytype, node: *Node, comptime flag: InteractionFlag, x: f32, y: f32) void {
-    if (node.key) |k| {
+    if (node.interaction_key) |k| {
         if (node_rect(node)) |r| {
             if (r.contains(x, y)) u.setFlag(k, flag, true);
         }
