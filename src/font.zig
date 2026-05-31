@@ -1,47 +1,29 @@
-const std = @import("std");
 const sdl3 = @import("sdl3");
-const ui = @import("./ui/root.zig");
-const Resources = @import("./res.zig").Resources;
 
 pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
+/// Pure text-state data. Lives in the UI cache (one slot per text widget); the
+/// render/size behavior is wired by the widget layer (see widgets.zig), keeping
+/// this module a leaf (no `ui`/`res` imports → no import cycle).
 pub const TextData = struct {
     buf: [64]u8,
-    fmt_text: ?[]const u8,
+    len: usize,
 
     pub fn init() TextData {
-        return .{ .buf = undefined, .fmt_text = null };
+        return .{ .buf = undefined, .len = 0 };
     }
 
-    pub fn update(self: *TextData, fmt_text: []const u8) void {
-        self.fmt_text = fmt_text;
+    /// Copy `text` into the persistent buffer.
+    pub fn update(self: *TextData, t: []const u8) void {
+        const n = @min(t.len, self.buf.len);
+        @memcpy(self.buf[0..n], t[0..n]);
+        self.len = n;
     }
 
-    pub fn calc_size(raw_ctx: *anyopaque, node: *ui.Node) anyerror!struct { f32, f32 } {
-        const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
-        const data: *const TextData = @ptrCast(@alignCast(node.data orelse return .{ 0, 0 }));
-        const fmt = data.fmt_text orelse return .{ 0, 0 };
-        const w, const h = try ctx.font.getStringSize(fmt);
-        return .{ @floatFromInt(w), @floatFromInt(h) };
-    }
-
-    pub fn render_text(raw_ctx: *anyopaque, node: *ui.Node) void {
-        const ctx: *Resources = @ptrCast(@alignCast(raw_ctx));
-        const data: *const TextData = @ptrCast(@alignCast(node.data orelse return));
-        const s = node.size orelse return;
-        const l = node.layout orelse return;
-        const fmt = data.fmt_text orelse return;
-        var surface = ctx.font.renderTextSolid(fmt, white) catch return;
-        defer surface.deinit();
-        const texture = ctx.renderer.createTextureFromSurface(surface) catch return;
-        defer texture.deinit();
-
-        const dst = sdl3.rect.FRect{
-            .x = (l._global_x orelse return) + s.padding.left,
-            .y = (l._global_y orelse return) + s.padding.up,
-            .w = s.data_width,
-            .h = s.data_height,
-        };
-        ctx.renderer.renderTexture(texture, null, dst) catch return;
+    /// The current text, reconstructed from `buf` + `len` at the call site.
+    /// Returns `null` (renders nothing) when empty. Never store the result
+    /// across a pool `acquire` — the slot may move; call this again instead.
+    pub fn text(self: *const TextData) ?[]const u8 {
+        return if (self.len == 0) null else self.buf[0..self.len];
     }
 };

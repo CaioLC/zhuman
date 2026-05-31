@@ -2,24 +2,41 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const features = @import("./features/root.zig");
+pub const cache = @import("./cache.zig");
+pub const geometry = @import("./geometry.zig");
+pub const interaction = @import("./interaction.zig");
+
+pub const Ui = @import("./ui.zig").Ui;
+pub const Rect = geometry.Rect;
+pub const Interaction = interaction.Interaction;
+pub const InteractionFlag = interaction.Flag;
+pub const key = cache.key;
+pub const key_i = cache.key_i;
+pub const Pool = cache.Pool;
+pub const Pools = cache.Pools;
 
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
 pub const Padding = features.Padding;
 pub const Size = features.Size;
 pub const Layout = features.Layout;
-pub const OnClick = features.OnClick;
 pub const OnRender = features.OnRender;
 
 pub const Node = struct {
     id: []const u8,
     parent: ?*Node,
     children: std.ArrayList(*Node),
-    data: ?*anyopaque,
+    /// Type-erased handle (pool index) into the UI cache for this node's render
+    /// state. The render/size callbacks supply the concrete state type when
+    /// resolving it. `null` for pure layout containers.
+    state: ?u32,
+    /// Interaction key (opt-in). Non-null only for interactive widgets; `null`
+    /// for labels and containers. Carrying it is what makes a node markable and
+    /// queryable — its interaction state lives in `Ui`'s keyed store, not here.
+    interaction_key: ?u64,
 
     size: ?features.Size,
     layout: ?features.Layout,
-    on_click: ?features.OnClick,
     on_render: ?features.OnRender,
 
     pub fn init(id: []const u8) Node {
@@ -27,10 +44,10 @@ pub const Node = struct {
             .id = id,
             .parent = null,
             .children = .empty,
-            .data = null,
+            .state = null,
+            .interaction_key = null,
             .size = null,
             .layout = null,
-            .on_click = null,
             .on_render = null,
         };
     }
@@ -51,18 +68,8 @@ pub const Node = struct {
         return self;
     }
 
-    pub fn with_onclick(self: *Node, on_click: features.OnClick) *Node {
-        self.on_click = on_click;
-        return self;
-    }
-
     pub fn with_render(self: *Node, on_render: features.OnRender) *Node {
         self.on_render = on_render;
-        return self;
-    }
-
-    pub fn with_data(self: *Node, data: *anyopaque) *Node {
-        self.data = data;
         return self;
     }
 
@@ -89,30 +96,57 @@ pub const Node = struct {
     pub fn set_global_pos(self: *Node, children_info: ?features.ChildrenPosInfo, ctx: ?*anyopaque) !void {
         try features.set_global_pos(self, children_info, ctx);
     }
-};
 
-pub fn dispatch_click(node: *Node, mx: f32, my: f32, button: features.MouseButton) void {
-    if (node.on_click) |oc| {
-        if (node.size) |s| {
-            if (node.layout) |l| {
-                const gx = l._global_x orelse 0;
-                const gy = l._global_y orelse 0;
-                if (mx >= gx and mx <= gx + s.width and my >= gy and my <= gy + s.height) {
-                    oc.invoke(.{ .x = mx, .y = my, .button = button });
-                }
-            }
-        }
+    /// This node's interaction state this frame (read-through: allocates/keeps
+    /// its store slot). **Panics** if the node is non-interactive (no
+    /// `interaction_key`): `query` asserts the node opted into interaction, so
+    /// querying a label/container is a precondition violation, not a silent
+    /// no-op. `u` is duck-typed (the concrete `Ui`).
+    pub fn query(self: *Node, u: anytype) Interaction {
+        const k = self.interaction_key orelse
+            std.debug.panic("query() on non-interactive node '{s}' (no interaction_key)", .{self.id});
+        return u.interactionOf(k);
     }
-    for (node.children.items) |child| {
-        dispatch_click(child, mx, my, button);
-    }
-}
+};
 
 pub fn render(node: *Node, ctx: *anyopaque) void {
     if (node.on_render) |or_| or_.invoke(ctx, node);
     for (node.children.items) |child| {
         render(child, ctx);
     }
+}
+
+/// A node's resolved screen rect from its layout + size, or null if it hasn't
+/// been laid out yet. Pure geometry read straight off the node.
+fn node_rect(node: *Node) ?geometry.Rect {
+    const s = node.size orelse return null;
+    const l = node.layout orelse return null;
+    return .{
+        .x = l._global_x orelse return null,
+        .y = l._global_y orelse return null,
+        .w = s.width,
+        .h = s.height,
+    };
+}
+
+/// Walk the tree and set `flag` on every keyed node whose rect contains (x, y).
+/// Called at the event stage against the *previous* frame's (already laid-out)
+/// tree; writes the flag into the keyed interaction store so this frame's build
+/// can read it back. `u` is duck-typed (the concrete `Ui`) to keep this module
+/// free of the binding. Mechanism only: userland supplies the point — from a
+/// mouse, a touch, a gamepad cursor, whatever — and decides what the flag means.
+pub fn mark_at(u: anytype, node: *Node, comptime flag: InteractionFlag, x: f32, y: f32) void {
+    if (node.interaction_key) |k| {
+        if (node_rect(node)) |r| {
+            if (r.contains(x, y)) u.setFlag(k, flag, true);
+        }
+    }
+    for (node.children.items) |child| mark_at(u, child, flag, x, y);
+}
+
+test {
+    _ = cache;
+    _ = @import("./ui.zig");
 }
 
 test "node tree layout" {
