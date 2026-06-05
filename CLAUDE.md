@@ -25,14 +25,14 @@ Each frame:
 2. **Mark** — event stage: `ui.mark_at(prev_root, …)` flags last frame's tree from this frame's input
 3. **Update** — `ecs.run(&world, &resources, system)` advances sim systems
 4. **Build UI** — `ui.beginFrame()`, arena reset, `build_ui()` constructs a fresh node tree (reads cache + world, mutates components inline on interaction)
-5. **Layout** — `root.set_global_pos()` resolves all positions
-6. **Render** — `ui.render()` walks the tree and draws; retain `root` as `prev_root`; `ui.endFrame()`
+5. **Layout** — `root.set_global_pos()` solves sizes (per-axis `SizeRule`: fixed/content/pct_of_parent/fit_children) then resolves all positions; pure (no host callback — content is host-measured at build into `data_*`)
+6. **Render** — userland render loop in `main.zig`: `root.iterate()` walks the tree and draws each node by its `tags` (e.g. `if (node.tags.text) widgets.draw_text(...)`); retain `root` as `prev_root`; `ui.endFrame()`
 
 Key `App` fields: `resources: res.Resources`, `world`, `player`, `ui: widgets.Ui`, `frame_arena` (reset each frame), `prev_root` (last frame's tree, kept for the event-stage mark before the reset).
 
 ### UI Engine (`src/ui/`) and widgets (`src/widgets.zig`)
 
-A standalone, immediate-mode UI building language: the node tree is rebuilt every frame from the arena; persistence (text caches, interaction state) lives in a key-addressed cache. The engine is generic (`Ui(StateNs, Res)`) and imports nothing from the game; `src/widgets.zig` is the host's concrete binding (`Ui = ui.Ui(UiState, Resources)`) plus the widget functions (`label`, `button`).
+A standalone, immediate-mode UI building language: the node tree is rebuilt every frame from the arena; persistence (text caches, interaction state) lives in a key-addressed cache. The engine is generic (`Ui(StateNs, Res)` + `Node(Tags)`) and imports nothing from the game — including rendering, which is host policy: core stores the tree + node `state`/`tags` and exposes `root.iterate()`, but draws nothing. `src/widgets.zig` is the host's concrete binding (`Ui = ui.Ui(UiState, Resources)`, `Node = ui.Node(Tags)`) plus the widget functions (`label`, `button`) and draw primitives (`draw_text`).
 
 **See [`src/ui/README.md`](src/ui/README.md) for the full architecture** — Node/features, the key-cache (pools + handles), interaction (marking the tree, transient vs latched flags, lazy slots), layout (`Anchor` + `ChildrenAlign`), how to write a widget, and the roadmap (autolayout, sprites).
 

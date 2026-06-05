@@ -29,32 +29,35 @@ Everything in `src/ui/` is **engine** and imports nothing from the game. It's
 parametrized so the host plugs its own types in:
 
 ```zig
-Ui(comptime StateNs: type, comptime Res: type)
+Ui(comptime StateNs: type, comptime Res: type)   // the per-frame builder
+Node(comptime Tags: type)                          // the tree atom
 ```
 
 - `StateNs` — a namespace of the state types the host wants cached (one
   `Pool(T)` is generated per declaration).
 - `Res` — the host's resource bundle (fonts, renderer, input, …). The engine
   holds a `*Res` opaquely and never touches its fields; only host callbacks do.
+- `Tags` — the host's render-flag type (a packed struct of defaulted bools, e.g.
+  `.text`, `.border`, `.inactive`). Carried on every node; the engine stores it
+  opaquely and **never reads it** — it's pure render *policy* the host switches on.
 
 The host supplies, *one layer up* (today `src/widgets.zig` + `src/res.zig`):
-the concrete binding `pub const Ui = ui.Ui(UiState, Resources)`, the widget
-functions, the render/size callbacks, and `Resources` itself. To lift this into
-its own project, take `src/ui/` as-is; `widgets.zig`/`res.zig` are the template
-for how a host binds it.
+the concrete bindings `pub const Ui = ui.Ui(UiState, Resources)` and
+`pub const Node = ui.Node(Tags)`, the widget functions, the size callbacks + the
+render loop, and `Resources` itself. To lift this into its own project, take
+`src/ui/` as-is; `widgets.zig`/`res.zig` are the template for how a host binds it.
 
 ## Module map
 
 | File | Responsibility |
 |---|---|
-| `root.zig` | `Node` (the tree atom) + free tree-walks: `render`, `mark_at`. Re-exports everything. |
+| `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `mark_at` tree-walk. Re-exports everything. |
 | `ui.zig` | `Ui(StateNs, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, interaction store. |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
 | `interaction.zig` | `Interaction` flag set + `Flag` enum. Leaf, no deps. |
-| `features/size.zig` | `Size` (intrinsic: calc fn, width/height, padding), `recalculate_size`. |
-| `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`), `set_global_pos` and the placement algorithms. |
-| `features/renderable.zig` | `OnRender` callback wrapper. |
+| `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
+| `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`) + the whole solve: sizing passes + `set_global_pos`/placement. |
 
 ## The frame lifecycle
 
@@ -66,8 +69,8 @@ The host loop drives the engine in a fixed order (`src/main.zig`):
 3. ui.beginFrame()        → frame += 1
 4. arena.reset()          → last frame's tree dies
 5. build_ui(&ui, …)       → construct a fresh node tree (widgets read cache + world)
-6. root.set_global_pos()  → resolve every node's position
-7. render(root, &ui)      → draw
+6. root.set_global_pos()  → solve sizes (per-axis rules) + resolve every position
+7. host render walk       → host iterates the tree (root.iterate()) and draws
 8. ui.endFrame()          → prune untouched cache slots, then clearTransient
    (retain root as prev_root for next frame's step 2)
 ```
@@ -78,26 +81,30 @@ frame's geometry doesn't exist yet, so interaction is marked against the
 
 ## Node & features
 
-A `Node` is the atom. It composes optional *feature* fields rather than
-subclassing:
+A `Node` is the atom (generic over the host's `Tags`). It composes optional
+*feature* fields rather than subclassing:
 
 ```zig
-Node {
+Node(Tags) {
     id: []const u8,          // human-readable, for debugging
     parent, children,
     state: ?u32,             // handle into a render-state pool (e.g. TextData); null for containers
     interaction_key: ?u64,   // opt-in interaction identity; null = non-interactive
-    size:  ?Size,            // intrinsic: calc fn, width/height, padding
+    tags: Tags,              // host render flags (policy); engine never reads them
+    size:  ?Size,            // per-axis SizeRule + padding + resolved box + measured data_*
     layout: ?Layout,         // positional: anchor + children alignment
-    on_render: ?OnRender,    // draw callback
 }
 ```
 
-Builder methods (`with_size`, `with_layout`, `with_render`, `add_child`) chain at
+Builder methods (`with_size`, `with_layout`, `add_child`) chain at
 construction. Behaviour varies by *which feature fields a widget wires*, not by
-flags — each field carries its payload (the calc fn, the draw fn), and the engine
-gates on presence (`if (node.on_render) |r| ...`), exactly where Fleury gates on
-bits.
+flags — each field carries its payload (e.g. the per-axis size rules), and the engine
+gates on presence (`if (node.size) |s| ...`), exactly where Fleury gates on
+bits. `tags` is the one exception: a host-defined flag *set* the engine carries
+but never interprets — the render loop switches on it (text vs sprite vs a
+payload-less modifier like `border`). The set flag also doubles as the
+discriminant for `state`: `.text` ⟹ resolve `state` through the `TextData` pool,
+`.sprite` ⟹ the sprite pool, so no separate state-kind union is needed.
 
 ## The key-cache: pools + handles
 
@@ -173,9 +180,29 @@ Two orthogonal axes, both Unity-inspired:
   `vertical`, `vertical_right`, `centered`, their `_wrapped`/`_reverse` variants.
   (≈ Unity Layout Groups.)
 
-`set_global_pos` resolves positions top-down; `recalculate_size` runs bottom-up
-first. **Today layout only *places* boxes** whose sizes are mostly fixed —
-containers don't yet negotiate size from their children (see Roadmap · autolayout).
+### Sizing
+
+Every node picks a `SizeRule` **per axis** (mandatory — width and height size
+independently): `fixed`, `content`, `pct_of_parent`, or `fit_children`. The
+*intrinsic content size* is host policy — the host **measures it at build** (text
+metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
+the `content` rule sizes to those, and the host renderer draws to them. The *rule*
+that turns that seed / parent / children into the final box is core. The whole
+solve is **pure** — no host callback, no `ctx`. `set_global_pos` runs three passes:
+
+1. **`recalculate_size`** (bottom-up) — resolve `fixed`/`content`/`fit_children`;
+   `pct_of_parent` takes a provisional = its measured content size.
+2. **`resolve_pct`** (top-down) — finalize `pct_of_parent` against *definite*
+   parents. `fit_children` is the only **indefinite** rule, so a `%` under a
+   `fit` parent has no definite base and falls back to `content` (→ the node's
+   `data_*`, or a safe **0** when it has no measured content).
+3. **`place`** (top-down) — assign global positions; pure geometry.
+
+Because the engine never measures anything, `set_global_pos` takes no `ctx` at
+all. (The callback-in-the-size-pass would only earn its place once content sizing
+becomes *constraint-dependent* — wrapped text, where height depends on the
+resolved width. We don't do that yet.) Still pending (Roadmap): `range`/`max_of`
+combinators and the `strictness`-weighted sibling distribution.
 
 ## Writing a widget
 
@@ -187,11 +214,12 @@ fn make_text(u, parent, seed, id, text) !struct { *Node, u64 } {
     const k = ui.key(seed, id);
     const idx = u.cache(k, TextData);          // handle into the TextData pool
     u.pool(TextData).get(idx).update(text);    // copy text into the cached slot
-    const node = try ui.Node.create(u.arena, id);
-    _ = node.with_size(ui.Size.init(&text_calc_size, null));
-    _ = node.with_render(ui.OnRender.init(&text_render));
+    const tw, const th = u.res.font.getStringSize(text); // host measures, at build
+    const node = try Node.create(u.arena, id);  // Node = ui.Node(Tags), bound by the host
+    _ = node.with_size(ui.Size.initContent(tw, th, null)); // both axes = content (stored in data_*)
     _ = node.with_layout(ui.Layout.init(.relative, null));
-    node.state = idx;
+    node.state = idx;                          // payload handle
+    node.tags = .{ .text = true };             // flags how the render walk draws it
     try parent.add_child(u.arena, node);
     return .{ node, k };                        // hand the key back so callers needn't re-hash
 }
@@ -213,10 +241,26 @@ pub fn button(u, parent, seed, id, text) !*Node {
 //   if (btn.query(u).clicked) { ... }
 ```
 
-Render/size callbacks receive the ctx as `*anyopaque`, cast it to `*Ui`, and
-resolve their own state via `node.state` — supplying the concrete type
-themselves. They may read `u.res` (the host binding); the *generic* engine code
-never does.
+**Rendering is entirely host-side.** The engine has no draw feature — it stores
+the tree + node `state`/`tags` and exposes `root.iterate()` (a zero-alloc
+pre-order cursor). The host loop *is the renderer*; it lives at the call site
+(`main.zig`), not behind an engine wrapper, and picks whatever backend it likes
+(SDL, GPU, CPU):
+
+```zig
+var it = root.iterate();
+while (it.next()) |node| {
+    if (node.tags.text) draw_text(u, node);   // resolve node.state → TextData, blit
+    // if (node.tags.border) draw_border(node);  // one branch per Tags aspect
+}
+```
+
+**Sizing is host-measured too.** The engine has no size callback either — the
+host measures content at build (`make_text` asks the font for the text's px
+extent) and stores it via `Size.initContent(w, h, …)` → `data_width`/`data_height`.
+The `content` rule sizes to those and `draw_text` draws to them, so the whole
+solve is pure and `set_global_pos` takes no `ctx`. Widgets read `u.res` (the host
+binding) when they measure; the *generic* engine code never does.
 
 ## Design decisions (the short version)
 
@@ -236,14 +280,17 @@ never does.
 
 ## Roadmap / not yet
 
-- **Autolayout sizing** (Track B): `ChildrenSum` / `PercentOfParent` `Size.calc`
-  variants, a `strictness: f32`, and one violation-resolution pass between sizing
-  and positioning. A bounded extension of `recalculate_size`, not a rewrite.
+- **Autolayout sizing** (Track B): base `SizeRule`s (`fixed`/`content`/
+  `pct_of_parent`/`fit_children`), per-axis, with the bottom-up + top-down solve
+  and the definite/indefinite fallback — **done** (see *Sizing* above). Still to
+  land: `range`/`max_of` combinators, and a `strictness: f32` driving a
+  violation-resolution pass that distributes slack/overflow among siblings.
 - **Sprites:** dropped with the old `Data`; reintroduce as a widget fn + a state
   type registered in `StateNs` when needed.
 - **Interactables-only marking:** `mark_at` currently walks the whole tree and
   skips unkeyed nodes. For large trees, collect keyed nodes into a flat per-frame
   list and iterate that instead — O(interactive) rather than O(all).
-- **Full extraction:** the render/size ctx is still `*anyopaque` (cast to `*Ui`
-  by host callbacks). When this becomes a standalone library, consider making the
-  callback ctx generic to drop the type-erasure.
+- **Full extraction:** the engine is now **callback-free** — rendering and sizing
+  are host loops/data, not engine-invoked `*anyopaque` callbacks, so that
+  type-erasure wart is gone. Lifting `src/ui/` into its own repo is mostly
+  packaging now; `widgets.zig`/`res.zig` stay the host-binding template.

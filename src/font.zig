@@ -3,8 +3,8 @@ const sdl3 = @import("sdl3");
 pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
 /// Pure text-state data. Lives in the UI cache (one slot per text widget); the
-/// render/size behavior is wired by the widget layer (see widgets.zig), keeping
-/// this module a leaf (no `ui`/`res` imports → no import cycle).
+/// rendering and measurement are wired by the widget layer (see widgets.zig),
+/// keeping this module a leaf (no `ui`/`res` imports → no import cycle).
 pub const TextData = struct {
     buf: [64]u8,
     len: usize,

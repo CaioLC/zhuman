@@ -15,23 +15,27 @@ pub const UiState = struct {
 /// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
 pub const Ui = ui.Ui(UiState, Resources);
 
+/// Host-defined render flags carried on every node (policy — core stores them
+/// opaquely, never reads them). The render walk switches on these to decide what
+/// to draw. A packed struct of defaulted bools: add a field (e.g. `border`,
+/// `inactive`) the day the renderer grows a new aspect — one line, no engine
+/// change. Composable: a node can be several at once.
+pub const Tags = packed struct {
+    text: bool = false,
+};
+
+/// Concrete node type for this host, bound to the host's `Tags`.
+pub const Node = ui.Node(Tags);
+
 const TextData = zfont.TextData;
 
-// --- Text widget callbacks ---------------------------------------------------
-// The ctx passed to render/size is `*Ui`. Each callback resolves its own state
-// from the cache via `node.state` (the handle), supplying the concrete type.
+// --- Text widget rendering ---------------------------------------------------
 
-fn text_calc_size(raw_ctx: *anyopaque, node: *ui.Node) anyerror!struct { f32, f32 } {
-    const u: *Ui = @ptrCast(@alignCast(raw_ctx));
-    const idx = node.state orelse return .{ 0, 0 };
-    const td = u.pool(TextData).get(idx);
-    const fmt = td.text() orelse return .{ 0, 0 };
-    const w, const h = try u.res.font.getStringSize(fmt);
-    return .{ @floatFromInt(w), @floatFromInt(h) };
-}
-
-fn text_render(raw_ctx: *anyopaque, node: *ui.Node) void {
-    const u: *Ui = @ptrCast(@alignCast(raw_ctx));
+/// Draw a `.text` node: resolve its cached `TextData` via `node.state` and blit it.
+/// One render primitive per `Tags` aspect; the host's render loop (in `main.zig`)
+/// walks the tree and calls the primitives whose flags are set. `state` should be
+/// non-null whenever `.text` is — the guard is belt-and-suspenders.
+pub fn draw_text(u: *Ui, node: *Node) void {
     const idx = node.state orelse return;
     const td = u.pool(TextData).get(idx);
     const s = node.size orelse return;
@@ -62,23 +66,27 @@ fn text_render(raw_ctx: *anyopaque, node: *ui.Node) void {
 /// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
 /// Returns the node and its key `k = ui.key(seed, id)`, so an interactive caller
 /// can reuse the key without re-hashing.
-fn make_text(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !struct { *ui.Node, u64 } {
+fn make_text(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !struct { *Node, u64 } {
     const k = ui.key(seed, id);
     const idx = u.cache(k, TextData);
     u.pool(TextData).get(idx).update(text);
 
-    const node = try ui.Node.create(u.arena, id);
-    _ = node.with_size(ui.Size.init(&text_calc_size, null));
-    _ = node.with_render(ui.OnRender.init(&text_render));
+    // Measure the content here, at build — the host has the font on hand. The
+    // engine never measures; it just reads these dims (`content` rule + renderer).
+    const tw, const th = try u.res.font.getStringSize(text);
+
+    const node = try Node.create(u.arena, id);
+    _ = node.with_size(ui.Size.initContent(@floatFromInt(tw), @floatFromInt(th), null));
     _ = node.with_layout(ui.Layout.init(.relative, null));
     node.state = idx;
+    node.tags = .{ .text = true }; // flags how the host's render walk draws it
     try parent.add_child(u.arena, node);
     return .{ node, k };
 }
 
 /// A non-interactive text leaf. `text` is copied into the cached `TextData`, so
 /// a build-time slice (e.g. a stack `bufPrint`) is safe to pass.
-pub fn label(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
+pub fn label(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
     const node, _ = try make_text(u, parent, seed, id, text);
     return node;
 }
@@ -109,7 +117,7 @@ test "interaction store: active latches, transient flags clear each frame" {
 /// `node.query(u)` — the flags reflect the previous frame's geometry against this
 /// frame's input (immediate-mode's inherent one-frame delay):
 /// `const b = try button(..); if (b.query(u).clicked) ...`.
-pub fn button(u: *Ui, parent: *ui.Node, seed: u64, id: []const u8, text: []const u8) !*ui.Node {
+pub fn button(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
     const node, const k = try make_text(u, parent, seed, id, text);
     node.interaction_key = k; // opt-in: only keyed nodes are marked/queryable
     return node;

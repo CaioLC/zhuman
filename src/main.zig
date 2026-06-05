@@ -30,7 +30,7 @@ const App = struct {
     ui: widgets.Ui,
     /// Last frame's (laid-out) node tree, kept across the frame boundary so the
     /// event stage can mark it before the arena is reset. `null` on frame 0.
-    prev_root: ?*ui.Node,
+    prev_root: ?*widgets.Node,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -92,7 +92,6 @@ pub fn main() !void {
     defer app.deinit();
     try app.setup(app.gpa.allocator());
 
-    const raw_ctx: *anyopaque = @ptrCast(&app.ui);
     var quit = false;
 
     while (!quit) {
@@ -133,23 +132,33 @@ pub fn main() !void {
         _ = app.frame_arena.reset(.retain_capacity); // prev_root's memory dies here
 
         const root = try build_ui(&app.ui, &app.world, app.player);
-        try root.set_global_pos(null, raw_ctx);
+        try root.set_global_pos();
         app.prev_root = root; // retain for next frame's event-stage marking
 
         try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
         try app.renderer.clear();
-        ui.render(root, raw_ctx);
+        // Render is userland: walk the laid-out tree (painter order) and draw each
+        // node by its tags. The engine hands us the cursor; what a flag means and
+        // how it reaches the screen is entirely ours. Add a branch per Tags aspect.
+        var it = root.iterate();
+        while (it.next()) |node| {
+            if (node.tags.text) widgets.draw_text(&app.ui, node);
+        }
         try app.renderer.present();
 
         app.ui.endFrame();
     }
 }
 
-fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*ui.Node {
+fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*widgets.Node {
     const a = u.arena;
 
-    const root = try ui.Node.create(a, "root");
-    _ = root.with_size(ui.Size.init(&screen_size, null));
+    const root = try widgets.Node.create(a, "root");
+    // Root sizes to the window — measured here at build (host policy), not via an
+    // engine callback. `content` then sizes to these dims; pct children resolve
+    // against them (a definite parent), so the layout tracks window resizes.
+    const ww, const wh = try u.res.window.getSize();
+    _ = root.with_size(ui.Size.initContent(@floatFromInt(ww), @floatFromInt(wh), null));
     _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
 
     // Counter: clickable, shows the live component value. Click resets it —
@@ -163,8 +172,10 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
         c.buffer = 0;
     }
 
-    const left = try ui.Node.create(a, "left_panel");
-    _ = left.with_size(ui.Size.initFixed(300, 600, null));
+    const left = try widgets.Node.create(a, "left_panel");
+    // Fixed 300 wide, full window height via pct_of_parent — root is `content`
+    // (the window size), a definite parent, so this tracks window resizes.
+    _ = left.with_size(ui.Size.init(.{ .fixed = 300 }, .{ .pct_of_parent = 1.0 }, null));
     _ = left.with_layout(ui.Layout.init(.top_left, .vertical));
     try root.add_child(a, left);
     const left_seed = ui.key(ROOT_SEED, "left_panel");
@@ -172,7 +183,7 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
         _ = try widgets.label(u, left, left_seed, id, "");
     }
 
-    const right = try ui.Node.create(a, "right_panel");
+    const right = try widgets.Node.create(a, "right_panel");
     _ = right.with_size(ui.Size.initFixed(300, 600, null));
     _ = right.with_layout(ui.Layout.init(.top_right, .vertical_right));
     try root.add_child(a, right);
@@ -182,10 +193,4 @@ fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*u
     }
 
     return root;
-}
-
-pub fn screen_size(raw_ctx: *anyopaque, _: *ui.Node) anyerror!struct { f32, f32 } {
-    const u: *widgets.Ui = @ptrCast(@alignCast(raw_ctx));
-    const width, const height = try u.res.window.getSize();
-    return .{ @floatFromInt(width), @floatFromInt(height) };
 }
