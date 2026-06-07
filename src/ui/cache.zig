@@ -85,7 +85,7 @@ pub fn Pool(comptime T: type) type {
 }
 
 /// Comptime-generate a struct holding one `Pool(T)` per type declared in `ns`.
-/// Mirrors `world.Storages`. The owning `Ui` looks pools up by element type.
+/// Mirrors `world.Storages`. The owning `Ctx` looks pools up by element type.
 pub fn Pools(comptime ns: type) type {
     const decls = @typeInfo(ns).@"struct".decls;
     var fields: [decls.len]std.builtin.Type.StructField = undefined;

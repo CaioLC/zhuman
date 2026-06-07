@@ -4,12 +4,9 @@ const Allocator = std.mem.Allocator;
 pub const features = @import("./features/root.zig");
 pub const cache = @import("./cache.zig");
 pub const geometry = @import("./geometry.zig");
-pub const interaction = @import("./interaction.zig");
 
-pub const Ui = @import("./ui.zig").Ui;
+pub const Ctx = @import("./ctx.zig").Ctx;
 pub const Rect = geometry.Rect;
-pub const Interaction = interaction.Interaction;
-pub const InteractionFlag = interaction.Flag;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
 pub const Pool = cache.Pool;
@@ -22,38 +19,31 @@ pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
 
-/// The tree atom, generic over the host's `Tags` type — a packed-struct flag set
-/// describing what each node *is* for rendering (e.g. `.text`, `.border`,
-/// `.inactive`). Core stores `Tags` opaquely and never reads it; the host's render
-/// walk switches on it. `Tags` must be default-constructible (`.{}`) — give every
-/// field a default. Every other field is tag-agnostic.
-pub fn Node(comptime Tags: type) type {
+/// The tree atom. Stores generic data and render flags opaquely.
+pub fn Node(comptime RenderFlags: type) type {
     return struct {
         const Self = @This();
 
         id: []const u8,
         parent: ?*Self,
         children: std.ArrayList(*Self),
-        /// Type-erased handle (pool index) into the UI cache for this node's render
-        /// state. The host's render walk supplies the concrete state type when
-        /// resolving it. `null` for pure layout containers.
-        state: ?u32,
-        /// Interaction key (opt-in). Non-null only for interactive widgets; `null`
-        /// for labels and containers. Carrying it is what makes a node markable and
-        /// queryable — its interaction state lives in `Ui`'s keyed store, not here.
+        /// Type-erased handle (pool index) into the UI cache holding this node's
+        /// render state. The host resolves the concrete state type. `null` for
+        /// data-less, pure layout containers.
+        data: ?u32,
+        /// Interaction key (opt-in). Non-null only for interactive widgets; the key
+        /// bridges the frame boundary — `mark_*` writes flags against it at the event
+        /// stage and this frame's build reads them back via `query`. The flags live in
+        /// `Ctx`'s keyed interaction store, not here. `null` = non-interactive.
         interaction_key: ?u64,
         /// Host-defined render flags (policy). Core only carries them; the host's
         /// render walk reads them to decide what/how to draw. Defaults to all-clear.
-        tags: Tags,
+        render_flags: RenderFlags,
 
         size: ?features.Size,
         layout: ?features.Layout,
 
-        /// Zero-allocation pre-order tree cursor (see `iterate`). Carries only the
-        /// subtree root and a cursor: advancement rides the `parent` pointers every
-        /// node already holds, so there's no traversal stack and nothing to free.
-        /// Rendering is host policy — the host walks this and draws each node by its
-        /// `tags`/`state`; the engine never touches pixels.
+        /// Zero-allocation pre-order tree cursor. See `iterate` fn.
         pub const Iterator = struct {
             root: *Self,
             current: ?*Self,
@@ -91,9 +81,9 @@ pub fn Node(comptime Tags: type) type {
                 .id = id,
                 .parent = null,
                 .children = .empty,
-                .state = null,
+                .data = null,
                 .interaction_key = null,
-                .tags = .{},
+                .render_flags = .{},
                 .size = null,
                 .layout = null,
             };
@@ -151,10 +141,9 @@ pub fn Node(comptime Tags: type) type {
 
         /// This node's interaction state this frame (read-through: allocates/keeps
         /// its store slot). **Panics** if the node is non-interactive (no
-        /// `interaction_key`): `query` asserts the node opted into interaction, so
-        /// querying a label/container is a precondition violation, not a silent
-        /// no-op. `u` is duck-typed (the concrete `Ui`).
-        pub fn query(self: *Self, u: anytype) Interaction {
+        /// `interaction_key`). `u` is duck-typed (the concrete `Ctx`); the return
+        /// type is the host's interaction-flag struct (`Ctx.Interaction`).
+        pub fn query(self: *Self, u: anytype) @TypeOf(u.*).Interaction {
             const k = self.interaction_key orelse
                 std.debug.panic("query() on non-interactive node '{s}' (no interaction_key)", .{self.id});
             return u.interactionOf(k);
@@ -164,7 +153,7 @@ pub fn Node(comptime Tags: type) type {
 
 /// A node's resolved screen rect from its layout + size, or null if it hasn't
 /// been laid out yet. Pure geometry read straight off the node. `node` is
-/// `anytype` (a `*Node(Tags)`); only tag-agnostic fields are touched.
+/// `anytype` (a `*Node(RenderFlags)`); only tag-agnostic fields are touched.
 fn node_rect(node: anytype) ?geometry.Rect {
     const s = node.size orelse return null;
     const l = node.layout orelse return null;
@@ -179,11 +168,11 @@ fn node_rect(node: anytype) ?geometry.Rect {
 /// Walk the tree and set `flag` on every keyed node whose rect contains (x, y).
 /// Called at the event stage against the *previous* frame's (already laid-out)
 /// tree; writes the flag into the keyed interaction store so this frame's build
-/// can read it back. `u` and `node` are duck-typed (the concrete `Ui` /
-/// `*Node(Tags)`) to keep this module free of the binding. Mechanism only:
-/// userland supplies the point — mouse, touch, gamepad cursor — and decides what
-/// the flag means.
-pub fn mark_at(u: anytype, node: anytype, comptime flag: InteractionFlag, x: f32, y: f32) void {
+/// can read it back. `u`, `node`, and `flag` are duck-typed (the concrete `Ctx`,
+/// `*Node(RenderFlags)`, and a field of the host's interaction-flag type) to keep
+/// this module free of the binding. Mechanism only: userland supplies the point —
+/// mouse, touch, gamepad cursor — and decides what the flag means.
+pub fn mark_at(u: anytype, node: anytype, comptime flag: anytype, x: f32, y: f32) void {
     if (node.interaction_key) |k| {
         if (node_rect(node)) |r| {
             if (r.contains(x, y)) u.setFlag(k, flag, true);
@@ -194,7 +183,7 @@ pub fn mark_at(u: anytype, node: anytype, comptime flag: InteractionFlag, x: f32
 
 test {
     _ = cache;
-    _ = @import("./ui.zig");
+    _ = @import("./ctx.zig");
 }
 
 /// A concrete `Node` for tests — flags are irrelevant to layout/traversal, so an
@@ -297,18 +286,18 @@ test "iterate walks the subtree in pre-order, climbing across levels" {
     try std.testing.expectEqual(@as(?*TestNode, null), leaf_it.next());
 }
 
-test "node carries host tags opaquely: default-clear, settable" {
+test "node carries host render flags opaquely: default-clear, settable" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
 
-    const Tags = packed struct { text: bool = false, border: bool = false };
-    const N = Node(Tags);
+    const RenderFlags = packed struct { text: bool = false, border: bool = false };
+    const N = Node(RenderFlags);
 
     const n = try N.create(a, "n");
-    try std.testing.expect(!n.tags.text and !n.tags.border); // init = all-clear
-    n.tags = .{ .text = true };
-    try std.testing.expect(n.tags.text and !n.tags.border); // composable, independent
+    try std.testing.expect(!n.render_flags.text and !n.render_flags.border); // init = all-clear
+    n.render_flags = .{ .text = true };
+    try std.testing.expect(n.render_flags.text and !n.render_flags.border); // composable, independent
 }
 
 test "pct_of_parent resolves against a definite (fixed) parent" {

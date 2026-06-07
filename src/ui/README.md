@@ -2,16 +2,14 @@
 
 A small **immediate-mode UI building language** in Zig. The node tree is rebuilt
 from scratch every frame; persistence (text caches, interaction state, …) lives
-in a key-addressed cache, not in the tree. Adapted from Ryan Fleury's
-[*UI Part 3: The Widget Building Language*](https://www.dgtlgrove.com/p/ui-part-3-the-widget-building-language)
-— we take his **key-cache persistence** and **immediate-mode** ideas and **reject
-his flags bitmask** in favor of per-widget functions + a node's optional feature
-fields.
+in a key-addressed cache, not in the tree. Heavily inspired by Ryan Fleury's
+[UI series of posts](https://www.dgtlgrove.com) but adapted to personal preferences
+and Zig idiomatic code.
 
 ## Design philosophy
 
 - **Immediate mode.** Widgets are *functions called during build*, not retained
-  objects you wire once and mutate. A widget returns its `*Node`; you read
+  objects you wire once and mutate. A widget always returns its most outward `*Node`; you read
   interaction off it and act inline — `if (btn.query(u).clicked) counter = 0;` —
   no callbacks, no command queue.
 - **The tree is ephemeral; the cache is persistent.** Every frame the tree is
@@ -29,33 +27,40 @@ Everything in `src/ui/` is **engine** and imports nothing from the game. It's
 parametrized so the host plugs its own types in:
 
 ```zig
-Ui(comptime StateNs: type, comptime Res: type)   // the per-frame builder
-Node(comptime Tags: type)                          // the tree atom
+Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type)  // the per-frame builder
+Node(comptime RenderFlags: type)                                          // the tree atom
 ```
 
-- `StateNs` — a namespace of the state types the host wants cached (one
+- `StateNs` — a namespace of the render-state types the host wants cached (one
   `Pool(T)` is generated per declaration).
+- `IntFlags` — the host's interaction-flag type (a packed struct of defaulted
+  bools, e.g. `hovering`, `clicked`, `active`). The engine stores it opaquely in
+  the keyed interaction store and **never reads its meaning**; it must declare
+  `pub const transient = [_][]const u8{ … }` naming the fields the engine zeroes
+  each frame (the rest latch). Both the vocabulary *and* the transient/latched
+  split are host policy.
 - `Res` — the host's resource bundle (fonts, renderer, input, …). The engine
-  holds a `*Res` opaquely and never touches its fields; only host callbacks do.
-- `Tags` — the host's render-flag type (a packed struct of defaulted bools, e.g.
-  `.text`, `.border`, `.inactive`). Carried on every node; the engine stores it
-  opaquely and **never reads it** — it's pure render *policy* the host switches on.
+  holds a `*Res` opaquely and never touches its fields; only host code does.
+- `RenderFlags` — the host's render-flag type (a packed struct of defaulted bools,
+  e.g. `.text`, `.border`, `.inactive`). Carried on every node; the engine stores
+  it opaquely and **never reads it** — it's pure render *policy* the host switches on.
 
 The host supplies, *one layer up* (today `src/widgets.zig` + `src/res.zig`):
-the concrete bindings `pub const Ui = ui.Ui(UiState, Resources)` and
-`pub const Node = ui.Node(Tags)`, the widget functions, the size callbacks + the
-render loop, and `Resources` itself. To lift this into its own project, take
-`src/ui/` as-is; `widgets.zig`/`res.zig` are the template for how a host binds it.
+the concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)`
+and `pub const Node = ui.Node(RenderFlags)`, the `Interaction` type, the widget
+functions, the build-time measurement + the render loop, and `Resources` itself. To
+lift this into its own project, take `src/ui/` as-is; `widgets.zig`/`res.zig` are
+the template for how a host binds it. (The engine type is `Ctx`; the host names its
+binding `UiCtx`.)
 
 ## Module map
 
 | File | Responsibility |
 |---|---|
 | `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `mark_at` tree-walk. Re-exports everything. |
-| `ui.zig` | `Ui(StateNs, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, interaction store. |
+| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, interaction store. |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
-| `interaction.zig` | `Interaction` flag set + `Flag` enum. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
 | `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`) + the whole solve: sizing passes + `set_global_pos`/placement. |
 
@@ -81,18 +86,18 @@ frame's geometry doesn't exist yet, so interaction is marked against the
 
 ## Node & features
 
-A `Node` is the atom (generic over the host's `Tags`). It composes optional
+A `Node` is the atom (generic over the host's `RenderFlags`). It composes optional
 *feature* fields rather than subclassing:
 
 ```zig
-Node(Tags) {
-    id: []const u8,          // human-readable, for debugging
+Node(RenderFlags) {
+    id: []const u8,            // human-readable, for debugging
     parent, children,
-    state: ?u32,             // handle into a render-state pool (e.g. TextData); null for containers
-    interaction_key: ?u64,   // opt-in interaction identity; null = non-interactive
-    tags: Tags,              // host render flags (policy); engine never reads them
-    size:  ?Size,            // per-axis SizeRule + padding + resolved box + measured data_*
-    layout: ?Layout,         // positional: anchor + children alignment
+    data: ?u32,               // handle into a render-state pool (e.g. TextData); null for containers
+    interaction_key: ?u64,    // opt-in interaction identity; null = non-interactive
+    render_flags: RenderFlags, // host render flags (policy); engine never reads them
+    size:  ?Size,             // per-axis SizeRule + padding + resolved box + measured data_*
+    layout: ?Layout,          // positional: anchor + children alignment
 }
 ```
 
@@ -100,11 +105,11 @@ Builder methods (`with_size`, `with_layout`, `add_child`) chain at
 construction. Behaviour varies by *which feature fields a widget wires*, not by
 flags — each field carries its payload (e.g. the per-axis size rules), and the engine
 gates on presence (`if (node.size) |s| ...`), exactly where Fleury gates on
-bits. `tags` is the one exception: a host-defined flag *set* the engine carries
-but never interprets — the render loop switches on it (text vs sprite vs a
+bits. `render_flags` is the one exception: a host-defined flag *set* the engine
+carries but never interprets — the render loop switches on it (text vs sprite vs a
 payload-less modifier like `border`). The set flag also doubles as the
-discriminant for `state`: `.text` ⟹ resolve `state` through the `TextData` pool,
-`.sprite` ⟹ the sprite pool, so no separate state-kind union is needed.
+discriminant for `data`: `.text` ⟹ resolve `data` through the `TextData` pool,
+`.sprite` ⟹ the sprite pool, so no separate data-kind union is needed.
 
 ## The key-cache: pools + handles
 
@@ -126,29 +131,41 @@ slot-map:
 
 ## Interaction: marking the tree
 
-Interaction is **opt-in** (only a node with an `interaction_key` participates) and follows the
-mechanism/policy split strictly.
+Interaction is **opt-in** (only a node with an `interaction_key` participates) and
+follows the mechanism/policy split strictly. **The flag vocabulary is host-defined**,
+exactly like `RenderFlags`: the host passes its `Interaction` struct as the `IntFlags`
+parameter, and the engine stores it opaquely in the keyed interaction store — it owns
+neither the field names nor what they mean. Today's host (`widgets.zig`):
 
 ```zig
-Interaction = packed struct { hovering, clicked, active: bool }  // a flag SET — any combo
+pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
+    hovering: bool = false,
+    clicked:  bool = false,
+    active:   bool = false,
+
+    pub const transient = [_][]const u8{ "hovering", "clicked" };  // engine zeroes these each frame
+};
 ```
 
-- `hovering` / `clicked` are **transient** — recomputed every frame, wiped by
-  `clearTransient` in `endFrame`.
-- `active` is **latched** — set on a transition, persists across frames until the
-  host clears it.
+The **transient/latched split is host policy too**: `clearTransient` (run in
+`endFrame`) reads the host's `transient` field-name list and zeroes only those
+fields. Fields *not* listed latch — they persist across frames until the host clears
+them. Here `hovering`/`clicked` are recomputed every frame; `active` latches. Add a
+field (`dragging`, `focused`) by editing the host struct — no engine change.
 
 **Core (mechanism):** `mark_at(u, node, flag, x, y)` walks the tree and, for every
 keyed node whose live rect `contains(x, y)`, calls `u.setFlag` — writing the flag
-into the keyed interaction store. The point is passed *in*; the engine never asks
-where it came from. (Containment semantics: nested nodes all under the point are
-all flagged — the ancestor stack, like CSS `:hover`.)
+into the keyed interaction store. `flag` is comptime-checked against the host's
+`Interaction` fields (`std.meta.FieldEnum`). The point is passed *in*; the engine
+never asks where it came from. (Containment semantics: nested nodes all under the
+point are all flagged — the ancestor stack, like CSS `:hover`.)
 
-**Host (policy):** decides the conditions and reads the result. `button` sets an
-`interaction_key` and returns the node; the host reads `node.query(u)` (a
-read-through query) and writes `if (btn.query(u).clicked)`.
-The only place input is read is the host's event stage and its widgets — the
-generic engine stays input-agnostic (works for mouse, touch, gamepad, anything).
+**Host (policy):** defines the vocabulary, decides the conditions, and reads the
+result. `button` sets an `interaction_key` and returns the node; the host reads
+`node.query(u)` (a read-through query returning the host's `Interaction` struct) and
+writes `if (btn.query(u).clicked)`. The only place input is read is the host's event
+stage and its widgets — the generic engine stays input-agnostic (works for mouse,
+touch, gamepad, anything).
 
 ### Persistence bridge & lazy slots
 
@@ -215,11 +232,11 @@ fn make_text(u, parent, seed, id, text) !struct { *Node, u64 } {
     const idx = u.cache(k, TextData);          // handle into the TextData pool
     u.pool(TextData).get(idx).update(text);    // copy text into the cached slot
     const tw, const th = u.res.font.getStringSize(text); // host measures, at build
-    const node = try Node.create(u.arena, id);  // Node = ui.Node(Tags), bound by the host
+    const node = try Node.create(u.arena, id);  // Node = ui.Node(RenderFlags), bound by the host
     _ = node.with_size(ui.Size.initContent(tw, th, null)); // both axes = content (stored in data_*)
     _ = node.with_layout(ui.Layout.init(.relative, null));
-    node.state = idx;                          // payload handle
-    node.tags = .{ .text = true };             // flags how the render walk draws it
+    node.data = idx;                           // payload handle
+    node.render_flags = .{ .text = true };     // flags how the render walk draws it
     try parent.add_child(u.arena, node);
     return .{ node, k };                        // hand the key back so callers needn't re-hash
 }
@@ -242,7 +259,7 @@ pub fn button(u, parent, seed, id, text) !*Node {
 ```
 
 **Rendering is entirely host-side.** The engine has no draw feature — it stores
-the tree + node `state`/`tags` and exposes `root.iterate()` (a zero-alloc
+the tree + node `data`/`render_flags` and exposes `root.iterate()` (a zero-alloc
 pre-order cursor). The host loop *is the renderer*; it lives at the call site
 (`main.zig`), not behind an engine wrapper, and picks whatever backend it likes
 (SDL, GPU, CPU):
@@ -250,8 +267,8 @@ pre-order cursor). The host loop *is the renderer*; it lives at the call site
 ```zig
 var it = root.iterate();
 while (it.next()) |node| {
-    if (node.tags.text) draw_text(u, node);   // resolve node.state → TextData, blit
-    // if (node.tags.border) draw_border(node);  // one branch per Tags aspect
+    if (node.render_flags.text) draw_text(u, node);   // resolve node.data → TextData, blit
+    // if (node.render_flags.border) draw_border(node);  // one branch per RenderFlags aspect
 }
 ```
 

@@ -27,7 +27,7 @@ const App = struct {
     world: ha.world.World,
     player: ha.world.Entity,
     frame_arena: std.heap.ArenaAllocator,
-    ui: widgets.Ui,
+    ui: widgets.UiCtx,
     /// Last frame's (laid-out) node tree, kept across the frame boundary so the
     /// event stage can mark it before the arena is reset. `null` on frame 0.
     prev_root: ?*widgets.Node,
@@ -71,7 +71,7 @@ const App = struct {
         self.world.add(self.player, tag.Player{});
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
-        self.ui = widgets.Ui.init(&self.resources, allocator, self.frame_arena.allocator());
+        self.ui = widgets.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
     }
 
     fn deinit(self: *App) void {
@@ -95,6 +95,7 @@ pub fn main() !void {
     var quit = false;
 
     while (!quit) {
+        // Event Stage
         app.resources.input.mouse_down = false; // edge: true only on a press this frame
         while (sdl.events.poll()) |event| {
             switch (event) {
@@ -125,32 +126,35 @@ pub fn main() !void {
             if (in.mouse_down) ui.mark_at(&app.ui, prev, .clicked, in.mouse_x, in.mouse_y);
         }
 
+        // Update Stage
+        // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
+        // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.update_counter);
-
+        // 3. update ui
         app.ui.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity); // prev_root's memory dies here
-
         const root = try build_ui(&app.ui, &app.world, app.player);
         try root.set_global_pos();
         app.prev_root = root; // retain for next frame's event-stage marking
 
+        // Render Stage
+        // window
         try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
         try app.renderer.clear();
-        // Render is userland: walk the laid-out tree (painter order) and draw each
-        // node by its tags. The engine hands us the cursor; what a flag means and
-        // how it reaches the screen is entirely ours. Add a branch per Tags aspect.
+        // ui
         var it = root.iterate();
         while (it.next()) |node| {
-            if (node.tags.text) widgets.draw_text(&app.ui, node);
+            if (node.render_flags.text) widgets.draw_text(&app.ui, node);
         }
+        // present
         try app.renderer.present();
 
         app.ui.endFrame();
     }
 }
 
-fn build_ui(u: *widgets.Ui, world: *ha.world.World, player: ha.world.Entity) !*widgets.Node {
+fn build_ui(u: *widgets.UiCtx, world: *ha.world.World, player: ha.world.Entity) !*widgets.Node {
     const a = u.arena;
 
     const root = try widgets.Node.create(a, "root");

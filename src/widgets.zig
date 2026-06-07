@@ -4,39 +4,51 @@ const sdl = @import("sdl3");
 const zfont = @import("./font.zig");
 const Resources = @import("./res.zig").Resources;
 
-/// The registry of widget-state types kept in the UI cache. One `Pool(T)` is
-/// generated per declaration. This is where the generic `ui` engine meets the
-/// concrete state types — see docs/ui-building-language-plan.md. (Interaction
-/// state is engine-owned on `Ui`, not registered here.)
+/// The registry of widget-state (render-state) types kept in the UI cache. One
+/// `Pool(T)` is generated per declaration. This is where the generic `ui` engine
+/// meets the concrete state types — see docs/ui-building-language-plan.md.
 pub const UiState = struct {
     pub const TextData = zfont.TextData;
 };
 
+/// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
+/// keyed by widget key). `mark_*` writes fields at the event stage; the build reads
+/// them back via `node.query`. `transient` names the fields the engine zeroes every
+/// frame (recomputed from input); fields not listed latch until userland clears them.
+/// Add a field (e.g. `dragging`, `focused`) the day a widget grows a new behaviour.
+pub const Interaction = packed struct {
+    hovering: bool = false,
+    clicked: bool = false,
+    active: bool = false,
+
+    pub const transient = [_][]const u8{ "hovering", "clicked" };
+};
+
 /// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
-pub const Ui = ui.Ui(UiState, Resources);
+pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
 
 /// Host-defined render flags carried on every node (policy — core stores them
 /// opaquely, never reads them). The render walk switches on these to decide what
 /// to draw. A packed struct of defaulted bools: add a field (e.g. `border`,
 /// `inactive`) the day the renderer grows a new aspect — one line, no engine
 /// change. Composable: a node can be several at once.
-pub const Tags = packed struct {
+pub const RenderFlags = packed struct {
     text: bool = false,
 };
 
-/// Concrete node type for this host, bound to the host's `Tags`.
-pub const Node = ui.Node(Tags);
+/// Concrete node type for this host, bound to the host's `RenderFlags`.
+pub const Node = ui.Node(RenderFlags);
 
 const TextData = zfont.TextData;
 
 // --- Text widget rendering ---------------------------------------------------
 
-/// Draw a `.text` node: resolve its cached `TextData` via `node.state` and blit it.
-/// One render primitive per `Tags` aspect; the host's render loop (in `main.zig`)
-/// walks the tree and calls the primitives whose flags are set. `state` should be
+/// Draw a `.text` node: resolve its cached `TextData` via `node.data` and blit it.
+/// One render primitive per `RenderFlags` aspect; the host's render loop (in `main.zig`)
+/// walks the tree and calls the primitives whose flags are set. `data` should be
 /// non-null whenever `.text` is — the guard is belt-and-suspenders.
-pub fn draw_text(u: *Ui, node: *Node) void {
-    const idx = node.state orelse return;
+pub fn draw_text(u: *UiCtx, node: *Node) void {
+    const idx = node.data orelse return;
     const td = u.pool(TextData).get(idx);
     const s = node.size orelse return;
     const l = node.layout orelse return;
@@ -66,7 +78,7 @@ pub fn draw_text(u: *Ui, node: *Node) void {
 /// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
 /// Returns the node and its key `k = ui.key(seed, id)`, so an interactive caller
 /// can reuse the key without re-hashing.
-fn make_text(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !struct { *Node, u64 } {
+fn make_text(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !struct { *Node, u64 } {
     const k = ui.key(seed, id);
     const idx = u.cache(k, TextData);
     u.pool(TextData).get(idx).update(text);
@@ -78,22 +90,22 @@ fn make_text(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8)
     const node = try Node.create(u.arena, id);
     _ = node.with_size(ui.Size.initContent(@floatFromInt(tw), @floatFromInt(th), null));
     _ = node.with_layout(ui.Layout.init(.relative, null));
-    node.state = idx;
-    node.tags = .{ .text = true }; // flags how the host's render walk draws it
+    node.data = idx;
+    node.render_flags = .{ .text = true }; // flags how the host's render walk draws it
     try parent.add_child(u.arena, node);
     return .{ node, k };
 }
 
 /// A non-interactive text leaf. `text` is copied into the cached `TextData`, so
 /// a build-time slice (e.g. a stack `bufPrint`) is safe to pass.
-pub fn label(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
+pub fn label(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
     const node, _ = try make_text(u, parent, seed, id, text);
     return node;
 }
 
 test "interaction store: active latches, transient flags clear each frame" {
     // res/arena are untouched by the interaction methods, so `undefined` is safe.
-    var u = Ui.init(undefined, std.testing.allocator, undefined);
+    var u = UiCtx.init(undefined, std.testing.allocator, undefined);
     defer u.deinit();
     u.beginFrame();
 
@@ -117,7 +129,7 @@ test "interaction store: active latches, transient flags clear each frame" {
 /// `node.query(u)` — the flags reflect the previous frame's geometry against this
 /// frame's input (immediate-mode's inherent one-frame delay):
 /// `const b = try button(..); if (b.query(u).clicked) ...`.
-pub fn button(u: *Ui, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
+pub fn button(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
     const node, const k = try make_text(u, parent, seed, id, text);
     node.interaction_key = k; // opt-in: only keyed nodes are marked/queryable
     return node;

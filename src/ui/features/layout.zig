@@ -97,7 +97,7 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
 /// Pass 1 — bottom-up sizing. Resolves `fixed`, `content`, and `fit_children`
 /// (from already-resolved children); `pct_of_parent` takes a provisional = its
 /// content size (the fallback value), finalized top-down in `resolve_pct`. `node`
-/// is `anytype` (a `*Node(Tags)`). `data_width`/`data_height` are the host's
+/// is `anytype` (a `*Node(RenderFlags)`). `data_width`/`data_height` are the host's
 /// pre-measured content dims (set at build); read for `content`, never overwritten.
 fn recalculate_size(node: anytype) void {
     for (node.children.items) |c| recalculate_size(c);
@@ -152,7 +152,7 @@ fn finalize_axis(rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p
 // ============================ Placement (pass 3) =============================
 
 /// Assign global positions top-down. Pure geometry — sizes are already resolved,
-/// so this never consults the host (`ctx`). `node` is `anytype` (a `*Node(Tags)`);
+/// so this never consults the host (`ctx`). `node` is `anytype` (a `*Node(RenderFlags)`);
 /// only tag-agnostic fields are touched, so the walk monomorphizes per node type.
 fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
     const s: *Size = &(node.size orelse return);
