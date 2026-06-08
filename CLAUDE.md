@@ -18,23 +18,24 @@ Requires Zig 0.15.2+. Dependencies (SDL3, SDL3 TTF) are fetched automatically vi
 
 ### Main Loop (`src/main.zig`)
 
-`App` owns all state. `App.init()` handles SDL/window setup only. `App.setup()` is called once after `App` is stable on the stack — it initialises the font, `Resources`, the ECS `World` (spawning the player entity), the per-frame arena, and the `Ui` (safe because internal pointers are set after the struct address is fixed).
+`App` owns all state. `App.init()` handles SDL/window setup only. `App.setup()` is called once after `App` is stable on the stack — it initialises the font, `Resources`, the ECS `World` (spawning the player entity), the per-frame arena, and the UI context (`UiCtx`, safe because internal pointers are set after the struct address is fixed).
 
 Each frame:
-1. **Events** — SDL3 event poll writes host input into `resources.input`
-2. **Mark** — event stage: `ui.mark_at(prev_root, …)` flags last frame's tree from this frame's input
+1. **Events** — SDL3 event poll writes host input into `resources.input`; a left-click calls `ui.mark(.clicked, x, y)`
+2. **Mark** — `ui.mark(.hovering, x, y)` hit-tests last frame's interaction-slot rects and sets flags (iterates the slot pool — no tree walk)
 3. **Update** — `ecs.run(&world, &resources, system)` advances sim systems
 4. **Build UI** — `ui.beginFrame()`, arena reset, `build_ui()` constructs a fresh node tree (reads cache + world, mutates components inline on interaction)
 5. **Layout** — `root.set_global_pos()` solves sizes (per-axis `SizeRule`: fixed/content/pct_of_parent/fit_children) then resolves all positions; pure (no host callback — content is host-measured at build into `data_*`)
-6. **Render** — userland render loop in `main.zig`: `root.iterate()` walks the tree and draws each node by its `tags` (e.g. `if (node.tags.text) widgets.draw_text(...)`); retain `root` as `prev_root`; `ui.endFrame()`
+6. **Stamp** — `ui.stamp_rects(root)` copies each queried node's resolved rect into its interaction slot, feeding next frame's mark (step 2)
+7. **Render** — userland render loop in `main.zig`: `root.iterate()` walks the tree and draws each node by its `render_flags` (e.g. `if (node.render_flags.text) widgets.draw_text(...)`); then `ui.endFrame()`
 
-Key `App` fields: `resources: res.Resources`, `world`, `player`, `ui: widgets.Ui`, `frame_arena` (reset each frame), `prev_root` (last frame's tree, kept for the event-stage mark before the reset).
+Key `App` fields: `resources: res.Resources`, `world`, `player`, `ui: widgets.UiCtx`, `frame_arena` (reset each frame). No retained `prev_root` — the interaction slot pool bridges the frame boundary instead.
 
 ### UI Engine (`src/ui/`) and widgets (`src/widgets.zig`)
 
-A standalone, immediate-mode UI building language: the node tree is rebuilt every frame from the arena; persistence (text caches, interaction state) lives in a key-addressed cache. The engine is generic (`Ui(StateNs, Res)` + `Node(Tags)`) and imports nothing from the game — including rendering, which is host policy: core stores the tree + node `state`/`tags` and exposes `root.iterate()`, but draws nothing. `src/widgets.zig` is the host's concrete binding (`Ui = ui.Ui(UiState, Resources)`, `Node = ui.Node(Tags)`) plus the widget functions (`label`, `button`) and draw primitives (`draw_text`).
+A standalone, immediate-mode UI building language: the node tree is rebuilt every frame from the arena; persistence (text caches, interaction state) lives in a key-addressed cache. The engine is generic (`Ctx(StateNs, IntFlags, Res)` + `Node(RenderFlags)`) and imports nothing from the game — including rendering, which is host policy: core stores the tree + node `data`/`render_flags` and exposes `root.iterate()`, but draws nothing. `src/widgets.zig` is the host's concrete binding (`UiCtx = ui.Ctx(UiState, Interaction, Resources)`, `Node = ui.Node(RenderFlags)`) plus the widget functions (`container`, `text_container`) and draw primitives (`draw_text`). Interaction flags (`Interaction`) and render flags (`RenderFlags`) are host-defined types passed into the engine.
 
-**See [`src/ui/README.md`](src/ui/README.md) for the full architecture** — Node/features, the key-cache (pools + handles), interaction (marking the tree, transient vs latched flags, lazy slots), layout (`Anchor` + `ChildrenAlign`), how to write a widget, and the roadmap (autolayout, sprites).
+**See [`src/ui/README.md`](src/ui/README.md) for the full architecture** — Node/features, the key-cache (pools + handles), interaction (slot-based hit-testing, transient vs latched flags, lazy slots), layout (`Anchor` + `ChildrenAlign`), how to write a widget, and the roadmap (autolayout, sprites).
 
 ### Supporting Modules
 
@@ -43,7 +44,7 @@ A standalone, immediate-mode UI building language: the node tree is rebuilt ever
 - `src/ecs.zig` — `ecs.run(world, res, system)` + Bevy-style `Query`/`Single`/`MaybeSingle` params
 - `src/systems.zig` — systems (e.g. `update_counter`)
 - `src/font.zig` — `TextData` (text buffer the UI caches and renders); leaf data module
-- `src/res.zig` — `Resources` (font, renderer, window, time, input); the host bundle, held by `Ui` as `*Res` and passed to systems
+- `src/res.zig` — `Resources` (font, renderer, window, time, input); the host bundle, held by `Ctx` as `*Res` and passed to systems
 - `src/root.zig` — library root, re-exports `sdl`, `ui`, `widgets`, `comp`, `tag`, `font`, `res`, `world`, `ecs`, `systems`
 
 ### Assets

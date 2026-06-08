@@ -231,19 +231,19 @@ combinators and the `strictness`-weighted sibling distribution.
 
 ## Writing a widget
 
-A widget composes a base **`container`** (a fresh node with identity, a default size,
-and a `relative` layout, attached to its parent) plus zero or more *feature mixins*
-that layer state onto it — mirroring how a `Node` composes optional feature fields:
+A widget composes a base **`container`** (a fresh node with identity + the given
+`layout`/`size`, attached to its parent) plus zero or more *feature mixins* that layer
+state onto it — mirroring how a `Node` composes optional feature fields:
 
 ```zig
-// Base: every node gets its key here, hashed from the PARENT's key + id, so identity
-// is structural (no seed threaded by hand). Universal identity → queryable by anyone.
-pub fn container(u, parent, id) !*Node {
+// Base: key hashed from the PARENT's key + id (structural identity, no hand-threaded
+// seed). `parent` is optional — pass null to build a root. layout/size wired if given.
+pub fn container(u, parent: ?*Node, id, layout: ?Layout, size: ?Size) !*Node {
     const node = try Node.create(u.arena, id);
-    node.key = ui.key(parent.key orelse 0, id);      // seed = parent identity
-    _ = node.with_size(ui.Size.init(.fit_children, .fit_children, null))
-            .with_layout(ui.Layout.init(.relative, null));
-    try parent.add_child(u.arena, node);
+    node.key = ui.key(if (parent) |p| (p.key orelse 0) else 0, id);
+    if (layout) |l| _ = node.with_layout(l);
+    if (size) |s| _ = node.with_size(s);
+    if (parent) |p| try p.add_child(u.arena, node);
     return node;
 }
 
@@ -257,25 +257,21 @@ fn add_text_data(u, node, text) !void {
     node.render_flags = .{ .text = true };           // how the render walk draws it
 }
 
-// Widgets = container + features. They differ by intent, not mechanism.
-pub fn label(u, parent, id, text) !*Node {            // static text
-    const node = try container(u, parent, id);
-    try add_text_data(u, node, text);
-    return node;
-}
-pub fn button_with_text(u, parent, id, text) !*Node { // container + text, queryable
-    const node = try container(u, parent, id);
+// A widget = container + features. `text_container` is container + cached text;
+// it's queryable like any keyed node, so it doubles as a button.
+pub fn text_container(u, parent, id, layout, text) !*Node {
+    const node = try container(u, parent, id, layout, Size.init(.content, .content, null));
     try add_text_data(u, node, text);
     return node;
 }
 
 // read interaction off the node (read-through: allocates/keeps the slot):
-//   const btn = try button_with_text(u, root, "ok", "OK");
+//   const btn = try text_container(u, root, "ok", layout, "OK");
 //   if (btn.query(u).clicked) { ... }
 ```
 
-The root has no parent, so the host seeds it once (`root.key = ui.key(0, "root")`);
-every descendant threads off it automatically.
+The root has no parent, so the host builds it with `container(u, null, "root", …)` —
+the seed falls back to the `0` base, and every descendant threads off it automatically.
 
 Add a data type to `UiState` to make a node cacheable; add a flag to `Interaction`
 to give it new interactive behaviour.
