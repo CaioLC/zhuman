@@ -15,8 +15,6 @@ const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
-const ROOT_SEED: u64 = 0;
-
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     window: sdl.video.Window,
@@ -28,9 +26,6 @@ const App = struct {
     player: ha.world.Entity,
     frame_arena: std.heap.ArenaAllocator,
     ui: widgets.UiCtx,
-    /// Last frame's (laid-out) node tree, kept across the frame boundary so the
-    /// event stage can mark it before the arena is reset. `null` on frame 0.
-    prev_root: ?*widgets.Node,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -57,7 +52,6 @@ const App = struct {
             .player = 0,
             .frame_arena = undefined,
             .ui = undefined,
-            .prev_root = null,
         };
     }
 
@@ -110,20 +104,13 @@ pub fn main() !void {
                 .mouse_button_down => |mb| {
                     app.resources.input.mouse_x = mb.x;
                     app.resources.input.mouse_y = mb.y;
-                    if (mb.button == .left) app.resources.input.mouse_down = true;
+                    if (mb.button == .left) {
+                        app.resources.input.mouse_down = true;
+                        app.ui.mark(.clicked, mb.x, mb.y);
+                    }
                 },
                 else => {},
             }
-        }
-
-        // Event stage: pepper last frame's (laid-out) tree with interaction flags
-        // from this frame's input. Conditions are userland — the engine just walks
-        // and stamps. `active` would be latched here on a press and cleared on a
-        // release; left out until there's a real use (no release tracking yet).
-        if (app.prev_root) |prev| {
-            const in = app.resources.input;
-            ui.mark_at(&app.ui, prev, .hovering, in.mouse_x, in.mouse_y);
-            if (in.mouse_down) ui.mark_at(&app.ui, prev, .clicked, in.mouse_x, in.mouse_y);
         }
 
         // Update Stage
@@ -132,11 +119,12 @@ pub fn main() !void {
         // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.update_counter);
         // 3. update ui
+        app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
         app.ui.beginFrame();
-        _ = app.frame_arena.reset(.retain_capacity); // prev_root's memory dies here
-        const root = try build_ui(&app.ui, &app.world, app.player);
+        _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
+        const root = try build_ui(&app.ui, &app.world);
         try root.set_global_pos();
-        app.prev_root = root; // retain for next frame's event-stage marking
+        ui.stamp_rects(&app.ui, root); // capture rects into interaction slots for next frame's hit-test
 
         // Render Stage
         // window
@@ -154,47 +142,52 @@ pub fn main() !void {
     }
 }
 
-fn build_ui(u: *widgets.UiCtx, world: *ha.world.World, player: ha.world.Entity) !*widgets.Node {
-    const a = u.arena;
+fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
+    // memory
+    var char_buf: [64]u8 = undefined;
 
-    const root = try widgets.Node.create(a, "root");
-    // Root sizes to the window — measured here at build (host policy), not via an
-    // engine callback. `content` then sizes to these dims; pct children resolve
-    // against them (a definite parent), so the layout tracks window resizes.
-    const ww, const wh = try u.res.window.getSize();
-    _ = root.with_size(ui.Size.initContent(@floatFromInt(ww), @floatFromInt(wh), null));
-    _ = root.with_layout(ui.Layout.init(.top_left, .centered_wrapped));
+    // nodes
+    const ww, const wh = try ui_ctx.res.window.getSize();
+    const root = try widgets.container(
+        ui_ctx,
+        null,
+        "root",
+        ui.features.Layout.init(.top_left, .centered_wrapped),
+        ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null),
+    );
+
+    const counter_div = try widgets.container(
+        ui_ctx,
+        root,
+        "c_div",
+        ui.features.Layout.init(.top_left, .centered),
+        ui.features.Size.init(.{ .pct_of_parent = 1.0 }, .fit_children, null),
+    );
 
     // Counter: clickable, shows the live component value. Click resets it —
     // mutating the component inline (Fork 2), no callback.
-    const c = world.get(player, comp.Counter).?;
-    var cbuf: [64]u8 = undefined;
-    const ctext = std.fmt.bufPrint(&cbuf, "Counter: {d:.0}", .{c.v}) catch "?";
-    const counter = try widgets.button(u, root, ROOT_SEED, "counter", ctext);
-    if (counter.query(u).clicked) {
+    const counter_q = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
+    const c = counter_q.get();
+    const counter = try widgets.text_container(
+        ui_ctx,
+        counter_div,
+        "counter",
+        ui.features.Layout.init(.relative, null),
+        std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?",
+    );
+
+    if (counter.query(ui_ctx).clicked) {
         c.v = 0;
         c.buffer = 0;
     }
 
-    const left = try widgets.Node.create(a, "left_panel");
-    // Fixed 300 wide, full window height via pct_of_parent — root is `content`
-    // (the window size), a definite parent, so this tracks window resizes.
-    _ = left.with_size(ui.Size.init(.{ .fixed = 300 }, .{ .pct_of_parent = 1.0 }, null));
-    _ = left.with_layout(ui.Layout.init(.top_left, .vertical));
-    try root.add_child(a, left);
-    const left_seed = ui.key(ROOT_SEED, "left_panel");
-    inline for (.{ "population", "demand", "produce", "calories", "stockpile" }) |id| {
-        _ = try widgets.label(u, left, left_seed, id, "");
-    }
-
-    const right = try widgets.Node.create(a, "right_panel");
-    _ = right.with_size(ui.Size.initFixed(300, 600, null));
-    _ = right.with_layout(ui.Layout.init(.top_right, .vertical_right));
-    try root.add_child(a, right);
-    const right_seed = ui.key(ROOT_SEED, "right_panel");
-    inline for (.{ "calendar", "money" }) |id| {
-        _ = try widgets.label(u, right, right_seed, id, "");
-    }
+    _ = try widgets.text_container(
+        ui_ctx,
+        root,
+        "Box",
+        ui.features.Layout.init(.relative, null),
+        std.fmt.bufPrint(&char_buf, "Box", .{}) catch "?",
+    );
 
     return root;
 }

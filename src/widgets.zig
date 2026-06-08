@@ -41,7 +41,7 @@ pub const Node = ui.Node(RenderFlags);
 
 const TextData = zfont.TextData;
 
-// --- Text widget rendering ---------------------------------------------------
+// --- Helper Functions ---------------------------------------------------
 
 /// Draw a `.text` node: resolve its cached `TextData` via `node.data` and blit it.
 /// One render primitive per `RenderFlags` aspect; the host's render loop (in `main.zig`)
@@ -68,38 +68,52 @@ pub fn draw_text(u: *UiCtx, node: *Node) void {
     u.res.renderer.renderTexture(texture, null, dst) catch return;
 }
 
-// --- Widget functions --------------------------------------------------------
-// Each takes `(parent, seed, id)`, computes its own key `k`, self-serves
-// persistent state from the cache, builds an ephemeral arena node, attaches it
-// to `parent`, and returns the `*Node`. Interactive widgets also carry an
-// `interaction_key` (so the event-stage `mark_*` walks can flag them); read
-// their state with `node.query(u)`.
-
-/// Build a `.relative` text node, cache+update its `TextData`, attach to parent.
-/// Returns the node and its key `k = ui.key(seed, id)`, so an interactive caller
-/// can reuse the key without re-hashing.
-fn make_text(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !struct { *Node, u64 } {
-    const k = ui.key(seed, id);
-    const idx = u.cache(k, TextData);
-    u.pool(TextData).get(idx).update(text);
+/// Feature mixin: give `node` cached text — measured at build, content-sized, and
+/// flagged for the render walk. Requires `node.key` (every node gets one in
+/// `container`) and an existing `node.size` (the default from `container`).
+fn add_text_data(ctx: *UiCtx, node: *Node, text: []const u8) !void {
+    const idx = ctx.cache(node.key.?, TextData);
+    ctx.pool(TextData).get(idx).update(text);
+    node.data = idx;
 
     // Measure the content here, at build — the host has the font on hand. The
     // engine never measures; it just reads these dims (`content` rule + renderer).
-    const tw, const th = try u.res.font.getStringSize(text);
-
-    const node = try Node.create(u.arena, id);
-    _ = node.with_size(ui.Size.initContent(@floatFromInt(tw), @floatFromInt(th), null));
-    _ = node.with_layout(ui.Layout.init(.relative, null));
-    node.data = idx;
+    const tw, const th = try ctx.res.font.getStringSize(text);
+    var size = node.size.?;
+    size.w = .content;
+    size.h = .content;
+    size.data_width = @floatFromInt(tw);
+    size.data_height = @floatFromInt(th);
+    node.size = size;
     node.render_flags = .{ .text = true }; // flags how the host's render walk draws it
-    try parent.add_child(u.arena, node);
-    return .{ node, k };
 }
 
-/// A non-interactive text leaf. `text` is copied into the cached `TextData`, so
-/// a build-time slice (e.g. a stack `bufPrint`) is safe to pass.
-pub fn label(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
-    const node, _ = try make_text(u, parent, seed, id, text);
+// --- Widget functions --------------------------------------------------------
+//
+// Each takes `(u, parent, id, …)` and derives its key from the **parent's key** +
+// `id`, self-serves persistent state from the cache, builds an ephemeral arena node,
+// and attaches it to `parent`. Widgets compose `container` + feature mixins.
+// To make a node carry data, add the data type to UiState.
+// To make a node interactive, add the flag to Interaction (the IntFlags pool).
+
+/// The base widget: a fresh node whose `key` is hashed from its **parent's key** + its
+/// `id`, so identity is structural (see the key-cache docs) — two same-`id` nodes under
+/// different parents never collide. `parent` is **optional**: pass `null` to build a
+/// root (the seed falls back to the `0` base and the node is left unattached). Wires the
+/// given `size`/`layout` if provided. The key is universal — any node is markable/queryable.
+pub fn container(ui_ctx: *UiCtx, parent: ?*Node, id: []const u8, layout: ?ui.Layout, size: ?ui.Size) !*Node {
+    const node = try Node.create(ui_ctx.arena, id);
+    node.key = ui.key(if (parent) |p| (p.key orelse 0) else 0, id);
+    if (layout) |l| _ = node.with_layout(l);
+    if (size) |s| _ = node.with_size(s);
+    if (parent) |p| try p.add_child(ui_ctx.arena, node);
+    return node;
+}
+
+/// A static text node: `container` + text.
+pub fn text_container(ui_ctx: *UiCtx, parent: *Node, id: []const u8, layout: ui.Layout, text: []const u8) !*Node {
+    const node = try container(ui_ctx, parent, id, layout, ui.Size.init(.content, .content, null));
+    try add_text_data(ui_ctx, node, text);
     return node;
 }
 
@@ -122,15 +136,4 @@ test "interaction store: active latches, transient flags clear each frame" {
     try std.testing.expect(!after.hovering);
     try std.testing.expect(!after.clicked);
     try std.testing.expect(after.active); // latched — survives the frame boundary
-}
-
-/// An interactive text leaf. Carries an `interaction_key` so the event-stage
-/// `mark_*` walks can flag it. Returns the `*Node`; read its interaction with
-/// `node.query(u)` — the flags reflect the previous frame's geometry against this
-/// frame's input (immediate-mode's inherent one-frame delay):
-/// `const b = try button(..); if (b.query(u).clicked) ...`.
-pub fn button(u: *UiCtx, parent: *Node, seed: u64, id: []const u8, text: []const u8) !*Node {
-    const node, const k = try make_text(u, parent, seed, id, text);
-    node.interaction_key = k; // opt-in: only keyed nodes are marked/queryable
-    return node;
 }

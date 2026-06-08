@@ -31,11 +31,11 @@ pub fn Node(comptime RenderFlags: type) type {
         /// render state. The host resolves the concrete state type. `null` for
         /// data-less, pure layout containers.
         data: ?u32,
-        /// Interaction key (opt-in). Non-null only for interactive widgets; the key
-        /// bridges the frame boundary — `mark_*` writes flags against it at the event
-        /// stage and this frame's build reads them back via `query`. The flags live in
-        /// `Ctx`'s keyed interaction store, not here. `null` = non-interactive.
-        interaction_key: ?u64,
+        /// Stable identity for this node — the hash of its parent seed + local id, and the
+        /// key into every persistent cache pool it uses (render state, interaction store).
+        /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
+        /// re-derives identically and re-finds the node's slots. `null` = caches nothing.
+        key: ?u64,
         /// Host-defined render flags (policy). Core only carries them; the host's
         /// render walk reads them to decide what/how to draw. Defaults to all-clear.
         render_flags: RenderFlags,
@@ -82,7 +82,7 @@ pub fn Node(comptime RenderFlags: type) type {
                 .parent = null,
                 .children = .empty,
                 .data = null,
-                .interaction_key = null,
+                .key = null,
                 .render_flags = .{},
                 .size = null,
                 .layout = null,
@@ -140,12 +140,12 @@ pub fn Node(comptime RenderFlags: type) type {
         }
 
         /// This node's interaction state this frame (read-through: allocates/keeps
-        /// its store slot). **Panics** if the node is non-interactive (no
-        /// `interaction_key`). `u` is duck-typed (the concrete `Ctx`); the return
-        /// type is the host's interaction-flag struct (`Ctx.Interaction`).
+        /// its store slot). **Panics** if the node has no `key`. `u` is duck-typed
+        /// (the concrete `Ctx`); the return type is the host's interaction-flag
+        /// struct (`Ctx.Interaction`).
         pub fn query(self: *Self, u: anytype) @TypeOf(u.*).Interaction {
-            const k = self.interaction_key orelse
-                std.debug.panic("query() on non-interactive node '{s}' (no interaction_key)", .{self.id});
+            const k = self.key orelse
+                std.debug.panic("query() on a node with no key: '{s}'", .{self.id});
             return u.interactionOf(k);
         }
     };
@@ -165,20 +165,17 @@ fn node_rect(node: anytype) ?geometry.Rect {
     };
 }
 
-/// Walk the tree and set `flag` on every keyed node whose rect contains (x, y).
-/// Called at the event stage against the *previous* frame's (already laid-out)
-/// tree; writes the flag into the keyed interaction store so this frame's build
-/// can read it back. `u`, `node`, and `flag` are duck-typed (the concrete `Ctx`,
-/// `*Node(RenderFlags)`, and a field of the host's interaction-flag type) to keep
-/// this module free of the binding. Mechanism only: userland supplies the point —
-/// mouse, touch, gamepad cursor — and decides what the flag means.
-pub fn mark_at(u: anytype, node: anytype, comptime flag: anytype, x: f32, y: f32) void {
-    if (node.interaction_key) |k| {
-        if (node_rect(node)) |r| {
-            if (r.contains(x, y)) u.setFlag(k, flag, true);
-        }
+/// Capture each interactive node's resolved rect into its interaction slot, so next
+/// frame's event stage can hit-test from the slot pool alone (`Ctx.mark`) with no
+/// tree walk. Only stamps nodes that already have a live slot — i.e. were `query`'d
+/// this frame; `stampRect` no-ops otherwise. Call once after `set_global_pos`, before
+/// the arena (and this tree) is reset. `u`/`node` are duck-typed (the concrete `Ctx`
+/// / `*Node(RenderFlags)`) to keep this module free of the binding.
+pub fn stamp_rects(u: anytype, node: anytype) void {
+    if (node.key) |k| {
+        if (node_rect(node)) |r| u.stampRect(k, r);
     }
-    for (node.children.items) |child| mark_at(u, child, flag, x, y);
+    for (node.children.items) |child| stamp_rects(u, child);
 }
 
 test {

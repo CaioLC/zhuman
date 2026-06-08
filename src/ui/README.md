@@ -57,8 +57,8 @@ binding `UiCtx`.)
 
 | File | Responsibility |
 |---|---|
-| `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `mark_at` tree-walk. Re-exports everything. |
-| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, interaction store. |
+| `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `stamp_rects` post-layout walk. Re-exports everything. |
+| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, and the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
@@ -70,19 +70,20 @@ The host loop drives the engine in a fixed order (`src/main.zig`):
 
 ```
 1. poll events            → write host input (Resources.input)
-2. mark_at(prev_root, …)  → event stage: flag last frame's tree from this frame's input
+2. ui.mark(flag, x, y)    → event stage: hit-test last frame's slot rects, set flags
 3. ui.beginFrame()        → frame += 1
 4. arena.reset()          → last frame's tree dies
 5. build_ui(&ui, …)       → construct a fresh node tree (widgets read cache + world)
 6. root.set_global_pos()  → solve sizes (per-axis rules) + resolve every position
-7. host render walk       → host iterates the tree (root.iterate()) and draws
-8. ui.endFrame()          → prune untouched cache slots, then clearTransient
-   (retain root as prev_root for next frame's step 2)
+7. ui.stamp_rects(root)   → copy each queried node's rect into its interaction slot
+8. host render walk       → host iterates the tree (root.iterate()) and draws
+9. ui.endFrame()          → prune untouched cache slots, then clearTransient
 ```
 
-The one-frame delay is inherent and intentional: at build time (step 5) this
-frame's geometry doesn't exist yet, so interaction is marked against the
-*previous* frame's laid-out tree (step 2, before the reset).
+The one-frame delay is inherent and intentional: at the event stage (step 2) this
+frame's geometry doesn't exist yet, so `mark` hit-tests the rects stamped after the
+*previous* frame's layout (step 7). The interaction **slot pool** — not a retained
+node tree — is what carries that geometry across the frame boundary.
 
 ## Node & features
 
@@ -93,8 +94,8 @@ A `Node` is the atom (generic over the host's `RenderFlags`). It composes option
 Node(RenderFlags) {
     id: []const u8,            // human-readable, for debugging
     parent, children,
-    data: ?u32,               // handle into a render-state pool (e.g. TextData); null for containers
-    interaction_key: ?u64,    // opt-in interaction identity; null = non-interactive
+    data: ?u32,               // handle into a render-state pool (e.g. TextData); null = no render state
+    key: ?u64,                // stable identity → the node's slot in every cache pool; null = caches nothing
     render_flags: RenderFlags, // host render flags (policy); engine never reads them
     size:  ?Size,             // per-axis SizeRule + padding + resolved box + measured data_*
     layout: ?Layout,          // positional: anchor + children alignment
@@ -129,13 +130,14 @@ slot-map:
 - **Prune at the frame boundary.** A slot not *touched* (acquired) this frame is
   freed next `endFrame`. Touch = stay alive.
 
-## Interaction: marking the tree
+## Interaction: hit-testing slots
 
-Interaction is **opt-in** (only a node with an `interaction_key` participates) and
-follows the mechanism/policy split strictly. **The flag vocabulary is host-defined**,
-exactly like `RenderFlags`: the host passes its `Interaction` struct as the `IntFlags`
-parameter, and the engine stores it opaquely in the keyed interaction store — it owns
-neither the field names nor what they mean. Today's host (`widgets.zig`):
+Every node built through `container` carries a `key`, so any node is queryable —
+there's no separate opt-in. A node *participates* in hit-testing only when something
+`query`s it (that's what keeps its interaction slot alive). **The flag vocabulary is
+host-defined**, exactly like `RenderFlags`: the host passes its `Interaction` struct
+as the `IntFlags` parameter, and the engine stores it opaquely — it owns neither the
+field names nor what they mean. Today's host (`widgets.zig`):
 
 ```zig
 pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
@@ -153,34 +155,40 @@ fields. Fields *not* listed latch — they persist across frames until the host 
 them. Here `hovering`/`clicked` are recomputed every frame; `active` latches. Add a
 field (`dragging`, `focused`) by editing the host struct — no engine change.
 
-**Core (mechanism):** `mark_at(u, node, flag, x, y)` walks the tree and, for every
-keyed node whose live rect `contains(x, y)`, calls `u.setFlag` — writing the flag
-into the keyed interaction store. `flag` is comptime-checked against the host's
-`Interaction` fields (`std.meta.FieldEnum`). The point is passed *in*; the engine
-never asks where it came from. (Containment semantics: nested nodes all under the
-point are all flagged — the ancestor stack, like CSS `:hover`.)
+The interaction store is a `Pool(Slot)` where `Slot = { flags, rect }`. A slot exists
+only for a key that's been `query`'d, and it carries that node's last laid-out rect —
+so **hit-testing iterates the live slots, never the node tree**:
+
+- **`ui.mark(flag, x, y)` (mechanism, event stage):** loops the live slots and sets
+  `flag` on each whose stored `rect.contains(x, y)`. **O(interactive)**, not O(all).
+  `flag` is comptime-checked against the host's `Interaction` fields
+  (`std.meta.FieldEnum`); the point is passed *in* (mouse/touch/gamepad — the engine
+  never asks where from). Each interactive node is flagged independently (not the
+  whole ancestor stack — there's no tree to walk).
+- **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and copies each
+  *already-queried* node's rect into its slot (`stampRect` no-ops for keys with no
+  slot). This is what feeds the next frame's `mark`.
 
 **Host (policy):** defines the vocabulary, decides the conditions, and reads the
-result. `button` sets an `interaction_key` and returns the node; the host reads
-`node.query(u)` (a read-through query returning the host's `Interaction` struct) and
-writes `if (btn.query(u).clicked)`. The only place input is read is the host's event
-stage and its widgets — the generic engine stays input-agnostic (works for mouse,
-touch, gamepad, anything).
+result. The host reads `node.query(u)` (a read-through query returning the host's
+`Interaction` struct) and writes `if (btn.query(u).clicked)`. The only place input is
+read is the host's event stage and its widgets — the generic engine stays
+input-agnostic.
 
 ### Persistence bridge & lazy slots
 
-The tree is reset every frame, so marks can't live on nodes. The host keeps
-`prev_root` across the boundary; the event stage marks it *before* the reset; this
-frame's build reads flags back from the keyed store by key.
+The tree is reset every frame, so interaction can't live on nodes. The **slot pool**
+is the bridge: rects are stamped into it after layout, and flags are written into it
+at the event stage — both survive the arena reset, so no `prev_root` is retained.
 
-Slots are **lazy**: a store slot exists only after `acquire` — called by `setFlag`
-(a mark *hit*) or `interactionOf` (a *read*). There is no per-node stamping, so
-cost ≈ (nodes hit) + (nodes read), not node count. A slot stays alive only while
-*touched* each frame:
+Slots are **lazy**: a store slot exists only after `acquire` — called by
+`interactionOf` (a `query` *read*) or `setFlag` (a direct write). `stampRect` and
+`mark` only ever touch *existing* slots, so a node nobody queries gets no slot, no
+rect, and no hit-test — cost ≈ (queried nodes), not node count. A slot stays alive
+only while *touched* (acquired) each frame:
 
-- Marks touch at the pre-increment frame number, reads at post-increment — so a
-  hit-but-**unread** slot is pruned that same iteration (a hover nobody observes
-  costs one transient slot for one frame).
+- A node not `query`'d this frame is pruned at `endFrame`, dropping straight out of
+  next frame's hit-test set.
 - **Consequence for `active`:** latched state persists *only while the widget is
   read every frame* (reads keep the slot alive). Stop reading a node → its slot is
   pruned → `active` is lost. For normal widgets (read each frame in build) this is
@@ -223,40 +231,54 @@ combinators and the `strictness`-weighted sibling distribution.
 
 ## Writing a widget
 
-A widget is a function that takes `(u, parent, seed, id, …)`, self-serves any
-persistent state from the cache, builds an ephemeral node, and attaches itself:
+A widget composes a base **`container`** (a fresh node with identity, a default size,
+and a `relative` layout, attached to its parent) plus zero or more *feature mixins*
+that layer state onto it — mirroring how a `Node` composes optional feature fields:
 
 ```zig
-fn make_text(u, parent, seed, id, text) !struct { *Node, u64 } {
-    const k = ui.key(seed, id);
-    const idx = u.cache(k, TextData);          // handle into the TextData pool
-    u.pool(TextData).get(idx).update(text);    // copy text into the cached slot
-    const tw, const th = u.res.font.getStringSize(text); // host measures, at build
-    const node = try Node.create(u.arena, id);  // Node = ui.Node(RenderFlags), bound by the host
-    _ = node.with_size(ui.Size.initContent(tw, th, null)); // both axes = content (stored in data_*)
-    _ = node.with_layout(ui.Layout.init(.relative, null));
-    node.data = idx;                           // payload handle
-    node.render_flags = .{ .text = true };     // flags how the render walk draws it
+// Base: every node gets its key here, hashed from the PARENT's key + id, so identity
+// is structural (no seed threaded by hand). Universal identity → queryable by anyone.
+pub fn container(u, parent, id) !*Node {
+    const node = try Node.create(u.arena, id);
+    node.key = ui.key(parent.key orelse 0, id);      // seed = parent identity
+    _ = node.with_size(ui.Size.init(.fit_children, .fit_children, null))
+            .with_layout(ui.Layout.init(.relative, null));
     try parent.add_child(u.arena, node);
-    return .{ node, k };                        // hand the key back so callers needn't re-hash
-}
-
-// Every widget returns its *Node (uniform). Interactive ones also set a key.
-pub fn label(u, parent, seed, id, text) !*Node {
-    const node, _ = try make_text(u, parent, seed, id, text);
     return node;
 }
 
-pub fn button(u, parent, seed, id, text) !*Node {
-    const node, const k = try make_text(u, parent, seed, id, text);
-    node.interaction_key = k;                  // opt-in: now markable & queryable
+// Feature mixin: cache + measure text, content-size the node, flag it for rendering.
+fn add_text_data(u, node, text) !void {
+    const idx = u.cache(node.key.?, TextData);       // handle into the TextData pool
+    u.pool(TextData).get(idx).update(text);          // copy text into the cached slot
+    node.data = idx;
+    const tw, const th = u.res.font.getStringSize(text); // host measures, at build
+    // …set node.size to .content with data_width/height = tw/th…
+    node.render_flags = .{ .text = true };           // how the render walk draws it
+}
+
+// Widgets = container + features. They differ by intent, not mechanism.
+pub fn label(u, parent, id, text) !*Node {            // static text
+    const node = try container(u, parent, id);
+    try add_text_data(u, node, text);
+    return node;
+}
+pub fn button_with_text(u, parent, id, text) !*Node { // container + text, queryable
+    const node = try container(u, parent, id);
+    try add_text_data(u, node, text);
     return node;
 }
 
 // read interaction off the node (read-through: allocates/keeps the slot):
-//   const btn = try button(u, root, s, "ok", "OK");
+//   const btn = try button_with_text(u, root, "ok", "OK");
 //   if (btn.query(u).clicked) { ... }
 ```
+
+The root has no parent, so the host seeds it once (`root.key = ui.key(0, "root")`);
+every descendant threads off it automatically.
+
+Add a data type to `UiState` to make a node cacheable; add a flag to `Interaction`
+to give it new interactive behaviour.
 
 **Rendering is entirely host-side.** The engine has no draw feature — it stores
 the tree + node `data`/`render_flags` and exposes `root.iterate()` (a zero-alloc
@@ -273,8 +295,8 @@ while (it.next()) |node| {
 ```
 
 **Sizing is host-measured too.** The engine has no size callback either — the
-host measures content at build (`make_text` asks the font for the text's px
-extent) and stores it via `Size.initContent(w, h, …)` → `data_width`/`data_height`.
+host measures content at build (`add_text_data` asks the font for the text's px
+extent) and stores it on the node's `Size` as `data_width`/`data_height`.
 The `content` rule sizes to those and `draw_text` draws to them, so the whole
 solve is pure and `set_global_pos` takes no `ctx`. Widgets read `u.res` (the host
 binding) when they measure; the *generic* engine code never does.
@@ -304,9 +326,12 @@ binding) when they measure; the *generic* engine code never does.
   violation-resolution pass that distributes slack/overflow among siblings.
 - **Sprites:** dropped with the old `Data`; reintroduce as a widget fn + a state
   type registered in `StateNs` when needed.
-- **Interactables-only marking:** `mark_at` currently walks the whole tree and
-  skips unkeyed nodes. For large trees, collect keyed nodes into a flat per-frame
-  list and iterate that instead — O(interactive) rather than O(all).
+- **Interactables-only marking — done.** The event stage (`ui.mark`) now iterates
+  the live interaction slots, each carrying its node's rect, so hit-testing is
+  O(interactive), not O(all) — no tree walk. The one O(all) pass left is
+  `stamp_rects` (it reads geometry that only exists on the tree); it could drop to
+  O(interactive) by having `query` push nodes onto a per-frame list, at the cost of
+  threading that list through `Ctx`.
 - **Full extraction:** the engine is now **callback-free** — rendering and sizing
   are host loops/data, not engine-invoked `*anyopaque` callbacks, so that
   type-erasure wart is gone. Lifting `src/ui/` into its own repo is mostly

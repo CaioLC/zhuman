@@ -29,16 +29,25 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// `Node.query`) can name the read-back return type without importing the host.
         pub const Interaction = IntFlags;
 
+        /// One interaction slot: the host's flags plus the node's last laid-out rect.
+        /// Keeping the rect here is what lets the event stage hit-test by iterating
+        /// live slots (`mark`) instead of walking the node tree — it's stamped in after
+        /// layout (`stampRect`) and so survives into the next frame's event stage.
+        pub const Slot = struct {
+            flags: IntFlags = .{},
+            rect: ?Rect = null,
+        };
+
         res: *Res,
         gpa: std.mem.Allocator, // persistent — owns the pools
         arena: std.mem.Allocator, // per-frame — owns the node tree
         frame: u64,
         pools: PoolsT,
-        /// Engine-owned interaction state, keyed by widget key. The persistence
-        /// substrate behind the per-node interaction flags: `mark_*` writes it at the
-        /// event stage, the build re-stamps nodes from it. Survives the frame-arena
-        /// reset (which the ephemeral node tree does not).
-        interactions: cache_mod.Pool(IntFlags) = .{},
+        /// Engine-owned interaction state, keyed by widget key. Every live slot is a
+        /// node that was `query`'d this frame — it carries that node's flags and rect.
+        /// `mark` writes flags at the event stage; the build reads them via
+        /// `interactionOf`. Survives the frame-arena reset (the node tree does not).
+        interactions: cache_mod.Pool(Slot) = .{},
 
         pub fn init(res: *Res, gpa: std.mem.Allocator, arena: std.mem.Allocator) Self {
             return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{} };
@@ -64,12 +73,12 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.pool(T).acquire(self.gpa, k, self.frame) catch @panic("ui cache OOM");
         }
 
-        /// Set one interaction flag for key `k` (called by the `mark_*` tree walks).
-        /// `flag` is checked against the host's `IntFlags` fields at comptime.
-        /// Acquiring keeps the slot alive this frame.
+        /// Set one interaction flag for key `k` directly (no hit-test). `flag` is
+        /// checked against the host's `IntFlags` fields at comptime. Acquiring keeps
+        /// the slot alive this frame.
         pub fn setFlag(self: *Self, k: u64, comptime flag: FlagEnum, val: bool) void {
             const idx = self.interactions.acquire(self.gpa, k, self.frame) catch @panic("ui interaction OOM");
-            @field(self.interactions.get(idx).*, @tagName(flag)) = val;
+            @field(self.interactions.get(idx).flags, @tagName(flag)) = val;
         }
 
         /// This key's interaction state. Zeroed (all flags off) the first frame a
@@ -78,7 +87,28 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// no interaction state until something marks or reads it — lazy slots).
         pub fn interactionOf(self: *Self, k: u64) IntFlags {
             const idx = self.interactions.acquire(self.gpa, k, self.frame) catch @panic("ui interaction OOM");
-            return self.interactions.get(idx).*;
+            return self.interactions.get(idx).flags;
+        }
+
+        /// Record `rect` on key `k`'s slot — but only if the slot already exists (i.e.
+        /// the node was `query`'d this frame). No-op otherwise, so non-queried nodes
+        /// never get a slot or a hit-test. Called by the post-layout `stamp_rects` walk.
+        pub fn stampRect(self: *Self, k: u64, rect: Rect) void {
+            if (self.interactions.index.get(k)) |idx| {
+                self.interactions.slots.items[idx].value.rect = rect;
+            }
+        }
+
+        /// Event-stage hit-test: set `flag` on every live slot whose stored rect
+        /// contains (x, y). O(interactive) — iterates the slot pool, not the node tree.
+        /// The rects are last frame's (stamped after that frame's layout); the point is
+        /// passed in (mouse/touch/gamepad — the engine never asks where it came from).
+        pub fn mark(self: *Self, comptime flag: FlagEnum, x: f32, y: f32) void {
+            for (self.interactions.slots.items) |*slot| {
+                if (!slot.live) continue;
+                const r = slot.value.rect orelse continue;
+                if (r.contains(x, y)) @field(slot.value.flags, @tagName(flag)) = true;
+            }
         }
 
         /// Reset the host's *transient* flags on every live slot, leaving latched
@@ -89,7 +119,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             for (self.interactions.slots.items) |*slot| {
                 if (!slot.live) continue;
                 inline for (IntFlags.transient) |name| {
-                    @field(slot.value, name) = false;
+                    @field(slot.value.flags, name) = false;
                 }
             }
         }
