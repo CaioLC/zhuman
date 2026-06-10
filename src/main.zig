@@ -143,51 +143,33 @@ pub fn main() !void {
 }
 
 fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
-    // memory
+    // "globals"
     var char_buf: [64]u8 = undefined;
-
-    // nodes
     const ww, const wh = try ui_ctx.res.window.getSize();
-    const root = try widgets.container(
-        ui_ctx,
-        null,
-        "root",
-        ui.features.Layout.init(.top_left, .centered_wrapped),
-        ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null),
-    );
 
-    const counter_div = try widgets.container(
-        ui_ctx,
-        root,
-        "c_div",
-        ui.features.Layout.init(.top_left, .centered),
-        ui.features.Size.init(.{ .pct_of_parent = 1.0 }, .fit_children, null),
-    );
-
-    // Counter: clickable, shows the live component value. Click resets it —
-    // mutating the component inline (Fork 2), no callback.
-    const counter_q = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
-    const c = counter_q.get();
-    const counter = try widgets.text_container(
-        ui_ctx,
-        counter_div,
-        "counter",
-        ui.features.Layout.init(.relative, null),
-        std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?",
-    );
-
-    if (counter.query(ui_ctx).clicked) {
-        c.v = 0;
-        c.buffer = 0;
+    // node graph + data
+    const root = try widgets.Node.create(ui_ctx.arena, "root");
+    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "div", root);
+    const counter = try widgets.Node.pcreate(ui_ctx.arena, "counter", center_div);
+    {
+        // counter data
+        const counter_q = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
+        const c = counter_q.get();
+        try widgets.data_text(ui_ctx, counter, std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?");
+        if (counter.query(ui_ctx).clicked) {
+            c.v = 0;
+            c.buffer = 0;
+        }
     }
+    const box = try widgets.Node.pcreate(ui_ctx.arena, "box", center_div);
+    try widgets.data_text(ui_ctx, box, "Box");
 
-    _ = try widgets.text_container(
-        ui_ctx,
-        root,
-        "Box",
-        ui.features.Layout.init(.relative, null),
-        std.fmt.bufPrint(&char_buf, "Box", .{}) catch "?",
-    );
+    // layout
+    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
+    _ = counter.with_layout(ui.features.Layout.init(.relative, null));
+    _ = box.with_layout(ui.features.Layout.init(.relative, null));
 
     return root;
 }

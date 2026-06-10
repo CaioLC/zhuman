@@ -50,8 +50,8 @@ const TextData = zfont.TextData;
 pub fn draw_text(u: *UiCtx, node: *Node) void {
     const idx = node.data orelse return;
     const td = u.pool(TextData).get(idx);
-    const s = node.size orelse return;
-    const l = node.layout orelse return;
+    const s = node.size;
+    const l = node.layout;
     const fmt = td.text() orelse return;
 
     var surface = u.res.font.renderTextSolid(fmt, zfont.white) catch return;
@@ -69,17 +69,18 @@ pub fn draw_text(u: *UiCtx, node: *Node) void {
 }
 
 /// Feature mixin: give `node` cached text — measured at build, content-sized, and
-/// flagged for the render walk. Requires `node.key` (every node gets one in
-/// `container`) and an existing `node.size` (the default from `container`).
-fn add_text_data(ctx: *UiCtx, node: *Node, text: []const u8) !void {
-    const idx = ctx.cache(node.key.?, TextData);
+/// flagged for the render walk. Apply it **after** the node is wired into the tree,
+/// so `node.key` is final (see `Node.rekey`). Overrides both size axes to `.content`,
+/// keeping the node's existing padding.
+pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
+    const idx = ctx.cache(node.key, TextData);
     ctx.pool(TextData).get(idx).update(text);
     node.data = idx;
 
     // Measure the content here, at build — the host has the font on hand. The
     // engine never measures; it just reads these dims (`content` rule + renderer).
     const tw, const th = try ctx.res.font.getStringSize(text);
-    var size = node.size.?;
+    var size = node.size;
     size.w = .content;
     size.h = .content;
     size.data_width = @floatFromInt(tw);
@@ -90,32 +91,10 @@ fn add_text_data(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 
 // --- Widget functions --------------------------------------------------------
 //
-// Each takes `(u, parent, id, …)` and derives its key from the **parent's key** +
-// `id`, self-serves persistent state from the cache, builds an ephemeral arena node,
-// and attaches it to `parent`. Widgets compose `container` + feature mixins.
-// To make a node carry data, add the data type to UiState.
+// Build a node with `Node.create`/`pcreate` (the latter wires it to a parent, so its
+// `key` is final), then attach data with a mixin like `data_text` and layout with
+// `with_size`/`with_layout`. To make a node carry data, add the data type to UiState.
 // To make a node interactive, add the flag to Interaction (the IntFlags pool).
-
-/// The base widget: a fresh node whose `key` is hashed from its **parent's key** + its
-/// `id`, so identity is structural (see the key-cache docs) — two same-`id` nodes under
-/// different parents never collide. `parent` is **optional**: pass `null` to build a
-/// root (the seed falls back to the `0` base and the node is left unattached). Wires the
-/// given `size`/`layout` if provided. The key is universal — any node is markable/queryable.
-pub fn container(ui_ctx: *UiCtx, parent: ?*Node, id: []const u8, layout: ?ui.Layout, size: ?ui.Size) !*Node {
-    const node = try Node.create(ui_ctx.arena, id);
-    node.key = ui.key(if (parent) |p| (p.key orelse 0) else 0, id);
-    if (layout) |l| _ = node.with_layout(l);
-    if (size) |s| _ = node.with_size(s);
-    if (parent) |p| try p.add_child(ui_ctx.arena, node);
-    return node;
-}
-
-/// A static text node: `container` + text.
-pub fn text_container(ui_ctx: *UiCtx, parent: *Node, id: []const u8, layout: ui.Layout, text: []const u8) !*Node {
-    const node = try container(ui_ctx, parent, id, layout, ui.Size.init(.content, .content, null));
-    try add_text_data(ui_ctx, node, text);
-    return node;
-}
 
 test "interaction store: active latches, transient flags clear each frame" {
     // res/arena are untouched by the interaction methods, so `undefined` is safe.

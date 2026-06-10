@@ -74,9 +74,8 @@ const Axis = enum { x, y };
 /// The main (flow) axis of a parent's children, from its `children_align`:
 /// vertical* flows on y, horizontal* and centered* on x. `fit_children` sums
 /// child extents along this axis and maxes them across it.
-fn main_axis(layout: ?Layout) Axis {
-    const l = layout orelse return .x;
-    return switch (l.children_align) {
+fn main_axis(layout: Layout) Axis {
+    return switch (layout.children_align) {
         .vertical, .vertical_right, .vertical_wrapped, .vertical_reverse, .vertical_reverse_wrapped => .y,
         else => .x,
     };
@@ -87,7 +86,7 @@ fn main_axis(layout: ?Layout) Axis {
 fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     var acc: f32 = 0;
     for (node.children.items) |c| {
-        const cs = c.size orelse continue;
+        const cs = c.size;
         const v = if (axis == .x) cs.width else cs.height;
         acc = if (axis == main) acc + v else @max(acc, v);
     }
@@ -101,11 +100,10 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
 /// pre-measured content dims (set at build); read for `content`, never overwritten.
 fn recalculate_size(node: anytype) void {
     for (node.children.items) |c| recalculate_size(c);
-    if (node.size) |*s| {
-        const main = main_axis(node.layout);
-        s.width = bottom_up_axis(s.w, s.data_width, node, .x, main) + s.padding.left + s.padding.right;
-        s.height = bottom_up_axis(s.h, s.data_height, node, .y, main) + s.padding.up + s.padding.down;
-    }
+    const s = &node.size;
+    const main = main_axis(node.layout);
+    s.width = bottom_up_axis(s.w, s.data_width, node, .x, main) + s.padding.left + s.padding.right;
+    s.height = bottom_up_axis(s.h, s.data_height, node, .y, main) + s.padding.up + s.padding.down;
 }
 
 fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Axis, main: Axis) f32 {
@@ -123,17 +121,14 @@ fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Ax
 /// child of it has no definite base and falls back to `content` (→ the node's
 /// measured `data_*`, or 0). `p_inner_*` is the parent's content-box per axis.
 fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
-    if (node.size) |*s| {
-        const pad_w = s.padding.left + s.padding.right;
-        const pad_h = s.padding.up + s.padding.down;
-        const def_w, const inner_w = finalize_axis(s.w, s.data_width, s.width - pad_w, p_def_w, p_inner_w);
-        const def_h, const inner_h = finalize_axis(s.h, s.data_height, s.height - pad_h, p_def_h, p_inner_h);
-        s.width = inner_w + pad_w;
-        s.height = inner_h + pad_h;
-        for (node.children.items) |c| resolve_pct(c, def_w, def_h, inner_w, inner_h);
-    } else {
-        for (node.children.items) |c| resolve_pct(c, p_def_w, p_def_h, p_inner_w, p_inner_h);
-    }
+    const s = &node.size;
+    const pad_w = s.padding.left + s.padding.right;
+    const pad_h = s.padding.up + s.padding.down;
+    const def_w, const inner_w = finalize_axis(s.w, s.data_width, s.width - pad_w, p_def_w, p_inner_w);
+    const def_h, const inner_h = finalize_axis(s.h, s.data_height, s.height - pad_h, p_def_h, p_inner_h);
+    s.width = inner_w + pad_w;
+    s.height = inner_h + pad_h;
+    for (node.children.items) |c| resolve_pct(c, def_w, def_h, inner_w, inner_h);
 }
 
 /// `(definite, inner_size)` for one axis. `pass1_inner` is the bottom-up
@@ -155,22 +150,18 @@ fn finalize_axis(rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p
 /// so this never consults the host (`ctx`). `node` is `anytype` (a `*Node(RenderFlags)`);
 /// only tag-agnostic fields are touched, so the walk monomorphizes per node type.
 fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
-    const s: *Size = &(node.size orelse return);
-    const l: *Layout = &(node.layout orelse return);
+    const s: *Size = &node.size;
+    const l: *Layout = &node.layout;
 
     var pw: f32 = 0.0;
     var ph: f32 = 0.0;
     var px: f32 = 0.0;
     var py: f32 = 0.0;
     if (node.parent) |p| {
-        if (p.size) |ps| {
-            pw = ps.width;
-            ph = ps.height;
-        }
-        if (p.layout) |pl| {
-            px = pl._global_x orelse 0.0;
-            py = pl._global_y orelse 0.0;
-        }
+        pw = p.size.width;
+        ph = p.size.height;
+        px = p.layout._global_x orelse 0.0;
+        py = p.layout._global_y orelse 0.0;
     }
 
     var x: f32, var y: f32 = .{ undefined, undefined };
@@ -191,14 +182,12 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
     var dep_count: usize = 0;
 
     for (node.children.items) |c| {
-        if (c.layout) |cl| {
-            if (cl.anchor == .relative) {
-                dep_buf[dep_count] = c;
-                dep_count += 1;
-            } else {
-                indep_buf[indep_count] = c;
-                indep_count += 1;
-            }
+        if (c.layout.anchor == .relative) {
+            dep_buf[dep_count] = c;
+            dep_count += 1;
+        } else {
+            indep_buf[indep_count] = c;
+            indep_count += 1;
         }
     }
 
@@ -211,7 +200,7 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
         var col_max_width: f32 = 0.0;
 
         for (dep_buf[0..dep_count], 0..) |c, idx| {
-            const cs = c.size orelse continue;
+            const cs = c.size;
             switch (l.children_align) {
                 .horizontal => {
                     try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
@@ -351,15 +340,12 @@ fn compute_wrapped_height(dep_children: anytype, parent_width: f32) f32 {
     var total_h: f32 = 0.0;
     var scan_start: usize = 0;
     while (scan_start < dep_children.len) {
-        const first = dep_children[scan_start].size orelse {
-            scan_start += 1;
-            continue;
-        };
+        const first = dep_children[scan_start].size;
         var scan_end: usize = scan_start + 1;
         var scan_w: f32 = first.width;
         var scan_h: f32 = first.height;
         while (scan_end < dep_children.len) {
-            const next = dep_children[scan_end].size orelse break;
+            const next = dep_children[scan_end].size;
             if (scan_w + next.width > parent_width) break;
             scan_w += next.width;
             scan_h = @max(scan_h, next.height);
@@ -375,15 +361,12 @@ fn set_centered_wrapped_rows(dep_children: anytype, parent_width: f32, start_y: 
     var row_start: usize = 0;
     var current_y: f32 = start_y;
     while (row_start < dep_children.len) {
-        const first = dep_children[row_start].size orelse {
-            row_start += 1;
-            continue;
-        };
+        const first = dep_children[row_start].size;
         var row_end: usize = row_start + 1;
         var row_w: f32 = first.width;
         var row_h: f32 = first.height;
         while (row_end < dep_children.len) {
-            const next = dep_children[row_end].size orelse break;
+            const next = dep_children[row_end].size;
             if (row_w + next.width > parent_width) break;
             row_w += next.width;
             row_h = @max(row_h, next.height);
@@ -391,7 +374,7 @@ fn set_centered_wrapped_rows(dep_children: anytype, parent_width: f32, start_y: 
         }
         var x_row = (parent_width - row_w) / 2.0;
         for (dep_children[row_start..row_end]) |child| {
-            const cs = child.size orelse continue;
+            const cs = child.size;
             try place(child, .{ .x_offset = x_row, .y_offset = current_y });
             x_row += cs.width;
         }

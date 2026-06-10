@@ -35,13 +35,17 @@ pub fn Node(comptime RenderFlags: type) type {
         /// key into every persistent cache pool it uses (render state, interaction store).
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
         /// re-derives identically and re-finds the node's slots. `null` = caches nothing.
-        key: ?u64,
+        key: u64,
         /// Host-defined render flags (policy). Core only carries them; the host's
         /// render walk reads them to decide what/how to draw. Defaults to all-clear.
         render_flags: RenderFlags,
 
-        size: ?features.Size,
-        layout: ?features.Layout,
+        /// Every node is a box: both default at `create` (size hugs its children,
+        /// layout anchors top-left flowing horizontally) and are overridden via
+        /// `with_size`/`with_layout` or a feature mixin. Never null — the layout
+        /// passes assume a box, so there are no "transparent" nodes.
+        size: features.Size,
+        layout: features.Layout,
 
         /// Zero-allocation pre-order tree cursor. See `iterate` fn.
         pub const Iterator = struct {
@@ -82,16 +86,24 @@ pub fn Node(comptime RenderFlags: type) type {
                 .parent = null,
                 .children = .empty,
                 .data = null,
-                .key = null,
+                .key = key(0, id),
                 .render_flags = .{},
-                .size = null,
-                .layout = null,
+                .size = features.Size.init(.fit_children, .fit_children, null),
+                .layout = features.Layout.init(.top_left, .horizontal),
             };
         }
 
         pub fn create(allocator: Allocator, id: []const u8) !*Self {
             const node = try allocator.create(Self);
             node.* = Self.init(id);
+            return node;
+        }
+
+        /// create and bind to a parent
+        pub fn pcreate(allocator: Allocator, id: []const u8, parent: *Self) !*Self {
+            const node = try allocator.create(Self);
+            node.* = Self.init(id);
+            try parent.add_child(allocator, node);
             return node;
         }
 
@@ -107,7 +119,21 @@ pub fn Node(comptime RenderFlags: type) type {
 
         pub fn add_child(self: *Self, allocator: Allocator, child: *Self) !void {
             child.parent = self;
+            child.rekey(self.key); // re-derive child + its whole subtree off our key
             try self.children.append(allocator, child);
+        }
+
+        pub fn add_children(self: *Self, allocator: Allocator, children: []const *Self) !void {
+            for (children) |child| try self.add_child(allocator, child);
+        }
+
+        /// Re-derive this node's key from `seed` and recurse into the subtree, so
+        /// identity is independent of wiring order — attaching an already-assembled
+        /// subtree re-keys all of it, not just the top node. Trees are small and
+        /// rebuilt per frame, so the walk is free.
+        fn rekey(self: *Self, seed: u64) void {
+            self.key = key(seed, self.id);
+            for (self.children.items) |child| child.rekey(self.key);
         }
 
         pub fn collect(self: *Self, allocator: Allocator, list: *std.ArrayList(*Self)) !void {
@@ -144,9 +170,7 @@ pub fn Node(comptime RenderFlags: type) type {
         /// (the concrete `Ctx`); the return type is the host's interaction-flag
         /// struct (`Ctx.Interaction`).
         pub fn query(self: *Self, u: anytype) @TypeOf(u.*).Interaction {
-            const k = self.key orelse
-                std.debug.panic("query() on a node with no key: '{s}'", .{self.id});
-            return u.interactionOf(k);
+            return u.interactionOf(self.key);
         }
     };
 }
@@ -155,13 +179,11 @@ pub fn Node(comptime RenderFlags: type) type {
 /// been laid out yet. Pure geometry read straight off the node. `node` is
 /// `anytype` (a `*Node(RenderFlags)`); only tag-agnostic fields are touched.
 fn node_rect(node: anytype) ?geometry.Rect {
-    const s = node.size orelse return null;
-    const l = node.layout orelse return null;
     return .{
-        .x = l._global_x orelse return null,
-        .y = l._global_y orelse return null,
-        .w = s.width,
-        .h = s.height,
+        .x = node.layout._global_x orelse return null,
+        .y = node.layout._global_y orelse return null,
+        .w = node.size.width,
+        .h = node.size.height,
     };
 }
 
@@ -172,9 +194,7 @@ fn node_rect(node: anytype) ?geometry.Rect {
 /// the arena (and this tree) is reset. `u`/`node` are duck-typed (the concrete `Ctx`
 /// / `*Node(RenderFlags)`) to keep this module free of the binding.
 pub fn stamp_rects(u: anytype, node: anytype) void {
-    if (node.key) |k| {
-        if (node_rect(node)) |r| u.stampRect(k, r);
-    }
+    if (node_rect(node)) |r| u.stampRect(node.key, r);
     for (node.children.items) |child| stamp_rects(u, child);
 }
 
@@ -195,8 +215,8 @@ test "node tree layout" {
     var root = try TestNode.create(allocator, "root");
     _ = root.with_size(Size.initFixed(800, 600, null));
     _ = root.with_layout(Layout.init(.top_left, null));
-    root.layout.?._global_x = 0;
-    root.layout.?._global_y = 0;
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
 
     const child = try TestNode.create(allocator, "chd1");
     _ = child.with_size(Size.initFixed(100, 50, null));
@@ -212,11 +232,11 @@ test "node tree layout" {
     // `fixed`, so no measured `data_*` is needed.
     try root.set_global_pos();
 
-    try std.testing.expect(child.layout.?._global_x.? == 350.0);
-    try std.testing.expect(child.layout.?._global_y.? == 275.0);
+    try std.testing.expect(child.layout._global_x.? == 350.0);
+    try std.testing.expect(child.layout._global_y.? == 275.0);
 
-    try std.testing.expect(child2.layout.?._global_x.? == 350.0);
-    try std.testing.expect(child2.layout.?._global_y.? == 550.0);
+    try std.testing.expect(child2.layout._global_x.? == 350.0);
+    try std.testing.expect(child2.layout._global_y.? == 550.0);
 }
 
 test "collect returns each node exactly once" {
@@ -312,8 +332,8 @@ test "pct_of_parent resolves against a definite (fixed) parent" {
     try root.add_child(a, child);
 
     try root.set_global_pos();
-    try std.testing.expectEqual(@as(f32, 400), child.size.?.width); // 0.5 * 800
-    try std.testing.expectEqual(@as(f32, 100), child.size.?.height);
+    try std.testing.expectEqual(@as(f32, 400), child.size.width); // 0.5 * 800
+    try std.testing.expectEqual(@as(f32, 100), child.size.height);
 }
 
 test "fit_children sums on the main axis, maxes on the cross" {
@@ -337,8 +357,8 @@ test "fit_children sums on the main axis, maxes on the cross" {
     try root.add_child(a, k2);
 
     try root.set_global_pos();
-    try std.testing.expectEqual(@as(f32, 200), root.size.?.width);
-    try std.testing.expectEqual(@as(f32, 80), root.size.?.height);
+    try std.testing.expectEqual(@as(f32, 200), root.size.width);
+    try std.testing.expectEqual(@as(f32, 80), root.size.height);
 }
 
 test "pct_of_parent under an indefinite (fit) parent falls back to content (0, no deref)" {
@@ -358,6 +378,6 @@ test "pct_of_parent under an indefinite (fit) parent falls back to content (0, n
     try root.add_child(a, child);
 
     try root.set_global_pos();
-    try std.testing.expectEqual(@as(f32, 0), child.size.?.width); // no definite base ⇒ content ⇒ 0
-    try std.testing.expectEqual(@as(f32, 0), root.size.?.width); // fit cross-axis = max(0) = 0
+    try std.testing.expectEqual(@as(f32, 0), child.size.width); // no definite base ⇒ content ⇒ 0
+    try std.testing.expectEqual(@as(f32, 0), root.size.width); // fit cross-axis = max(0) = 0
 }
