@@ -17,5 +17,13 @@ pub const Timer = struct {
     start: f32,
     end: f32,
     multiplier: f32,
-    _buffer: f32,
+};
+
+/// Counts `v` up from `start` toward `end` and stops there (no wrap). Drives a
+/// fill-up progress bar; userland resets `v` to `start` (e.g. on click).
+pub const FillTimer = struct {
+    v: f32,
+    start: f32,
+    end: f32,
+    multiplier: f32,
 };

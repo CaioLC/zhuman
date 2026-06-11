@@ -34,6 +34,8 @@ pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
 /// change. Composable: a node can be several at once.
 pub const RenderFlags = packed struct {
     text: bool = false,
+    fill: bool = false, // solid rect spanning the node's resolved box
+    outline: bool = false, // 1px box border around the node's resolved box
 };
 
 /// Concrete node type for this host, bound to the host's `RenderFlags`.
@@ -66,6 +68,31 @@ pub fn draw_text(u: *UiCtx, node: *Node) void {
         .h = s.data_height,
     };
     u.res.renderer.renderTexture(texture, null, dst) catch return;
+}
+
+/// The node's resolved on-screen box (global pos from layout + solved size), or null
+/// if it hasn't been laid out yet. The shape SDL's rect primitives draw into.
+fn node_box(node: *Node) ?sdl.rect.FRect {
+    return .{
+        .x = node.layout._global_x orelse return null,
+        .y = node.layout._global_y orelse return null,
+        .w = node.size.width,
+        .h = node.size.height,
+    };
+}
+
+/// Draw a `.fill` node: a solid white rect over the node's resolved box.
+pub fn draw_fill(u: *UiCtx, node: *Node) void {
+    const box = node_box(node) orelse return;
+    u.res.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+    u.res.renderer.renderFillRect(box) catch return;
+}
+
+/// Draw an `.outline` node: a white box border around the node's resolved box.
+pub fn draw_outline(u: *UiCtx, node: *Node) void {
+    const box = node_box(node) orelse return;
+    u.res.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+    u.res.renderer.renderRect(box) catch return;
 }
 
 /// Feature mixin: give `node` cached text — measured at build, content-sized, and

@@ -62,6 +62,8 @@ const App = struct {
 
         self.player = self.world.spawn();
         self.world.add(self.player, comp.Counter{ .v = 0, .multiplier = 1.0, .buffer = 0 });
+        self.world.add(self.player, comp.Timer{ .v = 10, .start = 10, .end = 0, .multiplier = 0.5 });
+        self.world.add(self.player, comp.FillTimer{ .v = 0, .start = 0, .end = 10, .multiplier = 0.5 });
         self.world.add(self.player, tag.Player{});
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
@@ -118,6 +120,8 @@ pub fn main() !void {
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.update_counter);
+        ecs.run(&app.world, &app.resources, sys.update_timer);
+        ecs.run(&app.world, &app.resources, sys.update_fill_timer);
         // 3. update ui
         app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
         app.ui.beginFrame();
@@ -133,6 +137,8 @@ pub fn main() !void {
         // ui
         var it = root.iterate();
         while (it.next()) |node| {
+            if (node.render_flags.fill) widgets.draw_fill(&app.ui, node);
+            if (node.render_flags.outline) widgets.draw_outline(&app.ui, node);
             if (node.render_flags.text) widgets.draw_text(&app.ui, node);
         }
         // present
@@ -161,15 +167,52 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
             c.buffer = 0;
         }
     }
-    const box = try widgets.Node.pcreate(ui_ctx.arena, "box", center_div);
-    try widgets.data_text(ui_ctx, box, "Box");
+    // Timer, shared by the text readout and the bar below (both read `v`).
+    const timer_q = ecs.Single(.{ comp.Timer, ecs.With(tag.Player) }){ .world = world };
+    const t = timer_q.get();
+
+    const timer_text = try widgets.Node.pcreate(ui_ctx.arena, "timer_text", center_div);
+    try widgets.data_text(ui_ctx, timer_text, std.fmt.bufPrint(&char_buf, "Time: {d:.0}", .{@ceil(t.v)}) catch "?");
+
+    // Countdown progress bar: fixed-size outer track (outlined) with a filled
+    // inner whose width is `timer.v / timer.start` of the parent — drains
+    // full→empty as the timer counts down, then snaps back on cycle.
+    const bar_outer = try widgets.Node.pcreate(ui_ctx.arena, "bar_outer", center_div);
+    bar_outer.render_flags.outline = true;
+    const bar_inner = try widgets.Node.pcreate(ui_ctx.arena, "bar_inner", bar_outer);
+    bar_inner.render_flags.fill = true;
+    {
+        const frac = t.v / t.start; // 1.0 (full) → 0.0 (empty)
+        _ = bar_inner.with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
+    }
+
+    // Fill-up bar: counts 0→10 and stops at full; clicking the track resets it.
+    // Same outer/inner shape as the countdown, but the inner grows instead of drains.
+    const fill_outer = try widgets.Node.pcreate(ui_ctx.arena, "fill_outer", center_div);
+    fill_outer.render_flags.outline = true;
+    const fill_inner = try widgets.Node.pcreate(ui_ctx.arena, "fill_inner", fill_outer);
+    fill_inner.render_flags.fill = true;
+    {
+        const ft_q = ecs.Single(.{ comp.FillTimer, ecs.With(tag.Player) }){ .world = world };
+        const ft = ft_q.get();
+        const frac = (ft.v - ft.start) / (ft.end - ft.start); // 0.0 (empty) → 1.0 (full)
+        _ = fill_inner.with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
+        // query() keeps the slot alive so its rect is stamped for next frame's hit-test
+        if (fill_outer.query(ui_ctx).clicked) ft.v = ft.start;
+    }
 
     // layout
     _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
     _ = counter.with_layout(ui.features.Layout.init(.relative, null));
-    _ = box.with_layout(ui.features.Layout.init(.relative, null));
+    _ = timer_text.with_layout(ui.features.Layout.init(.relative, null));
+    _ = bar_outer.with_layout(ui.features.Layout.init(.relative, null))
+        .with_size(ui.features.Size.initFixed(240, 24, null));
+    _ = bar_inner.with_layout(ui.features.Layout.init(.top_left, null));
+    _ = fill_outer.with_layout(ui.features.Layout.init(.relative, null))
+        .with_size(ui.features.Size.initFixed(240, 24, null));
+    _ = fill_inner.with_layout(ui.features.Layout.init(.top_left, null));
 
     return root;
 }
