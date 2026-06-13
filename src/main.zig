@@ -10,8 +10,6 @@ const sdl = ha.sdl;
 const sys = ha.systems;
 const ecs = ha.ecs;
 
-const screen_width: c_int = 800;
-const screen_height: c_int = 600;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
@@ -33,8 +31,8 @@ const App = struct {
         try sdl.ttf.init();
         const window, const renderer = try sdl.render.Renderer.initWithWindow(
             "Human Action",
-            screen_width,
-            screen_height,
+            800,
+            600,
             .{ .resizable = true },
         );
         var frame_capper = sdl.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
@@ -152,67 +150,40 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     // "globals"
     var char_buf: [64]u8 = undefined;
     const ww, const wh = try ui_ctx.res.window.getSize();
+    // queries
+    const q_counter = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
+    const c = q_counter.get();
+    const q_timer = ecs.Single(.{ comp.Timer, ecs.With(tag.Player) }){ .world = world };
+    const t = q_timer.get();
+    const ft_q = ecs.Single(.{ comp.FillTimer, ecs.With(tag.Player) }){ .world = world };
+    const ft = ft_q.get();
 
-    // node graph + data
+    // node graph
     const root = try widgets.Node.create(ui_ctx.arena, "root");
-    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "div", root);
-    const counter = try widgets.Node.pcreate(ui_ctx.arena, "counter", center_div);
+    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
+    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
     {
-        // counter data
-        const counter_q = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
-        const c = counter_q.get();
-        try widgets.data_text(ui_ctx, counter, std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?");
+        // Counter: clickable readout — clicking it resets the count.
+        const counter = try widgets.label(ui_ctx, center_div, "counter", std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?");
         if (counter.query(ui_ctx).clicked) {
             c.v = 0;
             c.buffer = 0;
         }
-    }
-    // Timer, shared by the text readout and the bar below (both read `v`).
-    const timer_q = ecs.Single(.{ comp.Timer, ecs.With(tag.Player) }){ .world = world };
-    const t = timer_q.get();
-
-    const timer_text = try widgets.Node.pcreate(ui_ctx.arena, "timer_text", center_div);
-    try widgets.data_text(ui_ctx, timer_text, std.fmt.bufPrint(&char_buf, "Time: {d:.0}", .{@ceil(t.v)}) catch "?");
-
-    // Countdown progress bar: fixed-size outer track (outlined) with a filled
-    // inner whose width is `timer.v / timer.start` of the parent — drains
-    // full→empty as the timer counts down, then snaps back on cycle.
-    const bar_outer = try widgets.Node.pcreate(ui_ctx.arena, "bar_outer", center_div);
-    bar_outer.render_flags.outline = true;
-    const bar_inner = try widgets.Node.pcreate(ui_ctx.arena, "bar_inner", bar_outer);
-    bar_inner.render_flags.fill = true;
-    {
-        const frac = t.v / t.start; // 1.0 (full) → 0.0 (empty)
-        _ = bar_inner.with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
-    }
-
-    // Fill-up bar: counts 0→10 and stops at full; clicking the track resets it.
-    // Same outer/inner shape as the countdown, but the inner grows instead of drains.
-    const fill_outer = try widgets.Node.pcreate(ui_ctx.arena, "fill_outer", center_div);
-    fill_outer.render_flags.outline = true;
-    const fill_inner = try widgets.Node.pcreate(ui_ctx.arena, "fill_inner", fill_outer);
-    fill_inner.render_flags.fill = true;
-    {
-        const ft_q = ecs.Single(.{ comp.FillTimer, ecs.With(tag.Player) }){ .world = world };
-        const ft = ft_q.get();
+        _ = try widgets.label(ui_ctx, center_div, "timer_text", std.fmt.bufPrint(&char_buf, "Time: {d:.0}", .{@ceil(t.v)}) catch "?");
+        _ = try widgets.progress_bar(ui_ctx, center_div, "bar", t.v / t.start);
         const frac = (ft.v - ft.start) / (ft.end - ft.start); // 0.0 (empty) → 1.0 (full)
-        _ = fill_inner.with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
+        const fill_outer = try widgets.progress_bar(ui_ctx, center_div, "fill", frac);
         // query() keeps the slot alive so its rect is stamped for next frame's hit-test
         if (fill_outer.query(ui_ctx).clicked) ft.v = ft.start;
     }
 
-    // layout
-    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
-    _ = counter.with_layout(ui.features.Layout.init(.relative, null));
-    _ = timer_text.with_layout(ui.features.Layout.init(.relative, null));
-    _ = bar_outer.with_layout(ui.features.Layout.init(.relative, null))
-        .with_size(ui.features.Size.initFixed(240, 24, null));
-    _ = bar_inner.with_layout(ui.features.Layout.init(.top_left, null));
-    _ = fill_outer.with_layout(ui.features.Layout.init(.relative, null))
-        .with_size(ui.features.Size.initFixed(240, 24, null));
-    _ = fill_inner.with_layout(ui.features.Layout.init(.top_left, null));
-
+    const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);
+    _ = bottom_div.with_layout(ui.features.Layout.init(.bottom_center, .vertical));
+    {
+        _ = try widgets.label(ui_ctx, bottom_div, "player_state", "You are hungry.");
+        _ = try widgets.label(ui_ctx, bottom_div, "city_state", "You are alone.");
+    }
     return root;
 }

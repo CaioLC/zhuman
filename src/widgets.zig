@@ -123,6 +123,36 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 // `with_size`/`with_layout`. To make a node carry data, add the data type to UiState.
 // To make a node interactive, add the flag to Interaction (the IntFlags pool).
 
+/// Label: a content-sized text node wired to `parent` under `key`, laid out relative
+/// to its siblings. Returns the node so the caller can query it (a clickable label
+/// reads `.clicked`; a plain readout discards the return). The caller owns the text —
+/// it's the data source, formatted at the call site and copied into the cache here.
+pub fn label(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*Node {
+    const node = try Node.pcreate(ctx.arena, key, parent);
+    try data_text(ctx, node, text);
+    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    return node;
+}
+
+/// Progress bar: a fixed-size outlined outer track holding a filled inner whose width
+/// is `frac` (0 → empty, 1 → full) of the track. Wires both nodes to `parent` under
+/// `key` and returns the outer node so the caller can query/override it. The caller
+/// computes `frac` — a countdown bar passes `timer.v / timer.start` (drains full→empty),
+/// a fill bar the inverse.
+pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32) !*Node {
+    const outer = try Node.pcreate(ctx.arena, key, parent);
+    outer.render_flags.outline = true;
+    _ = outer.with_layout(ui.features.Layout.init(.relative, null))
+        .with_size(ui.features.Size.initFixed(240, 24, null));
+
+    const inner = try Node.pcreate(ctx.arena, "inner", outer);
+    inner.render_flags.fill = true;
+    _ = inner.with_layout(ui.features.Layout.init(.top_left, null))
+        .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
+
+    return outer;
+}
+
 test "interaction store: active latches, transient flags clear each frame" {
     // res/arena are untouched by the interaction methods, so `undefined` is safe.
     var u = UiCtx.init(undefined, std.testing.allocator, undefined);
