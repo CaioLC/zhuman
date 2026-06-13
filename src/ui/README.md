@@ -87,28 +87,28 @@ node tree — is what carries that geometry across the frame boundary.
 
 ## Node & features
 
-A `Node` is the atom (generic over the host's `RenderFlags`). It composes optional
-*feature* fields rather than subclassing:
+A `Node` is the atom (generic over the host's `RenderFlags`):
 
 ```zig
 Node(RenderFlags) {
     id: []const u8,            // human-readable, for debugging
     parent, children,
     data: ?u32,               // handle into a render-state pool (e.g. TextData); null = no render state
-    key: ?u64,                // stable identity → the node's slot in every cache pool; null = caches nothing
+    key: u64,                 // stable identity → the node's slot in every cache pool (hash of parent key + id)
     render_flags: RenderFlags, // host render flags (policy); engine never reads them
-    size:  ?Size,             // per-axis SizeRule + padding + resolved box + measured data_*
-    layout: ?Layout,          // positional: anchor + children alignment
+    size:  Size,              // per-axis SizeRule + padding + resolved box + measured data_*; defaulted at create
+    layout: Layout,           // positional: anchor + children alignment; defaulted at create
 }
 ```
 
-Builder methods (`with_size`, `with_layout`, `add_child`) chain at
-construction. Behaviour varies by *which feature fields a widget wires*, not by
-flags — each field carries its payload (e.g. the per-axis size rules), and the engine
-gates on presence (`if (node.size) |s| ...`), exactly where Fleury gates on
-bits. `render_flags` is the one exception: a host-defined flag *set* the engine
-carries but never interprets — the render loop switches on it (text vs sprite vs a
-payload-less modifier like `border`). The set flag also doubles as the
+Builder methods (`with_size`, `with_layout`) chain at construction; `add_child` —
+and `pcreate`, which creates + binds in one call — wire the tree. **Every node is a
+box:** `size`/`layout` are non-optional, defaulted at `create` (a `fit_children` box
+anchored `top_left`/`horizontal`) and overridden where a widget wants otherwise, so
+the layout passes never branch on "does this node have a box." The one optional
+payload left is `data` (a node may cache nothing). `render_flags` is a host-defined
+flag *set* the engine carries but never interprets — the render loop switches on it
+(text vs sprite vs a payload-less modifier like `border`), and it doubles as the
 discriminant for `data`: `.text` ⟹ resolve `data` through the `TextData` pool,
 `.sprite` ⟹ the sprite pool, so no separate data-kind union is needed.
 
@@ -118,9 +118,11 @@ discriminant for `data`: `.text` ⟹ resolve `data` through the `TextData` pool,
 slot-map:
 
 - **Keys are a rolling hash.** `key(seed, id) = Wyhash(seed, id)`; `key_i` folds a
-  loop index. Every widget computes `k = key(seed, id)` as its identity and passes
-  `k` as the seed to its children, so identity is structural and deterministic
-  across runs. (Chosen over path-strings, which allocate per node per frame.)
+  loop index. A node's key is `key(parent.key, id)`, threaded automatically by
+  `add_child`, which re-keys the child's whole subtree on attach (`rekey`) — so
+  identity is structural, deterministic across runs, and **independent of wiring
+  order** (assemble a subtree first, attach it later, the keys resolve the same).
+  (Chosen over path-strings, which allocate per node per frame.)
 - **Handles, not pointers.** `acquire(k)` returns a `u32` index; dereference
   through the live pool at point of use. A pool growing/reallocating never
   dangles anyone — store the index, never a `*T` across another `acquire`.
@@ -132,8 +134,8 @@ slot-map:
 
 ## Interaction: hit-testing slots
 
-Every node built through `container` carries a `key`, so any node is queryable —
-there's no separate opt-in. A node *participates* in hit-testing only when something
+Every node carries a `key` (set at `create`, finalized on attach), so any node is
+queryable — there's no separate opt-in. A node *participates* in hit-testing only when something
 `query`s it (that's what keeps its interaction slot alive). **The flag vocabulary is
 host-defined**, exactly like `RenderFlags`: the host passes its `Interaction` struct
 as the `IntFlags` parameter, and the engine stores it opaquely — it owns neither the
@@ -231,47 +233,41 @@ combinators and the `strictness`-weighted sibling distribution.
 
 ## Writing a widget
 
-A widget composes a base **`container`** (a fresh node with identity + the given
-`layout`/`size`, attached to its parent) plus zero or more *feature mixins* that layer
-state onto it — mirroring how a `Node` composes optional feature fields:
+Build a node, wire it into the tree (which finalizes its `key`), then layer state
+onto it. **Order matters:** keyed data (`data_text`) addresses the cache by
+`node.key`, so the node must be attached *first*. Layout is key-free, so it's deferred.
 
 ```zig
-// Base: key hashed from the PARENT's key + id (structural identity, no hand-threaded
-// seed). `parent` is optional — pass null to build a root. layout/size wired if given.
-pub fn container(u, parent: ?*Node, id, layout: ?Layout, size: ?Size) !*Node {
-    const node = try Node.create(u.arena, id);
-    node.key = ui.key(if (parent) |p| (p.key orelse 0) else 0, id);
-    if (layout) |l| _ = node.with_layout(l);
-    if (size) |s| _ = node.with_size(s);
-    if (parent) |p| try p.add_child(u.arena, node);
-    return node;
-}
+// Create + bind to a parent in one call (core). The child's key becomes
+// key(parent.key, id); add_child re-keys the whole subtree, so this is order-safe.
+const node = try Node.pcreate(u.arena, id, parent);
 
 // Feature mixin: cache + measure text, content-size the node, flag it for rendering.
-fn add_text_data(u, node, text) !void {
-    const idx = u.cache(node.key.?, TextData);       // handle into the TextData pool
+// Apply AFTER wiring, so node.key is final.
+pub fn data_text(u, node, text) !void {
+    const idx = u.cache(node.key, TextData);         // handle into the TextData pool
     u.pool(TextData).get(idx).update(text);          // copy text into the cached slot
     node.data = idx;
     const tw, const th = u.res.font.getStringSize(text); // host measures, at build
-    // …set node.size to .content with data_width/height = tw/th…
+    // …content-size node.size with data_width/height = tw/th…
     node.render_flags = .{ .text = true };           // how the render walk draws it
 }
 
-// A widget = container + features. `text_container` is container + cached text;
-// it's queryable like any keyed node, so it doubles as a button.
-pub fn text_container(u, parent, id, layout, text) !*Node {
-    const node = try container(u, parent, id, layout, Size.init(.content, .content, null));
-    try add_text_data(u, node, text);
-    return node;
-}
-
-// read interaction off the node (read-through: allocates/keeps the slot):
-//   const btn = try text_container(u, root, "ok", layout, "OK");
-//   if (btn.query(u).clicked) { ... }
+// read interaction off the node (read-through: allocates/keeps the slot). Any
+// keyed node is queryable, so a text node doubles as a button:
+//   const counter = try Node.pcreate(u.arena, "counter", center_div);
+//   try data_text(u, counter, "Counter: 0");
+//   if (counter.query(u).clicked) { ... }
 ```
 
-The root has no parent, so the host builds it with `container(u, null, "root", …)` —
-the seed falls back to the `0` base, and every descendant threads off it automatically.
+The root has no parent, so the host builds it with `Node.create(u.arena, "root")`
+(seed falls back to the `0` base); every descendant threads off it via `pcreate` /
+`add_child`.
+
+A host `build_ui` reads in two sections (see `main.zig`): **graph + data** — `create`/
+`pcreate` each node and attach its keyed data, coupled because data needs a final key —
+then a **layout** pass that overrides the defaulted `size`/`layout` where needed. The
+solve (`set_global_pos`) runs once afterward over the finished tree.
 
 Add a data type to `UiState` to make a node cacheable; add a flag to `Interaction`
 to give it new interactive behaviour.
@@ -291,7 +287,7 @@ while (it.next()) |node| {
 ```
 
 **Sizing is host-measured too.** The engine has no size callback either — the
-host measures content at build (`add_text_data` asks the font for the text's px
+host measures content at build (`data_text` asks the font for the text's px
 extent) and stores it on the node's `Size` as `data_width`/`data_height`.
 The `content` rule sizes to those and `draw_text` draws to them, so the whole
 solve is pure and `set_global_pos` takes no `ctx`. Widgets read `u.res` (the host
