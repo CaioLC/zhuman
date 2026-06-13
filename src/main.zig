@@ -21,7 +21,6 @@ const App = struct {
     font: sdl.ttf.Font,
     resources: Resources,
     world: ha.world.World,
-    player: ha.world.Entity,
     frame_arena: std.heap.ArenaAllocator,
     ui: widgets.UiCtx,
 
@@ -47,7 +46,6 @@ const App = struct {
             .font = undefined,
             .resources = undefined,
             .world = undefined,
-            .player = 0,
             .frame_arena = undefined,
             .ui = undefined,
         };
@@ -58,11 +56,22 @@ const App = struct {
         self.resources = Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
 
-        self.player = self.world.spawn();
-        self.world.add(self.player, comp.Counter{ .v = 0, .multiplier = 1.0, .buffer = 0 });
-        self.world.add(self.player, comp.Timer{ .v = 10, .start = 10, .end = 0, .multiplier = 0.5 });
-        self.world.add(self.player, comp.FillTimer{ .v = 0, .start = 0, .end = 10, .multiplier = 0.5 });
-        self.world.add(self.player, tag.Player{});
+        _ = self.world.spawn(.{
+            comp.Counter{ .v = 0, .multiplier = 1.0 },
+            tag.Player,
+        });
+        _ = self.world.spawn(.{
+            comp.TimerWrap{ .v = 10, .start = 10, .end = 0, .multiplier = 0.5 },
+            tag.Player,
+        });
+        _ = self.world.spawn(.{
+            comp.CounterFill{ .v = 0, .start = 0, .end = 10, .multiplier = 0.5 },
+            tag.Player,
+        });
+        _ = self.world.spawn(.{
+            comp.Life{ .v = 10, .start = 10, .multiplier = 1.0 }, // drains 10→0 over 10s, then dies
+            tag.Player,
+        });
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = widgets.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -118,8 +127,11 @@ pub fn main() !void {
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.update_counter);
-        ecs.run(&app.world, &app.resources, sys.update_timer);
-        ecs.run(&app.world, &app.resources, sys.update_fill_timer);
+        ecs.run(&app.world, &app.resources, sys.update_timer_wrap);
+        ecs.run(&app.world, &app.resources, sys.update_counter_fill);
+        ecs.run(&app.world, &app.resources, sys.update_life); // drain life toward 0
+        ecs.run(&app.world, &app.resources, sys.mark_dead); // life at 0 → tag Dead
+        ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         // 3. update ui
         app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
         app.ui.beginFrame();
@@ -153,10 +165,13 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     // queries
     const q_counter = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
     const c = q_counter.get();
-    const q_timer = ecs.Single(.{ comp.Timer, ecs.With(tag.Player) }){ .world = world };
+    const q_timer = ecs.Single(.{ comp.TimerWrap, ecs.With(tag.Player) }){ .world = world };
     const t = q_timer.get();
-    const ft_q = ecs.Single(.{ comp.FillTimer, ecs.With(tag.Player) }){ .world = world };
+    const ft_q = ecs.Single(.{ comp.CounterFill, ecs.With(tag.Player) }){ .world = world };
     const ft = ft_q.get();
+    // MaybeSingle: the life entity is despawned on death, so it may be absent.
+    const q_life = ecs.MaybeSingle(.{ comp.Life, ecs.With(tag.Player) }){ .world = world };
+    const life = q_life.get();
 
     // node graph
     const root = try widgets.Node.create(ui_ctx.arena, "root");
@@ -167,16 +182,19 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     {
         // Counter: clickable readout — clicking it resets the count.
         const counter = try widgets.label(ui_ctx, center_div, "counter", std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?");
-        if (counter.query(ui_ctx).clicked) {
-            c.v = 0;
-            c.buffer = 0;
-        }
+        if (counter.query(ui_ctx).clicked) c.v = 0;
         _ = try widgets.label(ui_ctx, center_div, "timer_text", std.fmt.bufPrint(&char_buf, "Time: {d:.0}", .{@ceil(t.v)}) catch "?");
         _ = try widgets.progress_bar(ui_ctx, center_div, "bar", t.v / t.start);
         const frac = (ft.v - ft.start) / (ft.end - ft.start); // 0.0 (empty) → 1.0 (full)
         const fill_outer = try widgets.progress_bar(ui_ctx, center_div, "fill", frac);
         // query() keeps the slot alive so its rect is stamped for next frame's hit-test
         if (fill_outer.query(ui_ctx).clicked) ft.v = ft.start;
+
+        // Life: a draining bar + readout, shown only while the entity is alive.
+        if (life) |l| {
+            _ = try widgets.label(ui_ctx, center_div, "life_text", std.fmt.bufPrint(&char_buf, "Life: {d:.0}", .{@ceil(l.v)}) catch "?");
+            _ = try widgets.progress_bar(ui_ctx, center_div, "life", l.v / l.start);
+        }
     }
 
     const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);

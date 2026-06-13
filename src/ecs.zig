@@ -1,5 +1,10 @@
 //! Bevy-style ECS system parameters and dispatcher.
 //!
+//! Heavily inspired by [Bevy](https://bevyengine.org)'s ECS ergonomics — system
+//! params, `Query`/`With`/`Without`/`Maybe` filters, `Single`, and bundle spawning
+//! (`world.spawn(.{ Counter{…}, Player })`) — adapted to a comptime-Zig sparse-set
+//! world rather than Rust archetypes. Not a port; just the shape of the API.
+//!
 //! Systems declare their needs as parameter types:
 //!     fn update_counter(res: *Resources, q: Query(.{Counter, With(tag.Player)})) void
 //!
@@ -36,9 +41,10 @@ pub fn Maybe(comptime T: type) type {
     };
 }
 
+const EntryKind = enum { fetch, maybe, entity };
 const EntryItem = struct {
-    is_maybe: bool,
-    T: type,
+    kind: EntryKind,
+    T: type, // unused for .entity
 };
 
 const ParamSpec = struct {
@@ -57,17 +63,22 @@ fn parseParams(comptime params: anytype) ParamSpec {
     const fields = @typeInfo(@TypeOf(params)).@"struct".fields;
     inline for (fields) |f| {
         const T = @field(params, f.name);
-        if (@hasDecl(T, "_filter_kind")) {
+        if (T == Entity) {
+            // Bevy-style `Entity` query item — yields the id, not a component ptr, and
+            // doesn't drive iteration (it's not a storage). Checked before @hasDecl,
+            // which is a compile error on a non-container type like u32.
+            entry_order = entry_order ++ &[_]EntryItem{.{ .kind = .entity, .T = Entity }};
+        } else if (@hasDecl(T, "_filter_kind")) {
             const fk: FilterKind = T._filter_kind;
             const inner: type = T._filter_inner;
             switch (fk) {
                 .with => withs = withs ++ &[_]type{inner},
                 .without => withouts = withouts ++ &[_]type{inner},
-                .maybe => entry_order = entry_order ++ &[_]EntryItem{.{ .is_maybe = true, .T = inner }},
+                .maybe => entry_order = entry_order ++ &[_]EntryItem{.{ .kind = .maybe, .T = inner }},
             }
         } else {
             fetches = fetches ++ &[_]type{T};
-            entry_order = entry_order ++ &[_]EntryItem{.{ .is_maybe = false, .T = T }};
+            entry_order = entry_order ++ &[_]EntryItem{.{ .kind = .fetch, .T = T }};
         }
     }
     return .{
@@ -78,15 +89,22 @@ fn parseParams(comptime params: anytype) ParamSpec {
     };
 }
 
+fn entryFieldType(comptime it: EntryItem) type {
+    return switch (it.kind) {
+        .fetch => *it.T,
+        .maybe => ?*it.T,
+        .entity => Entity,
+    };
+}
+
 fn EntryType(comptime spec: ParamSpec) type {
     const items = spec.entry_order;
     if (items.len == 1) {
-        const it = items[0];
-        return if (it.is_maybe) ?*it.T else *it.T;
+        return entryFieldType(items[0]);
     }
     var fields: [items.len]std.builtin.Type.StructField = undefined;
     for (items, 0..) |it, i| {
-        const FT = if (it.is_maybe) ?*it.T else *it.T;
+        const FT = entryFieldType(it);
         fields[i] = .{
             .name = std.fmt.comptimePrint("{}", .{i}),
             .type = FT,
@@ -112,21 +130,23 @@ fn buildEntry(
 ) Entry {
     if (spec.entry_order.len == 1) {
         const it = spec.entry_order[0];
-        if (it.is_maybe) {
-            return w.storageOf(it.T).get(e);
-        }
-        // Single fetch IS the driver, use the index directly.
-        return &w.storageOf(it.T).dense_values[driver_idx];
+        return switch (it.kind) {
+            .entity => e,
+            .maybe => w.storageOf(it.T).get(e),
+            // Single fetch IS the driver, use the index directly.
+            .fetch => &w.storageOf(it.T).dense_values[driver_idx],
+        };
     }
     var entry: Entry = undefined;
     const driver_T = spec.fetches[0];
     inline for (spec.entry_order, 0..) |it, i| {
-        if (it.is_maybe) {
-            entry[i] = w.storageOf(it.T).get(e);
-        } else if (it.T == driver_T) {
-            entry[i] = &w.storageOf(it.T).dense_values[driver_idx];
-        } else {
-            entry[i] = w.storageOf(it.T).get(e).?;
+        switch (it.kind) {
+            .entity => entry[i] = e,
+            .maybe => entry[i] = w.storageOf(it.T).get(e),
+            .fetch => entry[i] = if (it.T == driver_T)
+                &w.storageOf(it.T).dense_values[driver_idx]
+            else
+                w.storageOf(it.T).get(e).?,
         }
     }
     return entry;
@@ -221,10 +241,11 @@ pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {
 }
 
 fn extract(comptime PT: type, world: *World, res: *Resources) PT {
+    if (PT == *World) return world; // direct world access for structural changes (add/remove/despawn)
     if (PT == *Resources) return res;
     if (PT == *const Resources) return res;
     if (!@hasDecl(PT, "_system_param_kind")) {
-        @compileError("system param must be *Resources / Query / Single / MaybeSingle, got " ++ @typeName(PT));
+        @compileError("system param must be *World / *Resources / Query / Single / MaybeSingle, got " ++ @typeName(PT));
     }
     return .{ .world = world };
 }

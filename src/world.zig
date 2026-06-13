@@ -88,9 +88,22 @@ pub const World = struct {
 
     pub fn deinit(_: *World) void {}
 
-    pub fn spawn(self: *World) Entity {
+    /// Spawn an entity carrying a `bundle` of components/tags, returning its id.
+    /// Each tuple element is either a **component instance** (`comp.Counter{ … }`,
+    /// added as-is) or a bare **tag type** (`tag.Player` — a zero-sized marker,
+    /// added as a default `T{}`). An already-instanced tag (`tag.Player{}`) also
+    /// works, falling through the value path. `spawn(.{})` spawns a bare entity.
+    pub fn spawn(self: *World, bundle: anytype) Entity {
         const e = self.next_id;
         self.next_id += 1;
+        inline for (std.meta.fields(@TypeOf(bundle))) |f| {
+            const item = @field(bundle, f.name);
+            if (@TypeOf(item) == type) {
+                self.add(e, item{}); // bare tag type → its zero-sized instance
+            } else {
+                self.add(e, item); // component (or already-instanced tag)
+            }
+        }
         return e;
     }
 
@@ -118,5 +131,16 @@ pub const World = struct {
 
     pub fn remove(self: *World, e: Entity, comptime T: type) void {
         self.storageOf(T).remove(e);
+    }
+
+    /// Remove `e` from every component and tag storage (each `remove` no-ops if `e`
+    /// isn't in that storage). The entity id is not recycled — `next_id` only climbs.
+    pub fn despawn(self: *World, e: Entity) void {
+        inline for (@typeInfo(@TypeOf(self.components)).@"struct".fields) |f| {
+            @field(self.components, f.name).remove(e);
+        }
+        inline for (@typeInfo(@TypeOf(self.tags)).@"struct".fields) |f| {
+            @field(self.tags, f.name).remove(e);
+        }
     }
 };

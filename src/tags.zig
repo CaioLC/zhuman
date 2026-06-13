@@ -6,3 +6,6 @@
 //! will fail compilation.
 
 pub const Player = struct {};
+
+/// Marks an entity for reaping. `mark_dead` adds it; `despawn_dead` clears it.
+pub const Dead = struct {};
