@@ -6,7 +6,8 @@
       "Bash(C:/Users/c4ioc/AppData/Local/zig/p/N-V-__8AAGBUxxRvh6uEWBaIB03ThSLTLf0SKQFy5Ejo15x8/zig build *)",
       "Bash(git add *)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "PowerShell(zig build *)"
     ]
   }
 }
