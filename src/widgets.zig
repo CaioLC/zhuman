@@ -153,6 +153,28 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32) !*No
     return outer;
 }
 
+/// Button: an outlined box that hugs its text label (plus a little padding so the
+/// glyphs clear the border), wired to `parent` under `key`. Returns the outer node;
+/// the caller reads `btn.query(ctx).clicked` to act on a press — querying also keeps
+/// the node's interaction slot alive so its rect is stamped for next frame's hit-test.
+/// The whole box is the clickable surface. The padding lives on the *label*, not the
+/// box: `place` puts a child at the parent's origin (ignoring parent padding) and
+/// `draw_text` insets by the text node's own padding, so this is what centres the
+/// glyphs and lets the `fit_children` box wrap `text + padding` exactly.
+pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*Node {
+    const outer = try Node.pcreate(ctx.arena, key, parent);
+    outer.render_flags.outline = true;
+    _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
+
+    const lbl = try Node.pcreate(ctx.arena, "lbl", outer);
+    try data_text(ctx, lbl, text); // sets content size + measured dims, keeps padding
+    lbl.size.padding = ui.features.Padding.initSymmetric(8, 4);
+    _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
+
+    return outer;
+}
+
 test "interaction store: active latches, transient flags clear each frame" {
     // res/arena are untouched by the interaction methods, so `undefined` is safe.
     var u = UiCtx.init(undefined, std.testing.allocator, undefined);

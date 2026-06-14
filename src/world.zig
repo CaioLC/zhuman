@@ -89,7 +89,7 @@ pub const World = struct {
     pub fn deinit(_: *World) void {}
 
     /// Spawn an entity carrying a `bundle` of components/tags, returning its id.
-    /// Each tuple element is either a **component instance** (`comp.Counter{ … }`,
+    /// Each tuple element is either a **component instance** (`comp.Life{ … }`,
     /// added as-is) or a bare **tag type** (`tag.Player` — a zero-sized marker,
     /// added as a default `T{}`). An already-instanced tag (`tag.Player{}`) also
     /// works, falling through the value path. `spawn(.{})` spawns a bare entity.

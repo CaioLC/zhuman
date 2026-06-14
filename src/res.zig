@@ -1,3 +1,4 @@
+const std = @import("std");
 const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const font = @import("./font.zig");
@@ -21,6 +22,10 @@ pub const Resources = struct {
     window:   sdl.video.Window,
     time:     Time,
     input:    Input,
+    /// The simulation's one source of chance — every uncertain outcome (an action
+    /// that may or may not deliver) is rolled against this. Held here so the player
+    /// today and the AI deciders later draw uncertainty from the same stream.
+    prng:     std.Random.DefaultPrng,
 
     pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) Resources {
         return .{
@@ -29,6 +34,12 @@ pub const Resources = struct {
             .window   = w,
             .time     = .{ .dt = 0 },
             .input    = .{},
+            .prng     = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())),
         };
+    }
+
+    /// A `std.Random` over `prng` — call `.float(f32)`, `.boolean()`, etc. on it.
+    pub fn random(self: *Resources) std.Random {
+        return self.prng.random();
     }
 };

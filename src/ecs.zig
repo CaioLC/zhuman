@@ -2,11 +2,11 @@
 //!
 //! Heavily inspired by [Bevy](https://bevyengine.org)'s ECS ergonomics — system
 //! params, `Query`/`With`/`Without`/`Maybe` filters, `Single`, and bundle spawning
-//! (`world.spawn(.{ Counter{…}, Player })`) — adapted to a comptime-Zig sparse-set
+//! (`world.spawn(.{ Energy{…}, Player })`) — adapted to a comptime-Zig sparse-set
 //! world rather than Rust archetypes. Not a port; just the shape of the API.
 //!
 //! Systems declare their needs as parameter types:
-//!     fn update_counter(res: *Resources, q: Query(.{Counter, With(tag.Player)})) void
+//!     fn update_energy(res: *Resources, q: Query(.{Energy, With(tag.Player)})) void
 //!
 //! `run(world, res, system_fn)` introspects the function at comptime and
 //! builds each parameter from the world / resources before invoking it.

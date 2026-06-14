@@ -270,7 +270,7 @@ A host `build_ui` (see `main.zig`) reads top-to-bottom as **globals → queries 
 node graph**: pull the frame's window dims and ECS state up front, then build the tree.
 The host hand-builds the structural nodes (`root`, a `center_div`) with `create`/
 `pcreate`, configuring each one's `size`/`layout` inline right after it's created; every
-content node is a widget function (`label`, `progress_bar`) that owns its whole subtree
+content node is a widget function (`label`, `progress_bar`, `button`) that owns its whole subtree
 — graph, keyed data, *and* layout. There's no separate deferred layout pass: each node
 is fully configured where it's built. Each widget returns its outermost `*Node`, so the
 build site reads interaction off it (`if (counter.query(u).clicked) …`) and feeds it

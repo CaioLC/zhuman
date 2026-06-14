@@ -6,55 +6,25 @@
 //! decl (functions, consts, imports of types you don't want registered)
 //! will fail compilation.
 
-// acumulates infinitely
-pub const Counter = struct {
-    v: f32,
-    multiplier: f32, // seconds per +1 unit; v advances continuously, rounded at render
-};
-
-/// Counts `v` up from `start` toward `end` and stops there (no wrap)
-pub const CounterFill = struct {
-    v: f32,
-    start: f32,
-    end: f32,
-    multiplier: f32,
-};
-
-/// Counts `v` up from `start` toward `end` and wraps
-pub const CounterWrap = struct {
-    v: f32,
-    start: f32,
-    end: f32,
-    multiplier: f32,
-};
-
-// reduces infinitely
-pub const Timer = struct {
-    v: f32,
-    multiplier: f32, // seconds per -1 unit; v advances continuously, rounded at render
-};
-
-/// reduces `v` up from `start` toward `end` and stops there (no wrap)
-pub const TimerFill = struct {
-    v: f32,
-    start: f32,
-    end: f32,
-    multiplier: f32,
-};
-
-// counts from start toward end, wrapping
-pub const TimerWrap = struct {
-    v: f32,
-    start: f32,
-    end: f32,
-    multiplier: f32,
-};
-
-/// Life: a one-shot drain toward zero — a `TimerFill` whose `end` is implicitly 0.
-/// `v` is current life, `start` the max (for a life bar: `v / start`). `multiplier`
-/// is seconds-per-unit. At `v == 0` the entity is dead.
-pub const Life = struct {
+/// Energy: the actor's vitality stock and the game's accumulation currency. It
+/// decays while idle (the actor is cold and hungry); at `v == 0` the actor perishes
+/// (see the death pipeline in `systems.zig`). Unbounded above — this is the
+/// "number-go-up" axis, shown as a figure, not a bar. `start` is the (starved) value
+/// a fresh actor spawns at; death restarts the run from there, losing all that was
+/// accumulated. `multiplier` is seconds-per-unit of idle decay.
+pub const Energy = struct {
     v: f32,
     start: f32,
     multiplier: f32,
+};
+
+/// Stamina: how rested the actor is — a bounded `0..max` capacity that gates the
+/// *quality* of action outcomes (energy yield is scaled by `v / max`, so a tired
+/// actor produces below standard). Acting spends it; the deliberate `Rest` action
+/// restores it (foregoing production to consume leisure); a tiny `trickle`
+/// regenerates it passively so the actor is never hard-stuck. Shown as a bar.
+pub const Stamina = struct {
+    v: f32,
+    max: f32,
+    trickle: f32, // passive regen, units per second
 };

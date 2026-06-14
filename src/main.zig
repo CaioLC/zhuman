@@ -13,6 +13,44 @@ const ecs = ha.ecs;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
+/// A choice open to the actor. Acting pays `energy_cost` + `stamina_cost` up front
+/// (whether or not it pays off) for a `p_success` chance at `energy_yield` energy —
+/// a means expended against an uncertain end. The energy yield is *scaled by current
+/// stamina* (`v / max`): a tired actor produces below standard. `Rest` is the lone
+/// exception — it yields `stamina_yield` (foregoing production to consume leisure)
+/// and is never stamina-scaled. The player ranks these and acts on the one it most
+/// prefers; later the sim's AI ranks the same catalog. Praxeology: cost, options,
+/// uncertainty, and the two margins — labor/leisure (stamina) and now/later (energy).
+const Action = struct {
+    label: []const u8,
+    energy_cost: f32,
+    stamina_cost: f32,
+    energy_yield: f32,
+    stamina_yield: f32,
+    p_success: f32,
+};
+
+const actions = [_]Action{
+    // Forage: cheap, reliable, small. The hand-to-mouth staple.
+    .{ .label = "Forage", .energy_cost = 0, .stamina_cost = 2, .energy_yield = 5, .stamina_yield = 0, .p_success = 0.7 },
+    // Fish: dearer and riskier, but a real surplus when it lands.
+    .{ .label = "Fish", .energy_cost = 1, .stamina_cost = 4, .energy_yield = 14, .stamina_yield = 0, .p_success = 0.4 },
+    // Rest: produce nothing, recover stamina — the deliberate leisure choice.
+    .{ .label = "Rest", .energy_cost = 0, .stamina_cost = 0, .energy_yield = 0, .stamina_yield = 6, .p_success = 1.0 },
+};
+
+/// Spawn a fresh actor — starved and cold (low energy), but rested (full stamina).
+/// Used at startup and on "start over": death wipes the entity, this reseeds the run
+/// from the bottom, so everything accumulated is lost. The energy `start` is also the
+/// respawn floor.
+fn spawn_player(world: *ha.world.World) void {
+    _ = world.spawn(.{
+        comp.Energy{ .v = 8, .start = 8, .multiplier = 2.0 }, // decays ~0.5/s when idle
+        comp.Stamina{ .v = 10, .max = 10, .trickle = 0.2 }, // rested; tiny passive regen
+        tag.Player,
+    });
+}
+
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     window: sdl.video.Window,
@@ -55,23 +93,7 @@ const App = struct {
         self.font = try sdl.ttf.Font.init(font_path, 24);
         self.resources = Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
-
-        _ = self.world.spawn(.{
-            comp.Counter{ .v = 0, .multiplier = 1.0 },
-            tag.Player,
-        });
-        _ = self.world.spawn(.{
-            comp.TimerWrap{ .v = 10, .start = 10, .end = 0, .multiplier = 0.5 },
-            tag.Player,
-        });
-        _ = self.world.spawn(.{
-            comp.CounterFill{ .v = 0, .start = 0, .end = 10, .multiplier = 0.5 },
-            tag.Player,
-        });
-        _ = self.world.spawn(.{
-            comp.Life{ .v = 10, .start = 10, .multiplier = 1.0 }, // drains 10→0 over 10s, then dies
-            tag.Player,
-        });
+        spawn_player(&self.world);
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = widgets.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -126,11 +148,9 @@ pub fn main() !void {
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
-        ecs.run(&app.world, &app.resources, sys.update_counter);
-        ecs.run(&app.world, &app.resources, sys.update_timer_wrap);
-        ecs.run(&app.world, &app.resources, sys.update_counter_fill);
-        ecs.run(&app.world, &app.resources, sys.update_life); // drain life toward 0
-        ecs.run(&app.world, &app.resources, sys.mark_dead); // life at 0 → tag Dead
+        ecs.run(&app.world, &app.resources, sys.update_energy); // energy decays while idle
+        ecs.run(&app.world, &app.resources, sys.update_stamina); // tiny passive stamina trickle
+        ecs.run(&app.world, &app.resources, sys.mark_dead); // energy at 0 → tag Dead
         ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         // 3. update ui
         app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
@@ -163,15 +183,10 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     var char_buf: [64]u8 = undefined;
     const ww, const wh = try ui_ctx.res.window.getSize();
     // queries
-    const q_counter = ecs.Single(.{ comp.Counter, ecs.With(tag.Player) }){ .world = world };
-    const c = q_counter.get();
-    const q_timer = ecs.Single(.{ comp.TimerWrap, ecs.With(tag.Player) }){ .world = world };
-    const t = q_timer.get();
-    const ft_q = ecs.Single(.{ comp.CounterFill, ecs.With(tag.Player) }){ .world = world };
-    const ft = ft_q.get();
-    // MaybeSingle: the life entity is despawned on death, so it may be absent.
-    const q_life = ecs.MaybeSingle(.{ comp.Life, ecs.With(tag.Player) }){ .world = world };
-    const life = q_life.get();
+    // MaybeSingle: the actor is despawned on death, so it may be absent. Energy + Stamina
+    // co-spawn on one entity, so one query fetches both (yields `?.{ *Energy, *Stamina }`).
+    const q_actor = ecs.MaybeSingle(.{ comp.Energy, comp.Stamina, ecs.With(tag.Player) }){ .world = world };
+    const actor = q_actor.get();
 
     // node graph
     const root = try widgets.Node.create(ui_ctx.arena, "root");
@@ -180,20 +195,43 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
     {
-        // Counter: clickable readout — clicking it resets the count.
-        const counter = try widgets.label(ui_ctx, center_div, "counter", std.fmt.bufPrint(&char_buf, "Counter: {d:.0}", .{c.v}) catch "?");
-        if (counter.query(ui_ctx).clicked) c.v = 0;
-        _ = try widgets.label(ui_ctx, center_div, "timer_text", std.fmt.bufPrint(&char_buf, "Time: {d:.0}", .{@ceil(t.v)}) catch "?");
-        _ = try widgets.progress_bar(ui_ctx, center_div, "bar", t.v / t.start);
-        const frac = (ft.v - ft.start) / (ft.end - ft.start); // 0.0 (empty) → 1.0 (full)
-        const fill_outer = try widgets.progress_bar(ui_ctx, center_div, "fill", frac);
-        // query() keeps the slot alive so its rect is stamped for next frame's hit-test
-        if (fill_outer.query(ui_ctx).clicked) ft.v = ft.start;
+        // The lone actor under scarcity. Energy is the survival stock (and the
+        // accumulation currency) — it decays, and the actor acts to replenish it.
+        // Stamina gates how well those actions land. While alive, it faces a menu.
+        if (actor) |a| {
+            const energy, const stamina = a;
 
-        // Life: a draining bar + readout, shown only while the entity is alive.
-        if (life) |l| {
-            _ = try widgets.label(ui_ctx, center_div, "life_text", std.fmt.bufPrint(&char_buf, "Life: {d:.0}", .{@ceil(l.v)}) catch "?");
-            _ = try widgets.progress_bar(ui_ctx, center_div, "life", l.v / l.start);
+            _ = try widgets.label(ui_ctx, center_div, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J", .{energy.v}) catch "?");
+            _ = try widgets.label(ui_ctx, center_div, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}", .{ stamina.v, stamina.max }) catch "?");
+            _ = try widgets.progress_bar(ui_ctx, center_div, "stamina_bar", stamina.v / stamina.max);
+
+            // Decision: each action pays its cost up front for an uncertain yield.
+            // Clicking is acting — the actor employs means toward the option it most
+            // prefers. The energy yield is scaled by current stamina (`sfac`), so the
+            // button shows the *effective* payoff right now; the roll then decides it.
+            for (actions, 0..) |act, i| {
+                const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
+                const sfac = stamina.v / stamina.max; // tired → below-standard outcomes
+                const txt = if (act.stamina_yield > 0)
+                    std.fmt.bufPrint(&char_buf, "{s}  (+{d:.0} stamina)", .{ act.label, act.stamina_yield }) catch act.label
+                else
+                    std.fmt.bufPrint(&char_buf, "{s}  (-{d:.0} sta, +{d:.1} e, {d:.0}%)", .{ act.label, act.stamina_cost, act.energy_yield * sfac, act.p_success * 100 }) catch act.label;
+                const btn = try widgets.button(ui_ctx, center_div, bkey, txt);
+                // Only act if the cost is affordable, else the click is a no-op.
+                if (btn.query(ui_ctx).clicked and energy.v >= act.energy_cost and stamina.v >= act.stamina_cost) {
+                    energy.v -= act.energy_cost;
+                    stamina.v -= act.stamina_cost;
+                    if (ui_ctx.res.random().float(f32) < act.p_success) energy.v += act.energy_yield * sfac;
+                    stamina.v += act.stamina_yield; // Rest's payoff (0 for productive actions)
+                    if (stamina.v > stamina.max) stamina.v = stamina.max;
+                    if (energy.v < 0) energy.v = 0; // the death pipeline tags + reaps it next frame
+                }
+            }
+        } else {
+            // Death is total: the run is over and everything accumulated is gone.
+            _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
+            const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over");
+            if (restart.query(ui_ctx).clicked) spawn_player(world);
         }
     }
 
