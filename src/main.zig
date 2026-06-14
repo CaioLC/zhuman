@@ -34,6 +34,8 @@ const actions = [_]Action{
     .{ .label = "Forage", .energy_cost = 0, .stamina_cost = 2, .energy_yield = 5, .p_success = 0.7 },
     // Fish: dearer and riskier, but a real surplus when it lands.
     .{ .label = "Fish", .energy_cost = 1, .stamina_cost = 4, .energy_yield = 14, .p_success = 0.4 },
+    // Fish: dearest and riskiest, but a real surplus when it lands.
+    .{ .label = "Hunt", .energy_cost = 1, .stamina_cost = 6, .energy_yield = 30, .p_success = 0.2 },
 };
 
 const CapitalKind = enum { tool, comfort };
@@ -46,7 +48,8 @@ const CapitalKind = enum { tool, comfort };
 /// One-time unlocks, tracked by a bit in `comp.Capital.owned` at this good's index.
 const Good = struct {
     label: []const u8,
-    cost: f32,
+    energy_cost: f32,
+    stamina_cost: f32, // building it is tiring too
     kind: CapitalKind,
     target: usize = 0, // tool only: which action it improves
     yield_mult: f32 = 1.0, // tool only
@@ -57,13 +60,13 @@ const Good = struct {
 
 const capital = [_]Good{
     // Sandals: Walking is easier, makes gathering more effective.
-    .{ .label = "Sandals", .cost = 10, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10 },
+    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10 },
     // Fishing rod: makes Fish (actions[1]) land more often and yield more.
-    .{ .label = "Fishing rod", .cost = 30, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25 },
+    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25 },
     // Bed: rest better — stamina trickles back faster, no upkeep.
-    .{ .label = "Bed", .cost = 20, .kind = .comfort, .trickle_add = 0.4 },
+    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4 },
     // Fireplace: warmth speeds recovery a lot, but burns energy to stay lit.
-    .{ .label = "Fireplace", .cost = 80, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3 },
+    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3 },
 };
 
 /// Spawn a fresh actor — starved and cold (low energy), but rested (full stamina).
@@ -231,7 +234,7 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
-    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical));
+    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     {
         // The lone actor under scarcity. Energy is the survival stock (and the
         // accumulation currency) — it decays, and the actor acts to replenish it.
@@ -239,18 +242,20 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
         if (actor) |a| {
             const energy, const stamina, const cap = a;
 
-            // The rate next to each count is read straight off the component: energy
-            // decays at `decay`/s (capital upkeep raises it), stamina trickles up at
-            // `trickle`/s (comfort capital raises it).
-            _ = try widgets.label(ui_ctx, center_div, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
-            _ = try widgets.label(ui_ctx, center_div, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
-            _ = try widgets.progress_bar(ui_ctx, center_div, "stamina_bar", stamina.v / stamina.max);
+            // Resources panel — the actor's stocks. The rate next to each count is read
+            // straight off the component: energy decays at `decay`/s (capital upkeep
+            // raises it), stamina trickles up at `trickle`/s (comfort capital raises it).
+            const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
+            _ = try widgets.label(ui_ctx, res_panel, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
+            _ = try widgets.label(ui_ctx, res_panel, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
+            _ = try widgets.progress_bar(ui_ctx, res_panel, "stamina_bar", stamina.v / stamina.max, .{ .r = 230, .g = 180, .b = 80 });
 
-            // Decision: each action pays its cost up front for an uncertain yield.
+            // Actions panel — each action pays its cost up front for an uncertain yield.
             // Clicking is acting — the actor employs means toward the option it most
             // prefers. The effective yield/odds fold in any owned tool that targets this
             // action (a rod boosts Fish), then the yield is scaled by current stamina
             // (`sfac`); the button shows that effective payoff, the roll then decides it.
+            const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
             for (actions, 0..) |act, i| {
                 const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
                 const sfac = stamina.v / stamina.max; // tired → below-standard outcomes
@@ -266,9 +271,11 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
                 if (eff_prob > 1.0) eff_prob = 1.0;
 
                 const txt = std.fmt.bufPrint(&char_buf, "{s}  (-{d:.0} sta, +{d:.1} e, {d:.0}%)", .{ act.label, act.stamina_cost, eff_yield * sfac, eff_prob * 100 }) catch act.label;
-                const btn = try widgets.button(ui_ctx, center_div, bkey, txt);
-                // Only act if the cost is affordable, else the click is a no-op.
-                if (btn.query(ui_ctx).clicked and energy.v >= act.energy_cost and stamina.v >= act.stamina_cost) {
+                // Affordability drives both the look (dimmed when unpayable) and the
+                // guard (the click is a no-op unless it's affordable).
+                const affordable = energy.v >= act.energy_cost and stamina.v >= act.stamina_cost;
+                const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
+                if (btn.query(ui_ctx).clicked and affordable) {
                     energy.v -= act.energy_cost;
                     stamina.v -= act.stamina_cost;
                     if (ui_ctx.res.random().float(f32) < eff_prob) energy.v += eff_yield * sfac;
@@ -276,25 +283,28 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
                 }
             }
 
-            // Capital: spend surplus energy now on a permanent edge later. One-time
+            // Capital panel — spend surplus energy now on a permanent edge later. One-time
             // unlocks — an owned good shows as a static line; an unowned one is a buy
             // button (greyed out by an affordability guard if you can't pay yet).
+            const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
             for (capital, 0..) |g, gi| {
                 const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
                 if (owns(cap, gi)) {
-                    _ = try widgets.label(ui_ctx, center_div, ckey, std.fmt.bufPrint(&char_buf, "{s}: owned", .{g.label}) catch g.label);
+                    _ = try widgets.label(ui_ctx, cap_panel, ckey, std.fmt.bufPrint(&char_buf, "{s}: owned", .{g.label}) catch g.label);
                     continue;
                 }
                 const txt = switch (g.kind) {
-                    .tool => std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e]  x{d:.1} yield, +{d:.0}%", .{ g.label, g.cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
+                    .tool => std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.stamina_cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
                     .comfort => if (g.upkeep > 0)
-                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e]  +{d:.1}/s sta, -{d:.1}/s e", .{ g.label, g.cost, g.trickle_add, g.upkeep }) catch g.label
+                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  +{d:.1}/s sta, -{d:.1}/s e", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add, g.upkeep }) catch g.label
                     else
-                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e]  +{d:.1}/s sta", .{ g.label, g.cost, g.trickle_add }) catch g.label,
+                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  +{d:.1}/s sta", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add }) catch g.label,
                 };
-                const buy = try widgets.button(ui_ctx, center_div, ckey, txt);
-                if (buy.query(ui_ctx).clicked and energy.v >= g.cost) {
-                    energy.v -= g.cost;
+                const affordable = energy.v >= g.energy_cost and stamina.v >= g.stamina_cost;
+                const buy = try widgets.button(ui_ctx, cap_panel, ckey, txt, affordable);
+                if (buy.query(ui_ctx).clicked and affordable) {
+                    energy.v -= g.energy_cost;
+                    stamina.v -= g.stamina_cost;
                     cap.owned |= bit(gi);
                     // Comfort effects bake into the components (so the readouts track them);
                     // tool effects are folded in at action resolution above.
@@ -307,16 +317,16 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
         } else {
             // Death is total: the run is over and everything accumulated is gone.
             _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
-            const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over");
+            const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
             if (restart.query(ui_ctx).clicked) spawn_player(world);
         }
     }
 
-    const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);
-    _ = bottom_div.with_layout(ui.features.Layout.init(.bottom_center, .vertical));
-    {
-        _ = try widgets.label(ui_ctx, bottom_div, "player_state", "You are hungry.");
-        _ = try widgets.label(ui_ctx, bottom_div, "city_state", "You are alone.");
-    }
+    // const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);
+    // _ = bottom_div.with_layout(ui.features.Layout.init(.bottom_center, .vertical).with_gap(4));
+    // {
+    //     _ = try widgets.label(ui_ctx, bottom_div, "player_state", "You are hungry.");
+    //     _ = try widgets.label(ui_ctx, bottom_div, "city_state", "You are alone.");
+    // }
     return root;
 }

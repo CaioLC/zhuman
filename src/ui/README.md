@@ -28,7 +28,7 @@ parametrized so the host plugs its own types in:
 
 ```zig
 Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type)  // the per-frame builder
-Node(comptime RenderFlags: type)                                          // the tree atom
+Node(comptime RenderFlags: type, comptime UserData: type)                 // the tree atom
 ```
 
 - `StateNs` — a namespace of the render-state types the host wants cached (one
@@ -44,6 +44,12 @@ Node(comptime RenderFlags: type)                                          // the
 - `RenderFlags` — the host's render-flag type (a packed struct of defaulted bools,
   e.g. `.text`, `.border`, `.inactive`). Carried on every node; the engine stores
   it opaquely and **never reads it** — it's pure render *policy* the host switches on.
+- `UserData` — the host's per-node payload type (a struct of defaulted fields, e.g.
+  `color`, later `opacity`/`border`/a sprite handle). Carried on every node as `user`;
+  the engine stores it opaquely and **never reads it**. This is the extensibility
+  seam: add a field to the host's `UserData` to give every node a new value with **no
+  engine change/recompile** — the engine never grows a concrete field like `color`.
+  Must be default-constructible (`.{}`) — the engine seeds it at `init`.
 
 The host supplies, *one layer up* (today `src/widgets.zig` + `src/res.zig`):
 the concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)`
@@ -61,6 +67,7 @@ binding `UiCtx`.)
 | `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, and the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
+| `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `UserData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
 | `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`) + the whole solve: sizing passes + `set_global_pos`/placement. |
 
@@ -90,12 +97,13 @@ node tree — is what carries that geometry across the frame boundary.
 A `Node` is the atom (generic over the host's `RenderFlags`):
 
 ```zig
-Node(RenderFlags) {
+Node(RenderFlags, UserData) {
     id: []const u8,            // human-readable, for debugging
     parent, children,
     data: ?u32,               // handle into a render-state pool (e.g. TextData); null = no render state
     key: u64,                 // stable identity → the node's slot in every cache pool (hash of parent key + id)
     render_flags: RenderFlags, // host render flags (policy); engine never reads them
+    user: UserData,           // host per-node payload (e.g. user.color); engine carries, never reads
     size:  Size,              // per-axis SizeRule + padding + resolved box + measured data_*; defaulted at create
     layout: Layout,           // positional: anchor + children alignment; defaulted at create
 }
@@ -206,6 +214,12 @@ Two orthogonal axes, both Unity-inspired:
 - **`ChildrenAlign`** — how a parent places its `relative` children: `horizontal`,
   `vertical`, `vertical_right`, `centered`, their `_wrapped`/`_reverse` variants.
   (≈ Unity Layout Groups.)
+- **`gap`** — space inserted *between* adjacent flowed children along the flow axis
+  (and between the rows/columns of the `_wrapped` variants); not before the first or
+  after the last, and not for the proportional `centered*` aligns. A `fit_children`
+  parent grows to include the gaps. Defaults to 0; set with `Layout.init(..).with_gap(n)`.
+  Per-node **`Size.padding`** (inset around a node's content, already on every box) is
+  the orthogonal knob — gap spaces siblings, padding insets a box's own content.
 
 ### Sizing
 
@@ -270,7 +284,7 @@ A host `build_ui` (see `main.zig`) reads top-to-bottom as **globals → queries 
 node graph**: pull the frame's window dims and ECS state up front, then build the tree.
 The host hand-builds the structural nodes (`root`, a `center_div`) with `create`/
 `pcreate`, configuring each one's `size`/`layout` inline right after it's created; every
-content node is a widget function (`label`, `progress_bar`, `button`) that owns its whole subtree
+content node is a widget function (`label`, `progress_bar`, `button`, `panel`) that owns its whole subtree
 — graph, keyed data, *and* layout. There's no separate deferred layout pass: each node
 is fully configured where it's built. Each widget returns its outermost `*Node`, so the
 build site reads interaction off it (`if (counter.query(u).clicked) …`) and feeds it

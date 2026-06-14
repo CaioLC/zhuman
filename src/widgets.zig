@@ -38,8 +38,16 @@ pub const RenderFlags = packed struct {
     outline: bool = false, // 1px box border around the node's resolved box
 };
 
-/// Concrete node type for this host, bound to the host's `RenderFlags`.
-pub const Node = ui.Node(RenderFlags);
+/// Host-defined per-node payload (policy). The engine carries it opaquely on every
+/// node; only host code (the draw primitives, widgets) reads it. Add a field here to
+/// give every node a new value — color today, opacity/border/sprite later — with no
+/// change to the generic engine. Must be default-constructible (the engine seeds `.{}`).
+pub const UserData = struct {
+    color: ui.Color = .{}, // what the draw primitives paint this node in (defaults white)
+};
+
+/// Concrete node type for this host, bound to the host's `RenderFlags` + `UserData`.
+pub const Node = ui.Node(RenderFlags, UserData);
 
 const TextData = zfont.TextData;
 
@@ -56,7 +64,8 @@ pub fn draw_text(u: *UiCtx, node: *Node) void {
     const l = node.layout;
     const fmt = td.text() orelse return;
 
-    var surface = u.res.font.renderTextSolid(fmt, zfont.white) catch return;
+    const c = node.user.color;
+    var surface = u.res.font.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
     const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
     defer texture.deinit();
@@ -81,17 +90,19 @@ fn node_box(node: *Node) ?sdl.rect.FRect {
     };
 }
 
-/// Draw a `.fill` node: a solid white rect over the node's resolved box.
+/// Draw a `.fill` node: a solid rect in the node's color over its resolved box.
 pub fn draw_fill(u: *UiCtx, node: *Node) void {
     const box = node_box(node) orelse return;
-    u.res.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+    const c = node.user.color;
+    u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     u.res.renderer.renderFillRect(box) catch return;
 }
 
-/// Draw an `.outline` node: a white box border around the node's resolved box.
+/// Draw an `.outline` node: a box border in the node's color around its resolved box.
 pub fn draw_outline(u: *UiCtx, node: *Node) void {
     const box = node_box(node) orelse return;
-    u.res.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+    const c = node.user.color;
+    u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     u.res.renderer.renderRect(box) catch return;
 }
 
@@ -116,6 +127,18 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     node.render_flags = .{ .text = true }; // flags how the host's render walk draws it
 }
 
+// --- Widget palette ----------------------------------------------------------
+// Interaction-state colors the widgets paint themselves in. Kept here (host
+// policy) so the engine stays color-agnostic — it only carries `node.color`.
+
+const col_normal = ui.Color{ .r = 200, .g = 200, .b = 210 }; // idle button: soft white
+const col_hover = ui.Color.white; // hovered: full bright
+const col_disabled = ui.Color{ .r = 90, .g = 90, .b = 105 }; // can't afford: dim grey
+const col_track = ui.Color{ .r = 90, .g = 90, .b = 105 }; // progress-bar track outline
+const col_stamina = ui.Color{ .r = 230, .g = 180, .b = 80 }; // stamina fill: warm amber
+const col_panel = ui.Color{ .r = 100, .g = 110, .b = 140 }; // panel border: muted blue-grey
+const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool light blue
+
 // --- Widget functions --------------------------------------------------------
 //
 // Build a node with `Node.create`/`pcreate` (the latter wires it to a parent, so its
@@ -138,15 +161,17 @@ pub fn label(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*No
 /// is `frac` (0 → empty, 1 → full) of the track. Wires both nodes to `parent` under
 /// `key` and returns the outer node so the caller can query/override it. The caller
 /// computes `frac` — a countdown bar passes `timer.v / timer.start` (drains full→empty),
-/// a fill bar the inverse.
-pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32) !*Node {
+/// a fill bar the inverse. `fill` colors the inner bar; the track outline is a dim grey.
+pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: ui.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     outer.render_flags.outline = true;
+    outer.user.color = col_track;
     _ = outer.with_layout(ui.features.Layout.init(.relative, null))
         .with_size(ui.features.Size.initFixed(240, 24, null));
 
     const inner = try Node.pcreate(ctx.arena, "inner", outer);
     inner.render_flags.fill = true;
+    inner.user.color = fill;
     _ = inner.with_layout(ui.features.Layout.init(.top_left, null))
         .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
 
@@ -161,7 +186,12 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32) !*No
 /// box: `place` puts a child at the parent's origin (ignoring parent padding) and
 /// `draw_text` insets by the text node's own padding, so this is what centres the
 /// glyphs and lets the `fit_children` box wrap `text + padding` exactly.
-pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*Node {
+///
+/// `enabled` drives the visual state (host policy): a disabled button is dimmed, an
+/// enabled one brightens on hover (read off its own slot, set at the event stage from
+/// last frame's rect) and is the soft idle color otherwise. The caller still guards
+/// the click — `enabled` is purely the look; pass it whatever "affordable" means.
+pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     outer.render_flags.outline = true;
     _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
@@ -171,6 +201,34 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*N
     try data_text(ctx, lbl, text); // sets content size + measured dims, keeps padding
     lbl.size.padding = ui.features.Padding.initSymmetric(8, 4);
     _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
+
+    // State color: dim if disabled, else bright on hover, else idle. Querying here
+    // also keeps the slot alive (same as the caller's `.clicked` read).
+    const c = if (!enabled) col_disabled else if (outer.query(ctx).hovering) col_hover else col_normal;
+    outer.user.color = c;
+    lbl.user.color = c;
+
+    return outer;
+}
+
+/// Panel: a titled, bordered, padded section that groups related content. Builds an
+/// outlined outer box (border in `col_panel`) that hugs its children — inset by inner
+/// `padding`, with a `gap` between them — and drops a title label at the top (in
+/// `col_title`). Returns the outer node so the caller appends content *after* the
+/// title; it flows vertically under it:
+///   `const p = try panel(ctx, parent, "res", "Resources");`
+///   `_ = try label(ctx, p, "energy", "Energy: 8 J");`
+pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
+    const outer = try Node.pcreate(ctx.arena, key, parent);
+    outer.render_flags.outline = true;
+    outer.user.color = col_panel;
+    _ = outer.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(8))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(12)));
+
+    const ttl = try Node.pcreate(ctx.arena, "title", outer);
+    try data_text(ctx, ttl, title);
+    ttl.user.color = col_title;
+    _ = ttl.with_layout(ui.features.Layout.init(.relative, null));
 
     return outer;
 }

@@ -7,6 +7,7 @@ pub const geometry = @import("./geometry.zig");
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const Rect = geometry.Rect;
+pub const Color = @import("./color.zig").Color;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
 pub const Pool = cache.Pool;
@@ -19,8 +20,14 @@ pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
 
-/// The tree atom. Stores generic data and render flags opaquely.
-pub fn Node(comptime RenderFlags: type) type {
+/// The tree atom. Stores generic data, render flags, and a host payload opaquely.
+///
+/// Two host-policy type params, both carried but never interpreted by core:
+/// - `RenderFlags` — a flag set the render walk switches on (what/how to draw).
+/// - `UserData` — a catch-all for per-node host values (color, opacity, a sprite
+///   handle…). New host fields go here, so the engine never recompiles to gain one.
+///   Must be default-constructible (`.{}`) — the engine seeds it at `init`.
+pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
     return struct {
         const Self = @This();
 
@@ -39,6 +46,10 @@ pub fn Node(comptime RenderFlags: type) type {
         /// Host-defined render flags (policy). Core only carries them; the host's
         /// render walk reads them to decide what/how to draw. Defaults to all-clear.
         render_flags: RenderFlags,
+        /// Host-defined per-node payload (policy). Core only carries it; the host
+        /// reads it (e.g. its draw primitives paint in `user.color`). Add a field to
+        /// the host's `UserData` to give every node a new value — no engine change.
+        user: UserData,
 
         /// Every node is a box: both default at `create` (size hugs its children,
         /// layout anchors top-left flowing horizontally) and are overridden via
@@ -88,6 +99,7 @@ pub fn Node(comptime RenderFlags: type) type {
                 .data = null,
                 .key = key(0, id),
                 .render_flags = .{},
+                .user = .{},
                 .size = features.Size.init(.fit_children, .fit_children, null),
                 .layout = features.Layout.init(.top_left, .horizontal),
             };
@@ -114,6 +126,11 @@ pub fn Node(comptime RenderFlags: type) type {
 
         pub fn with_layout(self: *Self, layout: features.Layout) *Self {
             self.layout = layout;
+            return self;
+        }
+
+        pub fn with_user(self: *Self, u: UserData) *Self {
+            self.user = u;
             return self;
         }
 
@@ -203,9 +220,9 @@ test {
     _ = @import("./ctx.zig");
 }
 
-/// A concrete `Node` for tests — flags are irrelevant to layout/traversal, so an
-/// empty tag set suffices.
-const TestNode = Node(packed struct {});
+/// A concrete `Node` for tests — flags and host payload are irrelevant to
+/// layout/traversal, so an empty set suffices for both.
+const TestNode = Node(packed struct {}, struct {});
 
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -309,7 +326,7 @@ test "node carries host render flags opaquely: default-clear, settable" {
     const a = arena.allocator();
 
     const RenderFlags = packed struct { text: bool = false, border: bool = false };
-    const N = Node(RenderFlags);
+    const N = Node(RenderFlags, struct {});
 
     const n = try N.create(a, "n");
     try std.testing.expect(!n.render_flags.text and !n.render_flags.border); // init = all-clear
@@ -359,6 +376,36 @@ test "fit_children sums on the main axis, maxes on the cross" {
     try root.set_global_pos();
     try std.testing.expectEqual(@as(f32, 200), root.size.width);
     try std.testing.expectEqual(@as(f32, 80), root.size.height);
+}
+
+test "layout gap: fit parent reserves it, children flow spaced by it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Vertical parent, gap 10 between its two children (50 + 30 tall):
+    // height = 50 + 10 + 30 = 90; width = max(100, 200) = 200 (no cross-axis gap).
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children, null));
+    _ = root.with_layout(Layout.init(.top_left, .vertical).with_gap(10));
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(100, 50, null));
+    _ = k1.with_layout(Layout.init(.relative, null));
+    try root.add_child(a, k1);
+
+    const k2 = try TestNode.create(a, "k2");
+    _ = k2.with_size(Size.initFixed(200, 30, null));
+    _ = k2.with_layout(Layout.init(.relative, null));
+    try root.add_child(a, k2);
+
+    try root.set_global_pos();
+    try std.testing.expectEqual(@as(f32, 200), root.size.width);
+    try std.testing.expectEqual(@as(f32, 90), root.size.height); // 50 + gap + 30
+    try std.testing.expectEqual(@as(f32, 0), k1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 60), k2.layout._global_y.?); // 50 + gap
 }
 
 test "pct_of_parent under an indefinite (fit) parent falls back to content (0, no deref)" {

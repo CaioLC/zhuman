@@ -40,6 +40,12 @@ pub const ChildrenPosInfo = struct {
 pub const Layout = struct {
     anchor: Anchor,
     children_align: ChildrenAlign,
+    /// Space inserted *between* adjacent flowed (`relative`) children, along the
+    /// flow axis (and between rows/columns of the `_wrapped` variants). Does not
+    /// apply to the proportional `centered*` aligns (they already distribute space)
+    /// nor before the first / after the last child. `fit_children` parents grow to
+    /// include the gaps. Defaults to 0 — set via `with_gap`.
+    gap: f32,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -47,9 +53,17 @@ pub const Layout = struct {
         return .{
             .anchor = anchor,
             .children_align = children_align orelse .horizontal,
+            .gap = 0,
             ._global_x = null,
             ._global_y = null,
         };
+    }
+
+    /// Copy with `gap` set — chains after `init` (`Layout.init(.., .vertical).with_gap(8)`).
+    pub fn with_gap(self: Layout, g: f32) Layout {
+        var l = self;
+        l.gap = g;
+        return l;
     }
 };
 
@@ -82,14 +96,23 @@ fn main_axis(layout: Layout) Axis {
 }
 
 /// `fit_children` on one axis: sum of child box extents if that axis is the flow
-/// (main) axis, else the max. Reads children's already-resolved (pass-1) sizes.
+/// (main) axis, else the max. Reads children's already-resolved (pass-1) sizes. On
+/// the main axis it also reserves the inter-child `gap` (one per flowed pair), so a
+/// `fit` parent wraps its spaced children exactly.
 fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     var acc: f32 = 0;
+    var flow_count: usize = 0;
     for (node.children.items) |c| {
         const cs = c.size;
         const v = if (axis == .x) cs.width else cs.height;
-        acc = if (axis == main) acc + v else @max(acc, v);
+        if (axis == main) {
+            acc += v;
+            if (c.layout.anchor == .relative) flow_count += 1;
+        } else {
+            acc = @max(acc, v);
+        }
     }
+    if (axis == main and flow_count > 1) acc += node.layout.gap * @as(f32, @floatFromInt(flow_count - 1));
     return acc;
 }
 
@@ -198,68 +221,73 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
         var y_offset: f32 = 0.0;
         var row_max_height: f32 = 0.0;
         var col_max_width: f32 = 0.0;
+        const gap = l.gap; // inserted between flowed children (and wrapped rows/cols)
 
         for (dep_buf[0..dep_count], 0..) |c, idx| {
             const cs = c.size;
             switch (l.children_align) {
                 .horizontal => {
                     try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
-                    x_offset += cs.width;
+                    x_offset += cs.width + gap;
                 },
                 .horizontal_wrapped => {
                     if (x_offset + cs.width > s.width) {
                         x_offset = 0.0;
-                        y_offset += row_max_height;
+                        y_offset += row_max_height + gap;
                         row_max_height = 0.0;
                     }
                     try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
-                    x_offset += cs.width;
+                    x_offset += cs.width + gap;
                     row_max_height = @max(row_max_height, cs.height);
                 },
                 .horizontal_reverse => {
                     x_offset -= cs.width;
                     try place(c, .{ .x_offset = s.width + x_offset, .y_offset = y_offset });
+                    x_offset -= gap;
                 },
                 .horizontal_reverse_wrapped => {
                     x_offset -= cs.width;
                     if (-x_offset > s.width) {
                         x_offset = 0 - cs.width;
-                        y_offset += row_max_height;
+                        y_offset += row_max_height + gap;
                         row_max_height = 0.0;
                     }
                     try place(c, .{ .x_offset = s.width + x_offset, .y_offset = y_offset });
+                    x_offset -= gap;
                     row_max_height = @max(row_max_height, cs.height);
                 },
                 .vertical => {
                     try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
-                    y_offset += cs.height;
+                    y_offset += cs.height + gap;
                 },
                 .vertical_right => {
                     try place(c, .{ .x_offset = s.width - cs.width, .y_offset = y_offset });
-                    y_offset += cs.height;
+                    y_offset += cs.height + gap;
                 },
                 .vertical_wrapped => {
                     if (y_offset + cs.height > s.height) {
                         y_offset = 0.0;
-                        x_offset += col_max_width;
+                        x_offset += col_max_width + gap;
                         col_max_width = 0.0;
                     }
                     try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
-                    y_offset += cs.height;
+                    y_offset += cs.height + gap;
                     col_max_width = @max(col_max_width, cs.width);
                 },
                 .vertical_reverse => {
                     y_offset -= cs.height;
                     try place(c, .{ .x_offset = x_offset, .y_offset = s.height + y_offset });
+                    y_offset -= gap;
                 },
                 .vertical_reverse_wrapped => {
                     y_offset -= cs.height;
                     if (-y_offset > s.height) {
                         y_offset = 0 - cs.height;
-                        x_offset += col_max_width;
+                        x_offset += col_max_width + gap;
                         col_max_width = 0.0;
                     }
                     try place(c, .{ .x_offset = x_offset, .y_offset = s.height + y_offset });
+                    y_offset -= gap;
                     col_max_width = @max(col_max_width, cs.width);
                 },
                 .centered => {
