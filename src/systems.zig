@@ -11,9 +11,9 @@ const Entity = world_mod.Entity;
 const Query = ecs.Query;
 const With = ecs.With;
 
-/// Decay `Energy` toward zero at `1 / multiplier` units per second — the actor is
-/// cold and hungry, and idleness costs it. Actions (see `main.zig`) push it back up;
-/// surviving means producing faster than this drains. `multiplier` is seconds-per-unit.
+/// Decay `Energy` toward zero at `decay` units per second — the actor is cold and
+/// hungry, and idleness costs it (capital upkeep raises `decay`). Actions (see
+/// `main.zig`) push it back up; surviving means producing faster than this drains.
 pub fn update_energy(
     res: *Resources,
     q: Query(.{comp.Energy}),
@@ -22,7 +22,7 @@ pub fn update_energy(
     var it = q.iter();
     while (it.next()) |e| {
         if (e.v <= 0) continue; // already perished — hold at zero for the death pipeline
-        e.v -= dt / e.multiplier;
+        e.v -= dt * e.decay;
         if (e.v < 0) e.v = 0;
     }
 }
