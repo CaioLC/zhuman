@@ -20,14 +20,19 @@ pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
 
-/// The tree atom. Stores generic data, render flags, and a host payload opaquely.
+/// The tree atom. Stores a host render descriptor opaquely, plus a cache handle.
 ///
-/// Two host-policy type params, both carried but never interpreted by core:
-/// - `RenderFlags` — a flag set the render walk switches on (what/how to draw).
-/// - `UserData` — a catch-all for per-node host values (color, opacity, a sprite
-///   handle…). New host fields go here, so the engine never recompiles to gain one.
-///   Must be default-constructible (`.{}`) — the engine seeds it at `init`.
-pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
+/// One host-policy type param, carried but never interpreted by core:
+/// - `RenderData` — the host's render descriptor: which aspects to draw this frame
+///   and the inline payload each carries (e.g. `text`/`fill`/`outline`, each an
+///   optional `Color`). The render walk switches on it; the engine never reads it.
+///   New host visuals (opacity, a sprite color…) go here, so the engine never
+///   recompiles to gain one. Must be default-constructible (`.{}`) — seeded at `init`.
+///
+/// Frame-local vs persistent: `render_data` is rebuilt every frame (like the node).
+/// Anything that must outlive the frame lives in a `key`-addressed pool, not here;
+/// `data` is only this node's *handle* into such a pool (its content is persistent).
+pub fn Node(comptime RenderData: type) type {
     return struct {
         const Self = @This();
 
@@ -43,13 +48,10 @@ pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
         /// re-derives identically and re-finds the node's slots. `null` = caches nothing.
         key: u64,
-        /// Host-defined render flags (policy). Core only carries them; the host's
-        /// render walk reads them to decide what/how to draw. Defaults to all-clear.
-        render_flags: RenderFlags,
-        /// Host-defined per-node payload (policy). Core only carries it; the host
-        /// reads it (e.g. its draw primitives paint in `user.color`). Add a field to
-        /// the host's `UserData` to give every node a new value — no engine change.
-        user: UserData,
+        /// Host-defined render descriptor (policy). Core only carries it; the host's
+        /// render walk reads it to decide what/how to draw — which aspects, in which
+        /// color. Frame-local (rebuilt each frame). Defaults to all-clear (`.{}`).
+        render_data: RenderData,
 
         /// Every node is a box: both default at `create` (size hugs its children,
         /// layout anchors top-left flowing horizontally) and are overridden via
@@ -98,8 +100,7 @@ pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
                 .children = .empty,
                 .data = null,
                 .key = key(0, id),
-                .render_flags = .{},
-                .user = .{},
+                .render_data = .{},
                 .size = features.Size.init(.fit_children, .fit_children, null),
                 .layout = features.Layout.init(.top_left, .horizontal),
             };
@@ -129,8 +130,8 @@ pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
             return self;
         }
 
-        pub fn with_user(self: *Self, u: UserData) *Self {
-            self.user = u;
+        pub fn with_render_data(self: *Self, rd: RenderData) *Self {
+            self.render_data = rd;
             return self;
         }
 
@@ -194,7 +195,7 @@ pub fn Node(comptime RenderFlags: type, comptime UserData: type) type {
 
 /// A node's resolved screen rect from its layout + size, or null if it hasn't
 /// been laid out yet. Pure geometry read straight off the node. `node` is
-/// `anytype` (a `*Node(RenderFlags)`); only tag-agnostic fields are touched.
+/// `anytype` (a `*Node(RenderData)`); only render-agnostic fields are touched.
 fn node_rect(node: anytype) ?geometry.Rect {
     return .{
         .x = node.layout._global_x orelse return null,
@@ -209,7 +210,7 @@ fn node_rect(node: anytype) ?geometry.Rect {
 /// tree walk. Only stamps nodes that already have a live slot — i.e. were `query`'d
 /// this frame; `stampRect` no-ops otherwise. Call once after `set_global_pos`, before
 /// the arena (and this tree) is reset. `u`/`node` are duck-typed (the concrete `Ctx`
-/// / `*Node(RenderFlags)`) to keep this module free of the binding.
+/// / `*Node(RenderData)`) to keep this module free of the binding.
 pub fn stamp_rects(u: anytype, node: anytype) void {
     if (node_rect(node)) |r| u.stampRect(node.key, r);
     for (node.children.items) |child| stamp_rects(u, child);
@@ -220,9 +221,9 @@ test {
     _ = @import("./ctx.zig");
 }
 
-/// A concrete `Node` for tests — flags and host payload are irrelevant to
-/// layout/traversal, so an empty set suffices for both.
-const TestNode = Node(packed struct {}, struct {});
+/// A concrete `Node` for tests — the render descriptor is irrelevant to
+/// layout/traversal, so an empty struct suffices.
+const TestNode = Node(struct {});
 
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -245,8 +246,6 @@ test "node tree layout" {
     _ = child2.with_layout(Layout.init(.bottom_center, null));
     try root.add_child(allocator, child2);
 
-    // Sizing happens in the solve pass — pure, no host bundle. These are all
-    // `fixed`, so no measured `data_*` is needed.
     try root.set_global_pos();
 
     try std.testing.expect(child.layout._global_x.? == 350.0);
@@ -320,18 +319,19 @@ test "iterate walks the subtree in pre-order, climbing across levels" {
     try std.testing.expectEqual(@as(?*TestNode, null), leaf_it.next());
 }
 
-test "node carries host render flags opaquely: default-clear, settable" {
+test "node carries host render data opaquely: default-clear, settable" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
 
-    const RenderFlags = packed struct { text: bool = false, border: bool = false };
-    const N = Node(RenderFlags, struct {});
+    // Aspects are optional payloads (a color), not bare bits — present ⟹ draw it.
+    const RenderData = struct { text: ?Color = null, border: ?Color = null };
+    const N = Node(RenderData);
 
     const n = try N.create(a, "n");
-    try std.testing.expect(!n.render_flags.text and !n.render_flags.border); // init = all-clear
-    n.render_flags = .{ .text = true };
-    try std.testing.expect(n.render_flags.text and !n.render_flags.border); // composable, independent
+    try std.testing.expect(n.render_data.text == null and n.render_data.border == null); // init = all-clear
+    n.render_data.text = Color.white;
+    try std.testing.expect(n.render_data.text != null and n.render_data.border == null); // independent aspects
 }
 
 test "pct_of_parent resolves against a definite (fixed) parent" {

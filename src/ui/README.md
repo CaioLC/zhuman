@@ -28,7 +28,7 @@ parametrized so the host plugs its own types in:
 
 ```zig
 Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type)  // the per-frame builder
-Node(comptime RenderFlags: type, comptime UserData: type)                 // the tree atom
+Node(comptime RenderData: type)                                           // the tree atom
 ```
 
 - `StateNs` — a namespace of the render-state types the host wants cached (one
@@ -41,19 +41,19 @@ Node(comptime RenderFlags: type, comptime UserData: type)                 // the
   split are host policy.
 - `Res` — the host's resource bundle (fonts, renderer, input, …). The engine
   holds a `*Res` opaquely and never touches its fields; only host code does.
-- `RenderFlags` — the host's render-flag type (a packed struct of defaulted bools,
-  e.g. `.text`, `.border`, `.inactive`). Carried on every node; the engine stores
-  it opaquely and **never reads it** — it's pure render *policy* the host switches on.
-- `UserData` — the host's per-node payload type (a struct of defaulted fields, e.g.
-  `color`, later `opacity`/`border`/a sprite handle). Carried on every node as `user`;
-  the engine stores it opaquely and **never reads it**. This is the extensibility
-  seam: add a field to the host's `UserData` to give every node a new value with **no
-  engine change/recompile** — the engine never grows a concrete field like `color`.
-  Must be default-constructible (`.{}`) — the engine seeds it at `init`.
+- `RenderData` — the host's render descriptor, carried on every node as `render_data`:
+  which draw aspects to paint this frame **and the inline payload each needs** (e.g.
+  `text`/`fill`/`outline`, each an *optional* `Color` — present ⟹ draw that aspect
+  in that color). The engine stores it opaquely and **never reads it** — it's pure
+  render *policy* the host's render walk switches on. This is the extensibility seam:
+  add a field to give every node a new draw aspect with **no engine change/recompile**.
+  Must be default-constructible (`.{}`) — the engine seeds it at `init`. (Frame-local:
+  rebuilt from scratch each frame, like the node itself.) Named *Data*, not *Flags*,
+  because the fields carry payloads (a `Color`), not bare bits.
 
 The host supplies, *one layer up* (today `src/widgets.zig` + `src/res.zig`):
 the concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)`
-and `pub const Node = ui.Node(RenderFlags)`, the `Interaction` type, the widget
+and `pub const Node = ui.Node(RenderData)`, the `Interaction` type, the widget
 functions, the build-time measurement + the render loop, and `Resources` itself. To
 lift this into its own project, take `src/ui/` as-is; `widgets.zig`/`res.zig` are
 the template for how a host binds it. (The engine type is `Ctx`; the host names its
@@ -67,7 +67,7 @@ binding `UiCtx`.)
 | `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, and the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
-| `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `UserData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
+| `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `RenderData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
 | `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`) + the whole solve: sizing passes + `set_global_pos`/placement. |
 
@@ -92,18 +92,40 @@ frame's geometry doesn't exist yet, so `mark` hit-tests the rects stamped after 
 *previous* frame's layout (step 7). The interaction **slot pool** — not a retained
 node tree — is what carries that geometry across the frame boundary.
 
+## Where node state lives (the one rule)
+
+A node is **arena-allocated and rebuilt from scratch every frame**, so it can only
+ever hold *frame-local* state. Anything that must survive the reset lives in a **pool
+keyed by `node.key`** — the node holds, at most, the *handle* to it. That single
+axis — *does this outlive the frame?* — decides where everything goes, and keeps the
+mechanisms from multiplying:
+
+| State | Home | Lifetime | Job |
+|---|---|---|---|
+| `render_data` | on the node | **frame-local** | which aspects to draw + the inline payload each needs (a `Color`) |
+| `data` (handle) | on the node → into a pool | content is **persistent** | this node's access path to its cached render state (`TextData`) |
+| interaction (`Slot{flags,rect}`) | pool, keyed by `node.key` | **persistent** | input state; reached via `query`/`mark`, never stored on the node |
+
+The node never holds persistent data *directly* — persistence is **always** a pool
+slot keyed by `node.key`. `render_data` is the one frame-local payload (color folds in
+here); `data` is the door to the persistent render-state pool; interaction is the other
+persistent, key-addressed store. Interaction can't fold into `render_data` precisely
+because they're opposite lifetimes: `render_data` is rebuilt each frame, while an
+interaction slot **must** persist (the rect stamped after frame N's layout is what
+frame N+1's event stage hit-tests, and `active` latches). Interaction's sibling is
+`TextData` — both are persistent and key-addressed — not `render_data`.
+
 ## Node & features
 
-A `Node` is the atom (generic over the host's `RenderFlags`):
+A `Node` is the atom (generic over the host's `RenderData`):
 
 ```zig
-Node(RenderFlags, UserData) {
-    id: []const u8,            // human-readable, for debugging
+Node(RenderData) {
+    id: []const u8,           // human-readable, for debugging
     parent, children,
     data: ?u32,               // handle into a render-state pool (e.g. TextData); null = no render state
     key: u64,                 // stable identity → the node's slot in every cache pool (hash of parent key + id)
-    render_flags: RenderFlags, // host render flags (policy); engine never reads them
-    user: UserData,           // host per-node payload (e.g. user.color); engine carries, never reads
+    render_data: RenderData,  // host render descriptor (policy): aspects + inline payload; engine never reads it
     size:  Size,              // per-axis SizeRule + padding + resolved box + measured data_*; defaulted at create
     layout: Layout,           // positional: anchor + children alignment; defaulted at create
 }
@@ -114,11 +136,11 @@ and `pcreate`, which creates + binds in one call — wire the tree. **Every node
 box:** `size`/`layout` are non-optional, defaulted at `create` (a `fit_children` box
 anchored `top_left`/`horizontal`) and overridden where a widget wants otherwise, so
 the layout passes never branch on "does this node have a box." The one optional
-payload left is `data` (a node may cache nothing). `render_flags` is a host-defined
-flag *set* the engine carries but never interprets — the render loop switches on it
-(text vs sprite vs a payload-less modifier like `border`), and it doubles as the
-discriminant for `data`: `.text` ⟹ resolve `data` through the `TextData` pool,
-`.sprite` ⟹ the sprite pool, so no separate data-kind union is needed.
+payload left is `data` (a node may cache nothing). `render_data` is a host-defined
+descriptor the engine carries but never interprets — the render loop switches on its
+fields (text vs sprite vs a fill/outline color), and a set aspect doubles as the
+discriminant for `data`: a present `text` ⟹ resolve `data` through the `TextData`
+pool, a present `sprite` ⟹ the sprite pool, so no separate data-kind union is needed.
 
 ## The key-cache: pools + handles
 
@@ -145,7 +167,7 @@ slot-map:
 Every node carries a `key` (set at `create`, finalized on attach), so any node is
 queryable — there's no separate opt-in. A node *participates* in hit-testing only when something
 `query`s it (that's what keeps its interaction slot alive). **The flag vocabulary is
-host-defined**, exactly like `RenderFlags`: the host passes its `Interaction` struct
+host-defined**, exactly like `RenderData`: the host passes its `Interaction` struct
 as the `IntFlags` parameter, and the engine stores it opaquely — it owns neither the
 field names nor what they mean. Today's host (`widgets.zig`):
 
@@ -266,7 +288,7 @@ pub fn data_text(u, node, text) !void {
     node.data = idx;
     const tw, const th = u.res.font.getStringSize(text); // host measures, at build
     // …content-size node.size with data_width/height = tw/th…
-    node.render_flags = .{ .text = true };           // how the render walk draws it
+    node.render_data.text = .{};                     // present (white) ⟹ render walk draws text
 }
 
 // read interaction off the node (read-through: allocates/keeps the slot). Any
@@ -296,16 +318,18 @@ Add a data type to `UiState` to make a node cacheable; add a flag to `Interactio
 to give it new interactive behaviour.
 
 **Rendering is entirely host-side.** The engine has no draw feature — it stores
-the tree + node `data`/`render_flags` and exposes `root.iterate()` (a zero-alloc
+the tree + node `data`/`render_data` and exposes `root.iterate()` (a zero-alloc
 pre-order cursor). The host loop *is the renderer*; it lives at the call site
 (`main.zig`), not behind an engine wrapper, and picks whatever backend it likes
-(SDL, GPU, CPU):
+(SDL, GPU, CPU). Each aspect is an *optional* payload — unwrap it, and the value is
+the color to paint in:
 
 ```zig
 var it = root.iterate();
 while (it.next()) |node| {
-    if (node.render_flags.text) draw_text(u, node);   // resolve node.data → TextData, blit
-    // if (node.render_flags.border) draw_border(node);  // one branch per RenderFlags aspect
+    if (node.render_data.fill)    |c| draw_fill(u, node, c);    // c: the fill color
+    if (node.render_data.outline) |c| draw_outline(u, node, c);
+    if (node.render_data.text)    |c| draw_text(u, node, c);    // resolve node.data → TextData, blit in c
 }
 ```
 

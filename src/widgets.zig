@@ -27,44 +27,39 @@ pub const Interaction = packed struct {
 /// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
 pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
 
-/// Host-defined render flags carried on every node (policy — core stores them
-/// opaquely, never reads them). The render walk switches on these to decide what
-/// to draw. A packed struct of defaulted bools: add a field (e.g. `border`,
-/// `inactive`) the day the renderer grows a new aspect — one line, no engine
-/// change. Composable: a node can be several at once.
-pub const RenderFlags = packed struct {
-    text: bool = false,
-    fill: bool = false, // solid rect spanning the node's resolved box
-    outline: bool = false, // 1px box border around the node's resolved box
+/// Host-defined render descriptor carried on every node (policy — core stores it
+/// opaquely, never reads it). The render walk switches on its fields to decide what
+/// to draw. Each aspect is an *optional payload*, not a bare bit: present ⟹ draw that
+/// aspect, and the value is the `Color` to paint it in (color is frame-local visual
+/// state, so it rides here rather than in a separate field). Add an aspect (e.g. a
+/// `sprite` handle) the day the renderer grows one — one line, no engine change.
+/// Composable: a node can set several aspects at once.
+pub const RenderData = struct {
+    text: ?ui.Color = null, // cached glyphs (handle in node.data), blit in this color
+    fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
+    outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
 };
 
-/// Host-defined per-node payload (policy). The engine carries it opaquely on every
-/// node; only host code (the draw primitives, widgets) reads it. Add a field here to
-/// give every node a new value — color today, opacity/border/sprite later — with no
-/// change to the generic engine. Must be default-constructible (the engine seeds `.{}`).
-pub const UserData = struct {
-    color: ui.Color = .{}, // what the draw primitives paint this node in (defaults white)
-};
-
-/// Concrete node type for this host, bound to the host's `RenderFlags` + `UserData`.
-pub const Node = ui.Node(RenderFlags, UserData);
+/// Concrete node type for this host, bound to the host's `RenderData`. Persistent
+/// per-node state (the glyph surface) lives in a `UiState` pool keyed by `node.key`,
+/// reached via the engine's `node.data` handle — not on the node itself.
+pub const Node = ui.Node(RenderData);
 
 const TextData = zfont.TextData;
 
 // --- Helper Functions ---------------------------------------------------
 
-/// Draw a `.text` node: resolve its cached `TextData` via `node.data` and blit it.
-/// One render primitive per `RenderFlags` aspect; the host's render loop (in `main.zig`)
-/// walks the tree and calls the primitives whose flags are set. `data` should be
-/// non-null whenever `.text` is — the guard is belt-and-suspenders.
-pub fn draw_text(u: *UiCtx, node: *Node) void {
+/// Draw a text node: resolve its cached `TextData` via `node.data` and blit it in `c`.
+/// One render primitive per `RenderData` aspect; the host's render loop (in `main.zig`)
+/// unwraps each optional aspect and passes its color in. `data` should be non-null
+/// whenever `text` is present — the guard is belt-and-suspenders.
+pub fn draw_text(u: *UiCtx, node: *Node, c: ui.Color) void {
     const idx = node.data orelse return;
     const td = u.pool(TextData).get(idx);
     const s = node.size;
     const l = node.layout;
     const fmt = td.text() orelse return;
 
-    const c = node.user.color;
     var surface = u.res.font.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
     const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
@@ -90,18 +85,16 @@ fn node_box(node: *Node) ?sdl.rect.FRect {
     };
 }
 
-/// Draw a `.fill` node: a solid rect in the node's color over its resolved box.
-pub fn draw_fill(u: *UiCtx, node: *Node) void {
+/// Draw a fill node: a solid rect in color `c` over its resolved box.
+pub fn draw_fill(u: *UiCtx, node: *Node, c: ui.Color) void {
     const box = node_box(node) orelse return;
-    const c = node.user.color;
     u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     u.res.renderer.renderFillRect(box) catch return;
 }
 
-/// Draw an `.outline` node: a box border in the node's color around its resolved box.
-pub fn draw_outline(u: *UiCtx, node: *Node) void {
+/// Draw an outline node: a box border in color `c` around its resolved box.
+pub fn draw_outline(u: *UiCtx, node: *Node, c: ui.Color) void {
     const box = node_box(node) orelse return;
-    const c = node.user.color;
     u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     u.res.renderer.renderRect(box) catch return;
 }
@@ -124,12 +117,12 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     size.data_width = @floatFromInt(tw);
     size.data_height = @floatFromInt(th);
     node.size = size;
-    node.render_flags = .{ .text = true }; // flags how the host's render walk draws it
+    node.render_data.text = .{}; // present (white) ⟹ render walk blits it; caller may recolor
 }
 
 // --- Widget palette ----------------------------------------------------------
 // Interaction-state colors the widgets paint themselves in. Kept here (host
-// policy) so the engine stays color-agnostic — it only carries `node.color`.
+// policy) so the engine stays color-agnostic — it only carries `node.render_data`.
 
 const col_normal = ui.Color{ .r = 200, .g = 200, .b = 210 }; // idle button: soft white
 const col_hover = ui.Color.white; // hovered: full bright
@@ -164,14 +157,12 @@ pub fn label(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*No
 /// a fill bar the inverse. `fill` colors the inner bar; the track outline is a dim grey.
 pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: ui.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_flags.outline = true;
-    outer.user.color = col_track;
+    outer.render_data.outline = col_track;
     _ = outer.with_layout(ui.features.Layout.init(.relative, null))
         .with_size(ui.features.Size.initFixed(240, 24, null));
 
     const inner = try Node.pcreate(ctx.arena, "inner", outer);
-    inner.render_flags.fill = true;
-    inner.user.color = fill;
+    inner.render_data.fill = fill;
     _ = inner.with_layout(ui.features.Layout.init(.top_left, null))
         .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
 
@@ -193,7 +184,6 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// the click — `enabled` is purely the look; pass it whatever "affordable" means.
 pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_flags.outline = true;
     _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
 
@@ -203,10 +193,11 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
 
     // State color: dim if disabled, else bright on hover, else idle. Querying here
-    // also keeps the slot alive (same as the caller's `.clicked` read).
+    // also keeps the slot alive (same as the caller's `.clicked` read). The box draws
+    // an outline, the label its text — both in `c`.
     const c = if (!enabled) col_disabled else if (outer.query(ctx).hovering) col_hover else col_normal;
-    outer.user.color = c;
-    lbl.user.color = c;
+    outer.render_data.outline = c;
+    lbl.render_data.text = c;
 
     return outer;
 }
@@ -220,14 +211,13 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
 ///   `_ = try label(ctx, p, "energy", "Energy: 8 J");`
 pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_flags.outline = true;
-    outer.user.color = col_panel;
+    outer.render_data.outline = col_panel;
     _ = outer.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(8))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(12)));
 
     const ttl = try Node.pcreate(ctx.arena, "title", outer);
     try data_text(ctx, ttl, title);
-    ttl.user.color = col_title;
+    ttl.render_data.text = col_title;
     _ = ttl.with_layout(ui.features.Layout.init(.relative, null));
 
     return outer;

@@ -208,9 +208,9 @@ pub fn main() !void {
         // ui
         var it = root.iterate();
         while (it.next()) |node| {
-            if (node.render_flags.fill) widgets.draw_fill(&app.ui, node);
-            if (node.render_flags.outline) widgets.draw_outline(&app.ui, node);
-            if (node.render_flags.text) widgets.draw_text(&app.ui, node);
+            if (node.render_data.fill) |c| widgets.draw_fill(&app.ui, node, c);
+            if (node.render_data.outline) |c| widgets.draw_outline(&app.ui, node, c);
+            if (node.render_data.text) |c| widgets.draw_text(&app.ui, node, c);
         }
         // present
         try app.renderer.present();
