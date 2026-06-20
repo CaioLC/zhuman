@@ -38,7 +38,16 @@ pub const RenderData = struct {
     text: ?ui.Color = null, // cached glyphs (handle in node.data), blit in this color
     fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
     outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
-    img: ?sdl.render.Texture = null, // cached texture (owned by Resources), blit over the node's box
+    img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
+};
+
+/// A textured draw: which texture (cached on `Resources`), and an optional `src`
+/// sub-rect selecting one cell of a sprite sheet. `src == null` blits the whole
+/// texture. The on-screen size comes from the node's resolved box, not from `src` —
+/// `data_img`/`data_sprite` set that box, so a 512px sheet cell can draw at 48px.
+pub const Sprite = struct {
+    texture: sdl.render.Texture,
+    src: ?sdl.rect.FRect = null,
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
@@ -75,7 +84,10 @@ pub fn draw_text(u: *UiCtx, node: *Node, c: ui.Color) void {
     u.res.renderer.renderTexture(texture, null, dst) catch return;
 }
 
-pub fn draw_texture(u: *UiCtx, node: *Node, texture: sdl.render.Texture) void {
+/// Draw a textured node: blit `sprite` (whole texture, or its `src` cell) into the
+/// node's resolved box. Same dst geometry as `draw_text` — global pos inset by padding,
+/// sized by the node's measured `data_*` dims.
+pub fn draw_texture(u: *UiCtx, node: *Node, sprite: Sprite) void {
     const s = node.size;
     const l = node.layout;
     const dst = sdl.rect.FRect{
@@ -84,7 +96,7 @@ pub fn draw_texture(u: *UiCtx, node: *Node, texture: sdl.render.Texture) void {
         .w = s.data_width,
         .h = s.data_height,
     };
-    u.res.renderer.renderTexture(texture, null, dst) catch return;
+    u.res.renderer.renderTexture(sprite.texture, sprite.src, dst) catch return;
 }
 
 /// The node's resolved on-screen box (global pos from layout + solved size), or null
@@ -134,11 +146,19 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 }
 
 /// Feature mixin: give `node` a cached texture (owned by `Resources`, not pooled per-node
-/// like `TextData`). Sizes the node to the texture and flags the `img` aspect for the walk.
+/// like `TextData`). Sizes the node to the whole texture and flags the `img` aspect.
 pub fn data_img(_: *UiCtx, node: *Node, texture: sdl.render.Texture) !void {
     const w, const h = try texture.getSize();
     node.size = ui.features.Size.initContent(w, h, null);
-    node.render_data = .{ .img = texture };
+    node.render_data.img = .{ .texture = texture };
+}
+
+/// Feature mixin: draw one `src` cell of a sprite sheet at a fixed `px`×`px` on screen.
+/// Unlike `data_img`, the display size is the caller's choice (sheet cells are large),
+/// so the source rect and on-screen box are decoupled.
+pub fn data_sprite(_: *UiCtx, node: *Node, texture: sdl.render.Texture, src: sdl.rect.FRect, px: f32) !void {
+    node.size = ui.features.Size.initContent(px, px, null);
+    node.render_data.img = .{ .texture = texture, .src = src };
 }
 
 // --- Widget palette ----------------------------------------------------------
@@ -229,6 +249,20 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     lbl.render_data.text = c;
 
     return outer;
+}
+
+/// Icon button: a clickable sprite cell drawn at `px`×`px`, with a hover/affordability
+/// outline ringing it (host policy, mirroring `button`). The render walk draws the
+/// outline *after* the image, so the ring shows over the opaque icon tile. Querying
+/// keeps the slot alive for next frame's hit-test; the caller reads `.clicked` and
+/// still guards the click — `enabled` is purely the look (dim / bright-on-hover / idle).
+/// Text-on-hover is deferred; the icon alone is the affordance for now.
+pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Texture, src: sdl.rect.FRect, px: f32, enabled: bool) !*Node {
+    const node = try Node.pcreate(ctx.arena, key, parent);
+    try data_sprite(ctx, node, texture, src, px);
+    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    node.render_data.outline = if (!enabled) col_disabled else if (node.query(ctx).hovering) col_hover else col_normal;
+    return node;
 }
 
 /// Panel: a titled, bordered, padded section that groups related content. Builds an

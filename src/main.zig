@@ -56,17 +56,25 @@ const Good = struct {
     prob_add: f32 = 0.0, // tool only
     trickle_add: f32 = 0.0, // comfort only
     upkeep: f32 = 0.0, // comfort only: added energy decay/s
+    icon_x: f32 = 0, // source cell origin in the icons.png sheet (icon_cell-sized squares)
+    icon_y: f32 = 0,
 };
 
+/// Each sprite cell in `assets/icons.png` is this many pixels square (the sheet is a
+/// 2×2 grid of 512px cells). `icon_x`/`icon_y` below index into it.
+const icon_cell = 512.0;
+/// On-screen size of a capital icon button.
+const icon_px = 56.0;
+
 const capital = [_]Good{
-    // Sandals: Walking is easier, makes gathering more effective.
-    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10 },
-    // Fishing rod: makes Fish (actions[1]) land more often and yield more.
-    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25 },
-    // Bed: rest better — stamina trickles back faster, no upkeep.
-    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4 },
-    // Fireplace: warmth speeds recovery a lot, but burns energy to stay lit.
-    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3 },
+    // Sandals: Walking is easier, makes gathering more effective. (sheet: top-right)
+    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_x = icon_cell, .icon_y = 0 },
+    // Fishing rod: makes Fish (actions[1]) land more often and yield more. (sheet: top-left)
+    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_x = 0, .icon_y = 0 },
+    // Bed: rest better — stamina trickles back faster, no upkeep. (sheet: bottom-left)
+    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4, .icon_x = 0, .icon_y = icon_cell },
+    // Fireplace: warmth speeds recovery a lot, but burns energy to stay lit. (sheet: bottom-right)
+    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3, .icon_x = icon_cell, .icon_y = icon_cell },
 };
 
 /// Spawn a fresh actor — starved and cold (low energy), but rested (full stamina).
@@ -75,7 +83,7 @@ const capital = [_]Good{
 /// respawn floor.
 fn spawn_player(world: *ha.world.World) void {
     _ = world.spawn(.{
-        comp.Energy{ .v = 8, .max = 8, .decay = 0.5 }, // starved; bleeds 0.5/s when idle
+        comp.Energy{ .v = 8, .max = 8, .decay = 0.4 }, // starved; bleeds 0.5/s when idle
         comp.Stamina{ .v = 10, .max = 10, .trickle = 0.3 }, // rested; tiny passive regen
         comp.Capital{}, // owns nothing yet
         tag.Player,
@@ -209,10 +217,12 @@ pub fn main() !void {
         // ui
         var it = root.iterate();
         while (it.next()) |node| {
+            // Order matters: fill (backmost) → image → text → outline (topmost). The
+            // outline draws last so a hover/affordance ring shows over opaque icon tiles.
             if (node.render_data.fill) |c| widgets.draw_fill(&app.ui, node, c);
-            if (node.render_data.outline) |c| widgets.draw_outline(&app.ui, node, c);
+            if (node.render_data.img) |s| widgets.draw_texture(&app.ui, node, s);
             if (node.render_data.text) |c| widgets.draw_text(&app.ui, node, c);
-            if (node.render_data.img) |c| widgets.draw_texture(&app.ui, node, c);
+            if (node.render_data.outline) |c| widgets.draw_outline(&app.ui, node, c);
         }
         // present
         try app.renderer.present();
@@ -239,8 +249,8 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
     // Test image, pinned top-right. `img` sizes the node to the texture; we only
     // override the anchor. Texture is cached on Resources, not pooled per-node.
-    const top_right = try widgets.img(ui_ctx, root, "img", res.tex);
-    _ = top_right.with_layout(ui.features.Layout.init(.top_right, null));
+    // const top_right = try widgets.img(ui_ctx, root, "img", res.tex);
+    // _ = top_right.with_layout(ui.features.Layout.init(.top_right, null));
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     {
@@ -289,24 +299,25 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
             }
 
             // Capital panel — spend surplus energy now on a permanent edge later. One-time
-            // unlocks — an owned good shows as a static line; an unowned one is a buy
-            // button (greyed out by an affordability guard if you can't pay yet).
+            // unlocks, shown as a horizontal tray of icons (icons.png sheet). An owned good
+            // is a static icon; an unowned one is an icon_button — its ring brightens on
+            // hover and dims when unaffordable (the click is also affordability-guarded).
+            // Icon-only for now; the cost/effect text moves to a hover tooltip later.
             const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
+            const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
+            _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
             for (capital, 0..) |g, gi| {
                 const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
+                const src = sdl.rect.FRect{ .x = g.icon_x, .y = g.icon_y, .w = icon_cell, .h = icon_cell };
                 if (owns(cap, gi)) {
-                    _ = try widgets.label(ui_ctx, cap_panel, ckey, std.fmt.bufPrint(&char_buf, "{s}: owned", .{g.label}) catch g.label);
+                    // Owned: a static icon, no ring, not clickable.
+                    const node = try widgets.Node.pcreate(ui_ctx.arena, ckey, cap_row);
+                    try widgets.data_sprite(ui_ctx, node, res.icons, src, icon_px);
+                    _ = node.with_layout(ui.features.Layout.init(.relative, null));
                     continue;
                 }
-                const txt = switch (g.kind) {
-                    .tool => std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.stamina_cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
-                    .comfort => if (g.upkeep > 0)
-                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  +{d:.1}/s sta, -{d:.1}/s e", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add, g.upkeep }) catch g.label
-                    else
-                        std.fmt.bufPrint(&char_buf, "Buy {s} [{d:.0} e, {d:.0} sta]  +{d:.1}/s sta", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add }) catch g.label,
-                };
                 const affordable = energy.v >= g.energy_cost and stamina.v >= g.stamina_cost;
-                const buy = try widgets.button(ui_ctx, cap_panel, ckey, txt, affordable);
+                const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, res.icons, src, icon_px, affordable);
                 if (buy.query(ui_ctx).clicked and affordable) {
                     energy.v -= g.energy_cost;
                     stamina.v -= g.stamina_cost;

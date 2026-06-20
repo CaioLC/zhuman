@@ -27,9 +27,13 @@ pub const Resources = struct {
     /// today and the AI deciders later draw uncertainty from the same stream.
     prng: std.Random.DefaultPrng,
     tex: sdl.render.Texture,
+    /// Sprite sheet of capital-good icons (`assets/icons.png`, a 2×2 grid). Cached once
+    /// here; the UI samples cells from it by source rect (see `widgets.data_sprite`).
+    icons: sdl.render.Texture,
 
     pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");
+        const icons = try sdl.image.loadTexture(r.*, "assets/icons.png");
         return .{
             .font = f,
             .renderer = r,
@@ -38,11 +42,13 @@ pub const Resources = struct {
             .input = .{},
             .prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())),
             .tex = tex,
+            .icons = icons,
         };
     }
 
     pub fn deinit(self: *Resources) void {
         self.tex.deinit();
+        self.icons.deinit();
     }
 
     /// A `std.Random` over `prng` — call `.float(f32)`, `.boolean()`, etc. on it.
