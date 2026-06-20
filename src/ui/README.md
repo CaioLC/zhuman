@@ -214,9 +214,11 @@ is the bridge: rects are stamped into it after layout, and flags are written int
 at the event stage — both survive the arena reset, so no `prev_root` is retained.
 
 Slots are **lazy**: a store slot exists only after `acquire` — called by
-`interactionOf` (a `query` *read*) or `setFlag` (a direct write). `stampRect` and
-`mark` only ever touch *existing* slots, so a node nobody queries gets no slot, no
-rect, and no hit-test — cost ≈ (queried nodes), not node count. A slot stays alive
+`interactionOf` (a `query` *read*) or `setFlag` (a direct write). `stampRect`,
+`rectOf`, and `mark` only ever touch *existing* slots, so a node nobody queries gets
+no slot, no rect, and no hit-test — cost ≈ (queried nodes), not node count. `rectOf`
+(via `node.rect`) reads back the slot's last-stamped rect without creating one — for
+positioning one node relative to where another was drawn last frame. A slot stays alive
 only while *touched* (acquired) each frame:
 
 - A node not `query`'d this frame is pruned at `endFrame`, dropping straight out of
@@ -242,6 +244,14 @@ Two orthogonal axes, both Unity-inspired:
   parent grows to include the gaps. Defaults to 0; set with `Layout.init(..).with_gap(n)`.
   Per-node **`Size.padding`** (inset around a node's content, already on every box) is
   the orthogonal knob — gap spaces siblings, padding insets a box's own content.
+- **`origin`** — a *root's* screen position (where its top-left lands). Defaults to
+  (0,0), so the main tree fills from the corner. The host can render **multiple roots**
+  (`root.set_global_pos()` + `root.iterate()` per tree) and float a second one — an
+  overlay/tooltip layer — anywhere on screen by giving its root an origin:
+  `Layout.init(.top_left, ..).with_origin(x, y)`. A root rendered last draws on top, and
+  being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
+  to an existing node, read that node's prior-frame rect with **`node.rect(ctx)`**
+  (→ `Ctx.rectOf(key)`, the rect `stamp_rects` recorded last frame) and derive the origin.
 
 ### Sizing
 

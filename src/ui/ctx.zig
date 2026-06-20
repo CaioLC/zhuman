@@ -90,6 +90,15 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.interactions.get(idx).flags;
         }
 
+        /// The rect last stamped on key `k`'s slot (i.e. its laid-out box from a prior
+        /// frame), or null if `k` has no slot or was never stamped. Reads without
+        /// creating a slot — for positioning one node relative to another's last rect
+        /// (e.g. a tooltip above a hovered icon) before this frame's layout runs.
+        pub fn rectOf(self: *Self, k: u64) ?Rect {
+            const idx = self.interactions.index.get(k) orelse return null;
+            return self.interactions.slots.items[idx].value.rect;
+        }
+
         /// Record `rect` on key `k`'s slot — but only if the slot already exists (i.e.
         /// the node was `query`'d this frame). No-op otherwise, so non-queried nodes
         /// never get a slot or a hit-test. Called by the post-layout `stamp_rects` walk.

@@ -172,6 +172,7 @@ const col_track = ui.Color{ .r = 90, .g = 90, .b = 105 }; // progress-bar track 
 const col_stamina = ui.Color{ .r = 230, .g = 180, .b = 80 }; // stamina fill: warm amber
 const col_panel = ui.Color{ .r = 100, .g = 110, .b = 140 }; // panel border: muted blue-grey
 const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool light blue
+const col_tip_fill = ui.Color{ .r = 16, .g = 16, .b = 28 }; // tooltip backing: opaque near-bg, so text reads over anything
 
 // --- Widget functions --------------------------------------------------------
 //
@@ -263,6 +264,25 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.ren
     _ = node.with_layout(ui.features.Layout.init(.relative, null));
     node.render_data.outline = if (!enabled) col_disabled else if (node.query(ctx).hovering) col_hover else col_normal;
     return node;
+}
+
+/// Tooltip: a floating, filled + bordered, padded box holding a single text line.
+/// Built as its **own root** (no parent) so the host can place it as an overlay layer —
+/// position it with `node.layout.with_origin(x, y)` and render it after the main tree so
+/// it sits on top. Opaque fill so the text reads over whatever's behind it. Returns the box.
+pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
+    const box = try Node.create(ctx.arena, key);
+    box.render_data.fill = col_tip_fill;
+    box.render_data.outline = col_panel;
+    _ = box.with_layout(ui.features.Layout.init(.top_left, .vertical))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(6)));
+
+    const lbl = try Node.pcreate(ctx.arena, "lbl", box);
+    try data_text(ctx, lbl, text);
+    lbl.render_data.text = col_normal;
+    _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
+
+    return box;
 }
 
 /// Panel: a titled, bordered, padded section that groups related content. Builds an

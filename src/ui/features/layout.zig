@@ -46,6 +46,13 @@ pub const Layout = struct {
     /// nor before the first / after the last child. `fit_children` parents grow to
     /// include the gaps. Defaults to 0 — set via `with_gap`.
     gap: f32,
+    /// Screen origin for a *parentless* (root) node: where its top-left lands. Lets a
+    /// second, independent tree — an overlay/tooltip layer — be placed anywhere on
+    /// screen instead of stacking at (0,0). Ignored once a node has a parent (it's
+    /// positioned relative to that parent). Defaults to (0,0), so the main root is
+    /// unaffected. Set via `with_origin`.
+    origin_x: f32 = 0,
+    origin_y: f32 = 0,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -63,6 +70,15 @@ pub const Layout = struct {
     pub fn with_gap(self: Layout, g: f32) Layout {
         var l = self;
         l.gap = g;
+        return l;
+    }
+
+    /// Copy with the root `origin` set — chains after `init`. Only meaningful on a root
+    /// node (see `origin_x`/`origin_y`); use it to float an overlay tree at a point.
+    pub fn with_origin(self: Layout, x: f32, y: f32) Layout {
+        var l = self;
+        l.origin_x = x;
+        l.origin_y = y;
         return l;
     }
 };
@@ -185,6 +201,12 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
         ph = p.size.height;
         px = p.layout._global_x orelse 0.0;
         py = p.layout._global_y orelse 0.0;
+    } else {
+        // Root: seed from its `origin` (0,0 for the main tree; the cursor/icon point
+        // for a floating overlay). Anchor math below runs against a zero-size parent,
+        // so a `.top_left` overlay lands exactly on its origin.
+        px = node.layout.origin_x;
+        py = node.layout.origin_y;
     }
 
     var x: f32, var y: f32 = .{ undefined, undefined };

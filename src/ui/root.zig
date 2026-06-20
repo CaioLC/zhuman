@@ -190,6 +190,14 @@ pub fn Node(comptime RenderData: type) type {
         pub fn query(self: *Self, u: anytype) @TypeOf(u.*).Interaction {
             return u.interactionOf(self.key);
         }
+
+        /// This node's rect from a *prior* frame's layout (read off its interaction
+        /// slot), or null if it has no live slot yet. Use to place something relative
+        /// to where this node was last drawn — the current frame's rect isn't resolved
+        /// until layout runs after build. `u` is the duck-typed concrete `Ctx`.
+        pub fn rect(self: *Self, u: anytype) ?Rect {
+            return u.rectOf(self.key);
+        }
     };
 }
 
