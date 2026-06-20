@@ -38,6 +38,7 @@ pub const RenderData = struct {
     text: ?ui.Color = null, // cached glyphs (handle in node.data), blit in this color
     fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
     outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
+    img: ?sdl.render.Texture = null, // cached texture (owned by Resources), blit over the node's box
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
@@ -65,6 +66,18 @@ pub fn draw_text(u: *UiCtx, node: *Node, c: ui.Color) void {
     const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
     defer texture.deinit();
 
+    const dst = sdl.rect.FRect{
+        .x = (l._global_x orelse return) + s.padding.left,
+        .y = (l._global_y orelse return) + s.padding.up,
+        .w = s.data_width,
+        .h = s.data_height,
+    };
+    u.res.renderer.renderTexture(texture, null, dst) catch return;
+}
+
+pub fn draw_texture(u: *UiCtx, node: *Node, texture: sdl.render.Texture) void {
+    const s = node.size;
+    const l = node.layout;
     const dst = sdl.rect.FRect{
         .x = (l._global_x orelse return) + s.padding.left,
         .y = (l._global_y orelse return) + s.padding.up,
@@ -120,6 +133,14 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     node.render_data.text = .{}; // present (white) ⟹ render walk blits it; caller may recolor
 }
 
+/// Feature mixin: give `node` a cached texture (owned by `Resources`, not pooled per-node
+/// like `TextData`). Sizes the node to the texture and flags the `img` aspect for the walk.
+pub fn data_img(_: *UiCtx, node: *Node, texture: sdl.render.Texture) !void {
+    const w, const h = try texture.getSize();
+    node.size = ui.features.Size.initContent(w, h, null);
+    node.render_data = .{ .img = texture };
+}
+
 // --- Widget palette ----------------------------------------------------------
 // Interaction-state colors the widgets paint themselves in. Kept here (host
 // policy) so the engine stays color-agnostic — it only carries `node.render_data`.
@@ -147,6 +168,14 @@ pub fn label(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*No
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_text(ctx, node, text);
     _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    return node;
+}
+
+/// Image widget: a leaf node showing `texture`, sized to it. Wires it to `parent`
+/// under `key` and returns it so the caller can override layout (e.g. anchor).
+pub fn img(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Texture) !*Node {
+    const node = try Node.pcreate(ctx.arena, key, parent);
+    try data_img(ctx, node, texture);
     return node;
 }
 

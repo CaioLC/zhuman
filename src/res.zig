@@ -17,25 +17,32 @@ pub const Input = struct {
 };
 
 pub const Resources = struct {
-    font:     *sdl.ttf.Font,
+    font: *sdl.ttf.Font,
     renderer: *const sdl.render.Renderer,
-    window:   sdl.video.Window,
-    time:     Time,
-    input:    Input,
+    window: sdl.video.Window,
+    time: Time,
+    input: Input,
     /// The simulation's one source of chance — every uncertain outcome (an action
     /// that may or may not deliver) is rolled against this. Held here so the player
     /// today and the AI deciders later draw uncertainty from the same stream.
-    prng:     std.Random.DefaultPrng,
+    prng: std.Random.DefaultPrng,
+    tex: sdl.render.Texture,
 
-    pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) Resources {
+    pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+        const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");
         return .{
-            .font     = f,
+            .font = f,
             .renderer = r,
-            .window   = w,
-            .time     = .{ .dt = 0 },
-            .input    = .{},
-            .prng     = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())),
+            .window = w,
+            .time = .{ .dt = 0 },
+            .input = .{},
+            .prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())),
+            .tex = tex,
         };
+    }
+
+    pub fn deinit(self: *Resources) void {
+        self.tex.deinit();
     }
 
     /// A `std.Random` over `prng` — call `.float(f32)`, `.boolean()`, etc. on it.

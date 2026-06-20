@@ -15,7 +15,7 @@
 /// fireplace burning fuel) adds to it.
 pub const Energy = struct {
     v: f32,
-    start: f32,
+    max: f32,
     decay: f32,
 };
 

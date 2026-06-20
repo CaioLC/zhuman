@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
 
         // Lib options.
         // .callbacks = false,
-        // .ext_image = false,
+        .ext_image = true,
         // .ext_net = false,
         .ext_ttf = true,
         // .log_message_stack_size = 1024,
@@ -27,15 +27,15 @@ pub fn build(b: *std.Build) void {
         // .c_sdl_install_build_config_h = false,
 
         // Options if `ext_image` is enabled:
-        // .image_enable_bmp = true,
+        .image_enable_bmp = true,
         // .image_enable_gif = true,
         // .image_enable_jpg = true,
         // .image_enable_lbm = true,
         // .image_enable_pcx = true,
-        // .image_enable_png = true,
+        .image_enable_png = true,
         // .image_enable_pnm = true,
         // .image_enable_qoi = true,
-        // .image_enable_svg = true,
+        .image_enable_svg = true,
         // .image_enable_tga = true,
         // .image_enable_xcf = true,
         // .image_enable_xpm = true,

@@ -75,7 +75,7 @@ const capital = [_]Good{
 /// respawn floor.
 fn spawn_player(world: *ha.world.World) void {
     _ = world.spawn(.{
-        comp.Energy{ .v = 8, .start = 8, .decay = 0.5 }, // starved; bleeds 0.5/s when idle
+        comp.Energy{ .v = 8, .max = 8, .decay = 0.5 }, // starved; bleeds 0.5/s when idle
         comp.Stamina{ .v = 10, .max = 10, .trickle = 0.3 }, // rested; tiny passive regen
         comp.Capital{}, // owns nothing yet
         tag.Player,
@@ -132,7 +132,7 @@ const App = struct {
 
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
         self.font = try sdl.ttf.Font.init(font_path, 24);
-        self.resources = Resources.init(&self.font, &self.renderer, self.window);
+        self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         spawn_player(&self.world);
 
@@ -144,6 +144,7 @@ const App = struct {
         self.ui.deinit();
         self.frame_arena.deinit();
         self.world.deinit();
+        self.resources.deinit();
         self.font.deinit();
         self.renderer.deinit();
         self.window.deinit();
@@ -211,6 +212,7 @@ pub fn main() !void {
             if (node.render_data.fill) |c| widgets.draw_fill(&app.ui, node, c);
             if (node.render_data.outline) |c| widgets.draw_outline(&app.ui, node, c);
             if (node.render_data.text) |c| widgets.draw_text(&app.ui, node, c);
+            if (node.render_data.img) |c| widgets.draw_texture(&app.ui, node, c);
         }
         // present
         try app.renderer.present();
@@ -221,8 +223,10 @@ pub fn main() !void {
 
 fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     // "globals"
+    const res = ui_ctx.res;
+    const ww, const wh = try res.window.getSize();
     var char_buf: [64]u8 = undefined;
-    const ww, const wh = try ui_ctx.res.window.getSize();
+
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. Energy, Stamina
     // and Capital co-spawn on one entity, so one query fetches all three.
@@ -233,12 +237,13 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     const root = try widgets.Node.create(ui_ctx.arena, "root");
     _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    // Test image, pinned top-right. `img` sizes the node to the texture; we only
+    // override the anchor. Texture is cached on Resources, not pooled per-node.
+    const top_right = try widgets.img(ui_ctx, root, "img", res.tex);
+    _ = top_right.with_layout(ui.features.Layout.init(.top_right, null));
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     {
-        // The lone actor under scarcity. Energy is the survival stock (and the
-        // accumulation currency) — it decays, and the actor acts to replenish it.
-        // Stamina gates how well those actions land. While alive, it faces a menu.
         if (actor) |a| {
             const energy, const stamina, const cap = a;
 
@@ -247,8 +252,8 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
             // raises it), stamina trickles up at `trickle`/s (comfort capital raises it).
             const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
             _ = try widgets.label(ui_ctx, res_panel, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
+            _ = try widgets.progress_bar(ui_ctx, res_panel, "energy_bar", energy.v / energy.max, .{ .r = 230, .g = 180, .b = 80 });
             _ = try widgets.label(ui_ctx, res_panel, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
-            _ = try widgets.progress_bar(ui_ctx, res_panel, "stamina_bar", stamina.v / stamina.max, .{ .r = 230, .g = 180, .b = 80 });
 
             // Actions panel — each action pays its cost up front for an uncertain yield.
             // Clicking is acting — the actor employs means toward the option it most
