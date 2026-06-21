@@ -56,13 +56,10 @@ const Good = struct {
     prob_add: f32 = 0.0, // tool only
     trickle_add: f32 = 0.0, // comfort only
     upkeep: f32 = 0.0, // comfort only: added energy decay/s
-    icon_x: f32 = 0, // source cell origin in the icons.png sheet (icon_cell-sized squares)
-    icon_y: f32 = 0,
+    icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
+    icon_row: f32 = 0,
 };
 
-/// Each sprite cell in `assets/icons.png` is this many pixels square (the sheet is a
-/// 2×2 grid of 512px cells). `icon_x`/`icon_y` below index into it.
-const icon_cell = 512.0;
 /// On-screen size of a capital icon button.
 const icon_px = 56.0;
 /// Gap between a hovered icon and the tooltip floating above it.
@@ -70,13 +67,13 @@ const tip_gap = 6.0;
 
 const capital = [_]Good{
     // Sandals: Walking is easier, makes gathering more effective. (sheet: top-right)
-    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_x = icon_cell, .icon_y = 0 },
+    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_col = 1, .icon_row = 0 },
     // Fishing rod: makes Fish (actions[1]) land more often and yield more. (sheet: top-left)
-    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_x = 0, .icon_y = 0 },
+    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_col = 0, .icon_row = 0 },
     // Bed: rest better — stamina trickles back faster, no upkeep. (sheet: bottom-left)
-    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4, .icon_x = 0, .icon_y = icon_cell },
+    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
     // Fireplace: warmth speeds recovery a lot, but burns energy to stay lit. (sheet: bottom-right)
-    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3, .icon_x = icon_cell, .icon_y = icon_cell },
+    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3, .icon_col = 1, .icon_row = 1 },
 };
 
 /// Spawn a fresh actor — starved and cold (low energy), but rested (full stamina).
@@ -284,124 +281,135 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     const root = try widgets.Node.create(ui_ctx.arena, "root");
     _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    // Test image, pinned top-right. `img` sizes the node to the texture; we only
-    // override the anchor. Texture is cached on Resources, not pooled per-node.
-    // const top_right = try widgets.img(ui_ctx, root, "img", res.tex);
-    // _ = top_right.with_layout(ui.features.Layout.init(.top_right, null));
-    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
-    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
-    {
-        if (actor) |a| {
-            const energy, const stamina, const cap = a;
+    // Menu mock, pinned center-left — will open a menu (no-op for now). Borrows the
+    // fireplace cell from the icon sheet until it gets its own glyph.
+    const menu = try widgets.icon_button(ui_ctx, root, "menu", widgets.icon_sprite(res, 1, 1), icon_px, true);
+    _ = menu.with_layout(ui.features.Layout.init(.center_left, null));
+    const m = menu.query(ui_ctx);
+    if (m.clicked) ui_ctx.setFlag(menu.key, .active, !m.active);
+    // `m.active` is the pre-toggle value, so this frame's live state is:
+    const menu_open = if (m.clicked) !m.active else m.active;
+    if (menu_open) {
+        _ = try widgets.label(ui_ctx, root, "my_menu", "this is a menu.");
+    } else {
+        const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
+        _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
+        {
+            if (actor) |a| {
+                const energy, const stamina, const cap = a;
 
-            // Resources panel — the actor's stocks. The rate next to each count is read
-            // straight off the component: energy decays at `decay`/s (capital upkeep
-            // raises it), stamina trickles up at `trickle`/s (comfort capital raises it).
-            const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
-            _ = try widgets.label(ui_ctx, res_panel, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
-            // _ = try widgets.progress_bar(ui_ctx, res_panel, "energy_bar", energy.v / energy.max, .{ .r = 230, .g = 180, .b = 80 });
-            _ = try widgets.label(ui_ctx, res_panel, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
+                // Resources panel — the actor's stocks. The rate next to each count is read
+                // straight off the component: energy decays at `decay`/s (capital upkeep
+                // raises it), stamina trickles up at `trickle`/s (comfort capital raises it).
+                const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
+                _ = try widgets.label(ui_ctx, res_panel, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
+                // _ = try widgets.progress_bar(ui_ctx, res_panel, "energy_bar", energy.v / energy.max, .{ .r = 230, .g = 180, .b = 80 });
+                _ = try widgets.label(ui_ctx, res_panel, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
 
-            // Actions panel — each action pays its cost up front for an uncertain yield.
-            // Clicking is acting — the actor employs means toward the option it most
-            // prefers. The effective yield/odds fold in any owned tool that targets this
-            // action (a rod boosts Fish), then the yield is scaled by current stamina
-            // (`sfac`); the button shows that effective payoff, the roll then decides it.
-            const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
-            for (actions, 0..) |act, i| {
-                const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
-                const sfac = stamina.v / stamina.max; // tired → below-standard outcomes
+                // Actions panel — each action pays its cost up front for an uncertain yield.
+                // Clicking is acting — the actor employs means toward the option it most
+                // prefers. The effective yield/odds fold in any owned tool that targets this
+                // action (a rod boosts Fish), then the yield is scaled by current stamina
+                // (`sfac`); the button shows that effective payoff, the roll then decides it.
+                const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
+                for (actions, 0..) |act, i| {
+                    const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
+                    const sfac = stamina.v / stamina.max; // tired → below-standard outcomes
 
-                var eff_yield = act.energy_yield;
-                var eff_prob = act.p_success;
+                    var eff_yield = act.energy_yield;
+                    var eff_prob = act.p_success;
+                    for (capital, 0..) |g, gi| {
+                        if (g.kind == .tool and g.target == i and owns(cap, gi)) {
+                            eff_yield *= g.yield_mult;
+                            eff_prob += g.prob_add;
+                        }
+                    }
+                    if (eff_prob > 1.0) eff_prob = 1.0;
+
+                    const txt = std.fmt.bufPrint(
+                        &char_buf,
+                        "{s}  (-{d:.0} sta, +{d:.1} e, {d:.0}%)",
+                        .{ act.label, act.stamina_cost, eff_yield * sfac, eff_prob * 100 },
+                    ) catch act.label;
+                    // Affordability drives both the look (dimmed when unpayable) and the
+                    // guard (the click is a no-op unless it's affordable).
+                    const affordable = energy.v >= act.energy_cost and stamina.v >= act.stamina_cost;
+                    const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
+                    if (btn.query(ui_ctx).clicked and affordable) {
+                        energy.v -= act.energy_cost;
+                        stamina.v -= act.stamina_cost;
+                        if (ui_ctx.res.random().float(f32) < eff_prob) energy.v += eff_yield * sfac;
+                        if (energy.v < 0) energy.v = 0; // the death pipeline tags + reaps it next frame
+                    }
+                }
+
+                // Capital panel — spend surplus energy now on a permanent edge later. One-time
+                // unlocks, shown as a horizontal tray of icons (icons.png sheet). An owned good
+                // is a static icon; an unowned one is an icon_button — its ring brightens on
+                // hover and dims when unaffordable (the click is also affordability-guarded).
+                // The buttons are icon-only; hovering one fills the detail line below the tray
+                // with its costs/effects (queried off last frame's stamped rects).
+                const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
+                const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
+                _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
+                var hovered: ?usize = null; // which good the cursor is over
+                var hov_rect: ?ui.Rect = null; // and where it sat last frame, to float the tooltip over it
                 for (capital, 0..) |g, gi| {
-                    if (g.kind == .tool and g.target == i and owns(cap, gi)) {
-                        eff_yield *= g.yield_mult;
-                        eff_prob += g.prob_add;
+                    const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
+                    const sprite = widgets.icon_sprite(res, g.icon_col, g.icon_row);
+                    if (owns(cap, gi)) {
+                        // Owned: a static icon, no ring, not clickable — but still queried so
+                        // hovering it shows its tooltip.
+                        const node = try widgets.Node.pcreate(ui_ctx.arena, ckey, cap_row);
+                        try widgets.data_sprite(ui_ctx, node, sprite, icon_px);
+                        _ = node.with_layout(ui.features.Layout.init(.relative, null));
+                        if (node.query(ui_ctx).hovering) {
+                            hovered = gi;
+                            hov_rect = node.rect(ui_ctx);
+                        }
+                        continue;
                     }
-                }
-                if (eff_prob > 1.0) eff_prob = 1.0;
-
-                const txt = std.fmt.bufPrint(&char_buf, "{s}  (-{d:.0} sta, +{d:.1} e, {d:.0}%)", .{ act.label, act.stamina_cost, eff_yield * sfac, eff_prob * 100 }) catch act.label;
-                // Affordability drives both the look (dimmed when unpayable) and the
-                // guard (the click is a no-op unless it's affordable).
-                const affordable = energy.v >= act.energy_cost and stamina.v >= act.stamina_cost;
-                const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
-                if (btn.query(ui_ctx).clicked and affordable) {
-                    energy.v -= act.energy_cost;
-                    stamina.v -= act.stamina_cost;
-                    if (ui_ctx.res.random().float(f32) < eff_prob) energy.v += eff_yield * sfac;
-                    if (energy.v < 0) energy.v = 0; // the death pipeline tags + reaps it next frame
-                }
-            }
-
-            // Capital panel — spend surplus energy now on a permanent edge later. One-time
-            // unlocks, shown as a horizontal tray of icons (icons.png sheet). An owned good
-            // is a static icon; an unowned one is an icon_button — its ring brightens on
-            // hover and dims when unaffordable (the click is also affordability-guarded).
-            // The buttons are icon-only; hovering one fills the detail line below the tray
-            // with its costs/effects (queried off last frame's stamped rects).
-            const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
-            const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
-            _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
-            var hovered: ?usize = null; // which good the cursor is over
-            var hov_rect: ?ui.Rect = null; // and where it sat last frame, to float the tooltip over it
-            for (capital, 0..) |g, gi| {
-                const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
-                const src = sdl.rect.FRect{ .x = g.icon_x, .y = g.icon_y, .w = icon_cell, .h = icon_cell };
-                if (owns(cap, gi)) {
-                    // Owned: a static icon, no ring, not clickable — but still queried so
-                    // hovering it shows its tooltip.
-                    const node = try widgets.Node.pcreate(ui_ctx.arena, ckey, cap_row);
-                    try widgets.data_sprite(ui_ctx, node, res.icons, src, icon_px);
-                    _ = node.with_layout(ui.features.Layout.init(.relative, null));
-                    if (node.query(ui_ctx).hovering) {
+                    const affordable = energy.v >= g.energy_cost and stamina.v >= g.stamina_cost;
+                    const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
+                    if (buy.query(ui_ctx).hovering) {
                         hovered = gi;
-                        hov_rect = node.rect(ui_ctx);
+                        hov_rect = buy.rect(ui_ctx);
                     }
-                    continue;
-                }
-                const affordable = energy.v >= g.energy_cost and stamina.v >= g.stamina_cost;
-                const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, res.icons, src, icon_px, affordable);
-                if (buy.query(ui_ctx).hovering) {
-                    hovered = gi;
-                    hov_rect = buy.rect(ui_ctx);
-                }
-                if (buy.query(ui_ctx).clicked and affordable) {
-                    energy.v -= g.energy_cost;
-                    stamina.v -= g.stamina_cost;
-                    cap.owned |= bit(gi);
-                    // Comfort effects bake into the components (so the readouts track them);
-                    // tool effects are folded in at action resolution above.
-                    if (g.kind == .comfort) {
-                        stamina.trickle += g.trickle_add;
-                        energy.decay += g.upkeep;
+                    if (buy.query(ui_ctx).clicked and affordable) {
+                        energy.v -= g.energy_cost;
+                        stamina.v -= g.stamina_cost;
+                        cap.owned |= bit(gi);
+                        // Comfort effects bake into the components (so the readouts track them);
+                        // tool effects are folded in at action resolution above.
+                        if (g.kind == .comfort) {
+                            stamina.trickle += g.trickle_add;
+                            energy.decay += g.upkeep;
+                        }
                     }
                 }
-            }
-            // Hover tooltip — a floating overlay tree showing the hovered good's costs/
-            // effects, pinned above its icon. Built only when a good is hovered and its
-            // last-frame rect is known (the tray is static, so last frame's rect is right).
-            // Sized by a throwaway layout pass, then given an origin centred over the icon.
-            if (hovered) |hi| {
-                if (hov_rect) |r| {
-                    const tip = capital_tip(&char_buf, capital[hi], owns(cap, hi));
-                    const box = try widgets.tooltip(ui_ctx, "tip", tip);
-                    try box.set_global_pos(); // resolve its size (origin still 0,0)
-                    const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
-                    const oy = r.y - box.size.height - tip_gap; // floating just above it
-                    box.layout = box.layout.with_origin(ox, oy);
-                    overlay = box;
+                // Hover tooltip — a floating overlay tree showing the hovered good's costs/
+                // effects, pinned above its icon. Built only when a good is hovered and its
+                // last-frame rect is known (the tray is static, so last frame's rect is right).
+                // Sized by a throwaway layout pass, then given an origin centred over the icon.
+                if (hovered) |hi| {
+                    if (hov_rect) |r| {
+                        const tip = capital_tip(&char_buf, capital[hi], owns(cap, hi));
+                        const box = try widgets.tooltip(ui_ctx, "tip", tip);
+                        try box.set_global_pos(); // resolve its size (origin still 0,0)
+                        const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
+                        const oy = r.y - box.size.height - tip_gap; // floating just above it
+                        box.layout = box.layout.with_origin(ox, oy);
+                        overlay = box;
+                    }
                 }
+            } else {
+                // Death is total: the run is over and everything accumulated is gone.
+                _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
+                const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
+                if (restart.query(ui_ctx).clicked) spawn_player(world);
             }
-        } else {
-            // Death is total: the run is over and everything accumulated is gone.
-            _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
-            const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
-            if (restart.query(ui_ctx).clicked) spawn_player(world);
         }
     }
-
     // const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);
     // _ = bottom_div.with_layout(ui.features.Layout.init(.bottom_center, .vertical).with_gap(4));
     // {

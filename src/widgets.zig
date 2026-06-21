@@ -50,6 +50,20 @@ pub const Sprite = struct {
     src: ?sdl.rect.FRect = null,
 };
 
+/// Each cell of the shared icon sheet (`res.icons`, assets/icons.png) is this many
+/// pixels square — the sheet is a grid of `icon_cell`-sized cells.
+pub const icon_cell = 512.0;
+
+/// Name one cell of the shared icon sheet by grid (col, row). The single place that
+/// knows the sheet lives on `res.icons` and how big a cell is — callers reference a
+/// cell, not a texture+rect, so the spritesheet isn't threaded through every icon.
+pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
+    return .{
+        .texture = res.icons,
+        .src = .{ .x = col * icon_cell, .y = row * icon_cell, .w = icon_cell, .h = icon_cell },
+    };
+}
+
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
 /// per-node state (the glyph surface) lives in a `UiState` pool keyed by `node.key`,
 /// reached via the engine's `node.data` handle — not on the node itself.
@@ -156,9 +170,9 @@ pub fn data_img(_: *UiCtx, node: *Node, texture: sdl.render.Texture) !void {
 /// Feature mixin: draw one `src` cell of a sprite sheet at a fixed `px`×`px` on screen.
 /// Unlike `data_img`, the display size is the caller's choice (sheet cells are large),
 /// so the source rect and on-screen box are decoupled.
-pub fn data_sprite(_: *UiCtx, node: *Node, texture: sdl.render.Texture, src: sdl.rect.FRect, px: f32) !void {
+pub fn data_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
     node.size = ui.features.Size.initContent(px, px, null);
-    node.render_data.img = .{ .texture = texture, .src = src };
+    node.render_data.img = sprite;
 }
 
 // --- Widget palette ----------------------------------------------------------
@@ -258,9 +272,9 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
 /// keeps the slot alive for next frame's hit-test; the caller reads `.clicked` and
 /// still guards the click — `enabled` is purely the look (dim / bright-on-hover / idle).
 /// Text-on-hover is deferred; the icon alone is the affordance for now.
-pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Texture, src: sdl.rect.FRect, px: f32, enabled: bool) !*Node {
+pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, px: f32, enabled: bool) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
-    try data_sprite(ctx, node, texture, src, px);
+    try data_sprite(ctx, node, sprite, px);
     _ = node.with_layout(ui.features.Layout.init(.relative, null));
     node.render_data.outline = if (!enabled) col_disabled else if (node.query(ctx).hovering) col_hover else col_normal;
     return node;
