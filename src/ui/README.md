@@ -373,8 +373,10 @@ binding) when they measure; the *generic* engine code never does.
   and the definite/indefinite fallback — **done** (see *Sizing* above). Still to
   land: `range`/`max_of` combinators, and a `strictness: f32` driving a
   violation-resolution pass that distributes slack/overflow among siblings.
-- **Sprites:** dropped with the old `Data`; reintroduce as a widget fn + a state
-  type registered in `StateNs` when needed.
+- **Sprites — done (host-side).** The host carries a `Sprite` (`texture` +
+  optional `src` sheet cell) on `RenderData.img`; `widgets.data_sprite` sets it
+  and `widgets.icon_sprite(res, col, row)` builds one from a sheet cell. No engine
+  change was needed — `RenderData` is host policy, so the aspect rode in opaquely.
 - **Interactables-only marking — done.** The event stage (`ui.mark`) now iterates
   the live interaction slots, each carrying its node's rect, so hit-testing is
   O(interactive), not O(all) — no tree walk. The one O(all) pass left is
