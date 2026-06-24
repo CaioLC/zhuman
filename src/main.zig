@@ -44,6 +44,10 @@ const actions = [_]Action{
 /// Satiety burned per unit of energy the actor pays from vigor — work makes you hungry.
 const effort_k: f32 = 0.4;
 
+/// Vigor a build click won't dip below — so investing in capital never zeroes vigor (which
+/// is death). Building stops when you hit this floor; the rest waits for vigor to refill.
+const build_vigor_floor: f32 = 0.5;
+
 const CapitalKind = enum { tool, comfort };
 
 /// A capital good: build it now by paying an `energy_cost` (work, from vigor) and consuming
@@ -128,6 +132,8 @@ fn capital_tip(buf: []u8, g: Good, gi: usize, cap: *const comp.Capital) []const 
             return std.fmt.bufPrint(buf, "{s}: {d:.0}/{d:.0} durability", .{ g.label, cap.durability[gi], g.power_capacity }) catch g.label;
         return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
     }
+    if (cap.progress[gi] > 0) // a build underway — show how far along
+        return std.fmt.bufPrint(buf, "{s}: building {d:.0}/{d:.0} e", .{ g.label, cap.progress[gi], g.energy_cost }) catch g.label;
     if (g.kind == .comfort)
         return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label;
     if (g.power_capacity > 0)
@@ -456,22 +462,35 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                         }
                         continue;
                     }
-                    const affordable = vigor.v > g.energy_cost and materials.v >= g.material_cost;
+                    // Building pours spare vigor into the good across clicks/sessions. Materials
+                    // are committed up front (first click); energy is the labour over time. A
+                    // grand good (saw: 14 e) can't fit one 10-vigor body, so it needs several
+                    // sessions — vigor refills, you click again, progress climbs until it's done.
+                    const started = cap.progress[gi] > 0;
+                    const can_invest = vigor.v > build_vigor_floor;
+                    // Affordable = there's vigor to invest, and (to *start*) materials in hand.
+                    const affordable = can_invest and (started or materials.v >= g.material_cost);
                     const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
                     if (buy.query(ui_ctx).hovering) {
                         hovered = gi;
                         hov_rect = buy.rect(ui_ctx);
                     }
                     if (buy.query(ui_ctx).clicked and affordable) {
-                        vigor.v -= g.energy_cost; // muscle pays the build's energy price
-                        satiety.v -= g.energy_cost * effort_k; // building is hungry work too
+                        if (!started) materials.v -= g.material_cost; // commit materials to begin
+                        const need = g.energy_cost - cap.progress[gi];
+                        const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
+                        vigor.v -= chunk; // muscle invested as labour
+                        satiety.v -= chunk * effort_k; // building is hungry work too
                         if (satiety.v < 0) satiety.v = 0;
-                        materials.v -= g.material_cost; // and consumes goods from the stockpile
-                        cap.owned |= bit(gi);
-                        if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
-                        // Comfort effects bake into the components (so the readouts track them);
-                        // tool effects are folded in at action resolution above.
-                        if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+                        cap.progress[gi] += chunk;
+                        if (cap.progress[gi] >= g.energy_cost) { // the build completes
+                            cap.progress[gi] = 0;
+                            cap.owned |= bit(gi);
+                            if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
+                            // Comfort effects bake into the components (so the readouts track them);
+                            // tool effects are folded in at action resolution above.
+                            if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+                        }
                     }
                 }
                 // Hover tooltip — a floating overlay tree showing the hovered good's costs/

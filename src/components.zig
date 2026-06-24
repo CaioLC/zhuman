@@ -55,9 +55,13 @@ pub const Materials = struct {
 /// `Vigor.trickle` at purchase. `durability[i]` tracks remaining wear for *external-energy*
 /// tools (a saw/engine): set to the good's capacity on build, drained as it pays an action's
 /// energy price in place of vigor, and at `0` the tool breaks (its `owned` bit is cleared,
-/// rebuild required). Indexed parallel to `owned`; `32` is the bitset's ceiling, so no need
-/// to import the catalog's length. Reset on death (fresh entity) — "start over" wipes it.
+/// rebuild required). `progress[i]` is energy invested toward an *in-progress* build: a grand
+/// good whose energy price exceeds one body's vigor is built across sessions, each session
+/// pouring spare vigor into `progress` until it reaches the cost and the good completes.
+/// All three are indexed parallel; `32` is the bitset's ceiling, so no need to import the
+/// catalog's length. Reset on death (fresh entity) — "start over" wipes it.
 pub const Capital = struct {
     owned: u32 = 0,
     durability: [32]f32 = [_]f32{0} ** 32,
+    progress: [32]f32 = [_]f32{0} ** 32,
 };
