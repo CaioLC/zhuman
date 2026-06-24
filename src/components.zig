@@ -49,11 +49,15 @@ pub const Materials = struct {
     v: f32,
 };
 
-/// Capital: the capital goods the actor owns — a bitset indexed by position in the
-/// `capital` catalog (`main.zig`). One-time unlocks: a set bit means owned. Tool goods
-/// fold into action resolution (a rod boosts fishing); comfort goods bake their effect
-/// into `Vigor.trickle` at purchase. Reset on death (fresh entity), so a "start over"
-/// wipes all accumulated capital.
+/// Capital: the capital goods the actor owns. `owned` is a bitset indexed by position in
+/// the `capital` catalog (`main.zig`) — a set bit means owned (one-time unlocks). Tool goods
+/// fold into action resolution (a rod boosts fishing); comfort goods bake their effect into
+/// `Vigor.trickle` at purchase. `durability[i]` tracks remaining wear for *external-energy*
+/// tools (a saw/engine): set to the good's capacity on build, drained as it pays an action's
+/// energy price in place of vigor, and at `0` the tool breaks (its `owned` bit is cleared,
+/// rebuild required). Indexed parallel to `owned`; `32` is the bitset's ceiling, so no need
+/// to import the catalog's length. Reset on death (fresh entity) — "start over" wipes it.
 pub const Capital = struct {
     owned: u32 = 0,
+    durability: [32]f32 = [_]f32{0} ** 32,
 };

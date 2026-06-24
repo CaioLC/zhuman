@@ -48,18 +48,23 @@ const CapitalKind = enum { tool, comfort };
 
 /// A capital good: build it now by paying an `energy_cost` (work, from vigor) and consuming
 /// `material_cost` from the stockpile — the *now-vs-later* margin, with teeth (your score
-/// dips to build). A `.tool` improves one action (`target` indexes into `actions`): it
-/// scales that action's yield by `yield_mult` and adds `prob_add` to its success chance.
-/// A `.comfort` good raises vigor recovery (`trickle_add`). One-time unlocks, tracked by a
-/// bit in `comp.Capital.owned` at this good's index.
+/// dips to build). A `.tool` improves one action (`target` indexes into `actions`) via any
+/// mix of three effects: `yield_mult`/`prob_add` boost its output (a rod), `cost_mult` < 1
+/// lowers its energy price (an axe — saves human effort), and `power_capacity` > 0 makes it
+/// an *external-energy* tool (a saw) that pays the action's price from its own durability
+/// instead of vigor, wearing down by the energy it supplies and breaking at 0. A `.comfort`
+/// good raises vigor recovery (`trickle_add`). One-time unlocks, tracked by a bit in
+/// `comp.Capital.owned`; durability (power tools) lives in `comp.Capital.durability`.
 const Good = struct {
     label: []const u8,
     energy_cost: f32, // work to build it; paid from Vigor
     material_cost: f32, // goods consumed from the stockpile to build it
     kind: CapitalKind,
     target: usize = 0, // tool only: which action it improves
-    yield_mult: f32 = 1.0, // tool only
-    prob_add: f32 = 0.0, // tool only
+    yield_mult: f32 = 1.0, // tool only: scales the action's yield
+    prob_add: f32 = 0.0, // tool only: adds to the action's success chance
+    cost_mult: f32 = 1.0, // tool only: scales the action's energy price (effort-saver, < 1)
+    power_capacity: f32 = 0.0, // tool only: > 0 ⇒ external-energy tool, this much durability (energy units)
     trickle_add: f32 = 0.0, // comfort only
     icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
     icon_row: f32 = 0,
@@ -79,6 +84,13 @@ const capital = [_]Good{
     .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
     // Fireplace: warmth speeds recovery a lot. (sheet: bottom-right)
     .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .icon_col = 1, .icon_row = 1 },
+    // Axe: effort-saver — makes Chop wood (actions[2]) cheaper to swing. PLACEHOLDER icon
+    // (borrows the sandals cell) until axe art exists.
+    .{ .label = "Axe", .energy_cost = 8, .material_cost = 18, .kind = .tool, .target = 2, .cost_mult = 0.6, .icon_col = 1, .icon_row = 0 },
+    // Saw: external-energy tool — pays Chop wood's (actions[2]) price from its own durability
+    // instead of vigor, sparing muscle until it wears out. PLACEHOLDER icon (borrows the
+    // fireplace cell) until saw art exists.
+    .{ .label = "Saw", .energy_cost = 14, .material_cost = 45, .kind = .tool, .target = 2, .power_capacity = 80, .icon_col = 1, .icon_row = 1 },
 };
 
 /// Spawn a fresh actor — rested but hungry, with a thin larder and nothing built. Used at
@@ -106,15 +118,59 @@ fn owns(cap: *const comp.Capital, i: usize) bool {
     return (cap.owned & bit(i)) != 0;
 }
 
-/// Format a good's hover detail into `buf`: "owned" once bought, else its build cost
-/// (energy work + materials) and the effect it grants (tool: yield×/odds; comfort: vigor
-/// trickle). Falls back to the bare label if the buffer is somehow too small.
-fn capital_tip(buf: []u8, g: Good, is_owned: bool) []const u8 {
-    if (is_owned) return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
-    return switch (g.kind) {
-        .tool => std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
-        .comfort => std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label,
-    };
+/// Format good `gi`'s hover detail into `buf`. Owned: "owned" (or remaining durability for a
+/// power tool); unowned: its build cost (energy work + materials) and salient effect — powered
+/// (pays an action from durability), effort-saver (×cost on an action), output boost (yield/
+/// odds), or comfort (vigor trickle). Falls back to the bare label if the buffer is too small.
+fn capital_tip(buf: []u8, g: Good, gi: usize, cap: *const comp.Capital) []const u8 {
+    if (owns(cap, gi)) {
+        if (g.power_capacity > 0)
+            return std.fmt.bufPrint(buf, "{s}: {d:.0}/{d:.0} durability", .{ g.label, cap.durability[gi], g.power_capacity }) catch g.label;
+        return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
+    }
+    if (g.kind == .comfort)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label;
+    if (g.power_capacity > 0)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | powers {s}, {d:.0} dur", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.power_capacity }) catch g.label;
+    if (g.cost_mult < 1.0)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | {s} x{d:.2} cost", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.cost_mult }) catch g.label;
+    return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult, g.prob_add * 100 }) catch g.label;
+}
+
+/// How an action's energy price is paid this frame. `eff_cost` is the base price after any
+/// owned effort-saver tools (`cost_mult`); the price is then split so vigor always covers at
+/// least 5% (`from_vigor`) and an owned external-energy tool's durability covers the rest
+/// (`from_power`, drawn from good `power_idx`). With no power tool, vigor pays it all.
+const Payment = struct {
+    eff_cost: f32,
+    from_vigor: f32,
+    from_power: f32,
+    power_idx: ?usize,
+};
+
+/// Plan how to pay `base_cost` for `action_idx`, given what the actor owns. Folds effort-savers
+/// into the price, then routes the bulk through the first owned power tool that still has
+/// durability, leaving vigor the 5% floor (plus whatever the tool can't cover).
+fn plan_payment(cap: *const comp.Capital, action_idx: usize, base_cost: f32) Payment {
+    var eff = base_cost;
+    var power_idx: ?usize = null;
+    var avail: f32 = 0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind != .tool or g.target != action_idx or !owns(cap, gi)) continue;
+        eff *= g.cost_mult; // effort-savers stack multiplicatively
+        if (g.power_capacity > 0 and cap.durability[gi] > 0 and power_idx == null) {
+            power_idx = gi;
+            avail = cap.durability[gi];
+        }
+    }
+    const vigor_min = 0.05 * eff;
+    var from_power: f32 = 0;
+    if (power_idx != null) {
+        from_power = eff - vigor_min;
+        if (from_power > avail) from_power = avail; // tool can't cover more than it has
+        if (from_power < 0) from_power = 0;
+    }
+    return .{ .eff_cost = eff, .from_vigor = eff - from_power, .from_power = from_power, .power_idx = power_idx };
 }
 
 const App = struct {
@@ -335,21 +391,32 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                     }
                     if (eff_prob > 1.0) eff_prob = 1.0;
 
+                    // Plan the payment: effort-savers cheapen the price, a power tool pays the
+                    // bulk from its durability, vigor covers the 5% floor (and any shortfall).
+                    const pay = plan_payment(cap, i, act.energy_cost);
+
                     const unit: u8 = if (act.target == .food) 'f' else 'm';
                     const txt = std.fmt.bufPrint(
                         &char_buf,
-                        "{s}  ({d:.0} e, +{d:.1}{c}, {d:.0}%)",
-                        .{ act.label, act.energy_cost, eff_yield * sfac, unit, eff_prob * 100 },
+                        "{s}  (-{d:.1} vig, +{d:.1}{c}, {d:.0}%)",
+                        .{ act.label, pay.from_vigor, eff_yield * sfac, unit, eff_prob * 100 },
                     ) catch act.label;
-                    // Affordable only if vigor strictly covers the price — an action never spends
+                    // Affordable only if vigor strictly covers its share — an action never spends
                     // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
                     // to death). Drives both the dimmed look and the click guard.
-                    const affordable = vigor.v > act.energy_cost;
+                    const affordable = vigor.v > pay.from_vigor;
                     const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
                     if (btn.query(ui_ctx).clicked and affordable) {
-                        vigor.v -= act.energy_cost; // muscle pays the energy price
-                        satiety.v -= act.energy_cost * effort_k; // work makes you hungry
+                        vigor.v -= pay.from_vigor; // muscle pays its share
+                        satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
                         if (satiety.v < 0) satiety.v = 0;
+                        if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
+                            cap.durability[pi] -= pay.from_power;
+                            if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
+                                cap.durability[pi] = 0;
+                                cap.owned &= ~bit(pi);
+                            }
+                        }
                         if (ui_ctx.res.random().float(f32) < eff_prob) {
                             const produced = eff_yield * sfac;
                             switch (act.target) {
@@ -401,6 +468,7 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                         if (satiety.v < 0) satiety.v = 0;
                         materials.v -= g.material_cost; // and consumes goods from the stockpile
                         cap.owned |= bit(gi);
+                        if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
                         // Comfort effects bake into the components (so the readouts track them);
                         // tool effects are folded in at action resolution above.
                         if (g.kind == .comfort) vigor.trickle += g.trickle_add;
@@ -412,7 +480,7 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                 // Sized by a throwaway layout pass, then given an origin centred over the icon.
                 if (hovered) |hi| {
                     if (hov_rect) |r| {
-                        const tip = capital_tip(&char_buf, capital[hi], owns(cap, hi));
+                        const tip = capital_tip(&char_buf, capital[hi], hi, cap);
                         const box = try widgets.tooltip(ui_ctx, "tip", tip);
                         try box.set_global_pos(); // resolve its size (origin still 0,0)
                         const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
