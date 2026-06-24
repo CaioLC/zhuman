@@ -11,48 +11,91 @@ const Entity = world_mod.Entity;
 const Query = ecs.Query;
 const With = ecs.With;
 
-/// Decay `Energy` toward zero at `decay` units per second — the actor is cold and
-/// hungry, and idleness costs it (capital upkeep raises `decay`). Actions (see
-/// `main.zig`) push it back up; surviving means producing faster than this drains.
-pub fn update_energy(
-    res: *Resources,
-    q: Query(.{comp.Energy}),
-) void {
-    const dt = res.time.dt;
-    var it = q.iter();
-    while (it.next()) |e| {
-        if (e.v <= 0) continue; // already perished — hold at zero for the death pipeline
-        e.v -= dt * e.decay;
-        if (e.v < 0) e.v = 0;
-    }
-}
+/// How fast the body converts `Food` into `Satiety` (units/second) when hungry. Faster than
+/// `Satiety.drain`, so a stocked larder keeps you topped up; an empty one lets you starve.
+/// A ration policy (full / ½ / ¼) will scale this later — for now it's a flat full ration.
+const metabolism_rate: f32 = 2.0;
 
-/// Trickle `Stamina` back up at `trickle` units/second, capped at `max`. This is only
-/// the tiny passive drip — the bulk of recovery is the deliberate `Rest` action — so
-/// the actor is never hard-stuck with no stamina and no way to earn any.
-pub fn update_stamina(
+/// Drain `Satiety` toward zero at `drain` units/second — the actor is always burning
+/// calories (acting burns extra, applied at action resolution in `main.zig`). As satiety
+/// falls it drags `Vigor`'s ceiling down with it (see `update_vigor`); empty = starvation.
+pub fn update_satiety(
     res: *Resources,
-    q: Query(.{comp.Stamina}),
+    q: Query(.{comp.Satiety}),
 ) void {
     const dt = res.time.dt;
     var it = q.iter();
     while (it.next()) |s| {
-        s.v += dt * s.trickle;
-        if (s.v > s.max) s.v = s.max;
+        s.v -= dt * s.drain;
+        if (s.v < 0) s.v = 0;
     }
 }
 
-/// Tag any actor whose `Energy` has drained to zero as `Dead`. Fetches the entity id
-/// (`Entity` in the query) so it can attach the tag, and guards on `has` so it tags
-/// once — `Energy` holds at 0, so this would otherwise match every frame after death.
+/// Metabolize `Food` into `Satiety`: while there's food and room to fill, move it across at
+/// `metabolism_rate`. This is the passive "eating" — keeping food in the larder is what
+/// keeps satiety (and so the vigor ceiling) up. Spoilage + drain are what create the
+/// pressure to keep producing food.
+pub fn metabolize(
+    res: *Resources,
+    q: Query(.{ comp.Food, comp.Satiety }),
+) void {
+    const dt = res.time.dt;
+    var it = q.iter();
+    while (it.next()) |entry| {
+        const food, const sat = entry;
+        const room = sat.max - sat.v;
+        if (room <= 0 or food.v <= 0) continue;
+        var bite = metabolism_rate * dt;
+        if (bite > room) bite = room;
+        if (bite > food.v) bite = food.v;
+        food.v -= bite;
+        sat.v += bite;
+    }
+}
+
+/// Spoil `Food` toward zero at `spoil` units/second — the larder rots, so a surplus can't
+/// simply be banked forever (this is what storage capital will later mitigate).
+pub fn update_food(
+    res: *Resources,
+    q: Query(.{comp.Food}),
+) void {
+    const dt = res.time.dt;
+    var it = q.iter();
+    while (it.next()) |f| {
+        f.v -= dt * f.spoil;
+        if (f.v < 0) f.v = 0;
+    }
+}
+
+/// Trickle `Vigor` back up at `trickle` units/second, but clamped to the *hunger ceiling*
+/// `max × (satiety / satiety.max)` rather than `max`. Doing "nothing" recovers vigor up to
+/// what hunger allows; as satiety falls the ceiling falls and vigor is dragged down with it,
+/// reaching `0` (death) when satiety does. Comfort capital raises the `trickle`.
+pub fn update_vigor(
+    res: *Resources,
+    q: Query(.{ comp.Vigor, comp.Satiety }),
+) void {
+    const dt = res.time.dt;
+    var it = q.iter();
+    while (it.next()) |entry| {
+        const v, const sat = entry;
+        const cap = v.max * (sat.v / sat.max);
+        v.v += dt * v.trickle;
+        if (v.v > cap) v.v = cap; // hunger ceiling pulls vigor down as satiety falls
+    }
+}
+
+/// Tag any actor whose `Vigor` has drained to zero as `Dead` — vigor `0` is death, and the
+/// only thing that takes it there is the hunger ceiling collapsing (actions are gated so
+/// they never spend the last unit). Guards on `has` so it tags once.
 pub fn mark_dead(
     world: *World,
-    q: Query(.{ Entity, comp.Energy }),
+    q: Query(.{ Entity, comp.Vigor }),
 ) void {
     var it = q.iter();
     while (it.next()) |entry| {
-        const e, const energy = entry;
-        if (energy.v <= 0 and !world.has(e, tag.Dead)) world.add(e, tag.Dead{});
+        const e, const vigor = entry;
+        if (vigor.v <= 0 and !world.has(e, tag.Dead)) world.add(e, tag.Dead{});
     }
 }
 

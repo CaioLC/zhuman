@@ -183,7 +183,7 @@ const col_normal = ui.Color{ .r = 200, .g = 200, .b = 210 }; // idle button: sof
 const col_hover = ui.Color.white; // hovered: full bright
 const col_disabled = ui.Color{ .r = 90, .g = 90, .b = 105 }; // can't afford: dim grey
 const col_track = ui.Color{ .r = 90, .g = 90, .b = 105 }; // progress-bar track outline
-const col_stamina = ui.Color{ .r = 230, .g = 180, .b = 80 }; // stamina fill: warm amber
+const col_vigor = ui.Color{ .r = 230, .g = 180, .b = 80 }; // vigor fill: warm amber
 const col_panel = ui.Color{ .r = 100, .g = 110, .b = 140 }; // panel border: muted blue-grey
 const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool light blue
 const col_tip_fill = ui.Color{ .r = 16, .g = 16, .b = 28 }; // tooltip backing: opaque near-bg, so text reads over anything

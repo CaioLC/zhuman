@@ -6,7 +6,7 @@
 //! world rather than Rust archetypes. Not a port; just the shape of the API.
 //!
 //! Systems declare their needs as parameter types:
-//!     fn update_energy(res: *Resources, q: Query(.{Energy, With(tag.Player)})) void
+//!     fn update_vigor(res: *Resources, q: Query(.{Vigor, With(tag.Player)})) void
 //!
 //! `run(world, res, system_fn)` introspects the function at comptime and
 //! builds each parameter from the world / resources before invoking it.

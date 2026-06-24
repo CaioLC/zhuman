@@ -13,49 +13,54 @@ const ecs = ha.ecs;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
-/// A choice open to the actor. Acting pays `energy_cost` + `stamina_cost` up front
-/// (whether or not it pays off) for a `p_success` chance at `energy_yield` energy —
-/// a means expended against an uncertain end. The energy yield is *scaled by current
-/// stamina* (`v / max`): a tired actor produces below standard. Stamina recovers only
-/// by the passive trickle, so the labor/leisure margin is implicit — keep working
-/// while drained, or pause and let stamina refill (paying energy decay meanwhile).
-/// The player ranks these and acts on the one it most prefers; later the sim's AI
-/// ranks the same catalog. Praxeology: cost, options, uncertainty.
+/// Where an action's produce lands — the perishable larder or the durable stockpile.
+const Yield = enum { food, materials };
+
+/// A choice open to the actor. The action is *priced* in `energy_cost` — the work it takes —
+/// which the actor pays from `Vigor` (its muscle). Paying also burns `Satiety` (work makes
+/// you hungry). For that price it rolls a `p_success` chance at `yield` units landing in the
+/// `target` stock (food to eat, or materials to build with). The yield is *scaled by current
+/// vigor* (`v / max`): a tired actor produces below standard, so the labor/leisure margin is
+/// implicit — work while drained for poor output, or pause and let vigor refill. The player
+/// ranks these and acts on the one it most prefers; later the sim's AI ranks the same
+/// catalog. Praxeology: cost, options, uncertainty.
 const Action = struct {
     label: []const u8,
-    energy_cost: f32,
-    stamina_cost: f32,
-    energy_yield: f32,
+    energy_cost: f32, // the work the action takes; paid from Vigor
+    yield: f32, // units produced on success, before vigor-scaling
+    target: Yield, // which stock the yield lands in
     p_success: f32,
 };
 
 const actions = [_]Action{
-    // Forage: cheap, reliable, small. The hand-to-mouth staple.
-    .{ .label = "Forage", .energy_cost = 0, .stamina_cost = 2, .energy_yield = 5, .p_success = 0.7 },
-    // Fish: dearer and riskier, but a real surplus when it lands.
-    .{ .label = "Fish", .energy_cost = 1, .stamina_cost = 4, .energy_yield = 14, .p_success = 0.4 },
-    // Fish: dearest and riskiest, but a real surplus when it lands.
-    .{ .label = "Hunt", .energy_cost = 1, .stamina_cost = 6, .energy_yield = 30, .p_success = 0.2 },
+    // Forage: cheap, reliable food. The hand-to-mouth staple.
+    .{ .label = "Forage", .energy_cost = 2, .yield = 5, .target = .food, .p_success = 0.85 },
+    // Fish: dearer and riskier, but a real food surplus when it lands.
+    .{ .label = "Fish", .energy_cost = 4, .yield = 14, .target = .food, .p_success = 0.4 },
+    // Chop wood: turns effort into building materials — the investment feedstock.
+    .{ .label = "Chop wood", .energy_cost = 5, .yield = 8, .target = .materials, .p_success = 0.6 },
 };
+
+/// Satiety burned per unit of energy the actor pays from vigor — work makes you hungry.
+const effort_k: f32 = 0.4;
 
 const CapitalKind = enum { tool, comfort };
 
-/// A capital good: surplus energy spent now (`cost`) for a permanent improvement —
-/// the *now-vs-later* margin. A `.tool` improves one action (`target` indexes into
-/// `actions`): it scales that action's yield by `yield_mult` and adds `prob_add` to
-/// its success chance. A `.comfort` good raises stamina recovery (`trickle_add`) and
-/// may carry `upkeep` — extra energy decay per second to sustain it (a lit fireplace).
-/// One-time unlocks, tracked by a bit in `comp.Capital.owned` at this good's index.
+/// A capital good: build it now by paying an `energy_cost` (work, from vigor) and consuming
+/// `material_cost` from the stockpile — the *now-vs-later* margin, with teeth (your score
+/// dips to build). A `.tool` improves one action (`target` indexes into `actions`): it
+/// scales that action's yield by `yield_mult` and adds `prob_add` to its success chance.
+/// A `.comfort` good raises vigor recovery (`trickle_add`). One-time unlocks, tracked by a
+/// bit in `comp.Capital.owned` at this good's index.
 const Good = struct {
     label: []const u8,
-    energy_cost: f32,
-    stamina_cost: f32, // building it is tiring too
+    energy_cost: f32, // work to build it; paid from Vigor
+    material_cost: f32, // goods consumed from the stockpile to build it
     kind: CapitalKind,
     target: usize = 0, // tool only: which action it improves
     yield_mult: f32 = 1.0, // tool only
     prob_add: f32 = 0.0, // tool only
     trickle_add: f32 = 0.0, // comfort only
-    upkeep: f32 = 0.0, // comfort only: added energy decay/s
     icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
     icon_row: f32 = 0,
 };
@@ -66,24 +71,26 @@ const icon_px = 56.0;
 const tip_gap = 6.0;
 
 const capital = [_]Good{
-    // Sandals: Walking is easier, makes gathering more effective. (sheet: top-right)
-    .{ .label = "Sandals", .energy_cost = 10, .stamina_cost = 3, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_col = 1, .icon_row = 0 },
+    // Sandals: walking is easier, makes foraging (actions[0]) more effective. (sheet: top-right)
+    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_col = 1, .icon_row = 0 },
     // Fishing rod: makes Fish (actions[1]) land more often and yield more. (sheet: top-left)
-    .{ .label = "Fishing rod", .energy_cost = 30, .stamina_cost = 5, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_col = 0, .icon_row = 0 },
-    // Bed: rest better — stamina trickles back faster, no upkeep. (sheet: bottom-left)
-    .{ .label = "Bed", .energy_cost = 20, .stamina_cost = 4, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
-    // Fireplace: warmth speeds recovery a lot, but burns energy to stay lit. (sheet: bottom-right)
-    .{ .label = "Fireplace", .energy_cost = 80, .stamina_cost = 6, .kind = .comfort, .trickle_add = 0.8, .upkeep = 0.3, .icon_col = 1, .icon_row = 1 },
+    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_col = 0, .icon_row = 0 },
+    // Bed: rest better — vigor trickles back faster. (sheet: bottom-left)
+    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
+    // Fireplace: warmth speeds recovery a lot. (sheet: bottom-right)
+    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .icon_col = 1, .icon_row = 1 },
 };
 
-/// Spawn a fresh actor — starved and cold (low energy), but rested (full stamina).
-/// Used at startup and on "start over": death wipes the entity, this reseeds the run
-/// from the bottom, so everything accumulated is lost. The energy `start` is also the
-/// respawn floor.
+/// Spawn a fresh actor — rested but hungry, with a thin larder and nothing built. Used at
+/// startup and on "start over": death wipes the entity, this reseeds the run from the
+/// bottom, so everything accumulated is lost. Satiety starts part-full so the hunger clock
+/// is already ticking; food is scarce, so the first job is to keep eating.
 fn spawn_player(world: *ha.world.World) void {
     _ = world.spawn(.{
-        comp.Energy{ .v = 8, .max = 8, .decay = 0.4 }, // starved; bleeds 0.5/s when idle
-        comp.Stamina{ .v = 10, .max = 10, .trickle = 0.3 }, // rested; tiny passive regen
+        comp.Vigor{ .v = 10, .max = 10, .trickle = 0.5 }, // rested; passive regen up to the hunger cap
+        comp.Satiety{ .v = 6, .max = 10, .drain = 0.25 }, // peckish; hunger clock already running
+        comp.Food{ .v = 4, .max = 30, .spoil = 0.05 }, // a thin, perishable larder
+        comp.Materials{ .v = 0 }, // nothing stockpiled yet
         comp.Capital{}, // owns nothing yet
         tag.Player,
     });
@@ -99,17 +106,14 @@ fn owns(cap: *const comp.Capital, i: usize) bool {
     return (cap.owned & bit(i)) != 0;
 }
 
-/// Format a good's hover detail into `buf`: "owned" once bought, else its costs and
-/// the effect it grants (tool: yield×/odds; comfort: stamina trickle, and upkeep if any).
-/// Falls back to the bare label if the buffer is somehow too small.
+/// Format a good's hover detail into `buf`: "owned" once bought, else its build cost
+/// (energy work + materials) and the effect it grants (tool: yield×/odds; comfort: vigor
+/// trickle). Falls back to the bare label if the buffer is somehow too small.
 fn capital_tip(buf: []u8, g: Good, is_owned: bool) []const u8 {
     if (is_owned) return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
     return switch (g.kind) {
-        .tool => std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} sta | x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.stamina_cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
-        .comfort => if (g.upkeep > 0)
-            std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} sta | +{d:.1}/s sta, -{d:.1}/s e", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add, g.upkeep }) catch g.label
-        else
-            std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} sta | +{d:.1}/s sta", .{ g.label, g.energy_cost, g.stamina_cost, g.trickle_add }) catch g.label,
+        .tool => std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult, g.prob_add * 100 }) catch g.label,
+        .comfort => std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label,
     };
 }
 
@@ -211,9 +215,11 @@ pub fn main() !void {
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
-        ecs.run(&app.world, &app.resources, sys.update_energy); // energy decays while idle
-        ecs.run(&app.world, &app.resources, sys.update_stamina); // tiny passive stamina trickle
-        ecs.run(&app.world, &app.resources, sys.mark_dead); // energy at 0 → tag Dead
+        ecs.run(&app.world, &app.resources, sys.update_satiety); // hunger drains
+        ecs.run(&app.world, &app.resources, sys.metabolize); // food → satiety (passive eating)
+        ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
+        ecs.run(&app.world, &app.resources, sys.update_vigor); // vigor trickles up to the hunger cap
+        ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
         ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         // 3. update ui
         app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
@@ -272,9 +278,9 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     var overlay: ?*widgets.Node = null; // floating tooltip, built on hover below
 
     // queries
-    // MaybeSingle: the actor is despawned on death, so it may be absent. Energy, Stamina
-    // and Capital co-spawn on one entity, so one query fetches all three.
-    const q_actor = ecs.MaybeSingle(.{ comp.Energy, comp.Stamina, comp.Capital, ecs.With(tag.Player) }){ .world = world };
+    // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
+    // co-spawn on one entity, so one query fetches them together.
+    const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, ecs.With(tag.Player) }){ .world = world };
     const actor = q_actor.get();
 
     // node graph
@@ -296,27 +302,30 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
         _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
         {
             if (actor) |a| {
-                const energy, const stamina, const cap = a;
+                const vigor, const satiety, const food, const materials, const cap = a;
+                // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
+                const vigor_cap = vigor.max * (satiety.v / satiety.max);
 
-                // Resources panel — the actor's stocks. The rate next to each count is read
-                // straight off the component: energy decays at `decay`/s (capital upkeep
-                // raises it), stamina trickles up at `trickle`/s (comfort capital raises it).
+                // Resources panel — the actor's stocks, each with the live rate read off its
+                // component. Vigor is shown against its *hunger ceiling*, not its base max, so
+                // a starving actor visibly loses headroom. Materials is the bare stockpile.
                 const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
-                _ = try widgets.label(ui_ctx, res_panel, "energy_text", std.fmt.bufPrint(&char_buf, "Energy: {d:.0} J  (-{d:.1}/s)", .{ energy.v, energy.decay }) catch "?");
-                // _ = try widgets.progress_bar(ui_ctx, res_panel, "energy_bar", energy.v / energy.max, .{ .r = 230, .g = 180, .b = 80 });
-                _ = try widgets.label(ui_ctx, res_panel, "stamina_text", std.fmt.bufPrint(&char_buf, "Stamina: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ stamina.v, stamina.max, stamina.trickle }) catch "?");
+                _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
+                _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
+                _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
+                _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {d:.0}", .{materials.v}) catch "?");
 
-                // Actions panel — each action pays its cost up front for an uncertain yield.
-                // Clicking is acting — the actor employs means toward the option it most
-                // prefers. The effective yield/odds fold in any owned tool that targets this
-                // action (a rod boosts Fish), then the yield is scaled by current stamina
-                // (`sfac`); the button shows that effective payoff, the roll then decides it.
+                // Actions panel — each action is priced in energy (work), paid from vigor; the
+                // payment also burns satiety. The effective yield/odds fold in any owned tool
+                // that targets this action (a rod boosts Fish), then the yield is scaled by
+                // current vigor against its *base* max (`sfac`) — so being tired (or starving,
+                // which drains vigor) means below-standard output. The roll decides success.
                 const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
                 for (actions, 0..) |act, i| {
                     const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
-                    const sfac = stamina.v / stamina.max; // tired → below-standard outcomes
+                    const sfac = vigor.v / vigor.max; // tired → below-standard outcomes
 
-                    var eff_yield = act.energy_yield;
+                    var eff_yield = act.yield;
                     var eff_prob = act.p_success;
                     for (capital, 0..) |g, gi| {
                         if (g.kind == .tool and g.target == i and owns(cap, gi)) {
@@ -326,27 +335,38 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                     }
                     if (eff_prob > 1.0) eff_prob = 1.0;
 
+                    const unit: u8 = if (act.target == .food) 'f' else 'm';
                     const txt = std.fmt.bufPrint(
                         &char_buf,
-                        "{s}  (-{d:.0} sta, +{d:.1} e, {d:.0}%)",
-                        .{ act.label, act.stamina_cost, eff_yield * sfac, eff_prob * 100 },
+                        "{s}  ({d:.0} e, +{d:.1}{c}, {d:.0}%)",
+                        .{ act.label, act.energy_cost, eff_yield * sfac, unit, eff_prob * 100 },
                     ) catch act.label;
-                    // Affordability drives both the look (dimmed when unpayable) and the
-                    // guard (the click is a no-op unless it's affordable).
-                    const affordable = energy.v >= act.energy_cost and stamina.v >= act.stamina_cost;
+                    // Affordable only if vigor strictly covers the price — an action never spends
+                    // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
+                    // to death). Drives both the dimmed look and the click guard.
+                    const affordable = vigor.v > act.energy_cost;
                     const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
                     if (btn.query(ui_ctx).clicked and affordable) {
-                        energy.v -= act.energy_cost;
-                        stamina.v -= act.stamina_cost;
-                        if (ui_ctx.res.random().float(f32) < eff_prob) energy.v += eff_yield * sfac;
-                        if (energy.v < 0) energy.v = 0; // the death pipeline tags + reaps it next frame
+                        vigor.v -= act.energy_cost; // muscle pays the energy price
+                        satiety.v -= act.energy_cost * effort_k; // work makes you hungry
+                        if (satiety.v < 0) satiety.v = 0;
+                        if (ui_ctx.res.random().float(f32) < eff_prob) {
+                            const produced = eff_yield * sfac;
+                            switch (act.target) {
+                                .food => {
+                                    food.v += produced;
+                                    if (food.v > food.max) food.v = food.max; // larder is capped
+                                },
+                                .materials => materials.v += produced,
+                            }
+                        }
                     }
                 }
 
-                // Capital panel — spend surplus energy now on a permanent edge later. One-time
-                // unlocks, shown as a horizontal tray of icons (icons.png sheet). An owned good
-                // is a static icon; an unowned one is an icon_button — its ring brightens on
-                // hover and dims when unaffordable (the click is also affordability-guarded).
+                // Capital panel — spend work (vigor) + materials now on a permanent edge later.
+                // One-time unlocks, shown as a horizontal tray of icons (icons.png sheet). An
+                // owned good is a static icon; an unowned one is an icon_button — its ring
+                // brightens on hover and dims when unaffordable (the click is also guarded).
                 // The buttons are icon-only; hovering one fills the detail line below the tray
                 // with its costs/effects (queried off last frame's stamped rects).
                 const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
@@ -369,22 +389,21 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
                         }
                         continue;
                     }
-                    const affordable = energy.v >= g.energy_cost and stamina.v >= g.stamina_cost;
+                    const affordable = vigor.v > g.energy_cost and materials.v >= g.material_cost;
                     const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
                     if (buy.query(ui_ctx).hovering) {
                         hovered = gi;
                         hov_rect = buy.rect(ui_ctx);
                     }
                     if (buy.query(ui_ctx).clicked and affordable) {
-                        energy.v -= g.energy_cost;
-                        stamina.v -= g.stamina_cost;
+                        vigor.v -= g.energy_cost; // muscle pays the build's energy price
+                        satiety.v -= g.energy_cost * effort_k; // building is hungry work too
+                        if (satiety.v < 0) satiety.v = 0;
+                        materials.v -= g.material_cost; // and consumes goods from the stockpile
                         cap.owned |= bit(gi);
                         // Comfort effects bake into the components (so the readouts track them);
                         // tool effects are folded in at action resolution above.
-                        if (g.kind == .comfort) {
-                            stamina.trickle += g.trickle_add;
-                            energy.decay += g.upkeep;
-                        }
+                        if (g.kind == .comfort) vigor.trickle += g.trickle_add;
                     }
                 }
                 // Hover tooltip — a floating overlay tree showing the hovered good's costs/
