@@ -345,10 +345,10 @@ fn collect(list: *std.ArrayList(*widgets.Node), arena: std.mem.Allocator, item: 
 }
 
 /// A fullscreen root: the anchor box a whole screen's content positions against. Every
-/// screen (`ui_playgame`, `ui_gameover`, the menu chrome) is its own independent tree
-/// rooted here, laid out from (0,0) and drawn in the order `build_ui` lists it. Sized to
-/// the live window so `.center`/`.center_left`/… anchors resolve against the full display.
-fn screen_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
+/// screen (`ui_playgame`, `ui_gameover`) is its own independent tree rooted here, laid
+/// out from (0,0) and drawn in the order `build_ui` lists it. Sized to the live window
+/// so `.center`/`.center_left`/… anchors resolve against the full display.
+fn ui_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
     const ww, const wh = try ui_ctx.res.window.getSize();
     const root = try widgets.Node.create(ui_ctx.arena, id);
     _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
@@ -358,10 +358,10 @@ fn screen_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
 
 /// The game-over screen: death is total — the run is over and everything accumulated is
 /// gone. A centered message plus a "Start over" button that reseeds a fresh actor from
-/// the bottom. Builds its own fullscreen root (via `screen_root`) and returns it, so its
+/// the bottom. Builds its own fullscreen root (via `ui_root`) and returns it, so its
 /// keys are final at build time and its slots match the rects stamped after layout.
 fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
-    const over = try screen_root(ui_ctx, "over");
+    const over = try ui_root(ui_ctx, "over");
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", over);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
@@ -379,11 +379,10 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
 /// layer. `actor` is the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food,
 /// *Materials, *Capital }`.
 fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, ?*widgets.Node } {
-    const res = ui_ctx.res;
     var char_buf: [64]u8 = undefined;
-    var overlay: ?*widgets.Node = null; // floating tooltip, built on hover below
+    var overlay: ?*widgets.Node = null; // floating tooltip, built by the goods menu on hover
 
-    const play = try screen_root(ui_ctx, "play");
+    const play = try ui_root(ui_ctx, "play");
 
     const vigor, const satiety, const food, const materials, const cap = actor;
     // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
@@ -462,14 +461,37 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
         }
     }
 
-    // Capital panel — spend work (vigor) + materials now on a permanent edge later.
-    // One-time unlocks, shown as a horizontal tray of icons (icons.png sheet). An
-    // owned good is a static icon; an unowned one is an icon_button — its ring
-    // brightens on hover and dims when unaffordable (the click is also guarded).
-    // The buttons are icon-only; hovering one fills the detail line below the tray
-    // with its costs/effects (queried off last frame's stamped rects).
-    const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
-    const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
+    // Capital Goods — a collapsible drawer pinned bottom-left. Its titled panel is the
+    // toggle: clicking it opens/closes the goods tray. The tray is built as a *sibling*
+    // of the panel (not a child), so clicking a good to build it never also trips the
+    // toggle — the hit-test marks every slot whose rect contains the point.
+    const capital_goods = try widgets.Node.pcreate(ui_ctx.arena, "capital", play);
+    _ = capital_goods.with_layout(ui.features.Layout.init(.bottom_left, .vertical).with_gap(10));
+    const cap_panel = try widgets.panel(ui_ctx, capital_goods, "cap_panel", "Capital Goods");
+    const cg = cap_panel.query(ui_ctx);
+    if (cg.clicked) ui_ctx.setFlag(cap_panel.key, .active, !cg.active);
+    // `cg.active` is the pre-toggle value, so this frame's live state is:
+    const cap_panel_open = if (cg.clicked) !cg.active else cg.active;
+    // Open: build the goods tray under the drawer and bubble up its hover tooltip.
+    if (cap_panel_open) overlay = try ui_capital_goods_menu(ui_ctx, capital_goods, actor);
+
+    return .{ play, overlay };
+}
+
+/// The capital-goods tray: a horizontal row of build icons (the `capital` catalog),
+/// built under `parent` and shown while the Capital Goods drawer is open. An owned good
+/// is a static icon; an unowned one an icon_button whose ring brightens on hover and
+/// dims when unaffordable. Building is incremental — the first click commits materials,
+/// then each click pours spare vigor into the good until it completes. Reads and mutates
+/// the actor's stocks inline on click. Returns the hover tooltip as a floating overlay
+/// root (or null when nothing is hovered) for the render list's top layer. `actor` is
+/// the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food, *Materials, *Capital }`.
+fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: anytype) !?*widgets.Node {
+    const res = ui_ctx.res;
+    var char_buf: [64]u8 = undefined;
+    const vigor, const satiety, _, const materials, const cap = actor;
+
+    const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", parent);
     _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
     var hovered: ?usize = null; // which good the cursor is over
     var hov_rect: ?ui.Rect = null; // and where it sat last frame, to float the tooltip over it
@@ -514,16 +536,16 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
                 cap.owned |= bit(gi);
                 if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
                 // Comfort effects bake into the components (so the readouts track them);
-                // tool effects are folded in at action resolution above.
+                // tool effects are folded in at action resolution (see `ui_playgame`).
                 if (g.kind == .comfort) vigor.trickle += g.trickle_add;
             }
         }
     }
 
-    // Hover tooltip — a floating overlay tree showing the hovered good's costs/
-    // effects, pinned above its icon. Built only when a good is hovered and its
-    // last-frame rect is known (the tray is static, so last frame's rect is right).
-    // Sized by a throwaway layout pass, then given an origin centred over the icon.
+    // Hover tooltip — a floating overlay tree showing the hovered good's costs/effects,
+    // pinned above its icon. Built only when a good is hovered and its last-frame rect
+    // is known (the tray is static, so last frame's rect is right). Sized by a throwaway
+    // layout pass, then given an origin centred over the icon.
     if (hovered) |hi| {
         if (hov_rect) |r| {
             const tip = capital_tip(&char_buf, capital[hi], hi, cap);
@@ -532,17 +554,13 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
             const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
             const oy = r.y - box.size.height - tip_gap; // floating just above it
             box.layout = box.layout.with_origin(ox, oy);
-            overlay = box;
+            return box;
         }
     }
-
-    return .{ play, overlay };
+    return null;
 }
 
 fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
-    // "globals"
-    const res = ui_ctx.res;
-
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
     // co-spawn on one entity, so one query fetches them together.
@@ -552,29 +570,13 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // Render list — the frame's root trees, drawn in order (later ones on top). Arena-
     // backed; dies with this frame's node tree. `collect` flattens each builder's return.
     var trees: std.ArrayList(*widgets.Node) = .empty;
-
-    // Chrome: the menu button, pinned center-left, always present — will open a menu
-    // (no-op for now). Its own fullscreen root so the anchor resolves against the screen.
-    // Borrows the fireplace cell from the icon sheet until it gets its own glyph.
-    const chrome = try screen_root(ui_ctx, "root");
-    const menu = try widgets.icon_button(ui_ctx, chrome, "menu", widgets.icon_sprite(res, 1, 1), icon_px, true);
-    _ = menu.with_layout(ui.features.Layout.init(.center_left, null));
-    const m = menu.query(ui_ctx);
-    if (m.clicked) ui_ctx.setFlag(menu.key, .active, !m.active);
-    // `m.active` is the pre-toggle value, so this frame's live state is:
-    const menu_open = if (m.clicked) !m.active else m.active;
-    if (menu_open) _ = try widgets.label(ui_ctx, chrome, "my_menu", "this is a menu.");
-    try collect(&trees, ui_ctx.arena, chrome);
-
     // Content, only while the menu is closed: the play HUD if the actor lives, else the
     // game-over screen. Each builder returns its own tree(s) — `ui_playgame` a
     // `.{ screen, tooltip }` pair, `ui_gameover` a single screen — which `collect` adds.
-    if (!menu_open) {
-        if (actor) |a| {
-            try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
-        } else {
-            try collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
-        }
+    if (actor) |a| {
+        try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
+    } else {
+        try collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
     }
 
     return .{ .trees = trees.items };
