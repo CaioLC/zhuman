@@ -288,22 +288,20 @@ pub fn main() !void {
         app.ui.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try build_ui(&app.ui, &app.world);
-        // Lay out + stamp each root. The overlay is its own tree, positioned via its
-        // layout origin (set in build_ui) rather than the main tree's flow.
-        try frame.main.set_global_pos();
-        ui.stamp_rects(&app.ui, frame.main); // capture rects into interaction slots for next frame's hit-test
-        if (frame.overlay) |ov| {
-            try ov.set_global_pos();
-            ui.stamp_rects(&app.ui, ov);
+        // Lay out + stamp each root tree, in list order. Each is independent — a screen
+        // is sized to the window and placed from (0,0); a floating overlay (the tooltip)
+        // carries its own layout origin, set in build_ui.
+        for (frame.trees) |t| {
+            try t.set_global_pos();
+            ui.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
         }
 
         // Render Stage
         // window
         try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
         try app.renderer.clear();
-        // ui — main tree first, then the overlay on top
-        draw_tree(&app.ui, frame.main);
-        if (frame.overlay) |ov| draw_tree(&app.ui, ov);
+        // ui — trees painted in list order, so later ones (overlays) land on top
+        for (frame.trees) |t| draw_tree(&app.ui, t);
         // present
         try app.renderer.present();
 
@@ -313,7 +311,7 @@ pub fn main() !void {
 
 /// Walk a UI tree and paint each node by its render aspects. Order matters: fill
 /// (backmost) → image → text → outline (topmost), so a hover/affordance ring shows
-/// over opaque icon tiles. Called per root — the main tree, then any overlay.
+/// over opaque icon tiles. Called once per root tree, in the render list's order.
 fn draw_tree(u: *widgets.UiCtx, root: *widgets.Node) void {
     var it = root.iterate();
     while (it.next()) |node| {
@@ -324,20 +322,226 @@ fn draw_tree(u: *widgets.UiCtx, root: *widgets.Node) void {
     }
 }
 
-/// What `build_ui` hands back each frame: the main tree, plus an optional floating
-/// overlay tree (the hover tooltip). The render loop lays out and draws each in order —
-/// the overlay last, so it sits on top. Two layers for now; grow to a list if needed.
+/// What `build_ui` hands back each frame: a flat list of independent root trees, laid
+/// out and drawn in order (later trees paint on top). Generalizes the old fixed
+/// `main`/`overlay` pair — the screen, plus any floating overlays (a hover tooltip,
+/// later a modal). A `ui_*` builder returns a single tree or a tuple of them, which
+/// `collect` flattens into this list. Arena-backed, so it dies with the frame's tree.
 const Ui = struct {
-    main: *widgets.Node,
-    overlay: ?*widgets.Node = null,
+    trees: []const *widgets.Node,
 };
+
+/// Append `item` to the render list, flattening whatever shape a `ui_*` builder hands
+/// back: a single `*Node`, an `?*Node` (skipped when null), or a tuple mixing the two
+/// (e.g. a screen plus its optional tooltip). Each leaf is an independent root tree; its
+/// position in the list is its draw order.
+fn collect(list: *std.ArrayList(*widgets.Node), arena: std.mem.Allocator, item: anytype) !void {
+    switch (@typeInfo(@TypeOf(item))) {
+        .optional => if (item) |v| try collect(list, arena, v),
+        .pointer => try list.append(arena, item), // a single `*Node`
+        .@"struct" => |s| inline for (s.fields) |f| try collect(list, arena, @field(item, f.name)),
+        else => @compileError("collect: unsupported UI tree shape " ++ @typeName(@TypeOf(item))),
+    }
+}
+
+/// A fullscreen root: the anchor box a whole screen's content positions against. Every
+/// screen (`ui_playgame`, `ui_gameover`, the menu chrome) is its own independent tree
+/// rooted here, laid out from (0,0) and drawn in the order `build_ui` lists it. Sized to
+/// the live window so `.center`/`.center_left`/… anchors resolve against the full display.
+fn screen_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
+    const ww, const wh = try ui_ctx.res.window.getSize();
+    const root = try widgets.Node.create(ui_ctx.arena, id);
+    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    return root;
+}
+
+/// The game-over screen: death is total — the run is over and everything accumulated is
+/// gone. A centered message plus a "Start over" button that reseeds a fresh actor from
+/// the bottom. Builds its own fullscreen root (via `screen_root`) and returns it, so its
+/// keys are final at build time and its slots match the rects stamped after layout.
+fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
+    const over = try screen_root(ui_ctx, "over");
+    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", over);
+    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
+    _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
+    const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
+    if (restart.query(ui_ctx).clicked) spawn_player(world);
+    return over;
+}
+
+/// The live HUD while the actor is alive: a top-left status panel (the actor's stocks
+/// and their live rates) plus a centered column of Actions and Capital. Each action is
+/// priced in energy paid from vigor (which also burns satiety); each capital good is an
+/// incremental build. Reads and mutates the actor's components inline on click. Builds
+/// its own fullscreen root and returns the pair `.{ screen, tooltip }` — the tooltip a
+/// floating overlay root (or null when nothing is hovered) for the render list's top
+/// layer. `actor` is the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food,
+/// *Materials, *Capital }`.
+fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, ?*widgets.Node } {
+    const res = ui_ctx.res;
+    var char_buf: [64]u8 = undefined;
+    var overlay: ?*widgets.Node = null; // floating tooltip, built on hover below
+
+    const play = try screen_root(ui_ctx, "play");
+
+    const vigor, const satiety, const food, const materials, const cap = actor;
+    // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
+    const vigor_cap = vigor.max * (satiety.v / satiety.max);
+
+    // Status panel — the actor's stocks, pinned top-left, each with the live rate read
+    // off its component. Vigor is shown against its *hunger ceiling*, not its base max,
+    // so a starving actor visibly loses headroom. Materials is the bare stockpile.
+    const status_div = try widgets.Node.pcreate(ui_ctx.arena, "status_div", play);
+    _ = status_div.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10));
+    const res_panel = try widgets.panel(ui_ctx, status_div, "res_panel", "Resources");
+    _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
+    _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
+    _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
+    _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {d:.0}", .{materials.v}) catch "?");
+
+    const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", play);
+    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
+
+    // Actions panel — each action is priced in energy (work), paid from vigor; the
+    // payment also burns satiety. The effective yield/odds fold in any owned tool
+    // that targets this action (a rod boosts Fish), then the yield is scaled by
+    // current vigor against its *base* max (`sfac`) — so being tired (or starving,
+    // which drains vigor) means below-standard output. The roll decides success.
+    const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
+    for (actions, 0..) |act, i| {
+        const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
+        const sfac = vigor.v / vigor.max; // tired → below-standard outcomes
+
+        var eff_yield = act.yield;
+        var eff_prob = act.p_success;
+        for (capital, 0..) |g, gi| {
+            if (g.kind == .tool and g.target == i and owns(cap, gi)) {
+                eff_yield *= g.yield_mult;
+                eff_prob += g.prob_add;
+            }
+        }
+        if (eff_prob > 1.0) eff_prob = 1.0;
+
+        // Plan the payment: effort-savers cheapen the price, a power tool pays the
+        // bulk from its durability, vigor covers the 5% floor (and any shortfall).
+        const pay = plan_payment(cap, i, act.energy_cost);
+
+        const unit: u8 = if (act.target == .food) 'f' else 'm';
+        const txt = std.fmt.bufPrint(
+            &char_buf,
+            "{s}  (-{d:.1} vig, +{d:.1}{c}, {d:.0}%)",
+            .{ act.label, pay.from_vigor, eff_yield * sfac, unit, eff_prob * 100 },
+        ) catch act.label;
+        // Affordable only if vigor strictly covers its share — an action never spends
+        // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
+        // to death). Drives both the dimmed look and the click guard.
+        const affordable = vigor.v > pay.from_vigor;
+        const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
+        if (btn.query(ui_ctx).clicked and affordable) {
+            vigor.v -= pay.from_vigor; // muscle pays its share
+            satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
+            if (satiety.v < 0) satiety.v = 0;
+            if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
+                cap.durability[pi] -= pay.from_power;
+                if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
+                    cap.durability[pi] = 0;
+                    cap.owned &= ~bit(pi);
+                }
+            }
+            if (ui_ctx.res.random().float(f32) < eff_prob) {
+                const produced = eff_yield * sfac;
+                switch (act.target) {
+                    .food => {
+                        food.v += produced;
+                        if (food.v > food.max) food.v = food.max; // larder is capped
+                    },
+                    .materials => materials.v += produced,
+                }
+            }
+        }
+    }
+
+    // Capital panel — spend work (vigor) + materials now on a permanent edge later.
+    // One-time unlocks, shown as a horizontal tray of icons (icons.png sheet). An
+    // owned good is a static icon; an unowned one is an icon_button — its ring
+    // brightens on hover and dims when unaffordable (the click is also guarded).
+    // The buttons are icon-only; hovering one fills the detail line below the tray
+    // with its costs/effects (queried off last frame's stamped rects).
+    const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
+    const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
+    _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
+    var hovered: ?usize = null; // which good the cursor is over
+    var hov_rect: ?ui.Rect = null; // and where it sat last frame, to float the tooltip over it
+    for (capital, 0..) |g, gi| {
+        const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
+        const sprite = widgets.icon_sprite(res, g.icon_col, g.icon_row);
+        if (owns(cap, gi)) {
+            // Owned: a static icon, no ring, not clickable — but still queried so
+            // hovering it shows its tooltip.
+            const node = try widgets.Node.pcreate(ui_ctx.arena, ckey, cap_row);
+            try widgets.data_sprite(ui_ctx, node, sprite, icon_px);
+            _ = node.with_layout(ui.features.Layout.init(.relative, null));
+            if (node.query(ui_ctx).hovering) {
+                hovered = gi;
+                hov_rect = node.rect(ui_ctx);
+            }
+            continue;
+        }
+        // Building pours spare vigor into the good across clicks/sessions. Materials
+        // are committed up front (first click); energy is the labour over time. A
+        // grand good (saw: 14 e) can't fit one 10-vigor body, so it needs several
+        // sessions — vigor refills, you click again, progress climbs until it's done.
+        const started = cap.progress[gi] > 0;
+        const can_invest = vigor.v > build_vigor_floor;
+        // Affordable = there's vigor to invest, and (to *start*) materials in hand.
+        const affordable = can_invest and (started or materials.v >= g.material_cost);
+        const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
+        if (buy.query(ui_ctx).hovering) {
+            hovered = gi;
+            hov_rect = buy.rect(ui_ctx);
+        }
+        if (buy.query(ui_ctx).clicked and affordable) {
+            if (!started) materials.v -= g.material_cost; // commit materials to begin
+            const need = g.energy_cost - cap.progress[gi];
+            const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
+            vigor.v -= chunk; // muscle invested as labour
+            satiety.v -= chunk * effort_k; // building is hungry work too
+            if (satiety.v < 0) satiety.v = 0;
+            cap.progress[gi] += chunk;
+            if (cap.progress[gi] >= g.energy_cost) { // the build completes
+                cap.progress[gi] = 0;
+                cap.owned |= bit(gi);
+                if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
+                // Comfort effects bake into the components (so the readouts track them);
+                // tool effects are folded in at action resolution above.
+                if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+            }
+        }
+    }
+
+    // Hover tooltip — a floating overlay tree showing the hovered good's costs/
+    // effects, pinned above its icon. Built only when a good is hovered and its
+    // last-frame rect is known (the tray is static, so last frame's rect is right).
+    // Sized by a throwaway layout pass, then given an origin centred over the icon.
+    if (hovered) |hi| {
+        if (hov_rect) |r| {
+            const tip = capital_tip(&char_buf, capital[hi], hi, cap);
+            const box = try widgets.tooltip(ui_ctx, "tip", tip);
+            try box.set_global_pos(); // resolve its size (origin still 0,0)
+            const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
+            const oy = r.y - box.size.height - tip_gap; // floating just above it
+            box.layout = box.layout.with_origin(ox, oy);
+            overlay = box;
+        }
+    }
+
+    return .{ play, overlay };
+}
 
 fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // "globals"
     const res = ui_ctx.res;
-    const ww, const wh = try res.window.getSize();
-    var char_buf: [64]u8 = undefined;
-    var overlay: ?*widgets.Node = null; // floating tooltip, built on hover below
 
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
@@ -345,182 +549,33 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, ecs.With(tag.Player) }){ .world = world };
     const actor = q_actor.get();
 
-    // node graph
-    const root = try widgets.Node.create(ui_ctx.arena, "root");
-    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    // Menu mock, pinned center-left — will open a menu (no-op for now). Borrows the
-    // fireplace cell from the icon sheet until it gets its own glyph.
-    const menu = try widgets.icon_button(ui_ctx, root, "menu", widgets.icon_sprite(res, 1, 1), icon_px, true);
+    // Render list — the frame's root trees, drawn in order (later ones on top). Arena-
+    // backed; dies with this frame's node tree. `collect` flattens each builder's return.
+    var trees: std.ArrayList(*widgets.Node) = .empty;
+
+    // Chrome: the menu button, pinned center-left, always present — will open a menu
+    // (no-op for now). Its own fullscreen root so the anchor resolves against the screen.
+    // Borrows the fireplace cell from the icon sheet until it gets its own glyph.
+    const chrome = try screen_root(ui_ctx, "root");
+    const menu = try widgets.icon_button(ui_ctx, chrome, "menu", widgets.icon_sprite(res, 1, 1), icon_px, true);
     _ = menu.with_layout(ui.features.Layout.init(.center_left, null));
     const m = menu.query(ui_ctx);
     if (m.clicked) ui_ctx.setFlag(menu.key, .active, !m.active);
     // `m.active` is the pre-toggle value, so this frame's live state is:
     const menu_open = if (m.clicked) !m.active else m.active;
-    if (menu_open) {
-        _ = try widgets.label(ui_ctx, root, "my_menu", "this is a menu.");
-    } else {
-        const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", root);
-        _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
-        {
-            if (actor) |a| {
-                const vigor, const satiety, const food, const materials, const cap = a;
-                // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
-                const vigor_cap = vigor.max * (satiety.v / satiety.max);
+    if (menu_open) _ = try widgets.label(ui_ctx, chrome, "my_menu", "this is a menu.");
+    try collect(&trees, ui_ctx.arena, chrome);
 
-                // Resources panel — the actor's stocks, each with the live rate read off its
-                // component. Vigor is shown against its *hunger ceiling*, not its base max, so
-                // a starving actor visibly loses headroom. Materials is the bare stockpile.
-                const res_panel = try widgets.panel(ui_ctx, center_div, "res_panel", "Resources");
-                _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
-                _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
-                _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
-                _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {d:.0}", .{materials.v}) catch "?");
-
-                // Actions panel — each action is priced in energy (work), paid from vigor; the
-                // payment also burns satiety. The effective yield/odds fold in any owned tool
-                // that targets this action (a rod boosts Fish), then the yield is scaled by
-                // current vigor against its *base* max (`sfac`) — so being tired (or starving,
-                // which drains vigor) means below-standard output. The roll decides success.
-                const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
-                for (actions, 0..) |act, i| {
-                    const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
-                    const sfac = vigor.v / vigor.max; // tired → below-standard outcomes
-
-                    var eff_yield = act.yield;
-                    var eff_prob = act.p_success;
-                    for (capital, 0..) |g, gi| {
-                        if (g.kind == .tool and g.target == i and owns(cap, gi)) {
-                            eff_yield *= g.yield_mult;
-                            eff_prob += g.prob_add;
-                        }
-                    }
-                    if (eff_prob > 1.0) eff_prob = 1.0;
-
-                    // Plan the payment: effort-savers cheapen the price, a power tool pays the
-                    // bulk from its durability, vigor covers the 5% floor (and any shortfall).
-                    const pay = plan_payment(cap, i, act.energy_cost);
-
-                    const unit: u8 = if (act.target == .food) 'f' else 'm';
-                    const txt = std.fmt.bufPrint(
-                        &char_buf,
-                        "{s}  (-{d:.1} vig, +{d:.1}{c}, {d:.0}%)",
-                        .{ act.label, pay.from_vigor, eff_yield * sfac, unit, eff_prob * 100 },
-                    ) catch act.label;
-                    // Affordable only if vigor strictly covers its share — an action never spends
-                    // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
-                    // to death). Drives both the dimmed look and the click guard.
-                    const affordable = vigor.v > pay.from_vigor;
-                    const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
-                    if (btn.query(ui_ctx).clicked and affordable) {
-                        vigor.v -= pay.from_vigor; // muscle pays its share
-                        satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
-                        if (satiety.v < 0) satiety.v = 0;
-                        if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
-                            cap.durability[pi] -= pay.from_power;
-                            if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
-                                cap.durability[pi] = 0;
-                                cap.owned &= ~bit(pi);
-                            }
-                        }
-                        if (ui_ctx.res.random().float(f32) < eff_prob) {
-                            const produced = eff_yield * sfac;
-                            switch (act.target) {
-                                .food => {
-                                    food.v += produced;
-                                    if (food.v > food.max) food.v = food.max; // larder is capped
-                                },
-                                .materials => materials.v += produced,
-                            }
-                        }
-                    }
-                }
-
-                // Capital panel — spend work (vigor) + materials now on a permanent edge later.
-                // One-time unlocks, shown as a horizontal tray of icons (icons.png sheet). An
-                // owned good is a static icon; an unowned one is an icon_button — its ring
-                // brightens on hover and dims when unaffordable (the click is also guarded).
-                // The buttons are icon-only; hovering one fills the detail line below the tray
-                // with its costs/effects (queried off last frame's stamped rects).
-                const cap_panel = try widgets.panel(ui_ctx, center_div, "cap_panel", "Capital");
-                const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", cap_panel);
-                _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
-                var hovered: ?usize = null; // which good the cursor is over
-                var hov_rect: ?ui.Rect = null; // and where it sat last frame, to float the tooltip over it
-                for (capital, 0..) |g, gi| {
-                    const ckey = try std.fmt.allocPrint(ui_ctx.arena, "cap{d}", .{gi});
-                    const sprite = widgets.icon_sprite(res, g.icon_col, g.icon_row);
-                    if (owns(cap, gi)) {
-                        // Owned: a static icon, no ring, not clickable — but still queried so
-                        // hovering it shows its tooltip.
-                        const node = try widgets.Node.pcreate(ui_ctx.arena, ckey, cap_row);
-                        try widgets.data_sprite(ui_ctx, node, sprite, icon_px);
-                        _ = node.with_layout(ui.features.Layout.init(.relative, null));
-                        if (node.query(ui_ctx).hovering) {
-                            hovered = gi;
-                            hov_rect = node.rect(ui_ctx);
-                        }
-                        continue;
-                    }
-                    // Building pours spare vigor into the good across clicks/sessions. Materials
-                    // are committed up front (first click); energy is the labour over time. A
-                    // grand good (saw: 14 e) can't fit one 10-vigor body, so it needs several
-                    // sessions — vigor refills, you click again, progress climbs until it's done.
-                    const started = cap.progress[gi] > 0;
-                    const can_invest = vigor.v > build_vigor_floor;
-                    // Affordable = there's vigor to invest, and (to *start*) materials in hand.
-                    const affordable = can_invest and (started or materials.v >= g.material_cost);
-                    const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
-                    if (buy.query(ui_ctx).hovering) {
-                        hovered = gi;
-                        hov_rect = buy.rect(ui_ctx);
-                    }
-                    if (buy.query(ui_ctx).clicked and affordable) {
-                        if (!started) materials.v -= g.material_cost; // commit materials to begin
-                        const need = g.energy_cost - cap.progress[gi];
-                        const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
-                        vigor.v -= chunk; // muscle invested as labour
-                        satiety.v -= chunk * effort_k; // building is hungry work too
-                        if (satiety.v < 0) satiety.v = 0;
-                        cap.progress[gi] += chunk;
-                        if (cap.progress[gi] >= g.energy_cost) { // the build completes
-                            cap.progress[gi] = 0;
-                            cap.owned |= bit(gi);
-                            if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
-                            // Comfort effects bake into the components (so the readouts track them);
-                            // tool effects are folded in at action resolution above.
-                            if (g.kind == .comfort) vigor.trickle += g.trickle_add;
-                        }
-                    }
-                }
-                // Hover tooltip — a floating overlay tree showing the hovered good's costs/
-                // effects, pinned above its icon. Built only when a good is hovered and its
-                // last-frame rect is known (the tray is static, so last frame's rect is right).
-                // Sized by a throwaway layout pass, then given an origin centred over the icon.
-                if (hovered) |hi| {
-                    if (hov_rect) |r| {
-                        const tip = capital_tip(&char_buf, capital[hi], hi, cap);
-                        const box = try widgets.tooltip(ui_ctx, "tip", tip);
-                        try box.set_global_pos(); // resolve its size (origin still 0,0)
-                        const ox = r.x + (r.w - box.size.width) / 2; // centred over the icon
-                        const oy = r.y - box.size.height - tip_gap; // floating just above it
-                        box.layout = box.layout.with_origin(ox, oy);
-                        overlay = box;
-                    }
-                }
-            } else {
-                // Death is total: the run is over and everything accumulated is gone.
-                _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
-                const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
-                if (restart.query(ui_ctx).clicked) spawn_player(world);
-            }
+    // Content, only while the menu is closed: the play HUD if the actor lives, else the
+    // game-over screen. Each builder returns its own tree(s) — `ui_playgame` a
+    // `.{ screen, tooltip }` pair, `ui_gameover` a single screen — which `collect` adds.
+    if (!menu_open) {
+        if (actor) |a| {
+            try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
+        } else {
+            try collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
         }
     }
-    // const bottom_div = try widgets.Node.pcreate(ui_ctx.arena, "b_div", root);
-    // _ = bottom_div.with_layout(ui.features.Layout.init(.bottom_center, .vertical).with_gap(4));
-    // {
-    //     _ = try widgets.label(ui_ctx, bottom_div, "player_state", "You are hungry.");
-    //     _ = try widgets.label(ui_ctx, bottom_div, "city_state", "You are alone.");
-    // }
-    return .{ .main = root, .overlay = overlay };
+
+    return .{ .trees = trees.items };
 }
