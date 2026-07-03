@@ -22,27 +22,26 @@ const Yield = enum { food, materials };
 
 /// A choice open to the actor. The action is *priced* in `energy_cost` — the work it takes —
 /// which the actor pays from `Vigor` (its muscle). Paying also burns `Satiety` (work makes
-/// you hungry). For that price it rolls a `p_success` chance at `yield` units landing in the
-/// `target` stock (food to eat, or materials to build with). The yield is *scaled by current
-/// vigor* (`v / max`): a tired actor produces below standard, so the labor/leisure margin is
-/// implicit — work while drained for poor output, or pause and let vigor refill. The player
-/// ranks these and acts on the one it most prefers; later the sim's AI ranks the same
-/// catalog. Praxeology: cost, options, uncertainty.
+/// you hungry). For that price it draws a yield from `dist` into the `target` stock (food to
+/// eat, or materials to build with) — the distribution's *spread is the risk*, so there's no
+/// separate success roll. The draw is *scaled by current vigor* (`v / max`): a tired actor
+/// produces below standard, so the labor/leisure margin is implicit — work while drained for
+/// poor output, or pause and let vigor refill. The player ranks these and acts on the one it
+/// most prefers; later the sim's AI ranks the same catalog. Praxeology: cost, options, uncertainty.
 const Action = struct {
     label: []const u8,
     energy_cost: f32, // the work the action takes; paid from Vigor
-    yield: f32, // units produced on success, before vigor-scaling
     target: Yield, // which stock the yield lands in
-    p_success: f32,
+    dist: ha.dist.Dist, // yield drawn from this distribution (its spread is the risk)
 };
 
 const actions = [_]Action{
-    // Forage: cheap, reliable food. The hand-to-mouth staple.
-    .{ .label = "Forage", .energy_cost = 2, .yield = 5, .target = .food, .p_success = 0.85 },
-    // Fish: dearer and riskier, but a real food surplus when it lands.
-    .{ .label = "Fish", .energy_cost = 4, .yield = 14, .target = .food, .p_success = 0.4 },
-    // Chop wood: turns effort into building materials — the investment feedstock.
-    .{ .label = "Chop wood", .energy_cost = 5, .yield = 8, .target = .materials, .p_success = 0.6 },
+    // Forage: cheap, steady food — a tight normal around 4. The hand-to-mouth staple.
+    .{ .label = "Forage", .energy_cost = 2, .target = .food, .dist = .{ .kind = .normal, .s = 4, .sd = 1.6 } },
+    // Fish: dearer, a bigger but lumpier catch — poisson(6), some trips near-empty.
+    .{ .label = "Fish", .energy_cost = 4, .target = .food, .dist = .{ .kind = .poisson, .s = 6 } },
+    // Chop wood: turns effort into materials — normal(6.5). The investment feedstock.
+    .{ .label = "Chop wood", .energy_cost = 5, .target = .materials, .dist = .{ .kind = .normal, .s = 6.5, .sd = 1.7 } },
 };
 
 /// Satiety burned per unit of energy the actor pays from vigor — work makes you hungry.
@@ -57,7 +56,7 @@ const CapitalKind = enum { tool, comfort };
 /// A capital good: build it now by paying an `energy_cost` (work, from vigor) and consuming
 /// `material_cost` from the stockpile — the *now-vs-later* margin, with teeth (your score
 /// dips to build). A `.tool` improves one action (`target` indexes into `actions`) via any
-/// mix of three effects: `yield_mult`/`prob_add` boost its output (a rod), `cost_mult` < 1
+/// mix of three effects: `yield_mult` boosts its output (a rod), `cost_mult` < 1
 /// lowers its energy price (an axe — saves human effort), and `power_capacity` > 0 makes it
 /// an *external-energy* tool (a saw) that pays the action's price from its own durability
 /// instead of vigor, wearing down by the energy it supplies and breaking at 0. A `.comfort`
@@ -70,7 +69,6 @@ const Good = struct {
     kind: CapitalKind,
     target: usize = 0, // tool only: which action it improves
     yield_mult: f32 = 1.0, // tool only: scales the action's yield
-    prob_add: f32 = 0.0, // tool only: adds to the action's success chance
     cost_mult: f32 = 1.0, // tool only: scales the action's energy price (effort-saver, < 1)
     power_capacity: f32 = 0.0, // tool only: > 0 ⇒ external-energy tool, this much durability (energy units)
     trickle_add: f32 = 0.0, // comfort only
@@ -85,9 +83,9 @@ const tip_gap = 6.0;
 
 const capital = [_]Good{
     // Sandals: walking is easier, makes foraging (actions[0]) more effective. (sheet: top-right)
-    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .prob_add = 0.10, .icon_col = 1, .icon_row = 0 },
-    // Fishing rod: makes Fish (actions[1]) land more often and yield more. (sheet: top-left)
-    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .prob_add = 0.25, .icon_col = 0, .icon_row = 0 },
+    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .icon_col = 1, .icon_row = 0 },
+    // Fishing rod: makes Fish (actions[1]) yield more. (sheet: top-left)
+    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .icon_col = 0, .icon_row = 0 },
     // Bed: rest better — vigor trickles back faster. (sheet: bottom-left)
     .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
     // Fireplace: warmth speeds recovery a lot. (sheet: bottom-right)
@@ -144,7 +142,7 @@ fn capital_tip(buf: []u8, g: Good, gi: usize, cap: *const comp.Capital) []const 
         return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | powers {s}, {d:.0} dur", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.power_capacity }) catch g.label;
     if (g.cost_mult < 1.0)
         return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | {s} x{d:.2} cost", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.cost_mult }) catch g.label;
-    return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield, +{d:.0}%", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult, g.prob_add * 100 }) catch g.label;
+    return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult }) catch g.label;
 }
 
 /// How an action's energy price is paid this frame. `eff_cost` is the base price after any
@@ -479,25 +477,32 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
         const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
         const sfac = vigor.v / vigor.max; // tired → below-standard outcomes
 
-        var eff_yield = act.yield;
-        var eff_prob = act.p_success;
+        // Fold in any owned tool that boosts this action's yield.
+        var eff_mult: f32 = 1.0;
         for (capital, 0..) |g, gi| {
-            if (g.kind == .tool and g.target == i and owns(cap, gi)) {
-                eff_yield *= g.yield_mult;
-                eff_prob += g.prob_add;
-            }
+            if (g.kind == .tool and g.target == i and owns(cap, gi)) eff_mult *= g.yield_mult;
         }
-        if (eff_prob > 1.0) eff_prob = 1.0;
+        const k = eff_mult * sfac; // scales the whole distribution: tools up, tiredness down
 
         // Plan the payment: effort-savers cheapen the price, a power tool pays the
         // bulk from its durability, vigor covers the 5% floor (and any shortfall).
         const pay = plan_payment(cap, i, act.energy_cost);
 
+        // Label shows the p10–p90 yield band (scaled by k), not a single number — the
+        // spread is the risk. Collapse to one figure when the rounded ends coincide.
+        const band = ha.dist.stats(act.dist);
+        const lo = @round(band.p10 * k);
+        const hi = @round(band.p90 * k);
         const unit: u8 = if (act.target == .food) 'f' else 'm';
+        var rbuf: [24]u8 = undefined;
+        const range = if (lo == hi)
+            std.fmt.bufPrint(&rbuf, "{d:.0}", .{lo}) catch "?"
+        else
+            std.fmt.bufPrint(&rbuf, "{d:.0}-{d:.0}", .{ lo, hi }) catch "?";
         const txt = std.fmt.bufPrint(
             &char_buf,
-            "{s}  (-{d:.1} vig, +{d:.1}{c}, {d:.0}%)",
-            .{ act.label, pay.from_vigor, eff_yield * sfac, unit, eff_prob * 100 },
+            "{s}  (-{d:.1} vig, +{s}{c})",
+            .{ act.label, pay.from_vigor, range, unit },
         ) catch act.label;
         // Affordable only if vigor strictly covers its share — an action never spends
         // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
@@ -515,7 +520,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
                     cap.owned &= ~bit(pi);
                 }
             }
-            const produced: f32 = if (ui_ctx.res.random().float(f32) < eff_prob) eff_yield * sfac else 0;
+            // Draw the yield from the action's distribution, scaled by k, rounded to a whole.
+            const produced = @round(ha.dist.sample(act.dist, ui_ctx.res.random()) * k);
             if (produced > 0) {
                 switch (act.target) {
                     .food => {
