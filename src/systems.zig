@@ -16,6 +16,17 @@ const With = ecs.With;
 /// A ration policy (full / ½ / ¼) will scale this later — for now it's a flat full ration.
 const metabolism_rate: f32 = 2.0;
 
+/// Advance the run clock while the actor lives. Driven by the player's presence — with no
+/// player (dead) the clock freezes, so the game-over screen shows the day you died. One
+/// player today, so this bumps `elapsed` once for the frame it finds one.
+pub fn advance_clock(
+    res: *Resources,
+    q: Query(.{ comp.Vigor, With(tag.Player) }),
+) void {
+    var it = q.iter();
+    if (it.next() != null) res.time.elapsed += res.time.dt;
+}
+
 /// Drain `Satiety` toward zero at `drain` units/second — the actor is always burning
 /// calories (acting burns extra, applied at action resolution in `main.zig`). As satiety
 /// falls it drags `Vigor`'s ceiling down with it (see `update_vigor`); empty = starvation.

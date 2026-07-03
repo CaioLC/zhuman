@@ -6,6 +6,9 @@ const logmod = @import("./log.zig");
 
 pub const Time = struct {
     dt: f32,
+    /// Seconds of game time elapsed this run — advanced while the actor lives (see
+    /// `advance_clock`), reset on start over. Drives the day counter.
+    elapsed: f32 = 0,
 };
 
 /// Host input state for this frame, fed by the event loop. Shared by both the

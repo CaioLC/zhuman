@@ -13,6 +13,10 @@ const ecs = ha.ecs;
 const fps = 60;
 const font_path = "assets/fonts/Kenney Mini Square.ttf";
 
+/// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
+/// today (population, not day-count, is the progression spine).
+const secs_per_day: f32 = 20;
+
 /// Where an action's produce lands — the perishable larder or the durable stockpile.
 const Yield = enum { food, materials };
 
@@ -278,6 +282,7 @@ pub fn main() !void {
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
+        ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
         ecs.run(&app.world, &app.resources, sys.update_satiety); // hunger drains
         ecs.run(&app.world, &app.resources, sys.metabolize); // food → satiety (passive eating)
         ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
@@ -381,6 +386,7 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
     if (restart.query(ui_ctx).clicked) {
         spawn_player(world);
+        ui_ctx.res.time.elapsed = 0; // fresh run starts on Day 1
         ui_ctx.res.log.clear();
         ui_ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
     }
@@ -410,6 +416,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     // so a starving actor visibly loses headroom. Materials is the bare stockpile.
     const status_div = try widgets.Node.pcreate(ui_ctx.arena, "status_div", play);
     _ = status_div.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10));
+    const day = 1 + @as(u64, @intFromFloat(ui_ctx.res.time.elapsed / secs_per_day));
+    _ = try widgets.label(ui_ctx, status_div, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
     const res_panel = try widgets.panel(ui_ctx, status_div, "res_panel", "Resources");
     _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
