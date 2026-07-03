@@ -405,6 +405,16 @@ fn actor_status(vigor: *const comp.Vigor, satiety: *const comp.Satiety) Status {
     return .{ .word = "ALIVE", .color = .{ .r = 79, .g = 158, .b = 196 } };
 }
 
+/// Format `n` compactly for the HUD — `1.2M`, `12k`, `3.4k`, or a bare integer — so the
+/// accumulator's big counters stay readable. Writes into `buf`, returns the slice.
+fn fmt_num(buf: []u8, n: f32) []const u8 {
+    const r = @round(n);
+    if (r >= 1_000_000) return std.fmt.bufPrint(buf, "{d:.1}M", .{r / 1_000_000}) catch "?";
+    if (r >= 10_000) return std.fmt.bufPrint(buf, "{d:.0}k", .{r / 1000}) catch "?";
+    if (r >= 1_000) return std.fmt.bufPrint(buf, "{d:.1}k", .{r / 1000}) catch "?";
+    return std.fmt.bufPrint(buf, "{d:.0}", .{r}) catch "?";
+}
+
 /// The live HUD while the actor is alive: a top-left status panel (the actor's stocks
 /// and their live rates) plus a centered column of Actions and Capital. Each action is
 /// priced in energy paid from vigor (which also burns satiety); each capital good is an
@@ -434,7 +444,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
-    _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {d:.0}", .{materials.v}) catch "?");
+    var mat_buf: [16]u8 = undefined;
+    _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {s}", .{fmt_num(&mat_buf, materials.v)}) catch "?");
 
     // Event log — newest-first feed of what just happened. Lives on `Resources.log`
     // (survives the per-frame arena); each line is recolored by its tone.
