@@ -428,14 +428,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     // so a starving actor visibly loses headroom. Materials is the bare stockpile.
     const status_div = try widgets.Node.pcreate(ui_ctx.arena, "status_div", play);
     _ = status_div.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10));
-    // Header line: the run day + the actor's condition word (colored by severity).
-    const header = try widgets.Node.pcreate(ui_ctx.arena, "header", status_div);
-    _ = header.with_layout(ui.features.Layout.init(.top_left, .horizontal).with_gap(12));
     const day = 1 + @as(u64, @intFromFloat(ui_ctx.res.time.elapsed / secs_per_day));
-    _ = try widgets.label(ui_ctx, header, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
-    const status = actor_status(vigor, satiety);
-    const status_node = try widgets.label(ui_ctx, header, "status_text", status.word);
-    status_node.render_data.text = status.color;
+    _ = try widgets.label(ui_ctx, status_div, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
     const res_panel = try widgets.panel(ui_ctx, status_div, "res_panel", "Resources");
     _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
@@ -454,6 +448,12 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
         const lnode = try widgets.label(ui_ctx, log_panel, lkey, entry.text());
         lnode.render_data.text = log_tone_color(entry.tone);
     }
+
+    // Actor condition word, pinned top-right of the screen (colored by severity).
+    const status = actor_status(vigor, satiety);
+    const status_node = try widgets.label(ui_ctx, play, "status_text", status.word);
+    status_node.render_data.text = status.color;
+    _ = status_node.with_layout(ui.features.Layout.init(.top_right, null));
 
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", play);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
