@@ -67,8 +67,10 @@ global utility function). Everything below serves those two pillars.
 (it rides the icon tray being retired there); the status word is a plain colored word for now — the
 bordered pill lands with M5.
 
-**M1 — Risk yields** (sim-only): distribution types + sampling from `res.random()` + p10/p90 stats.
-Act I is ungated (population is the only spine, and Act I is pop 1) — no tech formula.
+**M1 — Risk yields** — ✅ done 2026-07-02 (`feat/hud-redesign`): `src/dist.zig` engine
+(normal / poisson / uniform / exponential — sampled from `res.random()`, p10–p90 `stats`, unit-tested),
+and actions wired to it (each button shows its p10–p90 band). Curve glyph deferred to M5 (text-only
+ranges for now). Act I stays ungated — population is the spine, and Act I is pop 1, so no tech formula.
 
 **M2 — Engine: scrolling**: mouse-wheel into `Input` + a clip/scroll container + scrollbar.
 
