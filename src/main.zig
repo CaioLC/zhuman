@@ -393,6 +393,18 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     return over;
 }
 
+/// The actor's condition word + a severity color, from how fed and how rested it is
+/// (mirrors the design's status pill). No DEAD case here — that's the game-over screen.
+const Status = struct { word: []const u8, color: ui.Color };
+fn actor_status(vigor: *const comp.Vigor, satiety: *const comp.Satiety) Status {
+    const sat_frac = satiety.v / satiety.max;
+    const cap = vigor.max * sat_frac; // the hunger ceiling
+    if (sat_frac <= 0.12) return .{ .word = "STARVING", .color = .{ .r = 210, .g = 90, .b = 70 } };
+    if (cap > 0 and vigor.v < cap * 0.25) return .{ .word = "EXHAUSTED", .color = .{ .r = 230, .g = 180, .b = 80 } };
+    if (sat_frac < 0.30) return .{ .word = "HUNGRY", .color = .{ .r = 230, .g = 180, .b = 80 } };
+    return .{ .word = "ALIVE", .color = .{ .r = 79, .g = 158, .b = 196 } };
+}
+
 /// The live HUD while the actor is alive: a top-left status panel (the actor's stocks
 /// and their live rates) plus a centered column of Actions and Capital. Each action is
 /// priced in energy paid from vigor (which also burns satiety); each capital good is an
@@ -416,8 +428,14 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     // so a starving actor visibly loses headroom. Materials is the bare stockpile.
     const status_div = try widgets.Node.pcreate(ui_ctx.arena, "status_div", play);
     _ = status_div.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10));
+    // Header line: the run day + the actor's condition word (colored by severity).
+    const header = try widgets.Node.pcreate(ui_ctx.arena, "header", status_div);
+    _ = header.with_layout(ui.features.Layout.init(.top_left, .horizontal).with_gap(12));
     const day = 1 + @as(u64, @intFromFloat(ui_ctx.res.time.elapsed / secs_per_day));
-    _ = try widgets.label(ui_ctx, status_div, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
+    _ = try widgets.label(ui_ctx, header, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
+    const status = actor_status(vigor, satiety);
+    const status_node = try widgets.label(ui_ctx, header, "status_text", status.word);
+    status_node.render_data.text = status.color;
     const res_panel = try widgets.panel(ui_ctx, status_div, "res_panel", "Resources");
     _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
