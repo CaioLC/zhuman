@@ -62,8 +62,10 @@ global utility function). Everything below serves those two pillars.
 
 ## Milestones
 
-**M0 — Parity quick wins** (no engine changes): wire `progress_bar` into capital builds · number
-formatting (k/M) · log/event feed panel · day/tick clock · status pill.
+**M0 — Parity quick wins** — ✅ done 2026-07-02 (branch `feat/hud-redesign`): number formatting
+(k/M) · log/event feed panel · day clock · status word. Progress-bar-on-capital was deferred to M4
+(it rides the icon tray being retired there); the status word is a plain colored word for now — the
+bordered pill lands with M5.
 
 **M1 — Risk yields** (sim-only): distribution types + sampling from `res.random()` + p10/p90 stats.
 Act I is ungated (population is the only spine, and Act I is pop 1) — no tech formula.
