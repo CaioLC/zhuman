@@ -89,13 +89,17 @@ pub fn update_vigor(
 /// only thing that takes it there is the hunger ceiling collapsing (actions are gated so
 /// they never spend the last unit). Guards on `has` so it tags once.
 pub fn mark_dead(
+    res: *Resources,
     world: *World,
     q: Query(.{ Entity, comp.Vigor }),
 ) void {
     var it = q.iter();
     while (it.next()) |entry| {
         const e, const vigor = entry;
-        if (vigor.v <= 0 and !world.has(e, tag.Dead)) world.add(e, tag.Dead{});
+        if (vigor.v <= 0 and !world.has(e, tag.Dead)) {
+            world.add(e, tag.Dead{});
+            res.log.push(.danger, "You perished, cold and starved.");
+        }
     }
 }
 

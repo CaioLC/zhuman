@@ -222,6 +222,7 @@ const App = struct {
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         spawn_player(&self.world);
+        self.resources.log.push(.dim, "You wake alone. Cold. Hungry.");
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = widgets.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -309,6 +310,18 @@ pub fn main() !void {
     }
 }
 
+/// Map a log entry's tone to the color its line renders in (host policy, mirroring the
+/// widget palette). The log panel recolors each label with this after building it.
+fn log_tone_color(t: ha.log.Tone) ui.Color {
+    return switch (t) {
+        .dim => .{ .r = 110, .g = 120, .b = 130 },
+        .normal => .{ .r = 200, .g = 200, .b = 210 },
+        .good => .{ .r = 120, .g = 200, .b = 140 },
+        .warn => .{ .r = 230, .g = 180, .b = 80 },
+        .danger => .{ .r = 210, .g = 90, .b = 70 },
+    };
+}
+
 /// Walk a UI tree and paint each node by its render aspects. Order matters: fill
 /// (backmost) → image → text → outline (topmost), so a hover/affordance ring shows
 /// over opaque icon tiles. Called once per root tree, in the render list's order.
@@ -366,7 +379,11 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
     const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
-    if (restart.query(ui_ctx).clicked) spawn_player(world);
+    if (restart.query(ui_ctx).clicked) {
+        spawn_player(world);
+        ui_ctx.res.log.clear();
+        ui_ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
+    }
     return over;
 }
 
@@ -398,6 +415,19 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {d:.0}", .{materials.v}) catch "?");
+
+    // Event log — newest-first feed of what just happened. Lives on `Resources.log`
+    // (survives the per-frame arena); each line is recolored by its tone.
+    const log_panel = try widgets.panel(ui_ctx, status_div, "log_panel", "Log");
+    const feed = &ui_ctx.res.log;
+    const shown = @min(feed.count, 6);
+    var li: usize = 0;
+    while (li < shown) : (li += 1) {
+        const entry = feed.get(li);
+        const lkey = try std.fmt.allocPrint(ui_ctx.arena, "log{d}", .{li});
+        const lnode = try widgets.label(ui_ctx, log_panel, lkey, entry.text());
+        lnode.render_data.text = log_tone_color(entry.tone);
+    }
 
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", play);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
@@ -448,8 +478,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
                     cap.owned &= ~bit(pi);
                 }
             }
-            if (ui_ctx.res.random().float(f32) < eff_prob) {
-                const produced = eff_yield * sfac;
+            const produced: f32 = if (ui_ctx.res.random().float(f32) < eff_prob) eff_yield * sfac else 0;
+            if (produced > 0) {
                 switch (act.target) {
                     .food => {
                         food.v += produced;
@@ -458,6 +488,13 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
                     .materials => materials.v += produced,
                 }
             }
+            var lbuf: [96]u8 = undefined;
+            const uname = if (act.target == .food) "food" else "materials";
+            const lmsg = if (produced > 0)
+                std.fmt.bufPrint(&lbuf, "{s}. +{d:.0} {s}", .{ act.label, produced, uname }) catch act.label
+            else
+                std.fmt.bufPrint(&lbuf, "{s} — came back empty", .{act.label}) catch act.label;
+            ui_ctx.res.log.push(if (produced > 0) .good else .warn, lmsg);
         }
     }
 
@@ -524,7 +561,11 @@ fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: a
             hov_rect = buy.rect(ui_ctx);
         }
         if (buy.query(ui_ctx).clicked and affordable) {
-            if (!started) materials.v -= g.material_cost; // commit materials to begin
+            var lbuf: [96]u8 = undefined;
+            if (!started) { // commit materials to begin
+                materials.v -= g.material_cost;
+                ui_ctx.res.log.push(.normal, std.fmt.bufPrint(&lbuf, "Committed {d:.0} mat to {s}.", .{ g.material_cost, g.label }) catch g.label);
+            }
             const need = g.energy_cost - cap.progress[gi];
             const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
             vigor.v -= chunk; // muscle invested as labour
@@ -538,6 +579,7 @@ fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: a
                 // Comfort effects bake into the components (so the readouts track them);
                 // tool effects are folded in at action resolution (see `ui_playgame`).
                 if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+                ui_ctx.res.log.push(.good, std.fmt.bufPrint(&lbuf, "Built {s}!", .{g.label}) catch g.label);
             }
         }
     }

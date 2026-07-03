@@ -2,6 +2,7 @@ const std = @import("std");
 const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const font = @import("./font.zig");
+const logmod = @import("./log.zig");
 
 pub const Time = struct {
     dt: f32,
@@ -22,6 +23,8 @@ pub const Resources = struct {
     window: sdl.video.Window,
     time: Time,
     input: Input,
+    /// Newest-first event feed shown in the HUD log panel; global (one feed for the run).
+    log: logmod.Log = .{},
     /// The simulation's one source of chance — every uncertain outcome (an action
     /// that may or may not deliver) is rolled against this. Held here so the player
     /// today and the AI deciders later draw uncertainty from the same stream.
