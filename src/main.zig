@@ -35,15 +35,18 @@ const Action = struct {
     energy_cost: f32, // the work the action takes; paid from Vigor
     target: Yield, // which stock the yield lands in
     dist: ha.dist.Dist, // yield drawn from this distribution (its spread is the risk)
+    /// Which shelf the catalog browser (M4) files this under — category naming borrows
+    /// the design prototype's labor groups, at our curated (not procedural) scale.
+    category: []const u8,
 };
 
 const actions = [_]Action{
     // Forage: cheap, steady food — a tight normal around 4. The hand-to-mouth staple.
-    .{ .label = "Forage", .energy_cost = 2, .target = .food, .dist = .{ .kind = .normal, .s = 4, .sd = 1.6 } },
+    .{ .label = "Forage", .energy_cost = 2, .target = .food, .dist = .{ .kind = .normal, .s = 4, .sd = 1.6 }, .category = "FORAGE" },
     // Fish: dearer, a bigger but lumpier catch — poisson(6), some trips near-empty.
-    .{ .label = "Fish", .energy_cost = 4, .target = .food, .dist = .{ .kind = .poisson, .s = 6 } },
+    .{ .label = "Fish", .energy_cost = 4, .target = .food, .dist = .{ .kind = .poisson, .s = 6 }, .category = "FISH & HUNT" },
     // Chop wood: turns effort into materials — normal(6.5). The investment feedstock.
-    .{ .label = "Chop wood", .energy_cost = 5, .target = .materials, .dist = .{ .kind = .normal, .s = 6.5, .sd = 1.7 } },
+    .{ .label = "Chop wood", .energy_cost = 5, .target = .materials, .dist = .{ .kind = .normal, .s = 6.5, .sd = 1.7 }, .category = "WOODCUTTING" },
 };
 
 /// Satiety burned per unit of energy the actor pays from vigor — work makes you hungry.
@@ -77,6 +80,8 @@ const Good = struct {
     capacity_add: f32 = 0.0, // comfort only: shelter — raises Population's carrying capacity (M6)
     icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
     icon_row: f32 = 0,
+    /// Which shelf the catalog browser (M4) files this under — see `Action.category`.
+    category: []const u8,
 };
 
 /// On-screen size of a capital icon button.
@@ -86,22 +91,22 @@ const tip_gap = 6.0;
 
 const capital = [_]Good{
     // Sandals: walking is easier, makes foraging (actions[0]) more effective. (sheet: top-right)
-    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .icon_col = 1, .icon_row = 0 },
+    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .icon_col = 1, .icon_row = 0, .category = "TOOLS & CRAFT" },
     // Fishing rod: makes Fish (actions[1]) yield more. (sheet: top-left)
-    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .icon_col = 0, .icon_row = 0 },
+    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .icon_col = 0, .icon_row = 0, .category = "TOOLS & CRAFT" },
     // Bed: rest better — vigor trickles back faster; also shelter (half the capacity to
     // support a second person). (sheet: bottom-left)
-    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .capacity_add = 0.5, .icon_col = 0, .icon_row = 1 },
+    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .capacity_add = 0.5, .icon_col = 0, .icon_row = 1, .category = "SHELTER & COMFORT" },
     // Fireplace: warmth speeds recovery a lot; also shelter — owning both Bed and
     // Fireplace is what it takes to reach Population capacity 2. (sheet: bottom-right)
-    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .capacity_add = 0.5, .icon_col = 1, .icon_row = 1 },
+    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .capacity_add = 0.5, .icon_col = 1, .icon_row = 1, .category = "SHELTER & COMFORT" },
     // Axe: effort-saver — makes Chop wood (actions[2]) cheaper to swing. PLACEHOLDER icon
     // (borrows the sandals cell) until axe art exists.
-    .{ .label = "Axe", .energy_cost = 8, .material_cost = 18, .kind = .tool, .target = 2, .cost_mult = 0.6, .icon_col = 1, .icon_row = 0 },
+    .{ .label = "Axe", .energy_cost = 8, .material_cost = 18, .kind = .tool, .target = 2, .cost_mult = 0.6, .icon_col = 1, .icon_row = 0, .category = "TOOLS & CRAFT" },
     // Saw: external-energy tool — pays Chop wood's (actions[2]) price from its own durability
     // instead of vigor, sparing muscle until it wears out. PLACEHOLDER icon (borrows the
     // fireplace cell) until saw art exists.
-    .{ .label = "Saw", .energy_cost = 14, .material_cost = 45, .kind = .tool, .target = 2, .power_capacity = 80, .icon_col = 1, .icon_row = 1 },
+    .{ .label = "Saw", .energy_cost = 14, .material_cost = 45, .kind = .tool, .target = 2, .power_capacity = 80, .icon_col = 1, .icon_row = 1, .category = "ENERGY" },
 };
 
 /// "Fireplace"'s index in `capital` above — `compute_warmth`'s flat warmth bonus (owning
@@ -297,6 +302,56 @@ fn compute_warmth(vigor: *const comp.Vigor, satiety: *const comp.Satiety, cap: *
     return std.math.clamp(w, 0, 1);
 }
 
+/// Whether the actor can currently invest in building capital good `gi` — there must be
+/// vigor to spare above the build floor, and (to *start*) enough materials in hand.
+/// Shared by both presentations of the capital catalog (the icon tray, the M4 browser).
+fn afford_build(gi: usize, vigor: *const comp.Vigor, materials: *const comp.Materials, cap: *const comp.Capital) bool {
+    const g = capital[gi];
+    const started = cap.progress[gi] > 0;
+    const can_invest = vigor.v > build_vigor_floor;
+    return can_invest and (started or materials.v >= g.material_cost);
+}
+
+/// Apply one investment click toward capital good `gi`: commit materials on the first
+/// click, then pour spare vigor into `progress` until it reaches the good's energy cost
+/// and it completes. The shared "act" step for building (mirrors `resolve_action`'s role
+/// for the labor catalog) — both the always-visible icon tray and the M4 catalog browser
+/// funnel through this rather than duplicating the incremental-build logic. Silently
+/// no-ops if `gi` isn't affordable, same defensive stance as `resolve_action`.
+fn build_capital(
+    res: *Resources,
+    gi: usize,
+    vigor: *comp.Vigor,
+    satiety: *comp.Satiety,
+    materials: *comp.Materials,
+    cap: *comp.Capital,
+) void {
+    if (!afford_build(gi, vigor, materials, cap)) return;
+    const g = capital[gi];
+    const started = cap.progress[gi] > 0;
+
+    var lbuf: [96]u8 = undefined;
+    if (!started) { // commit materials to begin
+        materials.v -= g.material_cost;
+        res.log.push(.normal, std.fmt.bufPrint(&lbuf, "Committed {d:.0} mat to {s}.", .{ g.material_cost, g.label }) catch g.label);
+    }
+    const need = g.energy_cost - cap.progress[gi];
+    const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
+    vigor.v -= chunk; // muscle invested as labour
+    satiety.v -= chunk * effort_k; // building is hungry work too
+    if (satiety.v < 0) satiety.v = 0;
+    cap.progress[gi] += chunk;
+    if (cap.progress[gi] >= g.energy_cost) { // the build completes
+        cap.progress[gi] = 0;
+        cap.owned |= bit(gi);
+        if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
+        // Comfort effects bake into the components (so the readouts track them);
+        // tool effects are folded in at action resolution (see `ui_playgame`).
+        if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+        res.log.push(.good, std.fmt.bufPrint(&lbuf, "Built {s}!", .{g.label}) catch g.label);
+    }
+}
+
 /// `Population`'s carrying-capacity ceiling (roadmap M6): 1 (yourself) plus each owned
 /// comfort good's `capacity_add` — which capital goods count as "shelter" is catalog
 /// knowledge, so this lives here (not `systems.update_population`, which just integrates
@@ -390,8 +445,37 @@ pub fn main() !void {
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
-                .key_down => |key| if (key.key == .escape) {
-                    quit = true;
+                .key_down => |key| if (key.key) |kc| {
+                    if (kc == .escape) {
+                        if (app.resources.focused_text != null) {
+                            // Typing: Escape unfocuses the field rather than quitting.
+                            app.resources.focused_text = null;
+                            sdl.keyboard.stopTextInput(app.window) catch {};
+                        } else if (browse_open(&app.ui) != null) {
+                            close_browse(&app.ui); // browsing: Escape backs out of the catalog
+                        } else {
+                            quit = true;
+                        }
+                    } else if (kc == .backspace) {
+                        if (app.resources.focused_text) |fk| {
+                            const idx = app.ui.cache(fk, widgets.UiState.TextInputState);
+                            const st = app.ui.pool(widgets.UiState.TextInputState).get(idx);
+                            var n = st.len;
+                            if (n > 0) {
+                                n -= 1;
+                                while (n > 0 and (st.buf[n] & 0xC0) == 0x80) n -= 1; // skip UTF-8 continuation bytes
+                                st.len = n;
+                            }
+                        }
+                    }
+                },
+                .text_input => |ti| if (app.resources.focused_text) |fk| {
+                    const idx = app.ui.cache(fk, widgets.UiState.TextInputState);
+                    const st = app.ui.pool(widgets.UiState.TextInputState).get(idx);
+                    if (st.len + ti.text.len <= st.buf.len) {
+                        @memcpy(st.buf[st.len..][0..ti.text.len], ti.text);
+                        st.len += ti.text.len;
+                    }
                 },
                 .mouse_motion => |mm| {
                     app.resources.input.mouse_x = mm.x;
@@ -806,6 +890,8 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     // current vigor against its *base* max (`sfac`) — so being tired (or starving,
     // which drains vigor) means below-standard output. The roll decides success.
     const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
+    const browse_labor = try widgets.button(ui_ctx, act_panel, "browse_labor", "Browse catalog", true);
+    if (browse_labor.query(ui_ctx).clicked) open_browse(ui_ctx, .labor);
 
     // "Let AI decide" — a live, clickable proof of the `decide → act` split (roadmap
     // M7): `ai_decide` ranks the same catalog a human reads below and picks an index,
@@ -855,6 +941,12 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     const capital_goods = try widgets.Node.pcreate(ui_ctx.arena, "capital", play);
     _ = capital_goods.with_layout(ui.features.Layout.init(.bottom_left, .vertical).with_gap(10));
     const cap_panel = try widgets.panel(ui_ctx, capital_goods, "cap_panel", "Capital Goods");
+    // Built as a *sibling* of `cap_panel`, not a child — `cap_panel`'s whole box is the
+    // drawer's own click surface (see below), so a child button here would double-fire
+    // both the drawer toggle and the browser open on the same click (flat, occlusion-
+    // unaware hit-testing marks every slot whose rect contains the point).
+    const browse_capital = try widgets.button(ui_ctx, capital_goods, "browse_capital", "Browse catalog", true);
+    if (browse_capital.query(ui_ctx).clicked) open_browse(ui_ctx, .capital);
     const cg = cap_panel.query(ui_ctx);
     if (cg.clicked) ui_ctx.setFlag(cap_panel.key, .active, !cg.active);
     // `cg.active` is the pre-toggle value, so this frame's live state is:
@@ -902,36 +994,14 @@ fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: a
         // are committed up front (first click); energy is the labour over time. A
         // grand good (saw: 14 e) can't fit one 10-vigor body, so it needs several
         // sessions — vigor refills, you click again, progress climbs until it's done.
-        const started = cap.progress[gi] > 0;
-        const can_invest = vigor.v > build_vigor_floor;
-        // Affordable = there's vigor to invest, and (to *start*) materials in hand.
-        const can_afford_build = can_invest and (started or materials.v >= g.material_cost);
+        const can_afford_build = afford_build(gi, vigor, materials, cap);
         const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, can_afford_build);
         if (buy.query(ui_ctx).hovering) {
             hovered = gi;
             hov_rect = buy.rect(ui_ctx);
         }
         if (buy.query(ui_ctx).clicked and can_afford_build) {
-            var lbuf: [96]u8 = undefined;
-            if (!started) { // commit materials to begin
-                materials.v -= g.material_cost;
-                ui_ctx.res.log.push(.normal, std.fmt.bufPrint(&lbuf, "Committed {d:.0} mat to {s}.", .{ g.material_cost, g.label }) catch g.label);
-            }
-            const need = g.energy_cost - cap.progress[gi];
-            const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
-            vigor.v -= chunk; // muscle invested as labour
-            satiety.v -= chunk * effort_k; // building is hungry work too
-            if (satiety.v < 0) satiety.v = 0;
-            cap.progress[gi] += chunk;
-            if (cap.progress[gi] >= g.energy_cost) { // the build completes
-                cap.progress[gi] = 0;
-                cap.owned |= bit(gi);
-                if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
-                // Comfort effects bake into the components (so the readouts track them);
-                // tool effects are folded in at action resolution (see `ui_playgame`).
-                if (g.kind == .comfort) vigor.trickle += g.trickle_add;
-                ui_ctx.res.log.push(.good, std.fmt.bufPrint(&lbuf, "Built {s}!", .{g.label}) catch g.label);
-            }
+            build_capital(ui_ctx.res, gi, vigor, satiety, materials, cap);
         }
     }
 
@@ -951,6 +1021,300 @@ fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: a
         }
     }
     return null;
+}
+
+/// Which catalog the M4 browser overlay is showing, if either. Its open/closed state
+/// rides on a *fixed* interaction key (`browse_key`, not a node-derived one) because the
+/// flag must be readable/settable from three places that never build the same node in
+/// the same frame: the "Browse" button on the home screen (opens it), `build_ui`'s own
+/// routing check (reads it every frame regardless of which screen that turns out to be),
+/// and the browser's own "‹ BACK" button (closes it). A node-derived key would get pruned
+/// (see `ui/cache.zig`'s `Pool.prune`) the instant the screen that builds it isn't shown.
+const BrowseKind = enum { labor, capital };
+fn browse_key(kind: BrowseKind) u64 {
+    return ui.key(0, if (kind == .labor) "labor_browse_open" else "capital_browse_open");
+}
+fn browse_open(ctx: *widgets.UiCtx) ?BrowseKind {
+    if (ctx.interactionOf(browse_key(.labor)).active) return .labor;
+    if (ctx.interactionOf(browse_key(.capital)).active) return .capital;
+    return null;
+}
+fn open_browse(ctx: *widgets.UiCtx, kind: BrowseKind) void {
+    ctx.setFlag(browse_key(kind), .active, true);
+}
+fn close_browse(ctx: *widgets.UiCtx) void {
+    ctx.setFlag(browse_key(.labor), .active, false);
+    ctx.setFlag(browse_key(.capital), .active, false);
+    ctx.res.focused_text = null;
+    sdl.keyboard.stopTextInput(ctx.res.window) catch {};
+}
+
+/// Case-insensitive ASCII substring search — the catalog browser's search box. An empty
+/// `needle` matches everything (no filter typed yet).
+fn contains_ci(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return true;
+    if (needle.len > haystack.len) return false;
+    var i: usize = 0;
+    while (i + needle.len <= haystack.len) : (i += 1) {
+        if (std.ascii.eqlIgnoreCase(haystack[i .. i + needle.len], needle)) return true;
+    }
+    return false;
+}
+
+/// A checkbox-style toggle: `[x] label` / `[ ] label`, flipping its own latched `.active`
+/// flag on click (the same "own key persists its state" idiom `cap_panel`'s drawer toggle
+/// uses in `ui_playgame`). Peeks the pre-click state via the node's *precomputed* key
+/// (`ui.key(parent.key, key)` — identical to what `pcreate` derives internally) so the
+/// checkbox glyph is baked into the label text before the node exists.
+fn toggle_btn(ctx: *widgets.UiCtx, parent: *widgets.Node, key: []const u8, base_label: []const u8) !bool {
+    const pre = ctx.interactionOf(ui.key(parent.key, key)).active;
+    var buf: [40]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "[{s}] {s}", .{ if (pre) "x" else " ", base_label }) catch base_label;
+
+    const node = try widgets.Node.pcreate(ctx.arena, key, parent);
+    try widgets.data_text(ctx, node, text);
+    node.size.padding = ui.features.Padding.initSymmetric(6, 3);
+    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+
+    var on = pre;
+    if (node.query(ctx).clicked) {
+        on = !on;
+        ctx.setFlag(node.key, .active, on);
+    }
+    const c = if (on) ctx.res.theme.acc else ctx.res.theme.dim;
+    node.render_data.outline = c;
+    node.render_data.text = c;
+    return on;
+}
+
+/// An exclusive "radio" row: one button per label under `parent`, clicking one selects it
+/// and clears the rest (self-contained — each option just latches its own `.active`).
+/// Returns the selected index, defaulting to `0` (the first label) when none is active yet
+/// — true on first render, and again after the browser closes and its slots are pruned,
+/// which conveniently mirrors the design prototype's own reset-search/category-on-open.
+fn radio_row(ctx: *widgets.UiCtx, parent: *widgets.Node, row_key: []const u8, labels: []const []const u8) !usize {
+    const row = try widgets.Node.pcreate(ctx.arena, row_key, parent);
+    _ = row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(6));
+
+    var nodes: [8]*widgets.Node = undefined;
+    for (labels, 0..) |lbl, i| {
+        const k = try std.fmt.allocPrint(ctx.arena, "opt{d}", .{i});
+        const node = try widgets.Node.pcreate(ctx.arena, k, row);
+        try widgets.data_text(ctx, node, lbl);
+        node.size.padding = ui.features.Padding.initSymmetric(6, 3);
+        _ = node.with_layout(ui.features.Layout.init(.relative, null));
+        nodes[i] = node;
+    }
+
+    var active_i: ?usize = null;
+    var clicked_i: ?usize = null;
+    for (nodes[0..labels.len], 0..) |node, i| {
+        const q = node.query(ctx);
+        if (q.active) active_i = i;
+        if (q.clicked) clicked_i = i;
+    }
+    if (clicked_i) |ci| {
+        for (nodes[0..labels.len], 0..) |node, i| ctx.setFlag(node.key, .active, i == ci);
+        active_i = ci;
+    }
+    const sel = active_i orelse 0;
+    for (nodes[0..labels.len], 0..) |node, i| {
+        const c = if (i == sel) ctx.res.theme.acc else ctx.res.theme.dim;
+        node.render_data.outline = c;
+        node.render_data.text = c;
+    }
+    return sel;
+}
+
+/// One row in the catalog browser: name + cost chip on top, a dim sub-line below, and an
+/// ACT/BUILD button at the right. Returns whether the button was clicked (still guarded
+/// by `can_act`, same as every other button in the HUD — this is purely the look).
+fn catalog_row(
+    ctx: *widgets.UiCtx,
+    parent: *widgets.Node,
+    key: []const u8,
+    name: []const u8,
+    cost: []const u8,
+    sub: []const u8,
+    act_label: []const u8,
+    can_act: bool,
+) !bool {
+    const row = try widgets.Node.pcreate(ctx.arena, key, parent);
+    row.render_data.outline = ctx.res.theme.line;
+    _ = row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(12))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.initSymmetric(10, 6)));
+
+    const info = try widgets.Node.pcreate(ctx.arena, "info", row);
+    _ = info.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(2));
+    const top = try widgets.Node.pcreate(ctx.arena, "top", info);
+    _ = top.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(10));
+    const nlbl = try widgets.label(ctx, top, "name", name);
+    nlbl.render_data.text = ctx.res.theme.fg;
+    const clbl = try widgets.label(ctx, top, "cost", cost);
+    clbl.render_data.text = ctx.res.theme.acc;
+    const slbl = try widgets.label(ctx, info, "sub", sub);
+    slbl.render_data.text = ctx.res.theme.dim;
+
+    const btn = try widgets.button(ctx, row, "act", act_label, can_act);
+    return btn.query(ctx).clicked and can_act;
+}
+
+/// The M4 catalog browser: a fullscreen list over one catalog (`kind`), replacing the
+/// play screen while open (`build_ui` routes here instead of `ui_playgame`). Search +
+/// hide-can't-do/hide-owned toggles + a cheapest/richest/a-z sort + category chips filter
+/// a curated, hand-authored catalog (roadmap's locked decision #3 — not the design
+/// prototype's procedurally-generated ~150-item sweep, so "category sidebar" here is a
+/// filter-chip row rather than a scrolling left column; revisit if the catalog grows).
+/// Rows funnel through the same `resolve_action`/`build_capital` the inline HUD uses —
+/// this is a second *presentation* of the same catalog + act step, not a second mechanism.
+fn ui_catalog(ui_ctx: *widgets.UiCtx, kind: BrowseKind, actor: anytype) !*widgets.Node {
+    const vigor, const satiety, const food, const materials, const cap, _ = actor;
+
+    const root = try ui_root(ui_ctx, "catalog");
+    const col = try widgets.Node.pcreate(ui_ctx.arena, "col", root);
+    _ = col.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
+
+    // Header: back + title + search.
+    const header = try widgets.Node.pcreate(ui_ctx.arena, "header", col);
+    _ = header.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(14));
+    const back = try widgets.button(ui_ctx, header, "back", "< BACK", true);
+    if (back.query(ui_ctx).clicked) close_browse(ui_ctx);
+    const title_lbl = try widgets.label(ui_ctx, header, "title", if (kind == .labor) "LABOR CATALOG" else "CAPITAL CATALOG");
+    title_lbl.render_data.text = ui_ctx.res.theme.fg;
+    const search = try widgets.text_input(ui_ctx, header, "search", "search...", 200);
+    const sidx = ui_ctx.cache(search.key, widgets.UiState.TextInputState);
+    const query_text = ui_ctx.pool(widgets.UiState.TextInputState).get(sidx).buf[0..ui_ctx.pool(widgets.UiState.TextInputState).get(sidx).len];
+
+    // Filters: hide-can't-do (both), hide-owned (capital only), sort.
+    const filters = try widgets.Node.pcreate(ui_ctx.arena, "filters", col);
+    _ = filters.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(10));
+    const hide_cant = try toggle_btn(ui_ctx, filters, "hide_cant", "hide can't-do");
+    const hide_owned = if (kind == .capital) try toggle_btn(ui_ctx, filters, "hide_owned", "hide owned") else false;
+    const sort_i = try radio_row(ui_ctx, filters, "sort", &.{ "CHEAPEST", "RICHEST", "A-Z" });
+
+    // Category chips — "ALL" plus each distinct category this catalog carries.
+    const cat_labels: []const []const u8 = if (kind == .labor)
+        &.{ "ALL", "FORAGE", "FISH & HUNT", "WOODCUTTING" }
+    else
+        &.{ "ALL", "SHELTER & COMFORT", "TOOLS & CRAFT", "ENERGY" };
+    const cat_i = try radio_row(ui_ctx, col, "cats", cat_labels);
+    const cat_filter: ?[]const u8 = if (cat_i == 0) null else cat_labels[cat_i];
+
+    const list = try widgets.Node.pcreate(ui_ctx.arena, "list", col);
+    _ = list.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(6));
+
+    if (kind == .labor) {
+        var idxs: [actions.len]usize = undefined;
+        for (0..actions.len) |i| idxs[i] = i;
+        // Tiny catalog (≤ a handful of rows) — a plain insertion sort beats pulling in
+        // `std.sort`'s comparator-context machinery for this scale.
+        var i: usize = 1;
+        while (i < idxs.len) : (i += 1) {
+            const v = idxs[i];
+            var j = i;
+            while (j > 0) : (j -= 1) {
+                const a = idxs[j - 1];
+                const before = switch (sort_i) {
+                    0 => actions[a].energy_cost <= actions[v].energy_cost, // cheapest first
+                    1 => ha.dist.stats(actions[a].dist).mean >= ha.dist.stats(actions[v].dist).mean, // richest first
+                    else => std.mem.order(u8, actions[a].label, actions[v].label) == .lt, // a-z
+                };
+                if (before) break;
+                idxs[j] = a;
+            }
+            idxs[j] = v;
+        }
+
+        for (idxs) |gi| {
+            const act = actions[gi];
+            if (cat_filter) |cf| if (!std.mem.eql(u8, act.category, cf)) continue;
+            if (!contains_ci(act.label, query_text)) continue;
+            const can_act = affordable(vigor, cap, gi);
+            if (hide_cant and !can_act) continue;
+
+            const k = action_quality(vigor, cap, gi);
+            const band = ha.dist.stats(act.dist);
+            const lo = @round(band.p10 * k);
+            const hi = @round(band.p90 * k);
+            const unit: u8 = if (act.target == .food) 'f' else 'm';
+            var rbuf: [24]u8 = undefined;
+            const range = if (lo == hi)
+                std.fmt.bufPrint(&rbuf, "{d:.0}{c}", .{ lo, unit }) catch "?"
+            else
+                std.fmt.bufPrint(&rbuf, "{d:.0}-{d:.0}{c}", .{ lo, hi, unit }) catch "?";
+            var costbuf: [16]u8 = undefined;
+            const pay = plan_payment(cap, gi, act.energy_cost);
+            const cost = std.fmt.bufPrint(&costbuf, "-{d:.1} vig", .{pay.from_vigor}) catch "?";
+            var subbuf: [64]u8 = undefined;
+            const sub = std.fmt.bufPrint(&subbuf, "{s} - +{s}", .{ act.category, range }) catch act.category;
+
+            const rkey = try std.fmt.allocPrint(ui_ctx.arena, "row{d}", .{gi});
+            if (try catalog_row(ui_ctx, list, rkey, act.label, cost, sub, "ACT", can_act)) {
+                resolve_action(ui_ctx.res, gi, vigor, satiety, food, materials, cap);
+            }
+        }
+    } else {
+        var idxs: [capital.len]usize = undefined;
+        for (0..capital.len) |i| idxs[i] = i;
+        var i: usize = 1;
+        while (i < idxs.len) : (i += 1) {
+            const v = idxs[i];
+            var j = i;
+            while (j > 0) : (j -= 1) {
+                const a = idxs[j - 1];
+                const before = switch (sort_i) {
+                    0 => capital[a].material_cost <= capital[v].material_cost, // cheapest first
+                    1 => capital[a].energy_cost >= capital[v].energy_cost, // richest (biggest build) first
+                    else => std.mem.order(u8, capital[a].label, capital[v].label) == .lt, // a-z
+                };
+                if (before) break;
+                idxs[j] = a;
+            }
+            idxs[j] = v;
+        }
+
+        for (idxs) |gi| {
+            const g = capital[gi];
+            if (cat_filter) |cf| if (!std.mem.eql(u8, g.category, cf)) continue;
+            if (!contains_ci(g.label, query_text)) continue;
+            const owned = owns(cap, gi);
+            if (hide_owned and owned) continue;
+            const can_act = !owned and afford_build(gi, vigor, materials, cap);
+            if (hide_cant and !owned and !can_act) continue;
+
+            var costbuf: [24]u8 = undefined;
+            const cost = if (owned)
+                (if (g.power_capacity > 0)
+                    std.fmt.bufPrint(&costbuf, "{d:.0}/{d:.0} dur", .{ cap.durability[gi], g.power_capacity }) catch "owned"
+                else
+                    "owned")
+            else if (cap.progress[gi] > 0)
+                std.fmt.bufPrint(&costbuf, "{d:.0}%", .{100 * cap.progress[gi] / g.energy_cost}) catch "?"
+            else
+                std.fmt.bufPrint(&costbuf, "{d:.0} mat, {d:.0} e", .{ g.material_cost, g.energy_cost }) catch "?";
+            var subbuf: [64]u8 = undefined;
+            const sub = std.fmt.bufPrint(&subbuf, "{s} - {s}", .{ g.category, capital_effect(g) }) catch g.category;
+            const act_label = if (owned) "DONE" else if (cap.progress[gi] > 0) "POUR" else "BUILD";
+
+            const rkey = try std.fmt.allocPrint(ui_ctx.arena, "row{d}", .{gi});
+            if (try catalog_row(ui_ctx, list, rkey, g.label, cost, sub, act_label, can_act)) {
+                build_capital(ui_ctx.res, gi, vigor, satiety, materials, cap);
+            }
+        }
+    }
+
+    return root;
+}
+
+/// One-line plain-English effect summary for a capital good's browser row (distinct from
+/// `capital_tip`'s hover text, which also folds in owned/building status the row already
+/// shows via its cost chip).
+fn capital_effect(g: Good) []const u8 {
+    if (g.power_capacity > 0) return "powers an action from its own durability, not vigor";
+    if (g.cost_mult < 1.0) return "lowers an action's energy price";
+    if (g.kind == .comfort) return "raises vigor recovery";
+    return "boosts an action's yield";
 }
 
 fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
@@ -973,7 +1337,14 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // returns a `.{ screen, overlay }` pair (a hover tooltip for `ui_playgame`, a confirm
     // modal for `ui_gameover` — null when neither is showing), which `collect` adds.
     if (actor) |a| {
-        try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
+        // `browse_open` must run every frame regardless of which screen this turns out to
+        // be — it's the thing that keeps its own fixed interaction slots alive (see
+        // `BrowseKind`'s doc comment).
+        if (browse_open(ui_ctx)) |kind| {
+            try collect(&trees, ui_ctx.arena, try ui_catalog(ui_ctx, kind, a));
+        } else {
+            try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
+        }
     } else {
         try collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
     }

@@ -44,6 +44,11 @@ pub const Resources = struct {
     /// `build_ui` (from `compute_warmth`) and read by every widget via `ctx.res.theme`,
     /// rather than threading a theme argument through every widget call. Defaults cold.
     theme: thememod.Theme = thememod.cold,
+    /// Which `text_input` widget (by `node.key`) currently owns keyboard text, if any —
+    /// host-global because SDL delivers `.text_input`/backspace as raw keyboard events,
+    /// not routed to a widget. `null` means no field is focused (the common case; SDL's
+    /// text-input mode is started/stopped to match, see `widgets.text_input`).
+    focused_text: ?u64 = null,
 
     pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");

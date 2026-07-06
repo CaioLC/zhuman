@@ -97,9 +97,50 @@ consumer yet (the catalog browser's search box is the first one), and enabling S
 global text-input/IME mode for a widget nothing uses risks a platform-dependent change
 to existing key-event delivery for zero present benefit. Land it alongside M4 instead.
 
-**M4 — Catalog browser** (needs M2+M3): category sidebar, search, filters (hide can't-do / owned /
-favourites), sort cycle, favorites/pins, rich text rows. Author the curated Act I catalog. Retire
-icons here.
+**M4 — Catalog browser** — ✅ done 2026-07-06 (`feat/hud-redesign`): a fullscreen browser
+(`ui_catalog`) over each catalog, opened by a new "Browse catalog" button beside Actions
+and beside Capital Goods, replacing the play screen while open (`build_ui` routes to it
+instead of `ui_playgame`). `widgets.text_input` is the new engine-adjacent piece it
+needed — a persisted UTF-8 buffer (`UiState.TextInputState`) plus `main.zig`'s event loop
+wiring `.text_input`/backspace (UTF-8-boundary-safe) against whichever field
+`Resources.focused_text` names, since SDL delivers those as raw keyboard events, not
+routed to a widget; Escape unfocuses the field (or backs out of the browser) instead of
+quitting while either is active. Search (case-insensitive substring), a hide-can't-do
+toggle (+ hide-owned for capital), a cheapest/richest/a-z sort, and category chips all
+filter/order a curated, hand-authored catalog — both `Action` and `Good` gained a
+`category` field. Rows funnel through the *same* act step the inline HUD already used
+(`resolve_action`, and a newly extracted `build_capital` — pulled out of
+`ui_capital_goods_menu`'s inline build logic so both presentations share one mutation
+path) rather than a parallel mechanism. The open/closed flag is the one place that needed
+a genuinely new idiom: a *fixed* interaction key (`ui.key(0, "…_browse_open")`, not a
+node-derived one), since three different call sites — the home screen's Browse button,
+`build_ui`'s own routing check, and the browser's "‹ BACK" button — never build the same
+node in the same frame, and a node-derived key would get pruned the instant the screen
+that builds it isn't shown (see `ui/cache.zig`'s `Pool.prune`).
+
+**Scoped down from the roadmap's original description, deliberately:**
+- **Category "sidebar" → category chip row.** Our catalog is curated and small (3 labor
+  actions, 6 capital goods — locked decision #3, not the design prototype's procedural
+  ~150-item sweep), so a scrolling left column would mostly be empty space. Revisit if a
+  future Act's catalog grows enough to need it.
+- **Icons stay; not retired.** The always-visible Capital Goods icon tray (`icon_button` /
+  `data_sprite`) is untouched — the browser is a *second*, text-first presentation of the
+  same catalog + act functions, not a replacement. At today's catalog size the tray is
+  still legible and gives a faster at-a-glance build view; a full icon retirement is a
+  content decision for whenever the catalog outgrows both, not an engine one.
+- **Favorites/pins deferred.** Needs its own persisted per-item state (a bitset, like
+  `Capital.owned`, keyed by catalog index) — a separable unit of work, not a quick add
+  alongside everything else here.
+
+Verified: `zig build` + `zig build test` clean. Screenshot-confirmed the home screen
+renders both new "Browse catalog" buttons without disturbing existing layout (modulo the
+pre-existing overlap bug below, unrelated). The Capital Catalog browser was confirmed
+rendering fully correctly — categories, cost/effect text, sort/filter controls, BUILD
+buttons all present and readable — via a live click during this session's testing (still
+no input-simulation tool in this environment; same constraint as M2/M3). Labor-catalog
+browsing, typing in the search box, switching sort/filters, and clicking through an
+ACT/BUILD row to confirm the mutation lands haven't been directly observed by me yet —
+worth a quick manual pass.
 
 **M5 — Visual identity** — ✅ palette/font/scanlines/figure done 2026-07-06
 (`feat/hud-redesign`): `src/theme.zig` (`Theme` struct, `cold`/`warm` poles lifted 1:1

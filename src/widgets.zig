@@ -12,6 +12,11 @@ pub const UiState = struct {
     /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
     /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
     pub const ScrollState = struct { offset: f32 = 0 };
+    /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
+    /// event loop appends `.text_input` events and handles backspace directly against
+    /// whichever field `Resources.focused_text` names — the widget itself only reads it
+    /// to render. See `text_input`.
+    pub const TextInputState = struct { buf: [64]u8 = undefined, len: usize = 0 };
 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
@@ -426,6 +431,55 @@ pub const Modal = struct {
 /// (see `ui_gameover` in `main.zig`). That reads *last frame's* rect — this frame's
 /// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
 /// its rect) alive for that read, exactly like `scroll_view`'s `content`.
+/// Single-line search/text box: a bordered, fixed-width field holding a persisted UTF-8
+/// buffer (`UiState.TextInputState`, keyed like `ScrollState`). Click to focus — focus is
+/// host-global (`ctx.res.focused_text`), since SDL delivers `.text_input`/backspace as raw
+/// keyboard events rather than routed to a widget; `main.zig`'s event loop mutates the
+/// same `TextInputState` slot directly (via `ctx.cache(node.key, ...)`, the same key this
+/// widget computes) whenever this field owns focus. Shows `placeholder` (dimmed) when
+/// empty and unfocused, the typed text with a trailing caret while focused, plain text
+/// otherwise. `main.zig` is responsible for calling `sdl.keyboard.start/stopTextInput` on
+/// focus change and for clearing focus (and stopping text input) when the surrounding
+/// screen closes — this widget only starts/stops on its own click/focus transitions.
+pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []const u8, width: f32) !*Node {
+    const node = try Node.pcreate(ctx.arena, key, parent);
+    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+
+    const idx = ctx.cache(node.key, UiState.TextInputState);
+    const state = ctx.pool(UiState.TextInputState).get(idx);
+
+    const q = node.query(ctx);
+    var focused = ctx.res.focused_text == node.key;
+    if (q.clicked) {
+        focused = true;
+        ctx.res.focused_text = node.key;
+    } else if (focused and ctx.res.input.mouse_down) {
+        focused = false; // clicked elsewhere this frame
+        ctx.res.focused_text = null;
+    }
+    if (focused and !sdl.keyboard.textInputActive(ctx.res.window)) {
+        sdl.keyboard.startTextInput(ctx.res.window) catch {};
+    } else if (!focused and sdl.keyboard.textInputActive(ctx.res.window)) {
+        sdl.keyboard.stopTextInput(ctx.res.window) catch {};
+    }
+
+    var buf: [66]u8 = undefined;
+    const shown: []const u8 = if (state.len == 0 and !focused)
+        placeholder
+    else if (focused)
+        std.fmt.bufPrint(&buf, "{s}_", .{state.buf[0..state.len]}) catch state.buf[0..state.len]
+    else
+        state.buf[0..state.len];
+
+    try data_text(ctx, node, shown);
+    node.size.padding = ui.features.Padding.initSymmetric(8, 4);
+    node.size.w = .{ .fixed = width }; // data_text sized both axes to content — pin width
+    node.render_data.text = if (state.len == 0 and !focused) ctx.res.theme.dim else ctx.res.theme.fg;
+    node.render_data.outline = if (focused) ctx.res.theme.acc else ctx.res.theme.line2;
+
+    return node;
+}
+
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     const ww, const wh = try ctx.res.window.getSize();
     const root = try Node.create(ctx.arena, key);
