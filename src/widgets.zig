@@ -196,6 +196,7 @@ const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool
 const col_tip_fill = ui.Color{ .r = 16, .g = 16, .b = 28 }; // tooltip backing: opaque near-bg, so text reads over anything
 const col_scroll_track = ui.Color{ .r = 40, .g = 44, .b = 58 }; // scrollbar track: dim backing strip
 const col_scroll_thumb = ui.Color{ .r = 100, .g = 110, .b = 140 }; // scrollbar thumb: matches panel border
+const col_scrim = ui.Color{ .r = 10, .g = 10, .b = 18 }; // modal backdrop: opaque, near-black
 
 /// Wheel delta → px scrolled per tick (`scroll_view`).
 const scroll_speed: f32 = 24.0;
@@ -405,6 +406,48 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     }
 
     return .{ .outer = outer, .viewport = viewport, .content = content };
+}
+
+pub const Modal = struct {
+    root: *Node, // fullscreen scrim — its own root, so listing it last draws it over everything
+    box: *Node, // centered dialog the caller fills with content (buttons, labels, …)
+};
+
+/// A modal dialog shell: a fullscreen, opaque scrim (its own root, no parent — the
+/// caller lists it last in the frame's render trees so it draws over everything) behind
+/// a centered, bordered box the caller appends content to. Mirrors `tooltip`'s "build my
+/// own root, caller places it in the list" shape, but fills the whole window instead of
+/// floating at a point.
+///
+/// **"Input capture" is host policy, not a mechanism here.** Hit-testing is a flat,
+/// occlusion-unaware scan over live interaction slots (see `src/ui/README.md`) — the
+/// scrim drawing on top doesn't itself stop a click from also landing on whatever's
+/// still built (and queried) underneath. If the content behind a modal has a
+/// non-idempotent click handler, the call site must guard it (e.g. `if (!confirm_open)
+/// ...`) or skip building it while the modal is open.
+///
+/// **Dismiss is likewise the caller's call**, not this widget's: compare
+/// `ctx.res.input.mouse_down` against `modal.box.rect(ctx)` for click-outside-to-close
+/// (see `ui_gameover` in `main.zig`). That reads *last frame's* rect — this frame's
+/// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
+/// its rect) alive for that read, exactly like `scroll_view`'s `content`.
+pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
+    const ww, const wh = try ctx.res.window.getSize();
+    const root = try Node.create(ctx.arena, key);
+    _ = root.with_layout(ui.features.Layout.init(.top_left, null))
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    root.render_data.fill = col_scrim;
+
+    const box = try Node.pcreate(ctx.arena, "box", root);
+    _ = box.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
+    box.render_data.fill = col_tip_fill;
+    box.render_data.outline = col_panel;
+    _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
+
+    _ = try label(ctx, box, "title", title);
+
+    return .{ .root = root, .box = box };
 }
 
 test "interaction store: active latches, transient flags clear each frame" {

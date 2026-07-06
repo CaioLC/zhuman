@@ -431,22 +431,59 @@ fn ui_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
 }
 
 /// The game-over screen: death is total — the run is over and everything accumulated is
-/// gone. A centered message plus a "Start over" button that reseeds a fresh actor from
-/// the bottom. Builds its own fullscreen root (via `ui_root`) and returns it, so its
-/// keys are final at build time and its slots match the rects stamped after layout.
-fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !*widgets.Node {
+/// gone. A centered message plus a "Start over" button that, since that loss is
+/// irreversible, opens a confirm modal rather than reseeding immediately — "Yes" (or
+/// Enter — not yet wired) reseeds a fresh actor from the bottom, "Cancel" or a click
+/// outside the dialog backs out. Builds its own fullscreen root (via `ui_root`) plus the
+/// modal's overlay root (or null when not confirming) and returns the pair, so its keys
+/// are final at build time and its slots match the rects stamped after layout.
+///
+/// The open/closed flag rides on `restart`'s own `active` interaction flag (mirrors the
+/// Capital Goods drawer toggle in `ui_playgame`) rather than a separate state slot —
+/// `restart` is read every frame regardless, so its slot (and the latch) never lapses.
+/// `restart` stays built (and queried) while the modal is open, per `widgets.modal`'s
+/// input-capture note — safe here only because its own click handler (open the modal) is
+/// idempotent; a future modal guarding a non-idempotent action would need an explicit
+/// `if (!confirm_open)` guard instead.
+fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !struct { *widgets.Node, ?*widgets.Node } {
     const over = try ui_root(ui_ctx, "over");
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", over);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
     const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
-    if (restart.query(ui_ctx).clicked) {
-        spawn_player(world);
-        ui_ctx.res.time.elapsed = 0; // fresh run starts on Day 1
-        ui_ctx.res.log.clear();
-        ui_ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
+
+    const rst = restart.query(ui_ctx);
+    if (rst.clicked and !rst.active) ui_ctx.setFlag(restart.key, .active, true);
+    const confirm_open = rst.active or rst.clicked; // pre-toggle `active`, or opening this frame
+
+    var overlay: ?*widgets.Node = null;
+    if (confirm_open) {
+        const m = try widgets.modal(ui_ctx, "restart_confirm", "Start a new life? This run will be lost.");
+        const yes = try widgets.button(ui_ctx, m.box, "yes", "Yes, start over", true);
+        const cancel = try widgets.button(ui_ctx, m.box, "cancel", "Cancel", true);
+
+        var close = false;
+        if (yes.query(ui_ctx).clicked) {
+            spawn_player(world);
+            ui_ctx.res.time.elapsed = 0; // fresh run starts on Day 1
+            ui_ctx.res.log.clear();
+            ui_ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
+            close = true;
+        } else if (cancel.query(ui_ctx).clicked) {
+            close = true;
+        } else if (ui_ctx.res.input.mouse_down) {
+            // Click-outside-to-dismiss: null (no rect yet) on the frame the modal first
+            // opens — that's also this same click, so treating "unknown" as "don't
+            // close" is exactly right, not just a safe default.
+            if (m.box.rect(ui_ctx)) |r| {
+                if (!r.contains(ui_ctx.res.input.mouse_x, ui_ctx.res.input.mouse_y)) close = true;
+            }
+        }
+        if (close) ui_ctx.setFlag(restart.key, .active, false);
+        overlay = m.root;
     }
-    return over;
+
+    return .{ over, overlay };
 }
 
 /// The actor's condition word + a severity color, from how fed and how rested it is
@@ -714,9 +751,9 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // Render list — the frame's root trees, drawn in order (later ones on top). Arena-
     // backed; dies with this frame's node tree. `collect` flattens each builder's return.
     var trees: std.ArrayList(*widgets.Node) = .empty;
-    // Content, only while the menu is closed: the play HUD if the actor lives, else the
-    // game-over screen. Each builder returns its own tree(s) — `ui_playgame` a
-    // `.{ screen, tooltip }` pair, `ui_gameover` a single screen — which `collect` adds.
+    // Content: the play HUD if the actor lives, else the game-over screen. Each builder
+    // returns a `.{ screen, overlay }` pair (a hover tooltip for `ui_playgame`, a confirm
+    // modal for `ui_gameover` — null when neither is showing), which `collect` adds.
     if (actor) |a| {
         try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
     } else {

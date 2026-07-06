@@ -83,8 +83,19 @@ Wired into the HUD's Log panel, replacing its old hard 6-line cap — the whole 
 history (up to the ring buffer's 64) is now reachable. No drag yet (wheel-only, per
 scope); dragging the thumb is a natural M4 add if the catalog browser wants it.
 
-**M3 — Engine: text input + modal**: keyboard events → a `text_input` widget (focus / caret /
-backspace) + a modal root with input capture + dismiss.
+**M3 — Engine: modal** — ✅ modal half done 2026-07-06 (`feat/hud-redesign`):
+`widgets.modal` (a fullscreen scrim root + centered content box, mirroring `tooltip`'s
+"build my own root" shape) with click-outside-to-dismiss (compares `ctx.res.input
+.mouse_down` against the box's prior-frame rect, same trick `scroll_view` uses for its
+content height). Wired into the game-over screen: "Start over" now opens a confirm
+dialog ("Yes, start over" / "Cancel") instead of reseeding immediately — the loss is
+irreversible, so the extra step guards against a misclick. "Input capture" is
+documented as host policy, not a mechanism (hit-testing is flat/occlusion-unaware) —
+safe today only because the guarded action (open the modal) is idempotent.
+`text_input` (keyboard → focus/caret/backspace) is **deferred to M4**: it has no live
+consumer yet (the catalog browser's search box is the first one), and enabling SDL's
+global text-input/IME mode for a widget nothing uses risks a platform-dependent change
+to existing key-event delivery for zero present benefit. Land it alongside M4 instead.
 
 **M4 — Catalog browser** (needs M2+M3): category sidebar, search, filters (hide can't-do / owned /
 favourites), sort cycle, favorites/pins, rich text rows. Author the curated Act I catalog. Retire
