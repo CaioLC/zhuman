@@ -63,6 +63,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "human_action",
         .root_module = exe_mod,
+        .use_llvm = true,
     });
     b.installArtifact(exe);
 
@@ -72,7 +73,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_exe.step);
 
     // Unit tests
-    const unit_tests = b.addTest(.{ .root_module = ha_mod });
+    const unit_tests = b.addTest(.{ .root_module = ha_mod, .use_llvm = true });
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
