@@ -191,6 +191,100 @@ fn plan_payment(cap: *const comp.Capital, action_idx: usize, base_cost: f32) Pay
     return .{ .eff_cost = eff, .from_vigor = eff - from_power, .from_power = from_power, .power_idx = power_idx };
 }
 
+/// Action `i`'s current effective quality multiplier: tool yield bonuses (owned tools
+/// targeting it) times how tired the actor is (`vigor/max`) — scales both the label's
+/// shown yield band and the actual draw. Shared by the UI, `resolve_action`, and
+/// `ai_decide`'s ranking, so all three agree on what an action is "worth" right now.
+fn action_quality(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) f32 {
+    var eff_mult: f32 = 1.0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind == .tool and g.target == i and owns(cap, gi)) eff_mult *= g.yield_mult;
+    }
+    return eff_mult * (vigor.v / vigor.max);
+}
+
+/// Whether the actor can currently afford action `i` — vigor must strictly cover its
+/// (tool-adjusted) share of the price; an action never spends the last unit of vigor
+/// (vigor 0 is death — you starve, you don't work yourself to death). Shared by the UI
+/// (dims an unaffordable button) and any decider (which options are even viable).
+fn affordable(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) bool {
+    const pay = plan_payment(cap, i, actions[i].energy_cost);
+    return vigor.v > pay.from_vigor;
+}
+
+/// Apply decision `i` (an index into `actions`) to the actor: spend vigor/satiety (and
+/// any power-tool durability), draw the yield, deposit it, and log the result. The
+/// shared "act" step of the `decide → act` split (roadmap M7) — a decider only ever
+/// *chooses* `i`; both the player (via a click, in `ui_playgame`) and `ai_decide` (below)
+/// funnel through this to actually act on it. Silently no-ops if `i` isn't affordable —
+/// defends against a decider that "cheats" the vigor-0-is-death gate.
+fn resolve_action(
+    res: *Resources,
+    i: usize,
+    vigor: *comp.Vigor,
+    satiety: *comp.Satiety,
+    food: *comp.Food,
+    materials: *comp.Materials,
+    cap: *comp.Capital,
+) void {
+    if (!affordable(vigor, cap, i)) return;
+    const act = actions[i];
+    const k = action_quality(vigor, cap, i);
+    const pay = plan_payment(cap, i, act.energy_cost);
+
+    vigor.v -= pay.from_vigor; // muscle pays its share
+    satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
+    if (satiety.v < 0) satiety.v = 0;
+    if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
+        cap.durability[pi] -= pay.from_power;
+        if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
+            cap.durability[pi] = 0;
+            cap.owned &= ~bit(pi);
+        }
+    }
+    // Draw the yield from the action's distribution, scaled by k, rounded to a whole.
+    const produced = @round(ha.dist.sample(act.dist, res.random()) * k);
+    if (produced > 0) {
+        switch (act.target) {
+            .food => {
+                food.v += produced;
+                if (food.v > food.max) food.v = food.max; // larder is capped
+            },
+            .materials => materials.v += produced,
+        }
+    }
+    var lbuf: [96]u8 = undefined;
+    const uname = if (act.target == .food) "food" else "materials";
+    const lmsg = if (produced > 0)
+        std.fmt.bufPrint(&lbuf, "{s}. +{d:.0} {s}", .{ act.label, produced, uname }) catch act.label
+    else
+        std.fmt.bufPrint(&lbuf, "{s} — came back empty", .{act.label}) catch act.label;
+    res.log.push(if (produced > 0) .good else .warn, lmsg);
+}
+
+/// A simple rational decider: among affordable actions, pick the one with the best
+/// expected yield per unit of vigor spent (`dist.stats(...).mean`, scaled by
+/// `action_quality`, over the vigor price). Not the roadmap's eventual "autonomous
+/// decider policy" (parked for Act II design — demands, comparative advantage, learning —
+/// none of that exists yet) — a first, honest ranking that proves a non-UI decider can
+/// drive the same `resolve_action` a human does, over the same catalog. `null` if
+/// nothing is affordable. Exposed live via the "Let AI decide" button in `ui_playgame`.
+fn ai_decide(vigor: *const comp.Vigor, cap: *const comp.Capital) ?usize {
+    var best: ?usize = null;
+    var best_score: f32 = 0;
+    for (actions, 0..) |act, i| {
+        if (!affordable(vigor, cap, i)) continue;
+        const pay = plan_payment(cap, i, act.energy_cost);
+        if (pay.from_vigor <= 0) continue;
+        const score = ha.dist.stats(act.dist).mean * action_quality(vigor, cap, i) / pay.from_vigor;
+        if (best == null or score > best_score) {
+            best = i;
+            best_score = score;
+        }
+    }
+    return best;
+}
+
 /// How "warm" the actor's situation reads (0 cold/precarious → 1 warm/thriving) — the
 /// HUD's mood, not a game mechanic. Mirrors the design's model: rested (28%) + fed (40%)
 /// + capital built (32%, capped at 8 goods — comparable to the design's "built/8") + a
@@ -712,16 +806,20 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     // current vigor against its *base* max (`sfac`) — so being tired (or starving,
     // which drains vigor) means below-standard output. The roll decides success.
     const act_panel = try widgets.panel(ui_ctx, center_div, "act_panel", "Actions");
+
+    // "Let AI decide" — a live, clickable proof of the `decide → act` split (roadmap
+    // M7): `ai_decide` ranks the same catalog a human reads below and picks an index,
+    // then this button funnels it through the very same `resolve_action` a manual click
+    // does. Dimmed exactly when `ai_decide` would return `null` (nothing affordable).
+    const ai_pick = ai_decide(vigor, cap);
+    const ai_btn = try widgets.button(ui_ctx, act_panel, "ai_decide", "Let AI decide", ai_pick != null);
+    if (ai_btn.query(ui_ctx).clicked) {
+        if (ai_pick) |i| resolve_action(ui_ctx.res, i, vigor, satiety, food, materials, cap);
+    }
+
     for (actions, 0..) |act, i| {
         const bkey = try std.fmt.allocPrint(ui_ctx.arena, "act{d}", .{i}); // arena-lived: outlives this frame's tree
-        const sfac = vigor.v / vigor.max; // tired → below-standard outcomes
-
-        // Fold in any owned tool that boosts this action's yield.
-        var eff_mult: f32 = 1.0;
-        for (capital, 0..) |g, gi| {
-            if (g.kind == .tool and g.target == i and owns(cap, gi)) eff_mult *= g.yield_mult;
-        }
-        const k = eff_mult * sfac; // scales the whole distribution: tools up, tiredness down
+        const k = action_quality(vigor, cap, i); // tools up, tiredness down — scales the whole distribution
 
         // Plan the payment: effort-savers cheapen the price, a power tool pays the
         // bulk from its durability, vigor covers the 5% floor (and any shortfall).
@@ -743,40 +841,10 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
             "{s}  (-{d:.1} vig, +{s}{c})",
             .{ act.label, pay.from_vigor, range, unit },
         ) catch act.label;
-        // Affordable only if vigor strictly covers its share — an action never spends
-        // the last unit of vigor (vigor 0 is death; you starve, you don't work yourself
-        // to death). Drives both the dimmed look and the click guard.
-        const affordable = vigor.v > pay.from_vigor;
-        const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, affordable);
-        if (btn.query(ui_ctx).clicked and affordable) {
-            vigor.v -= pay.from_vigor; // muscle pays its share
-            satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
-            if (satiety.v < 0) satiety.v = 0;
-            if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
-                cap.durability[pi] -= pay.from_power;
-                if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
-                    cap.durability[pi] = 0;
-                    cap.owned &= ~bit(pi);
-                }
-            }
-            // Draw the yield from the action's distribution, scaled by k, rounded to a whole.
-            const produced = @round(ha.dist.sample(act.dist, ui_ctx.res.random()) * k);
-            if (produced > 0) {
-                switch (act.target) {
-                    .food => {
-                        food.v += produced;
-                        if (food.v > food.max) food.v = food.max; // larder is capped
-                    },
-                    .materials => materials.v += produced,
-                }
-            }
-            var lbuf: [96]u8 = undefined;
-            const uname = if (act.target == .food) "food" else "materials";
-            const lmsg = if (produced > 0)
-                std.fmt.bufPrint(&lbuf, "{s}. +{d:.0} {s}", .{ act.label, produced, uname }) catch act.label
-            else
-                std.fmt.bufPrint(&lbuf, "{s} — came back empty", .{act.label}) catch act.label;
-            ui_ctx.res.log.push(if (produced > 0) .good else .warn, lmsg);
+        const can_afford = affordable(vigor, cap, i);
+        const btn = try widgets.button(ui_ctx, act_panel, bkey, txt, can_afford);
+        if (btn.query(ui_ctx).clicked and can_afford) {
+            resolve_action(ui_ctx.res, i, vigor, satiety, food, materials, cap);
         }
     }
 
@@ -837,13 +905,13 @@ fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: a
         const started = cap.progress[gi] > 0;
         const can_invest = vigor.v > build_vigor_floor;
         // Affordable = there's vigor to invest, and (to *start*) materials in hand.
-        const affordable = can_invest and (started or materials.v >= g.material_cost);
-        const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, affordable);
+        const can_afford_build = can_invest and (started or materials.v >= g.material_cost);
+        const buy = try widgets.icon_button(ui_ctx, cap_row, ckey, sprite, icon_px, can_afford_build);
         if (buy.query(ui_ctx).hovering) {
             hovered = gi;
             hov_rect = buy.rect(ui_ctx);
         }
-        if (buy.query(ui_ctx).clicked and affordable) {
+        if (buy.query(ui_ctx).clicked and can_afford_build) {
             var lbuf: [96]u8 = undefined;
             if (!started) { // commit materials to begin
                 materials.v -= g.material_cost;

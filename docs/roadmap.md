@@ -134,9 +134,21 @@ one-time "Act I complete" line (`Population.crossed` latches it); it does **not*
 a second agent or start Act II — that's M7 (deciders) + M8 (the actual multi-agent
 epic), so for now reaching pop 2 is a surfaced milestone, not a scene change.
 
-**M7 — Decider abstraction**: make the `decide → act` split real — a decider interface with a
-player-decider (today) and an AI-decider, both producing ranked choices over one catalog. Prereq
-for autonomous agents.
+**M7 — Decider abstraction** — ✅ done 2026-07-06 (`feat/hud-redesign`): the `decide → act`
+split, made real over the labor (`actions`) catalog. `resolve_action` is the shared "act"
+step — spend vigor/satiety, draw + deposit the yield, log it — that a decider only ever
+*chooses* an index into, never mutates components directly. Two deciders drive it today:
+the player (`ui_playgame`'s click handler, unchanged in spirit — an immediate-mode UI
+button *is* how a human decides) and `ai_decide`, a first, honest rational ranking
+(affordable actions scored by expected yield-per-vigor, `dist.stats(...).mean ×
+action_quality / pay.from_vigor`) — not the roadmap's eventual "autonomous decider
+policy" (demands, comparative advantage — still parked for Act II design below), just
+proof a non-UI decider can drive the same resolution a human does. Exposed live as a
+"Let AI decide" button next to the manual actions, rather than a hidden/tested-only
+path — clicking it plays one AI-ranked turn on the same actor. Scoped to the labor
+catalog only; capital-good building stays the explicit, multi-session UI flow it already
+was (a decider ranking incremental builds doesn't fit the same one-shot "choose and
+resolve" shape, and wasn't needed to prove the abstraction).
 
 **M8 — Act II epic**: multi-agent (per-agent Vigor / Satiety / inventories / demands) · typed
 materials + recipes · barter with exchange-ratio discovery · specialization / comparative advantage.
