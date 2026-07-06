@@ -9,6 +9,9 @@ const Resources = @import("./res.zig").Resources;
 /// meets the concrete state types — see docs/ui-building-language-plan.md.
 pub const UiState = struct {
     pub const TextData = zfont.TextData;
+    /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
+    /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
+    pub const ScrollState = struct { offset: f32 = 0 };
 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
@@ -39,6 +42,10 @@ pub const RenderData = struct {
     fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
     outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
+    /// True ⟹ the render walk crops everything drawn under this node to its own resolved
+    /// box (a scroll viewport). Not a color like the other aspects — there's nothing to
+    /// paint, just a clip region to push/pop around this subtree.
+    clip: bool = false,
 };
 
 /// A textured draw: which texture (cached on `Resources`), and an optional `src`
@@ -187,6 +194,13 @@ const col_vigor = ui.Color{ .r = 230, .g = 180, .b = 80 }; // vigor fill: warm a
 const col_panel = ui.Color{ .r = 100, .g = 110, .b = 140 }; // panel border: muted blue-grey
 const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool light blue
 const col_tip_fill = ui.Color{ .r = 16, .g = 16, .b = 28 }; // tooltip backing: opaque near-bg, so text reads over anything
+const col_scroll_track = ui.Color{ .r = 40, .g = 44, .b = 58 }; // scrollbar track: dim backing strip
+const col_scroll_thumb = ui.Color{ .r = 100, .g = 110, .b = 140 }; // scrollbar thumb: matches panel border
+
+/// Wheel delta → px scrolled per tick (`scroll_view`).
+const scroll_speed: f32 = 24.0;
+/// Scrollbar track/thumb width, in px.
+const scrollbar_w: f32 = 6.0;
 
 // --- Widget functions --------------------------------------------------------
 //
@@ -318,6 +332,79 @@ pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*N
     _ = ttl.with_layout(ui.features.Layout.init(.relative, null));
 
     return outer;
+}
+
+pub const ScrollView = struct {
+    outer: *Node, // wraps the viewport + scrollbar track side by side
+    viewport: *Node, // fixed `width`×`height`, clipped
+    content: *Node, // fit_children column — the caller's real rows attach here
+};
+
+/// Vertical scroll container: a fixed `width`×`height` `viewport` (clipped, via
+/// `RenderData.clip`) holding a `fit_children` `content` column the caller appends rows
+/// to. Scrolls via mouse wheel while the viewport is hovered; the offset lives in a
+/// `ScrollState` slot keyed by `key` (persists like `active` does) and is folded into
+/// `content.layout.scroll_y`, which `place` uses to shift `content`'s children without a
+/// second layout pass.
+///
+/// Clamping needs `content`'s height, but this frame's children aren't attached (let
+/// alone laid out) yet — so, like the hover tooltip reading a prior-frame rect, this
+/// reads *last frame's* `content.rect`. `content` is `query`'d here purely to keep its
+/// interaction slot (and so its rect) alive for that read; the caller never reads its
+/// flags. One-frame-stale means a newly-taller/shorter content clamps a frame late —
+/// invisible at 60fps.
+///
+/// A thin track + thumb rides beside the viewport, shown only once content overflows it
+/// (no drag yet — wheel-only, per the M2 scope).
+pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, height: f32) !ScrollView {
+    const outer = try Node.pcreate(ctx.arena, key, parent);
+    _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
+
+    const viewport = try Node.pcreate(ctx.arena, "viewport", outer);
+    _ = viewport.with_layout(ui.features.Layout.init(.relative, null))
+        .with_size(ui.features.Size.initFixed(width, height, null));
+    viewport.render_data.clip = true;
+    viewport.render_data.outline = col_track; // dim frame marking the scrollable area
+
+    const content = try Node.pcreate(ctx.arena, "content", viewport);
+    _ = content.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(4));
+    const content_h = if (content.rect(ctx)) |r| r.h else 0;
+    _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
+
+    const max_offset = @max(0.0, content_h - height);
+    const idx = ctx.cache(outer.key, UiState.ScrollState);
+    const state = ctx.pool(UiState.ScrollState).get(idx);
+    if (viewport.query(ctx).hovering and ctx.res.input.wheel_y != 0) {
+        state.offset -= ctx.res.input.wheel_y * scroll_speed; // wheel up ⇒ scroll toward the top
+    }
+    state.offset = std.math.clamp(state.offset, 0, max_offset);
+    content.layout.scroll_y = state.offset;
+
+    if (max_offset > 0) {
+        const track = try Node.pcreate(ctx.arena, "track", outer);
+        _ = track.with_layout(ui.features.Layout.init(.relative, .vertical))
+            .with_size(ui.features.Size.initFixed(scrollbar_w, height, null));
+        track.render_data.fill = col_scroll_track;
+
+        // Thumb height reflects how much of the content is visible; its position within
+        // the track reflects `offset` — built as two stacked fixed-height children (an
+        // invisible spacer, then the thumb) rather than an absolute offset, so ordinary
+        // vertical flow places it with no extra mechanism.
+        const thumb_h = @max(16.0, height * height / content_h);
+        const thumb_y = (state.offset / max_offset) * (height - thumb_h);
+
+        const spacer = try Node.pcreate(ctx.arena, "above", track);
+        _ = spacer.with_layout(ui.features.Layout.init(.relative, null))
+            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_y, null));
+
+        const thumb = try Node.pcreate(ctx.arena, "thumb", track);
+        _ = thumb.with_layout(ui.features.Layout.init(.relative, null))
+            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_h, null));
+        thumb.render_data.fill = col_scroll_thumb;
+    }
+
+    return .{ .outer = outer, .viewport = viewport, .content = content };
 }
 
 test "interaction store: active latches, transient flags clear each frame" {

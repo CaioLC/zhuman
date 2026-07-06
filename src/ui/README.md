@@ -252,6 +252,14 @@ Two orthogonal axes, both Unity-inspired:
   being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
   to an existing node, read that node's prior-frame rect with **`node.rect(ctx)`**
   (→ `Ctx.rectOf(key)`, the rect `stamp_rects` recorded last frame) and derive the origin.
+- **`scroll_x`/`scroll_y`** — the same trick as `origin`, one level down: instead of
+  moving a *root* itself, it translates one node's *children* by `-scroll_x`/`-scroll_y`.
+  `place` folds it straight into the base position it hands each child (`px -= p.layout
+  .scroll_y`), so a scroll container needs no second layout pass — it just holds an
+  offset. Defaults to 0 (every ordinary node is unaffected). The host binds this to
+  mouse-wheel input in a `scroll_view` widget (`widgets.zig`); pair it with a `clip`
+  render aspect (a host `RenderData` field, not core) on the viewport so the
+  now-shifted-but-not-resized content doesn't paint outside its box.
 
 ### Sizing
 

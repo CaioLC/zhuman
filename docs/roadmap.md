@@ -72,7 +72,16 @@ bordered pill lands with M5.
 and actions wired to it (each button shows its p10–p90 band). Curve glyph deferred to M5 (text-only
 ranges for now). Act I stays ungated — population is the spine, and Act I is pop 1, so no tech formula.
 
-**M2 — Engine: scrolling**: mouse-wheel into `Input` + a clip/scroll container + scrollbar.
+**M2 — Engine: scrolling** — ✅ done 2026-07-06 (`feat/hud-redesign`): mouse-wheel into
+`Input` (`wheel_y`, one-frame edge) · `Layout.scroll_x/scroll_y` translate a node's
+flowed children without a second layout pass (`place` folds it into the child's base
+position — same idea as root `origin`, one level down) · `RenderData.clip` + a clip-stack
+in `main.zig`'s render walk (nested via `Rect.intersect`) crop a viewport's overflowing
+content · `widgets.scroll_view` (viewport + content + track/thumb, wheel-driven, clamped
+against last frame's content rect the way the hover tooltip reads a prior-frame rect).
+Wired into the HUD's Log panel, replacing its old hard 6-line cap — the whole run's
+history (up to the ring buffer's 64) is now reachable. No drag yet (wheel-only, per
+scope); dragging the thumb is a natural M4 add if the catalog browser wants it.
 
 **M3 — Engine: text input + modal**: keyboard events → a `text_input` widget (focus / caret /
 backspace) + a modal root with input capture + dismiss.

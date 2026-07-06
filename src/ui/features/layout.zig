@@ -53,6 +53,14 @@ pub const Layout = struct {
     /// unaffected. Set via `with_origin`.
     origin_x: f32 = 0,
     origin_y: f32 = 0,
+    /// Translates this node's *children* (not the node itself) by `-scroll_x`/`-scroll_y`
+    /// — a positive value shifts flowed content up/left, as if scrolled down/right. This
+    /// is how a scroll container (`widgets.scroll_view`) moves its overflowing `content`
+    /// without a second layout pass: the container holds the offset, `place` folds it into
+    /// the base position it hands each child. Defaults to 0 (no effect on ordinary nodes).
+    /// Distinct from `origin`, which positions a *root* itself, not its children.
+    scroll_x: f32 = 0,
+    scroll_y: f32 = 0,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -199,8 +207,8 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
     if (node.parent) |p| {
         pw = p.size.width;
         ph = p.size.height;
-        px = p.layout._global_x orelse 0.0;
-        py = p.layout._global_y orelse 0.0;
+        px = (p.layout._global_x orelse 0.0) - p.layout.scroll_x;
+        py = (p.layout._global_y orelse 0.0) - p.layout.scroll_y;
     } else {
         // Root: seed from its `origin` (0,0 for the main tree; the cursor/icon point
         // for a floating overlay). Anchor math below runs against a zero-size parent,

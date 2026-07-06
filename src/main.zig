@@ -254,6 +254,7 @@ pub fn main() !void {
     while (!quit) {
         // Event Stage
         app.resources.input.mouse_down = false; // edge: true only on a press this frame
+        app.resources.input.wheel_y = 0; // edge: nonzero only on a wheel tick this frame
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
@@ -271,6 +272,9 @@ pub fn main() !void {
                         app.resources.input.mouse_down = true;
                         app.ui.mark(.clicked, mb.x, mb.y);
                     }
+                },
+                .mouse_wheel => |mw| {
+                    app.resources.input.wheel_y = mw.scroll_y;
                 },
                 else => {},
             }
@@ -325,17 +329,71 @@ fn log_tone_color(t: ha.log.Tone) ui.Color {
     };
 }
 
+/// One entry in `draw_tree`'s clip stack: the node that pushed the clip (so we know when
+/// we've walked back out of its subtree) and the *already-intersected* rect active while
+/// inside it (nesting narrows, never widens).
+const ClipFrame = struct { node: *widgets.Node, rect: ui.Rect };
+
+/// Push/pop `renderer`'s scissor rect to `r` (or disable clipping for `null`). SDL wants
+/// integer pixels; the layout solve works in `f32`, so this is the one truncation point.
+fn apply_clip(u: *widgets.UiCtx, r: ?ui.Rect) void {
+    const clip = if (r) |rect| sdl.rect.IRect{
+        .x = @intFromFloat(rect.x),
+        .y = @intFromFloat(rect.y),
+        .w = @intFromFloat(rect.w),
+        .h = @intFromFloat(rect.h),
+    } else null;
+    u.res.renderer.setClipRect(clip) catch {};
+}
+
 /// Walk a UI tree and paint each node by its render aspects. Order matters: fill
 /// (backmost) → image → text → outline (topmost), so a hover/affordance ring shows
 /// over opaque icon tiles. Called once per root tree, in the render list's order.
+///
+/// `RenderData.clip` marks a node whose subtree should be cropped to its own box (a
+/// scroll viewport) — the walk is pre-order, so a stack of currently-open clip nodes is
+/// popped whenever the next node isn't inside the one on top (found by climbing
+/// `.parent`, since there's no "leaving a subtree" signal from `iterate()`).
 fn draw_tree(u: *widgets.UiCtx, root: *widgets.Node) void {
+    var clip_stack: [16]ClipFrame = undefined;
+    var depth: usize = 0;
+
     var it = root.iterate();
     while (it.next()) |node| {
+        while (depth > 0 and !is_descendant(node, clip_stack[depth - 1].node)) {
+            depth -= 1;
+            apply_clip(u, if (depth > 0) clip_stack[depth - 1].rect else null);
+        }
+
         if (node.render_data.fill) |c| widgets.draw_fill(u, node, c);
         if (node.render_data.img) |s| widgets.draw_texture(u, node, s);
         if (node.render_data.text) |c| widgets.draw_text(u, node, c);
         if (node.render_data.outline) |c| widgets.draw_outline(u, node, c);
+
+        if (node.render_data.clip) {
+            const box = ui.Rect{
+                .x = node.layout._global_x orelse 0,
+                .y = node.layout._global_y orelse 0,
+                .w = node.size.width,
+                .h = node.size.height,
+            };
+            const active = if (depth > 0) box.intersect(clip_stack[depth - 1].rect) else box;
+            clip_stack[depth] = .{ .node = node, .rect = active };
+            depth += 1;
+            apply_clip(u, active);
+        }
     }
+    if (depth > 0) apply_clip(u, null); // don't leak a scissor rect into the next root's draw
+}
+
+/// Is `ancestor` `node` itself or one of its ancestors, walking up via `.parent`?
+fn is_descendant(node: *widgets.Node, ancestor: *widgets.Node) bool {
+    var n: ?*widgets.Node = node;
+    while (n) |cur| {
+        if (cur == ancestor) return true;
+        n = cur.parent;
+    }
+    return false;
 }
 
 /// What `build_ui` hands back each frame: a flat list of independent root trees, laid
@@ -446,15 +504,16 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {s}", .{fmt_num(&mat_buf, materials.v)}) catch "?");
 
     // Event log — newest-first feed of what just happened. Lives on `Resources.log`
-    // (survives the per-frame arena); each line is recolored by its tone.
+    // (survives the per-frame arena); each line is recolored by its tone. Scrollable
+    // (mouse wheel) so the whole run's history is reachable, not just the last few lines.
     const log_panel = try widgets.panel(ui_ctx, status_div, "log_panel", "Log");
     const feed = &ui_ctx.res.log;
-    const shown = @min(feed.count, 6);
+    const log_view = try widgets.scroll_view(ui_ctx, log_panel, "log_view", 260, 160);
     var li: usize = 0;
-    while (li < shown) : (li += 1) {
+    while (li < feed.count) : (li += 1) {
         const entry = feed.get(li);
         const lkey = try std.fmt.allocPrint(ui_ctx.arena, "log{d}", .{li});
-        const lnode = try widgets.label(ui_ctx, log_panel, lkey, entry.text());
+        const lnode = try widgets.label(ui_ctx, log_view.content, lkey, entry.text());
         lnode.render_data.text = log_tone_color(entry.tone);
     }
 

@@ -18,6 +18,9 @@ pub const Input = struct {
     mouse_y: f32 = 0,
     /// A press occurred during this frame's event poll (one-frame edge).
     mouse_down: bool = false,
+    /// Vertical wheel delta this frame (one-frame edge; 0 when idle). Positive = away
+    /// from the user (SDL convention) — `scroll_view` treats that as "scroll up".
+    wheel_y: f32 = 0,
 };
 
 pub const Resources = struct {
