@@ -163,7 +163,7 @@ pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     size.data_width = @floatFromInt(tw);
     size.data_height = @floatFromInt(th);
     node.size = size;
-    node.render_data.text = .{}; // present (white) ⟹ render walk blits it; caller may recolor
+    node.render_data.text = ctx.res.theme.fg; // present ⟹ render walk blits it; caller may recolor
 }
 
 /// Feature mixin: give `node` a cached texture (owned by `Resources`, not pooled per-node
@@ -183,20 +183,13 @@ pub fn data_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
 }
 
 // --- Widget palette ----------------------------------------------------------
-// Interaction-state colors the widgets paint themselves in. Kept here (host
-// policy) so the engine stays color-agnostic — it only carries `node.render_data`.
-
-const col_normal = ui.Color{ .r = 200, .g = 200, .b = 210 }; // idle button: soft white
-const col_hover = ui.Color.white; // hovered: full bright
-const col_disabled = ui.Color{ .r = 90, .g = 90, .b = 105 }; // can't afford: dim grey
-const col_track = ui.Color{ .r = 90, .g = 90, .b = 105 }; // progress-bar track outline
-const col_vigor = ui.Color{ .r = 230, .g = 180, .b = 80 }; // vigor fill: warm amber
-const col_panel = ui.Color{ .r = 100, .g = 110, .b = 140 }; // panel border: muted blue-grey
-const col_title = ui.Color{ .r = 170, .g = 195, .b = 235 }; // panel title: cool light blue
-const col_tip_fill = ui.Color{ .r = 16, .g = 16, .b = 28 }; // tooltip backing: opaque near-bg, so text reads over anything
-const col_scroll_track = ui.Color{ .r = 40, .g = 44, .b = 58 }; // scrollbar track: dim backing strip
-const col_scroll_thumb = ui.Color{ .r = 100, .g = 110, .b = 140 }; // scrollbar thumb: matches panel border
-const col_scrim = ui.Color{ .r = 10, .g = 10, .b = 18 }; // modal backdrop: opaque, near-black
+// Widgets paint themselves from `ctx.res.theme` (the current frame's COLD↔WARM
+// palette, resolved once in `build_ui` — see `src/theme.zig`) rather than fixed
+// module colors, so the whole HUD reacts to the actor's warmth together. Interaction
+// *states* (idle/hover/disabled) still map to fixed theme *roles* (fg/acc/dim
+// respectively): a role's actual RGB just isn't constant across a run anymore. Kept
+// here (host policy) so the engine stays color-agnostic — it only carries
+// `node.render_data`.
 
 /// Wheel delta → px scrolled per tick (`scroll_view`).
 const scroll_speed: f32 = 24.0;
@@ -233,10 +226,10 @@ pub fn img(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Text
 /// is `frac` (0 → empty, 1 → full) of the track. Wires both nodes to `parent` under
 /// `key` and returns the outer node so the caller can query/override it. The caller
 /// computes `frac` — a countdown bar passes `timer.v / timer.start` (drains full→empty),
-/// a fill bar the inverse. `fill` colors the inner bar; the track outline is a dim grey.
+/// a fill bar the inverse. `fill` colors the inner bar; the track outline is themed `line2`.
 pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: ui.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = col_track;
+    outer.render_data.outline = ctx.res.theme.line2;
     _ = outer.with_layout(ui.features.Layout.init(.relative, null))
         .with_size(ui.features.Size.initFixed(240, 24, null));
 
@@ -271,10 +264,11 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     lbl.size.padding = ui.features.Padding.initSymmetric(8, 4);
     _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
 
-    // State color: dim if disabled, else bright on hover, else idle. Querying here
-    // also keeps the slot alive (same as the caller's `.clicked` read). The box draws
-    // an outline, the label its text — both in `c`.
-    const c = if (!enabled) col_disabled else if (outer.query(ctx).hovering) col_hover else col_normal;
+    // State color: dim if disabled, else bright (accent) on hover, else idle (fg).
+    // Querying here also keeps the slot alive (same as the caller's `.clicked` read).
+    // The box draws an outline, the label its text — both in `c`.
+    const t = ctx.res.theme;
+    const c = if (!enabled) t.dim else if (outer.query(ctx).hovering) t.acc else t.fg;
     outer.render_data.outline = c;
     lbl.render_data.text = c;
 
@@ -291,7 +285,8 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_sprite(ctx, node, sprite, px);
     _ = node.with_layout(ui.features.Layout.init(.relative, null));
-    node.render_data.outline = if (!enabled) col_disabled else if (node.query(ctx).hovering) col_hover else col_normal;
+    const t = ctx.res.theme;
+    node.render_data.outline = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg;
     return node;
 }
 
@@ -301,35 +296,35 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
 /// it sits on top. Opaque fill so the text reads over whatever's behind it. Returns the box.
 pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
-    box.render_data.fill = col_tip_fill;
-    box.render_data.outline = col_panel;
+    box.render_data.fill = ctx.res.theme.panel;
+    box.render_data.outline = ctx.res.theme.line2;
     _ = box.with_layout(ui.features.Layout.init(.top_left, .vertical))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(6)));
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", box);
     try data_text(ctx, lbl, text);
-    lbl.render_data.text = col_normal;
+    lbl.render_data.text = ctx.res.theme.fg;
     _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
 
     return box;
 }
 
 /// Panel: a titled, bordered, padded section that groups related content. Builds an
-/// outlined outer box (border in `col_panel`) that hugs its children — inset by inner
-/// `padding`, with a `gap` between them — and drops a title label at the top (in
-/// `col_title`). Returns the outer node so the caller appends content *after* the
-/// title; it flows vertically under it:
+/// outlined outer box (border themed `line`) that hugs its children — inset by inner
+/// `padding`, with a `gap` between them — and drops a title label at the top (themed
+/// `dim`, matching the design's subdued section headers). Returns the outer node so the
+/// caller appends content *after* the title; it flows vertically under it:
 ///   `const p = try panel(ctx, parent, "res", "Resources");`
 ///   `_ = try label(ctx, p, "energy", "Energy: 8 J");`
 pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = col_panel;
+    outer.render_data.outline = ctx.res.theme.line;
     _ = outer.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(8))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(12)));
 
     const ttl = try Node.pcreate(ctx.arena, "title", outer);
     try data_text(ctx, ttl, title);
-    ttl.render_data.text = col_title;
+    ttl.render_data.text = ctx.res.theme.dim;
     _ = ttl.with_layout(ui.features.Layout.init(.relative, null));
 
     return outer;
@@ -366,7 +361,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     _ = viewport.with_layout(ui.features.Layout.init(.relative, null))
         .with_size(ui.features.Size.initFixed(width, height, null));
     viewport.render_data.clip = true;
-    viewport.render_data.outline = col_track; // dim frame marking the scrollable area
+    viewport.render_data.outline = ctx.res.theme.line2; // dim frame marking the scrollable area
 
     const content = try Node.pcreate(ctx.arena, "content", viewport);
     _ = content.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(4));
@@ -386,7 +381,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
         const track = try Node.pcreate(ctx.arena, "track", outer);
         _ = track.with_layout(ui.features.Layout.init(.relative, .vertical))
             .with_size(ui.features.Size.initFixed(scrollbar_w, height, null));
-        track.render_data.fill = col_scroll_track;
+        track.render_data.fill = ctx.res.theme.line;
 
         // Thumb height reflects how much of the content is visible; its position within
         // the track reflects `offset` — built as two stacked fixed-height children (an
@@ -402,7 +397,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
         const thumb = try Node.pcreate(ctx.arena, "thumb", track);
         _ = thumb.with_layout(ui.features.Layout.init(.relative, null))
             .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_h, null));
-        thumb.render_data.fill = col_scroll_thumb;
+        thumb.render_data.fill = ctx.res.theme.line2;
     }
 
     return .{ .outer = outer, .viewport = viewport, .content = content };
@@ -436,13 +431,13 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     const root = try Node.create(ctx.arena, key);
     _ = root.with_layout(ui.features.Layout.init(.top_left, null))
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    root.render_data.fill = col_scrim;
+    root.render_data.fill = ctx.res.theme.bg;
 
     const box = try Node.pcreate(ctx.arena, "box", root);
     _ = box.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
-    box.render_data.fill = col_tip_fill;
-    box.render_data.outline = col_panel;
+    box.render_data.fill = ctx.res.theme.panel;
+    box.render_data.outline = ctx.res.theme.line2;
     _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
 
     _ = try label(ctx, box, "title", title);

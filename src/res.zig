@@ -3,6 +3,7 @@ const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const font = @import("./font.zig");
 const logmod = @import("./log.zig");
+const thememod = @import("./theme.zig");
 
 pub const Time = struct {
     dt: f32,
@@ -39,6 +40,10 @@ pub const Resources = struct {
     /// Sprite sheet of capital-good icons (`assets/icons.png`, a 2×2 grid). Cached once
     /// here; the UI samples cells from it by source rect (see `widgets.data_sprite`).
     icons: sdl.render.Texture,
+    /// This frame's resolved COLD↔WARM palette — recomputed once per frame in
+    /// `build_ui` (from `compute_warmth`) and read by every widget via `ctx.res.theme`,
+    /// rather than threading a theme argument through every widget call. Defaults cold.
+    theme: thememod.Theme = thememod.cold,
 
     pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");

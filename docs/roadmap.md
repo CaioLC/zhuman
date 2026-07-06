@@ -101,8 +101,25 @@ to existing key-event delivery for zero present benefit. Land it alongside M4 in
 favourites), sort cycle, favorites/pins, rich text rows. Author the curated Act I catalog. Retire
 icons here.
 
-**M5 — Visual identity**: theme struct + COLD↔WARM lerp + warmth model · sparkline · scanline
-overlay · ASCII figure + heartbeat pulse · monospace font.
+**M5 — Visual identity** — ✅ palette/font/scanlines/figure done 2026-07-06
+(`feat/hud-redesign`): `src/theme.zig` (`Theme` struct, `cold`/`warm` poles lifted 1:1
+from `design/`'s palette, `lerp(t)` blending every field together) · `compute_warmth`
+(rested 28% + fed 40% + capital built 32%, capped at 8 goods + a flat fireplace bonus —
+mirrors the design's model) drives it, resolved once per frame in `build_ui` onto
+`Resources.theme` so every widget reads `ctx.res.theme.*` instead of a fixed color ·
+every widget/HUD color (buttons, panels, log tones, the status pill, the window clear)
+now routes through theme roles (`fg`/`acc`/`dim`/`warn`/`danger`/`line`/`line2`/`panel`/
+`bg`) instead of hardcoded RGB · monospace font (`Kenney Mini Square Mono.ttf`, already
+bundled) · a scanline overlay (`draw_scanlines`, partial-alpha repeating darkening —
+first use of the renderer's blend mode) · a 3-line ASCII vitals figure (weary/ok/robust,
+picked from warmth + hunger/exhaustion; a 4th, dead, on the game-over screen) beside a
+sine-pulsed "heartbeat" readout (`Color.lerp`, freezes when the run clock stops).
+**Deferred**: the **vigor sparkline** needs a new persistent history-sampling mechanism
+(an ECS component + system sampling `Vigor` on a fixed cadence, reset on death) — a
+separable unit of work, not a quick add. The **distribution-curve glyph** (parked at M1
+for M5) needs a new engine draw primitive — nothing currently renders a polyline, only
+rect fill/outline/text/image — so it's parked again until that primitive exists. Both
+land in a follow-up pass rather than blocking the rest of M5.
 
 **M6 — Population (closes the Act I loop)**: shelter-capacity model, surplus-fills,
 starvation-empties; the Act I win condition (reach pop 2). This is what gives Act I a *goal* beyond

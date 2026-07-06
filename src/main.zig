@@ -11,7 +11,9 @@ const sys = ha.systems;
 const ecs = ha.ecs;
 
 const fps = 60;
-const font_path = "assets/fonts/Kenney Mini Square.ttf";
+/// Monospace, per the redesign's terminal identity (M5) — Kenney's own mono variant of
+/// the font already used, so glyph metrics/weight stay consistent with the old choice.
+const font_path = "assets/fonts/Kenney Mini Square Mono.ttf";
 
 /// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
 /// today (population, not day-count, is the progression spine).
@@ -99,6 +101,10 @@ const capital = [_]Good{
     .{ .label = "Saw", .energy_cost = 14, .material_cost = 45, .kind = .tool, .target = 2, .power_capacity = 80, .icon_col = 1, .icon_row = 1 },
 };
 
+/// "Fireplace"'s index in `capital` above — `compute_warmth`'s flat warmth bonus (owning
+/// a heat source warms the HUD a little beyond what vigor/satiety/build-count already say).
+const fireplace_idx: usize = 3;
+
 /// Spawn a fresh actor — rested but hungry, with a thin larder and nothing built. Used at
 /// startup and on "start over": death wipes the entity, this reseeds the run from the
 /// bottom, so everything accumulated is lost. Satiety starts part-full so the hunger clock
@@ -181,6 +187,18 @@ fn plan_payment(cap: *const comp.Capital, action_idx: usize, base_cost: f32) Pay
     return .{ .eff_cost = eff, .from_vigor = eff - from_power, .from_power = from_power, .power_idx = power_idx };
 }
 
+/// How "warm" the actor's situation reads (0 cold/precarious → 1 warm/thriving) — the
+/// HUD's mood, not a game mechanic. Mirrors the design's model: rested (28%) + fed (40%)
+/// + capital built (32%, capped at 8 goods — comparable to the design's "built/8") + a
+/// flat bonus for owning a heat source (`fireplace_idx`). Drives `theme.lerp` in
+/// `build_ui`, computed fresh each frame from the live actor (never stored).
+fn compute_warmth(vigor: *const comp.Vigor, satiety: *const comp.Satiety, cap: *const comp.Capital) f32 {
+    const built: f32 = @floatFromInt(@popCount(cap.owned));
+    var w = 0.28 * (vigor.v / vigor.max) + 0.40 * (satiety.v / satiety.max) + 0.32 * @min(1.0, built / 8.0);
+    if (owns(cap, fireplace_idx)) w += 0.06;
+    return std.math.clamp(w, 0, 1);
+}
+
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     window: sdl.video.Window,
@@ -206,6 +224,10 @@ const App = struct {
         renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
             frame_capper.mode = .{ .limited = fps };
         };
+        // Every existing draw uses alpha=255 (opaque), so blending changes nothing for
+        // them — this just lets the scanline overlay (`draw_scanlines`) paint at partial
+        // alpha instead of a flat opaque stripe.
+        try renderer.setDrawBlendMode(.blend);
         return .{
             .gpa = gpa,
             .window = window,
@@ -305,11 +327,17 @@ pub fn main() !void {
         }
 
         // Render Stage
-        // window
-        try app.renderer.setDrawColor(.{ .r = 20, .g = 20, .b = 40, .a = 255 });
+        // window — cleared to the theme's own background, so it shifts cold/warm too
+        const bg = app.resources.theme.bg;
+        try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
         for (frame.trees) |t| draw_tree(&app.ui, t);
+        // scanlines — a CRT-style overlay on top of everything (terminal identity, M5)
+        {
+            const ww, const wh = try app.resources.window.getSize();
+            draw_scanlines(&app.resources, ww, wh);
+        }
         // present
         try app.renderer.present();
 
@@ -317,15 +345,16 @@ pub fn main() !void {
     }
 }
 
-/// Map a log entry's tone to the color its line renders in (host policy, mirroring the
-/// widget palette). The log panel recolors each label with this after building it.
-fn log_tone_color(t: ha.log.Tone) ui.Color {
-    return switch (t) {
-        .dim => .{ .r = 110, .g = 120, .b = 130 },
-        .normal => .{ .r = 200, .g = 200, .b = 210 },
-        .good => .{ .r = 120, .g = 200, .b = 140 },
-        .warn => .{ .r = 230, .g = 180, .b = 80 },
-        .danger => .{ .r = 210, .g = 90, .b = 70 },
+/// Map a log entry's tone to the current theme's matching color role (host policy,
+/// mirroring the widget palette). The log panel recolors each label with this after
+/// building it.
+fn log_tone_color(t: ha.theme.Theme, tone: ha.log.Tone) ui.Color {
+    return switch (tone) {
+        .dim => t.dim,
+        .normal => t.fg,
+        .good => t.acc,
+        .warn => t.warn,
+        .danger => t.danger,
     };
 }
 
@@ -384,6 +413,21 @@ fn draw_tree(u: *widgets.UiCtx, root: *widgets.Node) void {
         }
     }
     if (depth > 0) apply_clip(u, null); // don't leak a scissor rect into the next root's draw
+}
+
+/// A subtle repeating horizontal darkening every 4px — the redesign's terminal-identity
+/// scanline overlay (M5). Drawn last, over the whole frame, at partial alpha (~14%,
+/// matching the design's CSS); needs the renderer's blend mode set to `.blend` (done
+/// once in `App.init` — every other draw is fully opaque, so that change is invisible
+/// everywhere except here).
+fn draw_scanlines(res: *Resources, ww: usize, wh: usize) void {
+    res.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 36 }) catch return;
+    const w: f32 = @floatFromInt(ww);
+    const h: f32 = @floatFromInt(wh);
+    var y: f32 = 2;
+    while (y < h) : (y += 4) {
+        res.renderer.renderFillRect(.{ .x = 0, .y = y, .w = w, .h = 1 }) catch {};
+    }
 }
 
 /// Is `ancestor` `node` itself or one of its ancestors, walking up via `.parent`?
@@ -449,6 +493,7 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !struct { *widget
     const over = try ui_root(ui_ctx, "over");
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", over);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
+    try ui_figure(ui_ctx, center_div, fig_dead, ui_ctx.res.theme.danger);
     _ = try widgets.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
     const restart = try widgets.button(ui_ctx, center_div, "restart", "Start over", true);
 
@@ -489,13 +534,72 @@ fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !struct { *widget
 /// The actor's condition word + a severity color, from how fed and how rested it is
 /// (mirrors the design's status pill). No DEAD case here — that's the game-over screen.
 const Status = struct { word: []const u8, color: ui.Color };
-fn actor_status(vigor: *const comp.Vigor, satiety: *const comp.Satiety) Status {
+fn actor_status(t: ha.theme.Theme, vigor: *const comp.Vigor, satiety: *const comp.Satiety) Status {
     const sat_frac = satiety.v / satiety.max;
     const cap = vigor.max * sat_frac; // the hunger ceiling
-    if (sat_frac <= 0.12) return .{ .word = "STARVING", .color = .{ .r = 210, .g = 90, .b = 70 } };
-    if (cap > 0 and vigor.v < cap * 0.25) return .{ .word = "EXHAUSTED", .color = .{ .r = 230, .g = 180, .b = 80 } };
-    if (sat_frac < 0.30) return .{ .word = "HUNGRY", .color = .{ .r = 230, .g = 180, .b = 80 } };
-    return .{ .word = "ALIVE", .color = .{ .r = 79, .g = 158, .b = 196 } };
+    if (sat_frac <= 0.12) return .{ .word = "STARVING", .color = t.danger };
+    if (cap > 0 and vigor.v < cap * 0.25) return .{ .word = "EXHAUSTED", .color = t.warn };
+    if (sat_frac < 0.30) return .{ .word = "HUNGRY", .color = t.warn };
+    return .{ .word = "ALIVE", .color = t.acc };
+}
+
+/// A tiny 3-line ASCII stand-in for the actor's body (the design's "vitals figure").
+const Figure = struct { l1: []const u8, l2: []const u8, l3: []const u8 };
+const fig_robust = Figure{ .l1 = "  \\o/", .l2 = "   |", .l3 = "  / \\" };
+const fig_ok = Figure{ .l1 = "   O", .l2 = "  /|\\", .l3 = "  / \\" };
+const fig_weary = Figure{ .l1 = "   o", .l2 = "  /|", .l3 = "  /" };
+const fig_dead = Figure{ .l1 = "   x", .l2 = "  -|-", .l3 = "  / \\" };
+
+/// Which figure/color the actor's vitals show — picked the same way `actor_status` picks
+/// a condition word but independently: the figure reacts to hunger/exhaustion *and*
+/// warmth, not just the status pill's severity. An enum (not the `Figure` value itself)
+/// so the color mapping below doesn't need to reverse-lookup which glyphs it got.
+const FigureKind = enum { weary, ok, robust };
+
+/// `warmth` is `compute_warmth`'s 0..1 mood; `sat_frac`/`vigor_frac_of_ceiling` gate the
+/// weary case ahead of it, mirroring the design: a starving or exhausted actor looks
+/// weary regardless of how "warm" the rest of the picture is.
+fn figure_kind(warmth: f32, sat_frac: f32, vigor_frac_of_ceiling: f32) FigureKind {
+    if (sat_frac < 0.15 or vigor_frac_of_ceiling < 0.2) return .weary;
+    if (warmth > 0.6) return .robust;
+    return .ok;
+}
+
+fn figure_glyphs(k: FigureKind) Figure {
+    return switch (k) {
+        .weary => fig_weary,
+        .ok => fig_ok,
+        .robust => fig_robust,
+    };
+}
+
+fn figure_color(t: ha.theme.Theme, k: FigureKind) ui.Color {
+    return switch (k) {
+        .weary => t.warn,
+        .ok, .robust => t.acc,
+    };
+}
+
+/// Build the figure's 3 lines as stacked labels (not one multi-line string — text nodes
+/// here are single-line) under `parent`, all in `color`.
+fn ui_figure(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, fig: Figure, color: ui.Color) !void {
+    const col = try widgets.Node.pcreate(ui_ctx.arena, "fig", parent);
+    _ = col.with_layout(ui.features.Layout.init(.relative, .vertical));
+    const l1 = try widgets.label(ui_ctx, col, "l1", fig.l1);
+    l1.render_data.text = color;
+    const l2 = try widgets.label(ui_ctx, col, "l2", fig.l2);
+    l2.render_data.text = color;
+    const l3 = try widgets.label(ui_ctx, col, "l3", fig.l3);
+    l3.render_data.text = color;
+}
+
+/// A pulsing color between `t.dim` and `t.acc` (period ~1.1s, matching the design's CSS
+/// `ha-pulse` keyframes) — the "heartbeat". Driven by `elapsed` (the run clock), so it
+/// freezes the instant the actor dies (the clock stops with them) rather than needing a
+/// separate wall-clock timer.
+fn heartbeat_color(t: ha.theme.Theme, elapsed: f32) ui.Color {
+    const phase = 0.5 + 0.5 * std.math.sin(elapsed * (2.0 * std.math.pi / 1.1));
+    return ui.Color.lerp(t.dim, t.acc, phase);
 }
 
 /// Format `n` compactly for the HUD — `1.2M`, `12k`, `3.4k`, or a bare integer — so the
@@ -534,6 +638,17 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     const day = 1 + @as(u64, @intFromFloat(ui_ctx.res.time.elapsed / secs_per_day));
     _ = try widgets.label(ui_ctx, status_div, "day_text", std.fmt.bufPrint(&char_buf, "Day {d}", .{day}) catch "?");
     const res_panel = try widgets.panel(ui_ctx, status_div, "res_panel", "Resources");
+
+    // Vitals: a small ASCII figure (mood — hunger/exhaustion first, then warmth) beside a
+    // pulsing "heartbeat" readout. Flavor only — the numbers below it are load-bearing.
+    const warmth = compute_warmth(vigor, satiety, cap);
+    const vitals = try widgets.Node.pcreate(ui_ctx.arena, "vitals", res_panel);
+    _ = vitals.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(10));
+    const kind = figure_kind(warmth, satiety.v / satiety.max, if (vigor_cap > 0) vigor.v / vigor_cap else 0);
+    try ui_figure(ui_ctx, vitals, figure_glyphs(kind), figure_color(ui_ctx.res.theme, kind));
+    const heart = try widgets.label(ui_ctx, vitals, "heartbeat", "<3 <3 <3");
+    heart.render_data.text = heartbeat_color(ui_ctx.res.theme, ui_ctx.res.time.elapsed);
+
     _ = try widgets.label(ui_ctx, res_panel, "vigor_text", std.fmt.bufPrint(&char_buf, "Vigor: {d:.0}/{d:.0}  (+{d:.1}/s)", .{ vigor.v, vigor_cap, vigor.trickle }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "satiety_text", std.fmt.bufPrint(&char_buf, "Satiety: {d:.0}/{d:.0}  (-{d:.1}/s)", .{ satiety.v, satiety.max, satiety.drain }) catch "?");
     _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
@@ -551,11 +666,11 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
         const entry = feed.get(li);
         const lkey = try std.fmt.allocPrint(ui_ctx.arena, "log{d}", .{li});
         const lnode = try widgets.label(ui_ctx, log_view.content, lkey, entry.text());
-        lnode.render_data.text = log_tone_color(entry.tone);
+        lnode.render_data.text = log_tone_color(ui_ctx.res.theme, entry.tone);
     }
 
     // Actor condition word, pinned top-right of the screen (colored by severity).
-    const status = actor_status(vigor, satiety);
+    const status = actor_status(ui_ctx.res.theme, vigor, satiety);
     const status_node = try widgets.label(ui_ctx, play, "status_text", status.word);
     status_node.render_data.text = status.color;
     _ = status_node.with_layout(ui.features.Layout.init(.top_right, null));
@@ -747,6 +862,12 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // co-spawn on one entity, so one query fetches them together.
     const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, ecs.With(tag.Player) }){ .world = world };
     const actor = q_actor.get();
+
+    // Resolve this frame's COLD↔WARM theme before building anything, so every widget's
+    // `ctx.res.theme` read below sees the same value. Death reads as cold — there's no
+    // live actor left to compute a warmth from, and the game-over screen is meant to feel
+    // that way.
+    ui_ctx.res.theme = if (actor) |a| ha.theme.lerp(compute_warmth(a[0], a[1], a[4])) else ha.theme.cold;
 
     // Render list — the frame's root trees, drawn in order (later ones on top). Arena-
     // backed; dies with this frame's node tree. `collect` flattens each builder's return.
