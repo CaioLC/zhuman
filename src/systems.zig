@@ -16,6 +16,19 @@ const With = ecs.With;
 /// A ration policy (full / ½ / ¼) will scale this later — for now it's a flat full ration.
 const metabolism_rate: f32 = 2.0;
 
+/// `Food` fraction (of `max`) above which the larder counts as a sustained "surplus" —
+/// `Population.count` grows toward `capacity` only above this line (roadmap M6). Below it
+/// (but not starving), population just holds — only actual starvation costs people.
+const pop_surplus_frac: f32 = 0.5;
+/// `Satiety` fraction at/below which the actor is starving (mirrors `main.zig`'s status
+/// word threshold) — population shrinks while here.
+const pop_starve_frac: f32 = 0.12;
+/// Population gained per second while in surplus.
+const pop_growth_rate: f32 = 0.05;
+/// Population lost per second while starving — faster than growth, so a collapse costs
+/// more than a surplus earns (mirrors the design: "a food collapse costs you people").
+const pop_starve_rate: f32 = 0.1;
+
 /// Advance the run clock while the actor lives. Driven by the player's presence — with no
 /// player (dead) the clock freezes, so the game-over screen shows the day you died. One
 /// player today, so this bumps `elapsed` once for the frame it finds one.
@@ -93,6 +106,31 @@ pub fn update_vigor(
         const cap = v.max * (sat.v / sat.max);
         v.v += dt * v.trickle;
         if (v.v > cap) v.v = cap; // hunger ceiling pulls vigor down as satiety falls
+    }
+}
+
+/// Grow/shrink `Population.count` toward `capacity` — up while there's a sustained food
+/// surplus, down (faster) while starving. `capacity` is catalog-dependent (which capital
+/// goods count as "shelter"), so the host (`main.zig`'s `compute_capacity`) computes and
+/// writes it each frame; this system only integrates `count` against whatever it finds
+/// already set there — same split as `Vigor.trickle` (host sets it on a comfort-good
+/// build, this system just applies it).
+pub fn update_population(
+    res: *Resources,
+    q: Query(.{ comp.Population, comp.Food, comp.Satiety }),
+) void {
+    const dt = res.time.dt;
+    var it = q.iter();
+    while (it.next()) |entry| {
+        const pop, const food, const sat = entry;
+        const sat_frac = sat.v / sat.max;
+        if (sat_frac <= pop_starve_frac) {
+            pop.count -= dt * pop_starve_rate;
+        } else if (food.v > food.max * pop_surplus_frac) {
+            pop.count += dt * pop_growth_rate;
+        }
+        if (pop.count < 0) pop.count = 0;
+        if (pop.count > pop.capacity) pop.count = pop.capacity;
     }
 }
 

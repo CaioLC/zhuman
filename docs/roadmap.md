@@ -121,9 +121,18 @@ for M5) needs a new engine draw primitive — nothing currently renders a polyli
 rect fill/outline/text/image — so it's parked again until that primitive exists. Both
 land in a follow-up pass rather than blocking the rest of M5.
 
-**M6 — Population (closes the Act I loop)**: shelter-capacity model, surplus-fills,
-starvation-empties; the Act I win condition (reach pop 2). This is what gives Act I a *goal* beyond
-"don't die."
+**M6 — Population (closes the Act I loop)** — ✅ done 2026-07-06 (`feat/hud-redesign`):
+`comp.Population { count, capacity, crossed }` — `capacity` is 1 (yourself) + each owned
+comfort good's new `capacity_add` (Bed + Fireplace, 0.5 each — both together is what it
+takes to shelter a second person), computed each frame by `main.zig`'s catalog-aware
+`compute_capacity` (capital-catalog knowledge stays out of `systems.zig`, same split as
+`Vigor.trickle`); `systems.update_population` grows `count` toward `capacity` on a
+sustained food surplus (larder > 50%) and shrinks it — faster — while starving, so "a
+food collapse costs you people" per the locked design. Shown in the HUD as
+`Population: count/capacity`. Crossing `count >= 2` is Act I's win condition — logs a
+one-time "Act I complete" line (`Population.crossed` latches it); it does **not** spawn
+a second agent or start Act II — that's M7 (deciders) + M8 (the actual multi-agent
+epic), so for now reaching pop 2 is a surfaced milestone, not a scene change.
 
 **M7 — Decider abstraction**: make the `decide → act` split real — a decider interface with a
 player-decider (today) and an AI-decider, both producing ranked choices over one catalog. Prereq

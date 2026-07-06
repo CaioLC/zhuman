@@ -74,6 +74,7 @@ const Good = struct {
     cost_mult: f32 = 1.0, // tool only: scales the action's energy price (effort-saver, < 1)
     power_capacity: f32 = 0.0, // tool only: > 0 ⇒ external-energy tool, this much durability (energy units)
     trickle_add: f32 = 0.0, // comfort only
+    capacity_add: f32 = 0.0, // comfort only: shelter — raises Population's carrying capacity (M6)
     icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
     icon_row: f32 = 0,
 };
@@ -88,10 +89,12 @@ const capital = [_]Good{
     .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .icon_col = 1, .icon_row = 0 },
     // Fishing rod: makes Fish (actions[1]) yield more. (sheet: top-left)
     .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .icon_col = 0, .icon_row = 0 },
-    // Bed: rest better — vigor trickles back faster. (sheet: bottom-left)
-    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .icon_col = 0, .icon_row = 1 },
-    // Fireplace: warmth speeds recovery a lot. (sheet: bottom-right)
-    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .icon_col = 1, .icon_row = 1 },
+    // Bed: rest better — vigor trickles back faster; also shelter (half the capacity to
+    // support a second person). (sheet: bottom-left)
+    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .capacity_add = 0.5, .icon_col = 0, .icon_row = 1 },
+    // Fireplace: warmth speeds recovery a lot; also shelter — owning both Bed and
+    // Fireplace is what it takes to reach Population capacity 2. (sheet: bottom-right)
+    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .capacity_add = 0.5, .icon_col = 1, .icon_row = 1 },
     // Axe: effort-saver — makes Chop wood (actions[2]) cheaper to swing. PLACEHOLDER icon
     // (borrows the sandals cell) until axe art exists.
     .{ .label = "Axe", .energy_cost = 8, .material_cost = 18, .kind = .tool, .target = 2, .cost_mult = 0.6, .icon_col = 1, .icon_row = 0 },
@@ -116,6 +119,7 @@ fn spawn_player(world: *ha.world.World) void {
         comp.Food{ .v = 4, .max = 30, .spoil = 0.05 }, // a thin, perishable larder
         comp.Materials{ .v = 0 }, // nothing stockpiled yet
         comp.Capital{}, // owns nothing yet
+        comp.Population{ .count = 1, .capacity = 1 }, // just you; capacity recomputed next frame
         tag.Player,
     });
 }
@@ -197,6 +201,18 @@ fn compute_warmth(vigor: *const comp.Vigor, satiety: *const comp.Satiety, cap: *
     var w = 0.28 * (vigor.v / vigor.max) + 0.40 * (satiety.v / satiety.max) + 0.32 * @min(1.0, built / 8.0);
     if (owns(cap, fireplace_idx)) w += 0.06;
     return std.math.clamp(w, 0, 1);
+}
+
+/// `Population`'s carrying-capacity ceiling (roadmap M6): 1 (yourself) plus each owned
+/// comfort good's `capacity_add` — which capital goods count as "shelter" is catalog
+/// knowledge, so this lives here (not `systems.update_population`, which just integrates
+/// `count` toward whatever capacity it finds already set — same split as `Vigor.trickle`).
+fn compute_capacity(cap: *const comp.Capital) f32 {
+    var c: f32 = 1.0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind == .comfort and owns(cap, gi)) c += g.capacity_add;
+    }
+    return c;
 }
 
 const App = struct {
@@ -311,6 +327,7 @@ pub fn main() !void {
         ecs.run(&app.world, &app.resources, sys.metabolize); // food → satiety (passive eating)
         ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
         ecs.run(&app.world, &app.resources, sys.update_vigor); // vigor trickles up to the hunger cap
+        ecs.run(&app.world, &app.resources, sys.update_population); // population grows on surplus, shrinks on starvation
         ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
         ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         // 3. update ui
@@ -619,16 +636,26 @@ fn fmt_num(buf: []u8, n: f32) []const u8 {
 /// its own fullscreen root and returns the pair `.{ screen, tooltip }` — the tooltip a
 /// floating overlay root (or null when nothing is hovered) for the render list's top
 /// layer. `actor` is the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food,
-/// *Materials, *Capital }`.
+/// *Materials, *Capital, *Population }`.
 fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, ?*widgets.Node } {
     var char_buf: [64]u8 = undefined;
     var overlay: ?*widgets.Node = null; // floating tooltip, built by the goods menu on hover
 
     const play = try ui_root(ui_ctx, "play");
 
-    const vigor, const satiety, const food, const materials, const cap = actor;
+    const vigor, const satiety, const food, const materials, const cap, const pop = actor;
     // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
     const vigor_cap = vigor.max * (satiety.v / satiety.max);
+
+    // Population: capacity is catalog-dependent (which capital goods are "shelter"), so
+    // it's recomputed here each frame; `systems.update_population` just integrates
+    // `count` toward it. Crossing 2 is Act I's win condition (roadmap M6) — the actual
+    // second agent is M8's job, so for now this just surfaces the moment in the log.
+    pop.capacity = compute_capacity(cap);
+    if (!pop.crossed and pop.count >= 2.0) {
+        pop.crossed = true;
+        ui_ctx.res.log.push(.good, "Population reached 2 - the shelter can support another. (Act II arrives in a future update.)");
+    }
 
     // Status panel — the actor's stocks, pinned top-left, each with the live rate read
     // off its component. Vigor is shown against its *hunger ceiling*, not its base max,
@@ -654,6 +681,7 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     _ = try widgets.label(ui_ctx, res_panel, "food_text", std.fmt.bufPrint(&char_buf, "Food: {d:.0}/{d:.0}  (spoils {d:.2}/s)", .{ food.v, food.max, food.spoil }) catch "?");
     var mat_buf: [16]u8 = undefined;
     _ = try widgets.label(ui_ctx, res_panel, "materials_text", std.fmt.bufPrint(&char_buf, "Materials: {s}", .{fmt_num(&mat_buf, materials.v)}) catch "?");
+    _ = try widgets.label(ui_ctx, res_panel, "population_text", std.fmt.bufPrint(&char_buf, "Population: {d:.1}/{d:.0}", .{ pop.count, pop.capacity }) catch "?");
 
     // Event log — newest-first feed of what just happened. Lives on `Resources.log`
     // (survives the per-frame arena); each line is recolored by its tone. Scrollable
@@ -776,11 +804,12 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
 /// then each click pours spare vigor into the good until it completes. Reads and mutates
 /// the actor's stocks inline on click. Returns the hover tooltip as a floating overlay
 /// root (or null when nothing is hovered) for the render list's top layer. `actor` is
-/// the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food, *Materials, *Capital }`.
+/// the `MaybeSingle` fetch tuple — `{ *Vigor, *Satiety, *Food, *Materials, *Capital,
+/// *Population }`.
 fn ui_capital_goods_menu(ui_ctx: *widgets.UiCtx, parent: *widgets.Node, actor: anytype) !?*widgets.Node {
     const res = ui_ctx.res;
     var char_buf: [64]u8 = undefined;
-    const vigor, const satiety, _, const materials, const cap = actor;
+    const vigor, const satiety, _, const materials, const cap, _ = actor;
 
     const cap_row = try widgets.Node.pcreate(ui_ctx.arena, "cap_row", parent);
     _ = cap_row.with_layout(ui.features.Layout.init(.relative, .horizontal).with_gap(8));
@@ -860,7 +889,7 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
     // co-spawn on one entity, so one query fetches them together.
-    const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, ecs.With(tag.Player) }){ .world = world };
+    const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, comp.Population, ecs.With(tag.Player) }){ .world = world };
     const actor = q_actor.get();
 
     // Resolve this frame's COLD↔WARM theme before building anything, so every widget's

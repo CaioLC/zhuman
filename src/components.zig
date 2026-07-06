@@ -65,3 +65,18 @@ pub const Capital = struct {
     durability: [32]f32 = [_]f32{0} ** 32,
     progress: [32]f32 = [_]f32{0} ** 32,
 };
+
+/// Population: the progression spine (roadmap M6) — a carrying-capacity model. `capacity`
+/// is a ceiling set by shelter (which capital goods count as "shelter" is catalog
+/// knowledge, so `main.zig` computes it each frame and writes it here — this component
+/// just holds the number). `count` (starts at 1, the player alone) grows toward `capacity`
+/// while there's a sustained food surplus and shrinks — faster than it grows — while
+/// starving (`systems.update_population`): a food collapse costs you people, mirroring
+/// `Vigor`'s hunger-capped ceiling. Reset on death (fresh entity) — "start over" wipes it.
+pub const Population = struct {
+    count: f32,
+    capacity: f32,
+    /// Set once `count` first reaches 2 — guards `main.zig`'s "Act I complete" log line
+    /// against re-firing every frame while it stays crossed (or oscillates near 2).
+    crossed: bool = false,
+};
