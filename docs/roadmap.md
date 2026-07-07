@@ -30,8 +30,11 @@ global utility function). Everything below serves those two pillars.
 
 ## Locked decisions (2026-07-02)
 
-1. **Passive rest.** No active rest/eat actions; vigor refills only via the passive trickle, food
-   via passive `metabolize`. Overwork can't kill you — only starvation. (Keeps CLAUDE.md's stance.)
+1. ~~**Passive rest.** No active rest/eat actions; vigor refills only via the passive trickle, food
+   via passive `metabolize`.~~ **Reversed 2026-07-07:** active rest/eat is back. `Satiety` and the
+   passive trickle are gone; `actions.action_eat` converts stored `Food` directly into `Vigor` on
+   demand, scaled by the food's quality. Overwork still can't kill you directly — only running out
+   of both vigor and food can.
 2. **Progression spine = population**, not an abstract tech score. Growth is a **carrying-capacity
    model: shelter sets capacity, sustained food surplus fills it, starvation empties it.** It
    self-regulates — a food collapse costs you people.

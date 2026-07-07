@@ -3,31 +3,12 @@ const comp = @import("./components.zig");
 const tag = @import("./tags.zig");
 const ecs = @import("./ecs.zig");
 const res_mod = @import("./res.zig");
-const world_mod = @import("./world.zig");
-
+const world = @import("./world.zig");
 const Resources = res_mod.Resources;
-const World = world_mod.World;
-const Entity = world_mod.Entity;
+const World = world.World;
+const Entity = world.Entity;
 const Query = ecs.Query;
 const With = ecs.With;
-
-/// How fast the body converts `Food` into `Satiety` (units/second) when hungry. Faster than
-/// `Satiety.drain`, so a stocked larder keeps you topped up; an empty one lets you starve.
-/// A ration policy (full / ½ / ¼) will scale this later — for now it's a flat full ration.
-const metabolism_rate: f32 = 2.0;
-
-/// `Food` fraction (of `max`) above which the larder counts as a sustained "surplus" —
-/// `Population.count` grows toward `capacity` only above this line (roadmap M6). Below it
-/// (but not starving), population just holds — only actual starvation costs people.
-const pop_surplus_frac: f32 = 0.5;
-/// `Satiety` fraction at/below which the actor is starving (mirrors `main.zig`'s status
-/// word threshold) — population shrinks while here.
-const pop_starve_frac: f32 = 0.12;
-/// Population gained per second while in surplus.
-const pop_growth_rate: f32 = 0.05;
-/// Population lost per second while starving — faster than growth, so a collapse costs
-/// more than a surplus earns (mirrors the design: "a food collapse costs you people").
-const pop_starve_rate: f32 = 0.1;
 
 /// Advance the run clock while the actor lives. Driven by the player's presence — with no
 /// player (dead) the clock freezes, so the game-over screen shows the day you died. One
@@ -40,48 +21,11 @@ pub fn advance_clock(
     if (it.next() != null) res.time.elapsed += res.time.dt;
 }
 
-/// Drain `Satiety` toward zero at `drain` units/second — the actor is always burning
-/// calories (acting burns extra, applied at action resolution in `main.zig`). As satiety
-/// falls it drags `Vigor`'s ceiling down with it (see `update_vigor`); empty = starvation.
-pub fn update_satiety(
-    res: *Resources,
-    q: Query(.{comp.Satiety}),
-) void {
-    const dt = res.time.dt;
-    var it = q.iter();
-    while (it.next()) |s| {
-        s.v -= dt * s.drain;
-        if (s.v < 0) s.v = 0;
-    }
-}
-
-/// Metabolize `Food` into `Satiety`: while there's food and room to fill, move it across at
-/// `metabolism_rate`. This is the passive "eating" — keeping food in the larder is what
-/// keeps satiety (and so the vigor ceiling) up. Spoilage + drain are what create the
-/// pressure to keep producing food.
-pub fn metabolize(
-    res: *Resources,
-    q: Query(.{ comp.Food, comp.Satiety }),
-) void {
-    const dt = res.time.dt;
-    var it = q.iter();
-    while (it.next()) |entry| {
-        const food, const sat = entry;
-        const room = sat.max - sat.v;
-        if (room <= 0 or food.v <= 0) continue;
-        var bite = metabolism_rate * dt;
-        if (bite > room) bite = room;
-        if (bite > food.v) bite = food.v;
-        food.v -= bite;
-        sat.v += bite;
-    }
-}
-
 /// Spoil `Food` toward zero at `spoil` units/second — the larder rots, so a surplus can't
 /// simply be banked forever (this is what storage capital will later mitigate).
 pub fn update_food(
     res: *Resources,
-    q: Query(.{comp.Food}),
+    q: Query(.{comp.StockFood}),
 ) void {
     const dt = res.time.dt;
     var it = q.iter();
@@ -117,7 +61,7 @@ pub fn update_vigor(
 /// build, this system just applies it).
 pub fn update_population(
     res: *Resources,
-    q: Query(.{ comp.Population, comp.Food, comp.Satiety }),
+    q: Query(.{ comp.Population, comp.StockFood, comp.Satiety }),
 ) void {
     const dt = res.time.dt;
     var it = q.iter();
@@ -160,7 +104,7 @@ pub fn despawn_dead(
     world: *World,
     q: Query(.{ Entity, tag.Dead }),
 ) void {
-    var dead: [world_mod.MAX_ENTITIES]Entity = undefined;
+    var dead: [world.MAX_ENTITIES]Entity = undefined;
     var n: usize = 0;
     var it = q.iter();
     while (it.next()) |entry| {

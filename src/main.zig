@@ -9,360 +9,19 @@ const widgets = ha.widgets;
 const sdl = ha.sdl;
 const sys = ha.systems;
 const ecs = ha.ecs;
+const actions = ha.actions;
 
+// CONFIGS
 const fps = 60;
-/// Monospace, per the redesign's terminal identity (M5) — Kenney's own mono variant of
-/// the font already used, so glyph metrics/weight stay consistent with the old choice.
+// TODO: we'll need to implement different font sizes
 const font_path = "assets/fonts/Kenney Mini Square Mono.ttf";
-
 /// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
 /// today (population, not day-count, is the progression spine).
+/// TODO: implement different game speeds
 const secs_per_day: f32 = 20;
-
-/// Where an action's produce lands — the perishable larder or the durable stockpile.
-const Yield = enum { food, materials };
-
-/// A choice open to the actor. The action is *priced* in `energy_cost` — the work it takes —
-/// which the actor pays from `Vigor` (its muscle). Paying also burns `Satiety` (work makes
-/// you hungry). For that price it draws a yield from `dist` into the `target` stock (food to
-/// eat, or materials to build with) — the distribution's *spread is the risk*, so there's no
-/// separate success roll. The draw is *scaled by current vigor* (`v / max`): a tired actor
-/// produces below standard, so the labor/leisure margin is implicit — work while drained for
-/// poor output, or pause and let vigor refill. The player ranks these and acts on the one it
-/// most prefers; later the sim's AI ranks the same catalog. Praxeology: cost, options, uncertainty.
-const Action = struct {
-    label: []const u8,
-    energy_cost: f32, // the work the action takes; paid from Vigor
-    target: Yield, // which stock the yield lands in
-    dist: ha.dist.Dist, // yield drawn from this distribution (its spread is the risk)
-    /// Which shelf the catalog browser (M4) files this under — category naming borrows
-    /// the design prototype's labor groups, at our curated (not procedural) scale.
-    category: []const u8,
-};
-
-const actions = [_]Action{
-    // Forage: cheap, steady food — a tight normal around 4. The hand-to-mouth staple.
-    .{ .label = "Forage", .energy_cost = 2, .target = .food, .dist = .{ .kind = .normal, .s = 4, .sd = 1.6 }, .category = "FORAGE" },
-    // Fish: dearer, a bigger but lumpier catch — poisson(6), some trips near-empty.
-    .{ .label = "Fish", .energy_cost = 4, .target = .food, .dist = .{ .kind = .poisson, .s = 6 }, .category = "FISH & HUNT" },
-    // Chop wood: turns effort into materials — normal(6.5). The investment feedstock.
-    .{ .label = "Chop wood", .energy_cost = 5, .target = .materials, .dist = .{ .kind = .normal, .s = 6.5, .sd = 1.7 }, .category = "WOODCUTTING" },
-};
-
-/// Satiety burned per unit of energy the actor pays from vigor — work makes you hungry.
-const effort_k: f32 = 0.4;
-
-/// Vigor a build click won't dip below — so investing in capital never zeroes vigor (which
-/// is death). Building stops when you hit this floor; the rest waits for vigor to refill.
-const build_vigor_floor: f32 = 0.5;
-
-const CapitalKind = enum { tool, comfort };
-
-/// A capital good: build it now by paying an `energy_cost` (work, from vigor) and consuming
-/// `material_cost` from the stockpile — the *now-vs-later* margin, with teeth (your score
-/// dips to build). A `.tool` improves one action (`target` indexes into `actions`) via any
-/// mix of three effects: `yield_mult` boosts its output (a rod), `cost_mult` < 1
-/// lowers its energy price (an axe — saves human effort), and `power_capacity` > 0 makes it
-/// an *external-energy* tool (a saw) that pays the action's price from its own durability
-/// instead of vigor, wearing down by the energy it supplies and breaking at 0. A `.comfort`
-/// good raises vigor recovery (`trickle_add`). One-time unlocks, tracked by a bit in
-/// `comp.Capital.owned`; durability (power tools) lives in `comp.Capital.durability`.
-const Good = struct {
-    label: []const u8,
-    energy_cost: f32, // work to build it; paid from Vigor
-    material_cost: f32, // goods consumed from the stockpile to build it
-    kind: CapitalKind,
-    target: usize = 0, // tool only: which action it improves
-    yield_mult: f32 = 1.0, // tool only: scales the action's yield
-    cost_mult: f32 = 1.0, // tool only: scales the action's energy price (effort-saver, < 1)
-    power_capacity: f32 = 0.0, // tool only: > 0 ⇒ external-energy tool, this much durability (energy units)
-    trickle_add: f32 = 0.0, // comfort only
-    capacity_add: f32 = 0.0, // comfort only: shelter — raises Population's carrying capacity (M6)
-    icon_col: f32 = 0, // which cell of the icons.png sheet (grid col, row)
-    icon_row: f32 = 0,
-    /// Which shelf the catalog browser (M4) files this under — see `Action.category`.
-    category: []const u8,
-};
-
-/// On-screen size of a capital icon button.
-const icon_px = 56.0;
 /// Gap between a hovered icon and the tooltip floating above it.
 const tip_gap = 6.0;
-
-const capital = [_]Good{
-    // Sandals: walking is easier, makes foraging (actions[0]) more effective. (sheet: top-right)
-    .{ .label = "Sandals", .energy_cost = 6, .material_cost = 8, .kind = .tool, .target = 0, .yield_mult = 1.1, .icon_col = 1, .icon_row = 0, .category = "TOOLS & CRAFT" },
-    // Fishing rod: makes Fish (actions[1]) yield more. (sheet: top-left)
-    .{ .label = "Fishing rod", .energy_cost = 8, .material_cost = 20, .kind = .tool, .target = 1, .yield_mult = 1.6, .icon_col = 0, .icon_row = 0, .category = "TOOLS & CRAFT" },
-    // Bed: rest better — vigor trickles back faster; also shelter (half the capacity to
-    // support a second person). (sheet: bottom-left)
-    .{ .label = "Bed", .energy_cost = 6, .material_cost = 16, .kind = .comfort, .trickle_add = 0.4, .capacity_add = 0.5, .icon_col = 0, .icon_row = 1, .category = "SHELTER & COMFORT" },
-    // Fireplace: warmth speeds recovery a lot; also shelter — owning both Bed and
-    // Fireplace is what it takes to reach Population capacity 2. (sheet: bottom-right)
-    .{ .label = "Fireplace", .energy_cost = 10, .material_cost = 40, .kind = .comfort, .trickle_add = 0.8, .capacity_add = 0.5, .icon_col = 1, .icon_row = 1, .category = "SHELTER & COMFORT" },
-    // Axe: effort-saver — makes Chop wood (actions[2]) cheaper to swing. PLACEHOLDER icon
-    // (borrows the sandals cell) until axe art exists.
-    .{ .label = "Axe", .energy_cost = 8, .material_cost = 18, .kind = .tool, .target = 2, .cost_mult = 0.6, .icon_col = 1, .icon_row = 0, .category = "TOOLS & CRAFT" },
-    // Saw: external-energy tool — pays Chop wood's (actions[2]) price from its own durability
-    // instead of vigor, sparing muscle until it wears out. PLACEHOLDER icon (borrows the
-    // fireplace cell) until saw art exists.
-    .{ .label = "Saw", .energy_cost = 14, .material_cost = 45, .kind = .tool, .target = 2, .power_capacity = 80, .icon_col = 1, .icon_row = 1, .category = "ENERGY" },
-};
-
-/// "Fireplace"'s index in `capital` above — `compute_warmth`'s flat warmth bonus (owning
-/// a heat source warms the HUD a little beyond what vigor/satiety/build-count already say).
-const fireplace_idx: usize = 3;
-
-/// Spawn a fresh actor — rested but hungry, with a thin larder and nothing built. Used at
-/// startup and on "start over": death wipes the entity, this reseeds the run from the
-/// bottom, so everything accumulated is lost. Satiety starts part-full so the hunger clock
-/// is already ticking; food is scarce, so the first job is to keep eating.
-fn spawn_player(world: *ha.world.World) void {
-    _ = world.spawn(.{
-        comp.Vigor{ .v = 10, .max = 10, .trickle = 0.5 }, // rested; passive regen up to the hunger cap
-        comp.Satiety{ .v = 6, .max = 10, .drain = 0.25 }, // peckish; hunger clock already running
-        comp.Food{ .v = 4, .max = 30, .spoil = 0.05 }, // a thin, perishable larder
-        comp.Materials{ .v = 0 }, // nothing stockpiled yet
-        comp.Capital{}, // owns nothing yet
-        comp.Population{ .count = 1, .capacity = 1 }, // just you; capacity recomputed next frame
-        tag.Player,
-    });
-}
-
-/// Bit mask for capital good `i` (its index in the `capital` catalog).
-fn bit(i: usize) u32 {
-    return @as(u32, 1) << @as(u5, @intCast(i));
-}
-
-/// Whether the actor owns capital good `i`.
-fn owns(cap: *const comp.Capital, i: usize) bool {
-    return (cap.owned & bit(i)) != 0;
-}
-
-/// Format good `gi`'s hover detail into `buf`. Owned: "owned" (or remaining durability for a
-/// power tool); unowned: its build cost (energy work + materials) and salient effect — powered
-/// (pays an action from durability), effort-saver (×cost on an action), output boost (yield/
-/// odds), or comfort (vigor trickle). Falls back to the bare label if the buffer is too small.
-fn capital_tip(buf: []u8, g: Good, gi: usize, cap: *const comp.Capital) []const u8 {
-    if (owns(cap, gi)) {
-        if (g.power_capacity > 0)
-            return std.fmt.bufPrint(buf, "{s}: {d:.0}/{d:.0} durability", .{ g.label, cap.durability[gi], g.power_capacity }) catch g.label;
-        return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
-    }
-    if (cap.progress[gi] > 0) // a build underway — show how far along
-        return std.fmt.bufPrint(buf, "{s}: building {d:.0}/{d:.0} e", .{ g.label, cap.progress[gi], g.energy_cost }) catch g.label;
-    if (g.kind == .comfort)
-        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label;
-    if (g.power_capacity > 0)
-        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | powers {s}, {d:.0} dur", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.power_capacity }) catch g.label;
-    if (g.cost_mult < 1.0)
-        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | {s} x{d:.2} cost", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.cost_mult }) catch g.label;
-    return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult }) catch g.label;
-}
-
-/// How an action's energy price is paid this frame. `eff_cost` is the base price after any
-/// owned effort-saver tools (`cost_mult`); the price is then split so vigor always covers at
-/// least 5% (`from_vigor`) and an owned external-energy tool's durability covers the rest
-/// (`from_power`, drawn from good `power_idx`). With no power tool, vigor pays it all.
-const Payment = struct {
-    eff_cost: f32,
-    from_vigor: f32,
-    from_power: f32,
-    power_idx: ?usize,
-};
-
-/// Plan how to pay `base_cost` for `action_idx`, given what the actor owns. Folds effort-savers
-/// into the price, then routes the bulk through the first owned power tool that still has
-/// durability, leaving vigor the 5% floor (plus whatever the tool can't cover).
-fn plan_payment(cap: *const comp.Capital, action_idx: usize, base_cost: f32) Payment {
-    var eff = base_cost;
-    var power_idx: ?usize = null;
-    var avail: f32 = 0;
-    for (capital, 0..) |g, gi| {
-        if (g.kind != .tool or g.target != action_idx or !owns(cap, gi)) continue;
-        eff *= g.cost_mult; // effort-savers stack multiplicatively
-        if (g.power_capacity > 0 and cap.durability[gi] > 0 and power_idx == null) {
-            power_idx = gi;
-            avail = cap.durability[gi];
-        }
-    }
-    const vigor_min = 0.05 * eff;
-    var from_power: f32 = 0;
-    if (power_idx != null) {
-        from_power = eff - vigor_min;
-        if (from_power > avail) from_power = avail; // tool can't cover more than it has
-        if (from_power < 0) from_power = 0;
-    }
-    return .{ .eff_cost = eff, .from_vigor = eff - from_power, .from_power = from_power, .power_idx = power_idx };
-}
-
-/// Action `i`'s current effective quality multiplier: tool yield bonuses (owned tools
-/// targeting it) times how tired the actor is (`vigor/max`) — scales both the label's
-/// shown yield band and the actual draw. Shared by the UI, `resolve_action`, and
-/// `ai_decide`'s ranking, so all three agree on what an action is "worth" right now.
-fn action_quality(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) f32 {
-    var eff_mult: f32 = 1.0;
-    for (capital, 0..) |g, gi| {
-        if (g.kind == .tool and g.target == i and owns(cap, gi)) eff_mult *= g.yield_mult;
-    }
-    return eff_mult * (vigor.v / vigor.max);
-}
-
-/// Whether the actor can currently afford action `i` — vigor must strictly cover its
-/// (tool-adjusted) share of the price; an action never spends the last unit of vigor
-/// (vigor 0 is death — you starve, you don't work yourself to death). Shared by the UI
-/// (dims an unaffordable button) and any decider (which options are even viable).
-fn affordable(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) bool {
-    const pay = plan_payment(cap, i, actions[i].energy_cost);
-    return vigor.v > pay.from_vigor;
-}
-
-/// Apply decision `i` (an index into `actions`) to the actor: spend vigor/satiety (and
-/// any power-tool durability), draw the yield, deposit it, and log the result. The
-/// shared "act" step of the `decide → act` split (roadmap M7) — a decider only ever
-/// *chooses* `i`; both the player (via a click, in `ui_playgame`) and `ai_decide` (below)
-/// funnel through this to actually act on it. Silently no-ops if `i` isn't affordable —
-/// defends against a decider that "cheats" the vigor-0-is-death gate.
-fn resolve_action(
-    res: *Resources,
-    i: usize,
-    vigor: *comp.Vigor,
-    satiety: *comp.Satiety,
-    food: *comp.Food,
-    materials: *comp.Materials,
-    cap: *comp.Capital,
-) void {
-    if (!affordable(vigor, cap, i)) return;
-    const act = actions[i];
-    const k = action_quality(vigor, cap, i);
-    const pay = plan_payment(cap, i, act.energy_cost);
-
-    vigor.v -= pay.from_vigor; // muscle pays its share
-    satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
-    if (satiety.v < 0) satiety.v = 0;
-    if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
-        cap.durability[pi] -= pay.from_power;
-        if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
-            cap.durability[pi] = 0;
-            cap.owned &= ~bit(pi);
-        }
-    }
-    // Draw the yield from the action's distribution, scaled by k, rounded to a whole.
-    const produced = @round(ha.dist.sample(act.dist, res.random()) * k);
-    if (produced > 0) {
-        switch (act.target) {
-            .food => {
-                food.v += produced;
-                if (food.v > food.max) food.v = food.max; // larder is capped
-            },
-            .materials => materials.v += produced,
-        }
-    }
-    var lbuf: [96]u8 = undefined;
-    const uname = if (act.target == .food) "food" else "materials";
-    const lmsg = if (produced > 0)
-        std.fmt.bufPrint(&lbuf, "{s}. +{d:.0} {s}", .{ act.label, produced, uname }) catch act.label
-    else
-        std.fmt.bufPrint(&lbuf, "{s} — came back empty", .{act.label}) catch act.label;
-    res.log.push(if (produced > 0) .good else .warn, lmsg);
-}
-
-/// A simple rational decider: among affordable actions, pick the one with the best
-/// expected yield per unit of vigor spent (`dist.stats(...).mean`, scaled by
-/// `action_quality`, over the vigor price). Not the roadmap's eventual "autonomous
-/// decider policy" (parked for Act II design — demands, comparative advantage, learning —
-/// none of that exists yet) — a first, honest ranking that proves a non-UI decider can
-/// drive the same `resolve_action` a human does, over the same catalog. `null` if
-/// nothing is affordable. Exposed live via the "Let AI decide" button in `ui_playgame`.
-fn ai_decide(vigor: *const comp.Vigor, cap: *const comp.Capital) ?usize {
-    var best: ?usize = null;
-    var best_score: f32 = 0;
-    for (actions, 0..) |act, i| {
-        if (!affordable(vigor, cap, i)) continue;
-        const pay = plan_payment(cap, i, act.energy_cost);
-        if (pay.from_vigor <= 0) continue;
-        const score = ha.dist.stats(act.dist).mean * action_quality(vigor, cap, i) / pay.from_vigor;
-        if (best == null or score > best_score) {
-            best = i;
-            best_score = score;
-        }
-    }
-    return best;
-}
-
-/// How "warm" the actor's situation reads (0 cold/precarious → 1 warm/thriving) — the
-/// HUD's mood, not a game mechanic. Mirrors the design's model: rested (28%) + fed (40%)
-/// + capital built (32%, capped at 8 goods — comparable to the design's "built/8") + a
-/// flat bonus for owning a heat source (`fireplace_idx`). Drives `theme.lerp` in
-/// `build_ui`, computed fresh each frame from the live actor (never stored).
-fn compute_warmth(vigor: *const comp.Vigor, satiety: *const comp.Satiety, cap: *const comp.Capital) f32 {
-    const built: f32 = @floatFromInt(@popCount(cap.owned));
-    var w = 0.28 * (vigor.v / vigor.max) + 0.40 * (satiety.v / satiety.max) + 0.32 * @min(1.0, built / 8.0);
-    if (owns(cap, fireplace_idx)) w += 0.06;
-    return std.math.clamp(w, 0, 1);
-}
-
-/// Whether the actor can currently invest in building capital good `gi` — there must be
-/// vigor to spare above the build floor, and (to *start*) enough materials in hand.
-/// Shared by both presentations of the capital catalog (the icon tray, the M4 browser).
-fn afford_build(gi: usize, vigor: *const comp.Vigor, materials: *const comp.Materials, cap: *const comp.Capital) bool {
-    const g = capital[gi];
-    const started = cap.progress[gi] > 0;
-    const can_invest = vigor.v > build_vigor_floor;
-    return can_invest and (started or materials.v >= g.material_cost);
-}
-
-/// Apply one investment click toward capital good `gi`: commit materials on the first
-/// click, then pour spare vigor into `progress` until it reaches the good's energy cost
-/// and it completes. The shared "act" step for building (mirrors `resolve_action`'s role
-/// for the labor catalog) — both the always-visible icon tray and the M4 catalog browser
-/// funnel through this rather than duplicating the incremental-build logic. Silently
-/// no-ops if `gi` isn't affordable, same defensive stance as `resolve_action`.
-fn build_capital(
-    res: *Resources,
-    gi: usize,
-    vigor: *comp.Vigor,
-    satiety: *comp.Satiety,
-    materials: *comp.Materials,
-    cap: *comp.Capital,
-) void {
-    if (!afford_build(gi, vigor, materials, cap)) return;
-    const g = capital[gi];
-    const started = cap.progress[gi] > 0;
-
-    var lbuf: [96]u8 = undefined;
-    if (!started) { // commit materials to begin
-        materials.v -= g.material_cost;
-        res.log.push(.normal, std.fmt.bufPrint(&lbuf, "Committed {d:.0} mat to {s}.", .{ g.material_cost, g.label }) catch g.label);
-    }
-    const need = g.energy_cost - cap.progress[gi];
-    const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
-    vigor.v -= chunk; // muscle invested as labour
-    satiety.v -= chunk * effort_k; // building is hungry work too
-    if (satiety.v < 0) satiety.v = 0;
-    cap.progress[gi] += chunk;
-    if (cap.progress[gi] >= g.energy_cost) { // the build completes
-        cap.progress[gi] = 0;
-        cap.owned |= bit(gi);
-        if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
-        // Comfort effects bake into the components (so the readouts track them);
-        // tool effects are folded in at action resolution (see `ui_playgame`).
-        if (g.kind == .comfort) vigor.trickle += g.trickle_add;
-        res.log.push(.good, std.fmt.bufPrint(&lbuf, "Built {s}!", .{g.label}) catch g.label);
-    }
-}
-
-/// `Population`'s carrying-capacity ceiling (roadmap M6): 1 (yourself) plus each owned
-/// comfort good's `capacity_add` — which capital goods count as "shelter" is catalog
-/// knowledge, so this lives here (not `systems.update_population`, which just integrates
-/// `count` toward whatever capacity it finds already set — same split as `Vigor.trickle`).
-fn compute_capacity(cap: *const comp.Capital) f32 {
-    var c: f32 = 1.0;
-    for (capital, 0..) |g, gi| {
-        if (g.kind == .comfort and owns(cap, gi)) c += g.capacity_add;
-    }
-    return c;
-}
+// END CONFIGS
 
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
@@ -410,7 +69,7 @@ const App = struct {
         self.font = try sdl.ttf.Font.init(font_path, 24);
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
-        spawn_player(&self.world);
+        _ = spawn_player(&self.world);
         self.resources.log.push(.dim, "You wake alone. Cold. Hungry.");
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
@@ -501,8 +160,7 @@ pub fn main() !void {
         app.resources.time.dt = app.frame_capper.delay();
         // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
-        ecs.run(&app.world, &app.resources, sys.update_satiety); // hunger drains
-        ecs.run(&app.world, &app.resources, sys.metabolize); // food → satiety (passive eating)
+        ecs.run(&app.world, &app.resources, sys.eat_food); // food → satiety (passive eating)
         ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
         ecs.run(&app.world, &app.resources, sys.update_vigor); // vigor trickles up to the hunger cap
         ecs.run(&app.world, &app.resources, sys.update_population); // population grows on surplus, shrinks on starvation
@@ -1321,7 +979,7 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
     // co-spawn on one entity, so one query fetches them together.
-    const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.Food, comp.Materials, comp.Capital, comp.Population, ecs.With(tag.Player) }){ .world = world };
+    const q_actor = ecs.MaybeSingle(.{ comp.Vigor, comp.Satiety, comp.StockFood, comp.StockMaterials, comp.Capital, comp.Population, ecs.With(tag.Player) }){ .world = world };
     const actor = q_actor.get();
 
     // Resolve this frame's COLD↔WARM theme before building anything, so every widget's
@@ -1350,4 +1008,216 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
     }
 
     return .{ .trees = trees.items };
+}
+
+fn spawn_agent(world: *ha.world.World) u32 {
+    return world.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 }, // rested; passive regen up to the hunger cap
+        comp.StockFood{ .v = 4, .spoil = 0.05 }, // a thin, perishable larder
+        comp.StockMaterials{ .v = 0 }, // nothing stockpiled yet
+        tag.Player,
+    } ++ actions.actions_bundle);
+}
+
+fn spawn_player(world: *ha.world.World) ha.world.Entity {
+    const e = spawn_agent(world);
+    world.add(e, tag.Player);
+    return e;
+}
+
+/// TODO: Spawn capital and associates with the appropriate owner (player and, later, many agents)
+fn spawn_capital(world: *ha.world.World, owner: entity_id) void {}
+
+/// Format good `gi`'s hover detail into `buf`. Owned: "owned" (or remaining durability for a
+/// power tool); unowned: its build cost (energy work + materials) and salient effect — powered
+/// (pays an action from durability), effort-saver (×cost on an action), output boost (yield/
+/// odds), or comfort (vigor trickle). Falls back to the bare label if the buffer is too small.
+fn capital_tip(buf: []u8, g: Good, gi: usize, cap: *const comp.Capital) []const u8 {
+    if (owns(cap, gi)) {
+        if (g.power_capacity > 0)
+            return std.fmt.bufPrint(buf, "{s}: {d:.0}/{d:.0} durability", .{ g.label, cap.durability[gi], g.power_capacity }) catch g.label;
+        return std.fmt.bufPrint(buf, "{s}: owned", .{g.label}) catch g.label;
+    }
+    if (cap.progress[gi] > 0) // a build underway — show how far along
+        return std.fmt.bufPrint(buf, "{s}: building {d:.0}/{d:.0} e", .{ g.label, cap.progress[gi], g.energy_cost }) catch g.label;
+    if (g.kind == .comfort)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | +{d:.1}/s vig", .{ g.label, g.energy_cost, g.material_cost, g.trickle_add }) catch g.label;
+    if (g.power_capacity > 0)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | powers {s}, {d:.0} dur", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.power_capacity }) catch g.label;
+    if (g.cost_mult < 1.0)
+        return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | {s} x{d:.2} cost", .{ g.label, g.energy_cost, g.material_cost, actions[g.target].label, g.cost_mult }) catch g.label;
+    return std.fmt.bufPrint(buf, "{s}: {d:.0} e, {d:.0} mat | x{d:.1} yield", .{ g.label, g.energy_cost, g.material_cost, g.yield_mult }) catch g.label;
+}
+
+/// How an action's energy price is paid this frame. `eff_cost` is the base price after any
+/// owned effort-saver tools (`cost_mult`); the price is then split so vigor always covers at
+/// least 5% (`from_vigor`) and an owned external-energy tool's durability covers the rest
+/// (`from_power`, drawn from good `power_idx`). With no power tool, vigor pays it all.
+const Payment = struct {
+    eff_cost: f32,
+    from_vigor: f32,
+    from_power: f32,
+    power_idx: ?usize,
+};
+
+/// Plan how to pay `base_cost` for `action_idx`, given what the actor owns. Folds effort-savers
+/// into the price, then routes the bulk through the first owned power tool that still has
+/// durability, leaving vigor the 5% floor (plus whatever the tool can't cover).
+fn plan_payment(cap: *const comp.Capital, action_idx: usize, base_cost: f32) Payment {
+    var eff = base_cost;
+    var power_idx: ?usize = null;
+    var avail: f32 = 0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind != .tool or g.target != action_idx or !owns(cap, gi)) continue;
+        eff *= g.cost_mult; // effort-savers stack multiplicatively
+        if (g.power_capacity > 0 and cap.durability[gi] > 0 and power_idx == null) {
+            power_idx = gi;
+            avail = cap.durability[gi];
+        }
+    }
+    const vigor_min = 0.05 * eff;
+    var from_power: f32 = 0;
+    if (power_idx != null) {
+        from_power = eff - vigor_min;
+        if (from_power > avail) from_power = avail; // tool can't cover more than it has
+        if (from_power < 0) from_power = 0;
+    }
+    return .{ .eff_cost = eff, .from_vigor = eff - from_power, .from_power = from_power, .power_idx = power_idx };
+}
+
+/// Action `i`'s current effective quality multiplier: tool yield bonuses (owned tools
+/// targeting it) times how tired the actor is (`vigor/max`) — scales both the label's
+/// shown yield band and the actual draw. Shared by the UI, `resolve_action`, and
+/// `ai_decide`'s ranking, so all three agree on what an action is "worth" right now.
+fn action_quality(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) f32 {
+    var eff_mult: f32 = 1.0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind == .tool and g.target == i and owns(cap, gi)) eff_mult *= g.yield_mult;
+    }
+    return eff_mult * (vigor.v / vigor.max);
+}
+
+/// Whether the actor can currently afford action `i` — vigor must strictly cover its
+/// (tool-adjusted) share of the price; an action never spends the last unit of vigor
+/// (vigor 0 is death — you starve, you don't work yourself to death). Shared by the UI
+/// (dims an unaffordable button) and any decider (which options are even viable).
+fn affordable(vigor: *const comp.Vigor, cap: *const comp.Capital, i: usize) bool {
+    const pay = plan_payment(cap, i, actions[i].energy_cost);
+    return vigor.v > pay.from_vigor;
+}
+
+/// Apply decision `i` (an index into `actions`) to the actor: spend vigor/satiety (and
+/// any power-tool durability), draw the yield, deposit it, and log the result. The
+/// shared "act" step of the `decide → act` split (roadmap M7) — a decider only ever
+/// *chooses* `i`; both the player (via a click, in `ui_playgame`) and `ai_decide` (below)
+/// funnel through this to actually act on it. Silently no-ops if `i` isn't affordable —
+/// defends against a decider that "cheats" the vigor-0-is-death gate.
+fn resolve_action(
+    res: *Resources,
+    i: usize,
+    vigor: *comp.Vigor,
+    satiety: *comp.Satiety,
+    food: *comp.StockFood,
+    materials: *comp.StockMaterials,
+    cap: *comp.Capital,
+) void {
+    if (!affordable(vigor, cap, i)) return;
+    const act = actions[i];
+    const k = action_quality(vigor, cap, i);
+    const pay = plan_payment(cap, i, act.energy_cost);
+
+    vigor.v -= pay.from_vigor; // muscle pays its share
+    satiety.v -= pay.from_vigor * effort_k; // only muscle work makes you hungry
+    if (satiety.v < 0) satiety.v = 0;
+    if (pay.power_idx) |pi| { // the tool wears by the energy it supplied
+        cap.durability[pi] -= pay.from_power;
+        if (cap.durability[pi] <= 0) { // worn out — it breaks, rebuild required
+            cap.durability[pi] = 0;
+            cap.owned &= ~bit(pi);
+        }
+    }
+    // Draw the yield from the action's distribution, scaled by k, rounded to a whole.
+    const produced = @round(ha.dist.sample(act.dist, res.random()) * k);
+    if (produced > 0) {
+        switch (act.target) {
+            .food => {
+                food.v += produced;
+                if (food.v > food.max) food.v = food.max; // larder is capped
+            },
+            .materials => materials.v += produced,
+        }
+    }
+    var lbuf: [96]u8 = undefined;
+    const uname = if (act.target == .food) "food" else "materials";
+    const lmsg = if (produced > 0)
+        std.fmt.bufPrint(&lbuf, "{s}. +{d:.0} {s}", .{ act.label, produced, uname }) catch act.label
+    else
+        std.fmt.bufPrint(&lbuf, "{s} — came back empty", .{act.label}) catch act.label;
+    res.log.push(if (produced > 0) .good else .warn, lmsg);
+}
+
+fn compute_warmth() f32 {
+    return 0.0;
+}
+
+/// Whether the actor can currently invest in building capital good `gi` — there must be
+/// vigor to spare above the build floor, and (to *start*) enough materials in hand.
+/// Shared by both presentations of the capital catalog (the icon tray, the M4 browser).
+fn afford_build(gi: usize, vigor: *const comp.Vigor, materials: *const comp.StockMaterials, cap: *const comp.Capital) bool {
+    const g = capital[gi];
+    const started = cap.progress[gi] > 0;
+    const can_invest = vigor.v > build_vigor_floor;
+    return can_invest and (started or materials.v >= g.material_cost);
+}
+
+/// Apply one investment click toward capital good `gi`: commit materials on the first
+/// click, then pour spare vigor into `progress` until it reaches the good's energy cost
+/// and it completes. The shared "act" step for building (mirrors `resolve_action`'s role
+/// for the labor catalog) — both the always-visible icon tray and the M4 catalog browser
+/// funnel through this rather than duplicating the incremental-build logic. Silently
+/// no-ops if `gi` isn't affordable, same defensive stance as `resolve_action`.
+fn build_capital(
+    res: *Resources,
+    gi: usize,
+    vigor: *comp.Vigor,
+    satiety: *comp.Satiety,
+    materials: *comp.StockMaterials,
+    cap: *comp.Capital,
+) void {
+    if (!afford_build(gi, vigor, materials, cap)) return;
+    const g = capital[gi];
+    const started = cap.progress[gi] > 0;
+
+    var lbuf: [96]u8 = undefined;
+    if (!started) { // commit materials to begin
+        materials.v -= g.material_cost;
+        res.log.push(.normal, std.fmt.bufPrint(&lbuf, "Committed {d:.0} mat to {s}.", .{ g.material_cost, g.label }) catch g.label);
+    }
+    const need = g.energy_cost - cap.progress[gi];
+    const chunk = @min(need, vigor.v - build_vigor_floor); // spare vigor this session
+    vigor.v -= chunk; // muscle invested as labour
+    satiety.v -= chunk * effort_k; // building is hungry work too
+    if (satiety.v < 0) satiety.v = 0;
+    cap.progress[gi] += chunk;
+    if (cap.progress[gi] >= g.energy_cost) { // the build completes
+        cap.progress[gi] = 0;
+        cap.owned |= bit(gi);
+        if (g.power_capacity > 0) cap.durability[gi] = g.power_capacity; // fuel up a fresh power tool
+        // Comfort effects bake into the components (so the readouts track them);
+        // tool effects are folded in at action resolution (see `ui_playgame`).
+        if (g.kind == .comfort) vigor.trickle += g.trickle_add;
+        res.log.push(.good, std.fmt.bufPrint(&lbuf, "Built {s}!", .{g.label}) catch g.label);
+    }
+}
+
+/// `Population`'s carrying-capacity ceiling (roadmap M6): 1 (yourself) plus each owned
+/// comfort good's `capacity_add` — which capital goods count as "shelter" is catalog
+/// knowledge, so this lives here (not `systems.update_population`, which just integrates
+/// `count` toward whatever capacity it finds already set — same split as `Vigor.trickle`).
+fn compute_capacity(cap: *const comp.Capital) f32 {
+    var c: f32 = 1.0;
+    for (capital, 0..) |g, gi| {
+        if (g.kind == .comfort and owns(cap, gi)) c += g.capacity_add;
+    }
+    return c;
 }

@@ -17,6 +17,8 @@ pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
 pub const systems = @import("./systems.zig");
+pub const actions = @import("./actions.zig");
+pub const capital = @import("./capital.zig");
 
 test {
     _ = ui;
@@ -28,10 +30,10 @@ test {
     _ = dist;
     _ = theme;
     _ = res;
+    _ = actions;
+    _ = capital;
 
     _ = world;
     _ = ecs;
     _ = systems;
 }
-
-

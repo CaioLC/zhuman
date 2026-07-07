@@ -7,7 +7,7 @@
 
 const std = @import("std");
 
-pub const Kind = enum { normal, poisson, uniform, exponential };
+pub const Kind = enum { normal, poisson, uniform, exponential, fixed };
 
 /// A yield distribution. `s` is the scale — the mean for `normal`/`poisson`, and the knob
 /// that sets the range for `uniform`/`exponential`. `sd` is the standard deviation for
@@ -54,6 +54,9 @@ pub fn stats(d: Dist) Stats {
             // exponential quantile is -m·ln(1-p): p10 at p=0.1, p90 at p=0.9.
             break :blk .{ .p10 = -m * @log(0.9), .p90 = -m * @log(0.1), .mean = m };
         },
+        .fixed => blk: {
+            break :blk .{ .p10 = s, .p90 = s, .mean = s };
+        },
     };
 }
 
@@ -72,6 +75,7 @@ pub fn sample(d: Dist, rng: std.Random) f32 {
             const m = @max(0.5, s);
             break :blk -m * @log(1 - rng.float(f32));
         },
+        .fixed => s,
     };
 }
 
