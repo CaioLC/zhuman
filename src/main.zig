@@ -5,7 +5,7 @@ const comp = ha.comp;
 const tag = ha.tag;
 const ui = ha.ui;
 const Resources = ha.res.Resources;
-const widgets = ha.widgets;
+const widgets = ha.ui_client;
 const sdl = ha.sdl;
 const sys = ha.systems;
 const ecs = ha.ecs;
@@ -185,11 +185,11 @@ pub fn main() !void {
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
-        for (frame.trees) |t| draw_tree(&app.ui, t);
+        for (frame.trees) |t| widgets.draw_tree(&app.ui, t);
         // scanlines — a CRT-style overlay on top of everything (terminal identity, M5)
         {
             const ww, const wh = try app.resources.window.getSize();
-            draw_scanlines(&app.resources, ww, wh);
+            widgets.draw_scanlines(&app.resources, ww, wh);
         }
         // present
         try app.renderer.present();
@@ -211,122 +211,6 @@ fn log_tone_color(t: ha.theme.Theme, tone: ha.log.Tone) ui.Color {
     };
 }
 
-/// One entry in `draw_tree`'s clip stack: the node that pushed the clip (so we know when
-/// we've walked back out of its subtree) and the *already-intersected* rect active while
-/// inside it (nesting narrows, never widens).
-const ClipFrame = struct { node: *widgets.Node, rect: ui.Rect };
-
-/// Push/pop `renderer`'s scissor rect to `r` (or disable clipping for `null`). SDL wants
-/// integer pixels; the layout solve works in `f32`, so this is the one truncation point.
-fn apply_clip(u: *widgets.UiCtx, r: ?ui.Rect) void {
-    const clip = if (r) |rect| sdl.rect.IRect{
-        .x = @intFromFloat(rect.x),
-        .y = @intFromFloat(rect.y),
-        .w = @intFromFloat(rect.w),
-        .h = @intFromFloat(rect.h),
-    } else null;
-    u.res.renderer.setClipRect(clip) catch {};
-}
-
-/// Walk a UI tree and paint each node by its render aspects. Order matters: fill
-/// (backmost) → image → text → outline (topmost), so a hover/affordance ring shows
-/// over opaque icon tiles. Called once per root tree, in the render list's order.
-///
-/// `RenderData.clip` marks a node whose subtree should be cropped to its own box (a
-/// scroll viewport) — the walk is pre-order, so a stack of currently-open clip nodes is
-/// popped whenever the next node isn't inside the one on top (found by climbing
-/// `.parent`, since there's no "leaving a subtree" signal from `iterate()`).
-fn draw_tree(u: *widgets.UiCtx, root: *widgets.Node) void {
-    var clip_stack: [16]ClipFrame = undefined;
-    var depth: usize = 0;
-
-    var it = root.iterate();
-    while (it.next()) |node| {
-        while (depth > 0 and !is_descendant(node, clip_stack[depth - 1].node)) {
-            depth -= 1;
-            apply_clip(u, if (depth > 0) clip_stack[depth - 1].rect else null);
-        }
-
-        if (node.render_data.fill) |c| widgets.draw_fill(u, node, c);
-        if (node.render_data.img) |s| widgets.draw_texture(u, node, s);
-        if (node.render_data.text) |c| widgets.draw_text(u, node, c);
-        if (node.render_data.outline) |c| widgets.draw_outline(u, node, c);
-
-        if (node.render_data.clip) {
-            const box = ui.Rect{
-                .x = node.layout._global_x orelse 0,
-                .y = node.layout._global_y orelse 0,
-                .w = node.size.width,
-                .h = node.size.height,
-            };
-            const active = if (depth > 0) box.intersect(clip_stack[depth - 1].rect) else box;
-            clip_stack[depth] = .{ .node = node, .rect = active };
-            depth += 1;
-            apply_clip(u, active);
-        }
-    }
-    if (depth > 0) apply_clip(u, null); // don't leak a scissor rect into the next root's draw
-}
-
-/// A subtle repeating horizontal darkening every 4px — the redesign's terminal-identity
-/// scanline overlay (M5). Drawn last, over the whole frame, at partial alpha (~14%,
-/// matching the design's CSS); needs the renderer's blend mode set to `.blend` (done
-/// once in `App.init` — every other draw is fully opaque, so that change is invisible
-/// everywhere except here).
-fn draw_scanlines(res: *Resources, ww: usize, wh: usize) void {
-    res.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 36 }) catch return;
-    const w: f32 = @floatFromInt(ww);
-    const h: f32 = @floatFromInt(wh);
-    var y: f32 = 2;
-    while (y < h) : (y += 4) {
-        res.renderer.renderFillRect(.{ .x = 0, .y = y, .w = w, .h = 1 }) catch {};
-    }
-}
-
-/// Is `ancestor` `node` itself or one of its ancestors, walking up via `.parent`?
-fn is_descendant(node: *widgets.Node, ancestor: *widgets.Node) bool {
-    var n: ?*widgets.Node = node;
-    while (n) |cur| {
-        if (cur == ancestor) return true;
-        n = cur.parent;
-    }
-    return false;
-}
-
-/// What `build_ui` hands back each frame: a flat list of independent root trees, laid
-/// out and drawn in order (later trees paint on top). Generalizes the old fixed
-/// `main`/`overlay` pair — the screen, plus any floating overlays (a hover tooltip,
-/// later a modal). A `ui_*` builder returns a single tree or a tuple of them, which
-/// `collect` flattens into this list. Arena-backed, so it dies with the frame's tree.
-const Ui = struct {
-    trees: []const *widgets.Node,
-};
-
-/// Append `item` to the render list, flattening whatever shape a `ui_*` builder hands
-/// back: a single `*Node`, an `?*Node` (skipped when null), or a tuple mixing the two
-/// (e.g. a screen plus its optional tooltip). Each leaf is an independent root tree; its
-/// position in the list is its draw order.
-fn collect(list: *std.ArrayList(*widgets.Node), arena: std.mem.Allocator, item: anytype) !void {
-    switch (@typeInfo(@TypeOf(item))) {
-        .optional => if (item) |v| try collect(list, arena, v),
-        .pointer => try list.append(arena, item), // a single `*Node`
-        .@"struct" => |s| inline for (s.fields) |f| try collect(list, arena, @field(item, f.name)),
-        else => @compileError("collect: unsupported UI tree shape " ++ @typeName(@TypeOf(item))),
-    }
-}
-
-/// A fullscreen root: the anchor box a whole screen's content positions against. Every
-/// screen (`ui_playgame`, `ui_gameover`) is its own independent tree rooted here, laid
-/// out from (0,0) and drawn in the order `build_ui` lists it. Sized to the live window
-/// so `.center`/`.center_left`/… anchors resolve against the full display.
-fn ui_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
-    const ww, const wh = try ui_ctx.res.window.getSize();
-    const root = try widgets.Node.create(ui_ctx.arena, id);
-    _ = root.with_layout(ui.features.Layout.init(.top_left, .horizontal))
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    return root;
-}
-
 /// The game-over screen: death is total — the run is over and everything accumulated is
 /// gone. A centered message plus a "Start over" button that, since that loss is
 /// irreversible, opens a confirm modal rather than reseeding immediately — "Yes" (or
@@ -343,7 +227,7 @@ fn ui_root(ui_ctx: *widgets.UiCtx, id: []const u8) !*widgets.Node {
 /// idempotent; a future modal guarding a non-idempotent action would need an explicit
 /// `if (!confirm_open)` guard instead.
 fn ui_gameover(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !struct { *widgets.Node, ?*widgets.Node } {
-    const over = try ui_root(ui_ctx, "over");
+    const over = try widgets.ui_root(ui_ctx, "over");
     const center_div = try widgets.Node.pcreate(ui_ctx.arena, "c_div", over);
     _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
     try ui_figure(ui_ctx, center_div, fig_dead, ui_ctx.res.theme.danger);
@@ -477,7 +361,7 @@ fn ui_playgame(ui_ctx: *widgets.UiCtx, actor: anytype) !struct { *widgets.Node, 
     var char_buf: [64]u8 = undefined;
     var overlay: ?*widgets.Node = null; // floating tooltip, built by the goods menu on hover
 
-    const play = try ui_root(ui_ctx, "play");
+    const play = try widgets.ui_root(ui_ctx, "play");
 
     const vigor, const satiety, const food, const materials, const cap, const pop = actor;
     // Vigor's live ceiling is pulled down by hunger (see `update_vigor`).
@@ -828,7 +712,7 @@ fn catalog_row(
 fn ui_catalog(ui_ctx: *widgets.UiCtx, kind: BrowseKind, actor: anytype) !*widgets.Node {
     const vigor, const satiety, const food, const materials, const cap, _ = actor;
 
-    const root = try ui_root(ui_ctx, "catalog");
+    const root = try widgets.ui_root(ui_ctx, "catalog");
     const col = try widgets.Node.pcreate(ui_ctx.arena, "col", root);
     _ = col.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10))
         .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
@@ -975,7 +859,7 @@ fn capital_effect(g: Good) []const u8 {
     return "boosts an action's yield";
 }
 
-fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
+fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !widgets.Ui {
     // queries
     // MaybeSingle: the actor is despawned on death, so it may be absent. All of its stocks
     // co-spawn on one entity, so one query fetches them together.
@@ -999,12 +883,12 @@ fn build_ui(ui_ctx: *widgets.UiCtx, world: *ha.world.World) !Ui {
         // be — it's the thing that keeps its own fixed interaction slots alive (see
         // `BrowseKind`'s doc comment).
         if (browse_open(ui_ctx)) |kind| {
-            try collect(&trees, ui_ctx.arena, try ui_catalog(ui_ctx, kind, a));
+            try widgets.collect(&trees, ui_ctx.arena, try ui_catalog(ui_ctx, kind, a));
         } else {
-            try collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
+            try widgets.collect(&trees, ui_ctx.arena, try ui_playgame(ui_ctx, a));
         }
     } else {
-        try collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
+        try widgets.collect(&trees, ui_ctx.arena, try ui_gameover(ui_ctx, world));
     }
 
     return .{ .trees = trees.items };

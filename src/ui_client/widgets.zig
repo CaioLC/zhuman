@@ -1,200 +1,25 @@
+//! The widget palette: functions that own a node's whole subtree — graph, keyed data,
+//! color, and layout. Built on `ctx_binding`'s concrete types and `data.zig`'s mixins.
+//! Widgets paint themselves from `ctx.res.theme` (the current frame's COLD↔WARM palette,
+//! resolved once in `build_ui` — see `src/theme.zig`) rather than fixed module colors, so
+//! the whole HUD reacts to the actor's warmth together. Interaction *states*
+//! (idle/hover/disabled) still map to fixed theme *roles* (fg/acc/dim respectively): a
+//! role's actual RGB just isn't constant across a run anymore. Kept here (host policy) so
+//! the engine stays color-agnostic — it only carries `node.render_data`.
+
 const std = @import("std");
-const ui = @import("./ui/root.zig");
+const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
-const zfont = @import("./font.zig");
-const Resources = @import("./res.zig").Resources;
+const cb = @import("./ctx_binding.zig");
+const data = @import("./data.zig");
 
-/// The registry of widget-state (render-state) types kept in the UI cache. One
-/// `Pool(T)` is generated per declaration. This is where the generic `ui` engine
-/// meets the concrete state types — see docs/ui-building-language-plan.md.
-pub const UiState = struct {
-    pub const TextData = zfont.TextData;
-    /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
-    /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
-    pub const ScrollState = struct { offset: f32 = 0 };
-    /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
-    /// event loop appends `.text_input` events and handles backspace directly against
-    /// whichever field `Resources.focused_text` names — the widget itself only reads it
-    /// to render. See `text_input`.
-    pub const TextInputState = struct { buf: [64]u8 = undefined, len: usize = 0 };
-};
-
-/// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
-/// keyed by widget key). `mark_*` writes fields at the event stage; the build reads
-/// them back via `node.query`. `transient` names the fields the engine zeroes every
-/// frame (recomputed from input); fields not listed latch until userland clears them.
-/// Add a field (e.g. `dragging`, `focused`) the day a widget grows a new behaviour.
-pub const Interaction = packed struct {
-    hovering: bool = false,
-    clicked: bool = false,
-    active: bool = false,
-
-    pub const transient = [_][]const u8{ "hovering", "clicked" };
-};
-
-/// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
-pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
-
-/// Host-defined render descriptor carried on every node (policy — core stores it
-/// opaquely, never reads it). The render walk switches on its fields to decide what
-/// to draw. Each aspect is an *optional payload*, not a bare bit: present ⟹ draw that
-/// aspect, and the value is the `Color` to paint it in (color is frame-local visual
-/// state, so it rides here rather than in a separate field). Add an aspect (e.g. a
-/// `sprite` handle) the day the renderer grows one — one line, no engine change.
-/// Composable: a node can set several aspects at once.
-pub const RenderData = struct {
-    text: ?ui.Color = null, // cached glyphs (handle in node.data), blit in this color
-    fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
-    outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
-    img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
-    /// True ⟹ the render walk crops everything drawn under this node to its own resolved
-    /// box (a scroll viewport). Not a color like the other aspects — there's nothing to
-    /// paint, just a clip region to push/pop around this subtree.
-    clip: bool = false,
-};
-
-/// A textured draw: which texture (cached on `Resources`), and an optional `src`
-/// sub-rect selecting one cell of a sprite sheet. `src == null` blits the whole
-/// texture. The on-screen size comes from the node's resolved box, not from `src` —
-/// `data_img`/`data_sprite` set that box, so a 512px sheet cell can draw at 48px.
-pub const Sprite = struct {
-    texture: sdl.render.Texture,
-    src: ?sdl.rect.FRect = null,
-};
-
-/// Each cell of the shared icon sheet (`res.icons`, assets/icons.png) is this many
-/// pixels square — the sheet is a grid of `icon_cell`-sized cells.
-pub const icon_cell = 512.0;
-
-/// Name one cell of the shared icon sheet by grid (col, row). The single place that
-/// knows the sheet lives on `res.icons` and how big a cell is — callers reference a
-/// cell, not a texture+rect, so the spritesheet isn't threaded through every icon.
-pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
-    return .{
-        .texture = res.icons,
-        .src = .{ .x = col * icon_cell, .y = row * icon_cell, .w = icon_cell, .h = icon_cell },
-    };
-}
-
-/// Concrete node type for this host, bound to the host's `RenderData`. Persistent
-/// per-node state (the glyph surface) lives in a `UiState` pool keyed by `node.key`,
-/// reached via the engine's `node.data` handle — not on the node itself.
-pub const Node = ui.Node(RenderData);
-
-const TextData = zfont.TextData;
-
-// --- Helper Functions ---------------------------------------------------
-
-/// Draw a text node: resolve its cached `TextData` via `node.data` and blit it in `c`.
-/// One render primitive per `RenderData` aspect; the host's render loop (in `main.zig`)
-/// unwraps each optional aspect and passes its color in. `data` should be non-null
-/// whenever `text` is present — the guard is belt-and-suspenders.
-pub fn draw_text(u: *UiCtx, node: *Node, c: ui.Color) void {
-    const idx = node.data orelse return;
-    const td = u.pool(TextData).get(idx);
-    const s = node.size;
-    const l = node.layout;
-    const fmt = td.text() orelse return;
-
-    var surface = u.res.font.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    defer surface.deinit();
-    const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
-    defer texture.deinit();
-
-    const dst = sdl.rect.FRect{
-        .x = (l._global_x orelse return) + s.padding.left,
-        .y = (l._global_y orelse return) + s.padding.up,
-        .w = s.data_width,
-        .h = s.data_height,
-    };
-    u.res.renderer.renderTexture(texture, null, dst) catch return;
-}
-
-/// Draw a textured node: blit `sprite` (whole texture, or its `src` cell) into the
-/// node's resolved box. Same dst geometry as `draw_text` — global pos inset by padding,
-/// sized by the node's measured `data_*` dims.
-pub fn draw_texture(u: *UiCtx, node: *Node, sprite: Sprite) void {
-    const s = node.size;
-    const l = node.layout;
-    const dst = sdl.rect.FRect{
-        .x = (l._global_x orelse return) + s.padding.left,
-        .y = (l._global_y orelse return) + s.padding.up,
-        .w = s.data_width,
-        .h = s.data_height,
-    };
-    u.res.renderer.renderTexture(sprite.texture, sprite.src, dst) catch return;
-}
-
-/// The node's resolved on-screen box (global pos from layout + solved size), or null
-/// if it hasn't been laid out yet. The shape SDL's rect primitives draw into.
-fn node_box(node: *Node) ?sdl.rect.FRect {
-    return .{
-        .x = node.layout._global_x orelse return null,
-        .y = node.layout._global_y orelse return null,
-        .w = node.size.width,
-        .h = node.size.height,
-    };
-}
-
-/// Draw a fill node: a solid rect in color `c` over its resolved box.
-pub fn draw_fill(u: *UiCtx, node: *Node, c: ui.Color) void {
-    const box = node_box(node) orelse return;
-    u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    u.res.renderer.renderFillRect(box) catch return;
-}
-
-/// Draw an outline node: a box border in color `c` around its resolved box.
-pub fn draw_outline(u: *UiCtx, node: *Node, c: ui.Color) void {
-    const box = node_box(node) orelse return;
-    u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    u.res.renderer.renderRect(box) catch return;
-}
-
-/// Feature mixin: give `node` cached text — measured at build, content-sized, and
-/// flagged for the render walk. Apply it **after** the node is wired into the tree,
-/// so `node.key` is final (see `Node.rekey`). Overrides both size axes to `.content`,
-/// keeping the node's existing padding.
-pub fn data_text(ctx: *UiCtx, node: *Node, text: []const u8) !void {
-    const idx = ctx.cache(node.key, TextData);
-    ctx.pool(TextData).get(idx).update(text);
-    node.data = idx;
-
-    // Measure the content here, at build — the host has the font on hand. The
-    // engine never measures; it just reads these dims (`content` rule + renderer).
-    const tw, const th = try ctx.res.font.getStringSize(text);
-    var size = node.size;
-    size.w = .content;
-    size.h = .content;
-    size.data_width = @floatFromInt(tw);
-    size.data_height = @floatFromInt(th);
-    node.size = size;
-    node.render_data.text = ctx.res.theme.fg; // present ⟹ render walk blits it; caller may recolor
-}
-
-/// Feature mixin: give `node` a cached texture (owned by `Resources`, not pooled per-node
-/// like `TextData`). Sizes the node to the whole texture and flags the `img` aspect.
-pub fn data_img(_: *UiCtx, node: *Node, texture: sdl.render.Texture) !void {
-    const w, const h = try texture.getSize();
-    node.size = ui.features.Size.initContent(w, h, null);
-    node.render_data.img = .{ .texture = texture };
-}
-
-/// Feature mixin: draw one `src` cell of a sprite sheet at a fixed `px`×`px` on screen.
-/// Unlike `data_img`, the display size is the caller's choice (sheet cells are large),
-/// so the source rect and on-screen box are decoupled.
-pub fn data_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
-    node.size = ui.features.Size.initContent(px, px, null);
-    node.render_data.img = sprite;
-}
-
-// --- Widget palette ----------------------------------------------------------
-// Widgets paint themselves from `ctx.res.theme` (the current frame's COLD↔WARM
-// palette, resolved once in `build_ui` — see `src/theme.zig`) rather than fixed
-// module colors, so the whole HUD reacts to the actor's warmth together. Interaction
-// *states* (idle/hover/disabled) still map to fixed theme *roles* (fg/acc/dim
-// respectively): a role's actual RGB just isn't constant across a run anymore. Kept
-// here (host policy) so the engine stays color-agnostic — it only carries
-// `node.render_data`.
+const UiCtx = cb.UiCtx;
+const Node = cb.Node;
+const Sprite = cb.Sprite;
+const UiState = cb.UiState;
+const data_text = data.data_text;
+const data_img = data.data_img;
+const data_sprite = data.data_sprite;
 
 /// Wheel delta → px scrolled per tick (`scroll_view`).
 const scroll_speed: f32 = 24.0;
@@ -431,6 +256,25 @@ pub const Modal = struct {
 /// (see `ui_gameover` in `main.zig`). That reads *last frame's* rect — this frame's
 /// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
 /// its rect) alive for that read, exactly like `scroll_view`'s `content`.
+pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
+    const ww, const wh = try ctx.res.window.getSize();
+    const root = try Node.create(ctx.arena, key);
+    _ = root.with_layout(ui.features.Layout.init(.top_left, null))
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    root.render_data.fill = ctx.res.theme.bg;
+
+    const box = try Node.pcreate(ctx.arena, "box", root);
+    _ = box.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10))
+        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
+    box.render_data.fill = ctx.res.theme.panel;
+    box.render_data.outline = ctx.res.theme.line2;
+    _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
+
+    _ = try label(ctx, box, "title", title);
+
+    return .{ .root = root, .box = box };
+}
+
 /// Single-line search/text box: a bordered, fixed-width field holding a persisted UTF-8
 /// buffer (`UiState.TextInputState`, keyed like `ScrollState`). Click to focus — focus is
 /// host-global (`ctx.res.focused_text`), since SDL delivers `.text_input`/backspace as raw
@@ -478,44 +322,4 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     node.render_data.outline = if (focused) ctx.res.theme.acc else ctx.res.theme.line2;
 
     return node;
-}
-
-pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
-    const ww, const wh = try ctx.res.window.getSize();
-    const root = try Node.create(ctx.arena, key);
-    _ = root.with_layout(ui.features.Layout.init(.top_left, null))
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    root.render_data.fill = ctx.res.theme.bg;
-
-    const box = try Node.pcreate(ctx.arena, "box", root);
-    _ = box.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
-    box.render_data.fill = ctx.res.theme.panel;
-    box.render_data.outline = ctx.res.theme.line2;
-    _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
-
-    _ = try label(ctx, box, "title", title);
-
-    return .{ .root = root, .box = box };
-}
-
-test "interaction store: active latches, transient flags clear each frame" {
-    // res/arena are untouched by the interaction methods, so `undefined` is safe.
-    var u = UiCtx.init(undefined, std.testing.allocator, undefined);
-    defer u.deinit();
-    u.beginFrame();
-
-    const k = ui.key(0, "btn");
-    u.setFlag(k, .hovering, true);
-    u.setFlag(k, .clicked, true);
-    u.setFlag(k, .active, true);
-
-    const on = u.interactionOf(k);
-    try std.testing.expect(on.hovering and on.clicked and on.active);
-
-    u.clearTransient();
-    const after = u.interactionOf(k);
-    try std.testing.expect(!after.hovering);
-    try std.testing.expect(!after.clicked);
-    try std.testing.expect(after.active); // latched — survives the frame boundary
 }
