@@ -4,13 +4,12 @@
 
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
-const zfont = @import("../font.zig");
 const cb = @import("./ctx_binding.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 const Sprite = cb.Sprite;
-const TextData = zfont.TextData;
+const TextData = cb.UiState.TextData;
 
 /// Draw a text node: resolve its cached `TextData` via `node.data` and blit it in `c`.
 /// One render primitive per `RenderData` aspect; the host's render loop (`tree.draw_tree`)

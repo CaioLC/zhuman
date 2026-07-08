@@ -1,7 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl3");
 const comp = @import("./components.zig");
-const font = @import("./font.zig");
 const logmod = @import("./log.zig");
 const thememod = @import("./theme.zig");
 

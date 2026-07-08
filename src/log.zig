@@ -3,7 +3,7 @@
 //! Global (one feed for the run), held on `Resources` so it outlives the per-frame UI
 //! arena. Fixed-capacity ring buffer with inline message buffers, so pushing needs no
 //! allocator. Callers format a message into a stack buffer, then `push` copies it in.
-//! Leaf module — imports nothing (like `font.zig`).
+//! Leaf module — imports nothing.
 
 /// Tone of a log line — drives the color the host paints it in (see `log_tone_color`
 /// in `main.zig`). Kept here so both the sim (a death message) and the UI agree on it.

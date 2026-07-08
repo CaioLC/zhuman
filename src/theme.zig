@@ -5,8 +5,11 @@
 //! drifting independently. Host-owned (the hex values are this game's art direction),
 //! not engine — `src/ui/` stays palette-agnostic.
 
+const sdl3 = @import("sdl3");
 const ui = @import("./ui/root.zig");
 const Color = ui.Color;
+
+pub const white: sdl3.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
 pub const Theme = struct {
     bg: Color,

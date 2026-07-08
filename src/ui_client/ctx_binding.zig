@@ -3,7 +3,6 @@
 const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
-const zfont = @import("../font.zig");
 const Resources = @import("../res.zig").Resources;
 
 /// Context Binding
@@ -11,8 +10,34 @@ const Resources = @import("../res.zig").Resources;
 /// `Pool(T)` is generated per declaration. This is where the generic `ui` engine
 /// meets the concrete state types — see docs/ui-building-language-plan.md.
 pub const UiState = struct {
-    /// TextData of a given widget
-    pub const TextData = zfont.TextData;
+    /// Pure text-state data — one slot per text widget, sourced by `data.data_text` and
+    /// blit by `draw.draw_text`. Defined here rather than a standalone leaf module: it's a
+    /// widget-state type like `ScrollState`/`TextInputState` below, and both `data.zig` and
+    /// `draw.zig` already depend on this file for `UiCtx`/`Node`, so a separate file would
+    /// need `ctx_binding.zig` to import back out to it — a cycle, since `data.zig` imports
+    /// `ctx_binding.zig` for its own types.
+    pub const TextData = struct {
+        buf: [64]u8,
+        len: usize,
+
+        pub fn init() TextData {
+            return .{ .buf = undefined, .len = 0 };
+        }
+
+        /// Copy `text` into the persistent buffer.
+        pub fn update(self: *TextData, t: []const u8) void {
+            const n = @min(t.len, self.buf.len);
+            @memcpy(self.buf[0..n], t[0..n]);
+            self.len = n;
+        }
+
+        /// The current text, reconstructed from `buf` + `len` at the call site.
+        /// Returns `null` (renders nothing) when empty. Never store the result
+        /// across a pool `acquire` — the slot may move; call this again instead.
+        pub fn text(self: *const TextData) ?[]const u8 {
+            return if (self.len == 0) null else self.buf[0..self.len];
+        }
+    };
     /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
     /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
     pub const ScrollState = struct { offset: f32 = 0 };
@@ -36,7 +61,7 @@ pub const Interaction = packed struct {
     pub const transient = [_][]const u8{ "hovering", "clicked" };
 };
 
-/// Concrete UI context type, bound here where `ui`, `font` and `res` all meet.
+/// Concrete UI context type, bound here where `ui` and `res` meet.
 pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
 
 /// Node Binding

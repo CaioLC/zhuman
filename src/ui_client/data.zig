@@ -4,13 +4,12 @@
 
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
-const zfont = @import("../font.zig");
 const cb = @import("./ctx_binding.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 const Sprite = cb.Sprite;
-const TextData = zfont.TextData;
+const TextData = cb.UiState.TextData;
 
 /// Feature mixin: give `node` cached text — measured at build, content-sized, and
 /// flagged for the render walk. Apply it **after** the node is wired into the tree,

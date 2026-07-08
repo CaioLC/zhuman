@@ -9,7 +9,6 @@ pub const ui_client = @import("./ui_client/root.zig");
 pub const UiCtx = ui_client.UiCtx;
 pub const comp = @import("./components.zig");
 pub const tag = @import("./tags.zig");
-pub const font = @import("./font.zig");
 pub const log = @import("./log.zig");
 pub const dist = @import("./dist.zig");
 pub const theme = @import("./theme.zig");
@@ -25,7 +24,6 @@ test {
     _ = ui_client;
     _ = comp;
     _ = tag;
-    _ = font;
     _ = log;
     _ = dist;
     _ = theme;
