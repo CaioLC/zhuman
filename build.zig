@@ -78,4 +78,20 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // UI-layer unit tests: the reusable engine + host binding (features/draw/widgets),
+    // excluding `pages.zig` (game-content screens that import the parked-broken
+    // `main.zig`). Lets the UI be verified in isolation while the sim half is mid-refactor.
+    // See `src/ui_client/test_ui.zig`.
+    const ui_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test_ui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
+    const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
+    const run_ui_tests = b.addRunArtifact(ui_tests);
+
+    const test_ui_step = b.step("test-ui", "Run UI-layer unit tests (engine + host binding, minus game content)");
+    test_ui_step.dependOn(&run_ui_tests.step);
 }

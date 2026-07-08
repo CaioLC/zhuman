@@ -37,6 +37,23 @@ pub const ChildrenPosInfo = struct {
     y_offset: f32,
 };
 
+/// The **overflow** axis: what happens to content that exceeds a node's box. Pure
+/// geometry, read *after* the solve — it never changes any computed size. Distinct
+/// from the *sizing* axis (`SizeRule`, where the box yields) and from *content-fill*
+/// (tiling/stretching a payload to the box, which is host paint policy): overflow keeps
+/// the box fixed and constrains the *content's* visible extent. Orthogonal to
+/// `scroll_x/y` — scroll *translates* children, overflow *masks* the result; a scroll
+/// viewport is the composition `.clip` + a `scroll_y` offset (see `scroll_view`).
+pub const Overflow = enum {
+    /// Content spilling past the box paints (and hit-tests) normally. The default —
+    /// every ordinary node.
+    visible,
+    /// Crop this node's subtree to its own box. Read by the host render walk (SDL
+    /// clip rect) and, in time, by hit-testing. Future crop variants: `scroll` (folds
+    /// the `scroll_y` offset in), `ellipsis`.
+    clip,
+};
+
 pub const Layout = struct {
     anchor: Anchor,
     children_align: ChildrenAlign,
@@ -61,6 +78,10 @@ pub const Layout = struct {
     /// Distinct from `origin`, which positions a *root* itself, not its children.
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,
+    /// Overflow handling for this node's content — see `Overflow`. Defaults to
+    /// `.visible` (no cropping), so ordinary nodes are unaffected. Set directly
+    /// (`node.layout.overflow = .clip`) or via `with_overflow`.
+    overflow: Overflow = .visible,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -87,6 +108,14 @@ pub const Layout = struct {
         var l = self;
         l.origin_x = x;
         l.origin_y = y;
+        return l;
+    }
+
+    /// Copy with `overflow` set — chains after `init`. `.clip` crops this node's
+    /// subtree to its box in the render walk (see `Overflow`).
+    pub fn with_overflow(self: Layout, o: Overflow) Layout {
+        var l = self;
+        l.overflow = o;
         return l;
     }
 };

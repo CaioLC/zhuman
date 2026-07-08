@@ -20,7 +20,7 @@ pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
 
-/// The tree atom. Stores a host render descriptor opaquely, plus a cache handle.
+/// The tree atom. Stores a host render descriptor opaquely.
 ///
 /// One host-policy type param, carried but never interpreted by core:
 /// - `RenderData` — the host's render descriptor: which aspects to draw this frame
@@ -30,8 +30,10 @@ pub const Layout = features.Layout;
 ///   recompiles to gain one. Must be default-constructible (`.{}`) — seeded at `init`.
 ///
 /// Frame-local vs persistent: `render_data` is rebuilt every frame (like the node).
-/// Anything that must outlive the frame lives in a `key`-addressed pool, not here;
-/// `data` is only this node's *handle* into such a pool (its content is persistent).
+/// Anything that must outlive the frame lives in a `key`-addressed pool, reached via
+/// `node.state(u, T)` — the node holds no handle, only its `key`, which re-derives the
+/// slot every frame. So a node can carry several cached states (text *and* an svg
+/// raster) with no per-node bookkeeping.
 pub fn Node(comptime RenderData: type) type {
     return struct {
         const Self = @This();
@@ -39,14 +41,10 @@ pub fn Node(comptime RenderData: type) type {
         id: []const u8,
         parent: ?*Self,
         children: std.ArrayList(*Self),
-        /// Type-erased handle (pool index) into the UI cache holding this node's
-        /// render state. The host resolves the concrete state type. `null` for
-        /// data-less, pure layout containers.
-        data: ?u32,
         /// Stable identity for this node — the hash of its parent seed + local id, and the
         /// key into every persistent cache pool it uses (render state, interaction store).
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
-        /// re-derives identically and re-finds the node's slots. `null` = caches nothing.
+        /// re-derives identically and re-finds the node's slots.
         key: u64,
         /// Host-defined render descriptor (policy). Core only carries it; the host's
         /// render walk reads it to decide what/how to draw — which aspects, in which
@@ -98,7 +96,6 @@ pub fn Node(comptime RenderData: type) type {
                 .id = id,
                 .parent = null,
                 .children = .empty,
-                .data = null,
                 .key = key(0, id),
                 .render_data = .{},
                 .size = features.Size.init(.fit_children, .fit_children, null),
@@ -197,6 +194,18 @@ pub fn Node(comptime RenderData: type) type {
         /// until layout runs after build. `u` is the duck-typed concrete `Ctx`.
         pub fn rect(self: *Self, u: anytype) ?Rect {
             return u.rectOf(self.key);
+        }
+
+        /// This node's cached render-state of type `T`: acquire-or-create the slot for
+        /// `node.key` in `T`'s pool and return a pointer to it. This is how a feature
+        /// reaches persistent state — the engine owns the caching (keying, lifecycle,
+        /// eviction); the caller just asks for its state and reads/writes it. The slot
+        /// survives the frame-arena reset (the node doesn't); acquiring keeps it alive
+        /// this frame. `T` must be registered in the host's `StateNs`. **Don't stash the
+        /// pointer across another `acquire` on `T`'s pool** — the pool may grow; call
+        /// again. `u` is the duck-typed concrete `Ctx`.
+        pub fn state(self: *Self, u: anytype, comptime T: type) *T {
+            return u.pool(T).get(u.cache(self.key, T));
         }
     };
 }

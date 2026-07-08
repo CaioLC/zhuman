@@ -1,5 +1,6 @@
 //! The widget palette: functions that own a node's whole subtree — graph, keyed data,
-//! color, and layout. Built on `ctx_binding`'s concrete types and `data.zig`'s mixins.
+//! color, and layout. Built on `ctx_binding`'s concrete types and the feature `attach`
+//! mixins (`features/`, re-exported as `data_text`/`data_img`/`data_sprite`).
 //! Widgets paint themselves from `ctx.res.theme` (the current frame's COLD↔WARM palette,
 //! resolved once in `build_ui` — see `src/theme.zig`) rather than fixed module colors, so
 //! the whole HUD reacts to the actor's warmth together. Interaction *states*
@@ -11,15 +12,15 @@ const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
 const cb = @import("./ctx_binding.zig");
-const data = @import("./data.zig");
+const feat = @import("./features/root.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 const Sprite = cb.Sprite;
 const UiState = cb.UiState;
-const data_text = data.data_text;
-const data_img = data.data_img;
-const data_sprite = data.data_sprite;
+const data_text = feat.data_text;
+const data_img = feat.data_img;
+const data_sprite = feat.data_sprite;
 
 /// Wheel delta → px scrolled per tick (`scroll_view`).
 const scroll_speed: f32 = 24.0;
@@ -188,9 +189,8 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
         .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
 
     const viewport = try Node.pcreate(ctx.arena, "viewport", outer);
-    _ = viewport.with_layout(ui.features.Layout.init(.relative, null))
+    _ = viewport.with_layout(ui.features.Layout.init(.relative, null).with_overflow(.clip))
         .with_size(ui.features.Size.initFixed(width, height, null));
-    viewport.render_data.clip = true;
     viewport.render_data.outline = ctx.res.theme.line2; // dim frame marking the scrollable area
 
     const content = try Node.pcreate(ctx.arena, "content", viewport);
@@ -199,8 +199,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
 
     const max_offset = @max(0.0, content_h - height);
-    const idx = ctx.cache(outer.key, UiState.ScrollState);
-    const state = ctx.pool(UiState.ScrollState).get(idx);
+    const state = outer.state(ctx, UiState.ScrollState);
     if (viewport.query(ctx).hovering and ctx.res.input.wheel_y != 0) {
         state.offset -= ctx.res.input.wheel_y * scroll_speed; // wheel up ⇒ scroll toward the top
     }
@@ -289,8 +288,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     const node = try Node.pcreate(ctx.arena, key, parent);
     _ = node.with_layout(ui.features.Layout.init(.relative, null));
 
-    const idx = ctx.cache(node.key, UiState.TextInputState);
-    const state = ctx.pool(UiState.TextInputState).get(idx);
+    const state = node.state(ctx, UiState.TextInputState);
 
     const q = node.query(ctx);
     var focused = ctx.res.focused_text == node.key;

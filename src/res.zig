@@ -37,7 +37,8 @@ pub const Resources = struct {
     prng: std.Random.DefaultPrng,
     tex: sdl.render.Texture,
     /// Sprite sheet of capital-good icons (`assets/icons.png`, a 2×2 grid). Cached once
-    /// here; the UI samples cells from it by source rect (see `widgets.data_sprite`).
+    /// here; the UI samples cells from it by source rect (see the `img` feature's
+    /// `attach_sprite`, re-exported as `ui_client.data_sprite`).
     icons: sdl.render.Texture,
     /// This frame's resolved COLD↔WARM palette — recomputed once per frame in
     /// `build_ui` (from `compute_warmth`) and read by every widget via `ctx.res.theme`,
