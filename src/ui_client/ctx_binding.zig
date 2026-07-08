@@ -92,9 +92,6 @@ pub const RenderData = struct {
     fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
     outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
-    /// True ⟹ the render walk crops everything drawn under this node to its own resolved
-    /// box (a scroll viewport). Not a color like the other aspects — there's nothing to
-    /// paint, just a clip region to push/pop around this subtree.
     clip: bool = false,
 };
 

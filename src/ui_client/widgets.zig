@@ -253,7 +253,7 @@ pub const Modal = struct {
 ///
 /// **Dismiss is likewise the caller's call**, not this widget's: compare
 /// `ctx.res.input.mouse_down` against `modal.box.rect(ctx)` for click-outside-to-close
-/// (see `ui_gameover` in `main.zig`). That reads *last frame's* rect — this frame's
+/// (see `ui_gameover` in `ui_client/pages.zig`). That reads *last frame's* rect — this frame's
 /// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
 /// its rect) alive for that read, exactly like `scroll_view`'s `content`.
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {

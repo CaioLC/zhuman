@@ -1,7 +1,7 @@
 //! Render-walk and frame tree-assembly — the host UI plumbing that turns `build_ui`'s
 //! per-screen node trees into pixels, without knowing anything about game content.
-//! Moved out of `main.zig`, which now only owns the event loop, sim tick, and the
-//! game-specific `ui_*` screen builders.
+//! Moved out of `main.zig`, which now only owns `App`, the event loop, and the sim tick —
+//! the game-specific `ui_*` screen builders live in `ui_client/pages.zig`.
 
 const std = @import("std");
 const ui = @import("../ui/root.zig");
