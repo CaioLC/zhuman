@@ -37,6 +37,23 @@ pub const ChildrenPosInfo = struct {
     y_offset: f32,
 };
 
+/// The **overflow** axis: what happens to content that exceeds a node's box. Pure
+/// geometry, read *after* the solve — it never changes any computed size. Distinct
+/// from the *sizing* axis (`SizeRule`, where the box yields) and from *content-fill*
+/// (tiling/stretching a payload to the box, which is host paint policy): overflow keeps
+/// the box fixed and constrains the *content's* visible extent. Orthogonal to
+/// `scroll_x/y` — scroll *translates* children, overflow *masks* the result; a scroll
+/// viewport is the composition `.clip` + a `scroll_y` offset (see `scroll_view`).
+pub const Overflow = enum {
+    /// Content spilling past the box paints (and hit-tests) normally. The default —
+    /// every ordinary node.
+    visible,
+    /// Crop this node's subtree to its own box. Read by the host render walk (SDL
+    /// clip rect) and, in time, by hit-testing. Future crop variants: `scroll` (folds
+    /// the `scroll_y` offset in), `ellipsis`.
+    clip,
+};
+
 pub const Layout = struct {
     anchor: Anchor,
     children_align: ChildrenAlign,
@@ -53,6 +70,18 @@ pub const Layout = struct {
     /// unaffected. Set via `with_origin`.
     origin_x: f32 = 0,
     origin_y: f32 = 0,
+    /// Translates this node's *children* (not the node itself) by `-scroll_x`/`-scroll_y`
+    /// — a positive value shifts flowed content up/left, as if scrolled down/right. This
+    /// is how a scroll container (`widgets.scroll_view`) moves its overflowing `content`
+    /// without a second layout pass: the container holds the offset, `place` folds it into
+    /// the base position it hands each child. Defaults to 0 (no effect on ordinary nodes).
+    /// Distinct from `origin`, which positions a *root* itself, not its children.
+    scroll_x: f32 = 0,
+    scroll_y: f32 = 0,
+    /// Overflow handling for this node's content — see `Overflow`. Defaults to
+    /// `.visible` (no cropping), so ordinary nodes are unaffected. Set directly
+    /// (`node.layout.overflow = .clip`) or via `with_overflow`.
+    overflow: Overflow = .visible,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -79,6 +108,14 @@ pub const Layout = struct {
         var l = self;
         l.origin_x = x;
         l.origin_y = y;
+        return l;
+    }
+
+    /// Copy with `overflow` set — chains after `init`. `.clip` crops this node's
+    /// subtree to its box in the render walk (see `Overflow`).
+    pub fn with_overflow(self: Layout, o: Overflow) Layout {
+        var l = self;
+        l.overflow = o;
         return l;
     }
 };
@@ -199,8 +236,8 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
     if (node.parent) |p| {
         pw = p.size.width;
         ph = p.size.height;
-        px = p.layout._global_x orelse 0.0;
-        py = p.layout._global_y orelse 0.0;
+        px = (p.layout._global_x orelse 0.0) - p.layout.scroll_x;
+        py = (p.layout._global_y orelse 0.0) - p.layout.scroll_y;
     } else {
         // Root: seed from its `origin` (0,0 for the main tree; the cursor/icon point
         // for a floating overlay). Anchor math below runs against a zero-size parent,

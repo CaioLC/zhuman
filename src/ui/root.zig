@@ -20,7 +20,7 @@ pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
 
-/// The tree atom. Stores a host render descriptor opaquely, plus a cache handle.
+/// The tree atom. Stores a host render descriptor opaquely.
 ///
 /// One host-policy type param, carried but never interpreted by core:
 /// - `RenderData` — the host's render descriptor: which aspects to draw this frame
@@ -30,8 +30,10 @@ pub const Layout = features.Layout;
 ///   recompiles to gain one. Must be default-constructible (`.{}`) — seeded at `init`.
 ///
 /// Frame-local vs persistent: `render_data` is rebuilt every frame (like the node).
-/// Anything that must outlive the frame lives in a `key`-addressed pool, not here;
-/// `data` is only this node's *handle* into such a pool (its content is persistent).
+/// Anything that must outlive the frame lives in a `key`-addressed pool, reached via
+/// `node.state(u, T)` — the node holds no handle, only its `key`, which re-derives the
+/// slot every frame. So a node can carry several cached states (text *and* an svg
+/// raster) with no per-node bookkeeping.
 pub fn Node(comptime RenderData: type) type {
     return struct {
         const Self = @This();
@@ -39,14 +41,10 @@ pub fn Node(comptime RenderData: type) type {
         id: []const u8,
         parent: ?*Self,
         children: std.ArrayList(*Self),
-        /// Type-erased handle (pool index) into the UI cache holding this node's
-        /// render state. The host resolves the concrete state type. `null` for
-        /// data-less, pure layout containers.
-        data: ?u32,
         /// Stable identity for this node — the hash of its parent seed + local id, and the
         /// key into every persistent cache pool it uses (render state, interaction store).
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
-        /// re-derives identically and re-finds the node's slots. `null` = caches nothing.
+        /// re-derives identically and re-finds the node's slots.
         key: u64,
         /// Host-defined render descriptor (policy). Core only carries it; the host's
         /// render walk reads it to decide what/how to draw — which aspects, in which
@@ -98,7 +96,6 @@ pub fn Node(comptime RenderData: type) type {
                 .id = id,
                 .parent = null,
                 .children = .empty,
-                .data = null,
                 .key = key(0, id),
                 .render_data = .{},
                 .size = features.Size.init(.fit_children, .fit_children, null),
@@ -154,10 +151,18 @@ pub fn Node(comptime RenderData: type) type {
             for (self.children.items) |child| child.rekey(self.key);
         }
 
-        pub fn collect(self: *Self, allocator: Allocator, list: *std.ArrayList(*Self)) !void {
-            try list.append(allocator, self);
-            for (self.children.items) |child| {
-                try child.collect(allocator, list);
+        /// Flatten a builder's return value into the frame's render `list`: a single
+        /// `*Self`, an `?*Self` (skipped when null), or a tuple mixing them (a screen plus
+        /// its optional overlay). Each leaf is an **independent root tree** whose position
+        /// in `list` is its draw order — distinct from `iterate`, which walks one tree's
+        /// own subtree. Pure structure over `*Self`, so it's engine mechanism, not host
+        /// policy (the host only decides what shapes its builders return).
+        pub fn collect(list: *std.ArrayList(*Self), allocator: Allocator, item: anytype) !void {
+            switch (@typeInfo(@TypeOf(item))) {
+                .optional => if (item) |v| try collect(list, allocator, v),
+                .pointer => try list.append(allocator, item), // a single `*Self` root
+                .@"struct" => |s| inline for (s.fields) |f| try collect(list, allocator, @field(item, f.name)),
+                else => @compileError("collect: unsupported UI tree shape " ++ @typeName(@TypeOf(item))),
             }
         }
 
@@ -197,6 +202,18 @@ pub fn Node(comptime RenderData: type) type {
         /// until layout runs after build. `u` is the duck-typed concrete `Ctx`.
         pub fn rect(self: *Self, u: anytype) ?Rect {
             return u.rectOf(self.key);
+        }
+
+        /// This node's cached render-state of type `T`: acquire-or-create the slot for
+        /// `node.key` in `T`'s pool and return a pointer to it. This is how a feature
+        /// reaches persistent state — the engine owns the caching (keying, lifecycle,
+        /// eviction); the caller just asks for its state and reads/writes it. The slot
+        /// survives the frame-arena reset (the node doesn't); acquiring keeps it alive
+        /// this frame. `T` must be registered in the host's `StateNs`. **Don't stash the
+        /// pointer across another `acquire` on `T`'s pool** — the pool may grow; call
+        /// again. `u` is the duck-typed concrete `Ctx`.
+        pub fn state(self: *Self, u: anytype, comptime T: type) *T {
+            return u.pool(T).get(u.cache(self.key, T));
         }
     };
 }
@@ -261,35 +278,6 @@ test "node tree layout" {
 
     try std.testing.expect(child2.layout._global_x.? == 350.0);
     try std.testing.expect(child2.layout._global_y.? == 550.0);
-}
-
-test "collect returns each node exactly once" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var root = try TestNode.create(allocator, "root");
-    _ = root.with_size(Size.initFixed(800, 600, null));
-    _ = root.with_layout(Layout.init(.top_left, null));
-
-    const indep = try TestNode.create(allocator, "indp");
-    _ = indep.with_size(Size.initFixed(100, 50, null));
-    _ = indep.with_layout(Layout.init(.center, null));
-    try root.add_child(allocator, indep);
-
-    const dep = try TestNode.create(allocator, "dep1");
-    _ = dep.with_size(Size.initFixed(100, 50, null));
-    _ = dep.with_layout(Layout.init(.relative, null));
-    try root.add_child(allocator, dep);
-
-    var list: std.ArrayList(*TestNode) = .empty;
-    defer list.clearAndFree(allocator);
-    try root.collect(allocator, &list);
-
-    try std.testing.expectEqual(3, list.items.len);
-    try std.testing.expectEqual(root, list.items[0]);
-    try std.testing.expectEqual(indep, list.items[1]);
-    try std.testing.expectEqual(dep, list.items[2]);
 }
 
 test "iterate walks the subtree in pre-order, climbing across levels" {

@@ -48,9 +48,9 @@ const EntryItem = struct {
 };
 
 const ParamSpec = struct {
-    fetches: []const type,         // required components contributing *T to the entry
-    withs: []const type,           // must-have filters
-    withouts: []const type,        // must-not-have filters
+    fetches: []const type, // required components contributing *T to the entry
+    withs: []const type, // must-have filters
+    withouts: []const type, // must-not-have filters
     entry_order: []const EntryItem, // declaration order of fetches + Maybes
 };
 
@@ -228,6 +228,38 @@ pub fn MaybeSingle(comptime params: anytype) type {
             return first;
         }
     };
+}
+
+/// Fetch several components off one *known* entity — `Query`'s non-iterating sibling.
+/// There's no driver storage to walk (the entity is already known), so every fetch is a
+/// direct sparse-set lookup; a required (non-`Maybe`) component missing from `e` is a
+/// caller bug (`e` was expected to already qualify — e.g. matched by a `Query` upstream,
+/// or it's the entity a decider was handed) and panics rather than degrading to an
+/// optional. `With`/`Without` don't apply here (there's no set of entities to filter),
+/// so passing them is a compile error rather than a silent no-op.
+pub fn getMany(world: *World, e: Entity, comptime params: anytype) EntryType(parseParams(params)) {
+    const spec = comptime parseParams(params);
+    if (spec.withs.len != 0 or spec.withouts.len != 0) {
+        @compileError("getMany: With/Without filters aren't meaningful for a known-entity fetch");
+    }
+    const Entry = EntryType(spec);
+    if (spec.entry_order.len == 1) {
+        const it = spec.entry_order[0];
+        return switch (it.kind) {
+            .entity => e,
+            .maybe => world.storageOf(it.T).get(e),
+            .fetch => world.storageOf(it.T).get(e) orelse @panic("getMany: entity missing required component"),
+        };
+    }
+    var entry: Entry = undefined;
+    inline for (spec.entry_order, 0..) |it, i| {
+        switch (it.kind) {
+            .entity => entry[i] = e,
+            .maybe => entry[i] = world.storageOf(it.T).get(e),
+            .fetch => entry[i] = world.storageOf(it.T).get(e) orelse @panic("getMany: entity missing required component"),
+        }
+    }
+    return entry;
 }
 
 pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {

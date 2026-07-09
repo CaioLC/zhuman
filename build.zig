@@ -49,6 +49,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
+    // Library-internal files (components/actions/capital) reach the library's own public
+    // surface via `@import("ha")` (e.g. `ha.dist`), so the module must import itself under
+    // that name. Without it the self-import resolves only when `ha_mod` happens to be the
+    // compilation root (`zig build test`); the exe build, which drives the component types
+    // through `World`, would fail to find module 'ha'.
+    ha_mod.addImport("ha", ha_mod);
 
     // Executable
     const exe_mod = b.createModule(.{
@@ -63,6 +69,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "human_action",
         .root_module = exe_mod,
+        .use_llvm = true,
     });
     b.installArtifact(exe);
 
@@ -72,9 +79,25 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_exe.step);
 
     // Unit tests
-    const unit_tests = b.addTest(.{ .root_module = ha_mod });
+    const unit_tests = b.addTest(.{ .root_module = ha_mod, .use_llvm = true });
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // UI-layer unit tests: the reusable engine + host binding (features/draw/widgets),
+    // excluding `pages.zig` (game-content screens that import the parked-broken
+    // `main.zig`). Lets the UI be verified in isolation while the sim half is mid-refactor.
+    // See `src/ui_client/test_ui.zig`.
+    const ui_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test_ui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
+    const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
+    const run_ui_tests = b.addRunArtifact(ui_tests);
+
+    const test_ui_step = b.step("test-ui", "Run UI-layer unit tests (engine + host binding, minus game content)");
+    test_ui_step.dependOn(&run_ui_tests.step);
 }

@@ -33,11 +33,30 @@ pub fn Pool(comptime T: type) type {
             live: bool,
         };
 
+        /// Release a slot's resources before its storage is dropped. If `T` declares
+        /// `pub fn deinit(self: *T) void`, call it; otherwise a no-op. This is the
+        /// eviction hook: a POD state (`TextState`, `ScrollState`) needs nothing, but a
+        /// state that *owns* a resource — an SVG feature caching a rasterized
+        /// `sdl.Texture` — would otherwise leak it when its node disappears, because
+        /// `prune` drops the value and `acquire` overwrites a reused hole with zeroes.
+        /// The `@typeInfo` guard keeps `@hasDecl` legal for non-container `T` (e.g. the
+        /// `Pool(u32)` in tests). Convention: `deinit` takes no allocator — a cached
+        /// GPU/handle resource frees itself; anything needing the gpa isn't pool-cached.
+        fn evict(value: *T) void {
+            switch (@typeInfo(T)) {
+                .@"struct", .@"enum", .@"union", .@"opaque" => if (@hasDecl(T, "deinit")) value.deinit(),
+                else => {},
+            }
+        }
+
         slots: std.ArrayList(Slot) = .empty,
         free: std.ArrayList(u32) = .empty,
         index: std.AutoHashMapUnmanaged(u64, u32) = .{},
 
         pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+            // Evict live slots (dead ones were already evicted at prune). Only these
+            // can still own a resource at teardown — e.g. an on-screen SVG's texture.
+            for (self.slots.items) |*slot| if (slot.live) evict(&slot.value);
             self.slots.deinit(alloc);
             self.free.deinit(alloc);
             self.index.deinit(alloc);
@@ -71,10 +90,13 @@ pub fn Pool(comptime T: type) type {
             return &self.slots.items[idx].value;
         }
 
-        /// Free every live slot not touched this frame (into the free-list).
+        /// Free every live slot not touched this frame (into the free-list). A pruned
+        /// slot's value is `evict`ed here (releasing any resource it owns) before it
+        /// becomes a hole — so by the time `acquire` reuses that hole, it's already clean.
         pub fn prune(self: *Self, alloc: std.mem.Allocator, frame: u64) std.mem.Allocator.Error!void {
             for (self.slots.items, 0..) |*slot, i| {
                 if (slot.live and slot.touched != frame) {
+                    evict(&slot.value);
                     slot.live = false;
                     _ = self.index.remove(slot.key);
                     try self.free.append(alloc, @intCast(i));
@@ -165,6 +187,38 @@ test "keys are deterministic and seed-sensitive" {
     try std.testing.expect(key(0, "volume") != key(1, "volume"));
     try std.testing.expect(key(0, "a") != key(0, "b"));
     try std.testing.expect(key_i(0, "item", 1) != key_i(0, "item", 2));
+}
+
+test "evict: prune and deinit call a slot's deinit; POD types are left alone" {
+    const alloc = std.testing.allocator;
+
+    // A resource-owning state: counts how many times it was deinit'd (via a shared
+    // tally). The pointer is optional so `std.mem.zeroes` can seed a fresh slot — the
+    // same reason a real resource-owning state holds e.g. `tex: ?Texture = null`.
+    var freed: usize = 0;
+    const Res = struct {
+        tally: ?*usize = null,
+        pub fn deinit(self: *@This()) void {
+            if (self.tally) |t| t.* += 1;
+        }
+    };
+
+    var p: Pool(Res) = .{};
+
+    // Two live slots on frame 1.
+    const a = try p.acquire(alloc, 1, 1);
+    p.get(a).* = .{ .tally = &freed };
+    const b = try p.acquire(alloc, 2, 1);
+    p.get(b).* = .{ .tally = &freed };
+
+    // Frame 2 re-touches only key 1 → key 2's slot is pruned and evicted once.
+    _ = try p.acquire(alloc, 1, 2);
+    try p.prune(alloc, 2);
+    try std.testing.expectEqual(@as(usize, 1), freed);
+
+    // The surviving live slot (key 1) is evicted at pool deinit → tally reaches 2.
+    p.deinit(alloc);
+    try std.testing.expectEqual(@as(usize, 2), freed);
 }
 
 test "Pools generates a pool per declared type" {

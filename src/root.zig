@@ -5,27 +5,33 @@ comptime {
 }
 pub const sdl = @import("sdl3");
 pub const ui = @import("./ui/root.zig");
-pub const widgets = @import("./widgets.zig");
-pub const UiCtx = widgets.UiCtx;
+pub const ui_client = @import("./ui_client/root.zig");
+pub const UiCtx = ui_client.UiCtx;
 pub const comp = @import("./components.zig");
 pub const tag = @import("./tags.zig");
-pub const font = @import("./font.zig");
+pub const log = @import("./log.zig");
+pub const dist = @import("./dist.zig");
+pub const theme = @import("./theme.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
 pub const systems = @import("./systems.zig");
+pub const actions = @import("./actions.zig");
+pub const capital = @import("./capital.zig");
 
 test {
     _ = ui;
-    _ = widgets;
+    _ = ui_client;
     _ = comp;
     _ = tag;
-    _ = font;
+    _ = log;
+    _ = dist;
+    _ = theme;
     _ = res;
+    _ = actions;
+    _ = capital;
 
     _ = world;
     _ = ecs;
     _ = systems;
 }
-
-

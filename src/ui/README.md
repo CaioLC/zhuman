@@ -51,13 +51,13 @@ Node(comptime RenderData: type)                                           // the
   rebuilt from scratch each frame, like the node itself.) Named *Data*, not *Flags*,
   because the fields carry payloads (a `Color`), not bare bits.
 
-The host supplies, *one layer up* (today `src/widgets.zig` + `src/res.zig`):
-the concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)`
-and `pub const Node = ui.Node(RenderData)`, the `Interaction` type, the widget
-functions, the build-time measurement + the render loop, and `Resources` itself. To
-lift this into its own project, take `src/ui/` as-is; `widgets.zig`/`res.zig` are
-the template for how a host binds it. (The engine type is `Ctx`; the host names its
-binding `UiCtx`.)
+The host supplies, *one layer up* (today `src/ui_client/` + `src/res.zig`): the
+concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)` and
+`pub const Node = ui.Node(RenderData)` (`ctx_binding.zig`), the `Interaction` type, the
+paint-feature registry + `attach` mixins (`features/`), the widget functions
+(`widgets.zig`), the render walk (`draw.zig`), and `Resources` itself. To lift this into
+its own project, take `src/ui/` as-is; `ui_client/` + `res.zig` are the template for how
+a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 
 ## Module map
 
@@ -96,24 +96,25 @@ node tree — is what carries that geometry across the frame boundary.
 
 A node is **arena-allocated and rebuilt from scratch every frame**, so it can only
 ever hold *frame-local* state. Anything that must survive the reset lives in a **pool
-keyed by `node.key`** — the node holds, at most, the *handle* to it. That single
-axis — *does this outlive the frame?* — decides where everything goes, and keeps the
-mechanisms from multiplying:
+keyed by `node.key`** — and the node holds *nothing* but its `key`, which re-derives
+the slot every frame. That single axis — *does this outlive the frame?* — decides where
+everything goes, and keeps the mechanisms from multiplying:
 
 | State | Home | Lifetime | Job |
 |---|---|---|---|
 | `render_data` | on the node | **frame-local** | which aspects to draw + the inline payload each needs (a `Color`) |
-| `data` (handle) | on the node → into a pool | content is **persistent** | this node's access path to its cached render state (`TextData`) |
+| render state (`TextData`, …) | pool, keyed by `node.key`; reached via `node.state(u, T)` | **persistent** | cached content a feature draws (glyphs, a rasterized svg) |
 | interaction (`Slot{flags,rect}`) | pool, keyed by `node.key` | **persistent** | input state; reached via `query`/`mark`, never stored on the node |
 
-The node never holds persistent data *directly* — persistence is **always** a pool
-slot keyed by `node.key`. `render_data` is the one frame-local payload (color folds in
-here); `data` is the door to the persistent render-state pool; interaction is the other
-persistent, key-addressed store. Interaction can't fold into `render_data` precisely
-because they're opposite lifetimes: `render_data` is rebuilt each frame, while an
-interaction slot **must** persist (the rect stamped after frame N's layout is what
-frame N+1's event stage hit-tests, and `active` latches). Interaction's sibling is
-`TextData` — both are persistent and key-addressed — not `render_data`.
+The node never holds persistent data *directly*, not even a handle to it: `node.state(u,
+T)` acquires-or-creates the slot for `node.key` in `T`'s pool on demand, so a node can
+carry *several* cached states (text **and** a rasterized svg) with no per-node
+bookkeeping. `render_data` is the one frame-local payload (color folds in here); the
+`node.key`-addressed pools are the persistent stores. Interaction can't fold into
+`render_data` precisely because they're opposite lifetimes: `render_data` is rebuilt
+each frame, while an interaction slot **must** persist (the rect stamped after frame N's
+layout is what frame N+1's event stage hit-tests, and `active` latches). Interaction's
+sibling is `TextData` — both are persistent and key-addressed — not `render_data`.
 
 ## Node & features
 
@@ -123,11 +124,10 @@ A `Node` is the atom (generic over the host's `RenderData`):
 Node(RenderData) {
     id: []const u8,           // human-readable, for debugging
     parent, children,
-    data: ?u32,               // handle into a render-state pool (e.g. TextData); null = no render state
     key: u64,                 // stable identity → the node's slot in every cache pool (hash of parent key + id)
     render_data: RenderData,  // host render descriptor (policy): aspects + inline payload; engine never reads it
     size:  Size,              // per-axis SizeRule + padding + resolved box + measured data_*; defaulted at create
-    layout: Layout,           // positional: anchor + children alignment; defaulted at create
+    layout: Layout,           // positional: anchor + children alignment + overflow; defaulted at create
 }
 ```
 
@@ -135,12 +135,13 @@ Builder methods (`with_size`, `with_layout`) chain at construction; `add_child` 
 and `pcreate`, which creates + binds in one call — wire the tree. **Every node is a
 box:** `size`/`layout` are non-optional, defaulted at `create` (a `fit_children` box
 anchored `top_left`/`horizontal`) and overridden where a widget wants otherwise, so
-the layout passes never branch on "does this node have a box." The one optional
-payload left is `data` (a node may cache nothing). `render_data` is a host-defined
+the layout passes never branch on "does this node have a box." The node holds **no
+persistent payload at all** — cached render state is reached lazily through
+`node.state(u, T)` (the pool keyed by `node.key`), never a handle stored on the node,
+so a node can cache nothing, one thing, or several. `render_data` is a host-defined
 descriptor the engine carries but never interprets — the render loop switches on its
-fields (text vs sprite vs a fill/outline color), and a set aspect doubles as the
-discriminant for `data`: a present `text` ⟹ resolve `data` through the `TextData`
-pool, a present `sprite` ⟹ the sprite pool, so no separate data-kind union is needed.
+fields (text vs sprite vs a fill/outline color) and resolves any cached state a set
+aspect needs via `node.state`.
 
 ## The key-cache: pools + handles
 
@@ -161,6 +162,13 @@ slot-map:
   (handles re-fetched every frame), so no handle ever spans a removal.
 - **Prune at the frame boundary.** A slot not *touched* (acquired) this frame is
   freed next `endFrame`. Touch = stay alive.
+- **Eviction hook.** When a slot is dropped (pruned, its hole reused, or the pool
+  torn down), the pool calls `value.deinit()` if `T` declares one. POD states
+  (`TextData`, a scroll offset) need nothing; a state that *owns a resource* — an svg
+  feature caching a rasterized `Texture` — declares `deinit` so the resource is freed
+  instead of leaked when its node disappears. The `@typeInfo` guard keeps this legal
+  for non-container `T`. Convention: `deinit` takes no allocator (a cached GPU/handle
+  frees itself; anything needing the gpa isn't pool-cached).
 
 ## Interaction: hit-testing slots
 
@@ -252,6 +260,25 @@ Two orthogonal axes, both Unity-inspired:
   being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
   to an existing node, read that node's prior-frame rect with **`node.rect(ctx)`**
   (→ `Ctx.rectOf(key)`, the rect `stamp_rects` recorded last frame) and derive the origin.
+- **`scroll_x`/`scroll_y`** — the same trick as `origin`, one level down: instead of
+  moving a *root* itself, it translates one node's *children* by `-scroll_x`/`-scroll_y`.
+  `place` folds it straight into the base position it hands each child (`px -= p.layout
+  .scroll_y`), so a scroll container needs no second layout pass — it just holds an
+  offset. Defaults to 0 (every ordinary node is unaffected). The host binds this to
+  mouse-wheel input in a `scroll_view` widget (`widgets.zig`); pair it with `overflow
+  = .clip` (below) on the viewport so the now-shifted-but-not-resized content doesn't
+  paint outside its box.
+- **`overflow`** (`.visible` | `.clip`) — the **overflow axis**: what happens to content
+  that exceeds the box. `.clip` crops this node's subtree to its own box; `.visible`
+  (default) lets it spill. Pure geometry, read *after* the solve — it never changes a
+  computed size (it's not sizing; the box stays fixed and the *content's* visible extent
+  is constrained). Orthogonal to `scroll_*`: scroll **translates** children, overflow
+  **masks** the result — a scroll viewport is the composition `.clip` + a `scroll_y`
+  offset. It lives in core `Layout` (not a host render aspect) because it feeds *two*
+  engine consumers — the render walk's clip stack and, in time, hit-testing (a
+  clipped-away node shouldn't be clickable). The host still owns the actual clip *call*
+  (`setClipRect`), the same way it owns painting. Future crop variants: `scroll` (folds
+  the offset in), `ellipsis`.
 
 ### Sizing
 
@@ -293,9 +320,7 @@ const node = try Node.pcreate(u.arena, id, parent);
 // Feature mixin: cache + measure text, content-size the node, flag it for rendering.
 // Apply AFTER wiring, so node.key is final.
 pub fn data_text(u, node, text) !void {
-    const idx = u.cache(node.key, TextData);         // handle into the TextData pool
-    u.pool(TextData).get(idx).update(text);          // copy text into the cached slot
-    node.data = idx;
+    node.state(u, TextData).update(text);            // acquire-or-create this node's slot, copy text in
     const tw, const th = u.res.font.getStringSize(text); // host measures, at build
     // …content-size node.size with data_width/height = tw/th…
     node.render_data.text = .{};                     // present (white) ⟹ render walk draws text
@@ -328,20 +353,28 @@ Add a data type to `UiState` to make a node cacheable; add a flag to `Interactio
 to give it new interactive behaviour.
 
 **Rendering is entirely host-side.** The engine has no draw feature — it stores
-the tree + node `data`/`render_data` and exposes `root.iterate()` (a zero-alloc
-pre-order cursor). The host loop *is the renderer*; it lives at the call site
-(`main.zig`), not behind an engine wrapper, and picks whatever backend it likes
-(SDL, GPU, CPU). Each aspect is an *optional* payload — unwrap it, and the value is
-the color to paint in:
+the tree + `render_data` and exposes `root.iterate()` (a zero-alloc pre-order cursor).
+The host loop *is the renderer*; it lives at the call site (`ui_client/draw.zig`), not
+behind an engine wrapper, and picks whatever backend it likes (SDL, GPU, CPU). Today's
+host organizes it as a **feature registry** (`ui_client/features/`): an ordered list of
+paint features (text/fill/outline/img/svg), each a module owning its `RenderData` field,
+its optional pooled `State`, its `attach` mixin, and its `draw`. The walk is a recursive
+pre-order paint carrying a **clip stack** (from `Layout.overflow`), dispatching each set
+aspect to its feature's `draw` in list order (= z-order):
 
 ```zig
-var it = root.iterate();
-while (it.next()) |node| {
-    if (node.render_data.fill)    |c| draw_fill(u, node, c);    // c: the fill color
-    if (node.render_data.outline) |c| draw_outline(u, node, c);
-    if (node.render_data.text)    |c| draw_text(u, node, c);    // resolve node.data → TextData, blit in c
+fn draw_node(u, node, clip) void {
+    u.res.renderer.setClipRect(irect(clip));           // apply the inherited clip
+    inline for (features.list) |F|                     // list order = z-order
+        if (@field(node.render_data, F.name)) |p| F.draw(u, node, p);
+    const child_clip = if (node.layout.overflow == .clip) intersect(clip, box(node)) else clip;
+    for (node.children.items) |c| draw_node(u, c, child_clip);
 }
 ```
+
+Adding a visual (an svg, an opacity) is adding a feature module + one `list` entry +
+one `RenderData` field — no engine change. `features.assertFeature` fails the build if
+the hand-written `RenderData` drifts from the list.
 
 **Sizing is host-measured too.** The engine has no size callback either — the
 host measures content at build (`data_text` asks the font for the text's px
@@ -374,9 +407,23 @@ binding) when they measure; the *generic* engine code never does.
   land: `range`/`max_of` combinators, and a `strictness: f32` driving a
   violation-resolution pass that distributes slack/overflow among siblings.
 - **Sprites — done (host-side).** The host carries a `Sprite` (`texture` +
-  optional `src` sheet cell) on `RenderData.img`; `widgets.data_sprite` sets it
-  and `widgets.icon_sprite(res, col, row)` builds one from a sheet cell. No engine
-  change was needed — `RenderData` is host policy, so the aspect rode in opaquely.
+  optional `src` sheet cell) on `RenderData.img`; the `img` feature's `attach_sprite`
+  sets it and `ctx_binding.icon_sprite(res, col, row)` builds one from a sheet cell. No
+  engine change was needed — `RenderData` is host policy, so the aspect rode in opaquely.
+- **Feature registry (host-side) — done.** Paint aspects are now a registry of feature
+  modules (`ui_client/features/`), each co-locating its `RenderData` field, optional
+  pooled `State`, `attach`, and `draw`; an ordered `list` drives the render walk and is
+  the z-order, and `assertFeature` keeps the hand-written `RenderData` from drifting.
+  Adding a visual (svg was the proof) is a module + a list entry — still no engine change.
+  The engine gained only the two *mechanism* hooks this leans on: `node.state(u, T)`
+  (node-keyed cache access, replacing the old singular `node.data` handle) and the pool
+  **eviction hook** (`deinit` on drop, so a feature's resource-owning `State` — an svg's
+  raster texture — doesn't leak).
+- **Overflow / clipping — done (in core).** `Layout.overflow` (`.visible`/`.clip`) is
+  the overflow axis; the host render walk (`draw.zig`) keeps a clip stack from it. It's
+  core (not a `RenderData` aspect) because it's geometry two engine consumers read — the
+  render crop and, next, hit-testing (so a clipped-away node stops being clickable —
+  `mark` intersecting the clip rect is the pending follow-up).
 - **Interactables-only marking — done.** The event stage (`ui.mark`) now iterates
   the live interaction slots, each carrying its node's rect, so hit-testing is
   O(interactive), not O(all) — no tree walk. The one O(all) pass left is
