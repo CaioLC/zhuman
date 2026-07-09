@@ -4,15 +4,15 @@
 //! only referenced here, because the pool registry can't import a feature module
 //! without a cycle (this module imports ctx_binding, not the reverse).
 
-const ui = @import("../../ui/root.zig");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
+const font = @import("../../font.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 
 pub const name = "text";
-pub const Payload = ?ui.Color;
+pub const Payload = ?cb.Color;
 pub const State = cb.UiState.TextState;
 
 /// Give `node` cached text — measured at build (the host has the font on hand),
@@ -20,8 +20,10 @@ pub const State = cb.UiState.TextState;
 /// wired into the tree, so `node.key` is final. Overrides both size axes to `.content`,
 /// keeping the node's existing padding.
 pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
-    node.state(ctx, State).update(text);
-    const tw, const th = try ctx.res.font.getStringSize(text);
+    const st = node.state(ctx, State);
+    st.update(text);
+    st.px = font.default_px; // default; `style.apply` overrides + re-measures for a heading
+    const tw, const th = try ctx.res.font.measure(text, st.px);
     var size = node.size;
     size.w = .content;
     size.h = .content;
@@ -33,11 +35,15 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 
 /// Blit the node's cached text in `c` over its content box. Rasterizes each frame (a
 /// short string is cheap — unlike `svg`, which caches its raster in `State`).
-pub fn draw(u: *UiCtx, node: *Node, c: ui.Color) void {
-    const fmt = node.state(u, State).text() orelse return;
+pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
+    const st = node.state(u, State);
+    const fmt = st.text() orelse return;
     const r = paint.content(node) orelse return;
 
-    var surface = u.res.font.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
+    // Render at the size stored on the state (default, or a heading size from `apply`), so
+    // glyphs fill the content box that was measured at the same size.
+    const f = u.res.font.at(st.px) catch return;
+    var surface = f.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
     const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
     defer texture.deinit();

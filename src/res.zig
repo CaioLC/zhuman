@@ -3,6 +3,7 @@ const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const logmod = @import("./log.zig");
 const thememod = @import("./theme.zig");
+const fontmod = @import("./font.zig");
 
 pub const Time = struct {
     dt: f32,
@@ -24,7 +25,9 @@ pub const Input = struct {
 };
 
 pub const Resources = struct {
-    font: *sdl.ttf.Font,
+    /// The multi-size monospace text backend (see `font.zig`) — measure/render at any
+    /// point size, one cached `ttf.Font` per size. Held by pointer, owned by `App`.
+    font: *fontmod.Fonts,
     renderer: *const sdl.render.Renderer,
     window: sdl.video.Window,
     time: Time,
@@ -50,7 +53,7 @@ pub const Resources = struct {
     /// text-input mode is started/stopped to match, see `widgets.text_input`).
     focused_text: ?u64 = null,
 
-    pub fn init(f: *sdl.ttf.Font, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+    pub fn init(f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");
         const icons = try sdl.image.loadTexture(r.*, "assets/icons.png");
         return .{

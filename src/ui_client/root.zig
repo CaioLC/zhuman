@@ -13,9 +13,16 @@ const draw = @import("./draw.zig");
 const tree = @import("./tree.zig");
 const widgets = @import("./widgets.zig");
 
+/// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
+/// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
+pub const style = @import("./style.zig");
+/// The content layer — pure content leaves (`text`/`image`/`svg`) + the `el` sugar.
+pub const elements = @import("./elements.zig");
+
 // ctx_binding
 pub const UiCtx = ctx_binding.UiCtx;
 pub const Node = ctx_binding.Node;
+pub const Color = ctx_binding.Color; // the host color type (SDL's), carried on RenderData
 pub const UiState = ctx_binding.UiState;
 pub const Sprite = ctx_binding.Sprite;
 pub const icon_sprite = ctx_binding.icon_sprite;

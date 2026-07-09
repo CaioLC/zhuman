@@ -20,7 +20,7 @@ const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 
 pub const name = "svg";
-pub const Payload = ?ui.Color; // tint
+pub const Payload = ?cb.Color; // tint
 pub const State = cb.UiState.SvgState;
 
 /// Give `node` a cached SVG raster from `path`, drawn at `px`×`px`, tinted `theme.fg`
@@ -40,7 +40,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, path: [:0]const u8, px: f32) !void {
 }
 
 /// Blit the cached raster over the node's content box, tinted `c`.
-pub fn draw(u: *UiCtx, node: *Node, c: ui.Color) void {
+pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const tex = node.state(u, State).tex orelse return;
     const r = paint.content(node) orelse return;
     tex.setColorMod(c.r, c.g, c.b) catch {};

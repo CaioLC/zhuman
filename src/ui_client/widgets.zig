@@ -58,7 +58,7 @@ pub fn img(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Text
 /// `key` and returns the outer node so the caller can query/override it. The caller
 /// computes `frac` — a countdown bar passes `timer.v / timer.start` (drains full→empty),
 /// a fill bar the inverse. `fill` colors the inner bar; the track outline is themed `line2`.
-pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: ui.Color) !*Node {
+pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: cb.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     outer.render_data.outline = ctx.res.theme.line2;
     _ = outer.with_layout(ui.features.Layout.init(.relative, null))

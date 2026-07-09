@@ -2,7 +2,6 @@
 //! `attach` (callers set `node.render_data.fill = color` directly). The simplest kind
 //! of feature: just a `name`, a `Payload`, and a `draw`.
 
-const ui = @import("../../ui/root.zig");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
 
@@ -10,10 +9,10 @@ const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 
 pub const name = "fill";
-pub const Payload = ?ui.Color;
+pub const Payload = ?cb.Color;
 
 /// Solid rect in `c` spanning the node's full resolved box.
-pub fn draw(u: *UiCtx, node: *Node, c: ui.Color) void {
+pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const r = paint.full(node) orelse return;
     u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     u.res.renderer.renderFillRect(paint.frect(r)) catch return;

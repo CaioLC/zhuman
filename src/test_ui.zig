@@ -17,6 +17,8 @@ const cb = @import("./ui_client/ctx_binding.zig");
 const features = @import("./ui_client/features/root.zig");
 const draw = @import("./ui_client/draw.zig");
 const widgets = @import("./ui_client/widgets.zig");
+const style = @import("./ui_client/style.zig");
+const elements = @import("./ui_client/elements.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
@@ -24,5 +26,7 @@ test {
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);
     std.testing.refAllDecls(widgets);
+    std.testing.refAllDecls(style); // style/placement fold + its unit tests
+    std.testing.refAllDecls(elements); // content leaves + `el` — force the bodies to compile
     _ = &features.data_svg; // svg.attach — compile it even though no widget calls it yet
 }

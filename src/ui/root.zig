@@ -7,9 +7,10 @@ pub const geometry = @import("./geometry.zig");
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const Rect = geometry.Rect;
-pub const Color = @import("./color.zig").Color;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
+// Note: no `Color` here — RGBA is host policy (the engine carries `RenderData`
+// opaquely and never reads a color). The host aliases its own (see `src/theme.zig`).
 pub const Pool = cache.Pool;
 pub const Pools = cache.Pools;
 
@@ -321,12 +322,14 @@ test "node carries host render data opaquely: default-clear, settable" {
     const a = arena.allocator();
 
     // Aspects are optional payloads (a color), not bare bits — present ⟹ draw it.
-    const RenderData = struct { text: ?Color = null, border: ?Color = null };
+    // The payload type is host policy; a trivial local stand-in exercises the point.
+    const Rgba = struct { r: u8, g: u8, b: u8, a: u8 };
+    const RenderData = struct { text: ?Rgba = null, border: ?Rgba = null };
     const N = Node(RenderData);
 
     const n = try N.create(a, "n");
     try std.testing.expect(n.render_data.text == null and n.render_data.border == null); // init = all-clear
-    n.render_data.text = Color.white;
+    n.render_data.text = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
     try std.testing.expect(n.render_data.text != null and n.render_data.border == null); // independent aspects
 }
 

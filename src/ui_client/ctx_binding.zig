@@ -3,7 +3,13 @@
 const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
+const theme = @import("../theme.zig");
 const Resources = @import("../res.zig").Resources;
+
+/// The host color type, re-exposed here so the whole `ui_client` layer names one `Color`
+/// (SDL's `pixels.Color`) — the engine carries it opaquely on `RenderData` and never
+/// reads it. Defined in `theme.zig` (the color leaf); aliased here for the features/widgets.
+pub const Color = theme.Color;
 
 /// Context Binding
 /// The registry of widget-state (render-state) types kept in the UI cache. One
@@ -19,9 +25,15 @@ pub const UiState = struct {
     pub const TextState = struct {
         buf: [64]u8,
         len: usize,
+        /// Point size to render this text at, in px. Set by the `text` feature's `attach`
+        /// (default) and overridden by `style.apply` when a `font` fragment resolves — so
+        /// the size travels from build to the feature's `draw`, which renders at it. Pool
+        /// slots are zero-initialized, so `attach` (run every frame before `draw`) always
+        /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
+        px: f32,
 
         pub fn init() TextState {
-            return .{ .buf = undefined, .len = 0 };
+            return .{ .buf = undefined, .len = 0, .px = 0 };
         }
 
         /// Copy `text` into the persistent buffer.
@@ -109,11 +121,11 @@ pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
 /// Overflow/clip is **not** here — it moved to `Layout.overflow` (it's geometry read by
 /// the render walk *and* hit-testing, not a paint aspect). See `src/ui/features/layout.zig`.
 pub const RenderData = struct {
-    text: ?ui.Color = null, // cached glyphs (in node.state(TextState)), blit in this color
-    fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
-    outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
+    text: ?Color = null, // cached glyphs (in node.state(TextState)), blit in this color
+    fill: ?Color = null, // solid rect spanning the node's resolved box, in this color
+    outline: ?Color = null, // 1px box border around the node's resolved box, in this color
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
-    svg: ?ui.Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
+    svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
