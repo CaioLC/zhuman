@@ -49,6 +49,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
+    // Library-internal files (components/actions/capital) reach the library's own public
+    // surface via `@import("ha")` (e.g. `ha.dist`), so the module must import itself under
+    // that name. Without it the self-import resolves only when `ha_mod` happens to be the
+    // compilation root (`zig build test`); the exe build, which drives the component types
+    // through `World`, would fail to find module 'ha'.
+    ha_mod.addImport("ha", ha_mod);
 
     // Executable
     const exe_mod = b.createModule(.{

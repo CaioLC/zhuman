@@ -151,10 +151,18 @@ pub fn Node(comptime RenderData: type) type {
             for (self.children.items) |child| child.rekey(self.key);
         }
 
-        pub fn collect(self: *Self, allocator: Allocator, list: *std.ArrayList(*Self)) !void {
-            try list.append(allocator, self);
-            for (self.children.items) |child| {
-                try child.collect(allocator, list);
+        /// Flatten a builder's return value into the frame's render `list`: a single
+        /// `*Self`, an `?*Self` (skipped when null), or a tuple mixing them (a screen plus
+        /// its optional overlay). Each leaf is an **independent root tree** whose position
+        /// in `list` is its draw order — distinct from `iterate`, which walks one tree's
+        /// own subtree. Pure structure over `*Self`, so it's engine mechanism, not host
+        /// policy (the host only decides what shapes its builders return).
+        pub fn collect(list: *std.ArrayList(*Self), allocator: Allocator, item: anytype) !void {
+            switch (@typeInfo(@TypeOf(item))) {
+                .optional => if (item) |v| try collect(list, allocator, v),
+                .pointer => try list.append(allocator, item), // a single `*Self` root
+                .@"struct" => |s| inline for (s.fields) |f| try collect(list, allocator, @field(item, f.name)),
+                else => @compileError("collect: unsupported UI tree shape " ++ @typeName(@TypeOf(item))),
             }
         }
 
@@ -270,35 +278,6 @@ test "node tree layout" {
 
     try std.testing.expect(child2.layout._global_x.? == 350.0);
     try std.testing.expect(child2.layout._global_y.? == 550.0);
-}
-
-test "collect returns each node exactly once" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var root = try TestNode.create(allocator, "root");
-    _ = root.with_size(Size.initFixed(800, 600, null));
-    _ = root.with_layout(Layout.init(.top_left, null));
-
-    const indep = try TestNode.create(allocator, "indp");
-    _ = indep.with_size(Size.initFixed(100, 50, null));
-    _ = indep.with_layout(Layout.init(.center, null));
-    try root.add_child(allocator, indep);
-
-    const dep = try TestNode.create(allocator, "dep1");
-    _ = dep.with_size(Size.initFixed(100, 50, null));
-    _ = dep.with_layout(Layout.init(.relative, null));
-    try root.add_child(allocator, dep);
-
-    var list: std.ArrayList(*TestNode) = .empty;
-    defer list.clearAndFree(allocator);
-    try root.collect(allocator, &list);
-
-    try std.testing.expectEqual(3, list.items.len);
-    try std.testing.expectEqual(root, list.items[0]);
-    try std.testing.expectEqual(indep, list.items[1]);
-    try std.testing.expectEqual(dep, list.items[2]);
 }
 
 test "iterate walks the subtree in pre-order, climbing across levels" {

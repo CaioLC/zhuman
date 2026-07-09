@@ -24,37 +24,13 @@ const World = world.World;
 const Entity = world.Entity;
 const Resources = res_mod.Resources;
 
-// --- capital archetypes (World.spawn bundles) ---
-
-pub const sandals = .{
-    comp.Label{ .v = "Sandals" },
-    comp.Requires{ .energy = 6.0, .materials = 8.0 },
-    tag.ActionModifier,
-};
-
-pub const fishing_rod = .{
-    comp.Label{ .v = "Fishing rod" },
-    comp.Requires{ .energy = 8.0, .materials = 20.0 },
-    tag.ActionModifier,
-};
-
-pub const axe = .{
-    comp.Label{ .v = "Axe" },
-    comp.Requires{ .energy = 8.0, .materials = 18.0 },
-    tag.ActionModifier,
-};
-
-// Build cost/label/category only — its ticked running state is `comp.Fireplace` below.
-pub const fireplace = .{
-    comp.Label{ .v = "Fireplace" },
-    comp.Requires{ .energy = 10.0, .materials = 40.0 },
-    tag.Generator,
-};
-
-// Bed isn't ported: its old effects (vigor-trickle boost, population shelter capacity)
-// both belonged to mechanics this refactor removed (trickle regen is gone; Population
-// is gone). It's neither an ActionModifier nor a Generator until comfort/shelter is
-// redesigned — no archetype defined here rather than a fake empty placeholder.
+// --- capital build archetypes: removed ---
+// The old `sandals`/`fishing_rod`/`axe`/`fireplace` const bundles built a good as a
+// *separate entity* (Label + Requires + category tag) and named the private
+// `comp.Requires`, so they neither compiled nor matched the redesign's "capital is a
+// component on the owning agent" model. They're dropped until that per-agent migration
+// lands; the ActionModifier apply/remove pairs and the Generator runner below already
+// speak the new model, so they stay.
 
 // --- ActionModifier creation/destruction ---
 // Each pair applies/reverses its good's effect on the target action component, which
