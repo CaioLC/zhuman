@@ -1,21 +1,21 @@
-//! A **mock showcase page** standing in for the mid-redesign HUD (`play_game`/`gameover`).
-//! It exercises the whole new stack end-to-end so the style system can be eyeballed in the
-//! running app: multi-size fonts (h1/h2/h3/body), themed text colors, and every shelf
-//! template (`button`, `panel`, `scroll_view`, `figure`, `action_button`, status/heartbeat).
-//! Routed by `build_ui` while the real screens are rebuilt (plan Phase 6).
+//! A **mock showcase page** standing in for the mid-redesign HUD. It exercises the whole
+//! new stack end-to-end so the style system can be eyeballed in the running app: multi-size
+//! fonts (h1/h2/h3/body), themed text colors, and every shelf template (`button`, `panel`,
+//! `scroll_view`, `figure`, `action_button`, status/heartbeat). Built entirely on
+//! `ui_client` — no direct engine (`ha.ui`) import.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
 const tag = ha.tag;
-const ui = ha.ui;
 const uic = ha.ui_client;
+const el = uic.elements;
+const style = uic.style;
+const Style = style.Style;
+const El = el.El;
 const ecs = ha.ecs;
 const actions = ha.actions;
-const style = uic.style;
-const elements = uic.elements;
-const Style = style.Style;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 const Node = uic.Node;
@@ -23,44 +23,30 @@ const UiCtx = uic.UiCtx;
 
 const t = @import("./templates/root.zig");
 
-/// A flowed text leaf with a style applied — the showcase's workhorse (content + style +
-/// placement in the primary "B" idiom: leaf, then compose).
-fn txt(ctx: *UiCtx, parent: *Node, id: []const u8, s: []const u8, style_spec: anytype) !*Node {
-    const n = try elements.text(ctx, parent, id, s);
-    style.apply_placement(n, .{style.flow});
-    style.apply(ctx, n, style_spec);
-    return n;
-}
-
-/// A flowed horizontal row container.
-fn row(ctx: *UiCtx, parent: *Node, id: []const u8) !*Node {
-    const n = try Node.pcreate(ctx.arena, id, parent);
-    style.apply_placement(n, .{ style.flow, style.row, style.gap(16) });
-    return n;
+/// A text leaf with a style — the showcase's workhorse (leaf flows by default, then style).
+fn txt(ctx: *UiCtx, parent: anytype, id: []const u8, s: []const u8, spec: anytype) !El {
+    return (try el.text(ctx, parent, id, s)).with_style(spec);
 }
 
 pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const th = ctx.res.theme;
-    const ww, const wh = try ctx.res.window.getSize();
 
-    // Fullscreen root: a vertical, padded column over a bg fill. A root stays non-relative
-    // (`.top_left`), so no `flow` here.
-    const root = try Node.create(ctx.arena, "mock");
-    _ = root.with_size(ui.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    style.apply_placement(root, .{ style.col, style.gap(14) });
-    style.apply(ctx, root, .{Style{ .fill = th.bg, .padding = ui.Padding.init(20) }});
+    // Fullscreen root: a vertical, padded column over a bg fill.
+    const root = try el.root(ctx, "mock");
+    _ = root.with_layout(.top_left).with_align_children(.vertical, .top_left).with_gap(14)
+        .with_style(.{ Style{ .fill = th.bg }, style.pad(20) });
 
     _ = try txt(ctx, root, "title", "Style System Showcase", .{ style.h1, Style{ .text = th.fg } });
 
     // Multi-size fonts: same word at each preset, so distinct point sizes are obvious.
-    const sizes = try row(ctx, root, "sizes");
+    const sizes = try t.row(ctx, root, "sizes");
     _ = try txt(ctx, sizes, "s1", "H1", .{ style.h1, Style{ .text = th.fg } });
     _ = try txt(ctx, sizes, "s2", "H2", .{ style.h2, Style{ .text = th.fg } });
     _ = try txt(ctx, sizes, "s3", "H3", .{ style.h3, Style{ .text = th.acc } });
     _ = try txt(ctx, sizes, "sb", "body", .{ style.body, Style{ .text = th.dim } });
 
     // Themed color roles on body text.
-    const colors = try row(ctx, root, "colors");
+    const colors = try t.row(ctx, root, "colors");
     _ = try txt(ctx, colors, "cfg", "fg", .{Style{ .text = th.fg }});
     _ = try txt(ctx, colors, "cacc", "acc", .{Style{ .text = th.acc }});
     _ = try txt(ctx, colors, "cwarn", "warn", .{Style{ .text = th.warn }});
@@ -68,13 +54,13 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
 
     // Buttons (enabled + disabled chrome).
     const bpanel = try t.panel(ctx, root, "bpanel", "Buttons");
-    const brow = try row(ctx, bpanel, "brow");
+    const brow = try t.row(ctx, bpanel, "brow");
     _ = try t.button(ctx, brow, "b_on", "Enabled", true);
     _ = try t.button(ctx, brow, "b_off", "Disabled", false);
 
     // Vitals figure + pulsing heartbeat readout.
     const vpanel = try t.panel(ctx, root, "vpanel", "Vitals");
-    const vrow = try row(ctx, vpanel, "vrow");
+    const vrow = try t.row(ctx, vpanel, "vrow");
     try t.figure(ctx, vrow, t.figure_glyphs(0.7), th.acc);
     _ = try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.time.elapsed) }});
 
@@ -101,5 +87,5 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
         _ = try txt(ctx, sv.content, key, line, .{Style{ .text = th.dim }});
     }
 
-    return root;
+    return root.get();
 }

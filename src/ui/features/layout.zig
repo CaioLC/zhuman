@@ -57,6 +57,15 @@ pub const Overflow = enum {
 pub const Layout = struct {
     anchor: Anchor,
     children_align: ChildrenAlign,
+    /// Where this node's flowed children settle within its **leftover space**, for the
+    /// simple `.horizontal`/`.vertical` flows only. The anchor's *cross-axis* part aligns
+    /// each child individually (a short child in a tall row → top/center/bottom); its
+    /// *main-axis* part justifies the whole packed run within any main-axis slack
+    /// (left/center/right). A no-op when the parent exactly fits its children on that axis
+    /// (e.g. `fit_children`) and for the wrapped/reverse/`centered` flows. Defaults to
+    /// `.top_left` — children flush to the start of both axes, i.e. the historical behavior.
+    /// Set via `El.with_align_children`; the engine's `Node.with_layout` leaves it at default.
+    child_anchor: Anchor = .top_left,
     /// Space inserted *between* adjacent flowed (`relative`) children, along the
     /// flow axis (and between rows/columns of the `_wrapped` variants). Does not
     /// apply to the proportional `centered*` aligns (they already distribute space)
@@ -222,6 +231,25 @@ fn finalize_axis(rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p
 
 // ============================ Placement (pass 3) =============================
 
+/// Fraction of a box anchor's leftover space that sits *before* the child on the X axis
+/// (left→0, center→0.5, right→1). `.relative` is invalid as a `child_anchor` → treated as 0.
+fn anchor_fx(a: Anchor) f32 {
+    return switch (a) {
+        .top_center, .center, .bottom_center => 0.5,
+        .top_right, .center_right, .bottom_right => 1.0,
+        else => 0.0,
+    };
+}
+
+/// Same, for the Y axis (top→0, center→0.5, bottom→1).
+fn anchor_fy(a: Anchor) f32 {
+    return switch (a) {
+        .center_left, .center, .center_right => 0.5,
+        .bottom_left, .bottom_center, .bottom_right => 1.0,
+        else => 0.0,
+    };
+}
+
 /// Assign global positions top-down. Pure geometry — sizes are already resolved,
 /// so this never consults the host (`ctx`). `node` is `anytype` (a `*Node(RenderData)`);
 /// only render-agnostic fields are touched, so the walk monomorphizes per node type.
@@ -282,11 +310,31 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
         var col_max_width: f32 = 0.0;
         const gap = l.gap; // inserted between flowed children (and wrapped rows/cols)
 
+        // Block justification (simple flows only): shift the whole flowed run within the
+        // parent's leftover *main-axis* space, per `child_anchor`'s main-axis component.
+        // `.top_left` (the default) leaves the run flush at the start — historical behavior.
+        switch (l.children_align) {
+            .horizontal => {
+                var block: f32 = 0;
+                for (dep_buf[0..dep_count]) |c| block += c.size.width;
+                if (dep_count > 1) block += gap * @as(f32, @floatFromInt(dep_count - 1));
+                x_offset = anchor_fx(l.child_anchor) * (s.width - block);
+            },
+            .vertical => {
+                var block: f32 = 0;
+                for (dep_buf[0..dep_count]) |c| block += c.size.height;
+                if (dep_count > 1) block += gap * @as(f32, @floatFromInt(dep_count - 1));
+                y_offset = anchor_fy(l.child_anchor) * (s.height - block);
+            },
+            else => {},
+        }
+
         for (dep_buf[0..dep_count], 0..) |c, idx| {
             const cs = c.size;
             switch (l.children_align) {
                 .horizontal => {
-                    try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    const cy = anchor_fy(l.child_anchor) * (s.height - cs.height); // cross-align
+                    try place(c, .{ .x_offset = x_offset, .y_offset = cy });
                     x_offset += cs.width + gap;
                 },
                 .horizontal_wrapped => {
@@ -316,7 +364,8 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
                     row_max_height = @max(row_max_height, cs.height);
                 },
                 .vertical => {
-                    try place(c, .{ .x_offset = x_offset, .y_offset = y_offset });
+                    const cx = anchor_fx(l.child_anchor) * (s.width - cs.width); // cross-align
+                    try place(c, .{ .x_offset = cx, .y_offset = y_offset });
                     y_offset += cs.height + gap;
                 },
                 .vertical_right => {

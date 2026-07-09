@@ -35,7 +35,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, path: [:0]const u8, px: f32) !void {
         st.tex = sdl.image.loadTexture(ctx.res.renderer.*, path) catch null;
         st.src_key = k;
     }
-    node.size = ui.features.Size.initContent(px, px, null);
+    node.size = ui.features.Size.initContent(px, px);
     node.render_data.svg = ctx.res.theme.fg;
 }
 

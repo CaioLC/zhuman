@@ -99,8 +99,8 @@ pub fn Node(comptime RenderData: type) type {
                 .children = .empty,
                 .key = key(0, id),
                 .render_data = .{},
-                .size = features.Size.init(.fit_children, .fit_children, null),
-                .layout = features.Layout.init(.top_left, .horizontal),
+                .size = features.Size.init(.fit_children, .fit_children),
+                .layout = features.Layout.init(.relative, .horizontal),
             };
         }
 
@@ -123,8 +123,9 @@ pub fn Node(comptime RenderData: type) type {
             return self;
         }
 
-        pub fn with_layout(self: *Self, layout: features.Layout) *Self {
-            self.layout = layout;
+        pub fn with_layout(self: *Self, anchor: Anchor, children_align: ?ChildrenAlign) *Self {
+            const l = features.Layout.init(anchor, children_align);
+            self.layout = l;
             return self;
         }
 
@@ -257,19 +258,19 @@ test "node tree layout" {
     const allocator = arena.allocator();
 
     var root = try TestNode.create(allocator, "root");
-    _ = root.with_size(Size.initFixed(800, 600, null));
-    _ = root.with_layout(Layout.init(.top_left, null));
+    _ = root.with_size(Size.initFixed(800, 600));
+    _ = root.with_layout(.top_left, null);
     root.layout._global_x = 0;
     root.layout._global_y = 0;
 
     const child = try TestNode.create(allocator, "chd1");
-    _ = child.with_size(Size.initFixed(100, 50, null));
-    _ = child.with_layout(Layout.init(.center, null));
+    _ = child.with_size(Size.initFixed(100, 50));
+    _ = child.with_layout(.center, null);
     try root.add_child(allocator, child);
 
     const child2 = try TestNode.create(allocator, "chd2");
-    _ = child2.with_size(Size.initFixed(100, 50, null));
-    _ = child2.with_layout(Layout.init(.bottom_center, null));
+    _ = child2.with_size(Size.initFixed(100, 50));
+    _ = child2.with_layout(.bottom_center, null);
     try root.add_child(allocator, child2);
 
     try root.set_global_pos();
@@ -339,12 +340,12 @@ test "pct_of_parent resolves against a definite (fixed) parent" {
     const a = arena.allocator();
 
     const root = try TestNode.create(a, "root");
-    _ = root.with_size(Size.initFixed(800, 600, null));
-    _ = root.with_layout(Layout.init(.top_left, .vertical));
+    _ = root.with_size(Size.initFixed(800, 600));
+    _ = root.with_layout(.top_left, .vertical);
 
     const child = try TestNode.create(a, "child");
-    _ = child.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .{ .fixed = 100 }, null));
-    _ = child.with_layout(Layout.init(.top_left, null));
+    _ = child.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .{ .fixed = 100 }));
+    _ = child.with_layout(.top_left, null);
     try root.add_child(a, child);
 
     try root.set_global_pos();
@@ -359,17 +360,17 @@ test "fit_children sums on the main axis, maxes on the cross" {
 
     // Vertical parent → main axis = y: height = 50 + 30 = 80, width = max(100, 200) = 200.
     const root = try TestNode.create(a, "root");
-    _ = root.with_size(Size.init(.fit_children, .fit_children, null));
-    _ = root.with_layout(Layout.init(.top_left, .vertical));
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .vertical);
 
     const k1 = try TestNode.create(a, "k1");
-    _ = k1.with_size(Size.initFixed(100, 50, null));
-    _ = k1.with_layout(Layout.init(.relative, null));
+    _ = k1.with_size(Size.initFixed(100, 50));
+    _ = k1.with_layout(.relative, null);
     try root.add_child(a, k1);
 
     const k2 = try TestNode.create(a, "k2");
-    _ = k2.with_size(Size.initFixed(200, 30, null));
-    _ = k2.with_layout(Layout.init(.relative, null));
+    _ = k2.with_size(Size.initFixed(200, 30));
+    _ = k2.with_layout(.relative, null);
     try root.add_child(a, k2);
 
     try root.set_global_pos();
@@ -385,19 +386,20 @@ test "layout gap: fit parent reserves it, children flow spaced by it" {
     // Vertical parent, gap 10 between its two children (50 + 30 tall):
     // height = 50 + 10 + 30 = 90; width = max(100, 200) = 200 (no cross-axis gap).
     const root = try TestNode.create(a, "root");
-    _ = root.with_size(Size.init(.fit_children, .fit_children, null));
-    _ = root.with_layout(Layout.init(.top_left, .vertical).with_gap(10));
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .vertical);
+    root.layout.gap = 10;
     root.layout._global_x = 0;
     root.layout._global_y = 0;
 
     const k1 = try TestNode.create(a, "k1");
-    _ = k1.with_size(Size.initFixed(100, 50, null));
-    _ = k1.with_layout(Layout.init(.relative, null));
+    _ = k1.with_size(Size.initFixed(100, 50));
+    _ = k1.with_layout(.relative, null);
     try root.add_child(a, k1);
 
     const k2 = try TestNode.create(a, "k2");
-    _ = k2.with_size(Size.initFixed(200, 30, null));
-    _ = k2.with_layout(Layout.init(.relative, null));
+    _ = k2.with_size(Size.initFixed(200, 30));
+    _ = k2.with_layout(.relative, null);
     try root.add_child(a, k2);
 
     try root.set_global_pos();
@@ -415,12 +417,12 @@ test "pct_of_parent under an indefinite (fit) parent falls back to content (0, n
     // Parent width is fit_children (indefinite). The child wants 50% of it but has
     // no measured content (data_width = 0) — the fallback must resolve to 0, safely.
     const root = try TestNode.create(a, "root");
-    _ = root.with_size(Size.init(.fit_children, .{ .fixed = 100 }, null));
-    _ = root.with_layout(Layout.init(.top_left, .vertical));
+    _ = root.with_size(Size.init(.fit_children, .{ .fixed = 100 }));
+    _ = root.with_layout(.top_left, .vertical);
 
     const child = try TestNode.create(a, "child");
-    _ = child.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .{ .fixed = 50 }, null));
-    _ = child.with_layout(Layout.init(.relative, null));
+    _ = child.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .{ .fixed = 50 }));
+    _ = child.with_layout(.relative, null);
     try root.add_child(a, child);
 
     try root.set_global_pos();

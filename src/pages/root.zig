@@ -7,7 +7,6 @@ const app = @import("../main.zig");
 
 const comp = ha.comp;
 const tag = ha.tag;
-const ui = ha.ui;
 const uic = ha.ui_client;
 const ecs = ha.ecs;
 const actions = ha.actions;
@@ -16,26 +15,23 @@ const Entity = ha.world.Entity;
 
 // Screens are mid-redesign (plan Phase 6): the mock showcase stands in for them. Restore
 // these imports + the actor-dispatch block in `build_ui` when play_game/gameover land.
-// const ui_playgame = @import("./play_game.zig").ui_playgame;
+const p_playgame = @import("./play_game.zig").ui_playgame;
 // const ui_gameover = @import("./gameover.zig").ui_gameover;
 const mock_page = @import("./mock.zig").mock_page;
 
 /// A fullscreen root: the anchor box a whole screen's content positions against. Sized to
 /// the live window so `.center`/`.top_left`/… anchors resolve against the full display.
 pub fn ui_root(ui_ctx: *uic.UiCtx, id: []const u8) !*uic.Node {
-    const ww, const wh = try ui_ctx.res.window.getSize();
-    const root = try uic.Node.create(ui_ctx.arena, id);
-    _ = root.with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
-    return root;
+    return (try uic.elements.root(ui_ctx, id)).get();
 }
 
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
-    // Mock mode (plan Phase 5/6): the HUD screens are being rebuilt on the new style
-    // system, so route to the showcase page under a fixed mid-warm palette. Restore the
-    // actor-dispatch block below when play_game/gameover return.
     ui_ctx.res.theme = ha.theme.lerp(0.6);
     var trees: std.ArrayList(*uic.Node) = .empty;
-    try uic.collect(&trees, ui_ctx.arena, try mock_page(ui_ctx, world));
+    // const mock = try mock_page(ui_ctx, world);
+    const play_game = try p_playgame(ui_ctx, world);
+
+    try uic.collect(&trees, ui_ctx.arena, play_game);
     return trees.items;
 
     // -- Actor-dispatch HUD (parked while the screens are rebuilt) --
@@ -55,30 +51,3 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
 }
 
 // -- HELPER FUNCTIONS --
-
-/// This frame's 0..1 "warmth" mood — drives the COLD↔WARM theme blend. Simplified to the
-/// actor's vigor fraction for now (the satiety/capital inputs went away with their
-/// mechanics); a rested actor reads warm, a spent one cold.
-pub fn compute_warmth(vigor: *const comp.Vigor) f32 {
-    return std.math.clamp(vigor.v / vigor.max, 0, 1);
-}
-
-/// Map a log entry's tone to the current theme's matching color role (host policy).
-fn log_tone_color(t: ha.theme.Theme, tone: ha.log.Tone) ha.theme.Color {
-    return switch (tone) {
-        .dim => t.dim,
-        .normal => t.fg,
-        .good => t.acc,
-        .warn => t.warn,
-        .danger => t.danger,
-    };
-}
-
-/// Compact number format for the HUD's big counters — `1.2M`, `12k`, `3.4k`, or a bare int.
-fn fmt_num(buf: []u8, n: f32) []const u8 {
-    const r = @round(n);
-    if (r >= 1_000_000) return std.fmt.bufPrint(buf, "{d:.1}M", .{r / 1_000_000}) catch "?";
-    if (r >= 10_000) return std.fmt.bufPrint(buf, "{d:.0}k", .{r / 1000}) catch "?";
-    if (r >= 1_000) return std.fmt.bufPrint(buf, "{d:.1}k", .{r / 1000}) catch "?";
-    return std.fmt.bufPrint(buf, "{d:.0}", .{r}) catch "?";
-}

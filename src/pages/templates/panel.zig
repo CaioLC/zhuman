@@ -1,27 +1,25 @@
 //! `panel` template — a titled, bordered, padded vertical section that groups content.
 //! Themed chrome (border `line`, title `dim`); the caller appends content nodes after the
-//! title and they flow vertically under it. Returns the outer node.
+//! title and they flow vertically under it. Returns the raw outer node.
 
 const ha = @import("ha");
 
-const ui = ha.ui;
 const uic = ha.ui_client;
+const el = uic.elements;
 const style = uic.style;
-const elements = uic.elements;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const Node = uic.Node;
 
-pub fn panel(ctx: *UiCtx, parent: *Node, id: []const u8, title: []const u8) !*Node {
+pub fn panel(ctx: *UiCtx, parent: anytype, id: []const u8, title: []const u8) !*Node {
     const th = ctx.res.theme;
 
-    const outer = try Node.pcreate(ctx.arena, id, parent);
-    style.apply_placement(outer, .{ style.flow, style.col, style.gap(8) });
-    style.apply(ctx, outer, .{Style{ .outline = th.line, .padding = ui.Padding.init(12) }});
+    const outer = try el.div(ctx, parent, id);
+    _ = outer.with_align_children(.vertical, .top_left).with_gap(8).with_size(.fit_children, .fit_children)
+        .with_style(.{ Style{ .outline = th.line }, style.pad(12) });
 
-    const ttl = try elements.text(ctx, outer, "title", title);
-    style.apply_placement(ttl, .{style.flow});
-    style.apply(ctx, ttl, .{Style{ .text = th.dim }});
+    const ttl = try el.text(ctx, outer, "title", title);
+    _ = ttl.with_style(.{Style{ .text = th.dim }});
 
-    return outer;
+    return outer.get();
 }

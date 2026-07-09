@@ -30,6 +30,10 @@ pub const icon_sprite = ctx_binding.icon_sprite;
 // draw
 pub const draw_tree = draw.draw_tree;
 
+// engine re-exports the game needs, so `pages/` + `main.zig` import only `ha.ui_client`
+// (never `ha.ui`). `stamp_rects` is the post-layout walk main runs each frame.
+pub const stamp_rects = @import("../ui/root.zig").stamp_rects;
+
 // frame assembly
 pub const Trees = tree.Trees; // the return-type wrapper (host)
 pub const collect = Node.collect; // the flatten mechanism (engine)

@@ -46,32 +46,34 @@ pub const Size = struct {
     data_width: f32,
     data_height: f32,
 
-    /// General constructor: pick a `SizeRule` per axis. A `.content` axis sizes to
-    /// `data_width`/`data_height` — supply those via `initContent`, or set the
-    /// fields after construction; otherwise they default to 0.
-    pub fn init(w: SizeRule, h: SizeRule, padding: ?Padding) Size {
-        const pad = padding orelse Padding.init(0);
+    /// General constructor: pick a `SizeRule` per axis. Padding is **not** set here — it's
+    /// a visual property owned by the style layer (`style.apply` writes `node.size.padding`),
+    /// so a fresh box starts with zero padding. A `.content` axis sizes to
+    /// `data_width`/`data_height` — supply those via `initContent`, or set the fields after
+    /// construction; otherwise they default to 0. `width`/`height` are seeded to 0; the
+    /// layout solve recomputes them (content + padding) every frame, so the seed is transient.
+    pub fn init(w: SizeRule, h: SizeRule) Size {
         return .{
             .w = w,
             .h = h,
-            .padding = pad,
-            .width = pad.left + pad.right,
-            .height = pad.up + pad.down,
+            .padding = Padding.init(0),
+            .width = 0,
+            .height = 0,
             .data_width = 0,
             .data_height = 0,
         };
     }
 
     /// Both axes fixed to explicit px.
-    pub fn initFixed(width: f32, height: f32, padding: ?Padding) Size {
-        return init(.{ .fixed = width }, .{ .fixed = height }, padding);
+    pub fn initFixed(width: f32, height: f32) Size {
+        return init(.{ .fixed = width }, .{ .fixed = height });
     }
 
     /// Both axes sized to the host's pre-measured content dims (text, sprite, …).
     /// The host measures at build (it has the font/asset on hand) and passes the px
     /// extent in; the renderer reads it back from `data_width`/`data_height`.
-    pub fn initContent(content_w: f32, content_h: f32, padding: ?Padding) Size {
-        var s = init(.content, .content, padding);
+    pub fn initContent(content_w: f32, content_h: f32) Size {
+        var s = init(.content, .content);
         s.data_width = content_w;
         s.data_height = content_h;
         return s;

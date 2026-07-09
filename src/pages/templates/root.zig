@@ -10,6 +10,7 @@ const scroll_view_mod = @import("./scroll_view.zig");
 const figure_mod = @import("./figure.zig");
 const status_mod = @import("./status.zig");
 const action_button_mod = @import("./action_button.zig");
+const row_mod = @import("./row.zig");
 
 // composites
 pub const button = button_mod.button;

@@ -3,7 +3,6 @@ const ha = @import("ha");
 
 const comp = ha.comp;
 const tag = ha.tag;
-const ui_engine = ha.ui;
 const ui_client = ha.ui_client;
 const sdl = ha.sdl;
 const sys = ha.systems;
@@ -170,7 +169,7 @@ pub fn main() !void {
         // carries its own layout origin, set in build_ui.
         for (frame) |t| {
             try t.set_global_pos();
-            ui_engine.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
+            ui_client.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
         }
 
         // Render Stage

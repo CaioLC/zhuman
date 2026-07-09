@@ -18,14 +18,14 @@ pub const Payload = ?Sprite;
 /// Whole-texture image: size the node to the texture, flag the `img` aspect.
 pub fn attach_texture(_: *UiCtx, node: *Node, texture: sdl.render.Texture) !void {
     const w, const h = try texture.getSize();
-    node.size = ui.features.Size.initContent(w, h, null);
+    node.size = ui.features.Size.initContent(w, h);
     node.render_data.img = .{ .texture = texture };
 }
 
 /// One `src` cell of a sprite sheet, drawn at `px`×`px` (display size decoupled from
 /// the source cell, which is large).
 pub fn attach_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
-    node.size = ui.features.Size.initContent(px, px, null);
+    node.size = ui.features.Size.initContent(px, px);
     node.render_data.img = sprite;
 }
 

@@ -6,50 +6,53 @@ const app = @import("../main.zig");
 
 const comp = ha.comp;
 const tag = ha.tag;
-const ui = ha.ui;
-const Layout = ui.Layout;
-const Size = ui.Size;
 
 const uic = ha.ui_client;
+const el = uic.elements;
+const style = uic.style;
 const ecs = ha.ecs;
 const actions = ha.actions;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
 const ui_root = @import("./root.zig").ui_root;
-const compute_warmth = @import("./root.zig").compute_warmth;
-const t = @import("./templates.zig");
+const t = @import("./templates/root.zig");
 
 pub fn ui_playgame(
-    ui_ctx: *uic.UiCtx,
+    ctx: *uic.UiCtx,
     _: *World,
-    _: Entity,
-    _: *comp.Vigor,
-    _: *comp.InventoryFood,
-    _: *comp.InventoryMaterial,
 ) !*uic.Node {
     //globals
     // var char_buf: [64]u8 = undefined;
     // const warmth = compute_warmth(vigor);
 
     // UI
-    const play_root = try ui_root(ui_ctx, "play");
-    _ = play_root.with_layout(Layout.init(.top_left, .vertical));
+    const root = try ui_root(ctx, "play");
+    _ = root.with_layout(.top_left).with_align_children(.vertical, .top_left);
 
-    // Header
-    const header = try uic.Node.pcreate(ui_ctx.arena, "header", play_root);
-    _ = header.with_layout(Layout.init(.top_left, .horizontal)).with_size(Size.init(.{ .pct_of_parent = 1.0 }, .fit_children, null));
+    // Header: a nav bar — title + subtitle flow left-to-right, vertically centered so the
+    // big H1 and the smaller H2 share a common center line.
+    const header = try el.div(ctx, root, "header");
+    _ = header
+        .with_layout(.top_left)
+        .with_align_children(.horizontal, .center_left)
+        .with_style(.{style.debug});
 
-    const header_left = try uic.Node.pcreate(ui_ctx.arena, "header_left", header);
-    _ = header_left.with_layout(Layout.init(.center_left, .horizontal)).with_size(Size.init(.{ .pct_of_parent = 0.7 }, .fit_children, null));
-    _ = try uic.label(ui_ctx, header_left, "game_title", "ACT I: Robinson Crusoe");
-    const header_right = try uic.Node.pcreate(ui_ctx.arena, "header_right", header);
-    _ = header_right
-        .with_layout(Layout.init(.center_right, .horizontal).with_gap(5.0))
-        .with_size(Size.init(.{ .pct_of_parent = 0.3 }, .fit_children, null));
-    _ = try uic.label(ui_ctx, header_right, "calendar", "Day 1");
-    _ = try uic.label(ui_ctx, header_right, "status", "Alive");
-
+    const title = try el.text(ctx, header, "title", "Human Action");
+    _ = title.with_style(.{ style.h1, style.debug });
+    const subtitle = try el.text(ctx, header, "subtitle", "Act 1 - Robinson Crusoe");
+    _ = subtitle.with_style(.{style.h2});
+    //
+    // const header_left = try uic.Node.pcreate(ui_ctx.arena, "header_left", header);
+    // _ = header_left.with_layout(Layout.init(.center_left, .horizontal)).with_size(Size.init(.{ .pct_of_parent = 0.7 }, .fit_children, null));
+    // _ = try uic.label(ui_ctx, header_left, "game_title", "ACT I: Robinson Crusoe");
+    // const header_right = try uic.Node.pcreate(ui_ctx.arena, "header_right", header);
+    // _ = header_right
+    //     .with_layout(Layout.init(.center_right, .horizontal).with_gap(5.0))
+    //     .with_size(Size.init(.{ .pct_of_parent = 0.3 }, .fit_children, null));
+    // _ = try uic.label(ui_ctx, header_right, "calendar", "Day 1");
+    // _ = try uic.label(ui_ctx, header_right, "status", "Alive");
+    //
     // // Status column (top-left): day + resources panel + log.
     // const status_div = try uic.Node.pcreate(ui_ctx.arena, "status_div", play_root);
     // _ = status_div.with_layout(ui.features.Layout.init(.top_left, .vertical).with_gap(10));
@@ -106,5 +109,5 @@ pub fn ui_playgame(
     // const eat_btn = try uic.button(ui_ctx, act_panel, "eat", eat_txt, can_eat);
     // if (eat_btn.query(ui_ctx).clicked and can_eat) actions.action_eat(world, e);
 
-    return play_root;
+    return root;
 }
