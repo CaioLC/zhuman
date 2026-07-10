@@ -49,4 +49,16 @@ pub const Fonts = struct {
     pub fn measure(self: *Fonts, text: []const u8, px: f32) !struct { c_int, c_int } {
         return (try self.at(px)).getStringSize(text);
     }
+
+    /// Like `measure`, plus the cross-axis alignment **baseline** — the px offset of the
+    /// text baseline up from the box's bottom edge (= the font's descent). Stored on
+    /// `Size.baseline` so a `.horizontal` row can baseline-align mixed sizes; kept next to
+    /// the size measure so the two never drift when a heading re-measures at a new px.
+    pub fn measureBaseline(self: *Fonts, text: []const u8, px: f32) !struct { c_int, c_int, f32 } {
+        const f = try self.at(px);
+        const w, const h = try f.getStringSize(text);
+        // ascent = baseline→top (positive). baseline-from-bottom = box height − ascent.
+        const baseline = @as(f32, @floatFromInt(h)) - @as(f32, @floatFromInt(f.getAscent()));
+        return .{ w, h, baseline };
+    }
 };

@@ -32,6 +32,17 @@ pub const ChildrenAlign = enum {
     centered_bottom_wrapped,
 };
 
+/// Cross-axis alignment for a `.horizontal` flow — how a mixed-height row lines its
+/// children up **vertically**. All four are one operation: give each child a *reference
+/// line* (an offset from its top), then place every child so its reference lands on the
+/// row's deepest reference (see `cross_ref` + `place`). `top`/`center`/`bottom` reference
+/// the box edge/middle; `baseline` references the text baseline (`Size.baseline`), so
+/// mixed-size text shares a common line. A box with no baseline (`baseline == 0`) falls
+/// back to its bottom edge, so `.baseline` degrades to `.bottom` for plain boxes.
+/// **Horizontal-flow only** — a vertical flow's cross axis is X, where "baseline" has no
+/// meaning, so it keeps aligning left/center/right via `child_anchor` (see `place`).
+pub const CrossAlign = enum { top, center, bottom, baseline };
+
 pub const ChildrenPosInfo = struct {
     x_offset: f32,
     y_offset: f32,
@@ -66,6 +77,12 @@ pub const Layout = struct {
     /// `.top_left` — children flush to the start of both axes, i.e. the historical behavior.
     /// Set via `El.with_align_children`; the engine's `Node.with_layout` leaves it at default.
     child_anchor: Anchor = .top_left,
+    /// Cross-axis alignment of a `.horizontal` flow's children — see `CrossAlign`. Defaults
+    /// to `.baseline` (text-first: mixed-size text shares a line, plain boxes bottom-align).
+    /// Supersedes `child_anchor`'s cross (vertical) component for horizontal flows; ignored
+    /// by vertical flows (which cross-align via `child_anchor`) and by wrapped/reverse flows.
+    /// Set via `El.with_cross_align`.
+    cross_align: CrossAlign = .baseline,
     /// Space inserted *between* adjacent flowed (`relative`) children, along the
     /// flow axis (and between rows/columns of the `_wrapped` variants). Does not
     /// apply to the proportional `centered*` aligns (they already distribute space)
@@ -162,6 +179,14 @@ fn main_axis(layout: Layout) Axis {
 /// the main axis it also reserves the inter-child `gap` (one per flowed pair), so a
 /// `fit` parent wraps its spaced children exactly.
 fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
+    // Cross axis (height) of a simple horizontal flow: the box must wrap the *reference-
+    // aligned* run, so its height is the deepest reference plus the deepest below-reference
+    // (`fit_cross`), not a plain child-height max. It reduces to `max(child height)` for
+    // top/center/bottom and only grows past it when a baseline row's tallest ascent and
+    // deepest descent come from different children.
+    if (axis == .y and main == .x and node.layout.children_align == .horizontal)
+        return fit_cross(node);
+
     var acc: f32 = 0;
     var flow_count: usize = 0;
     for (node.children.items) |c| {
@@ -176,6 +201,28 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     }
     if (axis == main and flow_count > 1) acc += node.layout.gap * @as(f32, @floatFromInt(flow_count - 1));
     return acc;
+}
+
+/// Cross-axis (height) fit for a `.horizontal` flow, reference-aware. Flowed children
+/// contribute `maxAscent + maxDescent` — their reference lines share one row line, so the
+/// run's extent is the deepest above-reference plus the deepest below-reference. An
+/// independently-anchored child (placed by its own anchor, not in the flow) just
+/// contributes its own height. Both fold into one max.
+fn fit_cross(node: anytype) f32 {
+    var max_ascent: f32 = 0; // deepest reference-from-top (what `cross_ref` returns)
+    var max_descent: f32 = 0; // deepest below the reference line (h − ref)
+    var max_anchored: f32 = 0;
+    for (node.children.items) |c| {
+        const h = c.size.height;
+        if (c.layout.anchor == .relative) {
+            const ref = cross_ref(node.layout.cross_align, h, c.size.baseline);
+            max_ascent = @max(max_ascent, ref);
+            max_descent = @max(max_descent, h - ref);
+        } else {
+            max_anchored = @max(max_anchored, h);
+        }
+    }
+    return @max(max_ascent + max_descent, max_anchored);
 }
 
 /// Pass 1 — bottom-up sizing. Resolves `fixed`, `content`, and `fit_children`
@@ -250,6 +297,21 @@ fn anchor_fy(a: Anchor) f32 {
     };
 }
 
+/// A child's cross-axis **reference line**, as a px offset from its **top** edge, for a
+/// `.horizontal` flow's `cross_align`. The row lines every child's reference onto the
+/// deepest one (`place`), and the row's `fit` height is `max(ref) + max(h − ref)`
+/// (`fit_cross`). `top`/`center`/`bottom` reference the box; `baseline` references the
+/// text baseline — `Size.baseline` is stored from the bottom, so the top offset is
+/// `h − baseline` (= the font ascent), and `baseline == 0` makes it the bottom edge.
+fn cross_ref(mode: CrossAlign, h: f32, baseline: f32) f32 {
+    return switch (mode) {
+        .top => 0,
+        .center => h / 2,
+        .bottom => h,
+        .baseline => h - baseline,
+    };
+}
+
 /// Assign global positions top-down. Pure geometry — sizes are already resolved,
 /// so this never consults the host (`ctx`). `node` is `anytype` (a `*Node(RenderData)`);
 /// only render-agnostic fields are touched, so the walk monomorphizes per node type.
@@ -308,6 +370,7 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
         var y_offset: f32 = 0.0;
         var row_max_height: f32 = 0.0;
         var col_max_width: f32 = 0.0;
+        var max_ref: f32 = 0.0; // `.horizontal` cross-align: the shared reference line (deepest ref-from-top)
         const gap = l.gap; // inserted between flowed children (and wrapped rows/cols)
 
         // Block justification (simple flows only): shift the whole flowed run within the
@@ -319,6 +382,9 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
                 for (dep_buf[0..dep_count]) |c| block += c.size.width;
                 if (dep_count > 1) block += gap * @as(f32, @floatFromInt(dep_count - 1));
                 x_offset = anchor_fx(l.child_anchor) * (s.width - block);
+                // Cross-align: the shared line every child's reference gets pulled onto.
+                for (dep_buf[0..dep_count]) |c|
+                    max_ref = @max(max_ref, cross_ref(l.cross_align, c.size.height, c.size.baseline));
             },
             .vertical => {
                 var block: f32 = 0;
@@ -333,7 +399,10 @@ fn place(node: anytype, children_info: ?ChildrenPosInfo) anyerror!void {
             const cs = c.size;
             switch (l.children_align) {
                 .horizontal => {
-                    const cy = anchor_fy(l.child_anchor) * (s.height - cs.height); // cross-align
+                    // Cross-align: pull this child's reference onto the row's shared line.
+                    // Reduces to bottom-align for plain boxes (baseline 0), and to
+                    // top/center/bottom per `cross_align`; baselines coincide for text.
+                    const cy = max_ref - cross_ref(l.cross_align, cs.height, cs.baseline);
                     try place(c, .{ .x_offset = x_offset, .y_offset = cy });
                     x_offset += cs.width + gap;
                 },

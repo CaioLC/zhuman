@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const ha = @import("ha");
 
 const comp = ha.comp;
@@ -13,7 +14,7 @@ const Resources = ha.res.Resources;
 
 // CONFIGS
 const fps = 60;
-const font_path = "assets/fonts/Kenney Mini Square Mono.ttf";
+const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
 /// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
 /// today (population, not day-count, is the progression spine). `pub`: read by
 /// `pages.ui_playgame`.

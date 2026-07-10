@@ -23,12 +23,13 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
     st.update(text);
     st.px = font.default_px; // default; `style.apply` overrides + re-measures for a heading
-    const tw, const th = try ctx.res.font.measure(text, st.px);
+    const tw, const th, const baseline = try ctx.res.font.measureBaseline(text, st.px);
     var size = node.size;
     size.w = .content;
     size.h = .content;
     size.data_width = @floatFromInt(tw);
     size.data_height = @floatFromInt(th);
+    size.baseline = baseline; // text baseline (from bottom) → cross-axis reference for rows
     node.size = size;
     node.render_data.text = ctx.res.theme.fg; // present ⟹ walk blits it; caller may recolor
 }

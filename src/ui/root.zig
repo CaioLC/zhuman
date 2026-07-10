@@ -16,6 +16,7 @@ pub const Pools = cache.Pools;
 
 pub const Anchor = features.Anchor;
 pub const ChildrenAlign = features.ChildrenAlign;
+pub const CrossAlign = features.CrossAlign;
 pub const Padding = features.Padding;
 pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
@@ -376,6 +377,66 @@ test "fit_children sums on the main axis, maxes on the cross" {
     try root.set_global_pos();
     try std.testing.expectEqual(@as(f32, 200), root.size.width);
     try std.testing.expectEqual(@as(f32, 80), root.size.height);
+}
+
+test "horizontal cross-align: baseline lines up references; fit = maxAscent + maxDescent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Horizontal parent (cross axis = y), default cross_align = .baseline. Two children of
+    // different height + baseline: k1 100×50 baseline 10 (ascent 40), k2 80×30 baseline 6
+    // (ascent 24). Shared line = max ascent = 40 → cy1 = 0, cy2 = 16 (both baselines at y=40).
+    // fit height = maxAscent(40) + maxDescent(10) = 50; width = 100 + 80 = 180.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .horizontal);
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(100, 50));
+    _ = k1.with_layout(.relative, null);
+    k1.size.baseline = 10;
+    try root.add_child(a, k1);
+
+    const k2 = try TestNode.create(a, "k2");
+    _ = k2.with_size(Size.initFixed(80, 30));
+    _ = k2.with_layout(.relative, null);
+    k2.size.baseline = 6;
+    try root.add_child(a, k2);
+
+    try root.set_global_pos();
+    try std.testing.expectEqual(@as(f32, 180), root.size.width);
+    try std.testing.expectEqual(@as(f32, 50), root.size.height);
+    try std.testing.expectEqual(@as(f32, 0), k1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 16), k2.layout._global_y.?);
+}
+
+test "horizontal cross-align: center is derived from the same reduction" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Same shape, cross_align = .center: ref = h/2, so k2 (shorter) centers in the row's
+    // max height (50). cy2 = (50 − 30)/2 = 10; height stays max child height = 50.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .horizontal);
+    root.layout.cross_align = .center;
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(100, 50));
+    _ = k1.with_layout(.relative, null);
+    try root.add_child(a, k1);
+
+    const k2 = try TestNode.create(a, "k2");
+    _ = k2.with_size(Size.initFixed(80, 30));
+    _ = k2.with_layout(.relative, null);
+    try root.add_child(a, k2);
+
+    try root.set_global_pos();
+    try std.testing.expectEqual(@as(f32, 50), root.size.height);
+    try std.testing.expectEqual(@as(f32, 0), k1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 10), k2.layout._global_y.?);
 }
 
 test "layout gap: fit parent reserves it, children flow spaced by it" {

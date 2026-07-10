@@ -64,6 +64,14 @@ pub const El = struct {
         return self;
     }
 
+    /// Cross-axis alignment for this node's `.horizontal` children — `.top`/`.center`/
+    /// `.bottom` (by box edge) or `.baseline` (text share a common baseline; a box with no
+    /// baseline uses its bottom). Default is `.baseline`. No effect on vertical/wrapped flows.
+    pub fn with_cross_align(self: El, mode: ui.CrossAlign) El {
+        self.node.layout.cross_align = mode;
+        return self;
+    }
+
     /// Per-axis size rule — `.fit_children`, `.{ .fixed = 240 }`, `.{ .pct_of_parent = 1 }`, …
     pub fn with_size(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
         self.node.size.w = w;

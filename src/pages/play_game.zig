@@ -1,47 +1,61 @@
 /// The live HUD while the actor is alive: a top-left status column (day + resources + log)
 /// and a centered Actions panel. Reads/mutates the actor's components inline on click.
 const std = @import("std");
+// general lib ECS
 const ha = @import("ha");
-const app = @import("../main.zig");
-
+const ecs = ha.ecs;
 const comp = ha.comp;
 const tag = ha.tag;
-
-const uic = ha.ui_client;
-const el = uic.elements;
-const style = uic.style;
-const ecs = ha.ecs;
 const actions = ha.actions;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
-
-const ui_root = @import("./root.zig").ui_root;
+// Ui Interface
+const uic = ha.ui_client;
+const el = uic.elements;
+const style = uic.style;
+const Node = uic.Node;
+// Game templates
 const t = @import("./templates/root.zig");
 
 pub fn ui_playgame(
     ctx: *uic.UiCtx,
     _: *World,
-) !*uic.Node {
+) !*Node {
     //globals
     // var char_buf: [64]u8 = undefined;
     // const warmth = compute_warmth(vigor);
 
     // UI
-    const root = try ui_root(ctx, "play");
+    const root = try el.root(ctx, "play");
     _ = root.with_layout(.top_left).with_align_children(.vertical, .top_left);
 
     // Header: a nav bar — title + subtitle flow left-to-right, vertically centered so the
     // big H1 and the smaller H2 share a common center line.
     const header = try el.div(ctx, root, "header");
     _ = header
-        .with_layout(.top_left)
-        .with_align_children(.horizontal, .center_left)
-        .with_style(.{style.debug});
+        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    const header_left = try el.div(ctx, header, "header");
+    _ = header_left
+        .with_layout(.bottom_left)
+        .with_align_children(.horizontal, .bottom_left)
+        .with_style(.{ style.debug, style.gap(6.0) });
 
-    const title = try el.text(ctx, header, "title", "Human Action");
-    _ = title.with_style(.{ style.h1, style.debug });
-    const subtitle = try el.text(ctx, header, "subtitle", "Act 1 - Robinson Crusoe");
-    _ = subtitle.with_style(.{style.h2});
+    const title = try el.text(ctx, header_left, "title", "Human Action");
+    _ = title
+        .with_style(.{ style.h1, style.debug });
+    const subtitle = try el.text(ctx, header_left, "subtitle", "Act 1");
+    _ = subtitle
+        .with_style(.{style.h2});
+
+    const header_right = try el.div(ctx, header, "header");
+    _ = header_right
+        .with_layout(.bottom_right)
+        .with_style(.{ style.debug, style.gap(6.0) });
+    const day_counter = try el.text(ctx, header_right, "dcounter", "Day 1");
+    _ = day_counter.with_style(.{style.h2});
+    const status = try el.text(ctx, header_right, "status", "Alive");
+    _ = status.with_style(.{style.h2});
+
     //
     // const header_left = try uic.Node.pcreate(ui_ctx.arena, "header_left", header);
     // _ = header_left.with_layout(Layout.init(.center_left, .horizontal)).with_size(Size.init(.{ .pct_of_parent = 0.7 }, .fit_children, null));
@@ -109,5 +123,5 @@ pub fn ui_playgame(
     // const eat_btn = try uic.button(ui_ctx, act_panel, "eat", eat_txt, can_eat);
     // if (eat_btn.query(ui_ctx).clicked and can_eat) actions.action_eat(world, e);
 
-    return root;
+    return root.get();
 }

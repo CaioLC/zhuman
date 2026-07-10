@@ -34,10 +34,12 @@ pub const Style = struct {
     gap: ?f32 = null,
 };
 
+// TODO: this was supposed to be a red outline around any node, but it is not showing. why?
 pub const debug: Style = .{ .outline = .{ .a = 0.0, .r = 1.0, .g = 0.0, .b = 0.0 } };
 
 // A generic typography scale (font size only — colors are game art direction and live
 // with the theme/templates). Tunable; `body` matches `font.default_px`.
+// TODO: make these dynamic based on window size
 pub const body: Style = .{ .font = 14 };
 pub const h3: Style = .{ .font = 22 };
 pub const h2: Style = .{ .font = 28 };
@@ -108,9 +110,10 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         if (s.font) |px| {
             const st = node.state(ctx, cb.UiState.TextState);
             if (st.text()) |str| {
-                const tw, const th = ctx.res.font.measure(str, px) catch return;
+                const tw, const th, const baseline = ctx.res.font.measureBaseline(str, px) catch return;
                 node.size.data_width = @floatFromInt(tw);
                 node.size.data_height = @floatFromInt(th);
+                node.size.baseline = baseline; // re-measure the baseline too, so a heading row still aligns
                 st.px = px; // set only on a successful re-measure, so box + render agree
             }
         }
