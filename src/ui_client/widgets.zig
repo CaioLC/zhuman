@@ -60,7 +60,7 @@ pub fn img(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Text
 /// a fill bar the inverse. `fill` colors the inner bar; the track outline is themed `line2`.
 pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: cb.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = ctx.res.theme.line2;
+    outer.render_data.outline = .{ .color = ctx.res.theme.line2 };
     _ = outer.with_layout(.relative, null)
         .with_size(ui.features.Size.initFixed(240, 24));
 
@@ -100,7 +100,7 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     // The box draws an outline, the label its text — both in `c`.
     const t = ctx.res.theme;
     const c = if (!enabled) t.dim else if (outer.query(ctx).hovering) t.acc else t.fg;
-    outer.render_data.outline = c;
+    outer.render_data.outline = .{ .color = c };
     lbl.render_data.text = c;
 
     return outer;
@@ -117,7 +117,7 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     try data_sprite(ctx, node, sprite, px);
     _ = node.with_layout(.relative, null);
     const t = ctx.res.theme;
-    node.render_data.outline = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg;
+    node.render_data.outline = .{ .color = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg };
     return node;
 }
 
@@ -128,7 +128,7 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
 pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
     box.render_data.fill = ctx.res.theme.panel;
-    box.render_data.outline = ctx.res.theme.line2;
+    box.render_data.outline = .{ .color = ctx.res.theme.line2 };
     _ = box.with_layout(.top_left, .vertical)
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     box.size.padding = ui.features.Padding.init(6); // padding is a style property now, not a Size.init arg
@@ -150,7 +150,7 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
 ///   `_ = try label(ctx, p, "energy", "Energy: 8 J");`
 pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = ctx.res.theme.line;
+    outer.render_data.outline = .{ .color = ctx.res.theme.line };
     _ = outer.with_layout(.relative, .vertical)
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     outer.layout.gap = 8;
@@ -195,7 +195,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     _ = viewport.with_layout(.relative, null)
         .with_size(ui.features.Size.initFixed(width, height));
     viewport.layout.overflow = .clip;
-    viewport.render_data.outline = ctx.res.theme.line2; // dim frame marking the scrollable area
+    viewport.render_data.outline = .{ .color = ctx.res.theme.line2 }; // dim frame marking the scrollable area
 
     const content = try Node.pcreate(ctx.arena, "content", viewport);
     _ = content.with_layout(.relative, .vertical);
@@ -273,7 +273,7 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     box.layout.gap = 10;
     box.size.padding = ui.features.Padding.init(16); // padding is a style property now, not a Size.init arg
     box.render_data.fill = ctx.res.theme.panel;
-    box.render_data.outline = ctx.res.theme.line2;
+    box.render_data.outline = .{ .color = ctx.res.theme.line2 };
     _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
 
     _ = try label(ctx, box, "title", title);
@@ -324,7 +324,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     node.size.padding = ui.features.Padding.initSymmetric(8, 4);
     node.size.w = .{ .fixed = width }; // data_text sized both axes to content — pin width
     node.render_data.text = if (state.len == 0 and !focused) ctx.res.theme.dim else ctx.res.theme.fg;
-    node.render_data.outline = if (focused) ctx.res.theme.acc else ctx.res.theme.line2;
+    node.render_data.outline = .{ .color = if (focused) ctx.res.theme.acc else ctx.res.theme.line2 };
 
     return node;
 }

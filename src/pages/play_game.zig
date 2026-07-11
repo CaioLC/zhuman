@@ -42,7 +42,7 @@ pub fn ui_playgame(
 
     const title = try el.text(ctx, header_left, "title", "Human Action");
     _ = title
-        .with_style(.{ style.h1, style.debug });
+        .with_style(.{ style.h1, style.debug, style.stroke_w(2), style.dashed });
     const subtitle = try el.text(ctx, header_left, "subtitle", "Act 1");
     _ = subtitle
         .with_style(.{style.h2});

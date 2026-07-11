@@ -98,6 +98,18 @@ pub const Sprite = struct {
     texture: sdl.render.Texture,
     src: ?sdl.rect.FRect = null,
 };
+/// A stroked border for the `outline` feature. `width` is the bar thickness in px (drawn
+/// *inward*, so it never grows the node's box); `style` picks solid / dashed / dotted. The
+/// whole feature payload, so a caller can vary thickness and pattern per node — see
+/// `features/outline.zig` for how each `style` rasterizes. Defaults (`width = 1`, `.solid`)
+/// reproduce the old 1px box border.
+pub const LineStyle = enum { solid, dashed, dotted };
+pub const Outline = struct {
+    color: Color,
+    width: f32 = 1,
+    style: LineStyle = .solid,
+};
+
 /// Name one cell of the shared icon sheet by grid (col, row). The single place that
 /// knows the sheet lives on `res.icons` and how big a cell is — callers reference a
 /// cell, not a texture+rect, so the spritesheet isn't threaded through every icon.
@@ -123,7 +135,7 @@ pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
 pub const RenderData = struct {
     text: ?Color = null, // cached glyphs (in node.state(TextState)), blit in this color
     fill: ?Color = null, // solid rect spanning the node's resolved box, in this color
-    outline: ?Color = null, // 1px box border around the node's resolved box, in this color
+    outline: ?Outline = null, // stroked border (color + width + solid/dashed/dotted), drawn inward
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
 };

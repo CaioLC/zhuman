@@ -32,7 +32,7 @@ pub fn button(ctx: *UiCtx, parent: anytype, id: []const u8, label: []const u8, e
     // Chrome: dim disabled, accent on hover (read off the box's slot), else soft fg.
     const c = if (!enabled) th.dim else if (outer.query().hovering) th.acc else th.fg;
     _ = lbl.with_style(.{Style{ .text = c }});
-    _ = outer.with_style(.{Style{ .outline = c }});
+    _ = outer.with_style(.{Style{ .outline_color = c }});
 
     return outer.get();
 }

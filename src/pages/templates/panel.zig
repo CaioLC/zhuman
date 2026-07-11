@@ -16,7 +16,7 @@ pub fn panel(ctx: *UiCtx, parent: anytype, id: []const u8, title: []const u8) !*
 
     const outer = try el.div(ctx, parent, id);
     _ = outer.with_align_children(.vertical, .top_left).with_gap(8).with_size(.fit_children, .fit_children)
-        .with_style(.{ Style{ .outline = th.line }, style.pad(12) });
+        .with_style(.{ Style{ .outline_color = th.line }, style.pad(12) });
 
     const ttl = try el.text(ctx, outer, "title", title);
     _ = ttl.with_style(.{Style{ .text = th.dim }});

@@ -29,13 +29,21 @@ pub const Style = struct {
     font: ?f32 = null,
     text: ?Color = null,
     fill: ?Color = null,
-    outline: ?Color = null,
+    /// Border color. Its presence is what makes a border draw; `outline_width` /
+    /// `outline_style` only shape a border that a set `outline_color` turned on. Kept as
+    /// three CSS-like fields (color / width / style) rather than one bundle so each folds
+    /// independently — one fragment can set the color, a later one flip it to dashed.
+    outline_color: ?Color = null,
+    outline_width: ?f32 = null,
+    outline_style: ?cb.LineStyle = null,
     padding: ?ui.Padding = null,
     gap: ?f32 = null,
 };
 
-// TODO: this was supposed to be a red outline around any node, but it is not showing. why?
-pub const debug: Style = .{ .outline = .{ .a = 0.0, .r = 1.0, .g = 0.0, .b = 0.0 } };
+// A bright-red debug outline around any node. `Color` is SDL's `SDL_Color` — u8 fields on
+// a 0–255 scale, so the outline must be `a = 255` (opaque) and `r = 255` (full red); the
+// earlier `a = 0.0, r = 1.0` read as 0–1 floats and coerced to a=0 (transparent), r=1 (~black).
+pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
 // A generic typography scale (font size only — colors are game art direction and live
 // with the theme/templates). Tunable; `body` matches `font.default_px`.
@@ -58,6 +66,16 @@ pub fn pad_sym(w: f32, h: f32) Style {
 pub fn gap(n: f32) Style {
     return .{ .gap = n };
 }
+
+// --- Outline fragments -------------------------------------------------------
+// Border thickness as a style fragment (only visible once an `outline_color` is also set).
+pub fn stroke_w(n: f32) Style {
+    return .{ .outline_width = n };
+}
+// Border pattern fragments — compose after an `outline_color` to shape it.
+pub const solid: Style = .{ .outline_style = .solid };
+pub const dashed: Style = .{ .outline_style = .dashed };
+pub const dotted: Style = .{ .outline_style = .dotted };
 
 /// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold.
 fn merge(out: *Style, frag: Style) void {
@@ -101,7 +119,12 @@ fn fold(ctx: *UiCtx, node: *Node, out: *Style, frag: anytype) void {
 pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
     const s = resolve(ctx, node, spec);
     if (s.fill) |c| node.render_data.fill = c;
-    if (s.outline) |c| node.render_data.outline = c;
+    // A set `outline_color` turns the border on; width/style shape it (defaults 1px solid).
+    if (s.outline_color) |c| node.render_data.outline = .{
+        .color = c,
+        .width = s.outline_width orelse 1,
+        .style = s.outline_style orelse .solid,
+    };
     if (s.padding) |p| node.size.padding = p;
     if (s.gap) |g| node.layout.gap = g;
 
@@ -154,7 +177,31 @@ test "apply: decorations + padding write; inert text style on a non-text node is
     const node = try Node.create(arena.allocator(), "n");
 
     const line: Color = .{ .r = 10, .g = 20, .b = 30, .a = 255 };
-    apply(undefined, node, .{ Style{ .outline = line }, pad(4) });
-    try std.testing.expectEqual(line, node.render_data.outline.?);
+    apply(undefined, node, .{ Style{ .outline_color = line }, pad(4) });
+    try std.testing.expectEqual(line, node.render_data.outline.?.color);
+    try std.testing.expectEqual(@as(f32, 1), node.render_data.outline.?.width); // default thickness
+    try std.testing.expectEqual(cb.LineStyle.solid, node.render_data.outline.?.style); // default pattern
     try std.testing.expectEqual(@as(f32, 4), node.size.padding.left);
+}
+
+test "apply: outline width + style fragments compose onto the border payload" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const node = try Node.create(arena.allocator(), "n");
+
+    const line: Color = .{ .r = 10, .g = 20, .b = 30, .a = 255 };
+    apply(undefined, node, .{ Style{ .outline_color = line }, stroke_w(3), dashed });
+    const o = node.render_data.outline.?;
+    try std.testing.expectEqual(line, o.color);
+    try std.testing.expectEqual(@as(f32, 3), o.width);
+    try std.testing.expectEqual(cb.LineStyle.dashed, o.style);
+}
+
+test "apply: outline width/style without a color draw nothing (no border)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const node = try Node.create(arena.allocator(), "n");
+
+    apply(undefined, node, .{ stroke_w(3), dotted }); // no outline_color ⟹ no border
+    try std.testing.expectEqual(@as(?cb.Outline, null), node.render_data.outline);
 }
