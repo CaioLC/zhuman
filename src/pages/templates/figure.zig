@@ -25,7 +25,7 @@ pub fn figure_glyphs(warmth: f32) Figure {
 /// Build the figure's 3 lines as a stacked column of tinted text leaves under `parent`.
 pub fn figure(ctx: *UiCtx, parent: anytype, fig: Figure, color: Color) !void {
     const col = try el.div(ctx, parent, "fig");
-    _ = col.with_align_children(.vertical, .top_left);
+    _ = col.with_flow(.{ .dir = .column });
 
     inline for (.{ "l1", "l2", "l3" }, .{ fig.l1, fig.l2, fig.l3 }) |lid, line| {
         const n = try el.text(ctx, col, lid, line);

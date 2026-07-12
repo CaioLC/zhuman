@@ -45,12 +45,12 @@ pub const Size = struct {
     /// Sizing is pure: core reads these, never computes them (no host callback).
     data_width: f32,
     data_height: f32,
-    /// Cross-axis **alignment reference** for a `.horizontal` flow: the px offset of this
+    /// Cross-axis **alignment reference** for a row (`dir = .row`): the px offset of this
     /// box's reference line *up from its bottom edge*. `0` (the default) ⇒ the reference is
     /// the bottom edge, so a plain box aligns by its bottom. The host sets it for text (=
     /// the font's descent) so a mixed-size row can share a common baseline. Consumed only by
-    /// `layout.cross_ref` under `cross_align = .baseline`; ignored by every other rule and by
-    /// non-horizontal flows. Measured at build like `data_*`, so the solve stays pure.
+    /// the placement pass under `Flow.cross = .baseline`; ignored by every other cross-align
+    /// and by column flows. Measured at build like `data_*`, so the solve stays pure.
     baseline: f32 = 0,
 
     /// General constructor: pick a `SizeRule` per axis. Padding is **not** set here — it's

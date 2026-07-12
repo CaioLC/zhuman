@@ -27,7 +27,7 @@ pub fn ui_playgame(
 
     // UI
     const root = try el.root(ctx, "play");
-    _ = root.with_layout(.top_left).with_align_children(.vertical, .top_left);
+    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column });
 
     // Header: a nav bar — title + subtitle flow left-to-right, vertically centered so the
     // big H1 and the smaller H2 share a common center line.
@@ -37,7 +37,7 @@ pub fn ui_playgame(
     const header_left = try el.div(ctx, header, "header");
     _ = header_left
         .with_layout(.bottom_left)
-        .with_align_children(.horizontal, .bottom_left)
+        .with_flow(.{ .dir = .row })
         .with_style(.{ style.debug, style.gap(6.0) });
 
     const title = try el.text(ctx, header_left, "title", "Human Action");

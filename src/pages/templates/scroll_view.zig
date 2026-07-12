@@ -30,7 +30,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, hei
     const th = ctx.res.theme;
 
     const outer = try el.div(ctx, parent, id);
-    _ = outer.with_align_children(.horizontal, .top_left).with_size(.fit_children, .fit_children);
+    _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);
 
     const viewport = try el.div(ctx, outer, "viewport");
     _ = viewport.with_layout(.relative)
@@ -39,7 +39,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, hei
         .with_style(.{Style{ .outline = th.line2 }}); // dim frame around the scroll area
 
     const content = try el.div(ctx, viewport, "content");
-    _ = content.with_align_children(.vertical, .top_left).with_gap(4);
+    _ = content.with_flow(.{ .dir = .column }).with_gap(4);
     const content_node = content.get();
     // Clamp needs content height, but this frame's rows aren't laid out yet — read last
     // frame's rect (queried here to keep the slot alive).
@@ -56,7 +56,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, hei
 
     if (max_offset > 0) {
         const track = try el.div(ctx, outer, "track");
-        _ = track.with_align_children(.vertical, .top_left)
+        _ = track.with_flow(.{ .dir = .column })
             .with_size(.{ .fixed = scrollbar_w }, .{ .fixed = height })
             .with_style(.{Style{ .fill = th.line }});
 

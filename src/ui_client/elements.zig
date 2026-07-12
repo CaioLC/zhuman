@@ -5,16 +5,16 @@
 //!
 //!   const header = try el.div(ctx, root, "header");
 //!   _ = header.with_layout(.top_left)                     // own anchor within the parent
-//!             .with_align_children(.horizontal, .center_left) // children: flow + settle
+//!             .with_flow(.{ .dir = .row, .cross = .center }) // arrange children
 //!             .with_gap(6)
 //!             .with_style(.{ h1, red });                  // style — declarative fragment fold
 //!
 //! Content leaves default their anchor to **`.relative`** (they are always children — roots
 //! come from `el.root`, which stays `.top_left`), so flowed layout is the zero-config case.
-//! **Placement is set straight onto the node** via `with_layout` (own anchor) /
-//! `with_align_children` (children flow + settle) / `with_gap`/`with_size`/`with_overflow`
-//! (no "Placement" partial folding over the engine's values); **style** is the fragment fold
-//! (`with_style` → `style.apply`). The two stay cleanly separate.
+//! **Placement is set straight onto the node** via `with_layout` (own anchor) / `with_flow`
+//! (how children arrange — direction/wrap/reverse/main/cross) / `with_gap`/`with_size`/
+//! `with_overflow` (no "Placement" partial folding over the engine's values); **style** is
+//! the fragment fold (`with_style` → `style.apply`). The two stay cleanly separate.
 //!
 //! Why a handle and not `*Node` methods: applying a `font` re-measures the text (needs the
 //! font backend on `ctx`), and the engine `Node` is deliberately ctx-agnostic. Drop to the
@@ -48,27 +48,19 @@ pub const El = struct {
         return self.node.query(self.ctx);
     }
 
-    /// Set this node's own anchor — how *it* sits within its parent. How its children flow
-    /// and settle is the separate concern `with_align_children`.
+    /// Set this node's own anchor — how *it* sits within its parent. How this node arranges
+    /// its own children is the separate concern `with_flow`.
     pub fn with_layout(self: El, anchor: ui.Anchor) El {
         self.node.layout.anchor = anchor;
         return self;
     }
 
-    /// Set how this node's children flow (`flow`) and where they settle within its leftover
-    /// space (`anchor` — cross-axis part aligns each child, main-axis part justifies the run;
-    /// see `Layout.child_anchor`). Pass `.top_left` for the plain flush-start flow.
-    pub fn with_align_children(self: El, flow: ui.ChildrenAlign, anchor: ui.Anchor) El {
-        self.node.layout.children_align = flow;
-        self.node.layout.child_anchor = anchor;
-        return self;
-    }
-
-    /// Cross-axis alignment for this node's `.horizontal` children — `.top`/`.center`/
-    /// `.bottom` (by box edge) or `.baseline` (text share a common baseline; a box with no
-    /// baseline uses its bottom). Default is `.baseline`. No effect on vertical/wrapped flows.
-    pub fn with_cross_align(self: El, mode: ui.CrossAlign) El {
-        self.node.layout.cross_align = mode;
+    /// Set how this node arranges its in-flow children — direction, wrap, reverse, and the
+    /// main/cross alignment. See `ui.Flow`; unset fields take their defaults, so
+    /// `.{ .dir = .column }` is a plain top-to-bottom column and `.{ .dir = .row }` a
+    /// baseline-aligned left-to-right row.
+    pub fn with_flow(self: El, flow: ui.Flow) El {
+        self.node.layout.flow = flow;
         return self;
     }
 

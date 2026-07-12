@@ -33,7 +33,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
 
     // Fullscreen root: a vertical, padded column over a bg fill.
     const root = try el.root(ctx, "mock");
-    _ = root.with_layout(.top_left).with_align_children(.vertical, .top_left).with_gap(14)
+    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(14)
         .with_style(.{ Style{ .fill = th.bg }, style.pad(20) });
 
     _ = try txt(ctx, root, "title", "Style System Showcase", .{ style.h1, Style{ .text = th.fg } });

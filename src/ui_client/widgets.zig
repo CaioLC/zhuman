@@ -87,7 +87,7 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// the click — `enabled` is purely the look; pass it whatever "affordable" means.
 pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    _ = outer.with_layout(.relative, .horizontal)
+    _ = outer.with_layout(.relative, .{ .dir = .row })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", outer);
@@ -129,7 +129,7 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
     box.render_data.fill = ctx.res.theme.panel;
     box.render_data.outline = .{ .color = ctx.res.theme.line2 };
-    _ = box.with_layout(.top_left, .vertical)
+    _ = box.with_layout(.top_left, .{ .dir = .column })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     box.size.padding = ui.features.Padding.init(6); // padding is a style property now, not a Size.init arg
 
@@ -151,7 +151,7 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
 pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     outer.render_data.outline = .{ .color = ctx.res.theme.line };
-    _ = outer.with_layout(.relative, .vertical)
+    _ = outer.with_layout(.relative, .{ .dir = .column })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     outer.layout.gap = 8;
     outer.size.padding = ui.features.Padding.init(12); // padding is a style property now, not a Size.init arg
@@ -188,7 +188,7 @@ pub const ScrollView = struct {
 /// (no drag yet — wheel-only, per the M2 scope).
 pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, height: f32) !ScrollView {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    _ = outer.with_layout(.relative, .horizontal)
+    _ = outer.with_layout(.relative, .{ .dir = .row })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
 
     const viewport = try Node.pcreate(ctx.arena, "viewport", outer);
@@ -198,7 +198,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     viewport.render_data.outline = .{ .color = ctx.res.theme.line2 }; // dim frame marking the scrollable area
 
     const content = try Node.pcreate(ctx.arena, "content", viewport);
-    _ = content.with_layout(.relative, .vertical);
+    _ = content.with_layout(.relative, .{ .dir = .column });
     content.layout.gap = 4;
     const content_h = if (content.rect(ctx)) |r| r.h else 0;
     _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
@@ -213,7 +213,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
 
     if (max_offset > 0) {
         const track = try Node.pcreate(ctx.arena, "track", outer);
-        _ = track.with_layout(.relative, .vertical)
+        _ = track.with_layout(.relative, .{ .dir = .column })
             .with_size(ui.features.Size.initFixed(scrollbar_w, height));
         track.render_data.fill = ctx.res.theme.line;
 
@@ -268,7 +268,7 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     root.render_data.fill = ctx.res.theme.bg;
 
     const box = try Node.pcreate(ctx.arena, "box", root);
-    _ = box.with_layout(.center, .vertical)
+    _ = box.with_layout(.center, .{ .dir = .column })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     box.layout.gap = 10;
     box.size.padding = ui.features.Padding.init(16); // padding is a style property now, not a Size.init arg

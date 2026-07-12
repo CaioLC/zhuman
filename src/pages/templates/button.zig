@@ -23,7 +23,7 @@ pub fn button(ctx: *UiCtx, parent: anytype, id: []const u8, label: []const u8, e
     // Outer clickable box: flows, lays its label out horizontally, and hugs it (fit).
     // No content of its own — just the outline chrome.
     const outer = try el.div(ctx, parent, id);
-    _ = outer.with_align_children(.horizontal, .center_left).with_size(.fit_children, .fit_children);
+    _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);
 
     // Label content leaf (flows by default); padding lives on it so glyphs clear the border.
     const lbl = try el.text(ctx, outer, "lbl", label);

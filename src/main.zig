@@ -169,7 +169,7 @@ pub fn main() !void {
         // is sized to the window and placed from (0,0); a floating overlay (the tooltip)
         // carries its own layout origin, set in build_ui.
         for (frame) |t| {
-            try t.set_global_pos();
+            try t.set_global_pos(app.ui.arena); // arena = scratch for the placement pass's child lists
             ui_client.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
         }
 
