@@ -322,10 +322,17 @@ fn place(node: anytype, alloc: Allocator, info: ?ChildrenPosInfo) anyerror!void 
     var px: f32 = 0.0;
     var py: f32 = 0.0;
     if (node.parent) |p| {
-        pw = p.size.width;
-        ph = p.size.height;
-        px = (p.layout._global_x orelse 0.0) - p.layout.scroll_x;
-        py = (p.layout._global_y orelse 0.0) - p.layout.scroll_y;
+        // Base against the parent's *content box*, not its full box: shrink the extent by
+        // the parent's padding and shift the origin in by its leading padding. This is the
+        // one spot that makes padding inset children — both the flowed run below (whose
+        // offsets add onto px/py) and the anchored path (which anchors within pw/ph at
+        // px/py) inherit the inset for free, so `flow_place`/`set_indep_global_pos` can work
+        // in pure content-box coordinates (origin 0).
+        const pp = p.size.padding;
+        pw = p.size.width - pp.left - pp.right;
+        ph = p.size.height - pp.up - pp.down;
+        px = (p.layout._global_x orelse 0.0) - p.layout.scroll_x + pp.left;
+        py = (p.layout._global_y orelse 0.0) - p.layout.scroll_y + pp.up;
     } else {
         // Root: seed from its `origin` (0,0 for the main tree; the cursor/icon point for a
         // floating overlay). Anchor math runs against a zero-size parent, so a `.top_left`
@@ -377,20 +384,15 @@ fn place(node: anytype, alloc: Allocator, info: ?ChildrenPosInfo) anyerror!void 
 fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!void {
     const flow = node.layout.flow;
     const m = main_axis(flow); // .x for a row, .y for a column
-    const main_size = extent(node, m);
+    const pad = node.size.padding;
+    // Flow within the *content* box, not the full box. `place` already shifted this node's
+    // children's origin in by the leading padding (via px/py), so here we only shrink the
+    // main extent by the padding on the main axis — every offset below is content-relative
+    // (origin 0). The cross axis needs nothing: no distribution reads the box's cross extent,
+    // and `line_start` starting at 0 plus the px/py inset already places the first line
+    // against the leading cross padding.
+    const main_size = extent(node, m) - (if (m == .x) pad.left + pad.right else pad.up + pad.down);
     const gap = node.layout.gap;
-
-    // TODO(padding-inset): flow children within the *content* box, not the full box. Today a
-    // container's padding grows its box (in the sizing pass) but never insets the children
-    // laid out here, so padding on a pure layout container is inert — only a *leaf's* own
-    // padding insets its own content (via the render walk's `paint.content`). To close it:
-    //   - main axis: `main_size -= (leading + trailing padding on m)`, and seed the main
-    //     cursor (`lead`) at the leading padding;
-    //   - cross axis: start `line_start` at the cross-axis leading padding.
-    // The anchored-child path (`set_indep_global_pos`, which anchors against the full box)
-    // wants the same content-box treatment for consistency. Deferred because it visibly
-    // shifts every padded container's content, so it should land as its own reviewable change
-    // (the `panel` template is the one current spot that puts padding on a container).
 
     var line_start: f32 = 0; // cross-axis cursor: where the current line begins
     var i: usize = 0;

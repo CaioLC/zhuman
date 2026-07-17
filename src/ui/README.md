@@ -255,7 +255,11 @@ Two orthogonal axes, both Unity-inspired:
   and ignored by the `space_*` main distributions (they compute their own spacing). A
   `fit_children` parent grows to include the gaps. Defaults to 0; set with `Layout.init(..).with_gap(n)`.
   Per-node **`Size.padding`** (inset around a node's content, already on every box) is
-  the orthogonal knob — gap spaces siblings, padding insets a box's own content.
+  the orthogonal knob — gap spaces siblings, padding insets a box's own content. It both
+  grows the box (sizing pass) *and* insets the children laid out inside it (flowed and
+  anchored alike): `place` bases every child against the parent's *content* box, so
+  `.start` packs at the leading padding, `.end` against the trailing padding, and an
+  anchored `.center` centres within the inset box.
 - **`origin`** — a *root's* screen position (where its top-left lands). Defaults to
   (0,0), so the main tree fills from the corner. The host can render **multiple roots**
   (`root.set_global_pos()` + `root.iterate()` per tree) and float a second one — an
@@ -309,9 +313,8 @@ scratch `Allocator` that `place` uses to materialize each node's in-flow child l
 flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-size-pass
 would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
 where height depends on the resolved width. We don't do that yet.) Still pending (Roadmap):
-`range`/`max_of` combinators, `stretch`/`align-content`, **padding-inset for flowed children**
-(container padding grows the box but is inert on the children today — see the TODO in `place`),
-and the `strictness`-weighted sibling distribution.
+`range`/`max_of` combinators, `stretch`/`align-content`, and the `strictness`-weighted
+sibling distribution.
 
 ## Writing a widget
 

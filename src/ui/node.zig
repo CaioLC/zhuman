@@ -565,3 +565,81 @@ test "wrap breaks the run into cross-stacked lines" {
     try std.testing.expectEqual(@as(f32, 10), buf[2].layout._global_y.?); // wrapped to line 2
     try std.testing.expectEqual(@as(f32, 0), buf[2].layout._global_x.?); // new line starts at the left
 }
+
+test "padding grows a fit parent AND insets its flowed children" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // fit_children column, 10px padding all round, two fixed 40×30 children.
+    // Box = content + padding: width = 40 + 20 = 60; height = 30 + 30 + 20 = 80.
+    // Children flow within the *content* box, so they start at the leading padding (10,10),
+    // not the box corner (0,0) — k2 stacks one child-height below with no gap.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+    root.size.padding = features.Padding.init(10);
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(40, 30));
+    _ = k1.with_layout(.relative, null);
+    try root.add_child(a, k1);
+    const k2 = try TestNode.create(a, "k2");
+    _ = k2.with_size(Size.initFixed(40, 30));
+    _ = k2.with_layout(.relative, null);
+    try root.add_child(a, k2);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 60), root.size.width); // content 40 + padding 20
+    try std.testing.expectEqual(@as(f32, 80), root.size.height); // content 60 + padding 20
+    try std.testing.expectEqual(.{ 10, 10 }, .{ k1.layout._global_x.?, k1.layout._global_y.? });
+    try std.testing.expectEqual(.{ 10, 40 }, .{ k2.layout._global_x.?, k2.layout._global_y.? });
+}
+
+test "padding: `.end` distribution packs against the trailing padding" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A `fixed` axis is a *content-box*: padding grows the box on top of it, so a "fixed 200"
+    // row with l10/r30 padding resolves to a 240-wide box over a 200-wide content extent.
+    // `.end` packs the lone 40-wide child against the content trailing edge:
+    // global_x = leftpad(10) + (200 − 40) = 170, so its right edge (210) sits exactly the
+    // right padding (30) in from the box's right edge (240).
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 100));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .main = .end });
+    root.size.padding = features.Padding.initEach(0, 30, 0, 10);
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(40, 10));
+    _ = k1.with_layout(.relative, null);
+    try root.add_child(a, k1);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 240), root.size.width); // content 200 + padding 40
+    try std.testing.expectEqual(@as(f32, 170), k1.layout._global_x.?); // right edge 210 = 240 − 30
+}
+
+test "padding: an anchored child centres within the content box" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Fixed 200×200 content-box, asymmetric padding (u10 r20 d30 l40) ⇒ a 260×240 box over a
+    // 200×200 content extent. An out-of-flow `.center` child anchors within the *content* box,
+    // not the full box: content spans global x[40,240] y[10,210], so a 40×40 child centres at
+    // (140−20, 110−20) = (120, 90).
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 200));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+    root.size.padding = features.Padding.initEach(10, 20, 30, 40);
+
+    const child = try TestNode.create(a, "child");
+    _ = child.with_size(Size.initFixed(40, 40));
+    _ = child.with_layout(.center, null);
+    try root.add_child(a, child);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(.{ 120, 90 }, .{ child.layout._global_x.?, child.layout._global_y.? });
+}

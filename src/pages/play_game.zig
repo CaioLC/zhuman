@@ -29,20 +29,18 @@ pub fn ui_playgame(
     const root = try el.root(ctx, "play");
     _ = root.with_layout(.top_left).with_flow(.{ .dir = .column });
 
-    // Header: a nav bar — title + subtitle flow left-to-right, vertically centered so the
-    // big H1 and the smaller H2 share a common center line.
     const header = try el.div(ctx, root, "header");
     _ = header
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+
     const header_left = try el.div(ctx, header, "header");
     _ = header_left
         .with_layout(.bottom_left)
         .with_flow(.{ .dir = .row })
-        .with_style(.{ style.debug, style.gap(6.0) });
-
+        .with_style(.{style.gap(6.0)});
     const title = try el.text(ctx, header_left, "title", "Human Action");
     _ = title
-        .with_style(.{ style.h1, style.debug, style.stroke_w(2), style.dashed });
+        .with_style(.{style.h1});
     const subtitle = try el.text(ctx, header_left, "subtitle", "Act 1");
     _ = subtitle
         .with_style(.{style.h2});
@@ -50,11 +48,17 @@ pub fn ui_playgame(
     const header_right = try el.div(ctx, header, "header");
     _ = header_right
         .with_layout(.bottom_right)
-        .with_style(.{ style.debug, style.gap(6.0) });
+        .with_style(.{style.gap(6.0)});
     const day_counter = try el.text(ctx, header_right, "dcounter", "Day 1");
     _ = day_counter.with_style(.{style.h2});
-    const status = try el.text(ctx, header_right, "status", "Alive");
-    _ = status.with_style(.{style.h2});
+    _ = try t.button(ctx, header_right, "status_buttom", "Alive", true);
+
+    // --- padding demo: a bordered panel (pad 12) whose content is now inset from the border.
+    const demo = try t.panel(ctx, root, "pad_demo", "Padding demo");
+    const line1 = try el.text(ctx, demo, "l1", "content sits 12px inside the border");
+    _ = line1.with_style(.{style.body});
+    const boxed = try el.text(ctx, demo, "l2", "child with its own border");
+    _ = boxed.with_style(.{ style.body, style.Style{ .outline_color = ctx.res.theme.acc } });
 
     //
     // const header_left = try uic.Node.pcreate(ui_ctx.arena, "header_left", header);

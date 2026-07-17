@@ -15,8 +15,8 @@ pub fn panel(ctx: *UiCtx, parent: anytype, id: []const u8, title: []const u8) !*
     const th = ctx.res.theme;
 
     const outer = try el.div(ctx, parent, id);
-    _ = outer.with_flow(.{ .dir = .column }).with_gap(8).with_size(.fit_children, .fit_children)
-        .with_style(.{ Style{ .outline_color = th.line }, style.pad(12) });
+    _ = outer.with_flow(.{ .dir = .column }).with_size(.fit_children, .fit_children)
+        .with_style(.{ Style{ .outline_color = th.line }, style.pad(12), style.gap(8) });
 
     const ttl = try el.text(ctx, outer, "title", title);
     _ = ttl.with_style(.{Style{ .text = th.dim }});

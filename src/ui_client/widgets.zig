@@ -77,9 +77,9 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// the caller reads `btn.query(ctx).clicked` to act on a press — querying also keeps
 /// the node's interaction slot alive so its rect is stamped for next frame's hit-test.
 /// The whole box is the clickable surface. The padding lives on the *label*, not the
-/// box: `place` puts a child at the parent's origin (ignoring parent padding) and
-/// `draw_text` insets by the text node's own padding, so this is what centres the
-/// glyphs and lets the `fit_children` box wrap `text + padding` exactly.
+/// box (the box carries none, so parent-padding inset is moot here): `draw_text` insets
+/// by the text node's own padding, which centres the glyphs and lets the `fit_children`
+/// box wrap `text + padding` exactly.
 ///
 /// `enabled` drives the visual state (host policy): a disabled button is dimmed, an
 /// enabled one brightens on hover (read off its own slot, set at the event stage from
