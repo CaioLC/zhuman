@@ -45,9 +45,19 @@ pub const Style = struct {
 // earlier `a = 0.0, r = 1.0` read as 0–1 floats and coerced to a=0 (transparent), r=1 (~black).
 pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
+// TODO(responsive-scale): every scalar in this file — the `body`/`h1` font ladder below,
+// `pad`/`pad_sym`, `gap`, `stroke_w`, and the fixed px sizes callers pass — is authored at a
+// single reference resolution and never adapts to the window. On a much larger or smaller
+// (or high-DPI) screen the whole HUD reads too small or too big. The fix is a global UI
+// **scale factor** (derived once per frame from the window size / DPI, held on `Resources`
+// beside `theme`) that these fragments multiply into every dimension at `apply` time, so a
+// 12px pad becomes `12 * scale`. That keeps authoring in convenient reference units while the
+// output tracks the display. Distinct from the responsive-*reflow* TODO in CLAUDE.md (columns
+// that collision-avoid at narrow widths): this is uniform scaling, that is layout re-flow —
+// they compose (scale first, then reflow the scaled boxes).
+
 // A generic typography scale (font size only — colors are game art direction and live
 // with the theme/templates). Tunable; `body` matches `font.default_px`.
-// TODO: make these dynamic based on window size
 pub const body: Style = .{ .font = 14 };
 pub const h3: Style = .{ .font = 22 };
 pub const h2: Style = .{ .font = 28 };
