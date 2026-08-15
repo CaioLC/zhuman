@@ -400,6 +400,39 @@ test "horizontal cross-align: baseline lines up references; fit = maxAscent + ma
     try std.testing.expectEqual(@as(f32, 16), k2.layout._global_y.?);
 }
 
+test "horizontal cross-align: baseline folds a padded child's bottom padding in" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Same shape as above, but k2 is padded (a text chip/badge): content 80×30 baseline 6,
+    // padding up 2 / down 4 → box 80×36, reference = 6 + 4 = 10 up from the box bottom
+    // (ascent 26). Shared line = max ascent = 40 → k2's box top at 40 − 26 = 14, so its
+    // *content* baseline lands on the line: 14 + 36 − 4 − 6 = 40, same as k1's (50 − 10).
+    // fit height = maxAscent(40) + maxDescent(10) = 50.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row });
+
+    const k1 = try TestNode.create(a, "k1");
+    _ = k1.with_size(Size.initFixed(100, 50));
+    _ = k1.with_layout(.relative, null);
+    k1.size.baseline = 10;
+    try root.add_child(a, k1);
+
+    const k2 = try TestNode.create(a, "k2");
+    _ = k2.with_size(Size.initFixed(80, 30));
+    _ = k2.with_layout(.relative, null);
+    k2.size.baseline = 6;
+    k2.size.padding = features.Padding.initEach(2, 0, 4, 0);
+    try root.add_child(a, k2);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 50), root.size.height);
+    try std.testing.expectEqual(@as(f32, 0), k1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 14), k2.layout._global_y.?);
+}
+
 test "horizontal cross-align: center is derived from the same reduction" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

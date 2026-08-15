@@ -242,8 +242,8 @@ fn fit_cross(node: anytype, cross_axis: Axis, flow: Flow) f32 {
         for (node.children.items) |c| {
             const h = c.size.height;
             if (c.layout.anchor == .relative) {
-                max_ascent = @max(max_ascent, h - c.size.baseline);
-                max_descent = @max(max_descent, c.size.baseline);
+                max_ascent = @max(max_ascent, h - c.size.baseline_off());
+                max_descent = @max(max_descent, c.size.baseline_off());
             } else {
                 max_anchored = @max(max_anchored, h);
             }
@@ -413,8 +413,8 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
             main_sum += cm;
             cross_max = @max(cross_max, extent(c, cross(m)));
             if (m == .x) { // baseline only means something for a row
-                max_ascent = @max(max_ascent, c.size.height - c.size.baseline);
-                max_descent = @max(max_descent, c.size.baseline);
+                max_ascent = @max(max_ascent, c.size.height - c.size.baseline_off());
+                max_descent = @max(max_descent, c.size.baseline_off());
             }
             j += 1;
         }
@@ -476,7 +476,7 @@ fn cross_within(flow: Flow, m: Axis, line_cross: f32, c: anytype, max_ascent: f3
         .start => 0,
         .center => (line_cross - cc) / 2,
         .end => line_cross - cc,
-        .baseline => if (flow.dir == .row) max_ascent - (c.size.height - c.size.baseline) else 0,
+        .baseline => if (flow.dir == .row) max_ascent - (c.size.height - c.size.baseline_off()) else 0,
     };
 }
 
