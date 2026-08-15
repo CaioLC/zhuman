@@ -4,8 +4,11 @@
 /// rides as a bottom-anchored footer; the body sections (resources, actions) return one
 /// at a time as the shelf grows.
 const std = @import("std");
-// general lib
+// general lib ECS
 const ha = @import("ha");
+const ecs = ha.ecs;
+const comp = ha.comp;
+const tag = ha.tag;
 const World = ha.world.World;
 // Ui Interface
 const uic = ha.ui_client;
@@ -17,7 +20,7 @@ const Node = uic.Node;
 const t = @import("./templates/root.zig");
 const app = @import("../main.zig");
 
-pub fn ui_playgame(ctx: *uic.UiCtx, _: *World) !*Node {
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     const th = ctx.res.theme;
     var buf: [64]u8 = undefined;
 
@@ -33,12 +36,21 @@ pub fn ui_playgame(ctx: *uic.UiCtx, _: *World) !*Node {
     _ = root.with_size(.{ .fixed = content_w }, .{ .fixed = content_h })
         .with_style(.{style.pad(page_pad)});
 
-    // --- header: a thin strip, run context pinned right ------------------------------------
+    // --- header: a thin strip — stocks left, run context right ----------------------------
     // Kept as an in-flow row (not a bare anchored line) so the strip reserves its height
-    // and the body sections below never slide under it. The left side is deliberately
-    // empty — navigation's future home.
+    // and the body sections below never slide under it.
     const header = try el.div(ctx, root, "header");
     _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+
+    // Left: the always-on V/F/M stock summary (skipped once the actor is gone).
+    const q = ecs.MaybeSingle(.{
+        comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
+    }){ .world = world };
+    if (q.get()) |a| {
+        const vigor, const food, const materials = a;
+        const bar = try t.resource_bar(ctx, header, "stocks", vigor, food, materials);
+        _ = bar.with_layout(.bottom_left);
+    }
 
     const run_line = try el.div(ctx, header, "run");
     _ = run_line.with_layout(.bottom_right).with_flow(.{ .dir = .row }).with_gap(6);
