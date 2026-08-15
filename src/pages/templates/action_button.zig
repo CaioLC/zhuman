@@ -12,13 +12,13 @@ const uic = ha.ui_client;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 const UiCtx = uic.UiCtx;
-const Node = uic.Node;
+const El = uic.elements.El;
 
 const button = @import("./button.zig").button;
 
 pub fn action_button(
     ctx: *UiCtx,
-    parent: *Node,
+    parent: El,
     world: *World,
     e: Entity,
     comptime ActionT: type,
@@ -50,5 +50,5 @@ pub fn action_button(
     var buf: [64]u8 = undefined;
     const txt = std.fmt.bufPrint(&buf, "{s}  (-{d:.0} e, +{s}{c})", .{ name, act.requires.energy, range, unit }) catch name;
     const btn = try button(ctx, parent, id, txt, can);
-    if (btn.query(ctx).clicked and can) act_fn(world, e, ctx.res);
+    if (btn.query().clicked and can) act_fn(world, e, ctx.res);
 }

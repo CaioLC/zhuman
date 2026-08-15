@@ -2,7 +2,8 @@
 //! column the caller appends rows to. Wheel-scrolls while hovered (offset persisted in a
 //! `ScrollState` slot, folded into `content.layout.scroll_y`); a track + thumb ride beside
 //! it once content overflows. Behavior-heavy: built from `El` for the structure, dropping to
-//! `.get()`/`.node` for the interaction/geometry reads. Scroll math unchanged from the old widget.
+//! `.get()` only for the state/geometry reads. Scroll math unchanged from the old widget.
+//! Returns `El` handles (shelf convention) — callers append rows into `.content`.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -12,21 +13,25 @@ const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
-const Node = uic.Node;
+const El = el.El;
 const ScrollState = uic.UiState.ScrollState;
 
 /// Wheel delta → px scrolled per tick.
 const scroll_speed: f32 = 24.0;
-/// Scrollbar track/thumb width, in px.
-const scrollbar_w: f32 = 6.0;
+/// Scrollbar track/thumb width, in px. Pub so a caller sizing "viewport + track" to a
+/// total width (`log_view`'s full-width footer) can reserve the gutter.
+pub const scrollbar_w: f32 = 6.0;
+/// Vertical gap between the content column's rows, in px. Pub so a caller sizing the
+/// viewport in *rows* (`log_view`'s N-lines height) counts the gaps it will actually get.
+pub const content_gap: f32 = 4.0;
 
 pub const ScrollView = struct {
-    outer: *Node, // wraps the viewport + scrollbar track side by side
-    viewport: *Node, // fixed width×height, clipped
-    content: *Node, // fit_children column — the caller's rows attach here
+    outer: El, // wraps the viewport + scrollbar track side by side
+    viewport: El, // fixed width×height, clipped
+    content: El, // fit_children column — the caller's rows attach here
 };
 
-pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, height: f32) !ScrollView {
+pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: f32) !ScrollView {
     const th = ctx.res.theme;
 
     const outer = try el.div(ctx, parent, id);
@@ -36,10 +41,10 @@ pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, hei
     _ = viewport.with_layout(.relative)
         .with_size(.{ .fixed = width }, .{ .fixed = height })
         .with_overflow(.clip)
-        .with_style(.{Style{ .outline = th.line2 }}); // dim frame around the scroll area
+        .with_style(.{Style{ .outline_color = th.line2 }}); // dim frame around the scroll area
 
     const content = try el.div(ctx, viewport, "content");
-    _ = content.with_flow(.{ .dir = .column }).with_gap(4);
+    _ = content.with_flow(.{ .dir = .column }).with_gap(content_gap);
     const content_node = content.get();
     // Clamp needs content height, but this frame's rows aren't laid out yet — read last
     // frame's rect (queried here to keep the slot alive).
@@ -73,5 +78,5 @@ pub fn scroll_view(ctx: *UiCtx, parent: anytype, id: []const u8, width: f32, hei
             .with_style(.{Style{ .fill = th.line2 }});
     }
 
-    return .{ .outer = outer.get(), .viewport = viewport.get(), .content = content_node };
+    return .{ .outer = outer, .viewport = viewport, .content = content };
 }

@@ -11,6 +11,6 @@ const el = uic.elements;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-pub fn row(ctx: *UiCtx, parent: anytype, id: []const u8) !El {
+pub fn row(ctx: *UiCtx, parent: El, id: []const u8) !El {
     return (try el.div(ctx, parent, id)).with_flow(.{ .dir = .row }).with_gap(16);
 }

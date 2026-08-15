@@ -9,6 +9,7 @@ const style = uic.style;
 const Style = style.Style;
 const Color = ha.theme.Color;
 const UiCtx = uic.UiCtx;
+const El = el.El;
 
 pub const Figure = struct { l1: []const u8, l2: []const u8, l3: []const u8 };
 pub const fig_robust = Figure{ .l1 = "  \\o/", .l2 = "   |", .l3 = "  / \\" };
@@ -23,7 +24,7 @@ pub fn figure_glyphs(warmth: f32) Figure {
 }
 
 /// Build the figure's 3 lines as a stacked column of tinted text leaves under `parent`.
-pub fn figure(ctx: *UiCtx, parent: anytype, fig: Figure, color: Color) !void {
+pub fn figure(ctx: *UiCtx, parent: El, fig: Figure, color: Color) !void {
     const col = try el.div(ctx, parent, "fig");
     _ = col.with_flow(.{ .dir = .column });
 

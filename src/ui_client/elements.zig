@@ -17,8 +17,10 @@
 //! the fragment fold (`with_style` → `style.apply`). The two stay cleanly separate.
 //!
 //! Why a handle and not `*Node` methods: applying a `font` re-measures the text (needs the
-//! font backend on `ctx`), and the engine `Node` is deliberately ctx-agnostic. Drop to the
-//! raw node with `.get()` (for templates / geometry reads).
+//! font backend on `ctx`), and the engine `Node` is deliberately ctx-agnostic. `El` is the
+//! layer's lingua franca: parents are taken as `El` and the template shelf returns `El`
+//! too, so a template's output feeds the next call's input with no unwrapping. Drop to the
+//! raw node with `.get()` (for geometry reads, or handing roots to the render walk).
 
 const std = @import("std");
 const sdl = @import("sdl3");
@@ -64,6 +66,13 @@ pub const El = struct {
         return self;
     }
 
+    /// Spacing between this node's in-flow children, in px. A `fit_children` parent grows
+    /// to include the gaps.
+    pub fn with_gap(self: El, g: f32) El {
+        self.node.layout.gap = g;
+        return self;
+    }
+
     /// Per-axis size rule — `.fit_children`, `.{ .fixed = 240 }`, `.{ .pct_of_parent = 1 }`, …
     pub fn with_size(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
         self.node.size.w = w;
@@ -84,14 +93,9 @@ pub const El = struct {
     }
 };
 
-/// Accept an `El` or a bare `*Node` as a parent — the comptime branch picks the node out.
-fn nodeOf(parent: anytype) *Node {
-    return if (@TypeOf(parent) == El) parent.node else parent;
-}
-
 /// A fresh child node, anchored `.relative` — the default for content leaves.
-fn child(ctx: *UiCtx, parent: anytype, id: []const u8) !*Node {
-    const node = try Node.pcreate(ctx.arena, id, nodeOf(parent));
+fn child(ctx: *UiCtx, parent: El, id: []const u8) !*Node {
+    const node = try Node.pcreate(ctx.arena, id, parent.node);
     node.layout.anchor = .relative; // children flow by default; override with `with_layout`
     return node;
 }
@@ -108,34 +112,34 @@ pub fn root(ctx: *UiCtx, id: []const u8) !El {
 }
 
 /// A box holding no content — use it to manage placement (a row/column container).
-pub fn div(ctx: *UiCtx, parent: anytype, id: []const u8) !El {
+pub fn div(ctx: *UiCtx, parent: El, id: []const u8) !El {
     return .{ .ctx = ctx, .node = try child(ctx, parent, id) };
 }
 
 /// A content-sized text node holding `str` (measured at the default font; recolor/resize
 /// with `with_style`).
-pub fn text(ctx: *UiCtx, parent: anytype, id: []const u8, str: []const u8) !El {
+pub fn text(ctx: *UiCtx, parent: El, id: []const u8, str: []const u8) !El {
     const node = try child(ctx, parent, id);
     try feat.data_text(ctx, node, str);
     return .{ .ctx = ctx, .node = node };
 }
 
 /// A whole-texture image node, sized to the texture.
-pub fn image(ctx: *UiCtx, parent: anytype, id: []const u8, texture: sdl.render.Texture) !El {
+pub fn image(ctx: *UiCtx, parent: El, id: []const u8, texture: sdl.render.Texture) !El {
     const node = try child(ctx, parent, id);
     try feat.data_img(ctx, node, texture);
     return .{ .ctx = ctx, .node = node };
 }
 
 /// One `src` cell of a sprite sheet, drawn at `px`×`px`.
-pub fn sprite(ctx: *UiCtx, parent: anytype, id: []const u8, spr: Sprite, px: f32) !El {
+pub fn sprite(ctx: *UiCtx, parent: El, id: []const u8, spr: Sprite, px: f32) !El {
     const node = try child(ctx, parent, id);
     try feat.data_sprite(ctx, node, spr, px);
     return .{ .ctx = ctx, .node = node };
 }
 
 /// A cached SVG raster from `path`, drawn at `px`×`px` (recolor the tint with `with_style`).
-pub fn svg(ctx: *UiCtx, parent: anytype, id: []const u8, path: [:0]const u8, px: f32) !El {
+pub fn svg(ctx: *UiCtx, parent: El, id: []const u8, path: [:0]const u8, px: f32) !El {
     const node = try child(ctx, parent, id);
     try feat.data_svg(ctx, node, path, px);
     return .{ .ctx = ctx, .node = node };
@@ -154,7 +158,7 @@ pub const Content = union(enum) {
 
 /// One-call sugar over `leaf + with_style` (style only; chain placement after). `spec` is
 /// the usual style fragment tuple (`.{}` for none).
-pub fn el(ctx: *UiCtx, parent: anytype, id: []const u8, content: Content, spec: anytype) !El {
+pub fn el(ctx: *UiCtx, parent: El, id: []const u8, content: Content, spec: anytype) !El {
     const e: El = switch (content) {
         .text => |s| try text(ctx, parent, id, s),
         .image => |t| try image(ctx, parent, id, t),

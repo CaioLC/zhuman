@@ -5,8 +5,9 @@
 //! that machinery; it just arranges it and picks the colors from `res.theme` + interaction.
 //!
 //! The chrome (dim if disabled, accent on hover, else fg) is computed inline off the outer
-//! box's own interaction slot. Returns the raw outer node; the caller reads
-//! `.query(ctx).clicked` and still guards the click (`enabled` is only the look).
+//! box's own interaction slot. Returns the outer `El` (shelf convention — a template hands
+//! back the same handle an element would); the caller reads `.query().clicked` and still
+//! guards the click (`enabled` is only the look).
 
 const ha = @import("ha");
 
@@ -15,9 +16,9 @@ const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
-const Node = uic.Node;
+const El = el.El;
 
-pub fn button(ctx: *UiCtx, parent: anytype, id: []const u8, label: []const u8, enabled: bool) !*Node {
+pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enabled: bool) !El {
     const th = ctx.res.theme;
 
     // Outer clickable box: flows, lays its label out horizontally, and hugs it (fit).
@@ -34,5 +35,5 @@ pub fn button(ctx: *UiCtx, parent: anytype, id: []const u8, label: []const u8, e
     _ = lbl.with_style(.{Style{ .text = c }});
     _ = outer.with_style(.{Style{ .outline_color = c }});
 
-    return outer.get();
+    return outer;
 }

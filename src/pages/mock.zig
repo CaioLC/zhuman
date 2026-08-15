@@ -24,7 +24,7 @@ const UiCtx = uic.UiCtx;
 const t = @import("./templates/root.zig");
 
 /// A text leaf with a style — the showcase's workhorse (leaf flows by default, then style).
-fn txt(ctx: *UiCtx, parent: anytype, id: []const u8, s: []const u8, spec: anytype) !El {
+fn txt(ctx: *UiCtx, parent: El, id: []const u8, s: []const u8, spec: anytype) !El {
     return (try el.text(ctx, parent, id, s)).with_style(spec);
 }
 

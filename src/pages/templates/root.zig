@@ -15,6 +15,7 @@ const row_mod = @import("./row.zig");
 // composites
 pub const button = button_mod.button;
 pub const panel = panel_mod.panel;
+pub const row = row_mod.row;
 pub const ScrollView = scroll_view_mod.ScrollView;
 pub const scroll_view = scroll_view_mod.scroll_view;
 pub const action_button = action_button_mod.action_button;

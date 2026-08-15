@@ -1,6 +1,7 @@
 //! `panel` template — a titled, bordered, padded vertical section that groups content.
 //! Themed chrome (border `line`, title `dim`); the caller appends content nodes after the
-//! title and they flow vertically under it. Returns the raw outer node.
+//! title and they flow vertically under it. Returns the outer `El`, so the caller places
+//! it (`with_layout`) and appends into it like any element.
 
 const ha = @import("ha");
 
@@ -9,9 +10,9 @@ const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
-const Node = uic.Node;
+const El = el.El;
 
-pub fn panel(ctx: *UiCtx, parent: anytype, id: []const u8, title: []const u8) !*Node {
+pub fn panel(ctx: *UiCtx, parent: El, id: []const u8, title: []const u8) !El {
     const th = ctx.res.theme;
 
     const outer = try el.div(ctx, parent, id);
@@ -21,5 +22,5 @@ pub fn panel(ctx: *UiCtx, parent: anytype, id: []const u8, title: []const u8) !*
     const ttl = try el.text(ctx, outer, "title", title);
     _ = ttl.with_style(.{Style{ .text = th.dim }});
 
-    return outer.get();
+    return outer;
 }
