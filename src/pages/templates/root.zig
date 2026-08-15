@@ -11,13 +11,17 @@ const figure_mod = @import("./figure.zig");
 const status_mod = @import("./status.zig");
 const action_button_mod = @import("./action_button.zig");
 const row_mod = @import("./row.zig");
+const stat_mod = @import("./stat.zig");
+const log_view_mod = @import("./log_view.zig");
 
 // composites
 pub const button = button_mod.button;
 pub const panel = panel_mod.panel;
 pub const row = row_mod.row;
+pub const stat = stat_mod.stat;
 pub const ScrollView = scroll_view_mod.ScrollView;
 pub const scroll_view = scroll_view_mod.scroll_view;
+pub const log_view = log_view_mod.log_view;
 pub const action_button = action_button_mod.action_button;
 
 // vitals figure
@@ -33,3 +37,4 @@ pub const figure = figure_mod.figure;
 pub const Status = status_mod.Status;
 pub const actor_status = status_mod.actor_status;
 pub const heartbeat_color = status_mod.heartbeat_color;
+pub const compute_warmth = status_mod.compute_warmth;

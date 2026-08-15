@@ -1,30 +1,35 @@
-//! The game-over screen builder (`src/pages/` game content).
+//! The game-over screen builder (`src/pages/` game content), on the elements/templates
+//! stack: a dead figure, a line, and a "Start over" button that respawns the player and
+//! resets the run clock + log.
 
 const ha = @import("ha");
 const app = @import("../main.zig");
 
-const ui = ha.ui;
 const uic = ha.ui_client;
+const el = uic.elements;
+const style = uic.style;
+const Style = style.Style;
 const World = ha.world.World;
 
-const ui_root = @import("./root.zig").ui_root;
-const ui_figure = @import("./templates.zig").ui_figure;
-const fig_dead = @import("./templates.zig").fig_dead;
+const t = @import("./templates/root.zig");
 
-/// The game-over screen: a dead figure, a line, and a "Start over" button that respawns
-/// the player and resets the run clock + log.
-pub fn ui_gameover(ui_ctx: *uic.UiCtx, world: *World) !*uic.Node {
-    const over = try ui_root(ui_ctx, "over");
-    const center_div = try uic.Node.pcreate(ui_ctx.arena, "c_div", over);
-    _ = center_div.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10));
-    try ui_figure(ui_ctx, center_div, fig_dead, ui_ctx.res.theme.danger);
-    _ = try uic.label(ui_ctx, center_div, "dead_text", "You perished, cold and starved.");
-    const restart = try uic.button(ui_ctx, center_div, "restart", "Start over", true);
-    if (restart.query(ui_ctx).clicked) {
+pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
+    const th = ctx.res.theme;
+
+    const root = try el.root(ctx, "over");
+    const center = try el.div(ctx, root, "c_div");
+    _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
+
+    try t.figure(ctx, center, t.fig_dead, th.danger);
+    _ = (try el.text(ctx, center, "dead_text", "You perished, cold and starved."))
+        .with_style(.{Style{ .text = th.fg }});
+
+    const restart = try t.button(ctx, center, "restart", "Start over", true);
+    if (restart.query().clicked) {
         _ = app.spawn_player(world);
-        ui_ctx.res.time.elapsed = 0; // fresh run starts on Day 1
-        ui_ctx.res.log.clear();
-        ui_ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
+        ctx.res.time.elapsed = 0; // fresh run starts on Day 1
+        ctx.res.log.clear();
+        ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
     }
-    return over;
+    return root.get();
 }

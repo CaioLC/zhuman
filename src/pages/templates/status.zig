@@ -24,3 +24,10 @@ pub fn actor_status(t: Theme, vigor: *const comp.Vigor) Status {
     if (frac < 0.35) return .{ .word = "WEARY", .color = t.warn };
     return .{ .word = "ALIVE", .color = t.acc };
 }
+
+/// This frame's 0..1 "warmth" mood — drives the COLD↔WARM theme blend and the vitals
+/// figure. Simplified to the actor's vigor fraction for now (the satiety/capital inputs
+/// went away with their mechanics); a rested actor reads warm, a spent one cold.
+pub fn compute_warmth(vigor: *const comp.Vigor) f32 {
+    return std.math.clamp(vigor.v / vigor.max, 0, 1);
+}
