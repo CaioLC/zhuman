@@ -180,11 +180,6 @@ pub fn main() !void {
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
         for (frame) |t| ui_client.draw_tree(&app.ui, t);
-        // scanlines — a CRT-style overlay on top of everything (terminal identity, M5)
-        {
-            const ww, const wh = try app.resources.window.getSize();
-            draw_scanlines(&app.resources, ww, wh);
-        }
         // present
         try app.renderer.present();
 
@@ -204,19 +199,4 @@ pub fn spawn_player(world: *ha.world.World) ha.world.Entity {
     const e = spawn_agent(world);
     world.add(e, tag.Player{});
     return e;
-}
-
-/// A subtle repeating horizontal darkening every 4px — the redesign's terminal-identity
-/// scanline overlay (M5). Drawn last, over the whole frame, at partial alpha (~14%,
-/// matching the design's CSS); needs the renderer's blend mode set to `.blend` (done
-/// once in `App.init` — every other draw is fully opaque, so that change is invisible
-/// everywhere except here).
-pub fn draw_scanlines(res: *Resources, ww: usize, wh: usize) void {
-    res.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 36 }) catch return;
-    const w: f32 = @floatFromInt(ww);
-    const h: f32 = @floatFromInt(wh);
-    var y: f32 = 2;
-    while (y < h) : (y += 4) {
-        res.renderer.renderFillRect(.{ .x = 0, .y = y, .w = w, .h = 1 }) catch {};
-    }
 }
