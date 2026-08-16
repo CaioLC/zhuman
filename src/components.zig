@@ -62,6 +62,17 @@ pub const ActionChopWood = struct {
     },
 };
 
+/// The continuous eating policy: an agent consumes its own larder every tick — eating
+/// happens regardless of action (see `systems.metabolize`); what the player controls is
+/// the *rate*. `setting` is that standing choice: ration (stretch the larder, stay
+/// weak), normal, or feast (restore fast, burn the stock). `base_rate` is food/day at
+/// `normal`; ration halves it, feast doubles it.
+pub const Metabolism = struct {
+    pub const Setting = enum { ration, normal, feast };
+    setting: Setting = .normal,
+    base_rate: f32 = 1.5,
+};
+
 /// **Unlocker** capital: owning the rod is what makes fishing possible at all —
 /// `capital.build_fish_rod` pays `requires` once and grants the agent its `ActionFish`
 /// component; `break_fish_rod` revokes the verb with the tool (reachable once

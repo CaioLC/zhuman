@@ -26,15 +26,8 @@ pub const actions_bundle = .{
 };
 
 // action queues
-pub fn action_eat(
-    w: *World,
-    e: Entity,
-) void {
-    const food, const vigor = ecs.getMany(w, e, .{ comp.InventoryFood, comp.Vigor });
-    if (food.v == 0.0) return;
-    food.v -= 1.0;
-    vigor.v += 2.0 * @as(f32, @floatFromInt(food.quality));
-}
+// (`action_eat` was removed 2026-08-15: eating moved onto the continuous metabolism loop
+// — `systems.metabolize` — with a player-set ration rate. Eating is no longer an action.)
 
 /// Shared body for the labor actions (Forage/Fish/ChopWood): spend energy/materials,
 /// draw food/materials yield from `dist.sample` (the spread *is* the risk — no separate

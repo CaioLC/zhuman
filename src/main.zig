@@ -15,11 +15,8 @@ const Resources = ha.res.Resources;
 // CONFIGS
 const fps = 60;
 const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
-/// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
-/// today (population, not day-count, is the progression spine). `pub`: read by
-/// `pages.ui_playgame`.
-/// TODO: implement different game speeds
-pub const secs_per_day: f32 = 20;
+// `secs_per_day` moved to `res.zig` (2026-08-15): library systems (`metabolize`) convert
+// per-day rates against it, and the library can't import main. Read it as `ha.res.secs_per_day`.
 // END CONFIGS
 
 const App = struct {
@@ -158,6 +155,7 @@ pub fn main() !void {
         // 2. update game systems
         ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
         ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
+        ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
         ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
         ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         // 3. update ui
@@ -192,6 +190,7 @@ fn spawn_agent(world: *ha.world.World) ha.world.Entity {
         comp.Vigor{ .v = 10, .max = 10 }, // rested
         comp.InventoryFood{ .v = 4, .quality = 1, .spoils = 0.05 }, // a thin, perishable larder
         comp.InventoryMaterial{ .v = 0 }, // nothing stockpiled yet
+        comp.Metabolism{}, // eats continuously from the first breath (normal ration)
     } ++ actions.actions_bundle);
 }
 

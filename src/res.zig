@@ -5,6 +5,11 @@ const logmod = @import("./log.zig");
 const thememod = @import("./theme.zig");
 const fontmod = @import("./font.zig");
 
+/// Game-seconds per in-game day — the tempo every per-day rate (metabolism, starvation,
+/// spoilage-as-displayed) is expressed against, and the day counter's divisor. Lives here
+/// (not `main.zig`) so library systems can convert per-day rates to per-`dt` amounts.
+pub const secs_per_day: f32 = 20;
+
 pub const Time = struct {
     dt: f32,
     /// Seconds of game time elapsed this run — advanced while the actor lives (see

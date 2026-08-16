@@ -78,7 +78,9 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Chop wood", actions.action_chop_wood);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
-                _ = try t.eat_tile(ctx, acts, world, e, "eat");
+                // Eating is no longer an action — the metabolism loop runs regardless;
+                // the dial below sets its rate (the standing ration/feast policy).
+                _ = try t.ration_dial(ctx, center, world, e, "ration");
             } else {
                 // The fish rod is a real Unlocker (dashed plan → solid owned; building
                 // grants the Fish verb). Sandals/Firepit remain UI mocks — clicks do
