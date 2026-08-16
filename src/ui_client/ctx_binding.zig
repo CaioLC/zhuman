@@ -53,6 +53,11 @@ pub const UiState = struct {
     /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
     /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
     pub const ScrollState = struct { offset: f32 = 0 };
+    /// A tab strip's persisted selection (an index into its labels), keyed by the strip's
+    /// own `node.key` — same pattern as `ScrollState`. NOTE: pool slots are seeded with
+    /// `std.mem.zeroes`, not the struct's field defaults — a fresh strip always starts on
+    /// tab 0, and a non-zero "default tab" would need the template to set it explicitly.
+    pub const TabsState = struct { active: usize = 0 };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
     /// whichever field `Resources.focused_text` names — the widget itself only reads it

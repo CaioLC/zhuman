@@ -53,19 +53,41 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         const bar = try t.resource_bar(ctx, header, "stocks", vigor, food, materials);
         _ = bar.with_layout(.bottom_left);
 
-        // --- center: the production actions row. Gather leads — the teaching card until
-        // the first resolved action (GameState.tutorial_done), then the compact tile
-        // speaking the same grammar. Eat rides beside it in tile form from the start
-        // (its `-1f → +2v` is grammar practice, not a new lesson). "Gather" is today's
-        // presentation of ActionForage; more actions, more tiles in this row.
-        const acts = try el.div(ctx, root, "acts");
-        _ = acts.with_layout(.center).with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
+        // --- center. Before the very first resolved action (GameState.tutorial_done),
+        // the teaching card stands alone — no tabs, no Eat, no Build: one thing to
+        // learn, one thing to click. The first click unfolds the full center: tabbed
+        // action families — ACTIONS (production: flows you repeat) and BUILD (capital:
+        // pay once, own a thing that changes which flows exist). The tab switch itself
+        // enacts the now-vs-later margin; selection persists in the strip's TabsState.
         if (!ctx.res.game.tutorial_done) {
-            _ = try t.action_card(ctx, acts, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage);
+            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage)) |card| {
+                _ = card.with_layout(.center);
+            }
         } else {
-            _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
+            // `.cross = .start`: the strip left-aligns over the content's edge — the
+            // classic tab silhouette — instead of floating centered above it.
+            const center = try el.div(ctx, root, "center");
+            _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+            const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
+            if (tb.active == 0) {
+                // Production row, in the grammar the card taught. Eat's `-1f → +2v` is
+                // practice, not a new lesson. "Gather" is today's presentation of
+                // ActionForage; more actions, more tiles in this row.
+                const acts = try el.div(ctx, center, "acts");
+                _ = acts.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
+                _ = try t.eat_tile(ctx, acts, world, e, "eat");
+            } else {
+                // Capital grammar mock — UI only, no build logic yet (clicks do nothing).
+                // Dashed = an unowned plan; the arrow slot names the consequence: a new
+                // verb (unlock), a cheaper verb (modifier), a self-running flow (generator).
+                const build = try el.div(ctx, center, "build");
+                _ = build.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
+                _ = try t.capital_tile(ctx, build, "rod", "Fish rod", "-8m -3e", "Fish");
+                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e");
+                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day");
+            }
         }
-        _ = try t.eat_tile(ctx, acts, world, e, "eat");
     }
 
     const run_line = try el.div(ctx, header, "run");
