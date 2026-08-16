@@ -94,7 +94,7 @@ A [Bevy](https://bevyengine.org)-inspired ECS over a sparse-set `World` (the erg
 - **World**: one `SparseSet` per component/tag type, generated at comptime from the public decls of `components.zig` / `tags.zig`. API: `spawn(bundle)` (bundle = tuple of component **instances** + bare **tag types**), `add`, `remove`, `get`, `has`, and `despawn(e)` (clears `e` from every storage; ids are never recycled — `next_id` only climbs).
 - **System params** (declared as a system fn's parameter types, built by `ecs.run` via comptime introspection): `Query(.{…})` iterates matches; `Single`/`MaybeSingle` expect exactly-one / zero-or-one. Inside the param tuple: bare component types are **fetches** (drive iteration, yield `*T`); `With(T)`/`Without(T)` filter; `Maybe(T)` yields `?*T`; and `Entity` yields the entity id (Bevy-style — doesn't drive iteration). A system may also take `*Resources` or `*World` directly.
 - **Structural changes** (`add`/`remove`/`despawn`/`spawn`) currently go through a raw `*World` system param. A Bevy-style deferred `Commands` buffer is intentionally **not** built yet — see the rationale + trigger in memory (`project_commands_deferred`). Two consequences to respect when writing systems: (1) mutating the storage you're iterating is unsafe — collect ids first, then apply (see `despawn_dead`); (2) an entity that can be despawned must be read with `MaybeSingle`, not `Single`, or the UI build will panic once it's gone.
-- **Survival/death pipeline** (run in this order each frame): `advance_clock` bumps the run clock (`Time.elapsed`, only while a player exists) → `update_food` spoils the larder toward zero at its per-larder `spoils` rate → `mark_dead` (queries `Entity, Vigor`, takes `*World` + `*Resources`) tags `Dead` at `vigor ≤ 0` and pushes the death line to the log → `despawn_dead` (queries `Entity, Dead`) reaps it; once the actor is gone the UI (which fetches it with `MaybeSingle`) shows the "start over" screen. The player's action buttons in `build_ui` add food/materials, and `eat` converts food → vigor. **Known gap:** `actions.gather` doesn't yet deduct an action's energy cost from `Vigor`, and nothing else drains vigor to 0, so the death path compiles but never actually fires — closing that cost-deduction gap is the still-open design decision (see "Actions & Capital"). The pre-redesign `update_satiety` / `metabolize` / `update_vigor` / `update_population` systems are gone.
+- **Survival/death pipeline** (run in this order each frame): `advance_clock` bumps the run clock (`Time.elapsed`, only while a player exists) → `update_food` spoils the larder toward zero at its per-larder `spoils` rate → `mark_dead` (queries `Entity, Vigor`, takes `*World` + `*Resources`) tags `Dead` at `vigor ≤ 0` and pushes the death line to the log → `despawn_dead` (queries `Entity, Dead`) reaps it; once the actor is gone the UI (which fetches it with `MaybeSingle`) shows the "start over" screen. The player's action buttons in `build_ui` add food/materials, and `eat` converts food → vigor. `actions.gather` **deducts the action's cost since 2026-08-15** (energy from `Vigor`, materials from `InventoryMaterial`) — but its strict energy gate keeps vigor above 0, so labor alone can't kill and the death path still never fires; nothing yet drains vigor *to* 0 (no starvation/idle metabolism), and a run can dead-end alive (vigor too low to gather, food at 0 so `eat` can't refill) — that drain/death mechanic is the still-open design decision. The pre-redesign `update_satiety` / `metabolize` / `update_vigor` / `update_population` systems are gone.
 
 ### Actions & Capital (`src/actions.zig`, `src/capital.zig`)
 
@@ -118,11 +118,14 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   `actions.actions_bundle` is the manually-maintained list of every action-component type, spliced
   into `World.spawn`'s bundle via `++` (a *nested* tuple element is **not** auto-flattened by
   `spawn` — verified via a scratch repro — so nesting it directly is a compile error).
-  `actions.gather` is the one shared "act" step (check affordability → sample `Yields` → deposit)
-  that all three call through, parameterized by `comptime ActionT: type` so each action stays its
-  own queryable component type while sharing resolution logic — note it currently checks
-  affordability but doesn't deduct the cost from `Vigor`/`InventoryMaterial` before depositing the
-  yield, a known gap, not yet decided whether/how to close. `actions.action_eat` is the new
+  `actions.gather` is the one shared "act" step (check affordability → pay the cost → sample
+  `Yields` → deposit → log the receipt) that all three call through, parameterized by
+  `comptime ActionT: type` so each action stays its own queryable component type while sharing
+  resolution logic. Since 2026-08-15 it deducts `requires.energy`/`materials` before depositing
+  (the energy gate is strict — vigor stays > 0 — while materials may be spent to exactly 0; the
+  old `>=` materials gate silently blocked every zero-materials action on a fresh spawn) and
+  pushes the yield to the log ("You gathered 2 food.", `.dim`-toned "You gathered nothing." on a
+  rounded-to-zero draw). `actions.action_eat` is the new
   **active** eat action (food adds straight to `Vigor`, scaled by `quality`) enabled by this
   session's Satiety removal.
 - **Capital** splits into two behavioral variants, by tag not by type (both share the same
@@ -182,7 +185,7 @@ today, sim deciders later) individualized costs/yields for free — two agents c
 
 The forward redesign plan — population-as-spine, autonomous-agent Act II, the text-forward terminal identity, and the M0–M8 milestone sequence — lives in [`docs/roadmap.md`](docs/roadmap.md); the imported design prototype is in `design/`. The near-term items below are scoped but not yet built (see also the `project_game_design_accumulator` memory):
 
-- **Deduct action cost** — `actions.gather` samples and deposits an action's yield but never spends its `requires.energy`/`materials`, so vigor only ever rises (via `eat`) and the actor can't die. Closing this is the load-bearing next gameplay decision (how much, and what "spending vigor" means without the old satiety coupling).
+- **Vigor drain / death path** — `actions.gather` now pays its cost (2026-08-15), but its strict energy gate keeps vigor above 0, so labor can't kill and `mark_dead` still never fires. A run can instead dead-end alive: vigor too low to afford any action, food at 0 so `eat` can't refill. The load-bearing next gameplay decision is what drains vigor to 0 — a passive metabolism trickle, spoilage-driven starvation, or something else — so death (and "start over") actually happens.
 - **Ration control on `eat`** — `eat` consumes a fixed 1 food → vigor; a full / ½ / ¼ portion control (to stretch a thin larder) is a natural knob once eating balance matters. Supersedes the old satiety-era "ration selector" (which scaled a now-removed `metabolism_rate`).
 - **Capital decay** — durable goods (a bed, a fireplace) should degrade on a slow trickle and need maintenance, the way food spoils fast. Deferred with the rest of the capital rework — there's no capital wear (or capital build) in the code today at all.
 - **Progress-ring polish** — a glanceable in-progress build indicator on the capital icon (an underbar or bottom-up fill); today the only cue is the hover tooltip's `building X/Y e`.
