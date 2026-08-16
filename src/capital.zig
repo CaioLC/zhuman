@@ -72,17 +72,29 @@ pub fn remove_axe(w: *World, agent: Entity) void {
 // no runtime bookkeeping. (The rod was an ActionModifier here before 2026-08-15; the
 // redesign made it gate fishing instead of improving it.)
 
-/// Build a fish rod: pay `comp.FishRod`'s build price, own the rod, gain the Fish verb.
-/// Refuses silently if already owned or unaffordable — same gates as `actions.gather`
-/// (energy strict, vigor 0 is death; materials may be spent to exactly 0).
+/// Begin building a fish rod: pay `comp.FishRod`'s build price upfront and start the
+/// work — the rod (and the Fish verb it grants) arrives only when `finish_fish_rod`
+/// resolves, `requires.hours` later. Refuses silently if already owned, already busy
+/// (one body, one act), or unaffordable — same gates as labor (energy strict, vigor 0
+/// is death; materials may be spent to exactly 0). Dying mid-build loses the work.
 pub fn build_fish_rod(w: *World, e: Entity, res: *Resources) void {
+    _ = res; // kept for the shared begin-signature; the receipt logs at completion
     if (w.has(e, comp.FishRod)) return; // one per agent (SparseSet.add doesn't guard dupes)
+    if (w.has(e, comp.Busy)) return; // one body, one act
     const vigor, const stock = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryMaterial });
     const cost = (comp.FishRod{}).requires;
     if (cost.energy >= vigor.v or cost.materials > stock.v) return;
 
     vigor.v -= cost.energy;
     stock.v -= cost.materials;
+    const total = res_mod.hours_to_secs(cost.hours);
+    // quality is a labor concept — a build either completes or it doesn't, so lock 1.
+    w.add(e, comp.Busy{ .doing = .build_fish_rod, .total = total, .remaining = total, .quality = 1 });
+}
+
+/// Completion of the rod build: own the rod, gain the verb. Called by
+/// `systems.resolve_busy`; `build_fish_rod`'s gates guarantee no rod exists yet.
+pub fn finish_fish_rod(w: *World, e: Entity, res: *Resources) void {
     w.add(e, comp.FishRod{});
     w.add(e, comp.ActionFish{}); // the unlock: the rod grants the verb
     res.log.push(.good, "You built a fish rod. Fishing is now possible.");
@@ -147,7 +159,7 @@ fn test_res() Resources {
     return res;
 }
 
-test "build_fish_rod pays, grants the rod and the Fish verb, and logs" {
+test "build pays upfront and starts the work; finish grants the rod and the verb" {
     var w = World.init();
     var res = test_res();
     const e = w.spawn(.{
@@ -158,14 +170,22 @@ test "build_fish_rod pays, grants the rod and the Fish verb, and logs" {
 
     build_fish_rod(&w, e, &res);
 
-    try std.testing.expect(w.has(e, comp.FishRod));
-    try std.testing.expect(w.has(e, comp.ActionFish)); // the unlock
+    // Paid and busy — the rod doesn't exist until the work completes.
+    try std.testing.expect(!w.has(e, comp.FishRod));
+    try std.testing.expect(!w.has(e, comp.ActionFish));
     try std.testing.expectEqual(@as(f32, 7), w.get(e, comp.Vigor).?.v); // 10 − 3 energy
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // 8 − 8
+    const b = w.get(e, comp.Busy).?;
+    try std.testing.expectEqual(comp.Busy.Doing.build_fish_rod, b.doing);
+    try std.testing.expectEqual(res_mod.hours_to_secs(12), b.total);
+
+    finish_fish_rod(&w, e, &res);
+    try std.testing.expect(w.has(e, comp.FishRod));
+    try std.testing.expect(w.has(e, comp.ActionFish)); // the unlock
     try std.testing.expectEqual(@as(usize, 1), res.log.count);
 }
 
-test "build_fish_rod refuses when unaffordable, and only ever builds one" {
+test "build_fish_rod refuses when unaffordable, owned, or busy" {
     var w = World.init();
     var res = test_res();
     const e = w.spawn(.{
@@ -174,16 +194,19 @@ test "build_fish_rod refuses when unaffordable, and only ever builds one" {
     });
 
     build_fish_rod(&w, e, &res);
-    try std.testing.expect(!w.has(e, comp.FishRod)); // refused, nothing granted
-    try std.testing.expect(!w.has(e, comp.ActionFish));
+    try std.testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
 
     w.get(e, comp.InventoryMaterial).?.v = 20;
-    build_fish_rod(&w, e, &res);
-    try std.testing.expect(w.has(e, comp.FishRod));
-    build_fish_rod(&w, e, &res); // second build must refuse (one per agent)
+    build_fish_rod(&w, e, &res); // starts the build
+    build_fish_rod(&w, e, &res); // busy — must refuse, not double-pay
     try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v); // paid once
-    try std.testing.expectEqual(@as(usize, 1), res.log.count); // one receipt
+
+    w.remove(e, comp.Busy);
+    finish_fish_rod(&w, e, &res);
+    build_fish_rod(&w, e, &res); // owned — must refuse (one per agent)
+    try std.testing.expect(!w.has(e, comp.Busy));
+    try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v);
 }
 
 test "break_fish_rod revokes the verb with the tool" {
@@ -194,6 +217,7 @@ test "break_fish_rod revokes the verb with the tool" {
         comp.InventoryMaterial{ .v = 8 },
     });
     build_fish_rod(&w, e, &res);
+    finish_fish_rod(&w, e, &res);
 
     break_fish_rod(&w, e, &res);
 

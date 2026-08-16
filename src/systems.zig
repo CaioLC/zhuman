@@ -4,6 +4,8 @@ const tag = @import("./tags.zig");
 const ecs = @import("./ecs.zig");
 const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
+const actions = @import("./actions.zig");
+const capital = @import("./capital.zig");
 const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
@@ -87,6 +89,40 @@ pub fn metabolize(
     }
 }
 
+/// Tick every act in progress and resolve the ones whose time is up: dispatch `doing`
+/// back to its completion half (deposit + receipt for labor, the grant for a build) and
+/// drop the `Busy`. Collect-then-apply, like `despawn_dead`: finishing removes from the
+/// storage this query iterates. Runs after `metabolize` (the body pays its keep while
+/// working) and before `mark_dead` (a death this frame still forfeits nothing extra —
+/// the work either resolved just now or despawns with the agent).
+pub fn resolve_busy(
+    res: *Resources,
+    w: *World,
+    q: Query(.{ Entity, comp.Busy }),
+) void {
+    var done: [world.MAX_ENTITIES]Entity = undefined;
+    var n: usize = 0;
+    var it = q.iter();
+    while (it.next()) |entry| {
+        const e, const b = entry;
+        b.remaining -= res.time.dt;
+        if (b.remaining <= 0) {
+            done[n] = e;
+            n += 1;
+        }
+    }
+    for (done[0..n]) |e| {
+        const b = w.get(e, comp.Busy).?.*; // copy out before removing the slot
+        w.remove(e, comp.Busy);
+        switch (b.doing) {
+            .forage => actions.finish_labor(w, e, res, comp.ActionForage, b.quality),
+            .fish => actions.finish_labor(w, e, res, comp.ActionFish, b.quality),
+            .chop_wood => actions.finish_labor(w, e, res, comp.ActionChopWood, b.quality),
+            .build_fish_rod => capital.finish_fish_rod(w, e, res),
+        }
+    }
+}
+
 /// Tag any actor whose `Vigor` has drained to zero as `Dead` — vigor `0` is death. Guards
 /// on `has` so it tags once. Starvation (`metabolize` on an empty larder) is what drains
 /// vigor to zero in practice; labor can't (its energy gate is strict).
@@ -133,6 +169,30 @@ fn test_res(dt: f32) Resources {
     res.log = .{};
     res.game = .{};
     return res;
+}
+
+test "resolve_busy ticks the work and resolves it exactly once, at completion" {
+    var w = World.init();
+    var res = test_res(res_mod.hours_to_secs(2)); // 2h per tick
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
+        comp.InventoryMaterial{ .v = 0 },
+        comp.ActionForage{}, // 4h of work
+        comp.Busy{ .doing = .forage, .total = res_mod.hours_to_secs(4), .remaining = res_mod.hours_to_secs(4), .quality = 1 },
+    });
+
+    ecs.run(&w, &res, resolve_busy); // 2h in — still working
+    try std.testing.expect(w.has(e, comp.Busy));
+    try std.testing.expectEqual(@as(usize, 0), res.log.count);
+
+    ecs.run(&w, &res, resolve_busy); // 4h — done: deposit + receipt, Busy gone
+    try std.testing.expect(!w.has(e, comp.Busy));
+    try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0);
+    try std.testing.expectEqual(@as(usize, 1), res.log.count);
+
+    ecs.run(&w, &res, resolve_busy); // idle tick — nothing to resolve
+    try std.testing.expectEqual(@as(usize, 1), res.log.count);
 }
 
 test "metabolize eats continuously, converting food to vigor (clamped at max)" {

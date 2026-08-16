@@ -10,6 +10,13 @@ const fontmod = @import("./font.zig");
 /// (not `main.zig`) so library systems can convert per-day rates to per-`dt` amounts.
 pub const secs_per_day: f32 = 20;
 
+/// In-game hours → game-seconds (a day is 24h mapped onto `secs_per_day`). Action
+/// durations are authored in hours (`Requires.hours`) — human-readable on the tiles —
+/// and ticked in game-seconds (`Busy.remaining`).
+pub fn hours_to_secs(h: f32) f32 {
+    return h * secs_per_day / 24.0;
+}
+
 pub const Time = struct {
     dt: f32,
     /// Seconds of game time elapsed this run — advanced while the actor lives (see
