@@ -206,15 +206,19 @@ fn extent(node: anytype, axis: Axis) f32 {
     return if (axis == .x) node.size.width else node.size.height;
 }
 
-/// `fit_children` on one axis. On the **main** axis: sum of child extents plus one `gap`
-/// per adjacent in-flow pair — a `fit` parent wraps its spaced children exactly. On the
-/// **cross** axis: `fit_cross` (a max, or a baseline-aware ascent+descent for a baseline
-/// row). Reads children's already-resolved (pass-1) sizes.
+/// `fit_children` on one axis. On the **main** axis: sum of *in-flow* child extents plus
+/// one `gap` per adjacent pair — a `fit` parent wraps its spaced children exactly.
+/// Anchored (out-of-flow) children are **excluded** from the main sum (changed
+/// 2026-08-16): they overlay, they don't size their parent — a progress bar anchored
+/// inside a tile must not make the tile grow/pulse with it (CSS absolute semantics). On
+/// the **cross** axis: `fit_cross` (a max, or a baseline-aware ascent+descent for a
+/// baseline row) — which deliberately *does* still count anchored children (the header's
+/// fit-height is set by its two anchored groups). Reads children's already-resolved
+/// (pass-1) sizes.
 ///
 /// Note: this sizes for a *single line*; a `fit_children` parent that also `wrap`s is not
 /// modeled (the same limitation as before the flow rewrite — wrap is used with fixed/pct
-/// containers). Anchored (out-of-flow) children still count toward the main-axis sum, as
-/// they did previously.
+/// containers).
 fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     const flow = node.layout.flow;
     if (axis != main) return fit_cross(node, axis, flow);
@@ -222,8 +226,9 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     var acc: f32 = 0;
     var flow_count: usize = 0;
     for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue; // overlays don't size their parent
         acc += extent(c, axis);
-        if (c.layout.anchor == .relative) flow_count += 1;
+        flow_count += 1;
     }
     if (flow_count > 1) acc += node.layout.gap * @as(f32, @floatFromInt(flow_count - 1));
     return acc;
