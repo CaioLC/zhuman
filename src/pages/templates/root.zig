@@ -18,6 +18,7 @@ const action_card_mod = @import("./action_card.zig");
 const action_tile_mod = @import("./action_tile.zig");
 const eat_tile_mod = @import("./eat_tile.zig");
 const capital_tile_mod = @import("./capital_tile.zig");
+const fish_rod_tile_mod = @import("./fish_rod_tile.zig");
 const tabs_mod = @import("./tabs.zig");
 
 // composites
@@ -34,6 +35,7 @@ pub const action_card = action_card_mod.action_card;
 pub const action_tile = action_tile_mod.action_tile;
 pub const eat_tile = eat_tile_mod.eat_tile;
 pub const capital_tile = capital_tile_mod.capital_tile;
+pub const fish_rod_tile = fish_rod_tile_mod.fish_rod_tile;
 pub const Tabs = tabs_mod.Tabs;
 pub const tabs = tabs_mod.tabs;
 

@@ -17,9 +17,11 @@ const Query = ecs.Query;
 const With = ecs.With;
 
 // --- actions archetypes (World.spawn bundles) ---
+// The *innate* actions — what a bare-handed human can do from the first breath. Fish is
+// deliberately absent: the verb arrives with the fish rod (an Unlocker capital good —
+// `capital.build_fish_rod` grants `ActionFish` when the rod is built).
 pub const actions_bundle = .{
     comp.ActionChopWood,
-    comp.ActionFish,
     comp.ActionForage,
 };
 

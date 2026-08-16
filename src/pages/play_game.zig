@@ -20,7 +20,6 @@ const Style = style.Style;
 const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
-const app = @import("../main.zig");
 
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     const th = ctx.res.theme;
@@ -70,22 +69,26 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
             const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
-                // Production row, in the grammar the card taught. Eat's `-1f → +2v` is
-                // practice, not a new lesson. "Gather" is today's presentation of
-                // ActionForage; more actions, more tiles in this row.
+                // Production row, in the grammar the card taught. A tile exists iff the
+                // agent holds the action component — so Fish appears here the moment the
+                // rod grants the verb, and not a frame before. "Gather" is today's
+                // presentation of ActionForage.
                 const acts = try el.div(ctx, center, "acts");
                 _ = acts.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Chop wood", actions.action_chop_wood);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
                 _ = try t.eat_tile(ctx, acts, world, e, "eat");
             } else {
-                // Capital grammar mock — UI only, no build logic yet (clicks do nothing).
-                // Dashed = an unowned plan; the arrow slot names the consequence: a new
-                // verb (unlock), a cheaper verb (modifier), a self-running flow (generator).
+                // The fish rod is a real Unlocker (dashed plan → solid owned; building
+                // grants the Fish verb). Sandals/Firepit remain UI mocks — clicks do
+                // nothing; the arrow still teaches their consequence category: a cheaper
+                // verb (modifier), a self-running flow (generator).
                 const build = try el.div(ctx, center, "build");
                 _ = build.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
-                _ = try t.capital_tile(ctx, build, "rod", "Fish rod", "-8m -3e", "Fish");
-                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e");
-                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day");
+                _ = try t.fish_rod_tile(ctx, build, world, e, "rod");
+                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e", true, false);
+                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day", true, false);
             }
         }
     }
@@ -94,7 +97,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     _ = run_line.with_layout(.bottom_right).with_flow(.{ .dir = .row }).with_gap(6);
     _ = (try el.text(ctx, run_line, "act", "Act I ·"))
         .with_style(.{ style.h3, Style{ .text = th.dim } });
-    const day = 1 + @as(u64, @intFromFloat(ctx.res.time.elapsed / app.secs_per_day));
+    const day = 1 + @as(u64, @intFromFloat(ctx.res.time.elapsed / ha.res.secs_per_day));
     const day_txt = std.fmt.bufPrint(&buf, "Day {d}", .{day}) catch "?";
     _ = (try el.text(ctx, run_line, "day", day_txt))
         .with_style(.{ style.h3, Style{ .text = th.fg } });

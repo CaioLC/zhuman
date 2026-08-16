@@ -62,6 +62,14 @@ pub const ActionChopWood = struct {
     },
 };
 
+/// **Unlocker** capital: owning the rod is what makes fishing possible at all —
+/// `capital.build_fish_rod` pays `requires` once and grants the agent its `ActionFish`
+/// component; `break_fish_rod` revokes the verb with the tool (reachable once
+/// durability lands). One per agent, backed by the sparse-set's structural guarantee.
+pub const FishRod = struct {
+    requires: Requires = .{ .energy = 3.0, .materials = 8.0 },
+};
+
 // Generator capital: same Requires/Yields shape as an action, but drained/deposited
 // every tick by capital.run_generator rather than on a player click. Placeholder scale
 // — real numbers depend on how often "a tick" actually is, still unsettled.
