@@ -73,6 +73,8 @@ fn gather(w: *World, e: Entity, res: *Resources, comptime ActionT: type) void {
     else
         "You gathered nothing.";
     res.log.push(if (rf > 0 or rm > 0) .normal else .dim, msg);
+
+    res.game.tutorial_done = true; // first resolved action ends the teaching presentation
 }
 
 pub fn action_forage(
@@ -101,12 +103,13 @@ pub fn action_chop_wood(
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the fields `gather` touches (`prng`, `log`) initialized —
-/// the SDL-backed fields stay undefined and untouched.
+/// A Resources with only the fields `gather` touches (`prng`, `log`, `game`)
+/// initialized — the SDL-backed fields stay undefined and untouched.
 fn test_res() Resources {
     var res: Resources = undefined;
     res.prng = std.Random.DefaultPrng.init(42);
     res.log = .{};
+    res.game = .{};
     return res;
 }
 
@@ -128,6 +131,7 @@ test "gather pays the cost, deposits the yield, and logs a receipt" {
     try std.testing.expectEqual(@as(f32, 8), vigor.v); // 10 − 2 energy paid
     try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0); // yield deposited (≥ 0 draw)
     try std.testing.expectEqual(@as(usize, 1), res.log.count); // the receipt line
+    try std.testing.expect(res.game.tutorial_done); // first action condenses the tutorial
 }
 
 test "gather refuses when energy would hit zero, leaving no trace" {
@@ -145,4 +149,5 @@ test "gather refuses when energy would hit zero, leaving no trace" {
     try std.testing.expectEqual(@as(f32, 2), w.get(e, comp.Vigor).?.v); // unpaid
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v); // no deposit
     try std.testing.expectEqual(@as(usize, 0), res.log.count); // no receipt
+    try std.testing.expect(!res.game.tutorial_done); // a refused action teaches nothing
 }

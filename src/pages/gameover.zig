@@ -30,6 +30,7 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
         ctx.res.time.elapsed = 0; // fresh run starts on Day 1
         ctx.res.log.clear();
         ctx.res.log.push(.dim, "You wake alone. Cold. Hungry.");
+        ctx.res.game = .{}; // fresh run re-teaches (until a menu pref says otherwise)
     }
     return root.get();
 }

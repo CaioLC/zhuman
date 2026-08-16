@@ -15,6 +15,7 @@ const UiCtx = uic.UiCtx;
 const El = uic.elements.El;
 
 const button = @import("./button.zig").button;
+const info = @import("./action_info.zig");
 
 pub fn action_button(
     ctx: *UiCtx,
@@ -32,23 +33,19 @@ pub fn action_button(
     // `gather` treats `requires.energy >= vigor.v` as "can't do it", so affordable is strict.
     const can = vigor.v > act.requires.energy;
 
-    // Show the dominant yield's p10–p90 band (food for forage/fish, materials for chop).
-    const food_band = ha.dist.stats(act.yields.food);
-    const mat_band = ha.dist.stats(act.yields.materials);
-    const food_dom = food_band.mean >= mat_band.mean;
-    const band = if (food_dom) food_band else mat_band;
-    const unit: u8 = if (food_dom) 'f' else 'm';
+    // Show the dominant yield's p10–p90 band — the shared pick (`action_info`).
+    const dom = info.dominant(act.yields);
 
     var rbuf: [24]u8 = undefined;
-    const lo = @round(band.p10);
-    const hi = @round(band.p90);
+    const lo = @round(dom.band.p10);
+    const hi = @round(dom.band.p90);
     const range = if (lo == hi)
         std.fmt.bufPrint(&rbuf, "{d:.0}", .{lo}) catch "?"
     else
         std.fmt.bufPrint(&rbuf, "{d:.0}-{d:.0}", .{ lo, hi }) catch "?";
 
     var buf: [64]u8 = undefined;
-    const txt = std.fmt.bufPrint(&buf, "{s}  (-{d:.0} e, +{s}{c})", .{ name, act.requires.energy, range, unit }) catch name;
+    const txt = std.fmt.bufPrint(&buf, "{s}  (-{d:.0} e, +{s}{c})", .{ name, act.requires.energy, range, dom.letter }) catch name;
     const btn = try button(ctx, parent, id, txt, can);
     if (btn.query().clicked and can) act_fn(world, e, ctx.res);
 }

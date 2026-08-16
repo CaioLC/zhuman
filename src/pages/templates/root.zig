@@ -14,6 +14,8 @@ const row_mod = @import("./row.zig");
 const stat_mod = @import("./stat.zig");
 const log_view_mod = @import("./log_view.zig");
 const resource_bar_mod = @import("./resource_bar.zig");
+const action_card_mod = @import("./action_card.zig");
+const action_tile_mod = @import("./action_tile.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -25,6 +27,8 @@ pub const scroll_view = scroll_view_mod.scroll_view;
 pub const log_view = log_view_mod.log_view;
 pub const resource_bar = resource_bar_mod.resource_bar;
 pub const action_button = action_button_mod.action_button;
+pub const action_card = action_card_mod.action_card;
+pub const action_tile = action_tile_mod.action_tile;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

@@ -9,7 +9,9 @@ const ha = @import("ha");
 const ecs = ha.ecs;
 const comp = ha.comp;
 const tag = ha.tag;
+const actions = ha.actions;
 const World = ha.world.World;
+const Entity = ha.world.Entity;
 // Ui Interface
 const uic = ha.ui_client;
 const el = uic.elements;
@@ -44,12 +46,26 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
 
     // Left: the always-on V/F/M stock summary (skipped once the actor is gone).
     const q = ecs.MaybeSingle(.{
-        comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
+        Entity, comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
     }){ .world = world };
     if (q.get()) |a| {
-        const vigor, const food, const materials = a;
+        const e, const vigor, const food, const materials = a;
         const bar = try t.resource_bar(ctx, header, "stocks", vigor, food, materials);
         _ = bar.with_layout(.bottom_left);
+
+        // --- center: the first action, front and center. Until the first resolved
+        // action (GameState.tutorial_done) it's the teaching card — cost → yield → odds
+        // spelled out; after, it condenses to the compact tile speaking the same grammar.
+        // "Gather" is today's presentation of ActionForage; more actions, more tiles.
+        if (!ctx.res.game.tutorial_done) {
+            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage)) |card| {
+                _ = card.with_layout(.center);
+            }
+        } else {
+            if (try t.action_tile(ctx, root, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage)) |tile| {
+                _ = tile.with_layout(.center);
+            }
+        }
     }
 
     const run_line = try el.div(ctx, header, "run");

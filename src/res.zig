@@ -24,6 +24,17 @@ pub const Input = struct {
     wheel_y: f32 = 0,
 };
 
+/// Meta/run state that isn't a component or a per-frame value — flags about the run's
+/// progression that the sim writes and the UI presents. Reset wholesale on "start over"
+/// (`= .{}`), like the log and the clock.
+pub const GameState = struct {
+    /// The player has resolved at least one action this run — flips in `actions.gather`
+    /// and condenses the teaching card (`action_card`) into the compact tile
+    /// (`action_tile`). A future settings menu lets an experienced player pre-set it
+    /// (skip the tutorial entirely).
+    tutorial_done: bool = false,
+};
+
 pub const Resources = struct {
     /// The multi-size monospace text backend (see `font.zig`) — measure/render at any
     /// point size, one cached `ttf.Font` per size. Held by pointer, owned by `App`.
@@ -47,6 +58,8 @@ pub const Resources = struct {
     /// `build_ui` (from `compute_warmth`) and read by every widget via `ctx.res.theme`,
     /// rather than threading a theme argument through every widget call. Defaults cold.
     theme: thememod.Theme = thememod.cold,
+    /// Run-progression flags (see `GameState`) — reset on "start over" like log/time.
+    game: GameState = .{},
     /// Which `text_input` widget (by `node.key`) currently owns keyboard text, if any —
     /// host-global because SDL delivers `.text_input`/backspace as raw keyboard events,
     /// not routed to a widget. `null` means no field is focused (the common case; SDL's
