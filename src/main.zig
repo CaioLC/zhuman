@@ -1,21 +1,20 @@
 const std = @import("std");
+
 const ha = @import("ha");
 
 const comp = ha.comp;
 const tag = ha.tag;
-const ui_engine = ha.ui;
 const ui_client = ha.ui_client;
 const sdl = ha.sdl;
 const sys = ha.systems;
 const ecs = ha.ecs;
 const actions = ha.actions;
-const pages = @import("./pages/pages.zig");
+const pages = @import("./pages/root.zig");
 const Resources = ha.res.Resources;
 
 // CONFIGS
 const fps = 60;
-// TODO: we'll need to implement different font sizes
-const font_path = "assets/fonts/Kenney Mini Square Mono.ttf";
+const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
 /// Real seconds per in-game day — paces the `Day N` readout. Tunable; the day is flavor
 /// today (population, not day-count, is the progression spine). `pub`: read by
 /// `pages.ui_playgame`.
@@ -28,7 +27,7 @@ const App = struct {
     window: sdl.video.Window,
     renderer: sdl.render.Renderer,
     frame_capper: sdl.extras.FramerateCapper(f32),
-    font: sdl.ttf.Font,
+    font: ha.font.Fonts,
     resources: Resources,
     world: ha.world.World,
     frame_arena: std.heap.ArenaAllocator,
@@ -66,7 +65,7 @@ const App = struct {
     }
 
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
-        self.font = try sdl.ttf.Font.init(font_path, 24);
+        self.font = try ha.font.Fonts.init(allocator, font_path);
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
@@ -169,9 +168,9 @@ pub fn main() !void {
         // Lay out + stamp each root tree, in list order. Each is independent — a screen
         // is sized to the window and placed from (0,0); a floating overlay (the tooltip)
         // carries its own layout origin, set in build_ui.
-        for (frame.trees) |t| {
-            try t.set_global_pos();
-            ui_engine.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
+        for (frame) |t| {
+            try t.set_global_pos(app.ui.arena); // arena = scratch for the placement pass's child lists
+            ui_client.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
         }
 
         // Render Stage
@@ -180,12 +179,7 @@ pub fn main() !void {
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
-        for (frame.trees) |t| ui_client.draw_tree(&app.ui, t);
-        // scanlines — a CRT-style overlay on top of everything (terminal identity, M5)
-        {
-            const ww, const wh = try app.resources.window.getSize();
-            draw_scanlines(&app.resources, ww, wh);
-        }
+        for (frame) |t| ui_client.draw_tree(&app.ui, t);
         // present
         try app.renderer.present();
 
@@ -205,19 +199,4 @@ pub fn spawn_player(world: *ha.world.World) ha.world.Entity {
     const e = spawn_agent(world);
     world.add(e, tag.Player{});
     return e;
-}
-
-/// A subtle repeating horizontal darkening every 4px — the redesign's terminal-identity
-/// scanline overlay (M5). Drawn last, over the whole frame, at partial alpha (~14%,
-/// matching the design's CSS); needs the renderer's blend mode set to `.blend` (done
-/// once in `App.init` — every other draw is fully opaque, so that change is invisible
-/// everywhere except here).
-pub fn draw_scanlines(res: *Resources, ww: usize, wh: usize) void {
-    res.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 36 }) catch return;
-    const w: f32 = @floatFromInt(ww);
-    const h: f32 = @floatFromInt(wh);
-    var y: f32 = 2;
-    while (y < h) : (y += 4) {
-        res.renderer.renderFillRect(.{ .x = 0, .y = y, .w = w, .h = 1 }) catch {};
-    }
 }

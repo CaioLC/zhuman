@@ -41,7 +41,7 @@ const scrollbar_w: f32 = 6.0;
 pub fn label(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_text(ctx, node, text);
-    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    _ = node.with_layout(.relative, null);
     return node;
 }
 
@@ -58,16 +58,16 @@ pub fn img(ctx: *UiCtx, parent: *Node, key: []const u8, texture: sdl.render.Text
 /// `key` and returns the outer node so the caller can query/override it. The caller
 /// computes `frac` — a countdown bar passes `timer.v / timer.start` (drains full→empty),
 /// a fill bar the inverse. `fill` colors the inner bar; the track outline is themed `line2`.
-pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: ui.Color) !*Node {
+pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill: cb.Color) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = ctx.res.theme.line2;
-    _ = outer.with_layout(ui.features.Layout.init(.relative, null))
-        .with_size(ui.features.Size.initFixed(240, 24, null));
+    outer.render_data.outline = .{ .color = ctx.res.theme.line2 };
+    _ = outer.with_layout(.relative, null)
+        .with_size(ui.features.Size.initFixed(240, 24));
 
     const inner = try Node.pcreate(ctx.arena, "inner", outer);
     inner.render_data.fill = fill;
-    _ = inner.with_layout(ui.features.Layout.init(.top_left, null))
-        .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }, null));
+    _ = inner.with_layout(.top_left, null)
+        .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }));
 
     return outer;
 }
@@ -77,9 +77,9 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// the caller reads `btn.query(ctx).clicked` to act on a press — querying also keeps
 /// the node's interaction slot alive so its rect is stamped for next frame's hit-test.
 /// The whole box is the clickable surface. The padding lives on the *label*, not the
-/// box: `place` puts a child at the parent's origin (ignoring parent padding) and
-/// `draw_text` insets by the text node's own padding, so this is what centres the
-/// glyphs and lets the `fit_children` box wrap `text + padding` exactly.
+/// box (the box carries none, so parent-padding inset is moot here): `draw_text` insets
+/// by the text node's own padding, which centres the glyphs and lets the `fit_children`
+/// box wrap `text + padding` exactly.
 ///
 /// `enabled` drives the visual state (host policy): a disabled button is dimmed, an
 /// enabled one brightens on hover (read off its own slot, set at the event stage from
@@ -87,20 +87,20 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// the click — `enabled` is purely the look; pass it whatever "affordable" means.
 pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
+    _ = outer.with_layout(.relative, .{ .dir = .row })
+        .with_size(ui.features.Size.init(.fit_children, .fit_children));
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", outer);
     try data_text(ctx, lbl, text); // sets content size + measured dims, keeps padding
     lbl.size.padding = ui.features.Padding.initSymmetric(8, 4);
-    _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
+    _ = lbl.with_layout(.relative, null);
 
     // State color: dim if disabled, else bright (accent) on hover, else idle (fg).
     // Querying here also keeps the slot alive (same as the caller's `.clicked` read).
     // The box draws an outline, the label its text — both in `c`.
     const t = ctx.res.theme;
     const c = if (!enabled) t.dim else if (outer.query(ctx).hovering) t.acc else t.fg;
-    outer.render_data.outline = c;
+    outer.render_data.outline = .{ .color = c };
     lbl.render_data.text = c;
 
     return outer;
@@ -115,9 +115,9 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
 pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, px: f32, enabled: bool) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_sprite(ctx, node, sprite, px);
-    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    _ = node.with_layout(.relative, null);
     const t = ctx.res.theme;
-    node.render_data.outline = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg;
+    node.render_data.outline = .{ .color = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg };
     return node;
 }
 
@@ -128,14 +128,15 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
 pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
     box.render_data.fill = ctx.res.theme.panel;
-    box.render_data.outline = ctx.res.theme.line2;
-    _ = box.with_layout(ui.features.Layout.init(.top_left, .vertical))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(6)));
+    box.render_data.outline = .{ .color = ctx.res.theme.line2 };
+    _ = box.with_layout(.top_left, .{ .dir = .column })
+        .with_size(ui.features.Size.init(.fit_children, .fit_children));
+    box.size.padding = ui.features.Padding.init(6); // padding is a style property now, not a Size.init arg
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", box);
     try data_text(ctx, lbl, text);
     lbl.render_data.text = ctx.res.theme.fg;
-    _ = lbl.with_layout(ui.features.Layout.init(.relative, null));
+    _ = lbl.with_layout(.relative, null);
 
     return box;
 }
@@ -149,14 +150,16 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
 ///   `_ = try label(ctx, p, "energy", "Energy: 8 J");`
 pub fn panel(ctx: *UiCtx, parent: *Node, key: []const u8, title: []const u8) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    outer.render_data.outline = ctx.res.theme.line;
-    _ = outer.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(8))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(12)));
+    outer.render_data.outline = .{ .color = ctx.res.theme.line };
+    _ = outer.with_layout(.relative, .{ .dir = .column })
+        .with_size(ui.features.Size.init(.fit_children, .fit_children));
+    outer.layout.gap = 8;
+    outer.size.padding = ui.features.Padding.init(12); // padding is a style property now, not a Size.init arg
 
     const ttl = try Node.pcreate(ctx.arena, "title", outer);
     try data_text(ctx, ttl, title);
     ttl.render_data.text = ctx.res.theme.dim;
-    _ = ttl.with_layout(ui.features.Layout.init(.relative, null));
+    _ = ttl.with_layout(.relative, null);
 
     return outer;
 }
@@ -185,16 +188,18 @@ pub const ScrollView = struct {
 /// (no drag yet — wheel-only, per the M2 scope).
 pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, height: f32) !ScrollView {
     const outer = try Node.pcreate(ctx.arena, key, parent);
-    _ = outer.with_layout(ui.features.Layout.init(.relative, .horizontal))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, null));
+    _ = outer.with_layout(.relative, .{ .dir = .row })
+        .with_size(ui.features.Size.init(.fit_children, .fit_children));
 
     const viewport = try Node.pcreate(ctx.arena, "viewport", outer);
-    _ = viewport.with_layout(ui.features.Layout.init(.relative, null).with_overflow(.clip))
-        .with_size(ui.features.Size.initFixed(width, height, null));
-    viewport.render_data.outline = ctx.res.theme.line2; // dim frame marking the scrollable area
+    _ = viewport.with_layout(.relative, null)
+        .with_size(ui.features.Size.initFixed(width, height));
+    viewport.layout.overflow = .clip;
+    viewport.render_data.outline = .{ .color = ctx.res.theme.line2 }; // dim frame marking the scrollable area
 
     const content = try Node.pcreate(ctx.arena, "content", viewport);
-    _ = content.with_layout(ui.features.Layout.init(.relative, .vertical).with_gap(4));
+    _ = content.with_layout(.relative, .{ .dir = .column });
+    content.layout.gap = 4;
     const content_h = if (content.rect(ctx)) |r| r.h else 0;
     _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
 
@@ -208,8 +213,8 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
 
     if (max_offset > 0) {
         const track = try Node.pcreate(ctx.arena, "track", outer);
-        _ = track.with_layout(ui.features.Layout.init(.relative, .vertical))
-            .with_size(ui.features.Size.initFixed(scrollbar_w, height, null));
+        _ = track.with_layout(.relative, .{ .dir = .column })
+            .with_size(ui.features.Size.initFixed(scrollbar_w, height));
         track.render_data.fill = ctx.res.theme.line;
 
         // Thumb height reflects how much of the content is visible; its position within
@@ -220,12 +225,12 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
         const thumb_y = (state.offset / max_offset) * (height - thumb_h);
 
         const spacer = try Node.pcreate(ctx.arena, "above", track);
-        _ = spacer.with_layout(ui.features.Layout.init(.relative, null))
-            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_y, null));
+        _ = spacer.with_layout(.relative, null)
+            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_y));
 
         const thumb = try Node.pcreate(ctx.arena, "thumb", track);
-        _ = thumb.with_layout(ui.features.Layout.init(.relative, null))
-            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_h, null));
+        _ = thumb.with_layout(.relative, null)
+            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_h));
         thumb.render_data.fill = ctx.res.theme.line2;
     }
 
@@ -258,15 +263,17 @@ pub const Modal = struct {
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     const ww, const wh = try ctx.res.window.getSize();
     const root = try Node.create(ctx.arena, key);
-    _ = root.with_layout(ui.features.Layout.init(.top_left, null))
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh), null));
+    _ = root.with_layout(.top_left, null)
+        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh)));
     root.render_data.fill = ctx.res.theme.bg;
 
     const box = try Node.pcreate(ctx.arena, "box", root);
-    _ = box.with_layout(ui.features.Layout.init(.center, .vertical).with_gap(10))
-        .with_size(ui.features.Size.init(.fit_children, .fit_children, ui.features.Padding.init(16)));
+    _ = box.with_layout(.center, .{ .dir = .column })
+        .with_size(ui.features.Size.init(.fit_children, .fit_children));
+    box.layout.gap = 10;
+    box.size.padding = ui.features.Padding.init(16); // padding is a style property now, not a Size.init arg
     box.render_data.fill = ctx.res.theme.panel;
-    box.render_data.outline = ctx.res.theme.line2;
+    box.render_data.outline = .{ .color = ctx.res.theme.line2 };
     _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
 
     _ = try label(ctx, box, "title", title);
@@ -286,7 +293,7 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
 /// screen closes — this widget only starts/stops on its own click/focus transitions.
 pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []const u8, width: f32) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
-    _ = node.with_layout(ui.features.Layout.init(.relative, null));
+    _ = node.with_layout(.relative, null);
 
     const state = node.state(ctx, UiState.TextInputState);
 
@@ -317,7 +324,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     node.size.padding = ui.features.Padding.initSymmetric(8, 4);
     node.size.w = .{ .fixed = width }; // data_text sized both axes to content — pin width
     node.render_data.text = if (state.len == 0 and !focused) ctx.res.theme.dim else ctx.res.theme.fg;
-    node.render_data.outline = if (focused) ctx.res.theme.acc else ctx.res.theme.line2;
+    node.render_data.outline = .{ .color = if (focused) ctx.res.theme.acc else ctx.res.theme.line2 };
 
     return node;
 }

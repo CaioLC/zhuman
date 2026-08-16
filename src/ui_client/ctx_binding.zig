@@ -3,7 +3,13 @@
 const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
+const theme = @import("../theme.zig");
 const Resources = @import("../res.zig").Resources;
+
+/// The host color type, re-exposed here so the whole `ui_client` layer names one `Color`
+/// (SDL's `pixels.Color`) — the engine carries it opaquely on `RenderData` and never
+/// reads it. Defined in `theme.zig` (the color leaf); aliased here for the features/widgets.
+pub const Color = theme.Color;
 
 /// Context Binding
 /// The registry of widget-state (render-state) types kept in the UI cache. One
@@ -19,9 +25,15 @@ pub const UiState = struct {
     pub const TextState = struct {
         buf: [64]u8,
         len: usize,
+        /// Point size to render this text at, in px. Set by the `text` feature's `attach`
+        /// (default) and overridden by `style.apply` when a `font` fragment resolves — so
+        /// the size travels from build to the feature's `draw`, which renders at it. Pool
+        /// slots are zero-initialized, so `attach` (run every frame before `draw`) always
+        /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
+        px: f32,
 
         pub fn init() TextState {
-            return .{ .buf = undefined, .len = 0 };
+            return .{ .buf = undefined, .len = 0, .px = 0 };
         }
 
         /// Copy `text` into the persistent buffer.
@@ -41,6 +53,11 @@ pub const UiState = struct {
     /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
     /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
     pub const ScrollState = struct { offset: f32 = 0 };
+    /// A tab strip's persisted selection (an index into its labels), keyed by the strip's
+    /// own `node.key` — same pattern as `ScrollState`. NOTE: pool slots are seeded with
+    /// `std.mem.zeroes`, not the struct's field defaults — a fresh strip always starts on
+    /// tab 0, and a non-zero "default tab" would need the template to set it explicitly.
+    pub const TabsState = struct { active: usize = 0 };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
     /// whichever field `Resources.focused_text` names — the widget itself only reads it
@@ -86,6 +103,18 @@ pub const Sprite = struct {
     texture: sdl.render.Texture,
     src: ?sdl.rect.FRect = null,
 };
+/// A stroked border for the `outline` feature. `width` is the bar thickness in px (drawn
+/// *inward*, so it never grows the node's box); `style` picks solid / dashed / dotted. The
+/// whole feature payload, so a caller can vary thickness and pattern per node — see
+/// `features/outline.zig` for how each `style` rasterizes. Defaults (`width = 1`, `.solid`)
+/// reproduce the old 1px box border.
+pub const LineStyle = enum { solid, dashed, dotted };
+pub const Outline = struct {
+    color: Color,
+    width: f32 = 1,
+    style: LineStyle = .solid,
+};
+
 /// Name one cell of the shared icon sheet by grid (col, row). The single place that
 /// knows the sheet lives on `res.icons` and how big a cell is — callers reference a
 /// cell, not a texture+rect, so the spritesheet isn't threaded through every icon.
@@ -109,11 +138,11 @@ pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
 /// Overflow/clip is **not** here — it moved to `Layout.overflow` (it's geometry read by
 /// the render walk *and* hit-testing, not a paint aspect). See `src/ui/features/layout.zig`.
 pub const RenderData = struct {
-    text: ?ui.Color = null, // cached glyphs (in node.state(TextState)), blit in this color
-    fill: ?ui.Color = null, // solid rect spanning the node's resolved box, in this color
-    outline: ?ui.Color = null, // 1px box border around the node's resolved box, in this color
+    text: ?Color = null, // cached glyphs (in node.state(TextState)), blit in this color
+    fill: ?Color = null, // solid rect spanning the node's resolved box, in this color
+    outline: ?Outline = null, // stroked border (color + width + solid/dashed/dotted), drawn inward
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
-    svg: ?ui.Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
+    svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent

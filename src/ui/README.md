@@ -69,7 +69,7 @@ a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
 | `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `RenderData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
-| `features/layout.zig` | `Layout` (`Anchor` + `ChildrenAlign`) + the whole solve: sizing passes + `set_global_pos`/placement. |
+| `features/layout.zig` | `Layout` (`Anchor` + `Flow`) + the whole solve: sizing passes + `set_global_pos`/placement (one line-based flow algorithm). |
 
 ## The frame lifecycle
 
@@ -81,7 +81,7 @@ The host loop drives the engine in a fixed order (`src/main.zig`):
 3. ui.beginFrame()        → frame += 1
 4. arena.reset()          → last frame's tree dies
 5. build_ui(&ui, …)       → construct a fresh node tree (widgets read cache + world)
-6. root.set_global_pos()  → solve sizes (per-axis rules) + resolve every position
+6. root.set_global_pos(a) → solve sizes (per-axis rules) + resolve every position (a = scratch arena)
 7. ui.stamp_rects(root)   → copy each queried node's rect into its interaction slot
 8. host render walk       → host iterates the tree (root.iterate()) and draws
 9. ui.endFrame()          → prune untouched cache slots, then clearTransient
@@ -127,7 +127,7 @@ Node(RenderData) {
     key: u64,                 // stable identity → the node's slot in every cache pool (hash of parent key + id)
     render_data: RenderData,  // host render descriptor (policy): aspects + inline payload; engine never reads it
     size:  Size,              // per-axis SizeRule + padding + resolved box + measured data_*; defaulted at create
-    layout: Layout,           // positional: anchor + children alignment + overflow; defaulted at create
+    layout: Layout,           // positional: anchor + child flow (Flow) + overflow; defaulted at create
 }
 ```
 
@@ -243,15 +243,23 @@ Two orthogonal axes, both Unity-inspired:
 - **`Anchor`** — 9 fixed presets (`top_left` … `bottom_right`, `center`) that a
   node uses to place *itself* within its parent (≈ Unity RectTransform anchors),
   plus `relative` (the parent places it).
-- **`ChildrenAlign`** — how a parent places its `relative` children: `horizontal`,
-  `vertical`, `vertical_right`, `centered`, their `_wrapped`/`_reverse` variants.
-  (≈ Unity Layout Groups.)
-- **`gap`** — space inserted *between* adjacent flowed children along the flow axis
-  (and between the rows/columns of the `_wrapped` variants); not before the first or
-  after the last, and not for the proportional `centered*` aligns. A `fit_children`
-  parent grows to include the gaps. Defaults to 0; set with `Layout.init(..).with_gap(n)`.
+- **`Flow`** — how a parent arranges its `relative` children, as a small struct of
+  *orthogonal* knobs (≈ CSS flexbox, ≈ Unity Layout Groups): `dir` (`row`/`column`),
+  `wrap`, `reverse`, `main` (main-axis distribution — `start`/`center`/`end`/`space_between`
+  /`space_around`/`space_evenly`), and `cross` (per-child cross-axis alignment — `start`/
+  `center`/`end`/`baseline`). One `place` algorithm reads all five, so every combination
+  composes; the old flat `ChildrenAlign` enum enumerated a fixed subset of that product by
+  hand (and grew a second, overlapping cross-align mechanism as features were bolted on).
+- **`gap`** — space inserted *between* adjacent flowed children along the main axis
+  (and between wrapped lines on the cross axis); not before the first or after the last,
+  and ignored by the `space_*` main distributions (they compute their own spacing). A
+  `fit_children` parent grows to include the gaps. Defaults to 0; set with `Layout.init(..).with_gap(n)`.
   Per-node **`Size.padding`** (inset around a node's content, already on every box) is
-  the orthogonal knob — gap spaces siblings, padding insets a box's own content.
+  the orthogonal knob — gap spaces siblings, padding insets a box's own content. It both
+  grows the box (sizing pass) *and* insets the children laid out inside it (flowed and
+  anchored alike): `place` bases every child against the parent's *content* box, so
+  `.start` packs at the leading padding, `.end` against the trailing padding, and an
+  anchored `.center` centres within the inset box.
 - **`origin`** — a *root's* screen position (where its top-left lands). Defaults to
   (0,0), so the main tree fills from the corner. The host can render **multiple roots**
   (`root.set_global_pos()` + `root.iterate()` per tree) and float a second one — an
@@ -287,8 +295,8 @@ independently): `fixed`, `content`, `pct_of_parent`, or `fit_children`. The
 *intrinsic content size* is host policy — the host **measures it at build** (text
 metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
 the `content` rule sizes to those, and the host renderer draws to them. The *rule*
-that turns that seed / parent / children into the final box is core. The whole
-solve is **pure** — no host callback, no `ctx`. `set_global_pos` runs three passes:
+that turns that seed / parent / children into the final box is core. The sizing passes
+are **pure** — no host callback. `set_global_pos` runs three passes:
 
 1. **`recalculate_size`** (bottom-up) — resolve `fixed`/`content`/`fit_children`;
    `pct_of_parent` takes a provisional = its measured content size.
@@ -296,13 +304,17 @@ solve is **pure** — no host callback, no `ctx`. `set_global_pos` runs three pa
    parents. `fit_children` is the only **indefinite** rule, so a `%` under a
    `fit` parent has no definite base and falls back to `content` (→ the node's
    `data_*`, or a safe **0** when it has no measured content).
-3. **`place`** (top-down) — assign global positions; pure geometry.
+3. **`place`** (top-down) — assign global positions via one line-based flow algorithm
+   (break into lines → distribute each along `main` → align each child across it by
+   `cross` → stack the lines); pure geometry, sizes already resolved.
 
-Because the engine never measures anything, `set_global_pos` takes no `ctx` at
-all. (The callback-in-the-size-pass would only earn its place once content sizing
-becomes *constraint-dependent* — wrapped text, where height depends on the
-resolved width. We don't do that yet.) Still pending (Roadmap): `range`/`max_of`
-combinators and the `strictness`-weighted sibling distribution.
+Because the engine never measures anything, `set_global_pos` takes no host `ctx` — only a
+scratch `Allocator` that `place` uses to materialize each node's in-flow child list (so the
+flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-size-pass
+would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
+where height depends on the resolved width. We don't do that yet.) Still pending (Roadmap):
+`range`/`max_of` combinators, `stretch`/`align-content`, and the `strictness`-weighted
+sibling distribution.
 
 ## Writing a widget
 
