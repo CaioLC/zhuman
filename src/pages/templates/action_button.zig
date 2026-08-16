@@ -33,12 +33,14 @@ pub fn action_button(
     // `gather` treats `requires.energy >= vigor.v` as "can't do it", so affordable is strict.
     const can = vigor.v > act.requires.energy;
 
-    // Show the dominant yield's p10–p90 band — the shared pick (`action_info`).
+    // Show the dominant yield's p10–p90 band — the shared pick (`action_info`), scaled
+    // by the same two-level quality factor `gather` draws with.
     const dom = info.dominant(act.yields);
+    const quality = ha.actions.yield_factor(vigor);
 
     var rbuf: [24]u8 = undefined;
-    const lo = @round(dom.band.p10);
-    const hi = @round(dom.band.p90);
+    const lo = @round(dom.band.p10 * quality);
+    const hi = @round(dom.band.p90 * quality);
     const range = if (lo == hi)
         std.fmt.bufPrint(&rbuf, "{d:.0}", .{lo}) catch "?"
     else

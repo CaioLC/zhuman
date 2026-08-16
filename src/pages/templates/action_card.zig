@@ -53,8 +53,10 @@ pub fn action_card(
     const btn = try button(ctx, card, "btn", name, can);
     if (btn.query().clicked and can) act_fn(world, e, ctx.res);
 
-    // Dominant yield (food or materials, by mean) — the shared pick (`action_info`).
+    // Dominant yield (food or materials, by mean) — the shared pick (`action_info`),
+    // scaled by the same two-level quality factor `gather` draws with.
     const dom = info_mod.dominant(act.yields);
+    const quality = ha.actions.yield_factor(vigor);
 
     var buf: [48]u8 = undefined; // one line at a time — el.text copies at build
     const cost_txt = if (act.requires.materials > 0)
@@ -63,10 +65,10 @@ pub fn action_card(
         std.fmt.bufPrint(&buf, "{d:.0} energy", .{act.requires.energy}) catch "?";
     try info(ctx, card, "cost", "cost", cost_txt);
 
-    try info(ctx, card, "yield", "yield", std.fmt.bufPrint(&buf, "{s}, {d:.0} on average", .{ dom.word, dom.band.mean }) catch "?");
+    try info(ctx, card, "yield", "yield", std.fmt.bufPrint(&buf, "{s}, {d:.0} on average", .{ dom.word, dom.band.mean * quality }) catch "?");
 
     // p10–p90 spelled out: 8 of 10 draws land inside the band. The spread IS the risk.
-    try info(ctx, card, "odds", "odds", std.fmt.bufPrint(&buf, "{d:.0}-{d:.0} in 8 of 10 ({s})", .{ @round(dom.band.p10), @round(dom.band.p90), @tagName(dom.kind) }) catch "?");
+    try info(ctx, card, "odds", "odds", std.fmt.bufPrint(&buf, "{d:.0}-{d:.0} in 8 of 10 ({s})", .{ @round(dom.band.p10 * quality), @round(dom.band.p90 * quality), @tagName(dom.kind) }) catch "?");
 
     return card;
 }

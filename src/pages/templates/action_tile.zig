@@ -94,9 +94,12 @@ pub fn action_tile(
     else
         std.fmt.bufPrint(&cbuf, "-{d:.0}", .{act.requires.energy}) catch "?";
 
+    // Band scaled by the same two-level factor `gather` draws with (weak = ×0.7 below
+    // the WEARY threshold) — the promise is exactly what a click right now would pay.
     const dom = info.dominant(act.yields);
-    const lo = @round(dom.band.p10);
-    const hi = @round(dom.band.p90);
+    const quality = ha.actions.yield_factor(vigor);
+    const lo = @round(dom.band.p10 * quality);
+    const hi = @round(dom.band.p90 * quality);
     var ybuf: [16]u8 = undefined;
     const yield_txt = if (lo == hi)
         std.fmt.bufPrint(&ybuf, "+{d:.0}{c}", .{ hi, dom.letter }) catch "?"

@@ -25,20 +25,23 @@ Today it is *early gameplay on a custom foundation*: a bespoke immediate-mode UI
 
 - **Energy** is the *unit of work* — the **price** of every action, not a stock you hold. It's paid from a *source*; today that source is your body (vigor), later it's harnessed external energy (the chainsaw → engine → petawatts arc).
 - **Vigor** (`comp.Vigor { v, max }`) is the human energy *source* that pays every action's price, and **`vigor == 0` is death**. Action output *quality* scales by `vigor/max`, so a tired actor produces below standard.
-- **Food** (`comp.InventoryFood { v, quality, spoils }`) is a perishable larder — produced by foraging/fishing, spent by actively eating, and it spoils.
+- **Food** (`comp.InventoryFood { v, quality, spoils }`) is a perishable larder — produced by foraging/fishing, consumed **continuously by the metabolism** at the player-set ration rate (see below), and it spoils.
 - **Materials** (`comp.InventoryMaterial { v }`) is the fungible, durable stockpile — the early "number-go-up" score *and* the currency spent to build capital (one bucket on purpose; typed materials wait for the market).
 
-**(Redesigned 2026-07-07):** `Satiety` and passive vigor regen are gone. There's no more hunger
-ceiling clamping `Vigor` — instead, an **active** `eat` action (`actions.action_eat`) converts
-stored `Food` directly into `Vigor`, scaled by the food's `quality`. This also reverses
-`docs/roadmap.md`'s earlier "no active rest/eat, passive trickle only" locked decision — see
-"Actions & Capital" below for the full shape of this redesign.
+**(Redesigned 2026-07-07, re-redesigned 2026-08-15):** `Satiety` and passive vigor regen went
+first (2026-07-07, replaced by an active `eat` action); then eating stopped being an action at
+all: **`systems.metabolize`** consumes the larder continuously — food converts to vigor (scaled
+by `quality`, clamped at `max`) at a rate the player sets as a *standing policy*
+(`comp.Metabolism.setting`: ration ½× / normal / feast 2×, `base_rate` 1.5 food/day at normal),
+and an **empty larder starves vigor down** (4/day) — the drain that finally makes death fire.
+`actions.action_eat` is gone.
 
 The player performs options that pay an energy price (from vigor) for an uncertain food/materials
-yield, or actively eats to refill vigor. This encodes the two praxeological margins: *labor vs
-leisure* (working spends vigor and lowers yields; vigor is refilled only by spending a turn eating,
-not passively) and *now vs later* (act now for food/materials, or invest materials + labour into
-capital goods). Death at `vigor == 0` is total — a "start over" wipes everything accumulated. There
+yield, while the metabolism ticks against the larder the whole time. This encodes the two
+praxeological margins: *labor vs leisure* (working spends vigor; it refills only through the
+metabolism's continuous eating, whose *rate* is the player's standing choice — ration and stay
+weak, feast and burn the stock) and *now vs later* (act now for food/materials, or invest
+materials + labour into capital goods). Death at `vigor == 0` is total — a "start over" wipes everything accumulated. There
 is deliberately **no world/space** — everything is UI. The decision is split `decide → act` (the
 player is the decider today; sim AI deciders feed the same options later). The UI node tree is
 rebuilt from scratch every frame using a per-frame arena allocator.
@@ -94,7 +97,7 @@ A [Bevy](https://bevyengine.org)-inspired ECS over a sparse-set `World` (the erg
 - **World**: one `SparseSet` per component/tag type, generated at comptime from the public decls of `components.zig` / `tags.zig`. API: `spawn(bundle)` (bundle = tuple of component **instances** + bare **tag types**), `add`, `remove`, `get`, `has`, and `despawn(e)` (clears `e` from every storage; ids are never recycled — `next_id` only climbs).
 - **System params** (declared as a system fn's parameter types, built by `ecs.run` via comptime introspection): `Query(.{…})` iterates matches; `Single`/`MaybeSingle` expect exactly-one / zero-or-one. Inside the param tuple: bare component types are **fetches** (drive iteration, yield `*T`); `With(T)`/`Without(T)` filter; `Maybe(T)` yields `?*T`; and `Entity` yields the entity id (Bevy-style — doesn't drive iteration). A system may also take `*Resources` or `*World` directly.
 - **Structural changes** (`add`/`remove`/`despawn`/`spawn`) currently go through a raw `*World` system param. A Bevy-style deferred `Commands` buffer is intentionally **not** built yet — see the rationale + trigger in memory (`project_commands_deferred`). Two consequences to respect when writing systems: (1) mutating the storage you're iterating is unsafe — collect ids first, then apply (see `despawn_dead`); (2) an entity that can be despawned must be read with `MaybeSingle`, not `Single`, or the UI build will panic once it's gone.
-- **Survival/death pipeline** (run in this order each frame): `advance_clock` bumps the run clock (`Time.elapsed`, only while a player exists) → `update_food` spoils the larder toward zero at its per-larder `spoils` rate → `mark_dead` (queries `Entity, Vigor`, takes `*World` + `*Resources`) tags `Dead` at `vigor ≤ 0` and pushes the death line to the log → `despawn_dead` (queries `Entity, Dead`) reaps it; once the actor is gone the UI (which fetches it with `MaybeSingle`) shows the "start over" screen. The player's action buttons in `build_ui` add food/materials, and `eat` converts food → vigor. `actions.gather` **deducts the action's cost since 2026-08-15** (energy from `Vigor`, materials from `InventoryMaterial`) — but its strict energy gate keeps vigor above 0, so labor alone can't kill and the death path still never fires; nothing yet drains vigor *to* 0 (no starvation/idle metabolism), and a run can dead-end alive (vigor too low to gather, food at 0 so `eat` can't refill) — that drain/death mechanic is the still-open design decision. The pre-redesign `update_satiety` / `metabolize` / `update_vigor` / `update_population` systems are gone.
+- **Survival/death pipeline** (run in this order each frame): `advance_clock` bumps the run clock (`Time.elapsed`, only while a player exists) → `update_food` spoils the larder toward zero at its per-larder `spoils` rate → `metabolize` consumes the larder at the agent's ration rate (food → vigor, clamped at `max`) or, on an **empty larder, starves vigor down** at 4/day, pushing edge-crossing lines to the log ("Your food has run out." / "You feel weak with hunger." / "You are starving.") → `mark_dead` (queries `Entity, Vigor`, takes `*World` + `*Resources`) tags `Dead` at `vigor ≤ 0` and pushes the death line → `despawn_dead` (queries `Entity, Dead`) reaps it; once the actor is gone the UI (which fetches it with `MaybeSingle`) shows the "start over" screen. `actions.gather` deducts its cost (energy from `Vigor`, materials from `InventoryMaterial`; strict energy gate — labor alone can't kill), so **starvation is the one path to death**, and it fires for real since 2026-08-15. The pre-redesign `update_satiety` / `update_vigor` / `update_population` systems are gone (today's `metabolize` is new, not that satiety-era one).
 
 ### Actions & Capital (`src/actions.zig`, `src/capital.zig`)
 
@@ -115,9 +118,11 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   `Requires`/`Yields` to construct one directly. (`capital.zig`'s old archetype consts used to do
   exactly that and wouldn't compile; the 2026-07-08 tidy-up **removed** them rather than making the two
   types `pub`, so the private-shape decision stands.)
-  `actions.actions_bundle` is the manually-maintained list of every action-component type, spliced
-  into `World.spawn`'s bundle via `++` (a *nested* tuple element is **not** auto-flattened by
-  `spawn` — verified via a scratch repro — so nesting it directly is a compile error).
+  `actions.actions_bundle` is the manually-maintained list of the *innate* action-component types
+  (Forage, ChopWood — what a bare-handed human can do; **Fish is deliberately absent** since
+  2026-08-15: the verb is granted by the fish rod, an Unlocker capital good — see Capital below),
+  spliced into `World.spawn`'s bundle via `++` (a *nested* tuple element is **not** auto-flattened
+  by `spawn` — verified via a scratch repro — so nesting it directly is a compile error).
   `actions.gather` is the one shared "act" step (check affordability → pay the cost → sample
   `Yields` → deposit → log the receipt) that all three call through, parameterized by
   `comptime ActionT: type` so each action stays its own queryable component type while sharing
@@ -125,11 +130,18 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   (the energy gate is strict — vigor stays > 0 — while materials may be spent to exactly 0; the
   old `>=` materials gate silently blocked every zero-materials action on a fresh spawn) and
   pushes the yield to the log ("You gathered 2 food.", `.dim`-toned "You gathered nothing." on a
-  rounded-to-zero draw). `actions.action_eat` is the new
-  **active** eat action (food adds straight to `Vigor`, scaled by `quality`) enabled by this
-  session's Satiety removal.
-- **Capital** splits into two behavioral variants, by tag not by type (both share the same
-  build-cost shape): an **`ActionModifier`** (Sandals, Fishing rod, Axe) mutates a target action's
+  rounded-to-zero draw). `actions.action_eat` was **removed 2026-08-15**: eating moved onto the
+  continuous metabolism loop (`systems.metabolize` + `comp.Metabolism`) with a player-set ration
+  rate — eating is a standing policy now, not an action; the HUD's `ration_dial` sets it.
+- **Capital** splits into three behavioral variants (all share the same build-cost shape): an
+  **Unlocker** (the fish rod, `comp.FishRod` — added 2026-08-15) grants a target action component
+  outright — owning the good is what makes the verb possible at all: `capital.build_fish_rod`
+  checks the same gates as `gather` (energy strict, materials to exactly 0), pays
+  `comp.FishRod{}`'s catalog-default `requires`, then `world.add`s both `FishRod` and `ActionFish`
+  onto the agent (the `has` check first is load-bearing — `SparseSet.add` doesn't guard dupes);
+  `break_fish_rod` is the symmetric revoke, unreachable until durability lands. (The rod was an
+  `ActionModifier` before — the redesign made it *gate* fishing instead of improving it.) An
+  **`ActionModifier`** (Sandals, Axe) mutates a target action's
   `Requires`/`Yields` once, at build and at break — `capital.apply_*`/`remove_*` pairs are that
   creation/destruction side effect, scaling the target's `.s`/`.sd` (or `Requires`) together rather
   than replacing them, so a boost preserves the distribution's shape. A **`Generator`** (Fireplace,
@@ -143,17 +155,18 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   type-level category. (An alternative was considered — each type self-declaring its category via a
   marker decl, the same trick `ecs.zig`'s `With`/`Without`/`Maybe` use for `_filter_kind` — and
   deferred in favor of matching the existing `actions_bundle` idiom.) The labor action functions are
-  now wired — the lean HUD's Actions buttons call `actions.action_*` / `action_eat` on click — but the
+  now wired — the HUD's action tiles call `actions.action_*` on click — but the
   sim tick still doesn't call `run_generators` (nothing spawns a `Generator`-owning agent yet).
   **Capital ownership:** a good is always owned by exactly one agent — never communal, never
   stackable (no owning two Fishing Rods) — by putting each good's component directly on the owning
   agent's entity: both properties fall out of the sparse-set's own structural guarantee (at most one
   instance of a component type per entity) rather than being runtime-checked bookkeeping. This is
-  **decided but only partly built**: `comp.Fireplace` follows it, and the old
-  `sandals`/`fishing_rod`/`axe`/`fireplace` "spawn a separate entity" archetype consts were **removed**
-  in the 2026-07-08 tidy-up (they named the private `Requires` and never compiled). What survives on
-  the new model — the `ActionModifier` `apply_*`/`remove_*` pairs and the `Generator` runner — stays;
-  giving capital per-agent build-state and a UI to build it is the next piece, not yet started.
+  **decided and now demonstrated**: `comp.FishRod` is the first good built through it end-to-end
+  (BUILD tab tile → `build_fish_rod` → components on the agent), `comp.Fireplace` follows the same
+  shape, and the old `sandals`/`fishing_rod`/`axe`/`fireplace` "spawn a separate entity" archetype
+  consts were **removed** in the 2026-07-08 tidy-up (they named the private `Requires` and never
+  compiled). Build is instant one-click for now — per-agent build *progress* (building X/Y over
+  time) and durability/decay are still open.
 - **`ecs.getMany(world, entity, comptime params)`** — `Query`'s non-iterating sibling, for
   known-entity multi-component fetches (`gather` and `run_generator` each pull 3–4 components off
   one already-known agent this way). Panics on a missing required component (the entity was expected
@@ -162,12 +175,12 @@ today, sim deciders later) individualized costs/yields for free — two agents c
 
 ### Supporting Modules
 
-- `src/components.zig` / `src/tags.zig` — ECS component & tag types. Only `pub const <Name> = struct {…}` type decls allowed (the `World` enumerates them at comptime, over a file's *public* decls only when reflecting cross-file — verified empirically, which is why the shared `Requires`/`Yields` shapes below are deliberately private). Components: `Label` (`{ v: []const u8 }`, a display name), `Vigor` (human energy source, scales action quality, **0 = death**; `{ v, max }` — no passive regen since the 2026-07-07 redesign, see "Actions & Capital"), `InventoryFood` (perishable larder; `{ v, quality, spoils }`), `InventoryMaterial` (fungible durable stockpile; `{ v }`), `ActionForage` / `ActionFish` / `ActionChopWood` (per-agent typed actions, each `{ requires: Requires, yields: Yields }`), `Fireplace` (a `Generator`-category capital good, same `{ requires, yields }` shape, ticked continuously instead of on click). Tags: `Player`, `Created`, `Dead`, `Idle` (capital that couldn't pay this round — not currently set by anything), `Generator` / `ActionModifier` (capital's two behavioral categories), `Food` / `Comfort` / `Tool` / `WoodCutting` (category tags, still being filled in). `Satiety`, `Materials`, `Capital{ owned, durability, progress }`, and `Population` from the pre-redesign model are gone.
+- `src/components.zig` / `src/tags.zig` — ECS component & tag types. Only `pub const <Name> = struct {…}` type decls allowed (the `World` enumerates them at comptime, over a file's *public* decls only when reflecting cross-file — verified empirically, which is why the shared `Requires`/`Yields` shapes below are deliberately private). Components: `Label` (`{ v: []const u8 }`, a display name), `Vigor` (human energy source, **0 = death**; `{ v, max }` — scales labor quality in two levels via `actions.yield_factor`, refilled only by the metabolism loop), `InventoryFood` (perishable larder; `{ v, quality, spoils }`), `InventoryMaterial` (fungible durable stockpile; `{ v }`), `ActionForage` / `ActionFish` / `ActionChopWood` (per-agent typed actions, each `{ requires: Requires, yields: Yields }`; Forage/ChopWood are innate, Fish is granted by the fish rod), `FishRod` (an Unlocker capital good — `{ requires }` only, the build price; owning it ⟺ holding `ActionFish`), `Fireplace` (a `Generator`-category capital good, same `{ requires, yields }` shape, ticked continuously instead of on click). Tags: `Player`, `Created`, `Dead`, `Idle` (capital that couldn't pay this round — not currently set by anything), `Generator` / `ActionModifier` (capital's two behavioral categories), `Food` / `Comfort` / `Tool` / `WoodCutting` (category tags, still being filled in). `Satiety`, `Materials`, `Capital{ owned, durability, progress }`, and `Population` from the pre-redesign model are gone.
 - `src/world.zig` — sparse-set ECS `World` (see the ECS section above)
 - `src/ecs.zig` — `ecs.run(world, res, system)` + the Bevy-style param machinery, including `getMany` (see the ECS section + the module doc)
-- `src/actions.zig` — per-agent labor actions (`action_forage` / `action_fish` / `action_chop_wood`, `action_eat`) and the manually-maintained `actions_bundle` list. See "Actions & Capital" above.
-- `src/capital.zig` — the `ActionModifier` `apply_*`/`remove_*` pairs and the `Generator` running system (`generator_bundle`, `run_generator`, `run_generators`); the old separate-entity build archetypes were removed 2026-07-08. See "Actions & Capital" above.
-- `src/systems.zig` — sim systems: `advance_clock` (run clock), `update_food` (spoils the larder), and the death systems `mark_dead` / `despawn_dead`. Convention: `update_<component_snake_case>` drives one component. The pre-redesign `update_satiety` / `metabolize` / `update_vigor` / `update_population` were removed with their mechanics.
+- `src/actions.zig` — per-agent labor actions (`action_forage` / `action_fish` / `action_chop_wood`) and the manually-maintained `actions_bundle` list of *innate* actions. Eating is not an action (see `systems.metabolize`). See "Actions & Capital" above.
+- `src/capital.zig` — the Unlocker `build_*`/`break_*` pairs (fish rod), the `ActionModifier` `apply_*`/`remove_*` pairs, and the `Generator` running system (`generator_bundle`, `run_generator`, `run_generators`); the old separate-entity build archetypes were removed 2026-07-08. See "Actions & Capital" above.
+- `src/systems.zig` — sim systems, run in this order: `advance_clock` (run clock), `update_food` (spoils the larder), `metabolize` (continuous eating at the ration rate; starvation drain on an empty larder — **new 2026-08-15**, unrelated to the deleted satiety-era system of the same name), and the death systems `mark_dead` / `despawn_dead`. Convention: `update_<component_snake_case>` drives one component. The pre-redesign `update_satiety` / `update_vigor` / `update_population` were removed with their mechanics.
 - `src/font.zig` — `TextData` (text buffer the UI caches and renders); leaf data module
 - `src/log.zig` — `Log`, a fixed-capacity ring buffer of toned event lines (`Tone`, `Entry`) held on `Resources`; the HUD's event feed. Leaf data module (no imports)
 - `src/theme.zig` — `Theme` (9 named color roles) + the `cold`/`warm` poles + `lerp(t)` blending them together; game-specific art direction (host-owned, not `src/ui/`). See "Visual identity (M5)" above
@@ -185,8 +198,7 @@ today, sim deciders later) individualized costs/yields for free — two agents c
 
 The forward redesign plan — population-as-spine, autonomous-agent Act II, the text-forward terminal identity, and the M0–M8 milestone sequence — lives in [`docs/roadmap.md`](docs/roadmap.md); the imported design prototype is in `design/`. The near-term items below are scoped but not yet built (see also the `project_game_design_accumulator` memory):
 
-- **Vigor drain / death path** — `actions.gather` now pays its cost (2026-08-15), but its strict energy gate keeps vigor above 0, so labor can't kill and `mark_dead` still never fires. A run can instead dead-end alive: vigor too low to afford any action, food at 0 so `eat` can't refill. The load-bearing next gameplay decision is what drains vigor to 0 — a passive metabolism trickle, spoilage-driven starvation, or something else — so death (and "start over") actually happens.
-- **Ration control on `eat`** — `eat` consumes a fixed 1 food → vigor; a full / ½ / ¼ portion control (to stretch a thin larder) is a natural knob once eating balance matters. Supersedes the old satiety-era "ration selector" (which scaled a now-removed `metabolism_rate`).
+- **Balance the metabolism numbers** — the vigor-drain/death path and the ration control both landed 2026-08-15 as `systems.metabolize` (continuous eating at `comp.Metabolism.setting`'s rate; starvation drains 4 vigor/day on an empty larder, so `mark_dead` finally fires). Two-level labor quality landed the same day: `actions.yield_factor` scales yields by ×0.7 below the WEARY threshold (35%) — a constant step, deliberately *not* the linear slide (built once, reverted: band churn + felt bad); both `gather`'s draw and the tiles' displayed bands call the one helper so promise and draw can't drift, and quality is judged *before* the click's cost is paid. The rates (`base_rate` 1.5 food/day, ½×/1×/2× multipliers, starve 4/day, spoilage 0.05/s, weak ×0.7) are first guesses — playtesting will retune them, alongside the companion mechanic that makes the dial bite hardest: action *durations* (instant actions let click-rate out-earn any ration), which is the next chunk, bringing a time-cost token to the tile grammar, an underbar progress fill for running actions, and a full-chip pulse on the ration dial's active option (fill = progress through the current food unit).
 - **Capital decay** — durable goods (a bed, a fireplace) should degrade on a slow trickle and need maintenance, the way food spoils fast. Deferred with the rest of the capital rework — there's no capital wear (or capital build) in the code today at all.
 - **Progress-ring polish** — a glanceable in-progress build indicator on the capital icon (an underbar or bottom-up fill); today the only cue is the hover tooltip's `building X/Y e`.
 - **Responsive layout** — the Resources/Log column (`top_left`) and the Actions/Capital column (`center`) can visually overlap at some window sizes/aspect ratios: independent anchors don't collision-avoid each other, they just place from their own point and let `fit_children` grow however large it grows. Confirmed pre-existing (reproduces on `ba3230e`, before the M5 visual-identity work), not a M5 regression. Fixing it properly needs a responsive layout pass (reflow/shrink columns to the live window size, not just anchor+grow) — a chunk of its own, not a quick tweak.
