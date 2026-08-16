@@ -53,19 +53,19 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         const bar = try t.resource_bar(ctx, header, "stocks", vigor, food, materials);
         _ = bar.with_layout(.bottom_left);
 
-        // --- center: the first action, front and center. Until the first resolved
-        // action (GameState.tutorial_done) it's the teaching card — cost → yield → odds
-        // spelled out; after, it condenses to the compact tile speaking the same grammar.
-        // "Gather" is today's presentation of ActionForage; more actions, more tiles.
+        // --- center: the production actions row. Gather leads — the teaching card until
+        // the first resolved action (GameState.tutorial_done), then the compact tile
+        // speaking the same grammar. Eat rides beside it in tile form from the start
+        // (its `-1f → +2v` is grammar practice, not a new lesson). "Gather" is today's
+        // presentation of ActionForage; more actions, more tiles in this row.
+        const acts = try el.div(ctx, root, "acts");
+        _ = acts.with_layout(.center).with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
         if (!ctx.res.game.tutorial_done) {
-            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage)) |card| {
-                _ = card.with_layout(.center);
-            }
+            _ = try t.action_card(ctx, acts, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage);
         } else {
-            if (try t.action_tile(ctx, root, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage)) |tile| {
-                _ = tile.with_layout(.center);
-            }
+            _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
         }
+        _ = try t.eat_tile(ctx, acts, world, e, "eat");
     }
 
     const run_line = try el.div(ctx, header, "run");
