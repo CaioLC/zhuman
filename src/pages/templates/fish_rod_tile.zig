@@ -22,13 +22,17 @@ pub fn fish_rod_tile(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []co
     const vigor = world.get(e, comp.Vigor) orelse return null;
     const stock = world.get(e, comp.InventoryMaterial) orelse return null;
     const owned = world.has(e, comp.FishRod);
+    const busy = world.get(e, comp.Busy);
+    const building = busy != null and busy.?.doing == .build_fish_rod;
+    const progress: ?f32 = if (building) 1.0 - busy.?.remaining / busy.?.total else null;
     const cost = (comp.FishRod{}).requires; // catalog default — the build price
-    // Same gates as build_fish_rod itself (energy strict; materials spendable to 0).
-    const can = !owned and vigor.v > cost.energy and stock.v >= cost.materials;
+    // Same gates as build_fish_rod itself (energy strict; materials spendable to 0;
+    // one body, one act).
+    const can = !owned and busy == null and vigor.v > cost.energy and stock.v >= cost.materials;
 
     var buf: [24]u8 = undefined;
-    const cost_txt = std.fmt.bufPrint(&buf, "-{d:.0}m -{d:.0}e", .{ cost.materials, cost.energy }) catch "?";
-    const tl = try capital_tile(ctx, parent, id, "Fish rod", cost_txt, "Fish", can, owned);
+    const cost_txt = std.fmt.bufPrint(&buf, "-{d:.0}m -{d:.0}e {d:.0}h", .{ cost.materials, cost.energy, cost.hours }) catch "?";
+    const tl = try capital_tile(ctx, parent, id, "Fish rod", cost_txt, "Fish", can, owned, progress);
     if (tl.clicked) capital.build_fish_rod(world, e, ctx.res);
     return tl.el;
 }

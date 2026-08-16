@@ -44,8 +44,8 @@ pub fn action_card(
     if (!world.has(e, ActionT)) return null;
     const act = world.get(e, ActionT).?;
     const vigor = world.get(e, comp.Vigor).?;
-    // Same strict energy gate as `gather`: spending vigor to exactly 0 would be death.
-    const can = vigor.v > act.requires.energy;
+    // Same gates as `begin_labor`: strict energy (vigor 0 is death), one act at a time.
+    const can = !world.has(e, comp.Busy) and vigor.v > act.requires.energy;
 
     const card = try el.div(ctx, parent, id);
     _ = card.with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
@@ -64,6 +64,10 @@ pub fn action_card(
     else
         std.fmt.bufPrint(&buf, "{d:.0} energy", .{act.requires.energy}) catch "?";
     try info(ctx, card, "cost", "cost", cost_txt);
+
+    // Time spelled out — the fourth price the compact tile will abbreviate to "4h".
+    // Under the metabolism, working hours are eaten hours.
+    try info(ctx, card, "time", "time", std.fmt.bufPrint(&buf, "{d:.0} hours", .{act.requires.hours}) catch "?");
 
     try info(ctx, card, "yield", "yield", std.fmt.bufPrint(&buf, "{s}, {d:.0} on average", .{ dom.word, dom.band.mean * quality }) catch "?");
 

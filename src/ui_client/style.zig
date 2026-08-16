@@ -71,6 +71,9 @@ pub fn pad(n: f32) Style {
 pub fn pad_sym(w: f32, h: f32) Style {
     return .{ .padding = ui.Padding.initSymmetric(w, h) };
 }
+pub fn pad_each(up: f32, right: f32, down: f32, left: f32) Style {
+    return .{ .padding = ui.Padding.initEach(up, right, down, left) };
+}
 
 // Gap as a style fragment. Lets a caller set the spacing between children elements
 pub fn gap(n: f32) Style {

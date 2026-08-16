@@ -89,8 +89,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 const build = try el.div(ctx, center, "build");
                 _ = build.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
                 _ = try t.fish_rod_tile(ctx, build, world, e, "rod");
-                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e", true, false);
-                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day", true, false);
+                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e", true, false, null);
+                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day", true, false, null);
             }
         }
     }

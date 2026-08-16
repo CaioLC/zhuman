@@ -28,6 +28,7 @@ const options = [_]Option{
 
 pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !?El {
     const met = world.get(e, comp.Metabolism) orelse return null;
+    const food = world.get(e, comp.InventoryFood);
     const th = ctx.res.theme;
 
     const bar = try el.div(ctx, parent, id);
@@ -39,8 +40,29 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
         const key = try std.fmt.allocPrint(ctx.arena, "opt{d}", .{i});
         const chip = try el.div(ctx, bar, key);
         if (chip.query().clicked) met.setting = opt.s;
-
         const is_active = met.setting == opt.s;
+
+        // The eating pulse: the active chip fills with progress through the *current
+        // food unit* (`ceil(F) − F`) and resets as each unit is consumed — a repeating
+        // full-chip pulse for a continuous process (vs the action underbar's one-shot
+        // fill). Its speed IS the rate: Feast races, Ration crawls, an empty larder
+        // stops pulsing entirely. Built before the label so the text paints on top;
+        // sized from LAST frame's rect (prior-frame pattern); anchored, so the chip
+        // never widens with it.
+        if (is_active) {
+            if (food) |f| {
+                if (f.v > 0) {
+                    if (chip.get().rect(ctx)) |r| {
+                        const fill = std.math.ceil(f.v) - f.v;
+                        const pulse = try el.div(ctx, chip, "pulse");
+                        _ = pulse.with_layout(.top_left)
+                            .with_size(.{ .fixed = r.w * fill }, .{ .fixed = r.h })
+                            .with_style(.{Style{ .fill = th.line }});
+                    }
+                }
+            }
+        }
+
         const c = if (is_active) th.fg else if (chip.query().hovering) th.acc else th.dim;
         const lbl = (try el.text(ctx, chip, "l", opt.name))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
