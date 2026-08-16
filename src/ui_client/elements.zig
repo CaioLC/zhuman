@@ -107,6 +107,11 @@ fn child(ctx: *UiCtx, parent: El, id: []const u8) !*Node {
 pub fn root(ctx: *UiCtx, id: []const u8) !El {
     const ww, const wh = try ctx.res.window.getSize();
     const node = try Node.create(ctx.arena, id);
+    // A root must place *itself*: `Node.init` defaults `.relative`, which errors the
+    // placement pass on a parentless node (`NoInfoForChildren`) — the gameover screen
+    // crashed the first time death ever fired, because unlike the play screen it never
+    // overrode the anchor. Set here so the doc's promise ("stays non-relative") is true.
+    node.layout.anchor = .top_left;
     node.size = ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh));
     return .{ .ctx = ctx, .node = node };
 }
