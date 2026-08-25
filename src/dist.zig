@@ -54,8 +54,12 @@ pub fn stats(d: Dist) Stats {
             // exponential quantile is -m·ln(1-p): p10 at p=0.1, p90 at p=0.9.
             break :blk .{ .p10 = -m * @log(0.9), .p90 = -m * @log(0.1), .mean = m };
         },
+        // `.fixed` means fixed: no spread math, so no `scaleOf` floor — a fixed 0 is 0.
+        // The floor would silently turn every "no yield on this side" (every action's
+        // unused food/materials slot) into a phantom +0.2 per draw.
         .fixed => blk: {
-            break :blk .{ .p10 = s, .p90 = s, .mean = s };
+            const v = @max(0, d.s);
+            break :blk .{ .p10 = v, .p90 = v, .mean = v };
         },
     };
 }
@@ -75,7 +79,7 @@ pub fn sample(d: Dist, rng: std.Random) f32 {
             const m = @max(0.5, s);
             break :blk -m * @log(1 - rng.float(f32));
         },
-        .fixed => s,
+        .fixed => @max(0, d.s), // no scaleOf floor — see `stats`
     };
 }
 
@@ -127,6 +131,16 @@ test "samples are non-negative across kinds" {
         var i: usize = 0;
         while (i < 2000) : (i += 1) try std.testing.expect(sample(d, rng) >= 0);
     }
+}
+
+test "fixed zero is zero — no scaleOf floor sneaking in a phantom yield" {
+    var prng = std.Random.DefaultPrng.init(3);
+    const d = Dist{ .kind = .fixed, .s = 0 };
+    try std.testing.expectEqual(@as(f32, 0), sample(d, prng.random()));
+    const st = stats(d);
+    try std.testing.expectEqual(@as(f32, 0), st.p10);
+    try std.testing.expectEqual(@as(f32, 0), st.p90);
+    try std.testing.expectEqual(@as(f32, 0), st.mean);
 }
 
 test "poisson sample mean converges to lambda" {
