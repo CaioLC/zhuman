@@ -599,6 +599,54 @@ test "wrap breaks the run into cross-stacked lines" {
     try std.testing.expectEqual(@as(f32, 0), buf[2].layout._global_x.?); // new line starts at the left
 }
 
+test "a fit_children height counts every wrapped line, not just the first" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Fixed 100-wide, fit-height wrapping row with gap 4; three 40×10 children. k0+k1 fill
+    // line 1 (40+4+40 = 84 ≤ 100), k2 wraps. The height must be both lines plus the
+    // inter-line gap (10 + 4 + 10), not one line — otherwise whatever follows this row in a
+    // column draws on top of its second line.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 100 }, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true });
+    root.layout.gap = 4;
+    for (0..3) |i| {
+        const kid = try std.fmt.allocPrint(a, "k{d}", .{i});
+        const k = try TestNode.create(a, kid);
+        _ = k.with_size(Size.initFixed(40, 10));
+        _ = k.with_layout(.relative, null);
+        try root.add_child(a, k);
+    }
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 24), root.size.height);
+}
+
+test "a wrapping fit falls back to one line when the main extent is indefinite" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Main axis is itself fit_children — there's no limit to pack against (asking would be
+    // circular), so the row measures as the single line it will actually be placed as.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true });
+    for (0..3) |i| {
+        const kid = try std.fmt.allocPrint(a, "k{d}", .{i});
+        const k = try TestNode.create(a, kid);
+        _ = k.with_size(Size.initFixed(40, 10));
+        _ = k.with_layout(.relative, null);
+        try root.add_child(a, k);
+    }
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 10), root.size.height);
+    try std.testing.expectEqual(@as(f32, 120), root.size.width);
+}
+
 test "padding grows a fit parent AND insets its flowed children" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

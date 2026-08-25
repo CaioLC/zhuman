@@ -216,12 +216,17 @@ fn extent(node: anytype, axis: Axis) f32 {
 /// fit-height is set by its two anchored groups). Reads children's already-resolved
 /// (pass-1) sizes.
 ///
-/// Note: this sizes for a *single line*; a `fit_children` parent that also `wrap`s is not
-/// modeled (the same limitation as before the flow rewrite — wrap is used with fixed/pct
-/// containers).
+/// A `wrap`ping run is measured across **all** its lines (`wrap_cross`, added 2026-08-24)
+/// whenever the main extent is knowable this early — otherwise a shelf that wraps to two
+/// rows would report one row of height and whatever follows it would draw on top.
 fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     const flow = node.layout.flow;
-    if (axis != main) return fit_cross(node, axis, flow);
+    if (axis != main) {
+        if (flow.wrap) {
+            if (wrap_cross(node, axis, main, flow)) |h| return h;
+        }
+        return fit_cross(node, axis, flow);
+    }
 
     var acc: f32 = 0;
     var flow_count: usize = 0;
@@ -232,6 +237,77 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
     }
     if (flow_count > 1) acc += node.layout.gap * @as(f32, @floatFromInt(flow_count - 1));
     return acc;
+}
+
+/// The `k`-th in-flow child, in flow order. Linear per call (so the wrap measurement is
+/// O(n²) in children) — deliberately allocation-free, since pass-1 sizing has no
+/// allocator, and a wrapping run is a handful of tiles.
+fn nth_flow_child(node: anytype, k: usize) @TypeOf(node) {
+    var seen: usize = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue;
+        if (seen == k) return c;
+        seen += 1;
+    }
+    unreachable; // callers only ask for k < the counted in-flow child count
+}
+
+/// Cross-axis `fit` for a **wrapping** run: pack the in-flow children into lines exactly
+/// the way `flow_place` does, then sum the line extents plus one `gap` per break. Returns
+/// `null` when there's no limit to pack against — only a `fixed` main rule is known during
+/// pass 1 (bottom-up), since `pct_of_parent` is still provisional and `fit_children` on the
+/// main axis is circular by definition — so the caller falls back to the single-line max.
+///
+/// A `fixed` rule value *is* the content extent (padding grows the box on top of it), which
+/// is the same number `flow_place` packs against after subtracting its padding — so the two
+/// agree without either consulting the resolved size. `reverse` is mirrored, since reversing
+/// changes which children share a line and therefore how deep each line is.
+fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow) ?f32 {
+    const main_rule = if (main == .x) node.size.w else node.size.h;
+    const main_size = switch (main_rule) {
+        .fixed => |n| n,
+        else => return null,
+    };
+    const gap = node.layout.gap;
+
+    var n: usize = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor == .relative) n += 1;
+    }
+    if (n == 0) return 0;
+
+    var total: f32 = 0;
+    var lines: usize = 0;
+    var i: usize = 0;
+    while (i < n) {
+        var j = i;
+        var run: f32 = 0; // main extent incl. gaps so far — the wrap test
+        var cross_max: f32 = 0;
+        var max_ascent: f32 = 0;
+        var max_descent: f32 = 0;
+        while (j < n) {
+            // Mirror `flow_place`'s child order: it reverses the in-flow list before packing.
+            const c = nth_flow_child(node, if (flow.reverse) n - 1 - j else j);
+            const cm = extent(c, main);
+            const step = if (j == i) cm else gap + cm; // no leading gap on the first child
+            if (j > i and run + step > main_size) break;
+            run += step;
+            cross_max = @max(cross_max, extent(c, cross_axis));
+            if (main == .x) { // baseline only means something for a row
+                max_ascent = @max(max_ascent, c.size.height - c.size.baseline_off());
+                max_descent = @max(max_descent, c.size.baseline_off());
+            }
+            j += 1;
+        }
+        total += if (flow.dir == .row and flow.cross == .baseline)
+            @max(max_ascent + max_descent, cross_max)
+        else
+            cross_max;
+        lines += 1;
+        i = j;
+    }
+    if (lines > 1) total += gap * @as(f32, @floatFromInt(lines - 1));
+    return total;
 }
 
 /// Cross-axis `fit`. For a baseline row the run's extent is the deepest above-baseline
