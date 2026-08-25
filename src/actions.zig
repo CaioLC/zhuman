@@ -17,12 +17,15 @@ const Query = ecs.Query;
 const With = ecs.With;
 
 // --- actions archetypes (World.spawn bundles) ---
-// The *innate* actions — what a bare-handed human can do from the first breath. Fish is
-// deliberately absent: the verb arrives with the fish rod (an Unlocker capital good —
-// `capital.build_fish_rod` grants `ActionFish` when the rod is built).
+// The *innate* actions — what a bare-handed human can do from the first breath: glean
+// the greenbelt for calories, pick the derelict edge of town for scrap. Every other verb
+// arrives with an Unlocker capital good (`capital.finish_build` grants the component):
+// Fish with the rod, Split wood with the hatchet, Check traps with the snares, Hunt with
+// the rifle. Scavenge is what bootstraps that first tool — it's the only innate source
+// of materials, so the ladder starts with a lottery and climbs into steady work.
 pub const actions_bundle = .{
-    comp.ActionChopWood,
     comp.ActionForage,
+    comp.ActionScavenge,
 };
 
 // action queues
@@ -54,8 +57,11 @@ pub fn yield_factor(vigor: *const comp.Vigor) f32 {
 pub fn doing_of(comptime ActionT: type) comp.Busy.Doing {
     return switch (ActionT) {
         comp.ActionForage => .forage,
+        comp.ActionScavenge => .scavenge,
         comp.ActionFish => .fish,
         comp.ActionChopWood => .chop_wood,
+        comp.ActionCheckTraps => .check_traps,
+        comp.ActionHunt => .hunt,
         else => @compileError("no Busy.Doing for " ++ @typeName(ActionT)),
     };
 }
@@ -133,12 +139,36 @@ pub fn action_fish(
     begin_labor(w, e, res, comp.ActionFish);
 }
 
+pub fn action_scavenge(
+    w: *World,
+    e: Entity,
+    res: *Resources,
+) void {
+    begin_labor(w, e, res, comp.ActionScavenge);
+}
+
 pub fn action_chop_wood(
     w: *World,
     e: Entity,
     res: *Resources,
 ) void {
     begin_labor(w, e, res, comp.ActionChopWood);
+}
+
+pub fn action_check_traps(
+    w: *World,
+    e: Entity,
+    res: *Resources,
+) void {
+    begin_labor(w, e, res, comp.ActionCheckTraps);
+}
+
+pub fn action_hunt(
+    w: *World,
+    e: Entity,
+    res: *Resources,
+) void {
+    begin_labor(w, e, res, comp.ActionHunt);
 }
 
 // ============================ Tests ==========================================

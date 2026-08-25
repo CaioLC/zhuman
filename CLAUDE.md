@@ -69,7 +69,7 @@ action components rather than indexing a shared array.
 
 **Catalog browser (M4) — shelved:** the fullscreen `ui_catalog` list (search / hide-can't-do / cheapest-richest-a-z sort / category chips over the action & capital catalogs) was **removed** in the 2026-07-08 lean rebuild — it was built on the deleted const-array catalogs and the `resolve_action`/`build_capital` act-steps. It'll return as a second *presentation* of the per-agent-component model once that model's UI is designed. The `widgets.text_input` it drove stays in the palette but is currently unused by any screen (so `main.zig`'s text-input event handling is dormant, not dead).
 
-The lean HUD chrome: the left status column shows the run **day** (`Day N`, from `Time.elapsed / secs_per_day`, advanced by `advance_clock` only while the actor lives), a `Resources` panel — opening with a 3-line ASCII **vitals figure** (`figure_glyphs` → weary/ok/robust from the frame's warmth; `fig_dead` on the game-over screen) beside a sine-pulsed **heartbeat** readout (`heartbeat_color`, freezes when the run clock stops), then **Vigor** (`v/max`), **Food** (`v`, quality, spoil rate) and **Materials** — and an **event log** (newest-first, from `Resources.log`, each line recolored by its `Tone` via `log_tone_color`, in a `widgets.scroll_view` so the whole 64-entry ring buffer is reachable by mouse wheel). The actor's **condition word** (`actor_status` → ALIVE / WEARY / SPENT, by vigor fraction) is pinned top-right. The centered **Actions** panel has one button per labor action the agent holds (Forage / Fish / Chop wood — each priced in energy, showing its p10–p90 yield band) plus an **Eat** button; a click funnels through `actions.action_*` / `actions.action_eat`. Big counters (Materials) render through `fmt_num` (`1.2k` / `3.4M`). (The capital-goods tray and the per-good hover tooltips were shelved with the browser.)
+The lean HUD chrome: the left status column shows the run **day** (`Day N`, from `Time.elapsed / secs_per_day`, advanced by `advance_clock` only while the actor lives), a `Resources` panel — opening with a 3-line ASCII **vitals figure** (`figure_glyphs` → weary/ok/robust from the frame's warmth; `fig_dead` on the game-over screen) beside a sine-pulsed **heartbeat** readout (`heartbeat_color`, freezes when the run clock stops), then **Vigor** (`v/max`), **Food** (`v`, quality, spoil rate) and **Materials** — and an **event log** (newest-first, from `Resources.log`, each line recolored by its `Tone` via `log_tone_color`, in a `widgets.scroll_view` so the whole 64-entry ring buffer is reachable by mouse wheel). The actor's **condition word** (`actor_status` → ALIVE / WEARY / SPENT, by vigor fraction) is pinned top-right. The centered panel is tabbed **ACTIONS / BUILD**. ACTIONS holds one wrapping row of tiles — one per labor verb the agent actually *holds* (innate Forage / Scavenge; Split wood / Fish / Check traps / Hunt appear the frame their tool finishes), each priced `-energy -materials hours` with its p10–p90 band scaled by `yield_factor` — plus the `ration_dial` (eating is a standing policy, not an action). BUILD holds the 15-good capital roster on four captioned, wrapping shelves (UNLOCK / UPGRADE / HEALTH / INSTALL — `capital_shelf` in `play_game.zig`), every tile wired to the real build path through the comptime-generic `capital_good_tile` (which superseded the one-off `fish_rod_tile` when the roster landed). Big counters (Materials) render through `fmt_num` (`1.2k` / `3.4M`).
 
 **Visual identity (M5):** the whole HUD is colored from `src/theme.zig`'s `Theme` — `cold`/`warm` palette poles blended by `theme.lerp(compute_warmth(...))`, resolved once per frame in `build_ui` onto `Resources.theme` (default `theme.cold`) so every widget reads `ctx.res.theme.*` (fg/acc/dim/warn/danger/line/line2/panel/bg) instead of a fixed color — a rested actor reads warm, a spent one cold. `compute_warmth` (now in `src/pages/`) is currently just the vigor fraction (`vigor.v / vigor.max`) — the satiety/capital inputs it once blended went away with those mechanics, to be reworked when capital returns to the HUD. The font is monospace (`Kenney Mini Square Mono.ttf`); a `draw_scanlines` overlay (partial-alpha, needs the renderer's `.blend` mode set once in `App.init`) darkens every 4th pixel row on top of everything, last, each frame.
 
@@ -108,8 +108,10 @@ today, sim deciders later) individualized costs/yields for free — two agents c
 `ActionForage` with different `requires`/`yields` — and it settles capital ownership the same way
 (see below).
 
-- **Actions** — `comp.ActionForage` / `ActionFish` / `ActionChopWood` each embed a `requires:
-  Requires { energy, materials }` (the price) and `yields: Yields { food, materials }` (the reward,
+- **Actions** — the Act One roster (filled out 2026-08-24): innate `comp.ActionForage` /
+  `ActionScavenge`, and capital-unlocked `ActionFish` / `ActionChopWood` / `ActionCheckTraps` /
+  `ActionHunt`. Each embeds a `requires:
+  Requires { energy, materials, hours }` (the price) and `yields: Yields { food, materials }` (the reward,
   **both `dist.Dist`**, sampled at resolution time — the spread *is* the risk, no separate success
   roll). `Requires`/`Yields` are deliberately **not `pub`**: they're meaningless as standalone
   components, and `World`'s comptime `Storages` scan only sees a file's *public* decls when
@@ -118,9 +120,16 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   `Requires`/`Yields` to construct one directly. (`capital.zig`'s old archetype consts used to do
   exactly that and wouldn't compile; the 2026-07-08 tidy-up **removed** them rather than making the two
   types `pub`, so the private-shape decision stands.)
+  Each action owns a distinct **risk texture** — all five `dist.Kind`s are in play (Scavenge
+  exponential on both yields: mostly scraps, occasional jackpot; Check traps uniform; Hunt
+  big-poisson) — and Check traps / Hunt are the first actions with `requires.materials > 0`
+  (bait/ammo: produced goods as inputs). Note `dist`'s `.fixed` kind is exempt from the `scaleOf`
+  0.2 floor since 2026-08-24 — a fixed-0 "no yield on this side" (every action's unused slot) used
+  to silently deposit +0.2 per draw.
   `actions.actions_bundle` is the manually-maintained list of the *innate* action-component types
-  (Forage, ChopWood — what a bare-handed human can do; **Fish is deliberately absent** since
-  2026-08-15: the verb is granted by the fish rod, an Unlocker capital good — see Capital below),
+  (**Forage + Scavenge** — what a bare-handed human can do; every other verb is granted by an
+  Unlocker capital good, see Capital below. Scavenge is the only innate *materials* source, so it's
+  what bootstraps the first tool: the ladder starts with a lottery and climbs into steady work),
   spliced into `World.spawn`'s bundle via `++` (a *nested* tuple element is **not** auto-flattened
   by `spawn` — verified via a scratch repro — so nesting it directly is a compile error).
   Labor resolves in **two halves since 2026-08-16** (actions take time — `Requires.hours`, a
@@ -139,21 +148,38 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   moved onto the continuous metabolism loop (`systems.metabolize` + `comp.Metabolism`) with a
   player-set ration rate — eating is a standing policy now, not an action; the HUD's
   `ration_dial` sets it.
-- **Capital** splits into three behavioral variants (all share the same build-cost shape): an
-  **Unlocker** (the fish rod, `comp.FishRod` — added 2026-08-15) grants a target action component
-  outright — owning the good is what makes the verb possible at all: `capital.build_fish_rod`
-  checks the same gates as `gather` (energy strict, materials to exactly 0), pays
-  `comp.FishRod{}`'s catalog-default `requires`, then `world.add`s both `FishRod` and `ActionFish`
-  onto the agent (the `has` check first is load-bearing — `SparseSet.add` doesn't guard dupes);
-  `break_fish_rod` is the symmetric revoke, unreachable until durability lands. (The rod was an
-  `ActionModifier` before — the redesign made it *gate* fishing instead of improving it.) An
-  **`ActionModifier`** (Sandals, Axe) mutates a target action's
-  `Requires`/`Yields` once, at build and at break — `capital.apply_*`/`remove_*` pairs are that
+- **Capital** — the 15-good Act One roster (filled out 2026-08-24), all of it **buildable
+  end-to-end**, in three behavioral variants sharing one build-cost shape and one build path.
+  `capital.begin_build`/`finish_build`/`break_good` are comptime-parameterized over the good
+  exactly as `begin_labor` is over the action (the gate/pay/start half is identical for all
+  fifteen; only `grant`/`revoke` differ), with `build_fish_rod`/`finish_fish_rod`/`break_fish_rod`
+  kept as named wrappers. `begin_build` checks the same gates as labor (not owned, not `Busy`,
+  energy strict, materials to exactly 0 — the `has` check first is load-bearing, `SparseSet.add`
+  doesn't guard dupes), pays the good's catalog-default `requires` (hours included) and starts a
+  timed build; `finish_build` adds the component, runs its `grant`, and logs the receipt.
+  `capital.prereq_of` declares a good's **prerequisite component** (Work gloves and Chainsaw both
+  target `ActionChopWood`, which only exists with the Hatchet) — gating the build *and* the tile,
+  so a modifier can never be applied to a component that isn't there (that would panic in
+  `getMany`). It's also the roster's only real tech-tree edge.
+  An **Unlocker** (Fishing rod → Fish, Hatchet → Split wood, Wire snares → Check traps, Air rifle
+  → Hunt) grants a target action component outright — owning the good is what makes the verb
+  possible at all. An **`ActionModifier`** (Boots, Work gloves, Bicycle, Cookpot, Root cellar,
+  Chainsaw, plus the health trio Bed / Pantry / Medicine chest) mutates an *existing* margin once,
+  at build and at break — an action's `Requires`/`Yields`, the larder's `quality`/`spoils`, or the
+  vigor ceiling — `capital.apply_*`/`remove_*` pairs are that
   creation/destruction side effect, scaling the target's `.s`/`.sd` (or `Requires`) together rather
-  than replacing them, so a boost preserves the distribution's shape. A **`Generator`** (Fireplace,
-  `comp.Fireplace`) instead runs continuously: given its own `requires`/`yields` (the same shape as
-  an action's), `capital.run_generator` drains/deposits it every tick it can afford — mirroring
-  `gather`'s shape exactly, one level up — and `capital.run_generators` is the system: an
+  than replacing them, so a boost preserves the distribution's shape. The health pairs are relative
+  (`+=`/`-=`) and *fill what they add* (apply bumps `v` with `max`), so `v/max` — what the warmth
+  theme, the status word and `yield_factor` all read — never dips on an upgrade, and a future aging
+  system decrementing `max` composes underneath. The Chainsaw is the Act II teaser: chop energy
+  ×0.3 but `requires.materials += 1` (fuel) — the first substitution of external energy for muscle.
+  A **`Generator`** (Garden bed, Chicken coop; `Fireplace` was retired 2026-08-24, its role folded
+  into the Cookpot) instead runs continuously: it carries **two** prices — `requires` is the build
+  order, `upkeep` is the per-tick drain — and `capital.run_generator` pays the upkeep and deposits
+  the yields every tick it can afford, mirroring labor's gates one level up. `upkeep` and `yields`
+  are authored **per in-game day** and scaled by the frame's dt, so a flow reads as a trickle (a
+  discrete daily harvest, which would restore poisson's lumpiness, is a later refinement).
+  `capital.run_generators` is the system: an
   `inline for` over the manually-maintained `capital.generator_bundle` (same idea as
   `actions_bundle`), one `Query` per type. That list is manual, not derived, because "every
   component type tagged Generator" is a fact about *types*, not entities — the ECS only answers
@@ -161,15 +187,15 @@ today, sim deciders later) individualized costs/yields for free — two agents c
   type-level category. (An alternative was considered — each type self-declaring its category via a
   marker decl, the same trick `ecs.zig`'s `With`/`Without`/`Maybe` use for `_filter_kind` — and
   deferred in favor of matching the existing `actions_bundle` idiom.) The labor action functions are
-  now wired — the HUD's action tiles call `actions.action_*` on click — but the
-  sim tick still doesn't call `run_generators` (nothing spawns a `Generator`-owning agent yet).
+  wired — the HUD's action tiles call `actions.action_*` on click — and `run_generators` **is** in
+  the sim tick since 2026-08-24 (after `resolve_busy`), now that generators are buildable.
   **Capital ownership:** a good is always owned by exactly one agent — never communal, never
   stackable (no owning two Fishing Rods) — by putting each good's component directly on the owning
   agent's entity: both properties fall out of the sparse-set's own structural guarantee (at most one
   instance of a component type per entity) rather than being runtime-checked bookkeeping. This is
-  **decided and now demonstrated**: `comp.FishRod` is the first good built through it end-to-end
-  (BUILD tab tile → `build_fish_rod` → components on the agent), `comp.Fireplace` follows the same
-  shape, and the old `sandals`/`fishing_rod`/`axe`/`fireplace` "spawn a separate entity" archetype
+  **decided and fully realized**: all fifteen goods build through it end-to-end
+  (BUILD tab tile → `begin_build` → timed work → `finish_build` → components on the agent),
+  and the old `sandals`/`fishing_rod`/`axe`/`fireplace` "spawn a separate entity" archetype
   consts were **removed** in the 2026-07-08 tidy-up (they named the private `Requires` and never
   compiled). Build is instant one-click for now — per-agent build *progress* (building X/Y over
   time) and durability/decay are still open.
@@ -181,11 +207,11 @@ today, sim deciders later) individualized costs/yields for free — two agents c
 
 ### Supporting Modules
 
-- `src/components.zig` / `src/tags.zig` — ECS component & tag types. Only `pub const <Name> = struct {…}` type decls allowed (the `World` enumerates them at comptime, over a file's *public* decls only when reflecting cross-file — verified empirically, which is why the shared `Requires`/`Yields` shapes below are deliberately private). Components: `Label` (`{ v: []const u8 }`, a display name), `Vigor` (human energy source, **0 = death**; `{ v, max }` — scales labor quality in two levels via `actions.yield_factor`, refilled only by the metabolism loop), `InventoryFood` (perishable larder; `{ v, quality, spoils }`), `InventoryMaterial` (fungible durable stockpile; `{ v }`), `ActionForage` / `ActionFish` / `ActionChopWood` (per-agent typed actions, each `{ requires: Requires, yields: Yields }`; Forage/ChopWood are innate, Fish is granted by the fish rod), `Busy` (`{ doing, total, remaining, quality }` — the one act in progress; costs paid at begin, yield at completion, quality locked at the click), `FishRod` (an Unlocker capital good — `{ requires }` only, the build price; owning it ⟺ holding `ActionFish`), `Fireplace` (a `Generator`-category capital good, same `{ requires, yields }` shape, ticked continuously instead of on click). Tags: `Player`, `Created`, `Dead`, `Idle` (capital that couldn't pay this round — not currently set by anything), `Generator` / `ActionModifier` (capital's two behavioral categories), `Food` / `Comfort` / `Tool` / `WoodCutting` (category tags, still being filled in). `Satiety`, `Materials`, `Capital{ owned, durability, progress }`, and `Population` from the pre-redesign model are gone.
+- `src/components.zig` / `src/tags.zig` — ECS component & tag types. Only `pub const <Name> = struct {…}` type decls allowed (the `World` enumerates them at comptime, over a file's *public* decls only when reflecting cross-file — verified empirically, which is why the shared `Requires`/`Yields` shapes below are deliberately private). Components: `Label` (`{ v: []const u8 }`, a display name), `Vigor` (human energy source, **0 = death**; `{ v, max }` — scales labor quality in two levels via `actions.yield_factor`, refilled only by the metabolism loop), `InventoryFood` (perishable larder; `{ v, quality, spoils }`), `InventoryMaterial` (fungible durable stockpile; `{ v }`), `ActionForage` / `ActionScavenge` (innate) and `ActionFish` / `ActionChopWood` / `ActionCheckTraps` / `ActionHunt` (unlocked by capital) — per-agent typed actions, each `{ requires: Requires, yields: Yields }`, `Busy` (`{ doing, total, remaining, quality }` — the one act in progress; costs paid at begin, yield at completion, quality locked at the click; its `Doing` enum names every labor verb *and* every build), and the 15 capital goods: Unlockers `FishRod` / `Hatchet` / `WireSnares` / `AirRifle`, modifiers `Boots` / `WorkGloves` / `Bicycle` / `Cookpot` / `RootCellar` / `Chainsaw` / `Bed` / `Pantry` / `MedicineChest` (each `{ requires }` only — the build price), and Generators `GardenBed` / `ChickenCoop` (`{ requires, upkeep, yields }` — build order, per-tick drain, per-day flow). `Fireplace` was retired 2026-08-24. Tags: `Player`, `Created`, `Dead`, `Idle` (capital that couldn't pay this round — not currently set by anything), `Generator` / `ActionModifier` (capital's two behavioral categories), `Food` / `Comfort` / `Tool` / `WoodCutting` (category tags, still being filled in). `Satiety`, `Materials`, `Capital{ owned, durability, progress }`, and `Population` from the pre-redesign model are gone.
 - `src/world.zig` — sparse-set ECS `World` (see the ECS section above)
 - `src/ecs.zig` — `ecs.run(world, res, system)` + the Bevy-style param machinery, including `getMany` (see the ECS section + the module doc)
-- `src/actions.zig` — per-agent labor actions (`action_forage` / `action_fish` / `action_chop_wood`) and the manually-maintained `actions_bundle` list of *innate* actions. Eating is not an action (see `systems.metabolize`). See "Actions & Capital" above.
-- `src/capital.zig` — the Unlocker `build_*`/`break_*` pairs (fish rod), the `ActionModifier` `apply_*`/`remove_*` pairs, and the `Generator` running system (`generator_bundle`, `run_generator`, `run_generators`); the old separate-entity build archetypes were removed 2026-07-08. See "Actions & Capital" above.
+- `src/actions.zig` — per-agent labor actions (innate `action_forage` / `action_scavenge`; unlocked `action_fish` / `action_chop_wood` / `action_check_traps` / `action_hunt`) and the manually-maintained `actions_bundle` list of *innate* actions. Eating is not an action (see `systems.metabolize`). See "Actions & Capital" above.
+- `src/capital.zig` — the generic build path (`begin_build` / `finish_build` / `break_good`, comptime-parameterized over the good; `buildable_bundle`, `doing_of_good`, `prereq_of`/`prereq_met`, `good_name`, and the per-good `grant`/`revoke` switches), the `ActionModifier` `apply_*`/`remove_*` pairs, and the `Generator` running system (`generator_bundle`, `run_generator`, `run_generators` — wired into the tick 2026-08-24); the old separate-entity build archetypes were removed 2026-07-08. See "Actions & Capital" above.
 - `src/systems.zig` — sim systems, run in this order: `advance_clock` (run clock), `update_food` (spoils the larder), `metabolize` (continuous eating at the ration rate; starvation drain on an empty larder — **new 2026-08-15**, unrelated to the deleted satiety-era system of the same name), `resolve_busy` (ticks work in progress; dispatches completion via `Busy.Doing`), and the death systems `mark_dead` / `despawn_dead`. Convention: `update_<component_snake_case>` drives one component. The pre-redesign `update_satiety` / `update_vigor` / `update_population` were removed with their mechanics.
 - `src/font.zig` — `TextData` (text buffer the UI caches and renders); leaf data module
 - `src/log.zig` — `Log`, a fixed-capacity ring buffer of toned event lines (`Tone`, `Entry`) held on `Resources`; the HUD's event feed. Leaf data module (no imports)

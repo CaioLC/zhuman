@@ -1,20 +1,29 @@
 //! Capital definitions.
 //!
 //! Capital goods split into three behavioral variants (all share the same build-cost
-//! shape): an **Unlocker** grants a target action component outright — owning the good
-//! is what makes the verb possible at all (the fish rod below; `build_/break_` pairs) —
-//! roundabout production made literal: spend today's vigor + materials, and a new verb
-//! exists tomorrow. An **`ActionModifier`** mutates an *existing* action's
-//! Requires/Yields once, at build and at break (Sandals, Axe below) — the apply/remove
-//! pairs are that creation/destruction side effect. A **`Generator`** instead runs
-//! continuously — provided its Requires are met each tick, it keeps depositing Yields
-//! (Fireplace, `comp.Fireplace` below); `run_generators` is that running system, over
-//! the manually-listed `generator_bundle`. A category ("every Generator") is a fact
-//! about types, not entities, so there's no runtime query for it — `generator_bundle` +
-//! `run_generator` mirror `actions_bundle` + `gather` in actions.zig exactly, one level
-//! up (a list of types instead of a list of instances). Wiring `run_generators` into
-//! the per-frame loop is still systems.zig's job, parked with the rest of the
-//! systems/UI tidy-up.
+//! shape — `requires`, hours included — so one begin/finish path serves them all):
+//!
+//! - an **Unlocker** grants a target action component outright — owning the good is what
+//!   makes the verb possible at all (Fishing rod → Fish, Hatchet → Split wood, Wire
+//!   snares → Check traps, Air rifle → Hunt). Roundabout production made literal: spend
+//!   today's vigor, materials and hours, and a new verb exists tomorrow.
+//! - an **ActionModifier** mutates an *existing* margin once, at build and at break — an
+//!   action's Requires/Yields (Boots, Work gloves, Bicycle, Chainsaw), the larder's
+//!   quality/spoilage (Cookpot, Root cellar), or the body's vigor ceiling (Bed, Pantry,
+//!   Medicine chest). The apply/remove pairs are that creation/destruction side effect.
+//! - a **Generator** runs continuously instead: `run_generator` pays its `upkeep` and
+//!   deposits its `yields` every tick it can afford (Garden bed, Chicken coop).
+//!   `run_generators` is that system, over the manually-listed `generator_bundle` — a
+//!   category ("every Generator") is a fact about types, not entities, so there's no
+//!   runtime query for it; the list mirrors `actions.actions_bundle` exactly, one level
+//!   up (a list of types instead of a list of instances).
+//!
+//! `begin_build`/`finish_build`/`break_good` are comptime-parameterized over the good,
+//! the same way `actions.begin_labor` is over the action — the gate/pay/start half is
+//! identical for every good, and only `grant`/`revoke` differ. A good whose effect needs
+//! a verb the agent lacks (Work gloves and Chainsaw both work on Split wood) declares
+//! that in `prereq_of`, which gates the build *and* the tile — so a modifier can never
+//! be applied to a component that isn't there.
 const std = @import("std");
 const ha = @import("ha");
 const comp = ha.comp;
@@ -28,113 +37,331 @@ const World = world.World;
 const Entity = world.Entity;
 const Resources = res_mod.Resources;
 
-// --- capital build archetypes: removed ---
-// The old `sandals`/`fishing_rod`/`axe`/`fireplace` const bundles built a good as a
-// *separate entity* (Label + Requires + category tag) and named the private
-// `comp.Requires`, so they neither compiled nor matched the redesign's "capital is a
-// component on the owning agent" model. They're dropped until that per-agent migration
-// lands; the ActionModifier apply/remove pairs and the Generator runner below already
-// speak the new model, so they stay.
+// --- the buildable catalog ---------------------------------------------------------
+// Manual per-type mappings, the `actions_bundle` idiom: facts about types, not entities.
 
-// --- ActionModifier creation/destruction ---
-// Each pair applies/reverses its good's effect on the target action component, which
-// lives directly on the owning agent entity (per the labor pattern in actions.zig).
+/// Every buildable good, in BUILD-shelf order. `inline for`-able by any caller that
+/// needs to sweep the catalog.
+pub const buildable_bundle = .{
+    comp.FishRod,     comp.Hatchet,    comp.WireSnares,    comp.AirRifle,
+    comp.Boots,       comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
+    comp.RootCellar,  comp.Chainsaw,   comp.Bed,           comp.Pantry,
+    comp.MedicineChest, comp.GardenBed, comp.ChickenCoop,
+};
 
-// Yields are distributions (`dist.Dist`), not flat numbers — a boost scales `.s` (the
-// mean/scale) and `.sd` together so the distribution's relative shape is preserved
-// (and `.sd == 0`, meaning "auto-derive", stays exactly 0 either way).
-
-pub fn apply_sandals(w: *World, agent: Entity) void {
-    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.yields.food.s *= 1.1;
-    forage.yields.food.sd *= 1.1;
-}
-pub fn remove_sandals(w: *World, agent: Entity) void {
-    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.yields.food.s /= 1.1;
-    forage.yields.food.sd /= 1.1;
-}
-
-pub fn apply_axe(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy *= 0.6;
-}
-pub fn remove_axe(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy /= 0.6;
+/// The `Busy.Doing` name for a good's build — what `resolve_busy` dispatches on.
+pub fn doing_of_good(comptime GoodT: type) comp.Busy.Doing {
+    return switch (GoodT) {
+        comp.FishRod => .build_fish_rod,
+        comp.Hatchet => .build_hatchet,
+        comp.WireSnares => .build_wire_snares,
+        comp.AirRifle => .build_air_rifle,
+        comp.Boots => .build_boots,
+        comp.WorkGloves => .build_work_gloves,
+        comp.Bicycle => .build_bicycle,
+        comp.Cookpot => .build_cookpot,
+        comp.RootCellar => .build_root_cellar,
+        comp.Chainsaw => .build_chainsaw,
+        comp.Bed => .build_bed,
+        comp.Pantry => .build_pantry,
+        comp.MedicineChest => .build_medicine_chest,
+        comp.GardenBed => .build_garden_bed,
+        comp.ChickenCoop => .build_chicken_coop,
+        else => @compileError("no Busy.Doing for " ++ @typeName(GoodT)),
+    };
 }
 
-// --- Unlocker build/break ---
-// Owning the good is what makes an action possible at all: building pays the good's
-// Requires once and *grants* the target action component on the owning agent; breaking
-// (reachable once durability lands) revokes it. The sparse-set's one-component-per-
-// entity guarantee backs both "one rod per agent" and "owning ⟺ the verb exists" —
-// no runtime bookkeeping. (The rod was an ActionModifier here before 2026-08-15; the
-// redesign made it gate fishing instead of improving it.)
+/// The component a good's effect needs to already exist on the agent, if any. Only the
+/// modifiers that target an *unlocked* verb have one — a Chainsaw with no Split wood to
+/// improve would panic in `getMany`, so this turns that into an honest gate: you need
+/// the hatchet before the tools that sharpen it.
+pub fn prereq_of(comptime GoodT: type) ?type {
+    return switch (GoodT) {
+        comp.WorkGloves, comp.Chainsaw => comp.ActionChopWood,
+        else => null,
+    };
+}
 
-/// Begin building a fish rod: pay `comp.FishRod`'s build price upfront and start the
-/// work — the rod (and the Fish verb it grants) arrives only when `finish_fish_rod`
-/// resolves, `requires.hours` later. Refuses silently if already owned, already busy
-/// (one body, one act), or unaffordable — same gates as labor (energy strict, vigor 0
-/// is death; materials may be spent to exactly 0). Dying mid-build loses the work.
-pub fn build_fish_rod(w: *World, e: Entity, res: *Resources) void {
+/// Whether `GoodT`'s prerequisite (if it has one) is satisfied on this agent.
+pub fn prereq_met(w: *World, e: Entity, comptime GoodT: type) bool {
+    if (prereq_of(GoodT)) |P| return w.has(e, P);
+    return true;
+}
+
+/// The receipt line for a completed build.
+fn built_msg(comptime GoodT: type) []const u8 {
+    return switch (GoodT) {
+        comp.FishRod => "You built a fish rod. Fishing is now possible.",
+        comp.Hatchet => "You built a hatchet. You can split wood now.",
+        comp.WireSnares => "You set wire snares. Check them for game.",
+        comp.AirRifle => "You assembled an air rifle. You can hunt now.",
+        comp.Boots => "You cobbled boots. Foraging costs less.",
+        comp.WorkGloves => "You stitched work gloves. Splitting wood costs less.",
+        comp.Bicycle => "You rebuilt a bicycle. Distance got cheap.",
+        comp.Cookpot => "You built a cookpot. Cooked food feeds you further.",
+        comp.RootCellar => "You dug a root cellar. Food keeps twice as long.",
+        comp.Chainsaw => "You got a chainsaw running. The engine works, not your back.",
+        comp.Bed => "You built a bed. You sleep properly now.",
+        comp.Pantry => "You built a pantry. You eat properly now.",
+        comp.MedicineChest => "You stocked a medicine chest. You mend properly now.",
+        comp.GardenBed => "You planted a garden bed. It grows without you.",
+        comp.ChickenCoop => "You raised a chicken coop. The hens lay without you.",
+        else => @compileError("no build message for " ++ @typeName(GoodT)),
+    };
+}
+
+/// What a good does the moment it exists — the whole difference between the categories.
+fn grant(w: *World, e: Entity, comptime GoodT: type) void {
+    switch (GoodT) {
+        // Unlockers: the good *is* the verb.
+        comp.FishRod => w.add(e, comp.ActionFish{}),
+        comp.Hatchet => w.add(e, comp.ActionChopWood{}),
+        comp.WireSnares => w.add(e, comp.ActionCheckTraps{}),
+        comp.AirRifle => w.add(e, comp.ActionHunt{}),
+        // Modifiers: a one-shot mutation of a margin.
+        comp.Boots => apply_boots(w, e),
+        comp.WorkGloves => apply_work_gloves(w, e),
+        comp.Bicycle => apply_bicycle(w, e),
+        comp.Cookpot => apply_cookpot(w, e),
+        comp.RootCellar => apply_root_cellar(w, e),
+        comp.Chainsaw => apply_chainsaw(w, e),
+        comp.Bed => health_apply(w, e, 2.0),
+        comp.Pantry => health_apply(w, e, 2.0),
+        comp.MedicineChest => health_apply(w, e, 2.0),
+        // Generators: holding the component is the whole effect — `run_generators`
+        // finds it by query from the next tick on.
+        comp.GardenBed, comp.ChickenCoop => {},
+        else => @compileError("no grant for " ++ @typeName(GoodT)),
+    }
+}
+
+/// The exact reverse of `grant` — every pair is symmetric so durability can walk a good
+/// back out without special cases.
+fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
+    switch (GoodT) {
+        comp.FishRod => w.remove(e, comp.ActionFish),
+        comp.Hatchet => w.remove(e, comp.ActionChopWood),
+        comp.WireSnares => w.remove(e, comp.ActionCheckTraps),
+        comp.AirRifle => w.remove(e, comp.ActionHunt),
+        comp.Boots => remove_boots(w, e),
+        comp.WorkGloves => remove_work_gloves(w, e),
+        comp.Bicycle => remove_bicycle(w, e),
+        comp.Cookpot => remove_cookpot(w, e),
+        comp.RootCellar => remove_root_cellar(w, e),
+        comp.Chainsaw => remove_chainsaw(w, e),
+        comp.Bed => health_remove(w, e, 2.0),
+        comp.Pantry => health_remove(w, e, 2.0),
+        comp.MedicineChest => health_remove(w, e, 2.0),
+        comp.GardenBed, comp.ChickenCoop => {},
+        else => @compileError("no revoke for " ++ @typeName(GoodT)),
+    }
+}
+
+// --- build / break -----------------------------------------------------------------
+
+/// Begin building `GoodT`: pay its build price upfront and start the work — the good
+/// (and whatever it grants) arrives only when `finish_build` resolves, `requires.hours`
+/// later. Refuses silently if already owned, already busy (one body, one act), missing
+/// the good's prerequisite verb, or unaffordable — same gates as labor (energy strict,
+/// vigor 0 is death; materials may be spent to exactly 0). Dying mid-build loses the work.
+pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
     _ = res; // kept for the shared begin-signature; the receipt logs at completion
-    if (w.has(e, comp.FishRod)) return; // one per agent (SparseSet.add doesn't guard dupes)
+    if (w.has(e, GoodT)) return; // one per agent (SparseSet.add doesn't guard dupes)
     if (w.has(e, comp.Busy)) return; // one body, one act
+    if (!prereq_met(w, e, GoodT)) return; // nothing to modify yet
     const vigor, const stock = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryMaterial });
-    const cost = (comp.FishRod{}).requires;
+    const cost = (GoodT{}).requires;
     if (cost.energy >= vigor.v or cost.materials > stock.v) return;
 
     vigor.v -= cost.energy;
     stock.v -= cost.materials;
     const total = res_mod.hours_to_secs(cost.hours);
     // quality is a labor concept — a build either completes or it doesn't, so lock 1.
-    w.add(e, comp.Busy{ .doing = .build_fish_rod, .total = total, .remaining = total, .quality = 1 });
+    w.add(e, comp.Busy{ .doing = doing_of_good(GoodT), .total = total, .remaining = total, .quality = 1 });
 }
 
-/// Completion of the rod build: own the rod, gain the verb. Called by
-/// `systems.resolve_busy`; `build_fish_rod`'s gates guarantee no rod exists yet.
+/// Completion of a build: own the good, apply what it does, log the receipt. Called by
+/// `systems.resolve_busy`; `begin_build`'s gates guarantee the good doesn't exist yet.
+pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
+    w.add(e, GoodT{});
+    grant(w, e, GoodT);
+    res.log.push(.good, built_msg(GoodT));
+}
+
+/// Break a good: its effect leaves with it. Nothing calls this yet (no durability);
+/// written now so every grant/revoke pair stays symmetric.
+pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
+    if (!w.has(e, GoodT)) return;
+    revoke(w, e, GoodT);
+    w.remove(e, GoodT);
+    var buf: [64]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, "Your {s} broke.", .{good_name(GoodT)}) catch "Something of yours broke.";
+    res.log.push(.warn, msg);
+}
+
+/// The good's display name, lowercase — used in the break line and by the BUILD tiles.
+pub fn good_name(comptime GoodT: type) []const u8 {
+    return switch (GoodT) {
+        comp.FishRod => "fish rod",
+        comp.Hatchet => "hatchet",
+        comp.WireSnares => "wire snares",
+        comp.AirRifle => "air rifle",
+        comp.Boots => "boots",
+        comp.WorkGloves => "work gloves",
+        comp.Bicycle => "bicycle",
+        comp.Cookpot => "cookpot",
+        comp.RootCellar => "root cellar",
+        comp.Chainsaw => "chainsaw",
+        comp.Bed => "bed",
+        comp.Pantry => "pantry",
+        comp.MedicineChest => "medicine chest",
+        comp.GardenBed => "garden bed",
+        comp.ChickenCoop => "chicken coop",
+        else => @compileError("no name for " ++ @typeName(GoodT)),
+    };
+}
+
+// Named wrappers for the rod — the shape `action_forage` has over `begin_labor`. Kept
+// because the rod is the tutorial's first build and reads better spelled out at call sites.
+pub fn build_fish_rod(w: *World, e: Entity, res: *Resources) void {
+    begin_build(w, e, res, comp.FishRod);
+}
 pub fn finish_fish_rod(w: *World, e: Entity, res: *Resources) void {
-    w.add(e, comp.FishRod{});
-    w.add(e, comp.ActionFish{}); // the unlock: the rod grants the verb
-    res.log.push(.good, "You built a fish rod. Fishing is now possible.");
+    finish_build(w, e, res, comp.FishRod);
 }
-
-/// Break the rod: the verb leaves with the tool. Nothing calls this yet (no durability);
-/// written now so the grant/revoke pair stays symmetric, like the modifier pairs above.
 pub fn break_fish_rod(w: *World, e: Entity, res: *Resources) void {
-    if (!w.has(e, comp.FishRod)) return;
-    w.remove(e, comp.FishRod);
-    w.remove(e, comp.ActionFish);
-    res.log.push(.warn, "Your fish rod broke.");
+    break_good(w, e, res, comp.FishRod);
 }
 
-// --- Generator running system ---
-// A manual per-type list, the same shape as `actions.actions_bundle`: there's no
-// runtime query for "every component type tagged Generator" (that's a fact about
-// types, not entities), so the types that should tick each frame are named here
-// explicitly. Adding a new Generator good means adding it to this list too.
+// --- ActionModifier creation/destruction -------------------------------------------
+// Each pair applies/reverses its good's effect on a component that already lives on the
+// owning agent entity (per the labor pattern in actions.zig).
+//
+// Yields are distributions (`dist.Dist`), not flat numbers — a boost scales `.s` (the
+// mean/scale) and `.sd` together so the distribution's relative shape is preserved (and
+// `.sd == 0`, meaning "auto-derive", stays exactly 0 either way).
+
+pub fn apply_boots(w: *World, agent: Entity) void {
+    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
+    forage.requires.energy *= 0.7;
+}
+pub fn remove_boots(w: *World, agent: Entity) void {
+    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
+    forage.requires.energy /= 0.7;
+}
+
+pub fn apply_work_gloves(w: *World, agent: Entity) void {
+    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
+    chop.requires.energy *= 0.75;
+}
+pub fn remove_work_gloves(w: *World, agent: Entity) void {
+    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
+    chop.requires.energy /= 0.75;
+}
+
+/// Bicycle: distance gets cheap — both roaming verbs at once (one good may touch several
+/// components; the grammar is the apply/remove pair, not one-target-only). Both targets
+/// are innate, so no prerequisite is needed.
+pub fn apply_bicycle(w: *World, agent: Entity) void {
+    const forage, const scav = ecs.getMany(w, agent, .{ comp.ActionForage, comp.ActionScavenge });
+    forage.requires.energy *= 0.6;
+    scav.requires.energy *= 0.6;
+}
+pub fn remove_bicycle(w: *World, agent: Entity) void {
+    const forage, const scav = ecs.getMany(w, agent, .{ comp.ActionForage, comp.ActionScavenge });
+    forage.requires.energy /= 0.6;
+    scav.requires.energy /= 0.6;
+}
+
+/// Cookpot: consumption-side capital — `quality` scales what every unit of stored food is
+/// worth as it's eaten (`systems.metabolize` converts at `2·quality`).
+pub fn apply_cookpot(w: *World, agent: Entity) void {
+    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
+    food.quality += 1;
+}
+pub fn remove_cookpot(w: *World, agent: Entity) void {
+    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
+    food.quality -= 1;
+}
+
+/// Root cellar: storage capital — halves spoilage, so it's only worth what your surpluses
+/// are.
+pub fn apply_root_cellar(w: *World, agent: Entity) void {
+    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
+    food.spoils *= 0.5;
+}
+pub fn remove_root_cellar(w: *World, agent: Entity) void {
+    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
+    food.spoils /= 0.5;
+}
+
+/// Chainsaw: the first substitution of external energy for muscle. Splitting wood stops
+/// pricing your body (energy ×0.3) and starts pricing fuel (+1m per use); yields ×2.5.
+pub fn apply_chainsaw(w: *World, agent: Entity) void {
+    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
+    chop.requires.energy *= 0.3;
+    chop.requires.materials += 1.0;
+    chop.yields.materials.s *= 2.5;
+    chop.yields.materials.sd *= 2.5;
+}
+pub fn remove_chainsaw(w: *World, agent: Entity) void {
+    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
+    chop.requires.energy /= 0.3;
+    chop.requires.materials -= 1.0;
+    chop.yields.materials.s /= 2.5;
+    chop.yields.materials.sd /= 2.5;
+}
+
+// --- Health goods: capacity capital -------------------------------------------------
+// Bed / Pantry / Medicine chest each raise the vigor *ceiling*. Apply also fills what it
+// adds (first night in a real bed, you wake refreshed), so `v/max` — the fraction the
+// warmth theme, the status word and `yield_factor` all read — never dips on an upgrade.
+// All mutations are relative (+=/−=), so a future aging system decrementing `max`
+// composes underneath without special cases.
+
+fn health_apply(w: *World, agent: Entity, amount: f32) void {
+    const vigor = ecs.getMany(w, agent, .{comp.Vigor});
+    vigor.max += amount;
+    vigor.v = @min(vigor.v + amount, vigor.max);
+}
+fn health_remove(w: *World, agent: Entity, amount: f32) void {
+    const vigor = ecs.getMany(w, agent, .{comp.Vigor});
+    vigor.max -= amount;
+    if (vigor.v > vigor.max) vigor.v = vigor.max;
+}
+
+// --- Generator running system -------------------------------------------------------
+// A manual per-type list, the same shape as `actions.actions_bundle`: there's no runtime
+// query for "every component type tagged Generator" (that's a fact about types, not
+// entities), so the types that tick each frame are named here explicitly. Adding a new
+// Generator good means adding it to this list too.
 pub const generator_bundle = .{
-    comp.Fireplace,
+    comp.GardenBed,
+    comp.ChickenCoop,
 };
 
-/// Shared body for every Generator — mirrors `actions.gather`'s shape exactly: if its
-/// Requires are currently affordable, deposit its Yields. `GenT` is one of the typed
-/// per-generator components (each carrying its own Requires/Yields), so distinct
-/// generators stay distinct component types while sharing this one resolution path.
+/// Shared body for every Generator — `actions.begin_labor`'s shape, one level up and
+/// continuous: if this tick's slice of `upkeep` is affordable, pay it and deposit the
+/// same slice of `yields`. Both are authored **per in-game day**, so everything scales by
+/// the frame's `dt` in days — the flow reads as a trickle (a discrete daily harvest, which
+/// would restore poisson's lumpiness, is a later refinement). Gates match labor's: energy
+/// strict (a generator must never drain its keeper to death), materials to exactly 0.
 fn run_generator(w: *World, e: Entity, res: *Resources, comptime GenT: type) void {
     const gen, const vigor, const stock, const food = ecs.getMany(w, e, .{ GenT, comp.Vigor, comp.InventoryMaterial, comp.InventoryFood });
-    if (gen.requires.energy >= vigor.v or gen.requires.materials >= stock.v) {
+    const dt_days = res.time.dt / res_mod.secs_per_day;
+    const energy = gen.upkeep.energy * dt_days;
+    const materials = gen.upkeep.materials * dt_days;
+    if (energy >= vigor.v or materials > stock.v) {
         return; // can't pay this tick
     }
-    stock.v += dist.sample(gen.yields.materials, res.random());
-    food.v += dist.sample(gen.yields.food, res.random());
+    vigor.v -= energy;
+    stock.v -= materials;
+    stock.v += dist.sample(gen.yields.materials, res.random()) * dt_days;
+    food.v += dist.sample(gen.yields.food, res.random()) * dt_days;
 }
 
 /// The system: ticks every Generator-category good on every entity that owns one.
-/// `inline for` unrolls `generator_bundle` at comptime into one Query per type. Not
-/// called anywhere yet — wiring it into the per-frame loop is systems.zig's job,
-/// parked with the rest of the systems/UI tidy-up.
+/// `inline for` unrolls `generator_bundle` at comptime into one Query per type.
 pub fn run_generators(w: *World, res: *Resources) void {
     inline for (generator_bundle) |GenT| {
         var q: ecs.Query(.{ Entity, GenT }) = .{ .world = w };
@@ -149,14 +376,23 @@ pub fn run_generators(w: *World, res: *Resources) void {
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the fields the build path touches (`prng`, `log`, `game`)
-/// initialized — the SDL-backed fields stay undefined and untouched.
+/// A Resources with only the fields the build/generator paths touch (`prng`, `log`,
+/// `game`, `time`) initialized — the SDL-backed fields stay undefined and untouched.
 fn test_res() Resources {
     var res: Resources = undefined;
     res.prng = std.Random.DefaultPrng.init(7);
     res.log = .{};
     res.game = .{};
+    res.time = .{ .dt = 0 };
     return res;
+}
+
+fn spawn_test_agent(w: *World) Entity {
+    return w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0.05 },
+        comp.InventoryMaterial{ .v = 1 },
+    } ++ @import("./actions.zig").actions_bundle);
 }
 
 test "build pays upfront and starts the work; finish grants the rod and the verb" {
@@ -223,4 +459,132 @@ test "break_fish_rod revokes the verb with the tool" {
 
     try std.testing.expect(!w.has(e, comp.FishRod));
     try std.testing.expect(!w.has(e, comp.ActionFish)); // the verb left with the tool
+}
+
+test "the hatchet unlocks splitting wood — the innate hands cannot" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    try std.testing.expect(!w.has(e, comp.ActionChopWood)); // not innate
+
+    w.get(e, comp.InventoryMaterial).?.v = 6;
+    begin_build(&w, e, &res, comp.Hatchet);
+    finish_build(&w, e, &res, comp.Hatchet);
+
+    try std.testing.expect(w.has(e, comp.ActionChopWood));
+    break_good(&w, e, &res, comp.Hatchet);
+    try std.testing.expect(!w.has(e, comp.ActionChopWood));
+}
+
+test "a modifier whose target verb is missing refuses to build" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = 100;
+
+    // No hatchet ⟹ no ActionChopWood ⟹ gloves have nothing to improve.
+    try std.testing.expect(!prereq_met(&w, e, comp.WorkGloves));
+    begin_build(&w, e, &res, comp.WorkGloves);
+    try std.testing.expect(!w.has(e, comp.Busy)); // refused, not a panic
+    try std.testing.expectEqual(@as(f32, 100), w.get(e, comp.InventoryMaterial).?.v); // unpaid
+
+    // With the hatchet, the same build goes through.
+    begin_build(&w, e, &res, comp.Hatchet);
+    finish_build(&w, e, &res, comp.Hatchet);
+    w.remove(e, comp.Busy);
+    try std.testing.expect(prereq_met(&w, e, comp.WorkGloves));
+    begin_build(&w, e, &res, comp.WorkGloves);
+    try std.testing.expect(w.has(e, comp.Busy));
+}
+
+test "modifier pairs are symmetric — apply then remove restores the margin" {
+    var w = World.init();
+    const e = spawn_test_agent(&w);
+
+    apply_boots(&w, e);
+    apply_bicycle(&w, e);
+    const forage = w.get(e, comp.ActionForage).?;
+    const scav = w.get(e, comp.ActionScavenge).?;
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.7 * 0.6), forage.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.6), scav.requires.energy, 1e-5);
+
+    remove_bicycle(&w, e);
+    remove_boots(&w, e);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0), forage.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0), scav.requires.energy, 1e-5);
+}
+
+test "chainsaw trades muscle for fuel on the hatchet's verb" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = 6;
+    begin_build(&w, e, &res, comp.Hatchet);
+    finish_build(&w, e, &res, comp.Hatchet);
+
+    apply_chainsaw(&w, e);
+    const chop = w.get(e, comp.ActionChopWood).?;
+    try std.testing.expectApproxEqAbs(@as(f32, 0.6), chop.requires.energy, 1e-5); // 2 × 0.3
+    try std.testing.expectEqual(@as(f32, 1.0), chop.requires.materials); // fuel per use
+    try std.testing.expectApproxEqAbs(@as(f32, 12.5), chop.yields.materials.s, 1e-4); // 5 × 2.5
+
+    remove_chainsaw(&w, e);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0), chop.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), chop.requires.materials, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 5.0), chop.yields.materials.s, 1e-4);
+}
+
+test "health goods raise the ceiling and fill what they add; removal clamps" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = 10;
+
+    begin_build(&w, e, &res, comp.Bed);
+    finish_build(&w, e, &res, comp.Bed);
+    const vigor = w.get(e, comp.Vigor).?;
+    try std.testing.expectEqual(@as(f32, 12), vigor.max);
+    // 10 − 3 energy paid at begin = 7, then +2 filled on completion.
+    try std.testing.expectEqual(@as(f32, 9), vigor.v);
+
+    break_good(&w, e, &res, comp.Bed);
+    try std.testing.expectEqual(@as(f32, 10), vigor.max);
+    try std.testing.expectEqual(@as(f32, 9), vigor.v); // still under the ceiling
+}
+
+test "cookpot and root cellar work the larder, symmetrically" {
+    var w = World.init();
+    const e = spawn_test_agent(&w);
+
+    apply_cookpot(&w, e);
+    apply_root_cellar(&w, e);
+    const food = w.get(e, comp.InventoryFood).?;
+    try std.testing.expectEqual(@as(u8, 2), food.quality);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.025), food.spoils, 1e-6);
+
+    remove_cookpot(&w, e);
+    remove_root_cellar(&w, e);
+    try std.testing.expectEqual(@as(u8, 1), food.quality);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.05), food.spoils, 1e-6);
+}
+
+test "a generator pays its upkeep and deposits its flow, per day" {
+    var w = World.init();
+    var res = test_res();
+    res.time = .{ .dt = res_mod.secs_per_day }; // one full day per tick
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
+        comp.InventoryMaterial{ .v = 0.1 }, // exactly one day of upkeep
+        comp.GardenBed{},
+    });
+
+    run_generators(&w, &res);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
+    const fed = w.get(e, comp.InventoryFood).?.v;
+    try std.testing.expect(fed > 0); // uniform's floor over a full day is 0.375
+
+    // Broke now — the next day can't pay the upkeep, so nothing moves.
+    run_generators(&w, &res);
+    try std.testing.expectApproxEqAbs(fed, w.get(e, comp.InventoryFood).?.v, 1e-6);
 }

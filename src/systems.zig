@@ -115,10 +115,29 @@ pub fn resolve_busy(
         const b = w.get(e, comp.Busy).?.*; // copy out before removing the slot
         w.remove(e, comp.Busy);
         switch (b.doing) {
+            // labor: draw at the locked quality, deposit, receipt
             .forage => actions.finish_labor(w, e, res, comp.ActionForage, b.quality),
+            .scavenge => actions.finish_labor(w, e, res, comp.ActionScavenge, b.quality),
             .fish => actions.finish_labor(w, e, res, comp.ActionFish, b.quality),
             .chop_wood => actions.finish_labor(w, e, res, comp.ActionChopWood, b.quality),
-            .build_fish_rod => capital.finish_fish_rod(w, e, res),
+            .check_traps => actions.finish_labor(w, e, res, comp.ActionCheckTraps, b.quality),
+            .hunt => actions.finish_labor(w, e, res, comp.ActionHunt, b.quality),
+            // capital: own the good, apply what it grants, receipt
+            .build_fish_rod => capital.finish_build(w, e, res, comp.FishRod),
+            .build_hatchet => capital.finish_build(w, e, res, comp.Hatchet),
+            .build_wire_snares => capital.finish_build(w, e, res, comp.WireSnares),
+            .build_air_rifle => capital.finish_build(w, e, res, comp.AirRifle),
+            .build_boots => capital.finish_build(w, e, res, comp.Boots),
+            .build_work_gloves => capital.finish_build(w, e, res, comp.WorkGloves),
+            .build_bicycle => capital.finish_build(w, e, res, comp.Bicycle),
+            .build_cookpot => capital.finish_build(w, e, res, comp.Cookpot),
+            .build_root_cellar => capital.finish_build(w, e, res, comp.RootCellar),
+            .build_chainsaw => capital.finish_build(w, e, res, comp.Chainsaw),
+            .build_bed => capital.finish_build(w, e, res, comp.Bed),
+            .build_pantry => capital.finish_build(w, e, res, comp.Pantry),
+            .build_medicine_chest => capital.finish_build(w, e, res, comp.MedicineChest),
+            .build_garden_bed => capital.finish_build(w, e, res, comp.GardenBed),
+            .build_chicken_coop => capital.finish_build(w, e, res, comp.ChickenCoop),
         }
     }
 }

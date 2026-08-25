@@ -59,7 +59,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         // pay once, own a thing that changes which flows exist). The tab switch itself
         // enacts the now-vs-later margin; selection persists in the strip's TabsState.
         if (!ctx.res.game.tutorial_done) {
-            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Gather", actions.action_forage)) |card| {
+            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Forage", actions.action_forage)) |card| {
                 _ = card.with_layout(.center);
             }
         } else {
@@ -70,27 +70,53 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
                 // Production row, in the grammar the card taught. A tile exists iff the
-                // agent holds the action component — so Fish appears here the moment the
-                // rod grants the verb, and not a frame before. "Gather" is today's
-                // presentation of ActionForage.
+                // agent holds the action component — so an unlocked verb appears here the
+                // frame its tool is finished, and not before. Innate: Forage, Scavenge.
                 const acts = try el.div(ctx, center, "acts");
-                _ = acts.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "gather_t", "Gather", actions.action_forage);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Chop wood", actions.action_chop_wood);
+                _ = acts.with_size(.{ .fixed = 640 }, .fit_children)
+                    .with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(12);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "forage_t", "Forage", actions.action_forage);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionScavenge, "scav_t", "Scavenge", actions.action_scavenge);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Split wood", actions.action_chop_wood);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionCheckTraps, "traps_t", "Check traps", actions.action_check_traps);
+                _ = try t.action_tile(ctx, acts, world, e, comp.ActionHunt, "hunt_t", "Hunt", actions.action_hunt);
                 // Eating is no longer an action — the metabolism loop runs regardless;
                 // the dial below sets its rate (the standing ration/feast policy).
                 _ = try t.ration_dial(ctx, center, world, e, "ration");
             } else {
-                // The fish rod is a real Unlocker (dashed plan → solid owned; building
-                // grants the Fish verb). Sandals/Firepit remain UI mocks — clicks do
-                // nothing; the arrow still teaches their consequence category: a cheaper
-                // verb (modifier), a self-running flow (generator).
+                // The Act One capital roster, all of it real: every tile pays, starts a
+                // timed build, and grants its effect on completion. Four shelves by the
+                // grammar's three sentences (health split out of UPGRADE for the scan):
+                // UNLOCK grants a whole verb, UPGRADE works a margin on a verb or the
+                // larder, HEALTH raises the vigor ceiling, INSTALL is the flows that run
+                // themselves. A shelf's tiles dim when unaffordable — or, for Work gloves
+                // and Chainsaw, until the Hatchet gives them a verb to improve.
                 const build = try el.div(ctx, center, "build");
-                _ = build.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
-                _ = try t.fish_rod_tile(ctx, build, world, e, "rod");
-                _ = try t.capital_tile(ctx, build, "sandals", "Sandals", "-4m", "Gather -1e", true, false, null);
-                _ = try t.capital_tile(ctx, build, "firepit", "Firepit", "-12m", "+1f/day", true, false, null);
+                _ = build.with_flow(.{ .dir = .column }).with_gap(8);
+
+                const unlocks = try capital_shelf(ctx, build, "unlocks", "UNLOCK");
+                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.FishRod, "rod", "Fishing rod", "Fish");
+                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.Hatchet, "hatchet", "Hatchet", "Split wood");
+                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.WireSnares, "snares", "Wire snares", "Check traps");
+                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.AirRifle, "rifle", "Air rifle", "Hunt");
+
+                const upgrades = try capital_shelf(ctx, build, "upgrades", "UPGRADE");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Boots, "boots", "Boots", "Forage e×0.7");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.WorkGloves, "gloves", "Work gloves", "Wood e×0.75");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Bicycle, "bicycle", "Bicycle", "Roaming e×0.6");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Cookpot, "cookpot", "Cookpot", "food +1 quality");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.RootCellar, "cellar", "Root cellar", "spoil ×0.5");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Chainsaw, "chainsaw", "Chainsaw", "Wood ×2.5, -1m fuel");
+
+                const health = try capital_shelf(ctx, build, "health", "HEALTH");
+                _ = try t.capital_good_tile(ctx, health, world, e, comp.Bed, "bed", "Bed", "+2 max v");
+                _ = try t.capital_good_tile(ctx, health, world, e, comp.Pantry, "pantry", "Pantry", "+2 max v");
+                _ = try t.capital_good_tile(ctx, health, world, e, comp.MedicineChest, "medchest", "Medicine chest", "+2 max v");
+
+                const installs = try capital_shelf(ctx, build, "installs", "INSTALL");
+                _ = try t.capital_good_tile(ctx, installs, world, e, comp.GardenBed, "garden", "Garden bed", "+1.5f/day -0.1m");
+                _ = try t.capital_good_tile(ctx, installs, world, e, comp.ChickenCoop, "coop", "Chicken coop", "+2.5f/day -0.3m");
             }
         }
     }
@@ -112,4 +138,25 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     try t.log_view(ctx, footer, "feed", &ctx.res.log, content_w, 4);
 
     return root.get();
+}
+
+/// One BUILD shelf: a fixed-width dim caption beside a wrap-flowing run of capital tiles.
+/// The caption column keeps the grammar's groups aligned down the tab; the wrap keeps a
+/// long shelf inside the window instead of running off the right edge. Returns the tiles
+/// container the caller appends goods into.
+fn capital_shelf(ctx: *uic.UiCtx, parent: el.El, id: []const u8, caption: []const u8) !el.El {
+    const th = ctx.res.theme;
+    const shelf = try el.div(ctx, parent, id);
+    _ = shelf.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+
+    // Fixed-width box around the caption so every shelf's tiles start on one column.
+    const cap_box = try el.div(ctx, shelf, "capbox");
+    _ = cap_box.with_size(.{ .fixed = 76 }, .fit_children);
+    _ = (try el.text(ctx, cap_box, "cap", caption))
+        .with_style(.{ style.body, Style{ .text = th.dim } });
+
+    const tiles = try el.div(ctx, shelf, "tiles");
+    _ = tiles.with_size(.{ .fixed = 640 }, .fit_children)
+        .with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(10);
+    return tiles;
 }
