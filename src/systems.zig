@@ -20,7 +20,7 @@ pub fn advance_clock(
     q: Query(.{ comp.Vigor, With(tag.Player) }),
 ) void {
     var it = q.iter();
-    if (it.next() != null) res.time.elapsed += res.time.dt;
+    if (it.next() != null) res.sim.elapsed += res.time.dt;
 }
 
 /// Spoil the larder toward zero at `spoils` units/second — food rots, so a surplus can't
@@ -63,7 +63,7 @@ pub fn metabolize(
     res: *Resources,
     q: Query(.{ comp.Vigor, comp.InventoryFood, comp.Metabolism }),
 ) void {
-    const dt_days = res.time.dt / res_mod.secs_per_day;
+    const dt_days = res.time.dt / res.config.secs_per_day;
     var it = q.iter();
     while (it.next()) |entry| {
         const vigor, const food, const met = entry;
@@ -82,10 +82,10 @@ pub fn metabolize(
         // Edge-triggered log lines — once, on the crossing frame. The vigor thresholds
         // only ever cross *downward* here while starving (eating raises), so these read
         // as hunger, not labor fatigue.
-        if (food_before > 0 and food.v <= 0) res.log.push(.warn, "Your food has run out.");
+        if (food_before > 0 and food.v <= 0) res.sim.log.push(.warn, "Your food has run out.");
         const frac = vigor.v / vigor.max;
-        if (frac_before >= 0.35 and frac < 0.35) res.log.push(.warn, "You feel weak with hunger.");
-        if (frac_before >= 0.12 and frac < 0.12) res.log.push(.danger, "You are starving.");
+        if (frac_before >= 0.35 and frac < 0.35) res.sim.log.push(.warn, "You feel weak with hunger.");
+        if (frac_before >= 0.12 and frac < 0.12) res.sim.log.push(.danger, "You are starving.");
     }
 }
 
@@ -155,7 +155,7 @@ pub fn mark_dead(
         const e, const vigor = entry;
         if (vigor.v <= 0 and !w.has(e, tag.Dead)) {
             w.add(e, tag.Dead{});
-            res.log.push(.danger, "You perished, cold and starved.");
+            res.sim.log.push(.danger, "You perished, cold and starved.");
         }
     }
 }
@@ -180,43 +180,45 @@ pub fn despawn_dead(
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the fields `metabolize` touches (`time`, `log`, `game`)
-/// initialized — the SDL-backed fields stay undefined and untouched.
+/// A Resources with only the groups `metabolize` touches (`time`, `sim`, `config`)
+/// initialized — `platform` stays undefined and untouched.
 fn test_res(dt: f32) Resources {
     var res: Resources = undefined;
     res.time = .{ .dt = dt };
-    res.log = .{};
-    res.game = .{};
+    res.sim = .{};
+    res.config = .{};
     return res;
 }
 
 test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     var w = World.init();
-    var res = test_res(res_mod.hours_to_secs(2)); // 2h per tick
+    var res = test_res(0);
+    res.time.dt = res_mod.hours_to_secs(2, res.config.secs_per_day); // 2h per tick
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryMaterial{ .v = 0 },
         comp.ActionForage{}, // 4h of work
-        comp.Busy{ .doing = .forage, .total = res_mod.hours_to_secs(4), .remaining = res_mod.hours_to_secs(4), .quality = 1 },
+        comp.Busy{ .doing = .forage, .total = res_mod.hours_to_secs(4, res.config.secs_per_day), .remaining = res_mod.hours_to_secs(4, res.config.secs_per_day), .quality = 1 },
     });
 
     ecs.run(&w, &res, resolve_busy); // 2h in — still working
     try std.testing.expect(w.has(e, comp.Busy));
-    try std.testing.expectEqual(@as(usize, 0), res.log.count);
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
     ecs.run(&w, &res, resolve_busy); // 4h — done: deposit + receipt, Busy gone
     try std.testing.expect(!w.has(e, comp.Busy));
     try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0);
-    try std.testing.expectEqual(@as(usize, 1), res.log.count);
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 
     ecs.run(&w, &res, resolve_busy); // idle tick — nothing to resolve
-    try std.testing.expectEqual(@as(usize, 1), res.log.count);
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
 test "metabolize eats continuously, converting food to vigor (clamped at max)" {
     var w = World.init();
-    var res = test_res(res_mod.secs_per_day); // one full day per tick
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day; // one full day per tick
     const e = w.spawn(.{
         comp.Vigor{ .v = 5, .max = 10 },
         comp.InventoryFood{ .v = 2, .quality = 1, .spoils = 0 },
@@ -226,12 +228,13 @@ test "metabolize eats continuously, converting food to vigor (clamped at max)" {
     ecs.run(&w, &res, metabolize);
     try std.testing.expectEqual(@as(f32, 0.5), w.get(e, comp.InventoryFood).?.v); // 2 − 1.5
     try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // 5 + 1.5·2·q1
-    try std.testing.expectEqual(@as(usize, 0), res.log.count); // nothing crossed
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing crossed
 }
 
 test "metabolize at feast burns the larder dry and logs the crossing" {
     var w = World.init();
-    var res = test_res(res_mod.secs_per_day);
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day;
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 2, .quality = 1, .spoils = 0 },
@@ -241,12 +244,13 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
     ecs.run(&w, &res, metabolize);
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v);
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // clamped at max
-    try std.testing.expectEqual(@as(usize, 1), res.log.count); // "Your food has run out."
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // "Your food has run out."
 }
 
 test "metabolize starves vigor down on an empty larder, logging the thresholds" {
     var w = World.init();
-    var res = test_res(res_mod.secs_per_day);
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day;
     const e = w.spawn(.{
         comp.Vigor{ .v = 5, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
@@ -255,9 +259,9 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
 
     ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day): crosses weak (3.5) and starving (1.2)
     try std.testing.expectEqual(@as(f32, 1), w.get(e, comp.Vigor).?.v);
-    try std.testing.expectEqual(@as(usize, 2), res.log.count);
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 
     ecs.run(&w, &res, metabolize); // 1 → 0 (clamped), no re-logging — mark_dead's turn
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.Vigor).?.v);
-    try std.testing.expectEqual(@as(usize, 2), res.log.count);
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 }

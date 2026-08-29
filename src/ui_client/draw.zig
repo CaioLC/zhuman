@@ -16,7 +16,7 @@ const Node = cb.Node;
 /// next tree isn't cropped by this one's leftover clip rect.
 pub fn draw_tree(u: *UiCtx, root: *Node) void {
     draw_node(u, root, null);
-    u.res.renderer.setClipRect(null) catch {};
+    u.res.platform.renderer.setClipRect(null) catch {};
 }
 
 /// Recursive pre-order paint (a parent draws under its children). `clip` is the
@@ -25,7 +25,7 @@ pub fn draw_tree(u: *UiCtx, root: *Node) void {
 /// Per node, features paint in `list` order (fill → image → svg → text → outline — the
 /// z-order); each set aspect's optional payload is unwrapped and handed to its `draw`.
 fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect) void {
-    u.res.renderer.setClipRect(paint.irect(clip)) catch {};
+    u.res.platform.renderer.setClipRect(paint.irect(clip)) catch {};
 
     inline for (feat.list) |F| {
         if (@field(node.render_data, F.name)) |payload| F.draw(u, node, payload);

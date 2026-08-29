@@ -32,11 +32,11 @@ pub fn attach(ctx: *UiCtx, node: *Node, path: [:0]const u8, px: f32) !void {
     const k = key_of(path, px);
     if (st.src_key != k) {
         st.deinit(); // free the previous rasterization (if any) before replacing it
-        st.tex = sdl.image.loadTexture(ctx.res.renderer.*, path) catch null;
+        st.tex = sdl.image.loadTexture(ctx.res.platform.renderer.*, path) catch null;
         st.src_key = k;
     }
     node.size = ui.features.Size.initContent(px, px);
-    node.render_data.svg = ctx.res.theme.fg;
+    node.render_data.svg = ctx.res.view.theme.fg;
 }
 
 /// Blit the cached raster over the node's content box, tinted `c`.
@@ -45,7 +45,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const r = paint.content(node) orelse return;
     tex.setColorMod(c.r, c.g, c.b) catch {};
     tex.setAlphaMod(c.a) catch {};
-    u.res.renderer.renderTexture(tex, null, paint.frect(r)) catch return;
+    u.res.platform.renderer.renderTexture(tex, null, paint.frect(r)) catch return;
 }
 
 /// Invalidation key: the source path folded with the target size. A change in either

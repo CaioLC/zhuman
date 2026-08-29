@@ -23,7 +23,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
     st.update(text);
     st.px = font.default_px; // default; `style.apply` overrides + re-measures for a heading
-    const tw, const th, const baseline = try ctx.res.font.measureBaseline(text, st.px);
+    const tw, const th, const baseline = try ctx.res.platform.font.measureBaseline(text, st.px);
     var size = node.size;
     size.w = .content;
     size.h = .content;
@@ -31,7 +31,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     size.data_height = @floatFromInt(th);
     size.baseline = baseline; // text baseline (from bottom) → cross-axis reference for rows
     node.size = size;
-    node.render_data.text = ctx.res.theme.fg; // present ⟹ walk blits it; caller may recolor
+    node.render_data.text = ctx.res.view.theme.fg; // present ⟹ walk blits it; caller may recolor
 }
 
 /// Blit the node's cached text in `c` over its content box. Rasterizes each frame (a
@@ -43,10 +43,10 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
 
     // Render at the size stored on the state (default, or a heading size from `apply`), so
     // glyphs fill the content box that was measured at the same size.
-    const f = u.res.font.at(st.px) catch return;
+    const f = u.res.platform.font.at(st.px) catch return;
     var surface = f.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
-    const texture = u.res.renderer.createTextureFromSurface(surface) catch return;
+    const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
     defer texture.deinit();
-    u.res.renderer.renderTexture(texture, null, paint.frect(r)) catch return;
+    u.res.platform.renderer.renderTexture(texture, null, paint.frect(r)) catch return;
 }

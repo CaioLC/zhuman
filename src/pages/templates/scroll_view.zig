@@ -32,7 +32,7 @@ pub const ScrollView = struct {
 };
 
 pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: f32) !ScrollView {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const outer = try el.div(ctx, parent, id);
     _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);

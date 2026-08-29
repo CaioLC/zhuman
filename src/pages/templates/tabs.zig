@@ -23,7 +23,7 @@ const TabsState = uic.UiState.TabsState;
 pub const Tabs = struct { el: El, active: usize };
 
 pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8) !Tabs {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const bar = try el.div(ctx, parent, id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(10);

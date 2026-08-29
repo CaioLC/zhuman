@@ -105,7 +105,7 @@ fn child(ctx: *UiCtx, parent: El, id: []const u8) !*Node {
 /// A fullscreen root sized to the live window — the anchor box a screen positions against.
 /// A root has no parent and stays non-relative (`.top_left`). Replaces the old `ui_root`.
 pub fn root(ctx: *UiCtx, id: []const u8) !El {
-    const ww, const wh = try ctx.res.window.getSize();
+    const ww, const wh = try ctx.res.platform.window.getSize();
     const node = try Node.create(ctx.arena, id);
     // A root must place *itself*: `Node.init` defaults `.relative`, which errors the
     // placement pass on a parentless node (`NoInfoForChildren`) — the gameover screen

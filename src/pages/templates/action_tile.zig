@@ -46,7 +46,7 @@ pub fn tile(
     can: bool,
     progress: ?f32,
 ) !Tile {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
     const running = progress != null;
 
     const box = try el.div(ctx, parent, id);

@@ -14,6 +14,6 @@ pub const Payload = ?cb.Color;
 /// Solid rect in `c` spanning the node's full resolved box.
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const r = paint.full(node) orelse return;
-    u.res.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    u.res.renderer.renderFillRect(paint.frect(r)) catch return;
+    u.res.platform.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
+    u.res.platform.renderer.renderFillRect(paint.frect(r)) catch return;
 }

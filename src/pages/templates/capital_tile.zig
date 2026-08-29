@@ -31,7 +31,7 @@ pub fn capital_tile(
     owned: bool,
     progress: ?f32,
 ) !Tile {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
     const building = progress != null;
 
     const box = try el.div(ctx, parent, id);

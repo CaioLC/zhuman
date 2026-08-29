@@ -30,7 +30,7 @@ const dash_gap: f32 = 4;
 /// Stroke the node's box per `o` (color + width + style), inward.
 pub fn draw(u: *UiCtx, node: *Node, o: cb.Outline) void {
     const r = paint.full(node) orelse return;
-    const rnd = u.res.renderer;
+    const rnd = u.res.platform.renderer;
     rnd.setDrawColor(.{ .r = o.color.r, .g = o.color.g, .b = o.color.b, .a = o.color.a }) catch return;
 
     const w = @max(o.width, 1);

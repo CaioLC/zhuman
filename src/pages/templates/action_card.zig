@@ -24,7 +24,7 @@ const info_mod = @import("./action_info.zig");
 
 /// One dim-label / fg-value info line at body size.
 fn info(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, value: []const u8) !void {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
     const line = try el.div(ctx, parent, id);
     _ = line.with_flow(.{ .dir = .row }).with_gap(8);
     _ = (try el.text(ctx, line, "l", label)).with_style(.{ style.body, Style{ .text = th.dim } });

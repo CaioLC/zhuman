@@ -22,7 +22,7 @@ const Node = uic.Node;
 const t = @import("./templates/root.zig");
 
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
     var buf: [64]u8 = undefined;
 
     const root = try el.root(ctx, "play");
@@ -58,7 +58,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         // action families — ACTIONS (production: flows you repeat) and BUILD (capital:
         // pay once, own a thing that changes which flows exist). The tab switch itself
         // enacts the now-vs-later margin; selection persists in the strip's TabsState.
-        if (!ctx.res.game.tutorial_done) {
+        if (!ctx.res.sim.tutorial_done) {
             if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Forage", actions.action_forage)) |card| {
                 _ = card.with_layout(.center);
             }
@@ -125,7 +125,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     _ = run_line.with_layout(.bottom_right).with_flow(.{ .dir = .row }).with_gap(6);
     _ = (try el.text(ctx, run_line, "act", "Act I ·"))
         .with_style(.{ style.h3, Style{ .text = th.dim } });
-    const day = 1 + @as(u64, @intFromFloat(ctx.res.time.elapsed / ha.res.secs_per_day));
+    const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
     const day_txt = std.fmt.bufPrint(&buf, "Day {d}", .{day}) catch "?";
     _ = (try el.text(ctx, run_line, "day", day_txt))
         .with_style(.{ style.h3, Style{ .text = th.fg } });
@@ -135,7 +135,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     // bottom edge of the content box regardless of what the body sections grow into.
     const footer = try el.div(ctx, root, "footer");
     _ = footer.with_layout(.bottom_left);
-    try t.log_view(ctx, footer, "feed", &ctx.res.log, content_w, 4);
+    try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w, 4);
 
     return root.get();
 }
@@ -145,7 +145,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
 /// long shelf inside the window instead of running off the right edge. Returns the tiles
 /// container the caller appends goods into.
 fn capital_shelf(ctx: *uic.UiCtx, parent: el.El, id: []const u8, caption: []const u8) !el.El {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
     const shelf = try el.div(ctx, parent, id);
     _ = shelf.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
 

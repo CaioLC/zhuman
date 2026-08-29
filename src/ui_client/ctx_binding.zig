@@ -116,11 +116,11 @@ pub const Outline = struct {
 };
 
 /// Name one cell of the shared icon sheet by grid (col, row). The single place that
-/// knows the sheet lives on `res.icons` and how big a cell is — callers reference a
+/// knows the sheet lives on `res.platform.icons` and how big a cell is — callers reference a
 /// cell, not a texture+rect, so the spritesheet isn't threaded through every icon.
 pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
     return .{
-        .texture = res.icons,
+        .texture = res.platform.icons,
         .src = .{ .x = col * icon_cell, .y = row * icon_cell, .w = icon_cell, .h = icon_cell },
     };
 }

@@ -32,5 +32,5 @@ pub fn attach_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
 /// Blit `sprite` (whole texture, or its `src` cell) into the node's content box.
 pub fn draw(u: *UiCtx, node: *Node, sprite: Sprite) void {
     const r = paint.content(node) orelse return;
-    u.res.renderer.renderTexture(sprite.texture, sprite.src, paint.frect(r)) catch return;
+    u.res.platform.renderer.renderTexture(sprite.texture, sprite.src, paint.frect(r)) catch return;
 }

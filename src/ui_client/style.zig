@@ -146,7 +146,7 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         if (s.font) |px| {
             const st = node.state(ctx, cb.UiState.TextState);
             if (st.text()) |str| {
-                const tw, const th, const baseline = ctx.res.font.measureBaseline(str, px) catch return;
+                const tw, const th, const baseline = ctx.res.platform.font.measureBaseline(str, px) catch return;
                 node.size.data_width = @floatFromInt(tw);
                 node.size.data_height = @floatFromInt(th);
                 node.size.baseline = baseline; // re-measure the baseline too, so a heading row still aligns

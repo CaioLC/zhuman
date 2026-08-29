@@ -38,12 +38,12 @@ fn log_tone_color(t: Theme, tone: Tone) Color {
 /// font backend errors — roughly right, and only cosmetic).
 fn line_height(ctx: *UiCtx) f32 {
     const px = style.body.font.?;
-    _, const h = ctx.res.font.measure("Ag", px) catch return px;
+    _, const h = ctx.res.platform.font.measure("Ag", px) catch return px;
     return @floatFromInt(h);
 }
 
 pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const flines: f32 = @floatFromInt(lines);
     const height = flines * line_height(ctx) + (flines - 1) * sv.content_gap;

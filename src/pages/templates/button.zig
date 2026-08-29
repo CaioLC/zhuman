@@ -2,7 +2,7 @@
 //! chrome. The exemplar for the shelf: a *template* is a game-specific (theme-aware)
 //! composition built entirely from the `ui_client` foundation — a content leaf
 //! (`el.text`) plus style/placement composed via the fluent `El` handle. It owns none of
-//! that machinery; it just arranges it and picks the colors from `res.theme` + interaction.
+//! that machinery; it just arranges it and picks the colors from `res.view.theme` + interaction.
 //!
 //! The chrome (dim if disabled, accent on hover, else fg) is computed inline off the outer
 //! box's own interaction slot. Returns the outer `El` (shelf convention — a template hands
@@ -19,7 +19,7 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enabled: bool) !El {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     // Outer clickable box: flows, lays its label out horizontally, and hugs it (fit).
     // No content of its own — just the outline chrome.

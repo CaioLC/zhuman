@@ -165,7 +165,6 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
 /// the good's prerequisite verb, or unaffordable — same gates as labor (energy strict,
 /// vigor 0 is death; materials may be spent to exactly 0). Dying mid-build loses the work.
 pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    _ = res; // kept for the shared begin-signature; the receipt logs at completion
     if (w.has(e, GoodT)) return; // one per agent (SparseSet.add doesn't guard dupes)
     if (w.has(e, comp.Busy)) return; // one body, one act
     if (!prereq_met(w, e, GoodT)) return; // nothing to modify yet
@@ -175,7 +174,7 @@ pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) 
 
     vigor.v -= cost.energy;
     stock.v -= cost.materials;
-    const total = res_mod.hours_to_secs(cost.hours);
+    const total = res_mod.hours_to_secs(cost.hours, res.config.secs_per_day);
     // quality is a labor concept — a build either completes or it doesn't, so lock 1.
     w.add(e, comp.Busy{ .doing = doing_of_good(GoodT), .total = total, .remaining = total, .quality = 1 });
 }
@@ -185,7 +184,7 @@ pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) 
 pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
     w.add(e, GoodT{});
     grant(w, e, GoodT);
-    res.log.push(.good, built_msg(GoodT));
+    res.sim.log.push(.good, built_msg(GoodT));
 }
 
 /// Break a good: its effect leaves with it. Nothing calls this yet (no durability);
@@ -196,7 +195,7 @@ pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) v
     w.remove(e, GoodT);
     var buf: [64]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, "Your {s} broke.", .{good_name(GoodT)}) catch "Something of yours broke.";
-    res.log.push(.warn, msg);
+    res.sim.log.push(.warn, msg);
 }
 
 /// The good's display name, lowercase — used in the break line and by the BUILD tiles.
@@ -348,7 +347,7 @@ pub const generator_bundle = .{
 /// strict (a generator must never drain its keeper to death), materials to exactly 0.
 fn run_generator(w: *World, e: Entity, res: *Resources, comptime GenT: type) void {
     const gen, const vigor, const stock, const food = ecs.getMany(w, e, .{ GenT, comp.Vigor, comp.InventoryMaterial, comp.InventoryFood });
-    const dt_days = res.time.dt / res_mod.secs_per_day;
+    const dt_days = res.time.dt / res.config.secs_per_day;
     const energy = gen.upkeep.energy * dt_days;
     const materials = gen.upkeep.materials * dt_days;
     if (energy >= vigor.v or materials > stock.v) {
@@ -376,14 +375,13 @@ pub fn run_generators(w: *World, res: *Resources) void {
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the fields the build/generator paths touch (`prng`, `log`,
-/// `game`, `time`) initialized — the SDL-backed fields stay undefined and untouched.
+/// A Resources with only the groups the build/generator paths touch (`sim`, `time`,
+/// `config`) initialized — `platform` stays undefined and untouched.
 fn test_res() Resources {
     var res: Resources = undefined;
-    res.prng = std.Random.DefaultPrng.init(7);
-    res.log = .{};
-    res.game = .{};
+    res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
     res.time = .{ .dt = 0 };
+    res.config = .{};
     return res;
 }
 
@@ -413,12 +411,12 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // 8 − 8
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.build_fish_rod, b.doing);
-    try std.testing.expectEqual(res_mod.hours_to_secs(12), b.total);
+    try std.testing.expectEqual(res_mod.hours_to_secs(12, res.config.secs_per_day), b.total);
 
     finish_fish_rod(&w, e, &res);
     try std.testing.expect(w.has(e, comp.FishRod));
     try std.testing.expect(w.has(e, comp.ActionFish)); // the unlock
-    try std.testing.expectEqual(@as(usize, 1), res.log.count);
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
 test "build_fish_rod refuses when unaffordable, owned, or busy" {
@@ -571,7 +569,7 @@ test "cookpot and root cellar work the larder, symmetrically" {
 test "a generator pays its upkeep and deposits its flow, per day" {
     var w = World.init();
     var res = test_res();
-    res.time = .{ .dt = res_mod.secs_per_day }; // one full day per tick
+    res.time = .{ .dt = res.config.secs_per_day }; // one full day per tick
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },

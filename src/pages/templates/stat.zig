@@ -13,7 +13,7 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 pub fn stat(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, value: []const u8) !El {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const line = try el.div(ctx, parent, id);
     _ = line.with_flow(.{ .dir = .row }).with_gap(8);

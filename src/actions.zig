@@ -88,12 +88,12 @@ fn begin_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: type) vo
     vigor.v -= act.requires.energy;
     stock.v -= act.requires.materials;
     if (frac_before >= weak_frac and vigor.v / vigor.max < weak_frac)
-        res.log.push(.warn, "You feel weak. Work will yield less.");
+        res.sim.log.push(.warn, "You feel weak. Work will yield less.");
 
-    const total = res_mod.hours_to_secs(act.requires.hours);
+    const total = res_mod.hours_to_secs(act.requires.hours, res.config.secs_per_day);
     w.add(e, comp.Busy{ .doing = doing_of(ActionT), .total = total, .remaining = total, .quality = quality });
 
-    res.game.tutorial_done = true; // the first begun action ends the teaching presentation
+    res.sim.tutorial_done = true; // the first begun action ends the teaching presentation
 }
 
 /// The **finish** half: draw the yield from `dist.sample` at the quality locked at begin
@@ -120,7 +120,7 @@ pub fn finish_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: typ
         std.fmt.bufPrint(&buf, "You gathered {d:.0} materials.", .{rm}) catch return
     else
         "You gathered nothing.";
-    res.log.push(if (rf > 0 or rm > 0) .normal else .dim, msg);
+    res.sim.log.push(if (rf > 0 or rm > 0) .normal else .dim, msg);
 }
 
 pub fn action_forage(
@@ -173,13 +173,13 @@ pub fn action_hunt(
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the fields `gather` touches (`prng`, `log`, `game`)
-/// initialized — the SDL-backed fields stay undefined and untouched.
+/// A Resources with only the groups the labor path touches (`sim`, `config`)
+/// initialized — `platform` stays undefined and untouched. The prng is seeded
+/// fixed so a test's draws are reproducible.
 fn test_res() Resources {
     var res: Resources = undefined;
-    res.prng = std.Random.DefaultPrng.init(42);
-    res.log = .{};
-    res.game = .{};
+    res.sim = .{ .prng = std.Random.DefaultPrng.init(42) };
+    res.config = .{};
     return res;
 }
 
@@ -201,11 +201,11 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // 10 − 2 energy
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.forage, b.doing);
-    try std.testing.expectEqual(res_mod.hours_to_secs(4), b.total); // Forage's 4h
+    try std.testing.expectEqual(res_mod.hours_to_secs(4, res.config.secs_per_day), b.total); // Forage's 4h
     try std.testing.expectEqual(@as(f32, 1.0), b.quality); // locked at full strength
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v); // no deposit
-    try std.testing.expectEqual(@as(usize, 0), res.log.count); // no receipt yet
-    try std.testing.expect(res.game.tutorial_done); // the first begun action condenses
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // no receipt yet
+    try std.testing.expect(res.sim.tutorial_done); // the first begun action condenses
 
     // A second begin while busy must refuse, leaving no trace.
     action_forage(&w, e, &res);
@@ -213,7 +213,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
 
     finish_labor(&w, e, &res, comp.ActionForage, b.quality);
     try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0); // yield deposited (≥ 0 draw)
-    try std.testing.expectEqual(@as(usize, 1), res.log.count); // the receipt line
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the receipt line
 }
 
 test "yield_factor: two stable levels split at the WEARY threshold" {
@@ -237,7 +237,7 @@ test "begin warns once when its own toll crosses into weakness, and locks pre-pa
 
     action_forage(&w, e, &res);
     try std.testing.expectEqual(@as(f32, 2), w.get(e, comp.Vigor).?.v);
-    try std.testing.expectEqual(@as(usize, 1), res.log.count); // the weakness warning
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the weakness warning
     // Quality was judged before paying: 40% was not weak, so the locked factor is 1.0.
     try std.testing.expectEqual(@as(f32, 1.0), w.get(e, comp.Busy).?.quality);
 }
@@ -256,6 +256,6 @@ test "begin refuses when energy would hit zero, leaving no trace" {
 
     try std.testing.expectEqual(@as(f32, 2), w.get(e, comp.Vigor).?.v); // unpaid
     try std.testing.expect(!w.has(e, comp.Busy)); // no work started
-    try std.testing.expectEqual(@as(usize, 0), res.log.count); // no lines
-    try std.testing.expect(!res.game.tutorial_done); // a refused action teaches nothing
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // no lines
+    try std.testing.expect(!res.sim.tutorial_done); // a refused action teaches nothing
 }

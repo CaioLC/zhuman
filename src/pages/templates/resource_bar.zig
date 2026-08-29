@@ -37,7 +37,7 @@ fn chip(ctx: *UiCtx, parent: El, id: []const u8, short: []const u8, long: []cons
 /// A dim divider between chips.
 fn sep(ctx: *UiCtx, parent: El, id: []const u8) !void {
     _ = (try el.text(ctx, parent, id, "|"))
-        .with_style(.{ style.h3, Style{ .text = ctx.res.theme.dim } });
+        .with_style(.{ style.h3, Style{ .text = ctx.res.view.theme.dim } });
 }
 
 /// The V/F/M row. Returns the bar `El` (shelf convention) — the caller places it.
@@ -49,7 +49,7 @@ pub fn resource_bar(
     food: *const comp.InventoryFood,
     materials: *const comp.InventoryMaterial,
 ) !El {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const bar = try el.div(ctx, parent, id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(10);

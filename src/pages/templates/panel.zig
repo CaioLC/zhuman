@@ -13,7 +13,7 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 pub fn panel(ctx: *UiCtx, parent: El, id: []const u8, title: []const u8) !El {
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const outer = try el.div(ctx, parent, id);
     _ = outer.with_flow(.{ .dir = .column }).with_size(.fit_children, .fit_children)

@@ -29,7 +29,7 @@ const options = [_]Option{
 pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !?El {
     const met = world.get(e, comp.Metabolism) orelse return null;
     const food = world.get(e, comp.InventoryFood);
-    const th = ctx.res.theme;
+    const th = ctx.res.view.theme;
 
     const bar = try el.div(ctx, parent, id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(8);

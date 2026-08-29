@@ -66,7 +66,7 @@ const App = struct {
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
-        self.resources.log.push(.dim, "You wake alone. Cold. Hungry.");
+        self.resources.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -175,7 +175,7 @@ pub fn main() !void {
 
         // Render Stage
         // window — cleared to the theme's own background, so it shifts cold/warm too
-        const bg = app.resources.theme.bg;
+        const bg = app.resources.view.theme.bg;
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
