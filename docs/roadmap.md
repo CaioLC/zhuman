@@ -27,7 +27,8 @@ Both have to come back before Act II can start:
 - **Balance the metabolism numbers.** Every rate is a first guess: `base_rate` 1.5 food/day at
   normal ration, the ½× / 1× / 2× ration multipliers, starvation at 4 vigor/day, spoilage at
   0.05/s, the ×0.7 weary penalty below 35% vigor, and the per-action hour costs (Forage 4h,
-  Fish 5h, Chop 6h, rod build 12h). Playtesting retunes them.
+  Fish 5h, Chop 6h, rod build 12h). Playtesting retunes them — the global rates are
+  `res.Config` fields, so retuning is a field edit, not a hunt across three files.
 - **Capital decay** — durable goods should degrade on a slow trickle and need maintenance, the
   way food spoils fast. Nothing wears today; goods are permanent once built.
 - **Cancelling a running act** — deliberately not built. A `Busy` runs to completion or dies
