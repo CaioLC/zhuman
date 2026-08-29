@@ -33,22 +33,19 @@ pub const actions_bundle = .{
 // — `systems.metabolize` — with a player-set ration rate. Eating is no longer an action.)
 
 // --- labor quality: two levels, one constant step ---
-// Below `weak_frac` of max vigor an agent is *weak* and its labor yields scale by
-// `weak_factor`. Deliberately NOT a linear slide (that was built once and reverted): a
-// constant step keeps the advertised band stable — it only changes at the threshold
-// crossing — and the threshold reuses `actor_status`'s WEARY line, which the header's V
-// chip already tints warn, so the state is announced before the band changes. Both the
-// sim (`gather`) and the tiles' displayed bands call `yield_factor`, so the promise and
-// the draw can never drift.
+// An agent that isn't `.alive` yields `Config.weary_yield`; one that is yields full.
+// A constant step, not a linear slide: it keeps the advertised band stable — the band
+// only moves at a threshold crossing — and the crossing is the same one that flips the
+// condition word to WEARY and tints the V chip warn, so the state is announced before
+// the band changes. (The linear slide was built once and reverted: constant band churn,
+// and it felt bad.) Both the sim (`gather`) and the tiles' displayed bands call
+// `yield_factor`, so the promise and the draw can never drift.
 
-/// Vigor fraction below which labor weakens (== the WEARY threshold).
-pub const weak_frac: f32 = 0.35;
-/// Yield multiplier while weak.
-pub const weak_factor: f32 = 0.7;
-
-/// The current yield multiplier for an agent's vigor — 1.0, or `weak_factor` when weak.
-pub fn yield_factor(vigor: *const comp.Vigor) f32 {
-    return if (vigor.v / vigor.max < weak_frac) weak_factor else 1.0;
+/// The current yield multiplier for an agent's vigor — 1.0 while `.alive`, else
+/// `Config.weary_yield`. The thresholds live on `Config` (`res.zig`) so the sim, the
+/// condition word and the vigor chip can't drift apart.
+pub fn yield_factor(vigor: *const comp.Vigor, cfg: res_mod.Config) f32 {
+    return cfg.yield_of(cfg.condition(vigor.v / vigor.max));
 }
 
 /// The runtime name of a labor action type — what a `Busy` can store so `resolve_busy`
@@ -80,14 +77,15 @@ fn begin_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: type) vo
         return; // cannot do the action
     }
 
-    const quality = yield_factor(vigor);
+    const quality = yield_factor(vigor, res.config);
     const frac_before = vigor.v / vigor.max;
 
     // Pay the price upfront. The strict energy gate above keeps vigor > 0, so labor alone
     // can't kill — running the body to death takes starving it of the refill.
     vigor.v -= act.requires.energy;
     stock.v -= act.requires.materials;
-    if (frac_before >= weak_frac and vigor.v / vigor.max < weak_frac)
+    if (res.config.condition(frac_before) == .alive and
+        res.config.condition(vigor.v / vigor.max) != .alive)
         res.sim.log.push(.warn, "You feel weak. Work will yield less.");
 
     const total = res_mod.hours_to_secs(act.requires.hours, res.config.secs_per_day);
@@ -217,12 +215,13 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
 }
 
 test "yield_factor: two stable levels split at the WEARY threshold" {
+    const cfg = res_mod.Config{};
     var v = comp.Vigor{ .v = 10, .max = 10 };
-    try std.testing.expectEqual(@as(f32, 1.0), yield_factor(&v));
+    try std.testing.expectEqual(@as(f32, 1.0), yield_factor(&v, cfg));
     v.v = 3.5; // exactly the threshold — not yet weak (strictly below crosses)
-    try std.testing.expectEqual(@as(f32, 1.0), yield_factor(&v));
+    try std.testing.expectEqual(@as(f32, 1.0), yield_factor(&v, cfg));
     v.v = 3.4;
-    try std.testing.expectEqual(weak_factor, yield_factor(&v));
+    try std.testing.expectEqual(cfg.weary_yield, yield_factor(&v, cfg));
 }
 
 test "begin warns once when its own toll crosses into weakness, and locks pre-pay quality" {

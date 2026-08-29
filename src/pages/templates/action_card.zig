@@ -56,7 +56,7 @@ pub fn action_card(
     // Dominant yield (food or materials, by mean) — the shared pick (`action_info`),
     // scaled by the same two-level quality factor `gather` draws with.
     const dom = info_mod.dominant(act.yields);
-    const quality = ha.actions.yield_factor(vigor);
+    const quality = ha.actions.yield_factor(vigor, ctx.res.config);
 
     var buf: [48]u8 = undefined; // one line at a time — el.text copies at build
     const cost_txt = if (act.requires.materials > 0)

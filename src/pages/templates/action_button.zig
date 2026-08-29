@@ -36,7 +36,7 @@ pub fn action_button(
     // Show the dominant yield's p10–p90 band — the shared pick (`action_info`), scaled
     // by the same two-level quality factor `gather` draws with.
     const dom = info.dominant(act.yields);
-    const quality = ha.actions.yield_factor(vigor);
+    const quality = ha.actions.yield_factor(vigor, ctx.res.config);
 
     var rbuf: [24]u8 = undefined;
     const lo = @round(dom.band.p10 * quality);

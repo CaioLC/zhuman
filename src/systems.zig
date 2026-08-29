@@ -37,16 +37,13 @@ pub fn update_food(
     }
 }
 
-/// Vigor drained by starvation once the larder is empty, in vigor/day. ~2.5 days from a
-/// full tank to death — the countdown that makes rationing a real decision.
-const starve_per_day: f32 = 4.0;
-
-/// Per-day food consumption multiplier for the player-set eating policy.
-fn ration_mult(s: comp.Metabolism.Setting) f32 {
+/// Per-day food consumption multiplier for the player-set eating policy. `.normal` is
+/// 1.0 by definition — `Metabolism.base_rate` already *is* the normal rate.
+fn ration_mult(cfg: res_mod.Config, s: comp.Metabolism.Setting) f32 {
     return switch (s) {
-        .ration => 0.5,
+        .ration => cfg.ration_scale,
         .normal => 1.0,
-        .feast => 2.0,
+        .feast => cfg.feast_scale,
     };
 }
 
@@ -71,12 +68,12 @@ pub fn metabolize(
         const frac_before = vigor.v / vigor.max;
 
         if (food.v > 0) {
-            const want = met.base_rate * ration_mult(met.setting) * dt_days;
+            const want = met.base_rate * ration_mult(res.config, met.setting) * dt_days;
             const eaten = @min(food.v, want);
             food.v -= eaten;
-            vigor.v = @min(vigor.v + eaten * 2.0 * @as(f32, @floatFromInt(food.quality)), vigor.max);
+            vigor.v = @min(vigor.v + eaten * res.config.vigor_per_food * @as(f32, @floatFromInt(food.quality)), vigor.max);
         } else {
-            vigor.v = @max(0, vigor.v - starve_per_day * dt_days);
+            vigor.v = @max(0, vigor.v - res.config.starve_per_day * dt_days);
         }
 
         // Edge-triggered log lines — once, on the crossing frame. The vigor thresholds
@@ -84,8 +81,10 @@ pub fn metabolize(
         // as hunger, not labor fatigue.
         if (food_before > 0 and food.v <= 0) res.sim.log.push(.warn, "Your food has run out.");
         const frac = vigor.v / vigor.max;
-        if (frac_before >= 0.35 and frac < 0.35) res.sim.log.push(.warn, "You feel weak with hunger.");
-        if (frac_before >= 0.12 and frac < 0.12) res.sim.log.push(.danger, "You are starving.");
+        const was = res.config.condition(frac_before);
+        const now = res.config.condition(frac);
+        if (was == .alive and now != .alive) res.sim.log.push(.warn, "You feel weak with hunger.");
+        if (was != .spent and now == .spent) res.sim.log.push(.danger, "You are starving.");
     }
 }
 

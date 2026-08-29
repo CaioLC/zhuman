@@ -44,14 +44,55 @@ pub const Input = struct {
     wheel_y: f32 = 0,
 };
 
+/// How tired an agent is, in bands. One vocabulary for the condition word, the vigor
+/// chip's color, the "you feel weak" log lines and labor's yield penalty — they all key
+/// off the same two thresholds, so they read them through `Config.condition` rather than
+/// each carrying its own copy of the numbers.
+pub const Condition = enum { alive, weary, spent };
+
 /// Tuning knobs. Never written at runtime, and deliberately **not** part of `Sim`, so
-/// starting a fresh run doesn't discard a setting the player chose.
+/// starting a fresh run doesn't discard a setting the player chose. Every value here is
+/// a first guess awaiting playtesting — which is why they're runtime fields rather than
+/// consts scattered across `actions.zig`, `systems.zig` and the templates.
 pub const Config = struct {
     /// Game-seconds per in-game day — the tempo every per-day rate (metabolism,
     /// starvation, spoilage-as-displayed) is expressed against, and the day counter's
     /// divisor. Lives here (not `main.zig`) so library systems can convert per-day
     /// rates to per-`dt` amounts.
     secs_per_day: f32 = 20,
+
+    // —— condition bands ——
+    /// Vigor fraction at or below which an agent is SPENT.
+    spent_frac: f32 = 0.12,
+    /// Vigor fraction below which an agent is WEARY.
+    weary_frac: f32 = 0.35,
+    /// Yield multiplier once an agent is no longer `.alive`. A constant step, not a
+    /// linear slide — the slide was built once and reverted (band churn, felt bad).
+    weary_yield: f32 = 0.7,
+
+    // —— metabolism ——
+    /// Vigor drained per day once the larder is empty. ~2.5 days from a full tank to
+    /// death — the countdown that makes rationing a real decision.
+    starve_per_day: f32 = 4.0,
+    /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
+    vigor_per_food: f32 = 2.0,
+    /// Per-day consumption multipliers for the two off-normal ration settings. `normal`
+    /// has none by definition — `Metabolism.base_rate` already is the normal rate.
+    ration_scale: f32 = 0.5,
+    feast_scale: f32 = 2.0,
+
+    /// Which band a vigor fraction falls in. The single definition of the two
+    /// thresholds; edge-crossing is a change in this value.
+    pub fn condition(self: Config, frac: f32) Condition {
+        if (frac <= self.spent_frac) return .spent;
+        if (frac < self.weary_frac) return .weary;
+        return .alive;
+    }
+
+    /// Labor's yield multiplier for an agent in this condition.
+    pub fn yield_of(self: Config, c: Condition) f32 {
+        return if (c == .alive) 1.0 else self.weary_yield;
+    }
 };
 
 /// The run: everything the simulation writes that isn't a component. `reset` starts a

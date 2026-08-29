@@ -72,7 +72,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
         try t.action_button(ctx, apanel, world, e, comp.ActionForage, "forage", "Forage", actions.action_forage);
         try t.action_button(ctx, apanel, world, e, comp.ActionFish, "fish", "Fish", actions.action_fish);
         try t.action_button(ctx, apanel, world, e, comp.ActionChopWood, "chop", "Chop wood", actions.action_chop_wood);
-        const s = t.actor_status(th, vigor);
+        const s = t.actor_status(th, vigor, ctx.res.config);
         _ = try txt(ctx, apanel, "status", s.word, .{Style{ .text = s.color }});
     }
 

@@ -132,7 +132,7 @@ pub fn action_tile(
     // Band scaled by the same two-level factor `begin_labor` locks in (weak = ×0.7 below
     // the WEARY threshold) — the promise is exactly what a click right now would pay.
     const dom = info.dominant(act.yields);
-    const quality = ha.actions.yield_factor(vigor);
+    const quality = ha.actions.yield_factor(vigor, ctx.res.config);
     const lo = @round(dom.band.p10 * quality);
     const hi = @round(dom.band.p90 * quality);
     var ybuf: [16]u8 = undefined;

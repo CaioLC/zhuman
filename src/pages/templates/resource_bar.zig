@@ -59,8 +59,11 @@ pub fn resource_bar(
     var sbuf: [32]u8 = undefined;
     var lbuf: [40]u8 = undefined;
 
-    const frac = vigor.v / vigor.max;
-    const vcol = if (frac <= 0.12) th.danger else if (frac < 0.35) th.warn else th.fg;
+    const vcol = switch (ctx.res.config.condition(vigor.v / vigor.max)) {
+        .spent => th.danger,
+        .weary => th.warn,
+        .alive => th.fg,
+    };
     try chip(
         ctx,
         bar,

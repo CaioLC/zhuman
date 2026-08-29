@@ -16,13 +16,15 @@ pub fn heartbeat_color(t: Theme, elapsed: f32) Color {
     return ha.theme.mix(t.dim, t.acc, phase);
 }
 
-/// The actor's condition word + a severity color, from how rested it is (vigor fraction).
+/// The actor's condition word + a severity color. The bands come from `Config` — the
+/// same call the vigor chip, the hunger log lines and labor's yield penalty make.
 pub const Status = struct { word: []const u8, color: Color };
-pub fn actor_status(t: Theme, vigor: *const comp.Vigor) Status {
-    const frac = vigor.v / vigor.max;
-    if (frac <= 0.12) return .{ .word = "SPENT", .color = t.danger };
-    if (frac < 0.35) return .{ .word = "WEARY", .color = t.warn };
-    return .{ .word = "ALIVE", .color = t.acc };
+pub fn actor_status(t: Theme, vigor: *const comp.Vigor, cfg: ha.res.Config) Status {
+    return switch (cfg.condition(vigor.v / vigor.max)) {
+        .spent => .{ .word = "SPENT", .color = t.danger },
+        .weary => .{ .word = "WEARY", .color = t.warn },
+        .alive => .{ .word = "ALIVE", .color = t.acc },
+    };
 }
 
 /// This frame's 0..1 "warmth" mood — drives the COLD↔WARM theme blend and the vitals
