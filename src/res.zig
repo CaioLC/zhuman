@@ -100,12 +100,6 @@ pub const Resources = struct {
     sim: Sim,
     config: Config = .{},
     view: View = .{},
-    /// Which `text_input` widget (by `node.key`) currently owns keyboard text, if any —
-    /// host-global because SDL delivers `.text_input`/backspace as raw keyboard events,
-    /// not routed to a widget. `null` means no field is focused.
-    /// TODO: this belongs on the UI `Ctx` — it's keyed by `node.key` and survives the
-    /// frame, the same shape as an interaction slot.
-    focused_text: ?u64 = null,
 
     pub fn init(f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");

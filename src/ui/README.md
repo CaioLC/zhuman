@@ -64,7 +64,7 @@ a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 | File | Responsibility |
 |---|---|
 | `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `stamp_rects` post-layout walk. Re-exports everything. |
-| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, and the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`). |
+| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`), and `focused` (the key that owns keyboard text). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
 | `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `RenderData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
@@ -214,6 +214,18 @@ result. The host reads `node.query(u)` (a read-through query returning the host'
 `Interaction` struct) and writes `if (btn.query(u).clicked)`. The only place input is
 read is the host's event stage and its widgets — the generic engine stays
 input-agnostic.
+
+### Keyboard focus
+
+`Ctx.focused: ?u64` names the node that currently owns keyboard text, or null. It sits
+beside the interaction pool but is shaped differently on purpose: **interaction is
+per-node, focus is singular and global**, because a platform delivers text and editing
+keys as raw events rather than routed to whatever the pointer is over. The engine stores
+the key and reads it back; what counts as *taking* focus, and what a focused widget does
+with the keys, is host policy (`widgets.text_input` claims it on click, the host event
+loop routes `.text_input`/backspace into that key's buffer). Unlike a slot, `focused` is
+not pruned — a focused node that stops being built leaves it set, so clearing it when a
+screen closes is the host's job.
 
 ### Persistence bridge & lazy slots
 

@@ -60,7 +60,7 @@ pub const UiState = struct {
     pub const TabsState = struct { active: usize = 0 };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
-    /// whichever field `Resources.focused_text` names — the widget itself only reads it
+    /// whichever field `UiCtx.focused` names — the widget itself only reads it
     /// to render. See `text_input`.
     pub const TextInputState = struct { buf: [64]u8 = undefined, len: usize = 0 };
     /// The `svg` feature's cached rasterization (see `ui_client/features/svg.zig`): the

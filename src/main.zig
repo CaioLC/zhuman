@@ -102,15 +102,15 @@ pub fn main() !void {
                 .quit, .terminating => quit = true,
                 .key_down => |key| if (key.key) |kc| {
                     if (kc == .escape) {
-                        if (app.resources.focused_text != null) {
+                        if (app.ui.focused != null) {
                             // Typing: Escape unfocuses the field rather than quitting.
-                            app.resources.focused_text = null;
+                            app.ui.focused = null;
                             sdl.keyboard.stopTextInput(app.window) catch {};
                         } else {
                             quit = true;
                         }
                     } else if (kc == .backspace) {
-                        if (app.resources.focused_text) |fk| {
+                        if (app.ui.focused) |fk| {
                             const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
                             const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
                             var n = st.len;
@@ -122,7 +122,7 @@ pub fn main() !void {
                         }
                     }
                 },
-                .text_input => |ti| if (app.resources.focused_text) |fk| {
+                .text_input => |ti| if (app.ui.focused) |fk| {
                     const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
                     const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
                     if (st.len + ti.text.len <= st.buf.len) {

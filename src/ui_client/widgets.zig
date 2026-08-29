@@ -283,7 +283,7 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
 
 /// Single-line search/text box: a bordered, fixed-width field holding a persisted UTF-8
 /// buffer (`UiState.TextInputState`, keyed like `ScrollState`). Click to focus — focus is
-/// host-global (`ctx.res.focused_text`), since SDL delivers `.text_input`/backspace as raw
+/// host-global (`ctx.focused`), since SDL delivers `.text_input`/backspace as raw
 /// keyboard events rather than routed to a widget; `main.zig`'s event loop mutates the
 /// same `TextInputState` slot directly (via `ctx.cache(node.key, ...)`, the same key this
 /// widget computes) whenever this field owns focus. Shows `placeholder` (dimmed) when
@@ -298,13 +298,13 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     const state = node.state(ctx, UiState.TextInputState);
 
     const q = node.query(ctx);
-    var focused = ctx.res.focused_text == node.key;
+    var focused = ctx.focused == node.key;
     if (q.clicked) {
         focused = true;
-        ctx.res.focused_text = node.key;
+        ctx.focused = node.key;
     } else if (focused and ctx.res.input.mouse_down) {
         focused = false; // clicked elsewhere this frame
-        ctx.res.focused_text = null;
+        ctx.focused = null;
     }
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.startTextInput(ctx.res.platform.window) catch {};

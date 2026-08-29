@@ -48,9 +48,17 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// `mark` writes flags at the event stage; the build reads them via
         /// `interactionOf`. Survives the frame-arena reset (the node tree does not).
         interactions: cache_mod.Pool(Slot) = .{},
+        /// The node key that currently owns keyboard text, if any. Focus is singular
+        /// and global — unlike interaction, which is per-node — because a platform
+        /// delivers text and editing keys as raw events, not routed to whatever the
+        /// pointer is over. The engine stores it and reads it back; what *counts* as
+        /// taking focus, and what a focused widget does with the keys, stays host
+        /// policy. Known gap: a focused node that stops being built leaves this set,
+        /// so the host is responsible for clearing it when a screen closes.
+        focused: ?u64 = null,
 
         pub fn init(res: *Res, gpa: std.mem.Allocator, arena: std.mem.Allocator) Self {
-            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{} };
+            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{}, .focused = null };
         }
 
         pub fn deinit(self: *Self) void {
