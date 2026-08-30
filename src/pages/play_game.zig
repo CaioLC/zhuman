@@ -107,7 +107,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Boots, "boots", "Boots", "Forage e×0.7");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.WorkGloves, "gloves", "Work gloves", "Wood e×0.75");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Bicycle, "bicycle", "Bicycle", "Roaming e×0.6");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Cookpot, "cookpot", "Cookpot", "food +1 quality");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Cookpot, "cookpot", "Cookpot", "food ×2 vigor");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.RootCellar, "cellar", "Root cellar", "spoil ×0.5");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Chainsaw, "chainsaw", "Chainsaw", "Wood ×2.5, -1m fuel");
 
