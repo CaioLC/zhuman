@@ -3,6 +3,7 @@
 //! live in `src/pages/`, outside the `ha` library). Re-exported flat so callers use one
 //! namespace instead of several:
 //!   - `ctx_binding` — the concrete engine types (`UiCtx`, `Node`, `RenderData`, `Sprite`)
+//!   - `theme`       — `Color` + the `Theme` roles every widget paints from (neutral defaults)
 //!   - `features`    — the paint-feature registry (text/fill/outline/img/svg) + `attach` mixins
 //!   - `draw`        — the render walk (paint a whole laid-out tree, with the clip stack)
 //!   - `tree`        — frame assembly (`collect` flattens builder returns; `Trees` wraps them)
@@ -18,11 +19,18 @@ const widgets = @import("./widgets.zig");
 pub const style = @import("./style.zig");
 /// The content layer — pure content leaves (`text`/`image`/`svg`) + the `el` sugar.
 pub const elements = @import("./elements.zig");
+/// The color vocabulary — `Color`, the blend math, and `Theme`'s nine roles with plain
+/// neutral defaults. A game installs its own values (`ha.palette`) onto `res.view.theme`;
+/// this layer only ever names the roles.
+pub const theme = @import("./theme.zig");
 
 // ctx_binding
 pub const UiCtx = ctx_binding.UiCtx;
 pub const Node = ctx_binding.Node;
 pub const Color = ctx_binding.Color; // the host color type (SDL's), carried on RenderData
+pub const Theme = theme.Theme; // the nine paint roles (neutral defaults; a game overrides)
+pub const mix = theme.mix; // per-channel color blend
+pub const rgb = theme.rgb; // opaque RGB shorthand
 pub const UiState = ctx_binding.UiState;
 pub const Sprite = ctx_binding.Sprite;
 pub const icon_sprite = ctx_binding.icon_sprite;
@@ -59,6 +67,7 @@ pub const modal = widgets.modal;
 pub const text_input = widgets.text_input;
 
 test {
+    _ = theme;
     _ = ctx_binding;
     _ = features;
     _ = draw;

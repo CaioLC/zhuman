@@ -2,7 +2,7 @@
 //! color, and layout. Built on `ctx_binding`'s concrete types and the feature `attach`
 //! mixins (`features/`, re-exported as `data_text`/`data_img`/`data_sprite`).
 //! Widgets paint themselves from `ctx.res.view.theme` (the current frame's COLD↔WARM palette,
-//! resolved once in `build_ui` — see `src/theme.zig`) rather than fixed module colors, so
+//! resolved once in `build_ui` — see `ui_client/theme.zig`) rather than fixed module colors, so
 //! the whole HUD reacts to the actor's warmth together. Interaction *states*
 //! (idle/hover/disabled) still map to fixed theme *roles* (fg/acc/dim respectively): a
 //! role's actual RGB just isn't constant across a run anymore. Kept here (host policy) so

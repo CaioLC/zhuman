@@ -1,19 +1,20 @@
-//! Status/vitals readout helpers (pure functions — no node building). Migrated from the
-//! old `pages/templates.zig`; `heartbeat_color` now uses `theme.mix` (the color blend that
-//! replaced `Color.lerp` in the color swap).
+//! Status/vitals readouts — pure functions over the actor's vigor, building no nodes. The
+//! condition word, the heartbeat's pulse color, and the frame's warmth all read the same
+//! one number, so the HUD never announces two different moods at once.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
-const Theme = ha.theme.Theme;
-const Color = ha.theme.Color;
+const uic = ha.ui_client;
+const Theme = uic.Theme;
+const Color = uic.Color;
 
 /// A pulsing color between `t.dim` and `t.acc` (period ~1.1s) — the "heartbeat". Driven by
 /// `elapsed` (the run clock), so it freezes the instant the actor dies.
 pub fn heartbeat_color(t: Theme, elapsed: f32) Color {
     const phase = 0.5 + 0.5 * std.math.sin(elapsed * (2.0 * std.math.pi / 1.1));
-    return ha.theme.mix(t.dim, t.acc, phase);
+    return uic.mix(t.dim, t.acc, phase);
 }
 
 /// The actor's condition word + a severity color. The bands come from `Config` — the

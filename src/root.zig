@@ -12,7 +12,7 @@ pub const tag = @import("./tags.zig");
 pub const log = @import("./log.zig");
 pub const font = @import("./font.zig");
 pub const dist = @import("./dist.zig");
-pub const theme = @import("./theme.zig");
+pub const palette = @import("./palette.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
@@ -27,7 +27,7 @@ test {
     _ = tag;
     _ = log;
     _ = dist;
-    _ = theme;
+    _ = palette;
     _ = res;
     _ = actions;
     _ = capital;

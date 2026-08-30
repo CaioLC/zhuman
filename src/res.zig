@@ -2,7 +2,7 @@ const std = @import("std");
 const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const logmod = @import("./log.zig");
-const thememod = @import("./theme.zig");
+const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
 
 /// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
@@ -128,7 +128,7 @@ pub const Sim = struct {
 /// (see `ui_client/style.zig`'s `TODO(responsive-scale)`) is the next resident.
 pub const View = struct {
     /// TODO: let's drop the cold/warm for now.
-    theme: thememod.Theme = thememod.cold,
+    theme: thememod.Theme = .{},
 };
 
 /// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per

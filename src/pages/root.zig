@@ -20,7 +20,7 @@ const mock_page = @import("./mock.zig").mock_page;
 
 /// Returns a flattened list of *Nodes for the render stage
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
-    ui_ctx.res.view.theme = ha.theme.lerp(0.6);
+    ui_ctx.res.view.theme = ha.palette.lerp(0.6);
     var trees: std.ArrayList(*uic.Node) = .empty;
     // const mock = try mock_page(ui_ctx, world);
 

@@ -17,7 +17,7 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const Color = ha.theme.Color;
+const Color = uic.Color;
 
 const fmt_num = @import("../fmt.zig").fmt_num;
 

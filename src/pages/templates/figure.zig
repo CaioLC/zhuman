@@ -7,7 +7,7 @@ const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
-const Color = ha.theme.Color;
+const Color = uic.Color;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 

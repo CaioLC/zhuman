@@ -11,7 +11,7 @@ pub const Rect = geometry.Rect;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
 // Note: no `Color` here — RGBA is host policy (the engine carries `RenderData`
-// opaquely and never reads a color). The host aliases its own (see `src/theme.zig`).
+// opaquely and never reads a color). The host aliases its own (see `ui_client/theme.zig`).
 pub const Pool = cache.Pool;
 pub const Pools = cache.Pools;
 

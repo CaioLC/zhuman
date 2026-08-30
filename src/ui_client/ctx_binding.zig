@@ -3,12 +3,12 @@
 const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
-const theme = @import("../theme.zig");
+const theme = @import("./theme.zig");
 const Resources = @import("../res.zig").Resources;
 
 /// The host color type, re-exposed here so the whole `ui_client` layer names one `Color`
 /// (SDL's `pixels.Color`) — the engine carries it opaquely on `RenderData` and never
-/// reads it. Defined in `theme.zig` (the color leaf); aliased here for the features/widgets.
+/// reads it. Defined in `ui_client/theme.zig` (the color leaf); aliased here for the layer.
 pub const Color = theme.Color;
 
 /// Context Binding

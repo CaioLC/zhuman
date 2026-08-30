@@ -16,8 +16,8 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const Theme = ha.theme.Theme;
-const Color = ha.theme.Color;
+const Theme = uic.Theme;
+const Color = uic.Color;
 const Log = ha.log.Log;
 const Tone = ha.log.Tone;
 

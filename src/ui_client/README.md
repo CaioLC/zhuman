@@ -14,13 +14,13 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 | Tier | Folder | Knows about | Holds |
 |---|---|---|---|
 | Engine | `src/ui/` | nothing | `Node`, the key-cache, the layout solve, interaction slots |
-| Foundation | `src/ui_client/` | the engine + SDL | the concrete bindings, paint features, the render walk, content elements, the style fold |
-| Templates | `src/pages/templates/` | the foundation + the theme | pre-styled compositions: `button`, `panel`, `action_tile`, `ration_dial`, … |
+| Foundation | `src/ui_client/` | the engine + SDL | the concrete bindings, paint features, the render walk, content elements, the style fold, the `Theme` roles |
+| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `ration_dial`, … |
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
-The foundation is **game-agnostic** but not quite theme-blind: `text` and `svg` default a
-node's ink to `res.view.theme.fg`, so a leaf is visible without any styling. Art direction
-beyond that default belongs to templates.
+The foundation owns the **roles** a widget paints from; the game owns the **values**. So
+`text` and `svg` may default a node's ink to `res.view.theme.fg` without reaching upward —
+`Theme` is this layer's own type, with its own defaults.
 
 ## The four layers of a node
 
@@ -145,6 +145,26 @@ presets was built and then removed: it was a second vocabulary shadowing the eng
 straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` /
 `with_size` / `with_overflow`. Style composes because a button's look is genuinely built
 from reusable pieces; placement does not, because a node sits in exactly one place.
+
+## Color: roles here, values in the game (`theme.zig`)
+
+`Theme` is nine named roles — `bg`, `panel`, `line`, `line2`, `dim`, `fg`, `acc`, `warn`,
+`danger` — and **every one is defaulted**, to a plain greyscale plus three conventional
+semantic hues. That default exists so the layer is complete on its own: a content leaf
+needs ink, and requiring a palette before anything renders would make an unstyled node
+invisible. The defaults are deliberately not anyone's visual identity, so a screen that
+forgets to install a palette looks unfinished rather than subtly wrong.
+
+A game supplies values by assigning a whole `Theme` onto `res.view.theme`; this layer
+never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`), whose
+`cold`/`warm` poles and `lerp(t)` blend are art direction and live outside this folder.
+Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
+`ctx.res.view.theme` — none of them imports the palette module.
+
+`theme.zig` is a **leaf**: it imports only `sdl3`, never the engine or `ctx_binding`. That
+is what lets `res.zig` hold a `Theme` on `View` with no import cycle — `res.zig` → this →
+`sdl3`, and nothing points back. It also carries the color math (`mix`, `rgb`) that a
+palette blend and a pulsing readout both need.
 
 ## Fonts
 
