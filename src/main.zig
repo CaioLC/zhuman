@@ -15,8 +15,6 @@ const Resources = ha.res.Resources;
 // CONFIGS
 const fps = 60;
 const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
-// `secs_per_day` moved to `res.zig` (2026-08-15): library systems (`metabolize`) convert
-// per-day rates against it, and the library can't import main. Read it as `ha.res.secs_per_day`.
 // END CONFIGS
 
 const App = struct {
@@ -44,10 +42,6 @@ const App = struct {
         renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
             frame_capper.mode = .{ .limited = fps };
         };
-        // Every existing draw uses alpha=255 (opaque), so blending changes nothing for
-        // them — this just lets the scanline overlay (`draw_scanlines`) paint at partial
-        // alpha instead of a flat opaque stripe.
-        try renderer.setDrawBlendMode(.blend);
         return .{
             .gpa = gpa,
             .window = window,
