@@ -6,25 +6,27 @@ the game's design is [`design.md`](design.md), the code is [`../src/README.md`](
 [`../src/ui_client/README.md`](../src/ui_client/README.md). A gap, a limitation, an intention
 or an argument about a future feature belongs here, and only here.
 
-## The horizon: Act II
+**Filed by Act.** An entry sits in the earliest Act that needs it — either that Act's content is
+blocked on it, or something on that Act's screen is missing or broken. Sim, HUD and engine work
+therefore sit side by side under one Act rather than in layer buckets. What no Act forces is
+under [Whenever](#whenever); what each Act *is* is in [`design.md`](design.md).
 
-Multi-agent simulation — per-agent vigor and inventories, per-agent demands, typed materials
-and recipes, barter with exchange-ratio discovery, specialization by comparative advantage.
-Blocked on the open design questions in [`design.md`](design.md), which can't be settled before
-agents exist.
+## Act I — Robinson Crusoe (pop 1)
 
-Two pieces of Act I's foundation were built and then removed in the actions/capital redesign.
-Both have to come back before Act II can start:
+The slice on screen today. It ends when a sustained food surplus plus shelter capacity for a
+second person crosses the population to 2.
 
-- **Population + carrying capacity** — Act I's win condition (crossing to pop 2) and the
-  shelter-sets-capacity growth model of locked decision #2. No `Population` component exists
-  today.
-- **The decider abstraction** — the `decide → act` split with a non-UI decider driving the same
-  resolution the player's clicks do. The split exists in shape (the player is the only decider);
-  no AI decider does.
+### Sim
 
-## Sim
-
+- **Population + carrying capacity** — Act I's win condition and the shelter-sets-capacity
+  growth model of locked decision #2. Built once and removed in the actions/capital redesign;
+  no `Population` component exists today. It is also the gate: Act II cannot start until a
+  second human can arrive.
+- **The merchant passerby** — [`design.md`](design.md)'s Act I ends with a first barter, a
+  passerby offering simple goods for the food and raw materials the player holds. Nothing
+  implements it: no non-player holder of goods, no offer, no exchange resolution. It is the one
+  piece of Act I that rehearses Act II's machinery, so building it is a probe of the exchange
+  path as much as it is content — against a scripted counterparty, with no ratio discovery.
 - **Balance the numbers.** Every rate is a first guess: `base_rate` 1.5 food/day at normal
   ration, the ½× / 1× / 2× ration multipliers, starvation at 4 vigor/day, spoilage at 0.05/s,
   the ×0.7 penalty below 35% vigor, and the per-action hour costs (Forage 4h, Fish 5h, Chop 6h,
@@ -36,23 +38,8 @@ Both have to come back before Act II can start:
   way food spoils fast. Nothing wears today; goods are permanent once built.
 - **Cancelling a running act** — deliberately not built. A `Busy` runs to completion or dies
   with the agent. The refund question can wait until a 12h build feels like a trap.
-- **Finish the category tags.** `tags.zig` has `Food` / `Comfort` / `Tool` / `WoodCutting` and
-  stops. Nothing reads them yet, so the set is neither complete nor load-bearing — settle it
-  when something (the catalog browser's chips, an AI decider's preferences) actually needs to
-  group goods.
-- **SparseSet memory scaling** — `world.zig`'s `SparseSet(T)` allocates three
-  `[MAX_ENTITIES]`-sized arrays (`dense_ids`, `dense_values`, `sparse`) per component type
-  regardless of how many entities carry `T`, so cost is `num_types × MAX_ENTITIES`, not
-  occupancy. Harmless at one agent and ~10 types; real once the capital roster reaches the
-  hundreds, or `MAX_ENTITIES` has to grow to fit more agents — entity ids are never recycled, so
-  it is a lifetime-spawn cap, not a live-population one. The fix: size the dense arrays to
-  occupancy, and back the `sparse` index with a hashmap for cold component types while hot ones
-  (`Vigor`, `InventoryFood`) keep the flat array — a per-type storage policy decided once, where
-  `Storages(ns)` builds each `SparseSet(T)`. Contained to `world.zig` (the storage swap) and
-  `ecs.zig`, whose `Query` driver loop reads `.dense_ids` / `.dense_values` / `.len` directly
-  and would have to go through methods instead.
 
-## HUD
+### HUD
 
 - **Vigor sparkline** — needs a new persistence mechanism: a `Vigor`-history component plus a
   system sampling it on a fixed cadence, reset on death.
@@ -66,7 +53,7 @@ Both have to come back before Act II can start:
 - **Scroll-thumb dragging** — `pages/templates/scroll_view.zig` is wheel-only; the track and
   thumb render but don't respond to drag.
 
-## UI foundation (`src/ui_client/`)
+### UI foundation (`src/ui_client/`)
 
 - **Retire `widgets.zig`.** The pre-`elements` palette is unreferenced — nothing outside
   `ui_client/` calls it, since the screens moved onto `pages/templates/`. Deleting it and
@@ -89,9 +76,46 @@ Both have to come back before Act II can start:
   layout pass that reflows and shrinks columns against the live window size instead of anchoring
   and growing.
 
-## UI engine (`src/ui/`)
+## Act II — first exchange (pop 2 → band)
 
-Gaps in the extraction unit itself. Its README describes only what the engine *does*.
+Multi-agent simulation — per-agent vigor and inventories, per-agent demands, typed materials
+and recipes, barter with exchange-ratio discovery, specialization by comparative advantage.
+Gated on Act I's population crossing, and blocked on the open design questions in
+[`design.md`](design.md), which can't be settled before agents exist.
+
+- **The decider abstraction** — the `decide → act` split with a non-UI decider driving the same
+  resolution the player's clicks do. The split exists in shape (the player is the only decider);
+  no AI decider does. Built once and removed in the actions/capital redesign, alongside
+  population.
+- **Finish the category tags.** `tags.zig` has `Food` / `Comfort` / `Tool` / `WoodCutting` and
+  stops. Nothing reads them yet, so the set is neither complete nor load-bearing — settle it
+  when something (the catalog browser's chips, an AI decider's preferences) actually needs to
+  group goods.
+
+## Act III+ — village → town → city
+
+Deliberately unspecified beyond [`design.md`](design.md)'s sketch: firms, deeper division of
+labor, a global source of capital goods the city buys from. None of it can be designed before
+Act II's demand model exists. One entry is concrete already, because scale forces it rather
+than content:
+
+- **SparseSet memory scaling** — `world.zig`'s `SparseSet(T)` allocates three
+  `[MAX_ENTITIES]`-sized arrays (`dense_ids`, `dense_values`, `sparse`) per component type
+  regardless of how many entities carry `T`, so cost is `num_types × MAX_ENTITIES`, not
+  occupancy. Harmless at one agent and ~10 types; real once the capital roster reaches the
+  hundreds, or `MAX_ENTITIES` has to grow to fit more agents — entity ids are never recycled, so
+  it is a lifetime-spawn cap, not a live-population one. The fix: size the dense arrays to
+  occupancy, and back the `sparse` index with a hashmap for rarely-carried component types while
+  hot ones (`Vigor`, `InventoryFood`) keep the flat array — a per-type storage policy decided
+  once, where `Storages(ns)` builds each `SparseSet(T)`. Contained to `world.zig` (the storage
+  swap) and `ecs.zig`, whose `Query` driver loop reads `.dense_ids` / `.dense_values` / `.len`
+  directly and would have to go through methods instead.
+
+## Whenever
+
+No Act forces these; they are paced by whatever is most in the way. The first four are gaps in
+the UI engine (`src/ui/`) — the extraction unit, whose [README](../src/ui/README.md) describes
+only what it *does*; the last is a tooling limit.
 
 - **Sizing combinators** — `range`/`max_of`, `stretch`/`align-content`, and a `strictness: f32`
   driving a violation-resolution pass that distributes slack and overflow among siblings. The
@@ -108,9 +132,6 @@ Gaps in the extraction unit itself. Its README describes only what the engine *d
   `query` pushed nodes onto a per-frame list, at the cost of threading that list through `Ctx`.
 - **Focus pruning** — `Ctx.focused` is not swept the way interaction slots are, so a focused
   node that stops being built leaves it set. The host clears it today.
-
-## Tooling
-
 - **`q.iter()` completion.** A query's `next()` returns a `@Type`-constructed tuple, which no
   language server evaluates, so destructuring it resolves to nothing. Worked around by
   annotating multi-fetch destructures. Declaring `Query`'s params as a concrete `[]const type`
