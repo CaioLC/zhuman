@@ -1,12 +1,12 @@
 //! `capital_good_tile` — one buildable capital good, wired to the real build path. Reads
-//! the agent's state (owned? building? affordable? prerequisite met?), formats the price
+//! the agent's state (owned? building? affordable? prerequisite met? unlocked?), formats the price
 //! from the good's catalog default (`comp.<Good>{}.requires`, hours included), and funnels
 //! a click through `capital.begin_build` — which pays, starts the work, and grants the
 //! good's effect `hours` later via `systems.resolve_busy`. Dashed while a plan, solid once
 //! owned; the underbar fills while building (see `capital_tile`).
 //!
 //! Comptime-parameterized over the good, the way `action_tile` is over the action — one
-//! wrapper for all fifteen instead of a hand-written tile each. The `consequence` string
+//! wrapper for all sixteen instead of a hand-written tile each. The `consequence` string
 //! stays a caller argument: it's the good's *pitch* (what changes for you), which is
 //! presentation, not data the component carries.
 
@@ -41,9 +41,11 @@ pub fn capital_good_tile(
     const progress: ?f32 = if (building) 1.0 - busy.?.remaining / busy.?.total else null;
     const cost = (GoodT{}).requires; // catalog default — the build price
     // Same gates as `begin_build` itself: not owned, not busy (one body, one act), the
-    // good's prerequisite verb present, energy strict, materials spendable to 0.
+    // good's prerequisite verb present, its standing `unlock` conditions met, energy
+    // strict, materials spendable to 0.
     const can = !owned and busy == null and
         capital.prereq_met(world, e, GoodT) and
+        capital.unlock_met(world, e, GoodT) and
         vigor.v > cost.energy and stock.v >= cost.materials;
 
     var buf: [24]u8 = undefined;

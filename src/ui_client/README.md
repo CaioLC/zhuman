@@ -44,8 +44,8 @@ pub const Node  = ui.Node(RenderData);
 ```
 
 - **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`:
-  `TextState` (buffer + the px to render at), `ScrollState`, `TabsState`, `TextInputState`,
-  and `SvgState`. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
+  `TextState` (buffer + the px to render at), `ScrollState`, `TabsState`, `StepState`,
+  `TextInputState`, and `SvgState`. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
   eviction hook frees it when the node disappears. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each

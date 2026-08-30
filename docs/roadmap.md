@@ -13,45 +13,29 @@ under [Whenever](#whenever); what each Act *is* is in [`design.md`](design.md).
 
 ## Act I — Robinson Crusoe (pop 1)
 
-The slice on screen today. It ends when a sustained food surplus plus shelter capacity for a
-second person crosses the population to 2.
+The slice on screen today. Its ending is built — the Shelter, and the curtain raising it drops
+(see [`design.md`](design.md)); what is left is the content that leads there.
 
 ### Sim
 
-- **Population + carrying capacity** — Act I's win condition and the shelter-sets-capacity
-  growth model of locked decision #2. Built once and removed in the actions/capital redesign;
-  no `Population` component exists today. It is also the gate: Act II cannot start until a
-  second human can arrive.
-- **The merchant passerby** — [`design.md`](design.md)'s Act I ends with a first barter, a
-  passerby offering simple goods for the food and raw materials the player holds. Nothing
-  implements it: no non-player holder of goods, no offer, no exchange resolution. It is the one
-  piece of Act I that rehearses Act II's machinery, so building it is a probe of the exchange
-  path as much as it is content — against a scripted counterparty, with no ratio discovery.
-- **Balance the numbers.** Every rate is a first guess: `base_rate` 1.5 food/day at normal
-  ration, the ½× / 1× / 2× ration multipliers, starvation at 4 vigor/day, spoilage at 0.05/s,
-  the ×0.7 penalty below 35% vigor, and the per-action hour costs (Forage 4h, Fish 5h, Chop 6h,
-  rod build 12h). Playtesting retunes them. The *global* rates are `res.Config` fields, so
-  retuning those is a field edit; the per-agent ones (`Metabolism.base_rate`,
-  `InventoryFood.spoils`, each action's `Requires`/`Yields`) are component defaults at the
-  spawn site.
-- **Capital decay** — durable goods should degrade on a slow trickle and need maintenance, the
-  way food spoils fast. Nothing wears today; goods are permanent once built.
-- **Cancelling a running act** — deliberately not built. A `Busy` runs to completion or dies
-  with the agent. The refund question can wait until a 12h build feels like a trap.
+- **The merchant passerby** — [`design.md`](design.md): as Act I approaches its end, the player
+  gets a glimpse of the Act II barter mechanics, with a passerby offering simple goods for the
+  food and raw materials the player holds. We need goods that can be bought at the merchant
+  (food, fishing rod, hatchet, etc.) and the purchase/sell mechanics at fixed ratios.
+- **Rethink capital goods** — a hatchet or a fishing rod _cannot_ be built by Robinson Crusoe
+  alone. Only very crude goods should be feasible in Act I. Everything stays *buildable*: the
+  advanced goods are priced out of reach for one person rather than forbidden, which is exactly
+  what the merchant exists to answer — trade beats autarky on cost, it isn't a permission gate.
 
 ### HUD
 
-- **Vigor sparkline** — needs a new persistence mechanism: a `Vigor`-history component plus a
-  system sampling it on a fixed cadence, reset on death.
-- **Distribution-curve glyph** — needs a new engine draw primitive. Nothing renders a polyline
-  today; only rect fill/outline, text, image and svg.
-- **Catalog browser + capital tray** — a second, text-first presentation of the action and
-  capital rosters. Returns with the design prototype's favorites (`☆`/`★`), hover tooltips and
-  per-good build state folded in.
-- **Progress-ring polish** — a glanceable in-progress build indicator on the capital tile; the
-  only cue today is the hover tooltip.
-- **Scroll-thumb dragging** — `pages/templates/scroll_view.zig` is wheel-only; the track and
-  thumb render but don't respond to drag.
+- **Distribution-curve glyph** — the other half of locked decision #5: a yield's p10–p90 band
+  drawn as a mini curve, its *shape* telling normal from poisson from exponential, in place of
+  the text line `action_card` prints today (`odds 1-3 in 8 of 10 (normal)`). Needs a new engine
+  draw primitive — nothing renders a polyline; only rect fill/outline, text, image and svg.
+- **Barter Modal** new screen overlay on top of PlayGame to implement the barter mechanics
+- Menu Page exposing our `res.config` to edit
+- Pause Overlay
 
 ### UI foundation (`src/ui_client/`)
 
@@ -91,6 +75,23 @@ Gated on Act I's population crossing, and blocked on the open design questions i
   stops. Nothing reads them yet, so the set is neither complete nor load-bearing — settle it
   when something (the catalog browser's chips, an AI decider's preferences) actually needs to
   group goods.
+- **Population** - we need to account for population and agent needs. The ceiling is
+  already data and unread: `comp.Shelter.capacity`, which Act I only ever asks to be > 1. 
+- **Higher Order Goods**
+- **Generalized Agents Inventory**
+
+### SIM 
+- **Capital decay** — durable goods should degrade on a slow trickle and need maintenance, the
+  way food spoils fast. Nothing wears today; goods are permanent once built.
+- **Add Ambiente music**
+
+### HUD
+- **Catalog browser + capital tray** — a second, text-first presentation of the action and
+  capital rosters. Returns with the design prototype's favorites (`☆`/`★`), hover tooltips and
+  per-good build state folded in.
+
+### UI foundation (`src/ui_client/`)
+- **Animations**
 
 ## Act III+ — village → town → city
 

@@ -26,6 +26,19 @@ const Yields = struct {
     materials: dist.Dist,
 };
 
+/// What a good demands of the *builder* before it is offered at all - standing
+/// conditions, as against `Requires`, which is what the build spends. Read once, in
+/// `capital.begin_build`: a dip afterwards doesn't stop work already paid for.
+const Unlock = struct {
+    /// A vigor *fraction*, not an absolute: capacity capital raises `max`, and `v/max`
+    /// is the reading every other part of the game keys off.
+    vigor_frac: f32,
+    /// Units in the larder.
+    food: f32,
+    /// How many goods from the catalog the builder must already own.
+    goods: u32,
+};
+
 // NOTE: These are components
 pub const Label = struct { v: []const u8 };
 
@@ -149,6 +162,7 @@ pub const Busy = struct {
         build_medicine_chest,
         build_garden_bed,
         build_chicken_coop,
+        build_shelter,
     };
     doing: Doing,
     /// Total work time and what's left of it, in game-seconds (see `res.hours_to_secs`).
@@ -280,4 +294,19 @@ pub const ChickenCoop = struct {
         .food = .{ .kind = .poisson, .s = 2.5 },
         .materials = .{ .kind = .fixed, .s = 0 },
     },
+};
+
+// -- Shelter: the roof that ends Act I ---------------------------------------------------
+// The one good that is neither a verb, a margin, a ceiling nor a flow. Owning it *is* Act
+// I's win condition: a lone actor who can house four has stopped surviving and started
+// settling, which is what a second human can be invited into. `unlock` is why it reads as
+// an achievement rather than a purchase - the conditions say you already made a life here.
+
+/// Shelter.
+pub const Shelter = struct {
+    requires: Requires = .{ .energy = 6.0, .materials = 80.0, .hours = 48 },
+    unlock: Unlock = .{ .vigor_frac = 0.8, .food = 20.0, .goods = 4 },
+    /// How many humans live under it. Act II's population fills this; Act I only asks
+    /// whether it is more than one.
+    capacity: u32 = 4,
 };

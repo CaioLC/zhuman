@@ -16,6 +16,7 @@ const Entity = ha.world.Entity;
 // Pages
 const p_playgame = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
+const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const mock_page = @import("./mock.zig").mock_page;
 
 /// Returns a flattened list of *Nodes for the render stage
@@ -24,12 +25,16 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     var trees: std.ArrayList(*uic.Node) = .empty;
     // const mock = try mock_page(ui_ctx, world);
 
-    // Route on the actor: alive → the HUD; despawned (vigor hit 0) → game over.
+    // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
+    // curtain, since owning a `Shelter` is the win condition; otherwise the HUD.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const screen = if (player.get() != null)
-        try p_playgame(ui_ctx, world)
+    const settled = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = world };
+    const screen = if (player.get() == null)
+        try p_gameover(ui_ctx, world)
+    else if (settled.get() != null)
+        try p_act_one_end(ui_ctx, world)
     else
-        try p_gameover(ui_ctx, world);
+        try p_playgame(ui_ctx, world);
 
     try uic.collect(&trees, ui_ctx.arena, screen);
     return trees.items;

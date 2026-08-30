@@ -58,6 +58,11 @@ pub const UiState = struct {
     /// `std.mem.zeroes`, not the struct's field defaults — a fresh strip always starts on
     /// tab 0, and a non-zero "default tab" would need the template to set it explicitly.
     pub const TabsState = struct { active: usize = 0 };
+    /// A multi-step panel's position in its sequence, keyed by the panel's own
+    /// `node.key` — the `TabsState` pattern for content that advances rather than
+    /// switches: the caller reads `step`, builds that step, and bumps it on a click.
+    /// Zero-seeded like the rest, so a freshly built panel always starts at step 0.
+    pub const StepState = struct { step: usize = 0 };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
     /// whichever field `UiCtx.focused` names — the widget itself only reads it

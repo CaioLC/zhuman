@@ -186,9 +186,9 @@ costs no materials at all).
 
 ### Capital
 
-Fifteen goods, all buildable end-to-end, in three behavioral variants over one build path.
+Sixteen goods, all buildable end-to-end, in four behavioral variants over one build path.
 `begin_build` / `finish_build` / `break_good` are comptime-parameterized over the good exactly
-as labor is over the action — the gate/pay/start half is identical for all fifteen, only
+as labor is over the action — the gate/pay/start half is identical for all sixteen, only
 `grant`/`revoke` differ.
 
 | Variant | Goods | Behavior |
@@ -196,6 +196,7 @@ as labor is over the action — the gate/pay/start half is identical for all fif
 | **Unlocker** | Fishing rod, Hatchet, Wire snares, Air rifle | grants an action component outright — owning the good is what makes the verb possible |
 | **`ActionModifier`** | Boots, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
 | **`Generator`** | Garden bed, Chicken coop | runs continuously: `requires` is the build order, `upkeep` the per-tick drain |
+| **Curtain** | Shelter | grants nothing mechanical: owning it is Act I's win condition, and `build_ui` routes to the curtain on it |
 
 A modifier's `apply_*`/`remove_*` pair *scales* its target's `.s`/`.sd` rather than replacing
 them, so a boost preserves the distribution's shape. The health trio is relative (`+=`/`-=`)
@@ -215,6 +216,13 @@ target `ActionChopWood`, which only exists once the Hatchet is built. It gates t
 the tile, so a modifier can never be applied to a component that is not there, which would
 panic in `getMany`. It is also the roster's only tech-tree edge.
 
+`capital.unlock_met` is the second gate, and the Shelter is its only subject: a good may carry
+an `unlock` — a vigor *fraction*, a larder floor and a count of goods already owned — stating
+what it asks of the builder, as against `requires`, which is what the build spends. Goods with
+no `unlock` field are ungated (`@hasField`). The conditions are read at `begin_build` and not
+again, so a dip mid-build doesn't stop work already paid for. `capital.goods_owned` counts them
+by sweeping `buildable_bundle`.
+
 `begin_build` checks `has` **first**; `SparseSet.add` does not guard duplicates.
 
 ## Module map
@@ -233,7 +241,7 @@ panic in `getMany`. It is also the roster's only tech-tree edge.
 | `palette.zig` | the game's palette — the nine `Theme` roles, filled in |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines. Leaf module |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
-| `pages/` | the screens (`build_ui`, `play_game`, `gameover`) and the template shelf |
+| `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`) and the template shelf |
 | `root.zig` | the `ha` library root and its re-exports |
 
 `build.zig` makes the module import *itself* as `ha`, so library-internal files can

@@ -86,12 +86,14 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 _ = try t.ration_dial(ctx, center, world, e, "ration");
             } else {
                 // The Act One capital roster, all of it real: every tile pays, starts a
-                // timed build, and grants its effect on completion. Four shelves by the
-                // grammar's three sentences (health split out of UPGRADE for the scan):
-                // UNLOCK grants a whole verb, UPGRADE works a margin on a verb or the
-                // larder, HEALTH raises the vigor ceiling, INSTALL is the flows that run
-                // themselves. A shelf's tiles dim when unaffordable — or, for Work gloves
-                // and Chainsaw, until the Hatchet gives them a verb to improve.
+                // timed build, and grants its effect on completion. Five shelves by the
+                // grammar's sentences (health split out of UPGRADE for the scan): UNLOCK
+                // grants a whole verb, UPGRADE works a margin on a verb or the larder,
+                // HEALTH raises the vigor ceiling, INSTALL is the flows that run
+                // themselves, and SETTLE holds the one good that ends the act. A shelf's
+                // tiles dim when unaffordable — or, for Work gloves and Chainsaw, until
+                // the Hatchet gives them a verb to improve, and for the Shelter until its
+                // standing conditions hold.
                 const build = try el.div(ctx, center, "build");
                 _ = build.with_flow(.{ .dir = .column }).with_gap(8);
 
@@ -117,6 +119,9 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 const installs = try capital_shelf(ctx, build, "installs", "INSTALL");
                 _ = try t.capital_good_tile(ctx, installs, world, e, comp.GardenBed, "garden", "Garden bed", "+1.5f/day -0.1m");
                 _ = try t.capital_good_tile(ctx, installs, world, e, comp.ChickenCoop, "coop", "Chicken coop", "+2.5f/day -0.3m");
+
+                const settle = try capital_shelf(ctx, build, "settle", "SETTLE");
+                _ = try t.capital_good_tile(ctx, settle, world, e, comp.Shelter, "shelter", "Shelter", "Room for four");
             }
         }
     }

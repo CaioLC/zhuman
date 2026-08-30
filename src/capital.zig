@@ -47,6 +47,7 @@ pub const buildable_bundle = .{
     comp.Boots,       comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
     comp.RootCellar,  comp.Chainsaw,   comp.Bed,           comp.Pantry,
     comp.MedicineChest, comp.GardenBed, comp.ChickenCoop,
+    comp.Shelter,
 };
 
 /// The `Busy.Doing` name for a good's build — what `resolve_busy` dispatches on.
@@ -67,6 +68,7 @@ pub fn doing_of_good(comptime GoodT: type) comp.Busy.Doing {
         comp.MedicineChest => .build_medicine_chest,
         comp.GardenBed => .build_garden_bed,
         comp.ChickenCoop => .build_chicken_coop,
+        comp.Shelter => .build_shelter,
         else => @compileError("no Busy.Doing for " ++ @typeName(GoodT)),
     };
 }
@@ -88,6 +90,29 @@ pub fn prereq_met(w: *World, e: Entity, comptime GoodT: type) bool {
     return true;
 }
 
+/// How many goods from the catalog this agent owns - the "you have made a life here"
+/// count an `unlock` measures against.
+pub fn goods_owned(w: *World, e: Entity) u32 {
+    var n: u32 = 0;
+    inline for (buildable_bundle) |G| {
+        if (w.has(e, G)) n += 1;
+    }
+    return n;
+}
+
+/// Whether the builder meets `GoodT`'s standing conditions - the second gate, beside
+/// `prereq_met`. A good with no `unlock` field has none, which is all of them but the
+/// Shelter. Checked at `begin_build` and not again: a dip mid-build doesn't stop work
+/// already paid for, the same rule every other act follows.
+pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
+    if (!@hasField(GoodT, "unlock")) return true;
+    const u = (GoodT{}).unlock;
+    const vigor, const food = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryFood });
+    if (vigor.v / vigor.max < u.vigor_frac) return false;
+    if (food.v < u.food) return false;
+    return goods_owned(w, e) >= u.goods;
+}
+
 /// The receipt line for a completed build.
 fn built_msg(comptime GoodT: type) []const u8 {
     return switch (GoodT) {
@@ -106,6 +131,7 @@ fn built_msg(comptime GoodT: type) []const u8 {
         comp.MedicineChest => "You stocked a medicine chest. You mend properly now.",
         comp.GardenBed => "You planted a garden bed. It grows without you.",
         comp.ChickenCoop => "You raised a chicken coop. The hens lay without you.",
+        comp.Shelter => "You raised a shelter. There is room here for others.",
         else => @compileError("no build message for " ++ @typeName(GoodT)),
     };
 }
@@ -131,6 +157,9 @@ fn grant(w: *World, e: Entity, comptime GoodT: type) void {
         // Generators: holding the component is the whole effect — `run_generators`
         // finds it by query from the next tick on.
         comp.GardenBed, comp.ChickenCoop => {},
+        // Shelter: holding it is the whole effect too, but what reads it is the screen -
+        // owning a shelter is the end of Act I (`pages.build_ui` routes on it).
+        comp.Shelter => {},
         else => @compileError("no grant for " ++ @typeName(GoodT)),
     }
 }
@@ -152,7 +181,7 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
         comp.Bed => health_remove(w, e, 2.0),
         comp.Pantry => health_remove(w, e, 2.0),
         comp.MedicineChest => health_remove(w, e, 2.0),
-        comp.GardenBed, comp.ChickenCoop => {},
+        comp.GardenBed, comp.ChickenCoop, comp.Shelter => {},
         else => @compileError("no revoke for " ++ @typeName(GoodT)),
     }
 }
@@ -162,12 +191,13 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
 /// Begin building `GoodT`: pay its build price upfront and start the work — the good
 /// (and whatever it grants) arrives only when `finish_build` resolves, `requires.hours`
 /// later. Refuses silently if already owned, already busy (one body, one act), missing
-/// the good's prerequisite verb, or unaffordable — same gates as labor (energy strict,
+/// the good's prerequisite verb, short of its standing `unlock` conditions, or unaffordable — same gates as labor (energy strict,
 /// vigor 0 is death; materials may be spent to exactly 0). Dying mid-build loses the work.
 pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
     if (w.has(e, GoodT)) return; // one per agent (SparseSet.add doesn't guard dupes)
     if (w.has(e, comp.Busy)) return; // one body, one act
     if (!prereq_met(w, e, GoodT)) return; // nothing to modify yet
+    if (!unlock_met(w, e, GoodT)) return; // standing conditions not met
     const vigor, const stock = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryMaterial });
     const cost = (GoodT{}).requires;
     if (cost.energy >= vigor.v or cost.materials > stock.v) return;
@@ -214,6 +244,7 @@ pub fn good_name(comptime GoodT: type) []const u8 {
         comp.Bed => "bed",
         comp.Pantry => "pantry",
         comp.MedicineChest => "medicine chest",
+        comp.Shelter => "shelter",
         comp.GardenBed => "garden bed",
         comp.ChickenCoop => "chicken coop",
         else => @compileError("no name for " ++ @typeName(GoodT)),
@@ -585,4 +616,80 @@ test "a generator pays its upkeep and deposits its flow, per day" {
     // Broke now — the next day can't pay the upkeep, so nothing moves.
     run_generators(&w, &res);
     try std.testing.expectApproxEqAbs(fed, w.get(e, comp.InventoryFood).?.v, 1e-6);
+}
+
+/// An agent stocked to build a shelter: the unlock's three conditions all met, and enough
+/// materials for the price. Individual conditions are then knocked out one at a time.
+fn spawn_settler(w: *World) Entity {
+    return w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 }, // 1.0 >= 0.8
+        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= 20
+        comp.InventoryMaterial{ .v = 100 }, // >= the 80 price
+        comp.Boots{},
+        comp.Bed{},
+        comp.Cookpot{},
+        comp.WireSnares{}, // four goods owned >= 4
+    });
+}
+
+test "the shelter is offered only once its standing conditions are met" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_settler(&w);
+
+    try std.testing.expectEqual(@as(u32, 4), goods_owned(&w, e));
+    try std.testing.expect(unlock_met(&w, e, comp.Shelter));
+
+    begin_build(&w, e, &res, comp.Shelter);
+    const b = w.get(e, comp.Busy).?;
+    try std.testing.expectEqual(comp.Busy.Doing.build_shelter, b.doing);
+    try std.testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 10 - 6 energy
+    try std.testing.expectEqual(@as(f32, 20), w.get(e, comp.InventoryMaterial).?.v); // 100 - 80
+
+    // Vigor fell below the fraction mid-build - the work is already paid for, so it stands.
+    try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+
+    finish_build(&w, e, &res, comp.Shelter);
+    try std.testing.expect(w.has(e, comp.Shelter));
+    try std.testing.expectEqual(@as(u32, 4), w.get(e, comp.Shelter).?.capacity);
+}
+
+test "each standing condition refuses the shelter on its own" {
+    var res = test_res();
+
+    // Too tired: 7/10 is under the 0.8 fraction, though the absolute is plentiful.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.get(e, comp.Vigor).?.v = 7;
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+    // Larder too thin.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.get(e, comp.InventoryFood).?.v = 19;
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+    // Nothing built yet - a full larder is not a settled life.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.remove(e, comp.Boots);
+        try std.testing.expectEqual(@as(u32, 3), goods_owned(&w, e));
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+}
+
+test "a good with no unlock field has no standing conditions" {
+    var w = World.init();
+    const e = spawn_test_agent(&w); // 0 food, nothing built, and it does not matter
+    try std.testing.expect(unlock_met(&w, e, comp.FishRod));
+    try std.testing.expect(unlock_met(&w, e, comp.ChickenCoop));
 }

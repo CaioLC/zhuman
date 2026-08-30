@@ -63,8 +63,10 @@ ordinal — never a global utility function.
   and the few capital goods a single individual can build (crude spear, rudimentary sandals,
   leaf bed). A merchant passerby offers the first barter — simple goods (a fish net, a hand axe)
   for the food and raw materials the player holds.
-  *Win condition:* a sustained food surplus plus shelter capacity for a second person → cross to
-  pop 2.
+  *Win condition:* the **Shelter**, a good that houses four. It is offered only to an actor who
+  has already made a life here — rested, a full larder, and several goods built — and it is the
+  largest build in the act. Raising it ends Act I: others ask to move in, and the crossing to
+  pop 2 is that invitation.
 - **Act II — First exchange (pop 2 → band).** An autonomous second agent arrives. Generic
   materials expand into a dozen typed goods; a broader capital roster can be built, stored and
   sold. Demand-driven barter with emergent exchange ratios and specialization by comparative

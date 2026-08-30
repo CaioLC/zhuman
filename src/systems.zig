@@ -140,6 +140,7 @@ pub fn resolve_busy(
             .build_medicine_chest => capital.finish_build(w, e, res, comp.MedicineChest),
             .build_garden_bed => capital.finish_build(w, e, res, comp.GardenBed),
             .build_chicken_coop => capital.finish_build(w, e, res, comp.ChickenCoop),
+            .build_shelter => capital.finish_build(w, e, res, comp.Shelter),
         }
     }
 }
