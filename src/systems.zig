@@ -16,20 +16,21 @@ const With = ecs.With;
 /// player (dead) the clock freezes, so the game-over screen shows the day you died. One
 /// player today, so this bumps `elapsed` once for the frame it finds one.
 pub fn advance_clock(
-    res: *Resources,
+    sim: *res_mod.Sim,
+    time: *const res_mod.Time,
     q: Query(.{ comp.Vigor, With(tag.Player) }),
 ) void {
     var it = q.iter();
-    if (it.next() != null) res.sim.elapsed += res.time.dt;
+    if (it.next() != null) sim.elapsed += time.dt;
 }
 
 /// Spoil the larder toward zero at `spoils` units/second — food rots, so a surplus can't
 /// simply be banked forever (this is what storage capital will later mitigate).
 pub fn update_food(
-    res: *Resources,
+    time: *const res_mod.Time,
     q: Query(.{comp.InventoryFood}),
 ) void {
-    const dt = res.time.dt;
+    const dt = time.dt;
     var it = q.iter();
     while (it.next()) |f| {
         f.v -= dt * f.spoils;
@@ -57,10 +58,12 @@ fn ration_mult(cfg: res_mod.Config, s: comp.Metabolism.Setting) f32 {
 /// (spoilage claims its share first) and before `mark_dead` (starving to 0 dies the same
 /// frame).
 pub fn metabolize(
-    res: *Resources,
+    time: *const res_mod.Time,
+    cfg: *const res_mod.Config,
+    sim: *res_mod.Sim,
     q: Query(.{ comp.Vigor, comp.InventoryFood, comp.Metabolism }),
 ) void {
-    const dt_days = res.time.dt / res.config.secs_per_day;
+    const dt_days = time.dt / cfg.secs_per_day;
     var it = q.iter();
     while (it.next()) |entry| {
         const vigor, const food, const met = entry;
@@ -68,23 +71,23 @@ pub fn metabolize(
         const frac_before = vigor.v / vigor.max;
 
         if (food.v > 0) {
-            const want = met.base_rate * ration_mult(res.config, met.setting) * dt_days;
+            const want = met.base_rate * ration_mult(cfg.*, met.setting) * dt_days;
             const eaten = @min(food.v, want);
             food.v -= eaten;
-            vigor.v = @min(vigor.v + eaten * res.config.vigor_per_food * @as(f32, @floatFromInt(food.quality)), vigor.max);
+            vigor.v = @min(vigor.v + eaten * cfg.vigor_per_food * @as(f32, @floatFromInt(food.quality)), vigor.max);
         } else {
-            vigor.v = @max(0, vigor.v - res.config.starve_per_day * dt_days);
+            vigor.v = @max(0, vigor.v - cfg.starve_per_day * dt_days);
         }
 
         // Edge-triggered log lines — once, on the crossing frame. The vigor thresholds
         // only ever cross *downward* here while starving (eating raises), so these read
         // as hunger, not labor fatigue.
-        if (food_before > 0 and food.v <= 0) res.sim.log.push(.warn, "Your food has run out.");
+        if (food_before > 0 and food.v <= 0) sim.log.push(.warn, "Your food has run out.");
         const frac = vigor.v / vigor.max;
-        const was = res.config.condition(frac_before);
-        const now = res.config.condition(frac);
-        if (was == .alive and now != .alive) res.sim.log.push(.warn, "You feel weak with hunger.");
-        if (was != .spent and now == .spent) res.sim.log.push(.danger, "You are starving.");
+        const was = cfg.condition(frac_before);
+        const now = cfg.condition(frac);
+        if (was == .alive and now != .alive) sim.log.push(.warn, "You feel weak with hunger.");
+        if (was != .spent and now == .spent) sim.log.push(.danger, "You are starving.");
     }
 }
 
@@ -145,7 +148,7 @@ pub fn resolve_busy(
 /// on `has` so it tags once. Starvation (`metabolize` on an empty larder) is what drains
 /// vigor to zero in practice; labor can't (its energy gate is strict).
 pub fn mark_dead(
-    res: *Resources,
+    sim: *res_mod.Sim,
     w: *World,
     q: Query(.{ Entity, comp.Vigor }),
 ) void {
@@ -154,7 +157,7 @@ pub fn mark_dead(
         const e, const vigor = entry;
         if (vigor.v <= 0 and !w.has(e, tag.Dead)) {
             w.add(e, tag.Dead{});
-            res.sim.log.push(.danger, "You perished, cold and starved.");
+            sim.log.push(.danger, "You perished, cold and starved.");
         }
     }
 }

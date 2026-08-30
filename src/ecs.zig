@@ -6,10 +6,18 @@
 //! world rather than Rust archetypes. Not a port; just the shape of the API.
 //!
 //! Systems declare their needs as parameter types:
-//!     fn update_vigor(res: *Resources, q: Query(.{Vigor, With(tag.Player)})) void
+//!     fn metabolize(time: *const Time, cfg: *const Config, sim: *Sim,
+//!                   q: Query(.{Vigor, InventoryFood, Metabolism})) void
 //!
 //! `run(world, res, system_fn)` introspects the function at comptime and
 //! builds each parameter from the world / resources before invoking it.
+//!
+//! A parameter may be `*World`, the whole `*Resources`, a `Query`/`Single`/
+//! `MaybeSingle`, or **one resource group** — any struct-typed field of
+//! `Resources` (see `groups`). Naming groups is preferred: the signature then
+//! states the system's reach and the compiler enforces it, and `*const` vs `*`
+//! says whether it reads or writes. A system with no `*Platform` param cannot
+//! touch the renderer.
 
 const std = @import("std");
 const world_mod = @import("./world.zig");
@@ -272,12 +280,65 @@ pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {
     @call(.auto, sys, args);
 }
 
+/// The injectable **resource groups**: every struct-typed field of `Resources`. A system
+/// names the group it touches (`*Sim`, `*const Config`) instead of taking the whole bundle,
+/// so its signature states its reach and the compiler holds it to that — a system with no
+/// `*Platform` param cannot reach the renderer.
+///
+/// Derived from the fields rather than listed, so a new group is injectable with no edit
+/// here. Two guards keep the type-directed binding honest:
+///
+///  - **struct-typed fields only.** A bare primitive on `Resources` (a top-level `f32`)
+///    would make `*f32` injectable, and every system taking an `*f32` would silently bind
+///    to it. A scalar belongs inside a group anyway, so excluding it costs nothing.
+///  - **distinct types.** Two fields of the same type make `*T` ambiguous; the `comptime`
+///    block below turns that into a build error instead of a silent bind to whichever
+///    field comes first.
+const groups = blk: {
+    var out: []const std.builtin.Type.StructField = &.{};
+    for (std.meta.fields(Resources)) |f| {
+        if (@typeInfo(f.type) == .@"struct") out = out ++ [_]std.builtin.Type.StructField{f};
+    }
+    break :blk out;
+};
+
+comptime {
+    for (groups, 0..) |a, i| for (groups[i + 1 ..]) |b| {
+        if (a.type == b.type) @compileError(
+            "Resources." ++ a.name ++ " and Resources." ++ b.name ++ " share the type " ++
+                @typeName(a.type) ++ ", so a `*" ++ @typeName(a.type) ++
+                "` system param would be ambiguous. Give one of them its own type.",
+        );
+    };
+}
+
+/// The group names, for the "valid system param" error message. Comptime-built from
+/// `groups`, so it can never fall out of step with what is actually injectable.
+const group_list = blk: {
+    var out: []const u8 = "";
+    for (groups, 0..) |f, i| out = out ++ (if (i == 0) "" else ", ") ++ "*" ++ @typeName(f.type);
+    break :blk out;
+};
+
 fn extract(comptime PT: type, world: *World, res: *Resources) PT {
     if (PT == *World) return world; // direct world access for structural changes (add/remove/despawn)
     if (PT == *Resources) return res;
     if (PT == *const Resources) return res;
-    if (!@hasDecl(PT, "_system_param_kind")) {
-        @compileError("system param must be *World / *Resources / Query / Single / MaybeSingle, got " ++ @typeName(PT));
+    // One resource group. `*const` is the read-only form and is worth reaching for: it puts
+    // "reads tuning" vs "writes the run" in the signature, checked by the compiler.
+    inline for (groups) |f| {
+        if (PT == *f.type or PT == *const f.type) return &@field(res, f.name);
+    }
+    // `@hasDecl` demands a container, and the likeliest wrong guess is a pointer (`*Log`,
+    // `*f32`), so check the shape first — otherwise a bad param dies on a builtin error
+    // and never reaches the message that lists what is actually valid.
+    const is_container = switch (@typeInfo(PT)) {
+        .@"struct", .@"enum", .@"union", .@"opaque" => true,
+        else => false,
+    };
+    if (!is_container or !@hasDecl(PT, "_system_param_kind")) {
+        @compileError("system param must be *World, *Resources, a Query/Single/MaybeSingle, " ++
+            "or a resource group (" ++ group_list ++ ", each also valid as *const); got " ++ @typeName(PT));
     }
     return .{ .world = world };
 }

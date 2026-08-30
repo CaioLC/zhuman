@@ -89,6 +89,17 @@ through comptime introspection:
 | `Maybe(T)` | yields `?*T` |
 | `Entity` | yields the id; does not drive iteration |
 | `*Resources` / `*World` | taken directly |
+| `*Sim`, `*const Config`, `*const Time`, … | one **resource group** — any struct-typed field of `Resources` |
+
+Prefer naming groups over taking `*Resources`: the signature then states what the system
+reaches, and the compiler holds it to that — `metabolize` has no `*Platform` param, so it
+cannot touch the renderer. `*const` vs `*` says whether it reads or writes, which is why
+`*const Config` (tuning) and `*Sim` (the run) read differently at a glance. The set is
+derived from `Resources`' fields, so a new group needs no change in `ecs.zig`; two guards
+keep the type-directed binding honest — only struct-typed fields inject (a bare `f32` on
+`Resources` would make `*f32` bind to it), and two fields sharing a type is a build error
+rather than a silent bind to the first. `resolve_busy` still takes `*Resources`, because it
+delegates to `finish_labor`/`finish_build`, which do too.
 
 `ecs.getMany(world, entity, params)` is `Query`'s non-iterating sibling, for pulling several
 components off an entity you already have. It panics on a missing required component rather
