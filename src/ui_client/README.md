@@ -185,15 +185,9 @@ drawn in order. The flattening of a builder's return shape (a `*Node`, an `?*Nod
 tuple of them) into that list is `Node.collect`, an engine mechanism; this file only names
 the wrapper so `pages/` can build against it.
 
-## Not yet
+## `widgets.zig`
 
-- **`widgets.zig` is legacy and unreferenced.** The pre-`elements` palette (`label`,
-  `button`, `panel`, `scroll_view`, `modal`, `tooltip`, `text_input`, …). Nothing outside
-  this folder calls it any more — the screens moved onto templates — so it stays alive only
-  through `root.zig`'s re-exports. Deleting it also drops the last copies of
-  `scroll_speed`/`scrollbar_w`, which `pages/templates/scroll_view.zig` duplicates. Its
-  `modal`, `tooltip` and `text_input` have no template equivalent yet, so those three want
-  rebuilding on the foundation rather than plain deletion.
-- **Responsive scale.** Every scalar here — the `body`/`h1` ladder, `pad`, `gap`,
-  `stroke_w`, and the px sizes callers pass — is authored at one reference resolution and
-  never adapts. See the `TODO(responsive-scale)` note in `style.zig` and the roadmap.
+The palette that predates `elements` — `label`, `button`, `panel`, `scroll_view`, `modal`,
+`tooltip`, `text_input`. Nothing outside this folder calls it: the screens moved onto
+`pages/templates/`, so it stays reachable only through `root.zig`'s re-exports. Retiring it is
+in [`../../docs/roadmap.md`](../../docs/roadmap.md).

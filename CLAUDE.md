@@ -41,7 +41,7 @@ got there — git holds the history.
 | How does the UI engine work? nodes, the key-cache, interaction, layout | [`src/ui/README.md`](src/ui/README.md) |
 | How do I build a screen? elements, `El`, the style fold, paint features, the theme | [`src/ui_client/README.md`](src/ui_client/README.md) |
 | What is the game *for*? the vision, the acts, the locked decisions | [`docs/design.md`](docs/design.md) |
-| What is next, and what is deliberately not built? | [`docs/roadmap.md`](docs/roadmap.md) |
+| What is next, what is broken, what is deliberately not built? | [`docs/roadmap.md`](docs/roadmap.md) |
 
 ## Layers
 
@@ -61,6 +61,12 @@ The sim (`world.zig`, `ecs.zig`, `systems.zig`, `actions.zig`, `capital.zig`) si
 of this and knows nothing about the UI.
 
 ## Conventions
+
+**One document holds the future.** [`docs/roadmap.md`](docs/roadmap.md) is the only place
+that discusses what isn't built — gaps, limitations, intentions, arguments about future
+features. Every other document, and every code comment, describes what *is*. A `TODO` in the
+code is a roadmap entry that escaped; put the content in the roadmap and leave at most a
+pointer where it matters.
 
 **Writing docs and comments.** Describe what a thing *is*, in the present tense. A date inside
 a description is a smell — it means the sentence is about a change rather than about the

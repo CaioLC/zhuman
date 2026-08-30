@@ -8,7 +8,9 @@
 const ha = @import("ha");
 const dist = ha.dist;
 
-// TODO: these are private structs and only used as pieces of larger components. not to be generated as a SparseSet
+// Private on purpose: these are pieces of larger components, never components themselves,
+// and `World`'s comptime scan only sees a file's *public* decls — so keeping them private
+// is what stops a dead `SparseSet` being generated for each.
 const Requires = struct {
     energy: f32,
     materials: f32,

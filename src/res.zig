@@ -124,10 +124,11 @@ pub const Sim = struct {
 /// This frame's resolved presentation values. Everything here is recomputed in
 /// `build_ui`'s prologue from sim state and the window; nothing persists across frames,
 /// and nothing outside the UI reads it. State that must survive a frame belongs in a
-/// `Ctx` pool; state the sim writes belongs in `Sim`. The responsive-scale factor
-/// (see `ui_client/style.zig`'s `TODO(responsive-scale)`) is the next resident.
+/// `Ctx` pool; state the sim writes belongs in `Sim`. The responsive-scale factor is the
+/// next resident (docs/roadmap.md, "UI foundation").
 pub const View = struct {
-    /// TODO: let's drop the cold/warm for now.
+    /// This frame's palette — `build_ui` installs one over the foundation's neutral
+    /// defaults. Where the COLD↔WARM blend is headed is in docs/roadmap.md.
     theme: thememod.Theme = .{},
 };
 

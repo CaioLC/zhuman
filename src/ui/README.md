@@ -327,9 +327,7 @@ Because the engine never measures anything, `set_global_pos` takes no host `ctx`
 scratch `Allocator` that `place` uses to materialize each node's in-flow child list (so the
 flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-size-pass
 would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
-where height depends on the resolved width. We don't do that yet.) Still pending (Roadmap):
-`range`/`max_of` combinators, `stretch`/`align-content`, and the `strictness`-weighted
-sibling distribution.
+where height depends on the resolved width. We don't do that yet.)
 
 ## Writing a widget
 
@@ -426,26 +424,11 @@ measures; the *generic* engine code never does.
 - **Anchors + Layout Groups for macro composition; autolayout for interiors** is
   an additive, orthogonal track — not web-style layout.
 
-## Not yet
+## Extraction
 
-Everything the engine does today is described above. What it does not do:
+The engine is callback-free — rendering and sizing are host loops and host data, not
+engine-invoked `*anyopaque` callbacks — and imports nothing outside this folder. Lifting
+`src/ui/` into its own repo is packaging work; `src/ui_client/` is the template for how a host
+binds it (see [`../ui_client/README.md`](../ui_client/README.md)).
 
-- **Sizing combinators.** `range`/`max_of`, and a `strictness: f32` driving a
-  violation-resolution pass that distributes slack and overflow among siblings. The
-  per-axis `SizeRule` solve is in place (see *Sizing*); this extends it.
-- **Clip-aware hit-testing.** `Layout.overflow` crops the render walk, but `mark` still
-  tests a slot's raw rect, so a node scrolled out of its viewport stays clickable. The fix
-  is intersecting the clip rect in `mark` — the second consumer that put `overflow` in
-  core rather than in the host's `RenderData`.
-- **O(interactive) `stamp_rects`.** The event stage is already O(interactive) — `mark`
-  iterates live slots, each carrying its rect, with no tree walk. `stamp_rects` is the one
-  O(all) pass left, because it reads geometry that only exists on the tree. It could match
-  if `query` pushed nodes onto a per-frame list, at the cost of threading that list
-  through `Ctx`.
-- **Focus pruning.** `Ctx.focused` is not swept the way slots are; the host clears it.
-
-**On extraction:** the engine is callback-free — rendering and sizing are host loops and
-host data, not engine-invoked `*anyopaque` callbacks — and imports nothing outside this
-folder. Lifting `src/ui/` into its own repo is packaging work at this point;
-`src/ui_client/` is the template for how a host binds it (see
-[`../ui_client/README.md`](../ui_client/README.md)).
+What the engine does *not* do yet is [`../../docs/roadmap.md`](../../docs/roadmap.md).

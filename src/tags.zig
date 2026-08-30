@@ -21,4 +21,5 @@ pub const Food = struct {};
 pub const Comfort = struct {};
 pub const Tool = struct {};
 pub const WoodCutting = struct {};
-// TODO: Continue categorizing
+// Nothing reads these yet; the set is settled when something needs to group goods
+// (docs/roadmap.md, "Sim").
