@@ -14,8 +14,15 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 
-/// The host color type — SDL's `SDL_Color` (`{ r, g, b, a: u8 }`). One alias so the
-/// backing type can be swapped in a single place; carried opaquely on `RenderData`.
+/// The host color type — exactly SDL's `SDL_Color` (`{ r, g, b, a: u8 }`), not a wrapper.
+/// Carried opaquely on `RenderData`; the engine never reads it.
+///
+/// The alias is a **dependency fence, not an abstraction seam**. It buys no portability:
+/// this layer is SDL all the way down (renderer, textures, fonts, `FRect`), and every
+/// call into SDL destructures a colour into an anonymous literal anyway, so nothing here
+/// leans on the type's identity. What it buys is that `src/pages/` — templates and
+/// screens — can name a colour without importing `sdl3`. No file under `pages/` imports
+/// the graphics backend today; this is part of why.
 pub const Color = sdl3.pixels.Color;
 
 /// Opaque RGB shorthand (alpha = 255). SDL's `Color` has no field defaults (it is a

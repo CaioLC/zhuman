@@ -14,8 +14,7 @@ const uitheme = @import("./ui_client/theme.zig");
 const rgb = uitheme.rgb;
 const mix = uitheme.mix;
 
-pub const Theme = uitheme.Theme;
-pub const Color = uitheme.Color;
+const Theme = uitheme.Theme;
 
 pub const cold = Theme{
     .bg = rgb(7, 11, 13),
