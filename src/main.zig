@@ -168,7 +168,7 @@ pub fn main() !void {
         }
 
         // Render Stage
-        // window — cleared to the theme's own background, so it shifts cold/warm too
+        // window — cleared to the theme's own background, not a fixed color
         const bg = app.resources.view.theme.bg;
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();

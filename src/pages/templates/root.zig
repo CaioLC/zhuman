@@ -53,4 +53,3 @@ pub const figure = figure_mod.figure;
 pub const Status = status_mod.Status;
 pub const actor_status = status_mod.actor_status;
 pub const heartbeat_color = status_mod.heartbeat_color;
-pub const compute_warmth = status_mod.compute_warmth;

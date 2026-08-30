@@ -54,13 +54,6 @@ Both have to come back before Act II can start:
 
 ## HUD
 
-- **Finish removing COLD↔WARM.** The temperature identity is two-thirds gone and the leftovers
-  are inert: `draw_scanlines` no longer exists, `compute_warmth` is defined and re-exported but
-  never called, and `build_ui` pins the theme at a hardcoded `palette.lerp(0.6)`. Decide it
-  either way — revive warmth by wiring `compute_warmth` back into `build_ui`, or finish the
-  removal and collapse `palette.zig` to a single palette, dropping `cold`/`warm`/`lerp` and
-  `compute_warmth`. Leaving it half-done means the code reads as if a mechanic exists that does
-  not.
 - **Vigor sparkline** — needs a new persistence mechanism: a `Vigor`-history component plus a
   system sampling it on a fixed cadence, reset on death.
 - **Distribution-curve glyph** — needs a new engine draw primitive. Nothing renders a polyline

@@ -230,7 +230,7 @@ panic in `getMany`. It is also the roster's only tech-tree edge.
 | `capital.zig` | the generic build path, the modifier pairs, the generator system |
 | `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band |
 | `res.zig` | `Resources`, grouped by who writes it: `platform`, `input`, `time`, `sim`, `config`, `view` |
-| `palette.zig` | the game's `cold`/`warm` palettes and the blend between them |
+| `palette.zig` | the game's palette — the nine `Theme` roles, filled in |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines. Leaf module |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
 | `pages/` | the screens (`build_ui`, `play_game`, `gameover`) and the template shelf |

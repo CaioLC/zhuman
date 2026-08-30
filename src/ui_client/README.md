@@ -157,7 +157,7 @@ forgets to install a palette looks unfinished rather than subtly wrong.
 
 A game supplies values by assigning a whole `Theme` onto `res.view.theme`; this layer
 never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`), whose
-`cold`/`warm` poles and `lerp(t)` blend are art direction and live outside this folder.
+`theme` values are art direction and live outside this folder.
 Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
 `ctx.res.view.theme` — none of them imports the palette module.
 

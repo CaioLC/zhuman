@@ -314,7 +314,7 @@ pub fn remove_chainsaw(w: *World, agent: Entity) void {
 // --- Health goods: capacity capital -------------------------------------------------
 // Bed / Pantry / Medicine chest each raise the vigor *ceiling*. Apply also fills what it
 // adds (first night in a real bed, you wake refreshed), so `v/max` — the fraction the
-// warmth theme, the status word and `yield_factor` all read — never dips on an upgrade.
+// status word, the vitals figure and `yield_factor` all read — never dips on an upgrade.
 // All mutations are relative (+=/−=), so a future aging system decrementing `max`
 // composes underneath without special cases.
 

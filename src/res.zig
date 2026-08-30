@@ -128,7 +128,7 @@ pub const Sim = struct {
 /// next resident (docs/roadmap.md, "UI foundation").
 pub const View = struct {
     /// This frame's palette — `build_ui` installs one over the foundation's neutral
-    /// defaults. Where the COLD↔WARM blend is headed is in docs/roadmap.md.
+    /// defaults.
     theme: thememod.Theme = .{},
 };
 

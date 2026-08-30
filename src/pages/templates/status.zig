@@ -1,6 +1,6 @@
 //! Status/vitals readouts — pure functions over the actor's vigor, building no nodes. The
-//! condition word, the heartbeat's pulse color, and the frame's warmth all read the same
-//! one number, so the HUD never announces two different moods at once.
+//! condition word and the vitals figure read the same one number, so the HUD never
+//! announces two different moods at once.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -26,11 +26,4 @@ pub fn actor_status(t: Theme, vigor: *const comp.Vigor, cfg: ha.res.Config) Stat
         .weary => .{ .word = "WEARY", .color = t.warn },
         .alive => .{ .word = "ALIVE", .color = t.acc },
     };
-}
-
-/// This frame's 0..1 "warmth" mood — drives the COLD↔WARM theme blend and the vitals
-/// figure. Simplified to the actor's vigor fraction for now (the satiety/capital inputs
-/// went away with their mechanics); a rested actor reads warm, a spent one cold.
-pub fn compute_warmth(vigor: *const comp.Vigor) f32 {
-    return std.math.clamp(vigor.v / vigor.max, 0, 1);
 }
