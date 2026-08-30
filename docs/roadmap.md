@@ -29,6 +29,15 @@ The slice on screen today. Its ending is built — the Shelter, and the curtain 
 
 ### HUD
 
+- **The eating pulse runs backwards on a food surplus.** `ration_dial`'s active chip fills by
+  `ceil(F) − F` (`pages/templates/ration_dial.zig`), which reads as progress through the current
+  food unit only while the larder is *falling*: 5.0 → 4.0 sweeps the bar left to right and
+  resets, once per unit eaten. Let net flow turn positive — a garden bed or chicken coop
+  out-producing metabolism and spoilage — and F rises instead, so the same expression ramps
+  1 → 0 and the `.top_left`-anchored fill retreats right to left. The fix has to say what the
+  pulse *means* while the larder fills: mirror it (progress toward the next unit gained), hold
+  it still, or drive it off the consumption rate rather than off the stock level — which is the
+  honest reading, since the pulse's speed is meant to be the eating rate.
 - **Distribution-curve glyph** — the other half of locked decision #5: a yield's p10–p90 band
   drawn as a mini curve, its *shape* telling normal from poisson from exponential, in place of
   the text line `action_card` prints today (`odds 1-3 in 8 of 10 (normal)`). Needs a new engine
