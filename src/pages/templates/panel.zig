@@ -20,7 +20,7 @@ pub fn panel(ctx: *UiCtx, parent: El, id: []const u8, title: []const u8) !El {
         .with_style(.{ Style{ .outline_color = th.line }, style.pad(12), style.gap(8) });
 
     const ttl = try el.text(ctx, outer, "title", title);
-    _ = ttl.with_style(.{Style{ .text = th.dim }});
+    _ = ttl.with_style(.{ style.h3, Style{ .text = th.dim } }); // a panel title is a heading
 
     return outer;
 }

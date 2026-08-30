@@ -22,7 +22,7 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
 
     try t.figure(ctx, center, t.fig_dead, th.danger);
     _ = (try el.text(ctx, center, "dead_text", "You perished, cold and starved."))
-        .with_style(.{Style{ .text = th.fg }});
+        .with_style(.{ style.h2, Style{ .text = th.fg } }); // the only line on the screen
 
     const restart = try t.button(ctx, center, "restart", "Start over", true);
     if (restart.query().clicked) {

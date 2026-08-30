@@ -56,7 +56,7 @@ const App = struct {
     }
 
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
-        self.font = try ha.font.Fonts.init(allocator, font_path);
+        self.font = try ha.font.Fonts.init(allocator, font_path, ui_client.style.default_font);
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);

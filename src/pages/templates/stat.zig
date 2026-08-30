@@ -19,9 +19,9 @@ pub fn stat(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, value: [
     _ = line.with_flow(.{ .dir = .row }).with_gap(8);
 
     const lbl = try el.text(ctx, line, "lbl", label);
-    _ = lbl.with_style(.{Style{ .text = th.dim }});
+    _ = lbl.with_style(.{ style.body, Style{ .text = th.dim } });
     const val = try el.text(ctx, line, "val", value);
-    _ = val.with_style(.{Style{ .text = th.fg }});
+    _ = val.with_style(.{ style.h3, Style{ .text = th.fg } }); // the number you glance at
 
     return line;
 }

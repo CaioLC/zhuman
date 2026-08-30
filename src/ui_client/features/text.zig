@@ -6,7 +6,7 @@
 
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
-const font = @import("../../font.zig");
+const style = @import("../style.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -22,7 +22,7 @@ pub const State = cb.UiState.TextState;
 pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
     st.update(text);
-    st.px = font.default_px; // default; `style.apply` overrides + re-measures for a heading
+    st.px = style.default_font; // `style.apply` overrides + re-measures for a heading
     const tw, const th, const baseline = try ctx.res.platform.font.measureBaseline(text, st.px);
     var size = node.size;
     size.w = .content;

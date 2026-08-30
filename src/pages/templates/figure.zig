@@ -30,6 +30,7 @@ pub fn figure(ctx: *UiCtx, parent: El, fig: Figure, color: Color) !void {
 
     inline for (.{ "l1", "l2", "l3" }, .{ fig.l1, fig.l2, fig.l3 }) |lid, line| {
         const n = try el.text(ctx, col, lid, line);
-        _ = n.with_style(.{Style{ .text = color }});
+        // h3 keeps the 3-line figure legible; at body size the ASCII reads as noise.
+        _ = n.with_style(.{ style.h3, Style{ .text = color } });
     }
 }

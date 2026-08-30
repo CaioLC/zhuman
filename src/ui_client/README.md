@@ -161,6 +161,11 @@ never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`)
 Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
 `ctx.res.view.theme` — none of them imports the palette module.
 
+The typography scale lives beside the roles: `default_font` (14) is what a text leaf renders
+at when nothing styles it, and `body` is defined *from* it, so "unstyled" and "explicitly
+body" cannot drift. `h3`/`h2`/`h1` step up from there. `font.zig` is the backend — a lazy
+size-to-font cache — and owns no typography; `Fonts.init` takes the size to pre-warm.
+
 `theme.zig` is a **leaf**: it imports only `sdl3`, never the engine or `ctx_binding`. That
 is what lets `res.zig` hold a `Theme` on `View` with no import cycle — `res.zig` → this →
 `sdl3`, and nothing points back. It also carries the color math (`mix`, `rgb`) that a

@@ -10,21 +10,19 @@
 const std = @import("std");
 const sdl = @import("sdl3");
 
-/// Default UI text size (px), used until the style system supplies a per-node font.
-/// (Phase 3 folds this into the style layer's `DEFAULT_FONT`.)
-pub const default_px: f32 = 24;
-
 pub const Fonts = struct {
     path: [:0]const u8,
     gpa: std.mem.Allocator,
     /// whole-point size → the font opened at it. A handful of entries across a run.
     cache: std.AutoHashMapUnmanaged(u32, sdl.ttf.Font) = .{},
 
-    /// Open the backend for `path` and warm the default size, so a missing font file
-    /// errors here at startup (as it did when a single font was opened eagerly at setup).
-    pub fn init(gpa: std.mem.Allocator, path: [:0]const u8) !Fonts {
+    /// Open the backend for `path` and warm one size, so a missing font file errors here
+    /// at startup rather than at the first blit. Which size to warm is the caller's call
+    /// (`ui_client.style.default_font` is the one every unstyled node uses) — this module
+    /// is the backend and owns no typography.
+    pub fn init(gpa: std.mem.Allocator, path: [:0]const u8, warm_px: f32) !Fonts {
         var self = Fonts{ .path = path, .gpa = gpa };
-        _ = try self.at(default_px);
+        _ = try self.at(warm_px);
         return self;
     }
 

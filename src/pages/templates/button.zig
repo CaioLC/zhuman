@@ -28,7 +28,7 @@ pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enable
 
     // Label content leaf (flows by default); padding lives on it so glyphs clear the border.
     const lbl = try el.text(ctx, outer, "lbl", label);
-    _ = lbl.with_style(.{style.pad_sym(8, 4)});
+    _ = lbl.with_style(.{ style.body, style.pad_sym(8, 4) });
 
     // Chrome: dim disabled, accent on hover (read off the box's slot), else soft fg.
     const c = if (!enabled) th.dim else if (outer.query().hovering) th.acc else th.fg;

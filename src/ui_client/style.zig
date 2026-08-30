@@ -57,8 +57,15 @@ pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 2
 // they compose (scale first, then reflow the scaled boxes).
 
 // A generic typography scale (font size only — colors are game art direction and live
-// with the theme/templates). Tunable; `body` matches `font.default_px`.
-pub const body: Style = .{ .font = 14 };
+// with the theme/templates).
+
+/// What a text leaf renders at when nothing styles it — the base of the ladder below, and
+/// the size `text.attach` seeds onto a fresh node. `body` is defined *from* it rather than
+/// repeating the number, so "unstyled" and "explicitly body" can never drift apart: an
+/// element that forgets `style.body` still matches the ones that ask for it.
+pub const default_font: f32 = 14;
+
+pub const body: Style = .{ .font = default_font };
 pub const h3: Style = .{ .font = 22 };
 pub const h2: Style = .{ .font = 28 };
 pub const h1: Style = .{ .font = 36 };
