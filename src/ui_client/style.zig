@@ -52,7 +52,7 @@ pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 2
 // **scale factor** (derived once per frame from the window size / DPI, held on `Resources`
 // beside `theme`) that these fragments multiply into every dimension at `apply` time, so a
 // 12px pad becomes `12 * scale`. That keeps authoring in convenient reference units while the
-// output tracks the display. Distinct from the responsive-*reflow* TODO in CLAUDE.md (columns
+// output tracks the display. Distinct from the responsive-*reflow* item in docs/roadmap.md (columns
 // that collision-avoid at narrow widths): this is uniform scaling, that is layout re-flow —
 // they compose (scale first, then reflow the scaled boxes).
 

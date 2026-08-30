@@ -1,7 +1,7 @@
 # Human Action — Game Design
 
-What the game is and the rules it plays by. The code as it exists is documented in
-[`../CLAUDE.md`](../CLAUDE.md); what's next is [`roadmap.md`](roadmap.md).
+What the game is and the rules it plays by. The code that implements it is
+[`../src/README.md`](../src/README.md); what's next is [`roadmap.md`](roadmap.md).
 
 ## Vision
 

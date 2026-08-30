@@ -1,7 +1,7 @@
 # Roadmap
 
 What's next. The game's design is [`design.md`](design.md); the code as it exists is
-[`../CLAUDE.md`](../CLAUDE.md).
+[`../src/README.md`](../src/README.md).
 
 ## The horizon: Act II
 
