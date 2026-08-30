@@ -4,8 +4,8 @@
 //! `Resources` (rendering + host `input`), and the per-frame arena (node tree).
 //! Parametrized over the state-type registry `StateNs`, the host interaction-flag
 //! type `IntFlags`, and the `Res` type so the generic `ui` module stays free of any
-//! game/platform imports — the concrete binding lives one layer up (see widgets.zig).
-//! See docs/ui-building-language-plan.md.
+//! game/platform imports — the concrete binding lives one layer up (`ui_client/ctx_binding.zig`).
+//! See `README.md` in this folder.
 
 const std = @import("std");
 const cache_mod = @import("cache.zig");

@@ -48,6 +48,12 @@ Both have to come back before Act II can start:
 
 **Engine**
 
+- **Retire `ui_client/widgets.zig`.** The pre-`elements` widget palette is unreferenced -
+  nothing outside `ui_client/` calls it, since the screens moved onto `pages/templates/`.
+  Deleting it and `root.zig`'s re-exports also drops the duplicate `scroll_speed`/
+  `scrollbar_w` constants. Its `modal`, `tooltip` and `text_input` have no template
+  equivalent yet, so those three want rebuilding on the foundation first rather than plain
+  deletion.
 - **Responsive layout** — the Resources/Log column (`top_left`) and the tabbed center column can
   overlap at some window sizes and aspect ratios. Independent anchors don't collision-avoid:
   each places from its own point and lets `fit_children` grow as large as it grows. The fix is a

@@ -14,7 +14,7 @@ pub const Color = theme.Color;
 /// Context Binding
 /// The registry of widget-state (render-state) types kept in the UI cache. One
 /// `Pool(T)` is generated per declaration. This is where the generic `ui` engine
-/// meets the concrete state types — see docs/ui-building-language-plan.md.
+/// meets the concrete state types — see `README.md` in this folder.
 pub const UiState = struct {
     /// Pure text-state data — one slot per text widget, sourced and blit by the `text`
     /// feature (`features/text.zig`). The `State` types live *here*, not with their

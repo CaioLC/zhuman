@@ -7,7 +7,7 @@
 //! live pool at point of use. Removed slots become holes in a free-list (we
 //! never compact), so live indices are stable for the lifetime of a slot.
 //!
-//! See docs/ui-building-language-plan.md (decisions #1, #2, #3).
+//! See `../ui/README.md` — "The key-cache: pools + handles".
 
 const std = @import("std");
 

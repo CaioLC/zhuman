@@ -51,11 +51,14 @@ Node(comptime RenderData: type)                                           // the
   rebuilt from scratch each frame, like the node itself.) Named *Data*, not *Flags*,
   because the fields carry payloads (a `Color`), not bare bits.
 
+Colors are host-side too: the engine has no `Color` type. A payload on `RenderData` is
+whatever the host puts there (here, SDL's `pixels.Color`), carried opaquely.
+
 The host supplies, *one layer up* (today `src/ui_client/` + `src/res.zig`): the
 concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)` and
 `pub const Node = ui.Node(RenderData)` (`ctx_binding.zig`), the `Interaction` type, the
-paint-feature registry + `attach` mixins (`features/`), the widget functions
-(`widgets.zig`), the render walk (`draw.zig`), and `Resources` itself. To lift this into
+paint-feature registry + `attach` mixins (`features/`), the content elements and style
+fold (`elements.zig` / `style.zig`), the render walk (`draw.zig`), and `Resources` itself. To lift this into
 its own project, take `src/ui/` as-is; `ui_client/` + `res.zig` are the template for how
 a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 
@@ -63,11 +66,11 @@ a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 
 | File | Responsibility |
 |---|---|
-| `root.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + the `stamp_rects` post-layout walk. Re-exports everything. |
+| `root.zig` | The barrel: re-exports everything, and owns the `stamp_rects` post-layout walk. |
+| `node.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + `collect` (flatten a builder's return shape into the frame's root list). |
 | `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`), and `focused` (the key that owns keyboard text). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
-| `color.zig` | `Color` (RGBA POD, defaults white) + `scaled`. A reusable utility type the host puts in its `RenderData`; not a `Node` field, and the engine never interprets it. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
 | `features/layout.zig` | `Layout` (`Anchor` + `Flow`) + the whole solve: sizing passes + `set_global_pos`/placement (one line-based flow algorithm). |
 
@@ -177,7 +180,7 @@ queryable — there's no separate opt-in. A node *participates* in hit-testing o
 `query`s it (that's what keeps its interaction slot alive). **The flag vocabulary is
 host-defined**, exactly like `RenderData`: the host passes its `Interaction` struct
 as the `IntFlags` parameter, and the engine stores it opaquely — it owns neither the
-field names nor what they mean. Today's host (`widgets.zig`):
+field names nor what they mean. Today's host (`ui_client/ctx_binding.zig`):
 
 ```zig
 pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
@@ -285,7 +288,7 @@ Two orthogonal axes, both Unity-inspired:
   `place` folds it straight into the base position it hands each child (`px -= p.layout
   .scroll_y`), so a scroll container needs no second layout pass — it just holds an
   offset. Defaults to 0 (every ordinary node is unaffected). The host binds this to
-  mouse-wheel input in a `scroll_view` widget (`widgets.zig`); pair it with `overflow
+  mouse-wheel input in a `scroll_view` template (`pages/templates/`); pair it with `overflow
   = .clip` (below) on the viewport so the now-shifted-but-not-resized content doesn't
   paint outside its box.
 - **`overflow`** (`.visible` | `.clip`) — the **overflow axis**: what happens to content
@@ -404,14 +407,14 @@ the hand-written `RenderData` drifts from the list.
 host measures content at build (`data_text` asks the font for the text's px
 extent) and stores it on the node's `Size` as `data_width`/`data_height`.
 The `content` rule sizes to those and `draw_text` draws to them, so the whole
-solve is pure and `set_global_pos` takes no `ctx`. Widgets read `u.res` (the host
-binding) when they measure; the *generic* engine code never does.
+solve is pure and `set_global_pos` takes no `ctx`. Host code reads `u.res` when it
+measures; the *generic* engine code never does.
 
 ## Design decisions (the short version)
 
-- **Reject flags; use feature fields + widget functions.** Our `Node` already
-  has typed `?Feature` fields that carry payloads — strictly better than a bit.
-  `UIWidgets`/`El`/`Button`/`DataType` were dissolved into widget functions.
+- **Reject flags; use feature fields.** `Node` carries typed optional payload fields
+  rather than bare bits, so an aspect arrives with the data it needs to paint. Widget
+  *classes* (`UIWidgets`/`Button`/`DataType`) were dissolved into plain functions.
 - **Persistence = pools + handles**, keyed by rolling hash. No generation
   counters; never compact.
 - **Build is a world-mutating step at one fixed schedule slot.** Immediate mode
@@ -423,38 +426,26 @@ binding) when they measure; the *generic* engine code never does.
 - **Anchors + Layout Groups for macro composition; autolayout for interiors** is
   an additive, orthogonal track — not web-style layout.
 
-## Roadmap / not yet
+## Not yet
 
-- **Autolayout sizing** (Track B): base `SizeRule`s (`fixed`/`content`/
-  `pct_of_parent`/`fit_children`), per-axis, with the bottom-up + top-down solve
-  and the definite/indefinite fallback — **done** (see *Sizing* above). Still to
-  land: `range`/`max_of` combinators, and a `strictness: f32` driving a
-  violation-resolution pass that distributes slack/overflow among siblings.
-- **Sprites — done (host-side).** The host carries a `Sprite` (`texture` +
-  optional `src` sheet cell) on `RenderData.img`; the `img` feature's `attach_sprite`
-  sets it and `ctx_binding.icon_sprite(res, col, row)` builds one from a sheet cell. No
-  engine change was needed — `RenderData` is host policy, so the aspect rode in opaquely.
-- **Feature registry (host-side) — done.** Paint aspects are now a registry of feature
-  modules (`ui_client/features/`), each co-locating its `RenderData` field, optional
-  pooled `State`, `attach`, and `draw`; an ordered `list` drives the render walk and is
-  the z-order, and `assertFeature` keeps the hand-written `RenderData` from drifting.
-  Adding a visual (svg was the proof) is a module + a list entry — still no engine change.
-  The engine gained only the two *mechanism* hooks this leans on: `node.state(u, T)`
-  (node-keyed cache access, replacing the old singular `node.data` handle) and the pool
-  **eviction hook** (`deinit` on drop, so a feature's resource-owning `State` — an svg's
-  raster texture — doesn't leak).
-- **Overflow / clipping — done (in core).** `Layout.overflow` (`.visible`/`.clip`) is
-  the overflow axis; the host render walk (`draw.zig`) keeps a clip stack from it. It's
-  core (not a `RenderData` aspect) because it's geometry two engine consumers read — the
-  render crop and, next, hit-testing (so a clipped-away node stops being clickable —
-  `mark` intersecting the clip rect is the pending follow-up).
-- **Interactables-only marking — done.** The event stage (`ui.mark`) now iterates
-  the live interaction slots, each carrying its node's rect, so hit-testing is
-  O(interactive), not O(all) — no tree walk. The one O(all) pass left is
-  `stamp_rects` (it reads geometry that only exists on the tree); it could drop to
-  O(interactive) by having `query` push nodes onto a per-frame list, at the cost of
-  threading that list through `Ctx`.
-- **Full extraction:** the engine is now **callback-free** — rendering and sizing
-  are host loops/data, not engine-invoked `*anyopaque` callbacks, so that
-  type-erasure wart is gone. Lifting `src/ui/` into its own repo is mostly
-  packaging now; `widgets.zig`/`res.zig` stay the host-binding template.
+Everything the engine does today is described above. What it does not do:
+
+- **Sizing combinators.** `range`/`max_of`, and a `strictness: f32` driving a
+  violation-resolution pass that distributes slack and overflow among siblings. The
+  per-axis `SizeRule` solve is in place (see *Sizing*); this extends it.
+- **Clip-aware hit-testing.** `Layout.overflow` crops the render walk, but `mark` still
+  tests a slot's raw rect, so a node scrolled out of its viewport stays clickable. The fix
+  is intersecting the clip rect in `mark` — the second consumer that put `overflow` in
+  core rather than in the host's `RenderData`.
+- **O(interactive) `stamp_rects`.** The event stage is already O(interactive) — `mark`
+  iterates live slots, each carrying its rect, with no tree walk. `stamp_rects` is the one
+  O(all) pass left, because it reads geometry that only exists on the tree. It could match
+  if `query` pushed nodes onto a per-frame list, at the cost of threading that list
+  through `Ctx`.
+- **Focus pruning.** `Ctx.focused` is not swept the way slots are; the host clears it.
+
+**On extraction:** the engine is callback-free — rendering and sizing are host loops and
+host data, not engine-invoked `*anyopaque` callbacks — and imports nothing outside this
+folder. Lifting `src/ui/` into its own repo is packaging work at this point;
+`src/ui_client/` is the template for how a host binds it (see
+[`../ui_client/README.md`](../ui_client/README.md)).
