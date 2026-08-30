@@ -66,7 +66,7 @@ pub fn metabolize(
     const dt_days = time.dt / cfg.secs_per_day;
     var it = q.iter();
     while (it.next()) |entry| {
-        const vigor, const food, const met = entry;
+        const vigor: *comp.Vigor, const food: *comp.InventoryFood, const met: *comp.Metabolism = entry;
         const food_before = food.v;
         const frac_before = vigor.v / vigor.max;
 
@@ -106,7 +106,7 @@ pub fn resolve_busy(
     var n: usize = 0;
     var it = q.iter();
     while (it.next()) |entry| {
-        const e, const b = entry;
+        const e: Entity, const b: *comp.Busy = entry;
         b.remaining -= res.time.dt;
         if (b.remaining <= 0) {
             done[n] = e;
@@ -154,7 +154,7 @@ pub fn mark_dead(
 ) void {
     var it = q.iter();
     while (it.next()) |entry| {
-        const e, const vigor = entry;
+        const e: Entity, const vigor: *comp.Vigor = entry;
         if (vigor.v <= 0 and !w.has(e, tag.Dead)) {
             w.add(e, tag.Dead{});
             sim.log.push(.danger, "You perished, cold and starved.");

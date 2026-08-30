@@ -160,6 +160,14 @@ fn buildEntry(
     return entry;
 }
 
+/// Iterate every entity matching `params`. `next()` yields a tuple of `*T` in declaration
+/// order (plus `Entity` and `?*T` for `Maybe`), built at comptime by `EntryType`.
+///
+/// A note for editors: that tuple is `@Type`-constructed, which no language server
+/// evaluates, so a destructure of it resolves to nothing. Annotating the bindings
+/// (`const vigor: *comp.Vigor, … = entry;`) restores completion and costs only the line.
+/// This is a tooling limit, not a design one — declaring `params` as a concrete
+/// `[]const type` instead of `anytype` was measured and changes nothing.
 pub fn Query(comptime params: anytype) type {
     const spec = comptime parseParams(params);
     if (spec.fetches.len == 0) {

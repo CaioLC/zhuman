@@ -106,6 +106,18 @@ components off an entity you already have. It panics on a missing required compo
 than degrading to `?*T`, because the caller is expected to have already qualified the entity;
 `With`/`Without` are a compile error there, since there is no set to filter.
 
+**Annotate a multi-fetch destructure.** `it.next()` returns a comptime-built tuple, and no
+language server evaluates `@Type`-constructed types — so `const vigor, const food = entry;`
+leaves an editor with nothing to offer on `vigor.`. Writing the types restores it:
+
+```zig
+const vigor: *comp.Vigor, const food: *comp.InventoryFood, const met: *comp.Metabolism = entry;
+```
+
+Worth it wherever several components come out at once, where the annotation doubles as
+documentation of which name is which. A single-component capture (`while (it.next()) |f|`) is
+already unambiguous from the `Query` a line above, and is left bare.
+
 **Structural changes go through a raw `*World` param.** A deferred `Commands` buffer is
 deliberately not built (see the `project_commands_deferred` memory). Two consequences bind
 every system: mutating the storage you are iterating is unsafe, so collect ids first and apply
