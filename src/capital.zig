@@ -427,9 +427,10 @@ fn spawn_test_agent(w: *World) Entity {
 test "build pays upfront and starts the work; finish grants the rod and the verb" {
     var w = World.init();
     var res = test_res();
+    const price = (comp.FishRod{}).requires; // from the catalog, so a re-price can't rot this
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
-        comp.InventoryMaterial{ .v = 8 }, // exactly the price — spendable to 0
+        comp.InventoryMaterial{ .v = price.materials }, // exactly the price — spendable to 0
     });
     try std.testing.expect(!w.has(e, comp.ActionFish)); // no rod, no verb
 
@@ -438,11 +439,11 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
     // Paid and busy — the rod doesn't exist until the work completes.
     try std.testing.expect(!w.has(e, comp.FishRod));
     try std.testing.expect(!w.has(e, comp.ActionFish));
-    try std.testing.expectEqual(@as(f32, 7), w.get(e, comp.Vigor).?.v); // 10 − 3 energy
-    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // 8 − 8
+    try std.testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
+    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // spent to 0
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.build_fish_rod, b.doing);
-    try std.testing.expectEqual(res_mod.hours_to_secs(12, res.config.secs_per_day), b.total);
+    try std.testing.expectEqual(res_mod.hours_to_secs(price.hours, res.config.secs_per_day), b.total);
 
     finish_fish_rod(&w, e, &res);
     try std.testing.expect(w.has(e, comp.FishRod));
@@ -453,16 +454,17 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
 test "build_fish_rod refuses when unaffordable, owned, or busy" {
     var w = World.init();
     var res = test_res();
+    const price = (comp.FishRod{}).requires;
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
-        comp.InventoryMaterial{ .v = 7 }, // one material short
+        comp.InventoryMaterial{ .v = price.materials - 1 }, // one material short
     });
 
     build_fish_rod(&w, e, &res);
     try std.testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
 
-    w.get(e, comp.InventoryMaterial).?.v = 20;
+    w.get(e, comp.InventoryMaterial).?.v = price.materials + 12;
     build_fish_rod(&w, e, &res); // starts the build
     build_fish_rod(&w, e, &res); // busy — must refuse, not double-pay
     try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v); // paid once

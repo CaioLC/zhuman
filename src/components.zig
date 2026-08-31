@@ -188,19 +188,26 @@ pub const Metabolism = struct {
 // once by `capital.begin_build`. What the good *does* once built is its category (see
 // capital.zig): an Unlocker grants a verb, an ActionModifier mutates a margin, a
 // Generator starts running. One per agent, backed by the sparse-set's structural
-// guarantee. Prices ladder from ~3 Scavenge draws (Sandals) to a multi-day save (Chainsaw)
-// — that ladder *is* the time-preference lesson.
+// guarantee.
+//
+// The roster splits in two, and the prices are what says which is which. **Crude** goods
+// — sandals, leaf bed, wire snares, root cellar, garden bed — are what a person alone can
+// make from scavenged scrap and their own hands: a few materials, half a day. **Manufactured**
+// goods are everything else, and a lone actor cannot sensibly produce them: they carry ×8 the
+// materials and ×10 the hours, so a hatchet is four days of building nothing else while the
+// larder drains. They stay buildable on purpose — nothing forbids them, they are simply
+// priced past what one body's time is worth, which is the argument for trading instead.
 
 // -- Unlockers: owning the tool is what makes the verb possible at all --------------------
 
 /// Fishing rod → `ActionFish`.
 pub const FishRod = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 8.0, .hours = 12 },
+    requires: Requires = .{ .energy = 3.0, .materials = 64.0, .hours = 120 },
 };
 
 /// Hatchet → `ActionChopWood`. The first step off bare hands into steady materials.
 pub const Hatchet = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 6.0, .hours = 10 },
+    requires: Requires = .{ .energy = 2.0, .materials = 48.0, .hours = 100 },
 };
 
 /// Wire snares → `ActionCheckTraps`.
@@ -210,7 +217,7 @@ pub const WireSnares = struct {
 
 /// Air rifle → `ActionHunt`. The long save of the labor roster.
 pub const AirRifle = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 25.0, .hours = 16 },
+    requires: Requires = .{ .energy = 2.0, .materials = 200.0, .hours = 160 },
 };
 
 // -- ActionModifiers: a margin on a verb you already have ---------------------------------
@@ -223,18 +230,18 @@ pub const Sandals = struct {
 
 /// Work gloves: splitting wood costs less body.
 pub const WorkGloves = struct {
-    requires: Requires = .{ .energy = 1.0, .materials = 3.0, .hours = 5 },
+    requires: Requires = .{ .energy = 1.0, .materials = 24.0, .hours = 50 },
 };
 
 /// Bicycle: distance gets cheap — both roaming verbs at once.
 pub const Bicycle = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 15.0, .hours = 14 },
+    requires: Requires = .{ .energy = 2.0, .materials = 120.0, .hours = 140 },
 };
 
 /// Cookpot: consumption-side capital — cooking raises the larder's `quality`, so every
 /// stored unit of food converts to more vigor under the metabolism.
 pub const Cookpot = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 7.0, .hours = 8 },
+    requires: Requires = .{ .energy = 2.0, .materials = 56.0, .hours = 80 },
 };
 
 /// Root cellar: storage capital — halves spoilage. Worth exactly what your surpluses are.
@@ -246,7 +253,7 @@ pub const RootCellar = struct {
 /// *external* energy for muscle. Splitting wood stops pricing the body and starts
 /// pricing fuel.
 pub const Chainsaw = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 60.0, .hours = 30 },
+    requires: Requires = .{ .energy = 3.0, .materials = 480.0, .hours = 300 },
 };
 
 // -- Health goods: capacity capital ------------------------------------------------------
@@ -262,12 +269,12 @@ pub const LeafBed = struct {
 
 /// Pantry.
 pub const Pantry = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 14.0, .hours = 14 },
+    requires: Requires = .{ .energy = 2.0, .materials = 112.0, .hours = 140 },
 };
 
 /// Medicine chest.
 pub const MedicineChest = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 20.0, .hours = 16 },
+    requires: Requires = .{ .energy = 2.0, .materials = 160.0, .hours = 160 },
 };
 
 // -- Generators: capital that runs itself ------------------------------------------------
@@ -290,7 +297,7 @@ pub const GardenBed = struct {
 
 /// Chicken coop: a bigger flow than the garden (poisson: eggs) for real upkeep (feed).
 pub const ChickenCoop = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 18.0, .hours = 20 },
+    requires: Requires = .{ .energy = 3.0, .materials = 144.0, .hours = 200 },
     upkeep: Requires = .{ .energy = 0.0, .materials = 0.3, .hours = 0 },
     yields: Yields = .{
         .food = .{ .kind = .poisson, .s = 2.5 },
