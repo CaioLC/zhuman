@@ -227,15 +227,39 @@ fn node_rect(node: anytype) ?geometry.Rect {
     };
 }
 
-/// Capture each interactive node's resolved rect into its interaction slot, so next
-/// frame's event stage can hit-test from the slot pool alone (`Ctx.mark`) with no
-/// tree walk. Only stamps nodes that already have a live slot — i.e. were `query`'d
-/// this frame; `stampRect` no-ops otherwise. Call once after `set_global_pos`, before
-/// the arena (and this tree) is reset. `u`/`node` are duck-typed (the concrete `Ctx`
-/// / `*Node(RenderData)`) to keep this module free of the binding.
+/// Capture each interactive node's geometry into its interaction slot, so next frame's
+/// event stage can hit-test from the slot pool alone (`Ctx.mark`) with no tree walk.
+/// Only stamps nodes that already have a live slot — i.e. were `query`'d this frame;
+/// `stampRect` no-ops otherwise. Call once after `set_global_pos`, before the arena
+/// (and this tree) is reset. `u`/`node` are duck-typed (the concrete `Ctx` /
+/// `*Node(RenderData)`) to keep this module free of the binding.
+///
+/// The walk is pre-order, and the host calls it over the roots in list order — which
+/// is exactly the order the render walk paints. So the sequence of stamps *is* back-to
+/// front z-order, and `Ctx` records it as one: this pass is where the paint-order list
+/// comes from. Two things ride down the recursion to make that list usable:
+///
+///   - the **clip** region, folded the same way the render walk folds it (a `.clip`
+///     node crops its subtree to its own box; `.visible` passes the inherited one
+///     through). Stamped beside the full rect, never *into* it — cropping the stored
+///     rect would tell a scroll container its content fits inside the viewport.
+///   - the nearest **stamped ancestor's key**, so a hit can bubble up the containment
+///     chain past nodes that were never queried.
 pub fn stamp_rects(u: anytype, node: anytype) void {
-    if (node_rect(node)) |r| u.stampRect(node.key, r);
-    for (node.children.items) |child| stamp_rects(u, child);
+    stamp_walk(u, node, null, null);
+}
+
+fn stamp_walk(u: anytype, node: anytype, clip: ?geometry.Rect, parent_key: ?u64) void {
+    const box = node_rect(node);
+    var next_parent = parent_key;
+    if (box) |r| {
+        if (u.stampRect(node.key, r, clip, parent_key)) next_parent = node.key;
+    }
+    const child_clip: ?geometry.Rect = if (node.layout.overflow == .clip) blk: {
+        const b = box orelse break :blk clip;
+        break :blk if (clip) |c| c.intersect(b) else b;
+    } else clip;
+    for (node.children.items) |child| stamp_walk(u, child, child_clip, next_parent);
 }
 
 /// A concrete `Node` for tests — the render descriptor is irrelevant to
@@ -723,4 +747,120 @@ test "padding: an anchored child centres within the content box" {
 
     try root.set_global_pos(a);
     try std.testing.expectEqual(.{ 120, 90 }, .{ child.layout._global_x.?, child.layout._global_y.? });
+}
+
+/// Records what `stamp_walk` handed it, standing in for a `Ctx` — the walk takes its
+/// sink as `anytype`, so its ordering and clip logic test without a context, a pool or
+/// a window. `slots` names the keys that have an interaction slot; every other key is
+/// a node that was never queried, which `stampRect` skips.
+const StampLog = struct {
+    const Entry = struct { key: u64, clip: ?geometry.Rect, parent: ?u64 };
+    entries: std.ArrayList(Entry) = .empty,
+    alloc: Allocator,
+    slots: []const u64,
+
+    fn stampRect(self: *StampLog, k: u64, r: geometry.Rect, clip: ?geometry.Rect, parent: ?u64) bool {
+        _ = r;
+        for (self.slots) |s| {
+            if (s != k) continue;
+            self.entries.append(self.alloc, .{ .key = k, .clip = clip, .parent = parent }) catch unreachable;
+            return true;
+        }
+        return false;
+    }
+    fn deinit(self: *StampLog) void {
+        self.entries.deinit(self.alloc);
+    }
+    fn indexOf(self: *StampLog, k: u64) ?usize {
+        for (self.entries.items, 0..) |e, i| if (e.key == k) return i;
+        return null;
+    }
+};
+
+test "stamp order is paint order: a parent lands before its children" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const root = try TestNode.create(alloc, "root");
+    _ = root.with_size(Size.initFixed(200, 200));
+    _ = root.with_layout(.top_left, null);
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
+
+    const outer = try TestNode.pcreate(alloc, "outer", root);
+    _ = outer.with_size(Size.initFixed(100, 100));
+    const inner = try TestNode.pcreate(alloc, "inner", outer);
+    _ = inner.with_size(Size.initFixed(50, 50));
+    try root.set_global_pos(alloc);
+
+    var log = StampLog{ .alloc = std.testing.allocator, .slots = &.{ outer.key, inner.key } };
+    defer log.deinit();
+    stamp_rects(&log, root);
+
+    // The child is stamped after its parent, so walking the list backwards reaches the
+    // child first — which is what makes "topmost wins" agree with what the eye sees.
+    try std.testing.expectEqual(@as(usize, 2), log.entries.items.len);
+    try std.testing.expect(log.indexOf(outer.key).? < log.indexOf(inner.key).?);
+}
+
+test "stamp_walk hands down the nearest queried ancestor, skipping unqueried ones" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const root = try TestNode.create(alloc, "root");
+    _ = root.with_size(Size.initFixed(200, 200));
+    _ = root.with_layout(.top_left, null);
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
+
+    const row = try TestNode.pcreate(alloc, "row", root); // queried
+    const wrapper = try TestNode.pcreate(alloc, "wrap", row); // plain layout div, never queried
+    const btn = try TestNode.pcreate(alloc, "btn", wrapper); // queried
+    _ = row.with_size(Size.initFixed(100, 40));
+    _ = wrapper.with_size(Size.initFixed(60, 40));
+    _ = btn.with_size(Size.initFixed(20, 20));
+    try root.set_global_pos(alloc);
+
+    var log = StampLog{ .alloc = std.testing.allocator, .slots = &.{ row.key, btn.key } };
+    defer log.deinit();
+    stamp_rects(&log, root);
+
+    // The bubble chain has to skip the wrapper — it has no slot to carry the flag.
+    const b = log.entries.items[log.indexOf(btn.key).?];
+    try std.testing.expectEqual(row.key, b.parent.?);
+    const r = log.entries.items[log.indexOf(row.key).?];
+    try std.testing.expect(r.parent == null);
+}
+
+test "a .clip node crops its subtree's hit region but not its siblings'" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const root = try TestNode.create(alloc, "root");
+    _ = root.with_size(Size.initFixed(400, 400));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
+
+    const viewport = try TestNode.pcreate(alloc, "viewport", root);
+    _ = viewport.with_size(Size.initFixed(100, 100));
+    viewport.layout.overflow = .clip;
+    const content = try TestNode.pcreate(alloc, "content", viewport);
+    _ = content.with_size(Size.initFixed(100, 300)); // taller than the viewport
+
+    const outside = try TestNode.pcreate(alloc, "outside", root); // sibling, uncropped
+    _ = outside.with_size(Size.initFixed(100, 40));
+    try root.set_global_pos(alloc);
+
+    var log = StampLog{ .alloc = std.testing.allocator, .slots = &.{ content.key, outside.key } };
+    defer log.deinit();
+    stamp_rects(&log, root);
+
+    const c = log.entries.items[log.indexOf(content.key).?];
+    try std.testing.expectEqual(@as(f32, 100), c.clip.?.h); // cropped to the viewport
+    const o = log.entries.items[log.indexOf(outside.key).?];
+    try std.testing.expect(o.clip == null); // nothing crops a sibling of the viewport
 }

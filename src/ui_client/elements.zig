@@ -91,6 +91,16 @@ pub const El = struct {
         style.apply(self.ctx, self.node, spec);
         return self;
     }
+
+    /// Take this node out of hit-testing: it is neither flagged nor does it occlude
+    /// what is drawn beneath it. For a node queried *only* to read its own geometry
+    /// back — `scroll_view`'s content, which needs last frame's height for the scroll
+    /// clamp — because `mark` stops at the topmost node it hits, and a bare geometry
+    /// probe sitting over a button would otherwise swallow the click.
+    pub fn pass_through(self: El) El {
+        self.ctx.setPassThrough(self.node.key, true);
+        return self;
+    }
 };
 
 /// A fresh child node, anchored `.relative` — the default for content leaves.

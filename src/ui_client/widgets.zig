@@ -200,6 +200,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     _ = content.with_layout(.relative, .{ .dir = .column });
     content.layout.gap = 4;
     const content_h = if (content.rect(ctx)) |r| r.h else 0;
+    ctx.setPassThrough(content.key, true); // geometry probe only — must not take the hit
     _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
 
     const max_offset = @max(0.0, content_h - height);

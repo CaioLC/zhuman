@@ -49,7 +49,9 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
     // Clamp needs content height, but this frame's rows aren't laid out yet — read last
     // frame's rect (queried here to keep the slot alive).
     const content_h = if (content_node.rect(ctx)) |r| r.h else 0;
-    _ = content.query();
+    // Queried for its geometry alone, so it must not take the hit: it covers the whole
+    // viewport, and `mark` stops at the topmost node it lands on.
+    _ = content.pass_through().query();
 
     const max_offset = @max(0.0, content_h - height);
     const st = outer.get().state(ctx, ScrollState);
