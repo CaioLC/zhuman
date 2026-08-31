@@ -22,10 +22,11 @@ The slice on screen today. Its ending is built — the Shelter, and the curtain 
   gets a glimpse of the Act II barter mechanics, with a passerby offering simple goods for the
   food and raw materials the player holds. We need goods that can be bought at the merchant
   (food, fishing rod, hatchet, etc.) and the purchase/sell mechanics at fixed ratios.
-- **Rethink capital goods** — a hatchet or a fishing rod _cannot_ be built by Robinson Crusoe
-  alone. Only very crude goods should be feasible in Act I. Everything stays *buildable*: the
-  advanced goods are priced out of reach for one person rather than forbidden, which is exactly
-  what the merchant exists to answer — trade beats autarky on cost, it isn't a permission gate.
+  When a bought tool is a better version of one already held, the better tool **replaces** the
+  weaker one's stats rather than stacking — and it has to, for unlockers: `grant` adds the
+  action component outright and `SparseSet.add` does not guard duplicates, so two goods
+  granting one verb would double-add it. Modifiers that merely share a target still stack
+  (sandals and a bicycle both cheapen Forage).
 
 ### HUD
 
@@ -38,13 +39,10 @@ The slice on screen today. Its ending is built — the Shelter, and the curtain 
   pulse *means* while the larder fills: mirror it (progress toward the next unit gained), hold
   it still, or drive it off the consumption rate rather than off the stock level — which is the
   honest reading, since the pulse's speed is meant to be the eating rate.
-- **Distribution-curve glyph** — the other half of locked decision #5: a yield's p10–p90 band
-  drawn as a mini curve, its *shape* telling normal from poisson from exponential, in place of
-  the text line `action_card` prints today (`odds 1-3 in 8 of 10 (normal)`). Needs a new engine
-  draw primitive — nothing renders a polyline; only rect fill/outline, text, image and svg.
 - **Barter Modal** new screen overlay on top of PlayGame to implement the barter mechanics
 - Menu Page exposing our `res.config` to edit
 - Pause Overlay
+- complete refactor of the build menu.
 
 ### UI foundation (`src/ui_client/`)
 
@@ -98,6 +96,10 @@ Gated on Act I's population crossing, and blocked on the open design questions i
 - **Catalog browser + capital tray** — a second, text-first presentation of the action and
   capital rosters. Returns with the design prototype's favorites (`☆`/`★`), hover tooltips and
   per-good build state folded in.
+- **Distribution-curve glyph** — the other half of locked decision #5: a yield's p10–p90 band
+  drawn as a mini curve, its *shape* telling normal from poisson from exponential, in place of
+  the text line `action_card` prints today (`odds 1-3 in 8 of 10 (normal)`). Needs a new engine
+  draw primitive — nothing renders a polyline; only rect fill/outline, text, image and svg.
 
 ### UI foundation (`src/ui_client/`)
 - **Animations**
