@@ -21,6 +21,7 @@ const capital_tile_mod = @import("./capital_tile.zig");
 const ration_dial_mod = @import("./ration_dial.zig");
 const capital_good_tile_mod = @import("./capital_good_tile.zig");
 const tabs_mod = @import("./tabs.zig");
+const holdings_mod = @import("./holdings.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -39,6 +40,7 @@ pub const ration_dial = ration_dial_mod.ration_dial;
 pub const capital_good_tile = capital_good_tile_mod.capital_good_tile;
 pub const Tabs = tabs_mod.Tabs;
 pub const tabs = tabs_mod.tabs;
+pub const holdings = holdings_mod.holdings;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

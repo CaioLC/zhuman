@@ -84,6 +84,12 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 // Eating is no longer an action — the metabolism loop runs regardless;
                 // the dial below sets its rate (the standing ration/feast policy).
                 _ = try t.ration_dial(ctx, center, world, e, "ration");
+                // Holdings rides under the dial rather than beside the resource bar,
+                // which is where it belongs and where it does not fit: the centre column
+                // is 640 wide inside an 868 content box, leaving 114px of margin against
+                // the ~300 this needs. It wants the reflow (docs/roadmap.md, Act I) — and
+                // meanwhile this is the tab where "why does Forage cost 1.7?" gets asked.
+                _ = try t.holdings(ctx, center, world, e, "holdings");
             } else {
                 // The Act One capital roster, all of it real: every tile pays, starts a
                 // timed build, and grants its effect on completion. Five shelves by the
