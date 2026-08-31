@@ -864,3 +864,33 @@ test "a .clip node crops its subtree's hit region but not its siblings'" {
     const o = log.entries.items[log.indexOf(outside.key).?];
     try std.testing.expect(o.clip == null); // nothing crops a sibling of the viewport
 }
+
+test "offset displaces a placement without replacing it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const root = try TestNode.create(alloc, "root");
+    _ = root.with_size(Size.initFixed(200, 200));
+    _ = root.with_layout(.top_left, null);
+    root.layout._global_x = 0;
+    root.layout._global_y = 0;
+
+    // Anchored: centred, then pushed out along a radius the caller computed itself.
+    const tile = try TestNode.pcreate(alloc, "tile", root);
+    _ = tile.with_size(Size.initFixed(40, 40));
+    _ = tile.with_layout(.center, null);
+    tile.layout = tile.layout.with_offset(63, -36);
+
+    // Flowed: still in the run, just nudged.
+    const flowed = try TestNode.pcreate(alloc, "flowed", root);
+    _ = flowed.with_size(Size.initFixed(10, 10));
+    flowed.layout.offset_y = 5;
+
+    try root.set_global_pos(alloc);
+
+    // centre of 200 minus half of 40 = 80, plus the offset
+    try std.testing.expectEqual(@as(f32, 80 + 63), tile.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 80 - 36), tile.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 5), flowed.layout._global_y.?);
+}

@@ -122,6 +122,17 @@ pub const Layout = struct {
     /// unaffected. Set via `with_origin`.
     origin_x: f32 = 0,
     origin_y: f32 = 0,
+    /// Displace this node from wherever its anchor (or its parent's flow) put it, in px.
+    /// Applied last, so it composes with a placement instead of replacing one: `.center`
+    /// plus a computed delta is polar placement, which is how anything laid out by its own
+    /// arithmetic — a radial board, a graph, a tooltip arrow — gets positioned at all.
+    /// Nine anchor presets are otherwise the only way to place a child, and none of them
+    /// takes a number. Defaults to (0,0). Set via `with_offset`.
+    ///
+    /// Distinct from `origin` (which positions a *root*, and only a root) and from
+    /// `scroll` (which moves a node's *children*, not the node).
+    offset_x: f32 = 0,
+    offset_y: f32 = 0,
     /// Translates this node's *children* (not the node itself) by `-scroll_x`/`-scroll_y`
     /// — a positive value shifts flowed content up/left, as if scrolled down/right. This
     /// is how a scroll container (`widgets.scroll_view`) moves its overflowing `content`
@@ -160,6 +171,15 @@ pub const Layout = struct {
         var l = self;
         l.origin_x = x;
         l.origin_y = y;
+        return l;
+    }
+
+    /// Copy with `offset` set — chains after `init`. Displaces the node from its
+    /// resolved placement (see `offset_x`).
+    pub fn with_offset(self: Layout, dx: f32, dy: f32) Layout {
+        var l = self;
+        l.offset_x = dx;
+        l.offset_y = dy;
         return l;
     }
 
@@ -430,8 +450,12 @@ fn place(node: anytype, alloc: Allocator, info: ?ChildrenPosInfo) anyerror!void 
         x = my_offsets.x_offset;
         y = my_offsets.y_offset;
     }
-    l._global_x = px + x;
-    l._global_y = py + y;
+    // `offset` is the last word on position, applied after the anchor (or the flow) has
+    // resolved — so it *displaces* a placement rather than replacing it. Both paths get
+    // it: `.center` plus a delta is polar placement, and a flowed node can be nudged
+    // without leaving the run.
+    l._global_x = px + x + l.offset_x;
+    l._global_y = py + y + l.offset_y;
 
     // --- children: place anchored (out-of-flow) inline, collect the in-flow run ----------
     var n_flow: usize = 0;

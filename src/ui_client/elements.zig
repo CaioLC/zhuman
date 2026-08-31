@@ -80,6 +80,15 @@ pub const El = struct {
         return self;
     }
 
+    /// Displace this node in px from wherever its anchor or its parent's flow put it.
+    /// `.center` plus a computed delta is polar placement — the way anything positioned
+    /// by its own arithmetic (a radial board, a graph) reaches the screen.
+    pub fn with_offset(self: El, dx: f32, dy: f32) El {
+        self.node.layout.offset_x = dx;
+        self.node.layout.offset_y = dy;
+        return self;
+    }
+
     /// Overflow handling for this node's content (`.visible` / `.clip`).
     pub fn with_overflow(self: El, o: ui.features.Overflow) El {
         self.node.layout.overflow = o;
