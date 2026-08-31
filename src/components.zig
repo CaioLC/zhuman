@@ -151,13 +151,13 @@ pub const Busy = struct {
         build_hatchet,
         build_wire_snares,
         build_air_rifle,
-        build_boots,
+        build_sandals,
         build_work_gloves,
         build_bicycle,
         build_cookpot,
         build_root_cellar,
         build_chainsaw,
-        build_bed,
+        build_leaf_bed,
         build_pantry,
         build_medicine_chest,
         build_garden_bed,
@@ -188,7 +188,7 @@ pub const Metabolism = struct {
 // once by `capital.begin_build`. What the good *does* once built is its category (see
 // capital.zig): an Unlocker grants a verb, an ActionModifier mutates a margin, a
 // Generator starts running. One per agent, backed by the sparse-set's structural
-// guarantee. Prices ladder from ~3 Scavenge draws (Boots) to a multi-day save (Chainsaw)
+// guarantee. Prices ladder from ~3 Scavenge draws (Sandals) to a multi-day save (Chainsaw)
 // — that ladder *is* the time-preference lesson.
 
 // -- Unlockers: owning the tool is what makes the verb possible at all --------------------
@@ -215,9 +215,10 @@ pub const AirRifle = struct {
 
 // -- ActionModifiers: a margin on a verb you already have ---------------------------------
 
-/// Boots: Forage costs less body.
-pub const Boots = struct {
-    requires: Requires = .{ .energy = 1.0, .materials = 4.0, .hours = 6 },
+/// Rudimentary sandals: Forage costs a little less body. Bark and cordage — crude, and
+/// priced like it; the margin is small because the footwear is bad.
+pub const Sandals = struct {
+    requires: Requires = .{ .energy = 1.0, .materials = 3.0, .hours = 6 },
 };
 
 /// Work gloves: splitting wood costs less body.
@@ -250,12 +251,13 @@ pub const Chainsaw = struct {
 
 // -- Health goods: capacity capital ------------------------------------------------------
 // Sleeps well / eats better / patched up properly ⟹ actually healthier: each raises the
-// vigor *ceiling* by 2 (see `capital.health_apply`). A future aging component decrementing
+// vigor *ceiling* (see `capital.health_apply`) — by 1 for the crude leaf bed, by 2 for the
+// two manufactured goods. A future aging component decrementing
 // `max` composes underneath, since every mutation here is relative.
 
-/// Bed.
-pub const Bed = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 10.0, .hours = 12 },
+/// Leaf bed — the crude one, so it buys half of what the built furniture does.
+pub const LeafBed = struct {
+    requires: Requires = .{ .energy = 2.0, .materials = 6.0, .hours = 10 },
 };
 
 /// Pantry.

@@ -8,7 +8,7 @@
 //!   snares → Check traps, Air rifle → Hunt). Roundabout production made literal: spend
 //!   today's vigor, materials and hours, and a new verb exists tomorrow.
 //! - an **ActionModifier** mutates an *existing* margin once, at build and at break — an
-//!   action's Requires/Yields (Boots, Work gloves, Bicycle, Chainsaw), the larder's
+//!   action's Requires/Yields (Sandals, Work gloves, Bicycle, Chainsaw), the larder's
 //!   quality/spoilage (Cookpot, Root cellar), or the body's vigor ceiling (Bed, Pantry,
 //!   Medicine chest). The apply/remove pairs are that creation/destruction side effect.
 //! - a **Generator** runs continuously instead: `run_generator` pays its `upkeep` and
@@ -44,8 +44,8 @@ const Resources = res_mod.Resources;
 /// needs to sweep the catalog.
 pub const buildable_bundle = .{
     comp.FishRod,     comp.Hatchet,    comp.WireSnares,    comp.AirRifle,
-    comp.Boots,       comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
-    comp.RootCellar,  comp.Chainsaw,   comp.Bed,           comp.Pantry,
+    comp.Sandals,     comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
+    comp.RootCellar,  comp.Chainsaw,   comp.LeafBed,       comp.Pantry,
     comp.MedicineChest, comp.GardenBed, comp.ChickenCoop,
     comp.Shelter,
 };
@@ -57,13 +57,13 @@ pub fn doing_of_good(comptime GoodT: type) comp.Busy.Doing {
         comp.Hatchet => .build_hatchet,
         comp.WireSnares => .build_wire_snares,
         comp.AirRifle => .build_air_rifle,
-        comp.Boots => .build_boots,
+        comp.Sandals => .build_sandals,
         comp.WorkGloves => .build_work_gloves,
         comp.Bicycle => .build_bicycle,
         comp.Cookpot => .build_cookpot,
         comp.RootCellar => .build_root_cellar,
         comp.Chainsaw => .build_chainsaw,
-        comp.Bed => .build_bed,
+        comp.LeafBed => .build_leaf_bed,
         comp.Pantry => .build_pantry,
         comp.MedicineChest => .build_medicine_chest,
         comp.GardenBed => .build_garden_bed,
@@ -120,13 +120,13 @@ fn built_msg(comptime GoodT: type) []const u8 {
         comp.Hatchet => "You built a hatchet. You can split wood now.",
         comp.WireSnares => "You set wire snares. Check them for game.",
         comp.AirRifle => "You assembled an air rifle. You can hunt now.",
-        comp.Boots => "You cobbled boots. Foraging costs less.",
+        comp.Sandals => "You bound sandals from bark. Foraging costs a little less.",
         comp.WorkGloves => "You stitched work gloves. Splitting wood costs less.",
         comp.Bicycle => "You rebuilt a bicycle. Distance got cheap.",
         comp.Cookpot => "You built a cookpot. Cooked food feeds you further.",
         comp.RootCellar => "You dug a root cellar. Food keeps twice as long.",
         comp.Chainsaw => "You got a chainsaw running. The engine works, not your back.",
-        comp.Bed => "You built a bed. You sleep properly now.",
+        comp.LeafBed => "You piled a leaf bed. You sleep off the ground now.",
         comp.Pantry => "You built a pantry. You eat properly now.",
         comp.MedicineChest => "You stocked a medicine chest. You mend properly now.",
         comp.GardenBed => "You planted a garden bed. It grows without you.",
@@ -145,13 +145,13 @@ fn grant(w: *World, e: Entity, comptime GoodT: type) void {
         comp.WireSnares => w.add(e, comp.ActionCheckTraps{}),
         comp.AirRifle => w.add(e, comp.ActionHunt{}),
         // Modifiers: a one-shot mutation of a margin.
-        comp.Boots => apply_boots(w, e),
+        comp.Sandals => apply_sandals(w, e),
         comp.WorkGloves => apply_work_gloves(w, e),
         comp.Bicycle => apply_bicycle(w, e),
         comp.Cookpot => apply_cookpot(w, e),
         comp.RootCellar => apply_root_cellar(w, e),
         comp.Chainsaw => apply_chainsaw(w, e),
-        comp.Bed => health_apply(w, e, 2.0),
+        comp.LeafBed => health_apply(w, e, 1.0),
         comp.Pantry => health_apply(w, e, 2.0),
         comp.MedicineChest => health_apply(w, e, 2.0),
         // Generators: holding the component is the whole effect — `run_generators`
@@ -172,13 +172,13 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
         comp.Hatchet => w.remove(e, comp.ActionChopWood),
         comp.WireSnares => w.remove(e, comp.ActionCheckTraps),
         comp.AirRifle => w.remove(e, comp.ActionHunt),
-        comp.Boots => remove_boots(w, e),
+        comp.Sandals => remove_sandals(w, e),
         comp.WorkGloves => remove_work_gloves(w, e),
         comp.Bicycle => remove_bicycle(w, e),
         comp.Cookpot => remove_cookpot(w, e),
         comp.RootCellar => remove_root_cellar(w, e),
         comp.Chainsaw => remove_chainsaw(w, e),
-        comp.Bed => health_remove(w, e, 2.0),
+        comp.LeafBed => health_remove(w, e, 1.0),
         comp.Pantry => health_remove(w, e, 2.0),
         comp.MedicineChest => health_remove(w, e, 2.0),
         comp.GardenBed, comp.ChickenCoop, comp.Shelter => {},
@@ -235,13 +235,13 @@ pub fn good_name(comptime GoodT: type) []const u8 {
         comp.Hatchet => "hatchet",
         comp.WireSnares => "wire snares",
         comp.AirRifle => "air rifle",
-        comp.Boots => "boots",
+        comp.Sandals => "sandals",
         comp.WorkGloves => "work gloves",
         comp.Bicycle => "bicycle",
         comp.Cookpot => "cookpot",
         comp.RootCellar => "root cellar",
         comp.Chainsaw => "chainsaw",
-        comp.Bed => "bed",
+        comp.LeafBed => "leaf bed",
         comp.Pantry => "pantry",
         comp.MedicineChest => "medicine chest",
         comp.Shelter => "shelter",
@@ -271,13 +271,13 @@ pub fn break_fish_rod(w: *World, e: Entity, res: *Resources) void {
 // mean/scale) and `.sd` together so the distribution's relative shape is preserved (and
 // `.sd == 0`, meaning "auto-derive", stays exactly 0 either way).
 
-pub fn apply_boots(w: *World, agent: Entity) void {
+pub fn apply_sandals(w: *World, agent: Entity) void {
     const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy *= 0.7;
+    forage.requires.energy *= 0.85;
 }
-pub fn remove_boots(w: *World, agent: Entity) void {
+pub fn remove_sandals(w: *World, agent: Entity) void {
     const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy /= 0.7;
+    forage.requires.energy /= 0.85;
 }
 
 pub fn apply_work_gloves(w: *World, agent: Entity) void {
@@ -530,15 +530,18 @@ test "modifier pairs are symmetric — apply then remove restores the margin" {
     var w = World.init();
     const e = spawn_test_agent(&w);
 
-    apply_boots(&w, e);
+    apply_sandals(&w, e);
     apply_bicycle(&w, e);
     const forage = w.get(e, comp.ActionForage).?;
     const scav = w.get(e, comp.ActionScavenge).?;
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.7 * 0.6), forage.requires.energy, 1e-5);
+    // Two goods on one verb stack rather than supersede: crude footwear and a bicycle are
+    // both in use at once. A *better tool replacing a weaker one* is the other rule, and
+    // it has no subject yet (docs/roadmap.md, Act I).
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.85 * 0.6), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.6), scav.requires.energy, 1e-5);
 
     remove_bicycle(&w, e);
-    remove_boots(&w, e);
+    remove_sandals(&w, e);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0), scav.requires.energy, 1e-5);
 }
@@ -569,14 +572,14 @@ test "health goods raise the ceiling and fill what they add; removal clamps" {
     const e = spawn_test_agent(&w);
     w.get(e, comp.InventoryMaterial).?.v = 10;
 
-    begin_build(&w, e, &res, comp.Bed);
-    finish_build(&w, e, &res, comp.Bed);
+    begin_build(&w, e, &res, comp.LeafBed);
+    finish_build(&w, e, &res, comp.LeafBed);
     const vigor = w.get(e, comp.Vigor).?;
-    try std.testing.expectEqual(@as(f32, 12), vigor.max);
-    // 10 − 3 energy paid at begin = 7, then +2 filled on completion.
+    try std.testing.expectEqual(@as(f32, 11), vigor.max); // the crude bed buys 1, not 2
+    // 10 − 2 energy paid at begin = 8, then +1 filled on completion.
     try std.testing.expectEqual(@as(f32, 9), vigor.v);
 
-    break_good(&w, e, &res, comp.Bed);
+    break_good(&w, e, &res, comp.LeafBed);
     try std.testing.expectEqual(@as(f32, 10), vigor.max);
     try std.testing.expectEqual(@as(f32, 9), vigor.v); // still under the ceiling
 }
@@ -625,8 +628,8 @@ fn spawn_settler(w: *World) Entity {
         comp.Vigor{ .v = 10, .max = 10 }, // 1.0 >= 0.8
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= 20
         comp.InventoryMaterial{ .v = 100 }, // >= the 80 price
-        comp.Boots{},
-        comp.Bed{},
+        comp.Sandals{},
+        comp.LeafBed{},
         comp.Cookpot{},
         comp.WireSnares{}, // four goods owned >= 4
     });
@@ -679,7 +682,7 @@ test "each standing condition refuses the shelter on its own" {
     {
         var w = World.init();
         const e = spawn_settler(&w);
-        w.remove(e, comp.Boots);
+        w.remove(e, comp.Sandals);
         try std.testing.expectEqual(@as(u32, 3), goods_owned(&w, e));
         try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
         begin_build(&w, e, &res, comp.Shelter);

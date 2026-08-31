@@ -104,7 +104,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.AirRifle, "rifle", "Air rifle", "Hunt");
 
                 const upgrades = try capital_shelf(ctx, build, "upgrades", "UPGRADE");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Boots, "boots", "Boots", "Forage e×0.7");
+                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Sandals, "sandals", "Sandals", "Forage e×0.85");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.WorkGloves, "gloves", "Work gloves", "Wood e×0.75");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Bicycle, "bicycle", "Bicycle", "Roaming e×0.6");
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Cookpot, "cookpot", "Cookpot", "food ×2 vigor");
@@ -112,7 +112,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Chainsaw, "chainsaw", "Chainsaw", "Wood ×2.5, -1m fuel");
 
                 const health = try capital_shelf(ctx, build, "health", "HEALTH");
-                _ = try t.capital_good_tile(ctx, health, world, e, comp.Bed, "bed", "Bed", "+2 max v");
+                _ = try t.capital_good_tile(ctx, health, world, e, comp.LeafBed, "leafbed", "Leaf bed", "+1 max v");
                 _ = try t.capital_good_tile(ctx, health, world, e, comp.Pantry, "pantry", "Pantry", "+2 max v");
                 _ = try t.capital_good_tile(ctx, health, world, e, comp.MedicineChest, "medchest", "Medicine chest", "+2 max v");
 
