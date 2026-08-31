@@ -32,10 +32,13 @@ const App = struct {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
         try sdl.init(.{ .video = true, .events = true });
         try sdl.ttf.init();
+        // Sized to the BUILD panel, which is the tallest screen: five shelves of tiles whose
+        // width grew with the manufactured tier's three-digit prices, so they wrap two to a
+        // row. Resizable, and the columns do not yet reflow (docs/roadmap.md, Act I).
         const window, const renderer = try sdl.render.Renderer.initWithWindow(
             "Human Action",
-            800,
-            600,
+            900,
+            820,
             .{ .resizable = true },
         );
         var frame_capper = sdl.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
