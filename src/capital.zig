@@ -217,6 +217,60 @@ pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type)
     res.sim.log.push(.good, built_msg(GoodT));
 }
 
+/// The good a `Busy.Doing` is building, or null for the labor verbs — the inverse of
+/// `doing_of_good`, and the reason a cancel can recover a price it was never handed.
+/// Comptime, so the caller reaches it through an `inline else` over the tag.
+fn good_of_doing(comptime d: comp.Busy.Doing) ?type {
+    return switch (d) {
+        .build_fish_rod => comp.FishRod,
+        .build_hatchet => comp.Hatchet,
+        .build_wire_snares => comp.WireSnares,
+        .build_air_rifle => comp.AirRifle,
+        .build_sandals => comp.Sandals,
+        .build_work_gloves => comp.WorkGloves,
+        .build_bicycle => comp.Bicycle,
+        .build_cookpot => comp.Cookpot,
+        .build_root_cellar => comp.RootCellar,
+        .build_chainsaw => comp.Chainsaw,
+        .build_leaf_bed => comp.LeafBed,
+        .build_pantry => comp.Pantry,
+        .build_medicine_chest => comp.MedicineChest,
+        .build_garden_bed => comp.GardenBed,
+        .build_chicken_coop => comp.ChickenCoop,
+        .build_shelter => comp.Shelter,
+        .forage, .scavenge, .fish, .chop_wood, .check_traps, .hunt => null, // labor, not a build
+    };
+}
+
+/// Abandon a build in progress: salvage `config.cancel_refund` of its materials and free
+/// the body. The energy and every hour already spent are gone — this is an exit from a
+/// four-day build with an emptying larder, not an undo.
+///
+/// Refuses on a labor verb: `Busy` covers both, and half-foraging is not a thing you can
+/// take materials back from. Returns whether it cancelled.
+pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
+    const busy = w.get(e, comp.Busy) orelse return false;
+    switch (busy.doing) {
+        inline else => |d| {
+            if (comptime good_of_doing(d)) |G| {
+                const refund = (G{}).requires.materials * res.config.cancel_refund;
+                const stock = ecs.getMany(w, e, .{comp.InventoryMaterial});
+                stock.v += refund;
+                w.remove(e, comp.Busy);
+                var buf: [96]u8 = undefined;
+                const msg = std.fmt.bufPrint(
+                    &buf,
+                    "You gave up on the {s}. Salvaged {d:.0} materials.",
+                    .{ good_name(G), refund },
+                ) catch "You gave up on the build.";
+                res.sim.log.push(.warn, msg);
+                return true;
+            }
+            return false;
+        },
+    }
+}
+
 /// Break a good: its effect leaves with it. Nothing calls this yet (no durability);
 /// written now so every grant/revoke pair stays symmetric.
 pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
@@ -697,4 +751,45 @@ test "a good with no unlock field has no standing conditions" {
     const e = spawn_test_agent(&w); // 0 food, nothing built, and it does not matter
     try std.testing.expect(unlock_met(&w, e, comp.FishRod));
     try std.testing.expect(unlock_met(&w, e, comp.ChickenCoop));
+}
+
+test "cancel salvages half the materials, frees the body, and grants nothing" {
+    var w = World.init();
+    var res = test_res();
+    const price = (comp.FishRod{}).requires;
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryMaterial{ .v = price.materials },
+    });
+
+    build_fish_rod(&w, e, &res);
+    try std.testing.expect(w.has(e, comp.Busy));
+    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // paid in full
+
+    try std.testing.expect(cancel_build(&w, e, &res));
+    try std.testing.expect(!w.has(e, comp.Busy)); // the body is free again
+    try std.testing.expect(!w.has(e, comp.FishRod)); // and owns nothing for the trouble
+    try std.testing.expect(!w.has(e, comp.ActionFish));
+    try std.testing.expectApproxEqAbs(
+        price.materials * res.config.cancel_refund,
+        w.get(e, comp.InventoryMaterial).?.v,
+        1e-5,
+    );
+    // The energy is gone with the hours — cancelling is an exit, not an undo.
+    try std.testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
+}
+
+test "cancel refuses on labor, and on an idle body" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+
+    try std.testing.expect(!cancel_build(&w, e, &res)); // nothing in progress
+
+    w.add(e, comp.Busy{ .doing = .forage, .total = 10, .remaining = 4, .quality = 1 });
+    try std.testing.expect(w.has(e, comp.Busy));
+    const before = w.get(e, comp.InventoryMaterial).?.v;
+    try std.testing.expect(!cancel_build(&w, e, &res)); // `Busy` covers labor too
+    try std.testing.expect(w.has(e, comp.Busy)); // still foraging
+    try std.testing.expectEqual(before, w.get(e, comp.InventoryMaterial).?.v);
 }

@@ -81,6 +81,14 @@ pub const Config = struct {
     ration_scale: f32 = 0.5,
     feast_scale: f32 = 2.0,
 
+    // —— capital ——
+    /// Share of a cancelled build's materials that comes back. Flat, not prorated by
+    /// how far the work got: materials are spent in full at `begin_build` and nothing
+    /// draws them down over time, so a time-proportional refund would imply a
+    /// consumption schedule the sim doesn't run. What it means is salvage — you take
+    /// back the stock you hadn't worked in yet. The energy and the hours are gone.
+    cancel_refund: f32 = 0.5,
+
     /// Which band a vigor fraction falls in. The single definition of the two
     /// thresholds; edge-crossing is a change in this value.
     pub fn condition(self: Config, frac: f32) Condition {
