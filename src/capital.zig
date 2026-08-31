@@ -194,7 +194,6 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
 /// the good's prerequisite verb, short of its standing `unlock` conditions, or unaffordable — same gates as labor (energy strict,
 /// vigor 0 is death; materials may be spent to exactly 0). Dying mid-build loses the work.
 pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    if (w.has(e, GoodT)) return; // one per agent (SparseSet.add doesn't guard dupes)
     if (w.has(e, comp.Busy)) return; // one body, one act
     if (!prereq_met(w, e, GoodT)) return; // nothing to modify yet
     if (!unlock_met(w, e, GoodT)) return; // standing conditions not met
@@ -212,8 +211,18 @@ pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) 
 /// Completion of a build: own the good, apply what it does, log the receipt. Called by
 /// `systems.resolve_busy`; `begin_build`'s gates guarantee the good doesn't exist yet.
 pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
+    // A repeat build is stock, not a second effect: increment and say so. `w.add` a
+    // second time would not overwrite — `SparseSet.add` doesn't guard duplicates, so it
+    // would append a second dense entry and leave the index pointing at one of them.
+    if (w.get(e, GoodT)) |held| {
+        held.count += 1;
+        var buf: [64]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "Another {s}. You have {d}.", .{ good_name(GoodT), held.count }) catch "You made another.";
+        res.sim.log.push(.good, msg);
+        return;
+    }
     w.add(e, GoodT{});
-    grant(w, e, GoodT);
+    grant(w, e, GoodT); // the effect lands once, on the way in from absent
     res.sim.log.push(.good, built_msg(GoodT));
 }
 
@@ -274,7 +283,13 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
 /// Break a good: its effect leaves with it. Nothing calls this yet (no durability);
 /// written now so every grant/revoke pair stays symmetric.
 pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    if (!w.has(e, GoodT)) return;
+    const held = w.get(e, GoodT) orelse return;
+    // Spares go first, and the effect only leaves with the last one — losing a spare
+    // pair of sandals must not cost you the discount you are still wearing.
+    if (held.count > 1) {
+        held.count -= 1;
+        return;
+    }
     revoke(w, e, GoodT);
     w.remove(e, GoodT);
     var buf: [64]u8 = undefined;
@@ -505,7 +520,7 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
-test "build_fish_rod refuses when unaffordable, owned, or busy" {
+test "build_fish_rod refuses when unaffordable or busy" {
     var w = World.init();
     var res = test_res();
     const price = (comp.FishRod{}).requires;
@@ -525,9 +540,41 @@ test "build_fish_rod refuses when unaffordable, owned, or busy" {
 
     w.remove(e, comp.Busy);
     finish_fish_rod(&w, e, &res);
-    build_fish_rod(&w, e, &res); // owned — must refuse (one per agent)
+    build_fish_rod(&w, e, &res); // owned, but 12 materials short of the price
     try std.testing.expect(!w.has(e, comp.Busy));
     try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v);
+}
+
+test "a repeat build is stock: the count rises, the effect does not" {
+    var w = World.init();
+    var res = test_res();
+    const price = (comp.Sandals{}).requires;
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = price.materials * 3;
+    const base = w.get(e, comp.ActionForage).?.requires.energy;
+
+    begin_build(&w, e, &res, comp.Sandals);
+    finish_build(&w, e, &res, comp.Sandals);
+    const once = w.get(e, comp.ActionForage).?.requires.energy;
+    try std.testing.expectEqual(@as(u32, 1), w.get(e, comp.Sandals).?.count);
+    try std.testing.expect(once < base); // the first pair is capital in use
+
+    // Owning it no longer refuses the build — that is what makes a good sellable.
+    begin_build(&w, e, &res, comp.Sandals);
+    finish_build(&w, e, &res, comp.Sandals);
+    try std.testing.expectEqual(@as(u32, 2), w.get(e, comp.Sandals).?.count);
+    try std.testing.expectEqual(once, w.get(e, comp.ActionForage).?.requires.energy); // no second discount
+
+    // Kinds, not units: four pairs of sandals are never four goods built.
+    try std.testing.expectEqual(@as(u32, 1), goods_owned(&w, e));
+
+    // Losing a spare keeps the discount; losing the last pair takes it back.
+    break_good(&w, e, &res, comp.Sandals);
+    try std.testing.expectEqual(@as(u32, 1), w.get(e, comp.Sandals).?.count);
+    try std.testing.expectEqual(once, w.get(e, comp.ActionForage).?.requires.energy);
+    break_good(&w, e, &res, comp.Sandals);
+    try std.testing.expect(!w.has(e, comp.Sandals));
+    try std.testing.expectApproxEqAbs(base, w.get(e, comp.ActionForage).?.requires.energy, 1e-5);
 }
 
 test "break_fish_rod revokes the verb with the tool" {
