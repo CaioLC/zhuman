@@ -68,7 +68,7 @@ a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 |---|---|
 | `root.zig` | The barrel: re-exports everything, and owns the `stamp_rects` post-layout walk. |
 | `node.zig` | `Node` (the tree atom) + `Iterator` (zero-alloc pre-order walk) + `collect` (flatten a builder's return shape into the frame's root list). |
-| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, the interaction store (keyed `{flags, rect}` slots + `mark`/`stampRect`), and `focused` (the key that owns keyboard text). |
+| `ctx.zig` | `Ctx(StateNs, IntFlags, Res)` — per-frame builder state: pools, `*Res`, arena, frame counter, the interaction store (keyed slots + the frame's paint order + `mark`/`stampRect`), and `focused` (the key that owns keyboard text). |
 | `cache.zig` | `Pool(T)` slot-map (handles + free-list), `Pools(ns)` generator, `key`/`key_i` hashing. |
 | `geometry.zig` | `Rect` + pure `contains(x, y)`. Leaf, no deps. |
 | `features/size.zig` | `Size` + per-axis `SizeRule` — pure data: rules, padding, resolved box, host-measured `data_*`. |
@@ -80,12 +80,12 @@ The host loop drives the engine in a fixed order (`src/main.zig`):
 
 ```
 1. poll events            → write host input (Resources.input)
-2. ui.mark(flag, x, y)    → event stage: hit-test last frame's slot rects, set flags
+2. ui.mark(flag, x, y)    → event stage: hit-test last frame's paint order, flag the top
 3. ui.beginFrame()        → frame += 1
 4. arena.reset()          → last frame's tree dies
 5. build_ui(&ui, …)       → construct a fresh node tree (widgets read cache + world)
 6. root.set_global_pos(a) → solve sizes (per-axis rules) + resolve every position (a = scratch arena)
-7. ui.stamp_rects(root)   → copy each queried node's rect into its interaction slot
+7. ui.stamp_rects(root)   → record geometry + paint order into the interaction slots
 8. host render walk       → host iterates the tree (root.iterate()) and draws
 9. ui.endFrame()          → prune untouched cache slots, then clearTransient
 ```
@@ -107,7 +107,7 @@ everything goes, and keeps the mechanisms from multiplying:
 |---|---|---|---|
 | `render_data` | on the node | **frame-local** | which aspects to draw + the inline payload each needs (a `Color`) |
 | render state (`TextData`, …) | pool, keyed by `node.key`; reached via `node.state(u, T)` | **persistent** | cached content a feature draws (glyphs, a rasterized svg) |
-| interaction (`Slot{flags,rect}`) | pool, keyed by `node.key` | **persistent** | input state; reached via `query`/`mark`, never stored on the node |
+| interaction (`Slot{flags,rect,clip,parent_key,pass_through}`) | pool, keyed by `node.key` | **persistent** | input state + the geometry `mark` hit-tests with; reached via `query`/`mark`, never stored on the node |
 
 The node never holds persistent data *directly*, not even a handle to it: `node.state(u,
 T)` acquires-or-creates the slot for `node.key` in `T`'s pool on demand, so a node can
@@ -202,15 +202,35 @@ The interaction store is a `Pool(Slot)` where `Slot = { flags, rect }`. A slot e
 only for a key that's been `query`'d, and it carries that node's last laid-out rect —
 so **hit-testing iterates the live slots, never the node tree**:
 
-- **`ui.mark(flag, x, y)` (mechanism, event stage):** loops the live slots and sets
-  `flag` on each whose stored `rect.contains(x, y)`. **O(interactive)**, not O(all).
+- **`ui.mark(flag, x, y)` (mechanism, event stage):** walks the frame's paint-order
+  list **backwards** and flags the *topmost* node containing the point, then walks that
+  node's `parent_key` chain and flags its ancestors. **O(interactive)**, not O(all).
   `flag` is comptime-checked against the host's `Interaction` fields
   (`std.meta.FieldEnum`); the point is passed *in* (mouse/touch/gamepad — the engine
-  never asks where from). Each interactive node is flagged independently (not the
-  whole ancestor stack — there's no tree to walk).
-- **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and copies each
-  *already-queried* node's rect into its slot (`stampRect` no-ops for keys with no
-  slot). This is what feeds the next frame's `mark`.
+  never asks where from). Three things fall out of stopping at the first hit:
+  - **Occlusion is a mechanism.** A node genuinely blocks what is drawn beneath it, so
+    an overlay no longer has to trust that whatever it covers is harmless to double-fire.
+  - **Containment still reads**, because ancestors are flagged by bubbling — a row stays
+    hovered while the pointer is over its own button.
+  - **Nodes block by default**, and a node queried only to read its own geometry back
+    opts out with `pass_through` (`Ctx.setPassThrough`). A default that blocks nothing
+    would leave `mark` unable to stop, which is the whole point of the ordered walk.
+
+  A slot whose stamped `clip` excludes the point is skipped: a node scrolled out of its
+  viewport keeps its rect but stops being hittable.
+- **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and records each
+  *already-queried* node's geometry into its slot (`stampRect` no-ops for keys with no
+  slot). This is what feeds the next frame's `mark`, and it carries three things down
+  the recursion: the node's **full rect** (the geometry channel `rectOf` returns —
+  never cropped, because a scroll container sizes its clamp from it), the inherited
+  **clip** (folded exactly as the render walk folds it), and the nearest **stamped
+  ancestor's key** for bubbling.
+
+  The walk is pre-order and the host calls it over the roots in list order — which *is*
+  paint order — so the sequence of stamps is the frame's z-axis, and `Ctx` records it as
+  one. It is built here rather than at `query` time deliberately: query order is not
+  paint order (a template may query a child before its parent), and identity here is
+  promised to be independent of wiring order.
 
 **Host (policy):** defines the vocabulary, decides the conditions, and reads the
 result. The host reads `node.query(u)` (a read-through query returning the host's
@@ -283,6 +303,15 @@ Two orthogonal axes, both Unity-inspired:
   being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
   to an existing node, read that node's prior-frame rect with **`node.rect(ctx)`**
   (→ `Ctx.rectOf(key)`, the rect `stamp_rects` recorded last frame) and derive the origin.
+- **`offset_x`/`offset_y`** — a displacement in px applied *after* the anchor (or the
+  parent's flow) has resolved, so it moves a placement instead of replacing one. This is
+  the only way to put a node at a coordinate you computed yourself: nine anchor presets
+  are otherwise the whole vocabulary, and none of them takes a number. `.center` plus a
+  delta is polar placement, which is what a radial or graph layout is made of; a flowed
+  node can also be nudged without leaving the run. Defaults to (0,0); set with
+  `Layout.init(..).with_offset(dx, dy)` or `El.with_offset`. Distinct from `origin`
+  (which positions a *root*, and only a root) and from `scroll` (which moves a node's
+  *children*, not the node).
 - **`scroll_x`/`scroll_y`** — the same trick as `origin`, one level down: instead of
   moving a *root* itself, it translates one node's *children* by `-scroll_x`/`-scroll_y`.
   `place` folds it straight into the base position it hands each child (`px -= p.layout
@@ -298,8 +327,8 @@ Two orthogonal axes, both Unity-inspired:
   is constrained). Orthogonal to `scroll_*`: scroll **translates** children, overflow
   **masks** the result — a scroll viewport is the composition `.clip` + a `scroll_y`
   offset. It lives in core `Layout` (not a host render aspect) because it feeds *two*
-  engine consumers — the render walk's clip stack and, in time, hit-testing (a
-  clipped-away node shouldn't be clickable). The host still owns the actual clip *call*
+  engine consumers — the render walk's clip stack and hit-testing (`stamp_rects` folds
+  the same inherited clip onto each slot, so a clipped-away node is not clickable). The host still owns the actual clip *call*
   (`setClipRect`), the same way it owns painting. Future crop variants: `scroll` (folds
   the offset in), `ellipsis`.
 

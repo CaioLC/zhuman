@@ -231,9 +231,24 @@ an `unlock` — a vigor *fraction*, a larder floor and a count of goods already 
 what it asks of the builder, as against `requires`, which is what the build spends. Goods with
 no `unlock` field are ungated (`@hasField`). The conditions are read at `begin_build` and not
 again, so a dip mid-build doesn't stop work already paid for. `capital.goods_owned` counts them
-by sweeping `buildable_bundle`.
+by sweeping `buildable_bundle` with `has`, so it counts **kinds** — four pairs of sandals are
+never four goods built.
 
-`begin_build` checks `has` **first**; `SparseSet.add` does not guard duplicates.
+Every good carries a `count`, and owning one is not a reason you can't make another: building
+for someone else is what a count is for. Only the **first unit carries the effect** — a second
+pair of sandals is stock, not a deeper discount — so `finish_build` increments an existing
+component and runs `grant` only on the way in from absent. It increments rather than re-adding
+because `SparseSet.add` does not guard duplicates: a second `add` would append a second dense
+entry and leave the index pointing at one of them. `break_good` takes spares first and revokes
+only with the last unit, so losing a spare can't cost you the discount you're still wearing.
+
+`capital.cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the
+materials and frees the body, while the energy and every hour already spent are gone. The refund
+is flat rather than prorated because materials are charged in full at `begin_build` and nothing
+draws them down over time — a time-proportional refund would imply a consumption schedule the
+sim doesn't run. `good_of_doing` inverts `doing_of_good` to recover the price from a `Busy` that
+was never handed one, and returns null for the six labor verbs, which is what refuses a cancel
+on a half-finished forage.
 
 ## Module map
 

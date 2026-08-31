@@ -34,28 +34,15 @@ that has stopped serving it.
   the fourth, because his valuation of the fourth genuinely is lower — plus finite stock and a
   limited window. He is a passerby. "Selling must simply lose to scavenging" is the wrong guard:
   it makes production for sale strictly dominated, so nobody would ever do it.
-- **Cancel a build.** A four-day build with an emptying larder is a trap with no exit today.
-  Cancel drops `Busy` and refunds part of the materials; the energy and the time are gone. It
-  reuses `resolve_busy`'s dispatch from `Busy.Doing` back to the concrete good to recover the
-  price, and must be gated to the `build_*` arms — `Doing` also covers the six labor verbs.
-  The refund is a flat fraction with a stated reason ("you salvage what you had not yet worked
-  in"): `materials × remaining/total` reads natural and asserts a draw-down the sim does not
-  run, since `begin_build` charges materials in full upfront and nothing consumes them over time.
-  **Pause is deliberately not built** — not for architectural reasons (a dropped `Busy` leaves
+- **Pause is deliberately not built** — not for architectural reasons (a dropped `Busy` leaves
   the body doing exactly one thing) but economic ones: chipping at a hatchet between forage runs
   makes the manufactured tier reachable by attrition, which is the pressure the merchant exists
-  to relieve.
-- **A count per good, and the sell path.** Once a trader will take goods off your hands, a lone
-  actor stops building only what he means to use — making a second pair of sandals to sell is
-  the first production for exchange in the game. One `count: u32 = 1` field per capital
-  component. The increment belongs in `finish_build` (`if (w.get(e, GoodT)) |g| g.count += 1
-  else { add; grant; }`), never in `begin_build`, which would hand over the good before the work
-  resolves; today's unconditional `w.add` would corrupt the set, since `SparseSet.add` does not
-  guard duplicates. Cancel decrements. **Only the first unit carries the effect** — a balance
-  call, not a correctness one: a second pair of sandals is stock, not a deeper discount. Selling
-  is `break_good` plus a payment, decrementing and only revoking at zero; `break_good` exists
-  and has no gameplay caller yet. `goods_owned` asks `has()`, so the Shelter still counts kinds
-  and four pairs of sandals will never be four goods built.
+  to relieve. *(Cancel itself is built — `capital.cancel_build`.)*
+- **The sell path.** Counts are built (`count` per good, incremented in
+  `finish_build`, spares broken first) — what is missing is a buyer. Selling is `break_good`
+  plus a payment: the decrement-and-revoke-at-zero half already works, the payment needs the
+  merchant's ratios. Until then a second pair of sandals is buildable and worth nothing, which
+  is why the BUILD tile still refuses a good you own.
 
   Two correctness notes that fall out and are otherwise unrecorded: `health_apply` /
   `health_remove` is the one modifier pair that does **not** round-trip (apply raises `max` and
@@ -107,56 +94,20 @@ that has stopped serving it.
   it still, or drive it off the consumption rate rather than off the stock level — which is the
   honest reading, since the pulse's speed is meant to be the eating rate.
 - **Barter Modal** new screen overlay on top of PlayGame to implement the barter mechanics.
-  Wants input capture to be real first (below), or it is safe only while every action underneath
-  it is idempotent.
+  Input capture is a mechanism now — an overlay genuinely blocks what it covers — but there is
+  no modal *template* to build one from (see **Retire `widgets.zig`**).
 - Menu Page exposing our `res.config` to edit
-- Pause Overlay — same dependency on input capture as the barter modal.
+- Pause Overlay — wants the same modal template as the barter modal.
 
 ### UI foundation (`src/ui_client/`, `src/ui/`)
 
-- **Clip-aware, z-ordered hit-testing.** Two changes to one path, and they ship together because
-  both touch `mark`.
-
-  *Clip:* `Layout.overflow` crops the render walk, but `mark` tests a slot's raw rect, so a node
-  scrolled out of its viewport stays clickable — which is why the BUILD panel grew the window
-  instead of scrolling. The intersection belongs **in `mark`**, and the slot must carry *two*
-  rects: the full one, which `rectOf` keeps returning, and the clip. Stamping only the
-  intersection is the tempting shortcut and it silently kills scrolling — `scroll_view` derives
-  `max_offset` from `content.rect` through that same channel, so it would clamp to the viewport
-  forever, the wheel would die and the scrollbar never appear. Tile underbars size off it too.
-  `Rect.intersect` and `draw_node`'s inheritance rule already exist to copy.
-
-  *Z-order:* `mark` flags **every** slot containing the point, so overlapping nodes all fire and
-  a modal does not block what is under it. Paint order is z-order and `stamp_rects` already
-  walks it — roots in list order, each tree pre-order — so that walk pushes interactive nodes
-  onto a per-frame list and `mark` walks it backwards, stopping at the first hit and bubbling up
-  by a `parent_key` on the slot. Node pointers would need `Ctx` to be generic over `Node`, which
-  it is not, and would carry frame-arena pointers across a frame boundary against the engine's
-  own handles-not-pointers rule. **Not** built at `query` time: query order is not paint order —
-  `scroll_view` queries a child before its parent, and `play_game.zig` appends into an earlier
-  sibling after building a later one — and [`../src/ui/README.md`](../src/ui/README.md) promises
-  identity is independent of wiring order. **Opaque by default**, with an explicit pass-through
-  opt-out; transparent-by-default makes the mechanism a no-op, since `mark` could never stop.
-  Three call sites query purely for geometry and need the opt-out: `scroll_view.zig`, and
-  `widgets.zig` twice.
-
-  This is what makes **input capture** a mechanism rather than host policy. It does *not* retire
-  the O(interactive) `stamp_rects` entry below — the list is built by that walk, so the walk
-  stays. It lands on a layout that already overlaps (see **Responsive layout**), where which
-  node wins becomes window-size dependent; worth verifying at those aspect ratios.
-- **`mark` and `stamp_rects` have no tests.** `ctx.zig` has no test block at all, so `test-ui`
-  goes green through a total inversion of hit-test semantics, and [`../CLAUDE.md`](../CLAUDE.md)
-  notes there is no synthetic-input path into SDL — a screenshot cannot show which of two
-  overlapping nodes took a click. `mark` is pure over the slot pool and unit-testable with
-  `UiCtx.init(undefined, alloc, undefined)`, which `ctx_binding.zig`'s existing interaction test
-  already demonstrates. Budget it with the change above, not after.
 - **Retire `widgets.zig`.** The pre-`elements` palette is unreferenced — nothing outside
   `ui_client/` calls it, since the screens moved onto `pages/templates/`. Deleting it and
   `root.zig`'s re-exports also drops the duplicate `scroll_speed` / `scrollbar_w` constants that
   `pages/templates/scroll_view.zig` already carries. Its `modal`, `tooltip` and `text_input`
   have no template equivalent yet, so those three want rebuilding on the foundation first rather
-  than plain deletion — `modal` in particular is the proof that input capture works, and both
-  the barter modal and the pause overlay want it. `text_input` has no live consumer at all — it
+  than plain deletion — `modal` in particular is the only thing that would exercise input
+  capture, which is now a mechanism with no caller; both overlays above want it. `text_input` has no live consumer at all — it
   returns with the catalog browser's search box.
 - **Responsive scaling** — every UI scalar (the `default_font`/`h1` ladder, `pad`/`pad_sym`,
   `gap`, `stroke_w`, and the fixed px sizes callers pass) is authored at one reference
@@ -171,6 +122,8 @@ that has stopped serving it.
   each places from its own point and lets `fit_children` grow as large as it grows. The fix is a
   layout pass that reflows and shrinks columns against the live window size instead of anchoring
   and growing. The default window is currently sized to the tallest screen rather than reflowing.
+  Sharper than it was: hit-testing stops at the topmost node, so where the columns overlap it is
+  now paint order that decides which one takes the click — and the log footer is built last.
 
 ## Act II — first exchange (pop 2 → band)
 
@@ -249,11 +202,6 @@ Gated on Act I's population crossing, and blocked on the open design questions i
   the same drawing capability the board's edges need, seen twice.
 
 ### UI foundation (`src/ui_client/`)
-- **Place a child at a computed point.** `Layout` offers nine anchor presets and `.relative` and
-  nothing else — `origin` positions only a parentless root, `scroll` translates a node's
-  *children*. So no radial, graph or free-form layout is expressible. `offset_x`/`offset_y`
-  applied after the anchor resolves is the missing primitive: `.center` plus a delta is polar
-  placement. Nothing about it is hexagonal, and tooltips, badges and graph nodes want it too.
 - **A line feature.** Rect fills draw any axis-aligned line at any thickness and nothing else —
   no diagonals, no curves, no chords. `svg` loads a *file*, so it cannot draw geometry computed
   from live data. This is **host work in `ui_client/features/`, not engine work**: a feature is
@@ -273,7 +221,8 @@ Gated on Act I's population crossing, and blocked on the open design questions i
   neighbours overlap at the corners. The slot carries an optional predicate
   (`?*const fn(Rect, f32, f32) bool`) that `mark` calls when set — the same host-policy seam the
   engine already uses for `RenderData` and `IntFlags.transient`, so core never learns what a
-  hexagon is.
+  hexagon is. It slots into the ordered walk `mark` already does, as one more reason to skip a
+  candidate beside `pass_through` and the clip test.
 - **Six sector hues.** Wedges must be distinguishable, and position alone will not carry it once
   chords cross the board — you need to see which trade a chord runs to. They have no legal home
   in `Theme` (nine roles, and `ui_client` must not learn what a sextant is) and templates may not

@@ -142,7 +142,7 @@ composition stays free.
 **Placement is deliberately not a fold.** A `Placement` partial with `row`/`col`/`fill`
 presets was built and then removed: it was a second vocabulary shadowing the engine's own
 `Layout`/`Size`, and every value had to be restated in it. Placement is now written
-straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` /
+straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` / `with_offset` /
 `with_size` / `with_overflow`. Style composes because a button's look is genuinely built
 from reusable pieces; placement does not, because a node sits in exactly one place.
 
