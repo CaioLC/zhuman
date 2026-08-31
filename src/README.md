@@ -194,13 +194,23 @@ as labor is over the action — the gate/pay/start half is identical for all six
 | Variant | Goods | Behavior |
 |---|---|---|
 | **Unlocker** | Fishing rod, Hatchet, Wire snares, Air rifle | grants an action component outright — owning the good is what makes the verb possible |
-| **`ActionModifier`** | Boots, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
+| **`ActionModifier`** | Sandals, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Leaf bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
 | **`Generator`** | Garden bed, Chicken coop | runs continuously: `requires` is the build order, `upkeep` the per-tick drain |
 | **Curtain** | Shelter | grants nothing mechanical: owning it is Act I's win condition, and `build_ui` routes to the curtain on it |
 
+Cutting across those variants is a second split, carried entirely by the prices. **Crude**
+goods — sandals, leaf bed, wire snares, root cellar, garden bed — are what one person makes
+from scavenged scrap in half a day. **Manufactured** goods are the rest, at ×8 the materials
+and ×10 the hours: a hatchet is four days of building nothing else while the larder drains.
+They are not forbidden, only priced past what one body's time is worth — buying one is meant
+to beat building it, which is the whole argument the merchant makes. Two goods may modify one
+verb and stack (sandals and a bicycle both cheapen Forage); a better tool *superseding* a
+weaker one is a different rule with no subject yet.
+
 A modifier's `apply_*`/`remove_*` pair *scales* its target's `.s`/`.sd` rather than replacing
 them, so a boost preserves the distribution's shape. The health trio is relative (`+=`/`-=`)
-and fills what it adds, so `v/max` never dips on an upgrade — which matters because the status
+and fills what it adds — 1 for the crude leaf bed, 2 each for the manufactured pair — so
+`v/max` never dips on an upgrade — which matters because the status
 word and `yield_factor` both read that fraction. The Chainsaw is the Act II teaser: chop energy
 ×0.3 but `requires.materials += 1` for fuel, the first substitution of external energy for
 muscle.

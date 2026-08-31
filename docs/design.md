@@ -60,9 +60,11 @@ ordinal — never a global utility function.
 ## Act structure
 
 - **Act I — Robinson Crusoe (pop 1).** Assets divide into *food* and *materials*. Crude labor
-  and the few capital goods a single individual can build (crude spear, rudimentary sandals,
-  leaf bed). A merchant passerby offers the first barter — simple goods (a fish net, a hand axe)
-  for the food and raw materials the player holds.
+  and the few capital goods a single individual can build from scavenged scrap — rudimentary
+  sandals, a leaf bed, wire snares, a dug root cellar, a garden bed. Everything more
+  sophisticated stays buildable but is priced past what one body's time is worth. A merchant
+  passerby offers the first barter — simple goods (a fish net, a hand axe) for the food and raw
+  materials the player holds.
   *Win condition:* the **Shelter**, a good that houses four. It is offered only to an actor who
   has already made a life here — rested, a full larder, and several goods built — and it is the
   largest build in the act. Raising it ends Act I: others ask to move in, and the crossing to
