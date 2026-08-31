@@ -76,6 +76,29 @@ pub const UiState = struct {
     /// when the node disappears or the app tears down. Without it, the texture would leak
     /// every time a scrolled-away / closed SVG node's slot is pruned. `src_key == 0` means
     /// "nothing rasterized yet" (a fresh, zero-initialized slot).
+    /// A polyline's points, keyed by its own `node.key`. The first state that carries
+    /// *variable-length* data rather than a handle or a scalar — which is why it exists
+    /// at all: `RenderData` holds one payload per feature per node, and coordinates do
+    /// not fit in a tint. Fixed capacity keeps it POD (no `deinit`, no allocator), and a
+    /// caller with more points than this wants a second node rather than a bigger buffer.
+    /// Zero-seeded like the rest, so an unset line has `len == 0` and draws nothing.
+    pub const LineState = struct {
+        pub const cap = 64;
+        buf: [cap]Point = undefined,
+        len: usize = 0,
+
+        pub fn set(self: *LineState, pts: []const Point) void {
+            const n = @min(pts.len, cap);
+            @memcpy(self.buf[0..n], pts[0..n]);
+            self.len = n;
+        }
+
+        /// The stored points. Never hold the slice across a pool `acquire` — the slot
+        /// may move; call this again instead.
+        pub fn points(self: *const LineState) []const Point {
+            return self.buf[0..self.len];
+        }
+    };
     pub const SvgState = struct {
         src_key: u64 = 0,
         tex: ?sdl.render.Texture = null,
@@ -85,6 +108,15 @@ pub const UiState = struct {
         }
     };
 };
+
+/// A point in a node's own box, in the unit square: (0,0) is its top-left corner and
+/// (1,1) its bottom-right. Relative rather than pixel so a polyline survives a resize
+/// and a zoom without the caller recomputing it. See `features/line.zig`.
+pub const Point = struct { x: f32, y: f32 };
+
+/// A stroke: what a polyline is drawn *with*, as against where it goes (which is
+/// variable-length, so it lives in `LineState`). Width is in px, unscaled.
+pub const Stroke = struct { color: Color, width: f32 = 1 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
 /// keyed by widget key). `mark_*` writes fields at the event stage; the build reads
@@ -148,6 +180,7 @@ pub const RenderData = struct {
     outline: ?Outline = null, // stroked border (color + width + solid/dashed/dotted), drawn inward
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
+    line: ?Stroke = null, // polyline through node.state(LineState)'s points, in this stroke
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent

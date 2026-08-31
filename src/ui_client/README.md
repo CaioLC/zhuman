@@ -45,7 +45,9 @@ pub const Node  = ui.Node(RenderData);
 
 - **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`:
   `TextState` (buffer + the px to render at), `ScrollState`, `TabsState`, `StepState`,
-  `TextInputState`, and `SvgState`. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
+  `TextInputState`, `LineState` and `SvgState`. `LineState` is the one that carries
+  *variable-length* data — a polyline's points, since `RenderData` holds a single payload
+  per feature and coordinates don't fit in a tint; fixed capacity keeps it POD. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
   eviction hook frees it when the node disappears. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
@@ -75,7 +77,7 @@ A *feature* is one kind of thing a node can be, as a module co-locating its whol
 | `attach` | no | the build-time mixin: measure, size, set payload/state |
 
 ```zig
-pub const list = .{ fill, image, svg, text, outline };  // back → front
+pub const list = .{ fill, image, svg, line, text, outline };  // back → front
 ```
 
 **The list's order is the z-order** — outline last, so a hover ring shows over an opaque

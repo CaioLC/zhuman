@@ -202,16 +202,13 @@ Gated on Act I's population crossing, and blocked on the open design questions i
   the same drawing capability the board's edges need, seen twice.
 
 ### UI foundation (`src/ui_client/`)
-- **A line feature.** Rect fills draw any axis-aligned line at any thickness and nothing else —
-  no diagonals, no curves, no chords. `svg` loads a *file*, so it cannot draw geometry computed
-  from live data. This is **host work in `ui_client/features/`, not engine work**: a feature is
-  one module, one `list` entry and one `RenderData` field, and `svg` was the proof. The binding
-  already exposes `renderLine`/`renderLines` for hairlines and `renderGeometry` for thick strokes
-  and filled polygons — the latter also draws the board's tiles, which the `svg` route cannot do
-  cheaply (it forces a square content box and re-rasterises every tile on every zoom step, since
-  its cache is keyed per node on path and size). The one genuinely new shape: this is the first
-  feature carrying *variable-length* data rather than a tint, so points want a pooled `State`
-  keyed on `node.key`, node-local and resolved against `paint.full` at draw time.
+- **Filled polygons, and honest thick strokes.** The `line` feature draws a polyline at any
+  angle, which is what closes the diagonal/curve gap — but thickness above a hairline is faked by
+  re-stroking along the *first* segment's normal, so it is right for a straight run and visibly
+  wrong on a tight corner. Both want `renderGeometry` (already in the binding): mitred quads for a
+  real stroke, and untextured coloured triangles for the board's hex tiles — which the `svg` route
+  cannot do cheaply, since it forces a square content box and re-rasterises every tile on every
+  zoom step (its cache is keyed per node on path and size).
 - **A hex coordinate module** (`src/grid/`) — axial and cube coordinates, pixel conversion,
   rings, neighbours, pixel-to-tile rounding, and the point-in-tile tests. Pure functions, no UI
   types, never imported by core: the engine stays ignorant of tilings and gets its flexibility

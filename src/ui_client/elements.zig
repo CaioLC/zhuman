@@ -169,6 +169,16 @@ pub fn svg(ctx: *UiCtx, parent: El, id: []const u8, path: [:0]const u8, px: f32)
     return .{ .ctx = ctx, .node = node };
 }
 
+/// A polyline through `pts` — node-local coordinates in the unit square, so (0,0) is this
+/// node's top-left and (1,1) its bottom-right. Unlike the other content leaves this one
+/// does **not** size itself: points are relative, so the caller gives the node a box
+/// (`with_size`) and the line stretches to fill it.
+pub fn line(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, stroke: cb.Stroke) !El {
+    const node = try child(ctx, parent, id);
+    feat.data_line(ctx, node, pts, stroke);
+    return .{ .ctx = ctx, .node = node };
+}
+
 // -- el: sugar composing a content leaf + a style spec in one call. --------------------
 
 /// What an `el` draws — the content variant it dispatches to a leaf. The image/svg/sprite
