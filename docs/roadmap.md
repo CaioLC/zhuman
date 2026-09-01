@@ -1,7 +1,8 @@
 # Roadmap
 
 **The only document that discusses what isn't built.** Everything else describes what is —
-the game's design is [`design.md`](design.md), the code is [`../src/README.md`](../src/README.md),
+the game's design is [`design.md`](design.md), its interface's is [`ui_design.md`](ui_design.md),
+the code is [`../src/README.md`](../src/README.md),
 [`../src/ui/README.md`](../src/ui/README.md) and
 [`../src/ui_client/README.md`](../src/ui_client/README.md). A gap, a limitation, an intention
 or an argument about a future feature belongs here, and only here.
@@ -83,13 +84,12 @@ that has stopped serving it.
 
 ### UI foundation (`src/ui_client/`, `src/ui/`)
 
-- **A text node silently truncates at 64 bytes.** `TextState.buf` is fixed and
-  `update` does `@min(t.len, buf.len)`, so a longer string loses its tail with no error and
-  no wrap — it looks like a layout bug and is not one. Two fixes, and they are different
-  features: raising the cap (cheap in memory, ~64 bytes per text node, but still a cap), and
-  **wrapping**, which the layout has no concept of — a text node is one line, measured once.
-  Until then a caller past the limit has to split into two nodes, which `build_list`'s
-  footnote does.
+- **Text neither wraps nor complains.** A node is one line, and overrunning its buffer
+  (see [`../src/ui_client/README.md`](../src/ui_client/README.md)) drops the tail with no
+  error — it reads as a layout bug and is not one. Two different features: raising the cap,
+  which is cheap and still a cap, and **wrapping**, which the layout has no concept of at
+  all — a text node is measured once, as one line. Until then a long line splits across
+  nodes by hand, which `build_list`'s footnote does.
 - **Retire `widgets.zig`.** The pre-`elements` palette is unreferenced — nothing outside
   `ui_client/` calls it, since the screens moved onto `pages/templates/`. Deleting it and
   `root.zig`'s re-exports also drops the duplicate `scroll_speed` / `scrollbar_w` constants that
@@ -159,30 +159,19 @@ Gated on Act I's population crossing, and blocked on the open design questions i
 - **Add Ambiente music**
 
 ### HUD
-- **The structure board.** A hex board carrying **materials and capital only** — consumption is
-  deliberately off it, named once at the rim, which is what lets the radius mean one thing.
-  Centre is the body and the gifts of nature; rim is where goods meet the mouth; so it runs raw
-  to finished, centre to rim, and **radius is the length of production**. Ring is the stage,
-  sextant is the specialization — hex geometry hands you both axes, since a ring at distance *n*
-  holds exactly *6n* tiles. A tile on a wedge seam belongs to both trades, which falls out of
-  the geometry rather than being authored.
+- **The structure board** — its shape, geometry and vocabulary are
+  [`ui_design.md`](ui_design.md); what is missing is the building. Needs the hex coordinate
+  module and sector hues below, `renderGeometry` for tiles and honest strokes, and — before any
+  of it can be drawn honestly — the authored stages above, since a board is only as good as the
+  structure it displays. It routes like the Act I curtain rather than floating as an overlay,
+  which gives it the whole window.
 
-  The economics is the point: an edge running **radially** is deepening your own trade, an edge
-  running as a **chord** is needing what somebody else makes, and the density of chords is the
-  degree of division of labour, drawn. Selecting a good lights everything upstream of it, and
-  the reach of what lights up is what you cannot do alone. Say *stages*, not orders — Menger
-  numbers inward from consumption, so on this board the centre is the highest order and "higher
-  order outward" would invert him; Böhm-Bawerk's stages run raw to finished, which is the
-  direction drawn.
-
-  Read-only: the board is the map, BUILD is the shop. A detail panel beside the selected tile
-  would remove the surface hop at the cost of duplicating the build affordance — worth adding
-  only if the hop turns out to annoy. It routes like the Act I curtain rather than floating as
-  an overlay, which gives it the whole window.
-
-  This **absorbs the catalog browser and capital tray** rather than sitting beside them: the
-  tray is Act I's Holdings panel, and the browser is this board plus BUILD's filtered list. The
-  design prototype's favourites (`☆`/`★`) and hover tooltips return here.
+  Two things it decides on arrival. Whether a detail panel beside the selected tile earns
+  itself: it removes the surface hop to BUILD at the cost of duplicating the build affordance,
+  and is worth adding only if the hop turns out to annoy. And that it **absorbs the catalog
+  browser and capital tray** rather than sitting beside them — the tray is Act I's Holdings
+  panel, and the browser is this board plus BUILD's filtered list. The design prototype's
+  favourites (`☆`/`★`) and hover tooltips return here.
 - **Distribution-curve glyph** — the other half of locked decision #5: a yield's p10–p90 band
   drawn as a mini curve, its *shape* telling normal from poisson from exponential, in place of
   the text line `action_card` prints today (`odds 1-3 in 8 of 10 (normal)`). The five

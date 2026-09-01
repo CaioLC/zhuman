@@ -198,7 +198,8 @@ as labor is over the action — the gate/pay/start half is identical for all six
 | **`Generator`** | Garden bed, Chicken coop | runs continuously: `requires` is the build order, `upkeep` the per-tick drain |
 | **Curtain** | Shelter | grants nothing mechanical: owning it is Act I's win condition, and `build_ui` routes to the curtain on it |
 
-Cutting across those variants is a second split, carried entirely by the prices. **Crude**
+Cutting across those variants is a second split, named by `capital.is_crude` and otherwise
+carried entirely by the prices. **Crude**
 goods — sandals, leaf bed, wire snares, root cellar, garden bed — are what one person makes
 from scavenged scrap in half a day. **Manufactured** goods are the rest, at ×8 the materials
 and ×10 the hours: a hatchet is four days of building nothing else while the larder drains.

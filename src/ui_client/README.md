@@ -15,7 +15,7 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 |---|---|---|---|
 | Engine | `src/ui/` | nothing | `Node`, the key-cache, the layout solve, interaction slots |
 | Foundation | `src/ui_client/` | the engine + SDL | the concrete bindings, paint features, the render walk, content elements, the style fold, the `Theme` roles |
-| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `ration_dial`, … |
+| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `build_list`, `holdings`, … |
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
 The foundation owns the **roles** a widget paints from; the game owns the **values**. So
@@ -44,8 +44,10 @@ pub const Node  = ui.Node(RenderData);
 ```
 
 - **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`:
-  `TextState` (buffer + the px to render at), `ScrollState`, `TabsState`, `StepState`,
-  `TextInputState`, `LineState` and `SvgState`. `LineState` is the one that carries
+  `TextState` (a **64-byte** buffer + the px to render at — `update` clamps to it, so a
+  longer string is truncated silently, and a node is one line either way), `ScrollState`,
+  `TabsState`, `StepState`,
+  `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
   *variable-length* data — a polyline's points, since `RenderData` holds a single payload
   per feature and coordinates don't fit in a tint; fixed capacity keeps it POD. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
   eviction hook frees it when the node disappears. Feature `State` types live *here*, not
