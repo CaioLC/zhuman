@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Human Action — Act II UX prototype</title>
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <main class="terminal act-two" aria-label="Human Action Act II interface prototype">
+    <header class="hud-header">
+      <div class="stockline compact" aria-label="Player and settlement stocks">
+        <span><span class="stock-label">V:</span> <span class="stock-value">13/14</span></span><span class="sep">|</span>
+        <span><span class="stock-label">F:</span> <span class="stock-value">23</span></span><span class="sep">|</span>
+        <span><span class="stock-label">WOOD:</span> <span class="stock-value">18</span></span>
+        <span><span class="stock-label">STONE:</span> <span class="stock-value">9</span></span>
+        <span><span class="stock-label">FIBRE:</span> <span class="stock-value">12</span></span>
+        <span><span class="stock-label">IRON:</span> <span class="stock-value low">1</span></span>
+      </div>
+      <div class="runline">
+        <button class="text-button optional" type="button" data-open-exchange><span class="accent">EXCHANGE 3</span></button>
+        <span class="sep optional">|</span>
+        <span>Act II · <strong>Day 43</strong></span>
+      </div>
+    </header>
+
+    <nav class="agent-strip" aria-label="Population and specializations">
+      <span class="label">PEOPLE 7/12</span>
+      <button class="agent-chip active" type="button">YOU · <span class="trade">WOOD</span></button>
+      <button class="agent-chip" type="button">MARA · <span class="trade">METAL</span></button>
+      <button class="agent-chip" type="button">SEN · <span class="trade">FIBRE</span></button>
+      <button class="agent-chip" type="button">IONA · <span class="trade">STONE</span></button>
+      <button class="agent-chip" type="button">OREN · <span class="trade">GROW</span></button>
+      <button class="agent-chip" type="button">TAVI · <span class="trade">POWER</span></button>
+      <button class="agent-chip" type="button">LEA · <span class="trade">GROW</span></button>
+    </nav>
+
+    <section class="structure-surface" aria-labelledby="structure-title">
+      <header class="structure-topbar">
+        <div class="structure-title"><h1 id="structure-title">STRUCTURE</h1><p>What exists, and what does it take?</p></div>
+        <div class="board-toolbar" aria-label="Structure board controls">
+          <div class="control-group" data-board-filter-group><button class="chip" type="button" aria-pressed="true" data-board-filter="all">all</button><button class="chip" type="button" aria-pressed="false" data-board-filter="owned">owned</button><button class="chip" type="button" aria-pressed="false" data-board-filter="reach">in reach</button></div>
+          <input class="search-box" id="board-search" type="search" placeholder="find a good" aria-label="Find a good">
+          <button class="chip" type="button" id="favorites-filter" aria-pressed="false">☆ saved</button>
+        </div>
+      </header>
+
+      <div class="structure-layout">
+        <div class="board-pane" id="board-pane">
+          <svg class="hex-board" id="structure-board" viewBox="0 0 620 620" role="group" aria-label="Production structure. The center is body and nature; rings are stages; six wedges are specializations.">
+            <defs id="board-defs"></defs>
+            <g id="board-wedges" aria-hidden="true"></g>
+            <g id="board-rings" aria-hidden="true"></g>
+            <g id="board-edges" aria-hidden="true"></g>
+            <g id="board-tiles"></g>
+            <g id="board-labels" aria-hidden="true"></g>
+          </svg>
+          <div class="board-tooltip" id="board-tooltip" role="tooltip" hidden></div>
+        </div>
+
+        <aside class="structure-detail" id="structure-detail" aria-live="polite" aria-label="Selected good details">
+          <div class="detail-kicker">SELECT A GOOD</div>
+          <div class="detail-head"><h2 class="detail-name">Forge</h2><button class="icon-button" type="button" id="favorite-good" aria-label="Save Forge">☆</button></div>
+          <div class="detail-tags"><span class="detail-tag">STAGE 3</span><span class="detail-tag">METAL</span><span class="detail-tag">OUT OF REACH</span></div>
+          <p class="detail-copy">Select a tile to reveal its upstream structure, live price, and who can make it most cheaply.</p>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="structure-footer">
+      <div class="legend-row" aria-label="Specialization colors">
+        <span><i class="legend-dot" style="color:var(--sector-grow)"></i>GROW</span><span><i class="legend-dot" style="color:var(--sector-wood)"></i>WOOD</span><span><i class="legend-dot" style="color:var(--sector-fibre)"></i>FIBRE</span><span><i class="legend-dot" style="color:var(--sector-stone)"></i>STONE</span><span><i class="legend-dot" style="color:var(--sector-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--sector-power)"></i>POWER</span><span>radial line = deepening</span><span>dashed chord = trade</span>
+      </div>
+      <div class="board-hints"><span id="structure-status">Select a tile · click or press Enter</span><span>Arrows move · Esc clears</span></div>
+    </footer>
+  </main>
+
+  <dialog class="terminal-dialog" id="exchange-dialog" aria-labelledby="exchange-title">
+    <form class="dialog-shell" method="dialog">
+      <header class="dialog-header">
+        <div><div class="dialog-kicker">DIRECT BARTER · OFFER 2 OF 3</div><h2 class="dialog-title" id="exchange-title">Does this exchange improve both sides?</h2></div>
+        <button class="dialog-close" type="submit" value="cancel" aria-label="Close exchange">×</button>
+      </header>
+      <div class="dialog-tabs" role="tablist" aria-label="Counterparty">
+        <button class="tab counterparty" type="button" role="tab" aria-selected="true" data-agent="Mara">MARA · METAL</button>
+        <button class="tab counterparty" type="button" role="tab" aria-selected="false" data-agent="Sen">SEN · FIBRE</button>
+        <button class="tab counterparty" type="button" role="tab" aria-selected="false" data-agent="Iona">IONA · STONE</button>
+      </div>
+      <div class="dialog-body">
+        <div class="exchange-grid">
+          <section class="trade-column" aria-labelledby="you-hold-title">
+            <h3 class="column-heading" id="you-hold-title">YOU HOLD · WOOD</h3>
+            <ul class="inventory-list">
+              <li class="inventory-row"><span>Planks</span><strong>8</strong></li><li class="inventory-row"><span>Charcoal</span><strong>5</strong></li><li class="inventory-row"><span>Timber frame</span><strong>2</strong></li><li class="inventory-row"><span>Iron stock</span><strong class="danger">1</strong></li><li class="inventory-row"><span>Food</span><strong>23</strong></li>
+            </ul>
+            <p class="demand-rank">YOUR DEMAND: ① iron stock · ② food · ③ fibre</p>
+          </section>
+
+          <section class="trade-preview" aria-label="Counteroffer editor">
+            <div class="preview-line"><span>YOU GIVE</span><strong><output id="give-output">4</output> planks</strong></div>
+            <div class="stepper" aria-label="Planks offered"><button type="button" data-step="give" data-delta="-1">−</button><output id="give-step">4</output><button type="button" data-step="give" data-delta="1">+</button></div>
+            <div class="trade-arrow" aria-hidden="true">⇄</div>
+            <div class="preview-line"><span>MARA GIVES</span><strong><output id="take-output">3</output> iron stock</strong></div>
+            <div class="stepper" aria-label="Iron stock requested"><button type="button" data-step="take" data-delta="-1">−</button><output id="take-step">3</output><button type="button" data-step="take" data-delta="1">+</button></div>
+            <div class="preview-effect" id="mutual-gain">Both accept · each gets a higher-ranked good.</div>
+          </section>
+
+          <section class="trade-column" aria-labelledby="other-hold-title">
+            <h3 class="column-heading" id="other-hold-title"><span id="counterparty-name">MARA</span> HOLDS · METAL</h3>
+            <ul class="inventory-list">
+              <li class="inventory-row"><span>Iron stock</span><strong>7</strong></li><li class="inventory-row"><span>Nails</span><strong>12</strong></li><li class="inventory-row"><span>Saw blade</span><strong>2</strong></li><li class="inventory-row"><span>Planks</span><strong class="danger">0</strong></li><li class="inventory-row"><span>Food</span><strong>8</strong></li>
+            </ul>
+            <p class="demand-rank"><span id="counterparty-demand">MARA</span>'S DEMAND: ① planks · ② food · ③ charcoal</p>
+            <div class="ratio-tape"><span>RECENT EXCHANGES</span><strong id="ratio-output">1 iron : 1.33 planks</strong><span>range 1.2–1.6 · no posted money yet</span></div>
+          </section>
+        </div>
+      </div>
+      <footer class="dialog-footer">
+        <span class="dialog-note">Inventories stay individual. The ratio is evidence from exchanges, not a global price or utility score.</span>
+        <div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">WITHDRAW</button><button class="primary-action" id="accept-exchange" type="button">ACCEPT ⇄</button></div>
+      </footer>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      const SVG = 'http://www.w3.org/2000/svg';
+      const center = { x: 310, y: 310 };
+      const hexSize = 31;
+      const colors = ['#9a9360', '#a47754', '#9d806e', '#7e8587', '#68898b', '#887493'];
+      const sectors = [
+        { name: 'GROW', stages: [
+          [{ name: 'Wild seed', short: 'SEED' }],
+          [{ name: 'Garden bed', short: 'GARDN' }, { name: 'Seed store', short: 'STORE' }],
+          [{ name: 'Grain plot', short: 'GRAIN' }, { name: 'Chicken coop', short: 'COOP' }, { name: 'Millstone', short: 'MILL' }],
+          [{ name: 'Granary', short: 'GRNRY' }, { name: 'Flour mill', short: 'FLOUR' }, { name: 'Orchard', short: 'ORCHD' }, { name: 'Feed store', short: 'FEED' }]
+        ]},
+        { name: 'WOOD', stages: [
+          [{ name: 'Timber stand', short: 'TIMBR' }],
+          [{ name: 'Hand axe', short: 'AXE' }, { name: 'Charcoal pit', short: 'CHAR' }],
+          [{ name: 'Planks', short: 'PLANK' }, { name: 'Carpenter bench', short: 'BENCH' }, { name: 'Timber frame', short: 'FRAME' }],
+          [{ name: 'Cart', short: 'CART' }, { name: 'Barrels', short: 'BARL' }, { name: 'Shelter frame', short: 'SHELT' }, { name: 'Root cellar', short: 'ROOT' }]
+        ]},
+        { name: 'FIBRE', stages: [
+          [{ name: 'Wild fibre', short: 'FIBRE' }],
+          [{ name: 'Spindle', short: 'SPIN' }, { name: 'Ropewalk', short: 'ROPE' }],
+          [{ name: 'Thread', short: 'THRD' }, { name: 'Cloth', short: 'CLOTH' }, { name: 'Fishing net', short: 'FNET' }],
+          [{ name: 'Work clothes', short: 'WRKCL' }, { name: 'Harness', short: 'HRNSS' }, { name: 'Sailcloth', short: 'SAIL' }, { name: 'Baskets', short: 'BSKTS' }]
+        ]},
+        { name: 'STONE', stages: [
+          [{ name: 'Loose stone', short: 'STONE' }],
+          [{ name: 'Quarry tools', short: 'QTOOL' }, { name: 'Stone yard', short: 'YARD' }],
+          [{ name: 'Cut stone', short: 'CUT' }, { name: 'Kiln', short: 'KILN' }, { name: 'Mortar', short: 'MORTR' }],
+          [{ name: 'Foundation', short: 'FOUND' }, { name: 'Oven', short: 'OVEN' }, { name: 'Cistern', short: 'CISTR' }, { name: 'Road bed', short: 'ROAD' }]
+        ]},
+        { name: 'METAL', stages: [
+          [{ name: 'Ore seam', short: 'ORE' }],
+          [{ name: 'Bloomery', short: 'BLOOM' }, { name: 'Anvil', short: 'ANVIL' }],
+          [{ name: 'Iron stock', short: 'IRON' }, { name: 'Forge', short: 'FORGE' }, { name: 'Hatchet', short: 'HATCH' }],
+          [{ name: 'Saw blade', short: 'SAW' }, { name: 'Nails', short: 'NAILS' }, { name: 'Cookpot', short: 'COOK' }, { name: 'Plough', short: 'PLOUG' }]
+        ]},
+        { name: 'POWER', stages: [
+          [{ name: 'Falling water', short: 'WATER' }],
+          [{ name: 'Work bench', short: 'WORK' }, { name: 'Water wheel', short: 'WHEEL' }],
+          [{ name: 'Windmill', short: 'WIND' }, { name: 'Gear set', short: 'GEARS' }, { name: 'Pump', short: 'PUMP' }],
+          [{ name: 'Grain mill', short: 'GMILL' }, { name: 'Workshop', short: 'WSHOP' }, { name: 'Irrigation', short: 'IRRIG' }, { name: 'Press', short: 'PRESS' }]
+        ]}
+      ];
+
+      const dependencyOverrides = {
+        'Garden bed': ['Wild seed'], 'Seed store': ['Wild seed'],
+        'Hand axe': ['Timber stand'], 'Charcoal pit': ['Timber stand'],
+        'Spindle': ['Wild fibre'], 'Ropewalk': ['Wild fibre', 'Hand axe'],
+        'Quarry tools': ['Loose stone', 'Hand axe'], 'Stone yard': ['Loose stone'],
+        'Bloomery': ['Ore seam', 'Charcoal pit'], 'Anvil': ['Bloomery'],
+        'Work bench': ['Timber stand', 'Loose stone'], 'Water wheel': ['Timber stand', 'Loose stone'],
+        'Grain plot': ['Garden bed', 'Seed store'], 'Chicken coop': ['Garden bed', 'Planks'], 'Millstone': ['Quarry tools', 'Cut stone'],
+        'Planks': ['Hand axe', 'Timber stand'], 'Carpenter bench': ['Planks', 'Work bench'], 'Timber frame': ['Planks', 'Carpenter bench'],
+        'Thread': ['Spindle', 'Wild fibre'], 'Cloth': ['Thread', 'Spindle'], 'Fishing net': ['Thread', 'Ropewalk'],
+        'Cut stone': ['Quarry tools', 'Stone yard'], 'Kiln': ['Stone yard', 'Charcoal pit'], 'Mortar': ['Kiln', 'Loose stone'],
+        'Iron stock': ['Bloomery', 'Charcoal pit'], 'Forge': ['Iron stock', 'Anvil', 'Charcoal pit'], 'Hatchet': ['Forge', 'Planks'],
+        'Windmill': ['Timber frame', 'Cloth'], 'Gear set': ['Forge', 'Work bench'], 'Pump': ['Forge', 'Water wheel'],
+        'Granary': ['Timber frame', 'Cut stone'], 'Flour mill': ['Millstone', 'Gear set', 'Timber frame'], 'Orchard': ['Garden bed', 'Irrigation'], 'Feed store': ['Grain plot', 'Granary'],
+        'Cart': ['Planks', 'Iron stock'], 'Barrels': ['Planks', 'Iron stock'], 'Shelter frame': ['Timber frame', 'Cut stone', 'Nails'], 'Root cellar': ['Cut stone', 'Timber frame'],
+        'Work clothes': ['Cloth', 'Thread'], 'Harness': ['Cloth', 'Iron stock'], 'Sailcloth': ['Cloth', 'Thread'], 'Baskets': ['Wild fibre', 'Planks'],
+        'Foundation': ['Cut stone', 'Mortar'], 'Oven': ['Cut stone', 'Mortar', 'Iron stock'], 'Cistern': ['Cut stone', 'Mortar'], 'Road bed': ['Loose stone', 'Cut stone'],
+        'Saw blade': ['Forge', 'Iron stock'], 'Nails': ['Forge', 'Iron stock'], 'Cookpot': ['Forge', 'Iron stock'], 'Plough': ['Forge', 'Planks'],
+        'Grain mill': ['Millstone', 'Gear set', 'Timber frame'], 'Workshop': ['Carpenter bench', 'Forge', 'Cut stone'], 'Irrigation': ['Pump', 'Planks', 'Cut stone'], 'Press': ['Gear set', 'Timber frame']
+      };
+
+      const descriptions = {
+        'Forge': 'A retained metalworking site. It converges iron stock, an anvil, and charcoal into the tools other trades need.',
+        'Shelter frame': 'The long-lived frame that combines wood, worked stone, and metal fasteners before shelter reaches consumption.',
+        'Flour mill': 'A powered final-stage capital good: stone grinds, gears transmit, and timber holds the work.',
+        'Fishing net': 'Fibre capital that turns thread and rope into a better fishing margin.',
+        'Bloomery': 'Ore becomes workable iron by consuming charcoal from another specialization.'
+      };
+
+      const ownedNames = new Set(['Body + nature', 'Wild seed', 'Timber stand', 'Wild fibre', 'Loose stone', 'Ore seam', 'Falling water', 'Garden bed', 'Hand axe', 'Charcoal pit', 'Spindle', 'Quarry tools', 'Stone yard', 'Work bench', 'Planks', 'Thread']);
+      const availableNames = new Set(['Seed store', 'Ropewalk', 'Bloomery', 'Anvil', 'Water wheel', 'Carpenter bench', 'Cut stone', 'Kiln', 'Iron stock', 'Cloth', 'Fishing net']);
+      const savedNames = new Set(['Fishing net', 'Shelter frame']);
+      const holderBySector = ['Oren', 'You', 'Sen', 'Iona', 'Mara', 'Tavi'];
+      const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+      const tileMap = new Map();
+      const tiles = [];
+      const edgeData = [];
+      let selected = null;
+      let boardFilter = 'all';
+      let savedOnly = false;
+
+      const svg = document.querySelector('#structure-board');
+      const defs = document.querySelector('#board-defs');
+      const wedgeGroup = document.querySelector('#board-wedges');
+      const ringGroup = document.querySelector('#board-rings');
+      const edgeGroup = document.querySelector('#board-edges');
+      const tileGroup = document.querySelector('#board-tiles');
+      const labelGroup = document.querySelector('#board-labels');
+      const tooltip = document.querySelector('#board-tooltip');
+      const boardPane = document.querySelector('#board-pane');
+
+      function node(name, attrs = {}) {
+        const el = document.createElementNS(SVG, name);
+        Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+        return el;
+      }
+
+      function ring(radius) {
+        let q = dirs[4][0] * radius;
+        let r = dirs[4][1] * radius;
+        const result = [];
+        for (let side = 0; side < 6; side += 1) {
+          for (let slot = 0; slot < radius; slot += 1) {
+            result.push({ q, r, side, slot });
+            q += dirs[side][0];
+            r += dirs[side][1];
+          }
+        }
+        return result;
+      }
+
+      function axialToPixel(q, r) {
+        return { x: center.x + hexSize * Math.sqrt(3) * (q + r / 2), y: center.y + hexSize * 1.5 * r };
+      }
+
+      function hexPoints(x, y, size = hexSize) {
+        return Array.from({ length: 6 }, (_, i) => {
+          const angle = (Math.PI / 180) * (60 * i - 30);
+          return `${(x + size * Math.cos(angle)).toFixed(2)},${(y + size * Math.sin(angle)).toFixed(2)}`;
+        }).join(' ');
+      }
+
+      function slug(value) {
+        return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      }
+
+      function makeGradients() {
+        colors.forEach((color, side) => {
+          const previous = (side + 5) % 6;
+          const gradient = node('linearGradient', { id: `seam-${side}`, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
+          gradient.append(node('stop', { offset: '0%', 'stop-color': colors[previous] }), node('stop', { offset: '50%', 'stop-color': colors[previous] }), node('stop', { offset: '50%', 'stop-color': color }), node('stop', { offset: '100%', 'stop-color': color }));
+          defs.append(gradient);
+        });
+      }
+
+      function drawBackdrop() {
+        for (let stage = 1; stage <= 4; stage += 1) {
+          const circle = node('circle', { class: 'stage-ring', cx: center.x, cy: center.y, r: stage * 54 });
+          ringGroup.append(circle);
+          const label = node('text', { class: 'stage-label', x: center.x + 7, y: center.y - stage * 54 + 10 });
+          label.textContent = `STAGE ${stage}`;
+          labelGroup.append(label);
+        }
+
+        const outer = ring(4);
+        for (let side = 0; side < 6; side += 1) {
+          const cells = outer.filter(cell => cell.side === side).map(cell => axialToPixel(cell.q, cell.r));
+          const avg = cells.reduce((acc, p) => ({ x: acc.x + p.x / cells.length, y: acc.y + p.y / cells.length }), { x: 0, y: 0 });
+          const angle = Math.atan2(avg.y - center.y, avg.x - center.x);
+          const a1 = angle - Math.PI / 6;
+          const a2 = angle + Math.PI / 6;
+          const radius = 286;
+          const path = node('path', { class: 'wedge', fill: colors[side], d: `M ${center.x} ${center.y} L ${center.x + Math.cos(a1) * radius} ${center.y + Math.sin(a1) * radius} A ${radius} ${radius} 0 0 1 ${center.x + Math.cos(a2) * radius} ${center.y + Math.sin(a2) * radius} Z` });
+          wedgeGroup.append(path);
+          const label = node('text', { class: 'sector-label', x: center.x + Math.cos(angle) * 276, y: center.y + Math.sin(angle) * 276 + 3 });
+          label.textContent = sectors[side].name;
+          labelGroup.append(label);
+        }
+
+        const rim = node('text', { class: 'rim-label', x: center.x, y: 612 });
+        rim.textContent = 'RIM → FOOD · COMFORT · SHELTER · CONSUMPTION STAYS OFF THE BOARD';
+        labelGroup.append(rim);
+      }
+
+      function tileState(name) {
+        if (ownedNames.has(name)) return 'owned';
+        if (availableNames.has(name)) return 'available';
+        return 'out-of-reach';
+      }
+
+      function createTile(data) {
+        const g = node('g', { class: `hex-tile ${tileState(data.name)}`, tabindex: '0', role: 'button', 'aria-label': `${data.name}, stage ${data.stage}, ${data.sectorName}, ${tileState(data.name).replaceAll('-', ' ')}` });
+        g.dataset.name = data.name;
+        g.dataset.stage = data.stage;
+        g.dataset.sector = data.sector;
+        g.dataset.state = tileState(data.name);
+        g.dataset.saved = String(savedNames.has(data.name));
+        const title = node('title');
+        title.textContent = `${data.name} · stage ${data.stage} · ${data.sectorName}`;
+        const fill = data.secondary == null ? data.color : `url(#seam-${data.sector})`;
+        const polygon = node('polygon', { class: 'hex-shape', points: hexPoints(data.x, data.y, data.stage === 0 ? 36 : hexSize), fill, stroke: data.color });
+        const label = node('text', { class: 'hex-label', x: data.x, y: data.y + 2 });
+        label.textContent = data.short;
+        g.append(title, polygon, label);
+        if (ownedNames.has(data.name)) g.append(node('circle', { class: 'hex-marker', cx: data.x + 18, cy: data.y - 18, r: 2.3 }));
+        if (savedNames.has(data.name)) {
+          const star = node('text', { class: 'hex-label', x: data.x - 18, y: data.y - 14 });
+          star.textContent = '★';
+          g.append(star);
+        }
+        g.addEventListener('click', () => selectTile(data.name));
+        g.addEventListener('keydown', event => onTileKey(event, data));
+        g.addEventListener('mouseenter', () => showTooltip(data));
+        g.addEventListener('mousemove', moveTooltip);
+        g.addEventListener('mouseleave', hideTooltip);
+        tileGroup.append(g);
+        data.el = g;
+        data.deps = [];
+        tiles.push(data);
+        tileMap.set(data.name, data);
+      }
+
+      function buildTiles() {
+        createTile({ name: 'Body + nature', short: 'BODY', stage: 0, sector: -1, sectorName: 'CENTRE', secondary: null, color: '#a69671', x: center.x, y: center.y, slot: 0 });
+        for (let stage = 1; stage <= 4; stage += 1) {
+          ring(stage).forEach(cell => {
+            const good = sectors[cell.side].stages[stage - 1][cell.slot];
+            const p = axialToPixel(cell.q, cell.r);
+            createTile({ ...good, stage, sector: cell.side, sectorName: sectors[cell.side].name, secondary: cell.slot === 0 ? (cell.side + 5) % 6 : null, color: colors[cell.side], x: p.x, y: p.y, q: cell.q, r: cell.r, slot: cell.slot });
+          });
+        }
+      }
+
+      function wireDependencies() {
+        tiles.forEach(tile => {
+          if (tile.stage === 0) return;
+          if (dependencyOverrides[tile.name]) tile.deps = dependencyOverrides[tile.name];
+          else if (tile.stage === 1) tile.deps = ['Body + nature'];
+          else {
+            const previous = sectors[tile.sector].stages[tile.stage - 2];
+            tile.deps = [previous[Math.min(tile.slot, previous.length - 1)].name];
+          }
+          tile.deps = tile.deps.filter(name => tileMap.has(name));
+          tile.deps.forEach(sourceName => {
+            const source = tileMap.get(sourceName);
+            const chord = source.sector >= 0 && tile.sector >= 0 && source.sector !== tile.sector;
+            const line = node('line', { class: `structure-edge${chord ? ' chord' : ''}`, x1: source.x, y1: source.y, x2: tile.x, y2: tile.y });
+            line.dataset.source = sourceName;
+            line.dataset.target = tile.name;
+            edgeGroup.append(line);
+            edgeData.push({ source: sourceName, target: tile.name, el: line });
+          });
+        });
+      }
+
+      function collectUpstream(name, result = new Set()) {
+        const tile = tileMap.get(name);
+        if (!tile) return result;
+        tile.deps.forEach(dep => {
+          if (!result.has(dep)) {
+            result.add(dep);
+            collectUpstream(dep, result);
+          }
+        });
+        return result;
+      }
+
+      function selectTile(name, focus = false) {
+        selected = tileMap.get(name);
+        if (!selected) return;
+        const upstream = collectUpstream(name);
+        tiles.forEach(tile => {
+          tile.el.classList.toggle('selected', tile === selected);
+          tile.el.classList.toggle('upstream', upstream.has(tile.name));
+        });
+        edgeData.forEach(edge => edge.el.classList.toggle('active', (edge.target === name || upstream.has(edge.target)) && upstream.has(edge.source)));
+        renderDetail(selected, upstream);
+        document.querySelector('#structure-status').textContent = `${selected.name} selected · ${upstream.size} upstream goods lit`;
+        if (focus) selected.el.focus();
+      }
+
+      function enablesFor(name) {
+        return tiles.filter(tile => tile.deps.includes(name)).map(tile => tile.name);
+      }
+
+      function ingredientDisposition(name) {
+        return /anvil|bench|tool|wheel|millstone|spindle|forge/i.test(name) ? 'retained' : 'consumed';
+      }
+
+      function renderDetail(tile, upstream) {
+        const detail = document.querySelector('#structure-detail');
+        const state = tileState(tile.name).replaceAll('-', ' ').toUpperCase();
+        const sectorTags = tile.secondary == null || tile.secondary < 0 ? [tile.sectorName] : [sectors[tile.secondary].name, tile.sectorName];
+        const deps = tile.deps.length ? tile.deps.map(name => `<li><strong>${name}</strong><span>${ingredientDisposition(name)}</span></li>`).join('') : '<li><strong>body + gifts of nature</strong><span>given</span></li>';
+        const enables = enablesFor(tile.name).slice(0, 4);
+        const enablesMarkup = enables.length ? enables.map(name => `<li><strong>${name}</strong><span>next stage</span></li>`).join('') : '<li><strong>consumption at the rim</strong><span>off board</span></li>';
+        const outsideTrade = tile.sector >= 0 && tile.sector !== 1;
+        const baseMats = tile.stage === 0 ? 0 : 5 + tile.stage * 7;
+        const days = tile.stage === 0 ? 0 : (0.3 + tile.stage * 0.65).toFixed(1);
+        const description = descriptions[tile.name] || `${tile.name} is stage ${tile.stage} ${tile.sectorName.toLowerCase()} capital. Its position is structure, not an unlock gate.`;
+        const holder = tile.sector < 0 ? 'everyone' : holderBySector[tile.sector];
+        detail.innerHTML = `
+          <div class="detail-kicker">SELECTED · ${upstream.size} UPSTREAM</div>
+          <div class="detail-head"><h2 class="detail-name">${tile.name}</h2><button class="icon-button ${savedNames.has(tile.name) ? 'starred' : ''}" type="button" id="favorite-good" aria-label="${savedNames.has(tile.name) ? 'Remove' : 'Save'} ${tile.name}">${savedNames.has(tile.name) ? '★' : '☆'}</button></div>
+          <div class="detail-tags"><span class="detail-tag">STAGE ${tile.stage}</span>${sectorTags.map(tag => `<span class="detail-tag">${tag}</span>`).join('')}<span class="detail-tag">${state}</span></div>
+          <p class="detail-copy">${description}</p>
+          <section class="detail-section"><h3>NEEDS · LINES LIT ON BOARD</h3><ul class="detail-list">${deps}</ul></section>
+          <section class="detail-section"><h3>ENABLES</h3><ul class="detail-list">${enablesMarkup}</ul></section>
+          <section class="detail-section"><h3>LIVE PRICE</h3><div class="detail-price"><strong>${baseMats} typed materials · ${days}d</strong><span>${outsideTrade ? 'your Wood specialization: ×1.25 time' : 'inside your specialization: base time'}</span><span>lowest-cost maker: ${holder}</span></div></section>
+          <div class="detail-principle"><strong>Displayed and costed, never enforced.</strong><br>You may build across trades at a penalty; exchange wins by comparison, not by a locked prerequisite.</div>
+          <button class="link-button open-build" type="button" id="open-in-build">SHOW IN BUILD →</button>`;
+        detail.querySelector('#favorite-good').addEventListener('click', toggleFavorite);
+        detail.querySelector('#open-in-build').addEventListener('click', () => document.querySelector('#structure-status').textContent = `${tile.name} would open as a pre-filtered BUILD row.`);
+      }
+
+      function toggleFavorite() {
+        if (!selected) return;
+        if (savedNames.has(selected.name)) savedNames.delete(selected.name); else savedNames.add(selected.name);
+        selected.el.dataset.saved = String(savedNames.has(selected.name));
+        const existing = [...selected.el.querySelectorAll('text')].find(el => el.textContent === '★');
+        if (savedNames.has(selected.name) && !existing) {
+          const star = node('text', { class: 'hex-label', x: selected.x - 18, y: selected.y - 14 });
+          star.textContent = '★';
+          selected.el.append(star);
+        } else if (!savedNames.has(selected.name) && existing) existing.remove();
+        renderDetail(selected, collectUpstream(selected.name));
+        applyBoardFilters();
+      }
+
+      function showTooltip(tile) {
+        tooltip.innerHTML = `<span class="accent">${tile.name}</span><br>stage ${tile.stage} · ${tile.sectorName.toLowerCase()} · ${tileState(tile.name).replaceAll('-', ' ')}`;
+        tooltip.hidden = false;
+      }
+
+      function moveTooltip(event) {
+        const rect = boardPane.getBoundingClientRect();
+        tooltip.style.left = `${Math.min(event.clientX - rect.left + 12, rect.width - 220)}px`;
+        tooltip.style.top = `${Math.max(4, event.clientY - rect.top + 12)}px`;
+      }
+
+      function hideTooltip() {
+        tooltip.hidden = true;
+      }
+
+      function onTileKey(event, tile) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectTile(tile.name);
+          return;
+        }
+        if (event.key === 'Escape') {
+          tiles.forEach(candidate => candidate.el.classList.remove('selected', 'upstream'));
+          edgeData.forEach(edge => edge.el.classList.remove('active'));
+          document.querySelector('#structure-status').textContent = 'Selection cleared';
+          return;
+        }
+        const vectors = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        const direction = vectors[event.key];
+        if (!direction) return;
+        event.preventDefault();
+        const candidates = tiles.filter(candidate => candidate !== tile && !candidate.el.classList.contains('filtered-out') && !candidate.el.classList.contains('search-dim')).map(candidate => {
+          const dx = candidate.x - tile.x;
+          const dy = candidate.y - tile.y;
+          const forward = dx * direction[0] + dy * direction[1];
+          const lateral = Math.abs(dx * direction[1] - dy * direction[0]);
+          return { candidate, forward, score: forward > 0 ? lateral * 3 + Math.hypot(dx, dy) : Infinity };
+        }).sort((a, b) => a.score - b.score);
+        if (candidates[0] && Number.isFinite(candidates[0].score)) selectTile(candidates[0].candidate.name, true);
+      }
+
+      function applyBoardFilters() {
+        const query = document.querySelector('#board-search').value.trim().toLowerCase();
+        tiles.forEach(tile => {
+          const state = tileState(tile.name);
+          let filterOut = boardFilter === 'owned' && state !== 'owned';
+          if (boardFilter === 'reach') filterOut = state === 'out-of-reach';
+          if (savedOnly && !savedNames.has(tile.name)) filterOut = true;
+          tile.el.classList.toggle('filtered-out', filterOut);
+          tile.el.classList.toggle('search-dim', Boolean(query) && !tile.name.toLowerCase().includes(query));
+        });
+      }
+
+      makeGradients();
+      drawBackdrop();
+      buildTiles();
+      wireDependencies();
+      selectTile('Forge');
+
+      document.querySelectorAll('[data-board-filter]').forEach(button => button.addEventListener('click', () => {
+        boardFilter = button.dataset.boardFilter;
+        document.querySelectorAll('[data-board-filter]').forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === button)));
+        applyBoardFilters();
+      }));
+      document.querySelector('#board-search').addEventListener('input', applyBoardFilters);
+      document.querySelector('#favorites-filter').addEventListener('click', event => {
+        savedOnly = !savedOnly;
+        event.currentTarget.setAttribute('aria-pressed', String(savedOnly));
+        event.currentTarget.textContent = `${savedOnly ? '★' : '☆'} saved`;
+        applyBoardFilters();
+      });
+      document.querySelectorAll('.agent-chip').forEach(button => button.addEventListener('click', () => {
+        document.querySelectorAll('.agent-chip').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+        document.querySelector('#structure-status').textContent = `${button.textContent.trim()} inventory viewpoint selected.`;
+      }));
+
+      const exchange = document.querySelector('#exchange-dialog');
+      document.querySelectorAll('[data-open-exchange]').forEach(button => button.addEventListener('click', () => exchange.showModal()));
+      document.querySelectorAll('.counterparty').forEach(button => button.addEventListener('click', () => {
+        document.querySelectorAll('.counterparty').forEach(candidate => candidate.setAttribute('aria-selected', String(candidate === button)));
+        document.querySelector('#counterparty-name').textContent = button.dataset.agent.toUpperCase();
+        document.querySelector('#counterparty-demand').textContent = button.dataset.agent.toUpperCase();
+      }));
+
+      const amounts = { give: 4, take: 3 };
+      document.querySelectorAll('[data-step]').forEach(button => button.addEventListener('click', () => {
+        const key = button.dataset.step;
+        amounts[key] = Math.max(1, Math.min(9, amounts[key] + Number(button.dataset.delta)));
+        document.querySelector(`#${key}-step`).textContent = amounts[key];
+        document.querySelector(`#${key === 'give' ? 'give' : 'take'}-output`).textContent = amounts[key];
+        const ratio = amounts.give / amounts.take;
+        document.querySelector('#ratio-output').textContent = `1 iron : ${ratio.toFixed(2)} planks`;
+        const accepted = ratio >= 1.2 && ratio <= 1.6;
+        document.querySelector('#mutual-gain').textContent = accepted ? 'Both accept · each gets a higher-ranked good.' : ratio < 1.2 ? 'Mara refuses · too few planks per iron.' : 'You lose too much · this falls below your ranked margin.';
+        document.querySelector('#mutual-gain').classList.toggle('danger', !accepted);
+        document.querySelector('#accept-exchange').disabled = !accepted;
+      }));
+
+      document.querySelector('#accept-exchange').addEventListener('click', () => {
+        document.querySelector('#structure-status').textContent = `Exchange settled: ${amounts.give} planks for ${amounts.take} iron stock.`;
+        exchange.close('accepted');
+      });
+
+      if (new URLSearchParams(location.search).get('modal') === 'exchange') requestAnimationFrame(() => exchange.showModal());
+    })();
+  </script>
+</body>
+</html>

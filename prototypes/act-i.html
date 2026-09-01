@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Human Action — Act I UX prototype</title>
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <main class="terminal act-one" aria-label="Human Action Act I interface prototype">
+    <header class="hud-header">
+      <div class="stockline" aria-label="Current stocks">
+        <span><span class="stock-label">V:</span> <span class="stock-value">14/15</span></span>
+        <span class="sep" aria-hidden="true">|</span>
+        <span><span class="stock-label">F:</span> <span class="stock-value">11.6</span></span>
+        <span class="sep" aria-hidden="true">|</span>
+        <span><span class="stock-label">M:</span> <span class="stock-value">31</span></span>
+      </div>
+      <div class="runline">
+
+        <span>Act I · <strong>Day 19</strong></span>
+      </div>
+    </header>
+
+    <div class="page-grid" id="page-grid">
+      <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Holdings" hidden><span aria-hidden="true">›</span><span class="restore-label">HOLDINGS</span></button>
+
+        <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
+          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>4 kinds, 6</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Holdings">‹</button></span></h2>
+          <ul class="holdings-list">
+            <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
+            <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
+            <li class="holding-row"><span>Leaf bed</span><span>vigor ceiling +1</span></li>
+            <li class="holding-row"><span>Hatchet ×2</span><span>can split wood</span></li>
+          </ul>
+          <hr class="holdings-divider">
+          <h3 class="block-heading">MARGINS</h3>
+          <ul class="margin-list">
+            <li class="margin-row"><span>Forage</span><span class="positive">2.0e → 1.7e</span></li>
+            <li class="margin-row"><span>Food spoilage</span><span class="positive">0.05 → 0.03/day</span></li>
+            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
+            <li class="margin-row"><span>Trade stock</span><span>2 spare units</span></li>
+          </ul>
+        </section>
+
+        <section class="panel side-note" aria-label="Current body policy and recovery">
+          <span class="eyebrow">BODY</span><br>
+          Eating <strong id="body-policy-label">normal</strong>.<br>
+          Food lasts <strong id="food-coverage">5.2d</strong>.<br>
+          Full vigor in <strong id="vigor-recovery">0.2d</strong>.
+        </section>
+      </aside>
+
+      <section class="surface" aria-label="Act I action surface">
+        <nav class="surface-nav" aria-label="Act I surfaces">
+          <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
+          <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
+
+        </nav>
+
+        <div class="passerby-strip" role="status">
+          <span class="signal">● PASSERBY</span>
+          <strong>Fishing net, hand axe, preserved food.</strong>
+          <button class="link-button" type="button" data-open-merchant>TRADE →</button>
+        </div>
+
+        <div class="activity-strip is-idle" id="activity-strip" role="status" aria-live="polite">
+          <span class="activity-kind" id="activity-kind">○ IDLING</span>
+          <strong id="activity-subject">no work in progress</strong>
+          <span class="activity-meta" id="activity-meta">ready</span>
+        </div>
+
+        <section id="view-actions" role="tabpanel" aria-labelledby="tab-actions">
+          <div class="surface-heading">
+            <div>
+              <h1>ACTIONS</h1>
+              <p>What will this body do now?</p>
+            </div>
+            <span class="eyebrow">5 verbs</span>
+          </div>
+
+          <div class="action-grid" aria-label="Available actions">
+            <button class="action-tile" type="button" data-action="Forage" data-duration="4h">
+              <span class="action-name">Forage</span>
+              <span class="action-metrics">
+                <span>−1.7e 4h</span>
+                <img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution">
+                <span class="yield">+1–3f</span>
+              </span>
+            </button>
+
+            <button class="action-tile" type="button" data-action="Scavenge" data-duration="5h">
+              <span class="action-name">Scavenge</span>
+              <span class="action-metrics">
+                <span>−2e 5h</span>
+                <img class="dist-icon" src="../assets/svg/dist_exponential.svg" alt="exponential distribution">
+                <span class="yield">+0–7m</span>
+              </span>
+            </button>
+
+            <button class="action-tile" type="button" data-action="Split wood" data-duration="5h">
+              <span class="action-name">Split wood</span>
+              <span class="action-metrics">
+                <span>−2.5e 5h</span>
+                <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
+                <span class="yield">+3–5m</span>
+              </span>
+            </button>
+
+            <button class="action-tile" type="button" data-action="Fish" data-duration="6h">
+              <span class="action-name">Fish</span>
+              <span class="action-metrics">
+                <span>−2e 6h</span>
+                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
+                <span class="yield">+2–5f</span>
+              </span>
+            </button>
+
+            <button class="action-tile" type="button" data-action="Check traps" data-duration="2h">
+              <span class="action-name">Check traps</span>
+              <span class="action-metrics">
+                <span>−1e −1m 2h</span>
+                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
+                <span class="yield">+1–4f</span>
+              </span>
+            </button>
+
+            <section class="policy-tile" aria-labelledby="eating-policy-title">
+              <div class="policy-head">
+                <h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2>
+                <output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output>
+              </div>
+              <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
+              <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
+            </section>
+          </div>
+
+        </section>
+
+        <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
+          <div class="surface-heading">
+            <h1>BUILD</h1>
+          </div>
+
+          <div class="build-controls" aria-label="Build list controls">
+            <div class="control-group" data-filter-group="sort"><span class="control-label">SORT</span><button class="chip" type="button" aria-pressed="true" data-value="reach">reach</button><button class="chip" type="button" aria-pressed="false" data-value="materials">materials</button><button class="chip" type="button" aria-pressed="false" data-value="time">time</button></div>
+            <div class="control-group" data-filter-group="show"><span class="control-label">SHOW</span><button class="chip" type="button" aria-pressed="false" data-value="ready">ready</button><button class="chip" type="button" aria-pressed="true" data-value="in-reach">in reach</button><button class="chip" type="button" aria-pressed="false" data-value="all">all</button></div>
+
+
+            <div class="control-group"><button class="chip" id="built-toggle" type="button" aria-pressed="false">□ built</button></div>
+          </div>
+
+          <div class="build-summary" id="build-summary" aria-live="polite">4 of 8 goods shown · 31 materials on hand</div>
+
+
+          <div class="build-table" aria-label="Buildable goods">
+            <div class="build-header" aria-hidden="true"><span>good</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
+            <div id="build-rows">
+              <article class="build-row ready" data-state="ready" data-reach="1" data-materials="12" data-time="0.7" data-tier="crude" data-effect="install" data-name="Garden bed">
+                <span class="good-name">Garden bed</span><span>12m 4e</span><span>0.7d</span><span class="effect">grows food on its own</span><span class="build-state"><span class="state-copy state-ready">ready</span></span><button class="row-action" type="button" data-start-build>Build →</button>
+              </article>
+              <article class="build-row ready" data-state="ready" data-reach="1" data-materials="10" data-time="0.5" data-tier="crude" data-effect="unlock" data-name="Wire snares">
+                <span class="good-name">Wire snares</span><span>10m 3e</span><span>0.5d</span><span class="effect">you can check traps</span><span class="build-state"><span class="state-copy state-ready">ready</span></span><button class="row-action" type="button" data-start-build>Build →</button>
+              </article>
+              <article class="build-row reach" data-state="reach" data-reach="0.65" data-materials="48" data-time="4.2" data-tier="made" data-effect="unlock" data-name="Fishing rod">
+                <span class="good-name">Fishing rod</span><span>48m 2e</span><span>4.2d</span><span class="effect">you can fish</span><span class="build-state"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span><span class="state-copy">31/48m</span></span><span></span>
+              </article>
+              <article class="build-row reach" data-state="reach" data-reach="0.78" data-materials="40" data-time="2.1" data-tier="made" data-effect="upgrade" data-name="Cookpot">
+                <span class="good-name">Cookpot</span><span>40m 2e</span><span>2.1d</span><span class="effect">food restores more vigor</span><span class="build-state"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span><span class="state-copy">31/40m</span></span><span></span>
+              </article>
+              <article class="build-row blocked" data-state="blocked" data-reach="0.64" data-materials="48" data-time="2.1" data-tier="made" data-effect="upgrade" data-name="Work gloves">
+                <span class="good-name">Work gloves</span><span>48m 1e</span><span>2.1d</span><span class="effect">splitting wood costs less</span><span class="build-state"><span class="state-copy state-blocked">needs Split wood</span></span><span></span>
+              </article>
+              <article class="build-row blocked" data-state="blocked" data-reach="0.32" data-materials="96" data-time="5.0" data-tier="made" data-effect="upgrade" data-name="Chainsaw">
+                <span class="good-name">Chainsaw</span><span>96m 3e</span><span>5.0d</span><span class="effect">wood costs fuel, not muscle</span><span class="build-state"><span class="state-copy state-blocked">needs Split wood</span></span><span></span>
+              </article>
+              <article class="build-row owned" data-state="owned" data-reach="1" data-materials="8" data-time="0.4" data-tier="crude" data-effect="health" data-name="Leaf bed">
+                <span class="good-name">Leaf bed</span><span>8m 2e</span><span>0.4d</span><span class="effect">vigor ceiling rises</span><span class="build-state"><span class="state-copy">owned ×1</span></span><button class="row-action" type="button" data-start-build>Build +1</button>
+              </article>
+              <article class="build-row owned" data-state="owned" data-reach="1" data-materials="10" data-time="0.5" data-tier="crude" data-effect="upgrade" data-name="Root cellar">
+                <span class="good-name">Root cellar</span><span>10m 4e</span><span>0.5d</span><span class="effect">food keeps twice as long</span><span class="build-state"><span class="state-copy">owned ×1</span></span><button class="row-action" type="button" data-start-build>Build +1</button>
+              </article>
+            </div>
+          </div>
+
+          <p class="build-footnote"><span>6 more goods are priced past one pair of hands.</span><span>A trader might carry them.</span></p>
+
+          <section class="shelter-goal" aria-labelledby="shelter-title">
+            <div class="shelter-kicker">A PLACE FOR OTHERS</div>
+            <div class="shelter-title-row">
+              <h2 id="shelter-title">Shelter</h2>
+              <span class="shelter-cost">60m 6e · 6.0d</span>
+              <span class="shelter-readiness">not ready</span>
+            </div>
+            <p>a roof with room for four. you're not alone anymore.</p>
+            <div class="shelter-requirements" aria-label="Shelter conditions">
+              <span>VIGOR <strong>14/15</strong></span><span>FOOD <strong>11.6/12</strong></span><span>GOODS <strong>4/5</strong></span><span>MATERIALS <strong>31/60</strong></span>
+            </div>
+          </section>
+        </section>
+      </section>
+    </div>
+
+    <footer class="screen-footer" aria-label="Event log" aria-live="polite">
+      <div class="log-line"><span class="time">19:08</span><span>Someone is walking the shoreline. Their pack carries made goods.</span></div>
+      <div class="log-line"><span class="time">18:22</span><span>You finish a second Hatchet. One is effect; one is stock.</span></div>
+      <div class="log-line"><span class="time">17:04</span><span>The Root cellar slows what the larder loses.</span></div>
+      <div class="log-line"><span class="time">16:11</span><span>You return with 4 materials.</span></div>
+    </footer>
+  </main>
+
+  <dialog class="terminal-dialog" id="merchant-dialog" aria-labelledby="merchant-title">
+    <form class="dialog-shell" method="dialog">
+      <header class="dialog-header">
+        <div><div class="dialog-kicker">PASSERBY · 1.8 DAYS LEFT</div><h2 class="dialog-title" id="merchant-title">What will you trade?</h2></div>
+        <button class="dialog-close" type="submit" value="cancel" aria-label="Close barter">×</button>
+      </header>
+      <div class="dialog-tabs" role="tablist" aria-label="Barter direction">
+        <button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY FROM THEM</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL YOUR STOCK</button>
+      </div>
+      <div class="dialog-body">
+        <div class="trade-grid">
+          <section class="trade-column" aria-labelledby="merchant-stock-title">
+            <h3 class="column-heading" id="merchant-stock-title">PASSERBY STOCK</h3>
+            <div class="offer-list" id="merchant-offers">
+              <button class="offer-button" type="button" aria-pressed="true" data-mode="buy" data-name="Fishing net" data-cost="12 food + 16 materials" data-receive="Fishing net ×1" data-effect="Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack." data-stock="1"><span>Fishing net<small>better Fish tool</small></span><span class="stock-count">×1</span></button>
+              <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Hand axe" data-cost="8 food + 24 materials" data-receive="Hand axe ×1" data-effect="Replaces Hatchet margins: Split wood takes 20% less energy." data-stock="1"><span>Hand axe<small>better wood tool</small></span><span class="stock-count">×1</span></button>
+              <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Preserved food" data-cost="8 materials" data-receive="Preserved food +10" data-effect="Adds food now. It does not change the larder's spoilage margin." data-stock="2"><span>Preserved food<small>10 food · keeps well</small></span><span class="stock-count">×2</span></button>
+              <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-receive="6 food + 5 materials" data-effect="The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." data-stock="2" hidden><span>Sandals<small>your spare stock</small></span><span class="stock-count">×1</span></button>
+              <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Hatchet" data-cost="Hatchet ×1" data-receive="9 food + 8 materials" data-effect="A spare is sold first; the Hatchet you use keeps granting Split wood." data-stock="2" hidden><span>Hatchet<small>your spare stock</small></span><span class="stock-count">×1</span></button>
+            </div>
+          </section>
+
+          <section class="trade-preview" aria-label="Trade preview">
+            <div class="preview-line"><span>YOU GIVE</span><strong id="preview-give">12 food + 16 materials</strong></div>
+            <div class="trade-arrow" aria-hidden="true">⇄</div>
+            <div class="preview-line"><span>YOU RECEIVE</span><strong id="preview-receive">Fishing net ×1</strong></div>
+            <div class="preview-effect" id="preview-effect">Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.</div>
+          </section>
+
+          <section class="trade-column" aria-labelledby="your-stock-title">
+            <h3 class="column-heading" id="your-stock-title">YOU HOLD</h3>
+            <ul class="inventory-list">
+              <li class="inventory-row"><span>Food</span><strong>11.6</strong></li>
+              <li class="inventory-row"><span>Materials</span><strong>31</strong></li>
+              <li class="inventory-row"><span>Sandals</span><strong>×2</strong></li>
+              <li class="inventory-row"><span>Hatchet</span><strong>×2</strong></li>
+              <li class="inventory-row"><span>Root cellar</span><strong>×1</strong></li>
+              <li class="inventory-row"><span>Leaf bed</span><strong>×1</strong></li>
+            </ul>
+            <p class="side-note">The preview is final: payment, replacement, and remaining stock are visible before exchange.</p>
+          </section>
+        </div>
+      </div>
+      <footer class="dialog-footer">
+        <span class="dialog-note">Fixed ratios, finite stock, limited time. Selling repeats at diminishing marginal prices.</span>
+        <div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">TRADE →</button></div>
+      </footer>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      const tabs = [...document.querySelectorAll('[data-view]')];
+      const views = {
+        actions: document.querySelector('#view-actions'),
+        build: document.querySelector('#view-build')
+      };
+      const prototypeParams = new URLSearchParams(location.search);
+
+      function setView(name, updateHash = true) {
+        if (!views[name]) name = 'actions';
+        Object.entries(views).forEach(([key, view]) => {
+          view.hidden = key !== name;
+          const tab = document.querySelector(`[data-view="${key}"]`);
+          tab.setAttribute('aria-selected', String(key === name));
+          tab.tabIndex = key === name ? 0 : -1;
+        });
+        if (updateHash && location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+      }
+
+      tabs.forEach(tab => tab.addEventListener('click', () => setView(tab.dataset.view)));
+      addEventListener('hashchange', () => setView(location.hash.slice(1), false));
+      setView(location.hash.slice(1) || 'actions', false);
+
+      const pageGrid = document.querySelector('#page-grid');
+      const collapseHoldings = document.querySelector('#holdings-collapse');
+      const restoreHoldings = document.querySelector('#holdings-restore');
+
+      function setHoldingsCollapsed(collapsed) {
+        pageGrid.classList.toggle('is-holdings-collapsed', collapsed);
+        collapseHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.hidden = !collapsed;
+      }
+
+      collapseHoldings.addEventListener('click', () => setHoldingsCollapsed(true));
+      restoreHoldings.addEventListener('click', () => setHoldingsCollapsed(false));
+      setHoldingsCollapsed(prototypeParams.get('holdings') === 'collapsed');
+
+      const eatingSlider = document.querySelector('#eating-policy-range');
+      const eatingValue = document.querySelector('#eating-policy-value');
+      const bodyPolicyLabel = document.querySelector('#body-policy-label');
+      const foodCoverage = document.querySelector('#food-coverage');
+      const vigorRecovery = document.querySelector('#vigor-recovery');
+      const eatingWords = [
+        { max: 12, word: 'meager' },
+        { max: 28, word: 'lean' },
+        { max: 44, word: 'modest' },
+        { max: 58, word: 'normal' },
+        { max: 72, word: 'hearty' },
+        { max: 88, word: 'generous' },
+        { max: 100, word: 'lavish' }
+      ];
+
+      function updateEatingPolicy(rawValue) {
+        const value = Number(rawValue);
+        const word = eatingWords.find(entry => value <= entry.max).word;
+        const rate = 0.5 * Math.pow(4, value / 100);
+        const coverage = 5.2 / rate;
+        const recovery = 0.224 / rate;
+        eatingSlider.style.setProperty('--ration-position', `${value}%`);
+        eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
+        eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
+        bodyPolicyLabel.textContent = word;
+        foodCoverage.textContent = `${coverage.toFixed(1)}d`;
+        vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
+      }
+
+      const seededEating = prototypeParams.get('eating');
+      if (seededEating !== null) eatingSlider.value = String(Math.max(0, Math.min(100, Number(seededEating))));
+      eatingSlider.addEventListener('input', event => updateEatingPolicy(event.currentTarget.value));
+      updateEatingPolicy(eatingSlider.value);
+
+      const activityStrip = document.querySelector('#activity-strip');
+      const activityKind = document.querySelector('#activity-kind');
+      const activitySubject = document.querySelector('#activity-subject');
+      const activityMeta = document.querySelector('#activity-meta');
+
+      function setActivity(kind, subject, meta) {
+        const labels = { idle: '○ IDLING', working: '● WORKING', building: '■ BUILDING' };
+        activityStrip.className = `activity-strip is-${kind}`;
+        activityKind.textContent = labels[kind];
+        activitySubject.textContent = subject;
+        activityMeta.textContent = meta;
+      }
+
+      document.querySelectorAll('[data-action]').forEach(button => {
+        button.addEventListener('click', () => {
+          setActivity('working', button.dataset.action, `${button.dataset.duration} left`);
+          addLog(`You begin ${button.dataset.action.toLowerCase()}. The stated price is paid now.`);
+        });
+      });
+
+      const controls = { sort: 'reach', show: 'in-reach', built: false };
+      const rowHost = document.querySelector('#build-rows');
+      const rows = [...rowHost.querySelectorAll('.build-row')];
+      const summary = document.querySelector('#build-summary');
+      let buildingRow = null;
+
+      document.querySelectorAll('[data-filter-group]').forEach(group => {
+        const key = group.dataset.filterGroup;
+        group.querySelectorAll('[data-value]').forEach(button => {
+          button.addEventListener('click', () => {
+            controls[key] = button.dataset.value;
+            group.querySelectorAll('[data-value]').forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === button)));
+            applyBuildView();
+          });
+        });
+      });
+
+      const builtToggle = document.querySelector('#built-toggle');
+      builtToggle.addEventListener('click', () => {
+        controls.built = !controls.built;
+        builtToggle.setAttribute('aria-pressed', String(controls.built));
+        builtToggle.textContent = `${controls.built ? '■' : '□'} built`;
+        applyBuildView();
+      });
+
+      function applyBuildView() {
+        const ordered = [...rows].sort((a, b) => {
+          if (a === buildingRow) return -1;
+          if (b === buildingRow) return 1;
+          if (controls.sort === 'materials') return Number(a.dataset.materials) - Number(b.dataset.materials);
+          if (controls.sort === 'time') return Number(a.dataset.time) - Number(b.dataset.time);
+          return Number(b.dataset.reach) - Number(a.dataset.reach);
+        });
+        ordered.forEach(row => rowHost.append(row));
+
+        let visible = 0;
+        rows.forEach(row => {
+          const state = row.dataset.state;
+          const always = row === buildingRow;
+          const builtOK = controls.built || state !== 'owned';
+
+          let showOK = true;
+          if (controls.show === 'ready') showOK = state === 'ready';
+          if (controls.show === 'in-reach') showOK = state === 'ready' || state === 'blocked' || (state === 'reach' && Number(row.dataset.reach) >= 0.5);
+          row.hidden = !(always || (builtOK && showOK));
+          if (!row.hidden) visible += 1;
+        });
+        summary.textContent = `${visible} of ${rows.length} goods shown · 31 materials on hand`;
+      }
+
+      rowHost.addEventListener('click', event => {
+        const start = event.target.closest('[data-start-build]');
+        const cancel = event.target.closest('[data-cancel-build]');
+        if (start) beginPrototypeBuild(start.closest('.build-row'));
+        if (cancel) cancelPrototypeBuild();
+      });
+
+      function beginPrototypeBuild(row) {
+        if (buildingRow) return;
+        buildingRow = row;
+        row.dataset.baseState = row.dataset.state;
+        row.dataset.state = 'building';
+        row.dataset.baseClass = row.className;
+        row.className = 'build-row is-building';
+        const state = row.querySelector('.build-state');
+        const action = row.querySelector('.row-action');
+        state.dataset.baseMarkup = state.innerHTML;
+        row.dataset.baseActionMarkup = action.outerHTML;
+        state.innerHTML = '<span class="state-copy accent">0.3d left</span><span class="build-progress" aria-hidden="true"></span>';
+        action.outerHTML = '<button class="row-action cancel-build" type="button" data-cancel-build aria-label="Cancel build">×</button>';
+        setActivity('building', row.dataset.name, '0.3d left');
+        rows.forEach(other => {
+          const button = other.querySelector('[data-start-build]');
+          if (other !== row && button) button.disabled = true;
+        });
+        applyBuildView();
+        addLog(`You begin ${row.dataset.name}. Materials are paid; cancel still loses time and energy.`);
+      }
+
+      function cancelPrototypeBuild() {
+        if (!buildingRow) return;
+        const row = buildingRow;
+        const state = row.querySelector('.build-state');
+        state.innerHTML = state.dataset.baseMarkup;
+        row.querySelector('.row-action').outerHTML = row.dataset.baseActionMarkup;
+        row.dataset.state = row.dataset.baseState;
+        row.className = row.dataset.baseClass;
+        buildingRow = null;
+        setActivity('idle', 'no work in progress', 'ready');
+        rows.forEach(other => {
+          const button = other.querySelector('[data-start-build]');
+          if (button) button.disabled = false;
+        });
+        applyBuildView();
+        addLog(`You abandon ${row.dataset.name}. Some materials return; the spent hours do not.`);
+      }
+
+      applyBuildView();
+
+      const seededActivity = prototypeParams.get('activity');
+      if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
+      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Garden bed'));
+
+      const dialog = document.querySelector('#merchant-dialog');
+      const offers = [...document.querySelectorAll('.offer-button')];
+      const modeTabs = [...document.querySelectorAll('[data-trade-mode]')];
+      let tradeMode = 'buy';
+      let selectedOffer = offers[0];
+
+      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', () => dialog.showModal()));
+
+      modeTabs.forEach(button => button.addEventListener('click', () => {
+        tradeMode = button.dataset.tradeMode;
+        modeTabs.forEach(candidate => candidate.setAttribute('aria-selected', String(candidate === button)));
+        offers.forEach(offer => offer.hidden = offer.dataset.mode !== tradeMode);
+        selectedOffer = offers.find(offer => offer.dataset.mode === tradeMode && Number(offer.dataset.stock) > 0) || offers.find(offer => offer.dataset.mode === tradeMode);
+        selectOffer(selectedOffer);
+      }));
+
+      offers.forEach(offer => offer.addEventListener('click', () => selectOffer(offer)));
+
+      function selectOffer(offer) {
+        if (!offer) return;
+        selectedOffer = offer;
+        offers.forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === offer)));
+        document.querySelector('#preview-give').textContent = offer.dataset.cost;
+        document.querySelector('#preview-receive').textContent = offer.dataset.receive;
+        document.querySelector('#preview-effect').textContent = offer.dataset.effect;
+        const unavailable = Number(offer.dataset.stock) <= 0;
+        document.querySelector('#complete-trade').disabled = unavailable;
+        document.querySelector('#complete-trade').textContent = unavailable ? 'GONE' : 'TRADE →';
+      }
+
+      document.querySelector('#complete-trade').addEventListener('click', () => {
+        if (!selectedOffer || Number(selectedOffer.dataset.stock) <= 0) return;
+        selectedOffer.dataset.stock = String(Number(selectedOffer.dataset.stock) - 1);
+        selectedOffer.querySelector('.stock-count').textContent = `×${selectedOffer.dataset.stock}`;
+        const direction = tradeMode === 'buy' ? `You trade for ${selectedOffer.dataset.name}.` : `The passerby takes one ${selectedOffer.dataset.name}.`;
+        addLog(`${direction} The exchange is final.`);
+        dialog.close('traded');
+      });
+
+      function addLog(message) {
+        const lines = [...document.querySelectorAll('.screen-footer .log-line')];
+        for (let i = lines.length - 1; i > 0; i -= 1) lines[i].innerHTML = lines[i - 1].innerHTML;
+        lines[0].innerHTML = `<span class="time">NOW</span><span>${message}</span>`;
+      }
+
+      if (prototypeParams.get('modal') === 'merchant') requestAnimationFrame(() => dialog.showModal());
+    })();
+  </script>
+</body>
+</html>

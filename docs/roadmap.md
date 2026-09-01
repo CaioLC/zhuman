@@ -59,23 +59,11 @@ that has stopped serving it.
   tab — and the effect it exists to explain is asked about on that tab, which is the only reason
   the compromise holds. Blocked on **Responsive layout** below, and the third thing that entry
   now owes.
-- **The effect filter is not wired.** BUILD's control strip carries sort, show, tier and `built`;
-  the promised UNLOCK / UPGRADE / HEALTH / INSTALL chip is not there. It wants the category tags
-  (Act II) rather than a fourth hand-written list of which good is which.
 - **Three margins Holdings cannot show.** The vigor ceiling, spoilage and food quality have their
   baseline as a literal in `main.spawn_agent` rather than a catalog default, so a delta would
   mean restating a number `capital.zig` owns. The ceiling is shown as a current value instead.
   The fix is to give `Vigor` and `InventoryFood` field defaults and spawn from them, which puts
   the starting condition in the catalog where every other default already lives.
-- **The eating pulse runs backwards on a food surplus.** `ration_dial`'s active chip fills by
-  `ceil(F) − F` (`pages/templates/ration_dial.zig`), which reads as progress through the current
-  food unit only while the larder is *falling*: 5.0 → 4.0 sweeps the bar left to right and
-  resets, once per unit eaten. Let net flow turn positive — a garden bed or chicken coop
-  out-producing metabolism and spoilage — and F rises instead, so the same expression ramps
-  1 → 0 and the `.top_left`-anchored fill retreats right to left. The fix has to say what the
-  pulse *means* while the larder fills: mirror it (progress toward the next unit gained), hold
-  it still, or drive it off the consumption rate rather than off the stock level — which is the
-  honest reading, since the pulse's speed is meant to be the eating rate.
 - **Barter Modal** new screen overlay on top of PlayGame to implement the barter mechanics.
   Input capture is a mechanism now — an overlay genuinely blocks what it covers — but there is
   no modal *template* to build one from (see **Retire `widgets.zig`**).
@@ -114,6 +102,60 @@ that has stopped serving it.
   Sharper than it was: hit-testing stops at the topmost node, so where the columns overlap it is
   now paint order that decides which one takes the click — and the log footer is built last.
 
+### Revised UI backend contract
+
+The Act I HTML prototype in [`../prototypes/act-i.html`](../prototypes/act-i.html) is deliberately
+richer than the running slice. Its late-act stock numbers are fixtures, but every changing value
+on it has an authoritative home below. This is the complete sim/data gap between that prototype
+and a connected screen; layout, drawing and interaction gaps remain in the HUD and UI-foundation
+entries above.
+
+**Missing simulation and catalog capabilities:**
+
+- **Merchant encounter state.** A run needs the passerby's eligibility trigger, arrival event,
+  departure time, finite inventory and identity. The UI reads one state (`absent`, `approaching`,
+  `present`, `departed`) plus remaining time; it does not infer an encounter from the day or the
+  Shelter checklist.
+- **Authoritative barter quotes.** Each visible offer needs a stable id, direction (buy/sell),
+  give and receive bundles, remaining stock, affordability/refusal reason, expiry and a revision.
+  A sell quote also returns the *next* marginal quote so the preview can state that the fourth
+  pair is worth less before the player parts with the third. Food, raw materials and goods all
+  use one bundle shape rather than one endpoint per resource.
+- **Atomic exchange resolution.** Accepting a quote revalidates its revision, transfers both
+  bundles or neither, decrements finite stock, applies replacement/revocation once, and emits one
+  log result. A stale, departed, unaffordable or sold-out quote returns a reason the modal can say
+  in the player's words; the UI never performs a local `break_good` followed by a separate
+  payment that could leave half a trade committed.
+- **Tool supersession.** The catalog needs replacement families and rank (Fishing rod → Fishing
+  net, Hatchet → Hand axe). Equipping the better unit replaces the weaker unit's action stats
+  without duplicate `SparseSet.add`, while physical counts remain available to sell. The quote
+  preview needs the before/after margins produced by the same operation resolution will apply.
+- **Continuous eating and recovery contract.** `comp.Metabolism.Setting` currently exposes only
+  ration / normal / feast. The approved slider needs an authoritative bounded scalar (0.5×
+  through 2×, normal at 1×) used by metabolism and persisted/read with agent state. BODY's
+  “food lasts” and “full vigor in” values must be projections over current food, Vigor deficit,
+  base metabolism, vigor-per-food, food quality and the selected rate; unavailable or no-recovery
+  states need an explicit result rather than a UI fixture. Descriptive labels remain presentation.
+- **Absolute Shelter Vigor condition.** The approved milestone requires current Vigor of 15, not
+  80% of whatever ceiling upgrades provide. Replace or extend `unlock.vigor_frac` with an absolute
+  catalog threshold, then use the same condition result for both the checklist and build resolution.
+- **Catalog baselines for derived margins.** `Vigor` and `InventoryFood` need the defaults already
+  called out under HUD so Holdings can derive ceiling, quality and spoilage deltas. Spawn literals
+  are not a second source of truth.
+- **Editable configuration contract.** The proposed menu may expose only values explicitly marked
+  player-configurable, with validation/ranges and reset-to-default. Raw mutable access to all of
+  `res.config` would turn tuning internals into accidental UI API. Persistence of those choices is
+  a separate decision and must be stated before the menu promises it.
+
+**Already present — not backend work:** action requirements and distributions, `dist.stats`,
+affordability inputs, `Busy` progress, build cancellation/refund, good counts, spare-first
+breaking, the event log and Shelter's food/goods conditions. BUILD can derive
+ready/reach/blocked/owned/building from those facts as it does now; the distribution curve is
+render/presentation work. The existing three-state ration mechanism and fractional Vigor check
+are starting points, not the final backend for the approved slider and absolute threshold.
+Persistent Holdings and its collapse control, modal input capture and responsive columns are UI
+work, not sim blockers.
+
 ## Act II — first exchange (pop 2 → band)
 
 Multi-agent simulation — per-agent vigor and inventories, per-agent demands, typed materials
@@ -121,13 +163,82 @@ and recipes, barter with exchange-ratio discovery, specialization by comparative
 Gated on Act I's population crossing, and blocked on the open design questions in
 [`design.md`](design.md), which can't be settled before agents exist.
 
+### Revised UI backend contract
+
+The board and barter fixture in [`../prototypes/act-ii.html`](../prototypes/act-ii.html) defines the
+read contract while leaving the open economic rules open. `GROW` / `WOOD` / `FIBRE` / `STONE` /
+`METAL` / `POWER`, the named agents, goods and sample ratios in that file are UX test data, not
+canonical content. Connecting it requires the following domain capabilities.
+
+- **Population lifecycle and identities.** Shelter capacity, sustained surplus and starvation
+  drive arrivals and departures; each live person has a stable entity/id, display label, vigor,
+  current work and specialization. The player remains one of those agents rather than becoming a
+  settlement-wide cursor. The header needs live population and carrying capacity, not a scripted
+  Act counter.
+- **Per-agent typed ledgers.** Food and each authored material are held by an individual agent.
+  A stable material/good id, display unit, quantity and ownership transfer API replace Act I's
+  single `InventoryMaterial`; settlement totals, where shown, are derived views over those
+  ledgers. Goods retain counts so effect-bearing first units and trade stock stay distinct.
+- **Authored catalog graph.** Every material/capital good needs stable identity, Act, one or more
+  specialization sectors, production stage, category tags, recipe, base labor/energy/time and
+  outputs. A recipe accepts several inputs and marks each consumed, retained/tooling, upkeep or
+  produced. Dependencies converge; they are display-and-cost structure and must not become hard
+  unlock gates. Seam goods can name two sectors rather than relying on a coordinate convention.
+- **Production quotes per agent.** Given actor + recipe + quantity, one calculation returns typed
+  input deficits, vigor/time price, expected output distribution, busy/standing reason and the
+  specialization multiplier. Cross-specialization work remains legal at a penalty. BUILD and the
+  STRUCTURE detail use the same quote so a board number cannot disagree with resolution.
+- **Specialization state and learning rule.** The sim needs the chosen model for comparative
+  advantage (heterogeneous yields, skill, learning-by-doing or a combination), its per-agent
+  values, and the operation that changes them. The UI only displays the resulting trade label and
+  quote delta; it must not assign a profession by clicking a colored wedge unless the design later
+  makes that an explicit action.
+- **Subjective ordinal demands.** Each agent needs ranked, agent-local wants over food, typed
+  materials and capital, including thresholds and quantity-sensitive marginal rank. There is no
+  shared utility score. The barter view needs a deliberate observability policy — exact ranks,
+  broad signals, or inferred behavior — before it can honestly show another person's demand list.
+- **Autonomous `decide → act`.** AI agents consume the same action/build/trade options and invoke
+  the same resolution paths as the player. Decisions cover labor, consumption policy, production,
+  offer creation/acceptance and specialization; UI absence must not stop an agent from acting.
+- **Bilateral offer and negotiation model.** Offers carry counterparty, give/receive typed bundles,
+  quantities, expiry, revision and status. Counteroffers preserve lineage; acceptance is atomic
+  across two private ledgers and returns both agents' post-trade holdings. The unresolved exchange-
+  ratio rule in `design.md` decides whether acceptance comes from posted prices, bargaining or a
+  market mechanism — the modal cannot hard-code all agents to a slider threshold.
+- **Exchange-ratio evidence.** Completed trades feed a bounded history keyed by good pair, with
+  quantity, time and direction. Any displayed range or ratio is derived from that history and says
+  when evidence is absent; it is not a global price table. Act I fixed merchant ratios adapt to
+  the same transaction record without pretending they were market discovery.
+- **Money emergence.** If a medium of exchange appears, agents need acceptance/demand for that
+  good and trades need direct-vs-mediated settlement. The HUD reads the resulting medium and
+  balance only after the sim recognizes one; an Act/day threshold must not simply turn on a coin
+  counter.
+- **Observable agent/market snapshot.** One frame-consistent read exposes the selected agent,
+  visible counterparties, observable holdings/demands, open offers and quote revisions. This is
+  especially important while AI decisions run: a detail panel assembled from unrelated mutable
+  reads can otherwise show a quantity from before a trade beside a quote from after it.
+- **Durability and maintenance when surfaced.** Capital condition, decay and maintenance inputs
+  must exist before Holdings or a board tile promises wear. Until then the revised UI omits a
+  condition meter rather than drawing a decorative one.
+- **Scale transition.** Individual decisions are authoritative through the Act II band. Before a
+  later aggregate model replaces any of them, it must preserve per-agent ownership, ordinal
+  demand and the transaction records the UI reads; aggregate totals cannot silently become shared
+  inventory.
+
+**Board derivations that do not require backend systems:** transitive upstream highlighting,
+search, zoom, favourites and arrow-key navigation are UI state over the catalog graph. Owned / in
+reach filters derive from holdings and production quotes. The board remains read-only: its only
+route is “show in BUILD,” never direct recipe resolution. Hex coordinates, sector painting, shape
+hit-testing, thick chords, focus and the selected detail composition are the UI-foundation/HUD
+work already filed below.
+
 - **The decider abstraction** — the `decide → act` split with a non-UI decider driving the same
   resolution the player's clicks do. The split exists in shape (the player is the only decider);
   no AI decider does. Built once and removed in the actions/capital redesign, alongside
   population.
 - **Finish the category tags.** `tags.zig` has `Food` / `Comfort` / `Tool` / `WoodCutting` and
   stops. Nothing reads them yet, so the set is neither complete nor load-bearing — the first
-  real consumer is likely the structure board's specializations or the Build pane's effect chip.
+  real consumer is likely the structure board's specialization and category model.
 - **Population** - we need to account for population and agent needs. The ceiling is
   already data and unread: `comp.Shelter.capacity`, which Act I only ever asks to be > 1.
 - **Higher order goods, as stages of production.** Today's roster is almost entirely
