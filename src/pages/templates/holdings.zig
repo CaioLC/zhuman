@@ -13,9 +13,9 @@
 //! `main.spawn_agent` rather than a catalog default, so they are shown as current values
 //! rather than deltas (see `docs/roadmap.md`, Act I).
 //!
-//! The effect text is presentation, so it lives here as a comptime switch rather than on
-//! the component — the same call `capital_good_tile` makes by taking `consequence` as an
-//! argument.
+//! The effect text is presentation and shared with the BUILD list (`good_text.zig`), so
+//! one sentence answers both "what would this get me?" and "what is it doing for me?"
+//! rather than two lists of sixteen strings drifting apart.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -31,29 +31,7 @@ const El = el.El;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
-/// What owning this good buys you, in the player's words. Presentation — the sim states
-/// the same facts as numbers, and `capital.zig` is where those live.
-fn effect_of(comptime GoodT: type) []const u8 {
-    return switch (GoodT) {
-        comp.FishRod => "you can fish",
-        comp.Hatchet => "you can split wood",
-        comp.WireSnares => "you can check traps",
-        comp.AirRifle => "you can hunt",
-        comp.Sandals => "foraging costs less",
-        comp.WorkGloves => "splitting wood costs less",
-        comp.Bicycle => "roaming costs less",
-        comp.Cookpot => "food feeds you further",
-        comp.RootCellar => "food keeps twice as long",
-        comp.Chainsaw => "the engine works, not your back",
-        comp.LeafBed => "+1 vigor ceiling",
-        comp.Pantry => "+2 vigor ceiling",
-        comp.MedicineChest => "+2 vigor ceiling",
-        comp.GardenBed => "grows food on its own",
-        comp.ChickenCoop => "the hens lay on their own",
-        comp.Shelter => "room here for four",
-        else => @compileError("no holdings effect for " ++ @typeName(GoodT)),
-    };
-}
+const gt = @import("./good_text.zig");
 
 /// One `label … value` line, the shape both blocks share.
 fn line(ctx: *UiCtx, parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
@@ -119,7 +97,7 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
             else
                 capital.good_name(G);
             const id_buf = std.fmt.comptimePrint("g{d}", .{i});
-            try line(ctx, roster, id_buf, label, effect_of(G), th.dim);
+            try line(ctx, roster, id_buf, label, gt.effect(G), th.dim);
         }
     }
 

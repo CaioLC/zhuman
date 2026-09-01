@@ -51,39 +51,21 @@ that has stopped serving it.
 
 ### HUD
 
-- **The BUILD pane is a catalog, not a choice.** Sixteen tiles land on screen the frame you
-  open it, sorted by how `capital.zig` implements each good, with four different reasons for
-  unavailability collapsed into one flat grey (busy elsewhere, prerequisite missing, standing
-  conditions unmet, unaffordable — owned and building do read distinctly). It also does three
-  jobs at once: what can I act on, what exists, what do I already own. The split:
-
-  - **BUILD** keeps the tab and answers only *what can I act on now* — a short list of **rows,
-    not tiles**, because a tile holds two strings and that is why the consequence column decayed
-    into `spoil ×0.5`. Sorted by reach, so the top row is always the next thing. A reach meter
-    (`31/48m`) on every unaffordable row, time in **days** to match the header clock, and
-    consequences written as sentences. Cancel lives in the row's right corner; the build in
-    progress keeps its row. Busy at labor is stated in one line, so rows read as *waiting*
-    rather than unaffordable. The Shelter sits below the list, outside the sort and never
-    filtered away, with a live checklist of its three standing conditions.
-  - **Sort and filter instead of authored sections.** Grouping by hand would only be a second
-    fixed taxonomy. Sort by reach / materials / time; show ready · in reach · all — which is
-    where the "within reach" cutoff lives, as a visible state rather than a magic number.
-    `built` is a toggle (off by default, on to run a production line once counts exist).
-    UNLOCK / UPGRADE / HEALTH / INSTALL survives demoted to an optional chip, and
-    **crude · manufactured gets its own chip** — that split *cuts across* the behavioural
-    variants rather than restating them, and its invisibility is half the original complaint.
-    A prerequisite-blocked good shows `needs: Hatchet` and is exempt from the reach filter;
-    filtering it away silently is worse than the grey tile it replaces.
-  - **HOLDINGS** becomes a persistent panel beside the resource readout, never opened, carrying
-    per-good counts and — the readout that exists nowhere today — the **stacked effects**:
-    three modifiers land on Forage and nothing on screen explains why it costs 1.7 energy. Its
-    kind count is `goods_owned`, so it and the Shelter checklist agree by construction.
-
-  Two things this must not assume. Pooled state is `std.mem.zeroes`-seeded, so a
-  `BuildViewState`'s field defaults are ignored — the defaults have to be enum tag 0 or set
-  explicitly. And the state type must be declared in `ui_client/ctx_binding.zig`'s `UiState`,
-  not in `pages/templates/`; keyed on a node that is built every frame, since the BUILD div only
-  exists while its tab is active and its slot is pruned the moment it stops being built.
+- **The HUD has no room for a persistent panel.** BUILD and HOLDINGS are built, but Holdings
+  belongs *beside the resource readout* and does not fit there: the centre column is 640 wide
+  inside an 868 content box, which leaves 114px of margin on ACTIONS and 71px on BUILD against
+  the ~300 the panel needs. It rides under the ration dial instead, so it is only visible on one
+  tab — and the effect it exists to explain is asked about on that tab, which is the only reason
+  the compromise holds. Blocked on **Responsive layout** below, and the third thing that entry
+  now owes.
+- **The effect filter is not wired.** BUILD's control strip carries sort, show, tier and `built`;
+  the promised UNLOCK / UPGRADE / HEALTH / INSTALL chip is not there. It wants the category tags
+  (Act II) rather than a fourth hand-written list of which good is which.
+- **Three margins Holdings cannot show.** The vigor ceiling, spoilage and food quality have their
+  baseline as a literal in `main.spawn_agent` rather than a catalog default, so a delta would
+  mean restating a number `capital.zig` owns. The ceiling is shown as a current value instead.
+  The fix is to give `Vigor` and `InventoryFood` field defaults and spawn from them, which puts
+  the starting condition in the catalog where every other default already lives.
 - **The eating pulse runs backwards on a food surplus.** `ration_dial`'s active chip fills by
   `ceil(F) − F` (`pages/templates/ration_dial.zig`), which reads as progress through the current
   food unit only while the larder is *falling*: 5.0 → 4.0 sweeps the bar left to right and
@@ -101,6 +83,13 @@ that has stopped serving it.
 
 ### UI foundation (`src/ui_client/`, `src/ui/`)
 
+- **A text node silently truncates at 64 bytes.** `TextState.buf` is fixed and
+  `update` does `@min(t.len, buf.len)`, so a longer string loses its tail with no error and
+  no wrap — it looks like a layout bug and is not one. Two fixes, and they are different
+  features: raising the cap (cheap in memory, ~64 bytes per text node, but still a cap), and
+  **wrapping**, which the layout has no concept of — a text node is one line, measured once.
+  Until then a caller past the limit has to split into two nodes, which `build_list`'s
+  footnote does.
 - **Retire `widgets.zig`.** The pre-`elements` palette is unreferenced — nothing outside
   `ui_client/` calls it, since the screens moved onto `pages/templates/`. Deleting it and
   `root.zig`'s re-exports also drops the duplicate `scroll_speed` / `scrollbar_w` constants that

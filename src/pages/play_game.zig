@@ -91,43 +91,12 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 // meanwhile this is the tab where "why does Forage cost 1.7?" gets asked.
                 _ = try t.holdings(ctx, center, world, e, "holdings");
             } else {
-                // The Act One capital roster, all of it real: every tile pays, starts a
-                // timed build, and grants its effect on completion. Five shelves by the
-                // grammar's sentences (health split out of UPGRADE for the scan): UNLOCK
-                // grants a whole verb, UPGRADE works a margin on a verb or the larder,
-                // HEALTH raises the vigor ceiling, INSTALL is the flows that run
-                // themselves, and SETTLE holds the one good that ends the act. A shelf's
-                // tiles dim when unaffordable — or, for Work gloves and Chainsaw, until
-                // the Hatchet gives them a verb to improve, and for the Shelter until its
-                // standing conditions hold.
-                const build = try el.div(ctx, center, "build");
-                _ = build.with_flow(.{ .dir = .column }).with_gap(8);
-
-                const unlocks = try capital_shelf(ctx, build, "unlocks", "UNLOCK");
-                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.FishRod, "rod", "Fishing rod", "Fish");
-                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.Hatchet, "hatchet", "Hatchet", "Split wood");
-                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.WireSnares, "snares", "Wire snares", "Check traps");
-                _ = try t.capital_good_tile(ctx, unlocks, world, e, comp.AirRifle, "rifle", "Air rifle", "Hunt");
-
-                const upgrades = try capital_shelf(ctx, build, "upgrades", "UPGRADE");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Sandals, "sandals", "Sandals", "Forage e×0.85");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.WorkGloves, "gloves", "Work gloves", "Wood e×0.75");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Bicycle, "bicycle", "Bicycle", "Roaming e×0.6");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Cookpot, "cookpot", "Cookpot", "food ×2 vigor");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.RootCellar, "cellar", "Root cellar", "spoil ×0.5");
-                _ = try t.capital_good_tile(ctx, upgrades, world, e, comp.Chainsaw, "chainsaw", "Chainsaw", "Wood ×2.5, -1m fuel");
-
-                const health = try capital_shelf(ctx, build, "health", "HEALTH");
-                _ = try t.capital_good_tile(ctx, health, world, e, comp.LeafBed, "leafbed", "Leaf bed", "+1 max v");
-                _ = try t.capital_good_tile(ctx, health, world, e, comp.Pantry, "pantry", "Pantry", "+2 max v");
-                _ = try t.capital_good_tile(ctx, health, world, e, comp.MedicineChest, "medchest", "Medicine chest", "+2 max v");
-
-                const installs = try capital_shelf(ctx, build, "installs", "INSTALL");
-                _ = try t.capital_good_tile(ctx, installs, world, e, comp.GardenBed, "garden", "Garden bed", "+1.5f/day -0.1m");
-                _ = try t.capital_good_tile(ctx, installs, world, e, comp.ChickenCoop, "coop", "Chicken coop", "+2.5f/day -0.3m");
-
-                const settle = try capital_shelf(ctx, build, "settle", "SETTLE");
-                _ = try t.capital_good_tile(ctx, settle, world, e, comp.Shelter, "shelter", "Shelter", "Room for four");
+                // One question — what can I act on now — answered in rows, sorted so the
+                // top of the list is the next thing. The view state is keyed on `center`
+                // rather than on the list: the list only exists while its tab is active,
+                // and a pool slot is pruned the frame its node stops being built, so sort
+                // and filter would reset on every visit to ACTIONS.
+                _ = try t.build_list(ctx, center, world, e, center, "buildlist");
             }
         }
     }
@@ -151,23 +120,3 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     return root.get();
 }
 
-/// One BUILD shelf: a fixed-width dim caption beside a wrap-flowing run of capital tiles.
-/// The caption column keeps the grammar's groups aligned down the tab; the wrap keeps a
-/// long shelf inside the window instead of running off the right edge. Returns the tiles
-/// container the caller appends goods into.
-fn capital_shelf(ctx: *uic.UiCtx, parent: el.El, id: []const u8, caption: []const u8) !el.El {
-    const th = ctx.res.view.theme;
-    const shelf = try el.div(ctx, parent, id);
-    _ = shelf.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-
-    // Fixed-width box around the caption so every shelf's tiles start on one column.
-    const cap_box = try el.div(ctx, shelf, "capbox");
-    _ = cap_box.with_size(.{ .fixed = 76 }, .fit_children);
-    _ = (try el.text(ctx, cap_box, "cap", caption))
-        .with_style(.{ style.body, Style{ .text = th.dim } });
-
-    const tiles = try el.div(ctx, shelf, "tiles");
-    _ = tiles.with_size(.{ .fixed = 640 }, .fit_children)
-        .with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(10);
-    return tiles;
-}

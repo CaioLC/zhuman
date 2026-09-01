@@ -63,6 +63,22 @@ pub const UiState = struct {
     /// switches: the caller reads `step`, builds that step, and bumps it on a click.
     /// Zero-seeded like the rest, so a freshly built panel always starts at step 0.
     pub const StepState = struct { step: usize = 0 };
+    /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
+    /// the tab strip's container, not the list itself, which only exists while its tab is
+    /// active and would have its slot pruned on every visit to the other one.
+    ///
+    /// Every default here is deliberately tag 0 / false, because pool slots are seeded
+    /// with `std.mem.zeroes` and *ignore* a struct's field defaults. Reordering `Sort` or
+    /// `Show` silently changes what the player sees on a fresh run.
+    pub const BuildViewState = struct {
+        pub const Sort = enum { reach, materials, time };
+        pub const Show = enum { in_reach, ready, all };
+        pub const Tier = enum { any, crude, manufactured };
+        sort: Sort = .reach,
+        show: Show = .in_reach,
+        tier: Tier = .any,
+        built: bool = false,
+    };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
     /// whichever field `UiCtx.focused` names — the widget itself only reads it

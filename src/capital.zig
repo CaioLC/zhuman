@@ -84,6 +84,18 @@ pub fn prereq_of(comptime GoodT: type) ?type {
     };
 }
 
+/// Whether a good is **crude** — scrap-and-hands work, the tier one person can actually
+/// make in half a day. Everything else is manufactured, carrying ×8 the materials and ×10
+/// the hours (see `components.zig`). The split cuts across the three behavioral variants
+/// rather than restating them, and it is the roster's own fact, so it lives here beside
+/// `good_name` rather than in whichever screen happens to group by it.
+pub fn is_crude(comptime GoodT: type) bool {
+    return switch (GoodT) {
+        comp.Sandals, comp.LeafBed, comp.WireSnares, comp.RootCellar, comp.GardenBed => true,
+        else => false,
+    };
+}
+
 /// Whether `GoodT`'s prerequisite (if it has one) is satisfied on this agent.
 pub fn prereq_met(w: *World, e: Entity, comptime GoodT: type) bool {
     if (prereq_of(GoodT)) |P| return w.has(e, P);
