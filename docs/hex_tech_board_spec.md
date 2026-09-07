@@ -19,7 +19,7 @@ Act I deliberately has only two economic stocks:
 
 Act I already includes personal-scale Forage and Split wood behavior. Their ring-1 counterparts must not unlock those verbs a second time. Ring-1 **Foraging** and **Woodcutting** instead mean that Food and Biomass production are established as Act II resource domains that can support a growing population.
 
-Raising **Shelter** ends Act I: other people ask to move in, population can rise above one, and Act II opens. The Act II UI increments this shell rather than replacing it. STRUCTURE remains a tab beside ACTIONS and BUILD; the same Holdings/BODY rail stays available on every tab and defaults to collapsed in STRUCTURE, while eating and activity behavior remain intact. The Act II prototype drops the persistent event-log footer so the active surface, especially the research board, receives that vertical space.
+Raising **Shelter** ends Act I: other people ask to move in, population can rise above one, and Act II opens. The Act II UI increments this shell rather than replacing it. STRUCTURE remains a tab beside ACTIONS and BUILD; the same Holdings/BODY rail stays available on every tab and defaults to collapsed in STRUCTURE, while eating and activity behavior remain intact. The persistent four-line event log remains the terminal footer on ACTIONS and BUILD. STRUCTURE alone hides it so the research board receives that vertical space.
 
 ### Transition into Act II
 
@@ -62,7 +62,7 @@ Research costs and resource accounting use exactly these six resource keys:
 
 ### Act II market context
 
-Act II has an operating market descended from the Act I passerby: finite-stock BUY and SELL lots settle atomically in Coin. Lots may contain typed Act II resources, so a resource can be held and spent before its local ring-1 production technology is Researched. Players may therefore import an input, establish its local production, or combine both approaches. Selling resources and goods can replenish Coin for later purchases.
+Act II begins with an operating market descended from the Act I passerby: finite-stock BUY and SELL lots settle atomically in Coin. Lots may contain typed Act II resources, so a resource can be held and spent before its local ring-1 production technology is Researched. Players may therefore import an input, establish its local production, or combine both approaches. Selling resources and goods can replenish Coin for later purchases. This row remains temporary until the Exchange stands; the Act II curtain replaces it with a permanent trading floor rather than a timed passerby market.
 
 **Coin is separate.** It is the market's settlement medium and is never a research input. Population and vigor are also not resources on this board. Market access does not change a tile's adjacency state; it changes whether the tile's authored resource bundle can be paid.
 
@@ -374,6 +374,95 @@ Hybrid (`k = 1..3`, low `k` nearer the first resource):
 |`(4, -2)`|Biomass–Food|2|**Crop rotation** — sustained soil; no yield decay|
 |`(4, -1)`|Biomass–Food|3|**Food processing** — mills and presses; food output multiplier|
 
+## 10. Scalable action/build catalogs and the Act II curtain
+
+### Queryable action browser
+
+Act II ACTIONS contains 20 representative unlocked verbs in one data-driven browser. Compact
+52 px rows use two columns on desktop and carry name, readiness, energy, duration, distribution and
+expected output. One search field supports free text plus `in:`, `out:`, `type:`/`kind:`,
+`state:`/`status:` and `is:`; comma alternatives, negation and wildcard match BUILD grammar. An
+adjacent disclosed row sorts by none/ready/time/energy/name in either direction. URL state uses
+`actionq`, `actionsort`, `actiondir` and `actionsortopen=1`.
+
+ACTIONS and BUILD use the same catalog-scroll element: automatic vertical overflow, stable gutter,
+shared focus treatment and the global scrollbar style. Only the action result collection scrolls
+inside ACTIONS; Eating Policy remains fixed below it, and the shared four-line event log remains
+fixed in the terminal footer. STRUCTURE hides the event log; BUILD restores it. On view changes each
+result collection retains its own scroll position, while a new query or sort returns it to the top.
+
+### Queryable recipe browser
+
+Act II BUILD is one data-driven catalog rather than authored shelves. Every recipe carries a
+name, current state, reach score, input-cost score, time, effect, kind, canonical input keys,
+canonical output keys, and an optional technology prerequisite. The prototype catalog has 50
+representative recipes spanning generators, tools, comfort, storage, transport, and worked
+materials; adding a recipe extends data rather than markup or filter code.
+
+The visible browser is deliberately compact:
+
+- one search field supports free text plus `in:`, `out:`, `type:`/`kind:`,
+  `state:`/`status:`, `tech:`, and `is:` qualifiers;
+- comma-separated values are alternatives, leading `-` negates, and `*` matches all recipes;
+- blank search shows the complete ordered set of eligible in-reach, unowned recipes (nine in the
+  current prototype); any nonblank query searches the full 50-recipe catalog, including owned and
+  distant recipes;
+- an adjacent icon toggles a second row, matched to the search field's width and 30 px height,
+  containing native **Sort by** (`none`, `reach`, `inputs`, `time`, `name`) and **Direction** (`asc`,
+  `desc`) selects; `none` restores catalog order, resets/disables Direction, and persists as
+  `buildsort=none`;
+- Escape closes the sort row and returns focus to its icon; `/` focuses search and Escape clears it;
+- the only result summary is `<visible> of 50 recipes shown` because resource balances already
+  appear in the persistent header.
+
+There are no visible preset, syntax-help, SHOW, built, or chip-based SORT rows, and no explanatory
+footnote below the table. Query, sort kind, direction and disclosure state use `buildq`,
+`buildsort`, `builddir`, and `buildsortopen=1`. Stale `buildshow` and `built` parameters are removed
+on interaction. A building row remains pinned and visible through every query/sort until completed
+or canceled. Research-linked recipes update in place when their prerequisite becomes Researched.
+BUILD reuses the same catalog-scroll element and global scrollbar treatment as ACTIONS; there is no
+BUILD-specific rail. Its six-column heading is sticky, while search, sort, the fixed Exchange bar and
+the shared event-log footer never move with recipe rows. Below 760 px the shared internal catalog
+scrolling is removed in favor of ordinary document scrolling.
+
+### Exchange milestone and Act III transition
+
+The **Exchange** is the Act II curtain: a standing trading floor raised through BUILD, analogous
+to the Act I Shelter but appropriate to a settlement economy. Its recipe is outside the ordinary
+catalog so sorting and filtering can never hide the act goal. A compact fixed bar always shows
+identity, readiness, a one-line condition summary and the raise action. Details disclose the cost,
+copy, complete requirement list and state explanation above the bar; `exchangeopen=1` shares this
+state. Opening it reduces the recipe viewport instead of increasing pane height.
+
+The Exchange recipe unlock condition is exactly:
+
+1. current population is **strictly greater than 500** (`500` fails; `501` passes); and
+2. at least one technology on ring 4 is Researched, regardless of resource wedge.
+
+Unlocking is not affordability. Once unlocked, the authored prototype recipe still requires
+**80 Biomass + 40 Minerals + 24 Metal** and **18 days**. The card distinguishes:
+
+- **locked** — one or both population/research conditions fail;
+- **unfunded** — both unlock conditions pass but recipe inputs are short;
+- **ready** — unlock conditions and all inputs pass; **RAISE EXCHANGE →** is enabled;
+- **standing** — inputs are paid, the building is permanent, and Act III is open.
+
+Raising the Exchange deducts the complete resource bundle atomically and dispatches the Act II →
+Act III transition. The header changes to Act III; the timed MERCHANT strip becomes a permanent
+EXCHANGE strip; the existing trade dialog identifies a permanent venue rather than a temporary
+market. Existing offers and settlement accounting remain intact for the transition prototype.
+The standing card reports consumed construction inputs as paid rather than comparing them with
+post-payment balances.
+
+Canonical review URLs:
+
+- 20-action browser: `#actions`;
+- filtered/sorted actions: `?actionq=out%3Afood&actionsort=time&actiondir=asc&actionsortopen=1#actions`;
+- default locked 50-recipe catalog: `#build`;
+- all recipes with open sort row: `?buildq=*&buildsort=name&builddir=asc&buildsortopen=1#build`;
+- ready expanded Exchange: `?population=501&capacity=640&researched=Selective%20breeding&biomass=120&minerals=60&metal=40&exchangeopen=1#build`;
+- standing/Act III: append `&exchange=standing` to the ready URL.
+
 ---
 
 ## 11. Quick verification checklist
@@ -390,6 +479,23 @@ Hybrid (`k = 1..3`, low `k` nearer the first resource):
 - Every resource type required by an Available technology has a current route through holdings, production, or authored market stock.
 - There is no Knowledge resource, research-point counter, or discovery mechanic.
 - Wood/Fibre/Stone/Iron are not resource-accounting keys; Coin remains separate from research resources.
+
+### ACTIONS, BUILD, log and Act III curtain
+
+- ACTIONS renders 20 data-driven compact verbs; search, qualified grammar, sort disclosure, count and URL state work.
+- Only ACTIONS results scroll on desktop; Eating Policy stays fixed below them.
+- BUILD renders 50 data-driven recipes in one list; a build in progress remains pinned and cancellable.
+- Blank search shows all eligible recipes (nine in the current fixture); any nonblank query searches all 50, including owned and distant recipes.
+- Only BUILD results scroll on desktop and the six-column heading remains sticky.
+- The four-line live event log is present on ACTIONS and BUILD, updates after actions/builds/trades/Exchange, and is hidden only on STRUCTURE.
+- Free text, `in:`, `out:`, `type:`, `state:`/`is:`, comma alternatives, negation, wildcard, slash focus, and Escape clear match the documented grammar.
+- The adjacent sort icon discloses only Sort by and Direction selects; both directions, Escape close/focus return, and shareable `buildsort`/`builddir`/`buildsortopen` state work.
+- FILTER presets, token help, SHOW/built controls, chip-based SORT, the explanatory footnote, and resource-heavy summary copy are absent.
+- Technology-linked recipes become Ready in place when their board prerequisite is Researched.
+- The fixed Exchange bar is outside recipe filtering and remains visible in default, unfunded, ready, and standing scenarios; its disclosure never grows the pane.
+- Population `500` does not unlock the Exchange; `501` does when any ring-4 technology is Researched.
+- Unlocking does not waive the 80 Biomass + 40 Minerals + 24 Metal recipe payment.
+- Raising the Exchange pays all inputs atomically, dispatches Act II → III, marks the card standing, and replaces temporary MERCHANT identity with permanent EXCHANGE identity.
 
 ### Ring-0 foundation
 

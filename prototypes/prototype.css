@@ -729,6 +729,135 @@ button:disabled {
 }
 
 
+.build-heading {
+  margin-bottom: 7px;
+}
+
+.build-query-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.build-query-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--line-2);
+  background: #11131880;
+}
+
+.build-query-field:focus-within {
+  border-color: var(--dim);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+
+.build-query-icon {
+  padding-left: 8px;
+  color: var(--line-2);
+  font-size: 13px;
+}
+
+.build-query-field input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  background: transparent;
+  font: 10px var(--font);
+}
+
+.build-query-field input::placeholder {
+  color: var(--line-2);
+}
+
+.build-query-field kbd {
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  color: var(--line-2);
+  font: 9px var(--font);
+}
+
+.build-sort-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  color: var(--dim);
+  background: transparent;
+  font: 14px var(--font);
+}
+
+.build-sort-toggle:hover,
+.build-sort-toggle:focus-visible,
+.build-sort-toggle[aria-expanded="true"] {
+  border-color: var(--acc);
+  color: var(--acc);
+  outline: 0;
+}
+
+.build-sort-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 42px);
+  height: 30px;
+  margin: -2px 0 8px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  background: #11131880;
+}
+
+.build-sort-panel[hidden] {
+  display: none;
+}
+
+.build-sort-control {
+  display: grid;
+  grid-template-columns: auto minmax(112px, 1fr);
+  align-items: center;
+  gap: 7px;
+  color: var(--line-2);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.build-sort-control select {
+  height: 24px;
+  padding: 2px 24px 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  outline: 0;
+  color: var(--fg);
+  background: var(--bg);
+  font: 10px var(--font);
+}
+
+.build-sort-control select:disabled {
+  border-color: var(--line);
+  color: var(--line-2);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.build-sort-control select:hover:not(:disabled),
+.build-sort-control select:focus-visible {
+  border-color: var(--acc);
+}
+
 .build-controls {
   display: flex;
   flex-wrap: wrap;
@@ -832,11 +961,37 @@ button:disabled {
 }
 
 .build-row .good-name {
+  display: grid;
+  gap: 1px;
   overflow: hidden;
   color: var(--fg);
-  font-size: 13px;
+}
+
+.build-row .good-name strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recipe-kind {
+  color: var(--line-2);
+}
+
+.build-row .good-name small {
+  overflow: hidden;
+  color: var(--line-2);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.build-action {
+  display: grid;
+  justify-items: end;
 }
 
 .build-row.blocked .good-name,
@@ -982,6 +1137,336 @@ button:disabled {
   color: var(--danger);
   font-weight: 400;
 }
+.exchange-goal {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 9px 10px 10px 12px;
+  border-left: 2px solid var(--danger);
+  background: linear-gradient(90deg, rgb(185 88 74 / 8%), transparent 76%);
+}
+
+.exchange-kicker {
+  color: var(--acc);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.exchange-title-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.exchange-title-row h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.exchange-cost,
+.exchange-readiness {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.exchange-readiness {
+  justify-self: end;
+  color: var(--danger);
+}
+
+.exchange-goal > p {
+  margin: 0;
+  color: var(--fg);
+  font-size: 10px;
+}
+
+.exchange-requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 13px;
+  color: var(--line-2);
+  font-size: 8.5px;
+}
+
+.exchange-requirements strong {
+  color: var(--danger);
+  font-weight: 400;
+}
+
+.exchange-requirements strong.is-met {
+  color: var(--good);
+}
+
+.exchange-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.exchange-action-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exchange-action-row .primary-action {
+  min-width: 132px;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 10px;
+}
+
+.exchange-goal.is-ready,
+.exchange-goal.is-standing {
+  border-left-color: var(--good);
+  background: linear-gradient(90deg, rgb(119 156 113 / 11%), transparent 76%);
+}
+
+.exchange-goal.is-ready .exchange-readiness,
+.exchange-goal.is-standing .exchange-readiness {
+  color: var(--good);
+}
+
+.exchange-goal.is-standing .exchange-kicker {
+  color: var(--good);
+}
+
+.act-two.has-exchange .merchant-strip {
+  border-color: color-mix(in srgb, var(--good) 55%, var(--line));
+}
+
+.act-two.has-exchange .merchant-strip .signal {
+  color: var(--good);
+}
+
+/* Scalable Act II catalog workspaces. The terminal log remains its third grid row. */
+.act-two .surface {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+  scrollbar-gutter: auto;
+}
+
+.act-two #view-actions,
+.act-two #view-build {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.act-two .action-heading {
+  margin-bottom: 7px;
+}
+
+.act-two .action-summary {
+  flex: none;
+}
+
+.act-two .catalog-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: 0;
+  scrollbar-gutter: stable;
+}
+
+.act-two .catalog-scroll:focus-visible {
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+
+.act-two .action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.act-two .action-tile {
+  min-height: 52px;
+  padding: 6px 8px 5px;
+}
+
+.act-two .action-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 5px;
+}
+
+.act-two .action-name {
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+}
+
+.act-two .action-state {
+  overflow: hidden;
+  color: var(--acc);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.act-two .action-tile.unavailable .action-state {
+  color: var(--danger);
+}
+
+.act-two .action-metrics {
+  grid-template-columns: minmax(0, 1fr) 18px minmax(54px, auto);
+  gap: 5px;
+  font-size: 9px;
+}
+
+.act-two .dist-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.act-two .action-policy {
+  flex: none;
+  min-height: 58px;
+  margin-top: 8px;
+  padding: 5px 9px 4px;
+  grid-template-rows: auto 15px auto;
+  gap: 2px;
+}
+
+.act-two .action-policy .eating-slider {
+  height: 15px;
+}
+
+.act-two .screen-footer {
+  flex: none;
+}
+
+/* Bounded 50-recipe BUILD catalog and fixed Exchange disclosure. */
+.act-two #view-build .build-summary {
+  flex: none;
+}
+
+.act-two .build-header {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.act-two .exchange-goal {
+  display: block;
+  flex: none;
+  margin-top: 8px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.act-two .exchange-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 34px;
+  padding: 3px 5px 3px 10px;
+}
+
+.act-two .exchange-disclosure {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  color: var(--fg);
+  background: var(--bg);
+  text-align: left;
+}
+
+.act-two .exchange-disclosure:hover,
+.act-two .exchange-disclosure:focus-visible {
+  color: var(--acc);
+  outline: 0;
+}
+
+.act-two .exchange-disclosure strong {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.act-two .exchange-readiness,
+.act-two .exchange-compact,
+.act-two .exchange-more {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.act-two .exchange-readiness {
+  justify-self: start;
+  color: var(--danger);
+}
+
+.act-two .exchange-compact,
+.act-two .exchange-more {
+  color: var(--dim);
+}
+
+.act-two .exchange-bar > .primary-action {
+  min-width: 132px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+.act-two .exchange-details {
+  display: grid;
+  gap: 4px;
+  padding: 6px 10px 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.act-two .exchange-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.act-two .exchange-details > p {
+  margin: 0;
+  color: var(--fg);
+  font-size: 10px;
+}
+
+.act-two .exchange-action-row {
+  display: block;
+}
+
+.act-two .exchange-action-row > span {
+  display: block;
+}
+
+.act-two .exchange-goal.is-ready .exchange-readiness,
+.act-two .exchange-goal.is-standing .exchange-readiness {
+  color: var(--good);
+}
+
 .screen-footer {
   min-height: 86px;
   margin: 0 var(--pad) var(--pad);
@@ -1914,5 +2399,91 @@ button:disabled {
 
   .dialog-note {
     max-width: none;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .act-two:not(.is-structure-focus) .surface {
+    display: block;
+    overflow: visible;
+    padding-bottom: 14px;
+  }
+
+  .act-two #view-actions,
+  .act-two #view-build {
+    display: block;
+    overflow: visible;
+  }
+
+  .act-two .catalog-scroll {
+    overflow: visible;
+    max-height: none;
+  }
+
+  .act-two .action-policy {
+    margin-top: 10px;
+  }
+
+  .act-two .build-header {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .act-two .build-sort-panel {
+    gap: 6px;
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .act-two .build-sort-control {
+    grid-template-columns: auto minmax(80px, 1fr);
+    gap: 4px;
+  }
+
+  .act-two .exchange-bar {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .act-two .exchange-disclosure {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .act-two .exchange-compact {
+    display: none;
+  }
+
+  .act-two .exchange-bar > .primary-action {
+    width: 100%;
+  }
+
+  .act-two .build-header,
+  .act-two .build-row {
+    grid-template-columns: minmax(90px, 1.15fr) minmax(56px, 0.62fr) 40px minmax(70px, 0.9fr) 40px;
+    gap: 5px;
+  }
+
+  .act-two .build-header > :nth-child(4),
+  .act-two .build-row > :nth-child(4) {
+    display: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .act-two .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .act-two .build-header,
+  .act-two .build-row {
+    grid-template-columns: minmax(90px, 1fr) 38px minmax(64px, 0.9fr) 38px;
+    gap: 4px;
+  }
+
+  .act-two .build-header > :nth-child(2),
+  .act-two .build-row > :nth-child(2) {
+    display: none;
   }
 }

@@ -20,7 +20,8 @@ Everything below follows from splitting questions apart and giving each its own 
 
 | Surface | Question | Shape |
 |---|---|---|
-| **BUILD** | what can I act on now? | a sorted, filtered list of rows |
+| **ACTIONS** | what will this body do now? | a searchable, bounded grid of compact verbs |
+| **BUILD** | what can I make next? | a sorted, filtered list of rows |
 | **HOLDINGS** | what do I own, and what is it doing for me? | a persistent panel |
 | **STRUCTURE** | what exists, and what does it take? | a board |
 
@@ -53,6 +54,19 @@ show the current value and say so, rather than copying a constant.
 its children are content — so a row is hovered as a row even while the pointer is over the
 `×` inside it.
 
+## ACTIONS — the verb browser
+
+Twenty unlocked verbs no longer fit as large cards. ACTIONS therefore uses one search-first browser
+with compact two-column rows. Each row remains one full button and carries name, readiness, energy,
+time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
+`state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
+`*` use the same grammar as BUILD. The adjacent sort disclosure offers none/ready/time/energy/name
+and both directions. None restores authored order and disables Direction.
+
+The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
+so it remains fixed below that collection. A count-only summary reports `<visible> of 20 actions
+shown`; query and sort state use `actionq`, `actionsort`, `actiondir` and `actionsortopen=1`.
+
 ## BUILD — the shop
 
 A list of **rows**, six fixed columns, sorted so the top is always the next thing.
@@ -72,30 +86,50 @@ the verb a blocked good is waiting on.
 place, pinned to the top under every sort, and its corner is how you abandon it. A long
 build with an emptying larder needs a visible way out.
 
-**Sort and filter, not authored groups.** Grouping the roster by hand would only be a second
-fixed taxonomy — the reason the old shelf captions had to go is that they restated
-`capital.zig`'s implementation categories. The axis belongs to the player:
+**Search first; sort on demand.** A larger catalog makes fixed groups less useful, not more.
+BUILD remains one list behind one search field. Plain text searches names, effects and costs;
+`in:<resource>` and `out:<resource>` inspect recipe edges; `type:<kind>` covers generator,
+tool, comfort, storage, transport and material; `state:<state>`/`is:<value>` inspect current
+state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` excludes, and
+`*` exposes the complete catalog. `/` focuses the field and Escape clears it.
 
-- **sort** — reach · materials · time. The cheapest good and the quickest are rarely the
-  same one, which is why time is its own axis now that it is the dominant price.
-- **show** — ready · in reach · all. This is where the "within reach" cutoff lives: a state
-  the player can see and change, rather than a constant buried in a predicate.
-- **tier** — any · crude · made. The crude/manufactured split *cuts across* the behavioural
-  variants rather than restating them, so it earns an axis of its own.
-- **built** — off by default, since owned goods live in HOLDINGS. On, it turns the pane into
-  a production line, which is what building a good you already own is for.
+A blank query shows every eligible in-reach, unowned recipe after ordering; the current prototype
+fixture exposes nine. As soon as the player types, the query searches all 50 recipes, including owned
+and currently distant goods. That removes the need for visible FILTER, SHOW, built, preset, or
+syntax-help rows while keeping every recipe reachable.
 
-Defaults are the whole design: most players never touch the strip, so the default view *is*
-the view. They are also load-bearing in a way that is easy to break — pool slots are
-zero-seeded and ignore field defaults, so every default must be enum tag 0.
+The icon immediately beside search toggles one Notion-style second row with the search field's
+same width and 30 px height. Native selects choose **Sort by** none/reach/input cost/time/name
+and **Direction** ascending/descending. Choosing none restores catalog order, resets and disables
+Direction, and persists explicitly as `buildsort=none`. The row closes with the same icon or Escape
+and returns focus to the icon. Query, sort, direction and disclosure state are shareable through
+`buildq`, `buildsort`, `builddir`, and `buildsortopen=1`.
 
-**The goal card.** The Shelter sits below the list, outside the sort and never filtered,
-with its three standing conditions live. It is how the act ends rather than an item in it,
-and a win condition rendered as an unexplained dim tile is the worst case of the grey.
+The summary is count-only (`9 of 50 recipes shown` in the current default); balances already live in the header. A build
+in progress remains visible regardless of query and linked research updates recipe state without
+rebuilding the list. The removed explanatory footnote is not replaced: the browser and goal card
+must explain themselves.
 
-**What the list doesn't hold, it names.** A footnote counts the goods priced past one pair
-of hands and says a trader might carry them — the merchant taught before the merchant
-exists.
+Defaults are the whole design: most players never touch the controls, so the default view keeps
+every currently eligible recipe reachable without typing. ACTIONS and BUILD use one shared catalog
+scroll element and the same global scrollbar treatment; the current nine-recipe BUILD default
+naturally overflows it. The six-column heading remains sticky, while even broad 50-row queries leave
+search, Exchange and the event log fixed.
+
+**The log is part of ACTIONS and BUILD.** One four-line live event log occupies the terminal footer
+on both panes and keeps its place while their result collections scroll. STRUCTURE alone hides it to
+recover board height. Below 760 px the fixed-height workspace is released: ACTIONS and BUILD return
+to normal document scrolling, narrow BUILD drops lower-priority columns, and the log remains at the
+end of the document rather than creating nested touch scrollers.
+
+**The goal card ends the act but is not filtered with ordinary goods.** In Act I this is the
+Shelter. In Act II it is the **Exchange**, a standing trading floor. Its recipe is unlocked
+only when population is strictly greater than 500 and at least one ring-4 technology is
+Researched. The prototype recipe costs 80 Biomass, 40 Minerals and 24 Metal and takes 18
+days. Raising it pays those inputs, replaces the temporary passerby-descended merchant row
+with a permanent Exchange, and opens Act III. A compact Exchange bar remains fixed below the
+recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
+the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
 
 ## HOLDINGS — the readout
 
