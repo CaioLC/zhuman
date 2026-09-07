@@ -11,16 +11,16 @@
   <main class="terminal act-two" aria-label="Human Action Act II interface prototype">
     <header class="hud-header">
       <div class="stockline compact" aria-label="Population and current stocks">
-        <span><span class="stock-label">POP:</span> <span class="stock-value" id="population-value">7/12</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">V:</span> <span class="stock-value">13/15</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">FOOD:</span> <span class="stock-value" data-resource-balance="food">23</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">WATER:</span> <span class="stock-value low" data-resource-balance="water">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">FUEL:</span> <span class="stock-value low" data-resource-balance="fuel">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">METAL:</span> <span class="stock-value low" data-resource-balance="metal">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">MINERALS:</span> <span class="stock-value low" data-resource-balance="minerals">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">BIOMASS:</span> <span class="stock-value" data-resource-balance="biomass">30</span></span><span class="sep" aria-hidden="true">|</span>
-        <span><span class="stock-label">COIN:</span> <span class="stock-value accent" data-coin-balance>42</span></span>
-      </div>      <div class="runline"><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span></div>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">PO</span><span class="lbl-full">POPULATION</span>:</span> <span class="stock-value" id="population-value">7/12</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">VI</span><span class="lbl-full">VIGOR</span>:</span> <span class="stock-value">13/15</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FO</span><span class="lbl-full">FOOD</span>:</span> <span class="stock-value" data-resource-balance="food">23</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">WA</span><span class="lbl-full">WATER</span>:</span> <span class="stock-value low" data-resource-balance="water">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FU</span><span class="lbl-full">FUEL</span>:</span> <span class="stock-value low" data-resource-balance="fuel">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">ME</span><span class="lbl-full">METAL</span>:</span> <span class="stock-value low" data-resource-balance="metal">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MI</span><span class="lbl-full">MINERALS</span>:</span> <span class="stock-value low" data-resource-balance="minerals">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">BI</span><span class="lbl-full">BIOMASS</span>:</span> <span class="stock-value" data-resource-balance="biomass">30</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">CO</span><span class="lbl-full">COIN</span>:</span> <span class="stock-value accent" data-coin-balance>42</span></span>
+      </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span></div>
     </header>
 
     <div class="page-grid" id="page-grid">
@@ -120,8 +120,8 @@
           </div>
 
           <div class="build-summary" id="build-summary" aria-live="polite">9 of 50 recipes shown</div>
-          <div class="catalog-scroll build-table" id="build-table" tabindex="0" aria-label="Buildable goods; scroll for more">
-            <div class="build-header" aria-hidden="true"><span>good</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
+          <div class="catalog-scroll build-table" id="build-table" tabindex="0" aria-label="Buildable recipes; scroll for more">
+            <div class="build-header" aria-hidden="true"><span>recipe</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
             <div id="build-rows"></div>
           </div>
 
@@ -179,10 +179,10 @@
 
   <dialog class="terminal-dialog" id="merchant-dialog" aria-labelledby="merchant-title">
     <form class="dialog-shell" method="dialog">
-      <header class="dialog-header"><div><div class="dialog-kicker" id="market-dialog-kicker">MERCHANT · MARKET OPEN 2.4 DAYS</div><h2 class="dialog-title" id="merchant-title">What will you buy or sell?</h2></div><button class="dialog-close" id="market-dialog-close" type="submit" value="cancel" aria-label="Close merchant">×</button></header>
+      <header class="dialog-header"><div><div class="dialog-kicker" id="market-dialog-kicker">MERCHANT · MARKET OPEN 2.4 DAYS</div><h2 class="dialog-title" id="merchant-title">What will you trade?</h2></div><button class="dialog-close" id="market-dialog-close" type="submit" value="cancel" aria-label="Close merchant">×</button></header>
       <div class="dialog-tabs" role="tablist" aria-label="Merchant direction"><button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY</button><button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL</button></div>
       <div class="dialog-body"><div class="trade-grid">
-        <section class="trade-column" aria-labelledby="merchant-stock-title"><h3 class="column-heading" id="merchant-stock-title">MERCHANT STOCK</h3><div class="offer-list" id="merchant-offers">
+        <section class="trade-column" aria-labelledby="merchant-stock-title"><h3 class="column-heading" id="merchant-stock-title">THEIR STOCK</h3><div class="offer-list" id="merchant-offers">
           <button class="offer-button" type="button" aria-pressed="true" data-mode="buy" data-name="Water" data-cost="5 coin" data-coins="5" data-receive="Water +6" data-effect="Six units enter your Water stock. Local production is not required." data-stock="3" data-resource="water" data-quantity="6"><span>Water +6<small>typed resource · 5 coin</small></span><span class="stock-count">×3</span></button>
           <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Minerals" data-cost="7 coin" data-coins="7" data-receive="Minerals +5" data-effect="Five units enter your Minerals stock before or after Quarry pit." data-stock="2" data-resource="minerals" data-quantity="5"><span>Minerals +5<small>typed resource · 7 coin</small></span><span class="stock-count">×2</span></button>
           <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Fuel" data-cost="8 coin" data-coins="8" data-receive="Fuel +4" data-effect="Four units enter your Fuel stock without changing local production." data-stock="2" data-resource="fuel" data-quantity="4"><span>Fuel +4<small>typed resource · 8 coin</small></span><span class="stock-count">×2</span></button>
@@ -193,7 +193,7 @@
           <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Planks" data-cost="Planks ×4" data-coins="6" data-receive="6 coin" data-effect="Four finished planks leave your Holdings as one lot." data-stock="2" hidden><span>Planks ×4<small>merchant pays 6 coin</small></span><span class="stock-count">×2</span></button>
           <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-coins="7" data-receive="7 coin" data-effect="A spare pair is sold first; your equipped Sandals keep their Forage margin." data-stock="2" hidden><span>Sandals ×1<small>merchant pays 7 coin</small></span><span class="stock-count">×2</span></button>
         </div></section>        <section class="trade-preview" aria-label="Merchant trade preview"><div class="preview-line"><span id="preview-give-label">YOU PAY</span><strong id="preview-give">5 coin</strong></div><div class="trade-arrow" aria-hidden="true">⇄</div><div class="preview-line"><span id="preview-receive-label">YOU RECEIVE</span><strong id="preview-receive">Water +6</strong></div><div class="preview-effect" id="preview-effect">Six units enter your Water stock. Local production is not required.</div></section>
-        <section class="trade-column" aria-labelledby="your-stock-title"><h3 class="column-heading" id="your-stock-title">YOUR PURSE &amp; STOCK</h3><ul class="inventory-list"><li class="inventory-row"><span>Coin</span><strong class="accent" data-coin-balance>42</strong></li><li class="inventory-row"><span>Food</span><strong data-resource-balance="food">23</strong></li><li class="inventory-row"><span>Water</span><strong data-resource-balance="water">0</strong></li><li class="inventory-row"><span>Fuel</span><strong data-resource-balance="fuel">0</strong></li><li class="inventory-row"><span>Metal</span><strong data-resource-balance="metal">0</strong></li><li class="inventory-row"><span>Minerals</span><strong data-resource-balance="minerals">0</strong></li><li class="inventory-row"><span>Biomass</span><strong data-resource-balance="biomass">30</strong></li></ul><p class="side-note">The price is final for this lot. Coin and stock settle together.</p></section>      </div></div>
+        <section class="trade-column" aria-labelledby="your-stock-title"><h3 class="column-heading" id="your-stock-title">YOU HOLD</h3><ul class="inventory-list"><li class="inventory-row"><span>Coin</span><strong class="accent" data-coin-balance>42</strong></li><li class="inventory-row"><span>Food</span><strong data-resource-balance="food">23</strong></li><li class="inventory-row"><span>Water</span><strong data-resource-balance="water">0</strong></li><li class="inventory-row"><span>Fuel</span><strong data-resource-balance="fuel">0</strong></li><li class="inventory-row"><span>Metal</span><strong data-resource-balance="metal">0</strong></li><li class="inventory-row"><span>Minerals</span><strong data-resource-balance="minerals">0</strong></li><li class="inventory-row"><span>Biomass</span><strong data-resource-balance="biomass">30</strong></li></ul><p class="side-note">The price is final for this lot. Coin and stock settle together.</p></section>      </div></div>
       <footer class="dialog-footer"><span class="dialog-note" id="market-dialog-note">Coin prices · finite stock · limited market time. Later lots may be repriced.</span><div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">BUY →</button></div></footer>
     </form>
   </dialog>
@@ -266,7 +266,7 @@
           tab.setAttribute('aria-selected', String(key === name));
           tab.tabIndex = key === name ? 0 : -1;
         });
-        setHoldingsCollapsed(holdingsCollapsedByView[name], false);
+        setHoldingsCollapsed(name === 'structure' ? true : holdingsCollapsedByView[name], false);
         if (updateHash && location.hash !== `#${name}`) {
           const nextUrl = new URL(location.href);
           nextUrl.hash = name;
@@ -487,12 +487,14 @@
         { max: 100, word: 'lavish' }
       ];
 
+      const bodyConfig = { baseCoverage: 10.3, baseRecovery: 0.448 };
+
       function updateEatingPolicy(rawValue) {
         const value = Number(rawValue);
         const word = eatingWords.find(entry => value <= entry.max).word;
         const rate = 0.5 * Math.pow(4, value / 100);
-        const coverage = 10.3 / rate;
-        const recovery = 0.448 / rate;
+        const coverage = bodyConfig.baseCoverage / rate;
+        const recovery = bodyConfig.baseRecovery / rate;
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
@@ -528,8 +530,8 @@
 
       const buildRecipes = [
         { name: 'Garden bed', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '8 biomass 4e', inputCost: 8, time: 0.7, effect: 'grows Food on its own', state: 'ready', reach: 1, stateCopy: 'ready' },
-        { name: 'Ropewalk', type: 'generator', inputs: ['biomass'], outputs: ['rope'], cost: '14 biomass 3e', inputCost: 14, time: 0.8, effect: 'turns Biomass into rope', state: 'blocked', reach: 1, tech: 'Loom & ropewalk' },
-        { name: 'Fishing net', type: 'tool', inputs: ['biomass'], outputs: ['food'], cost: '12 biomass 2e', inputCost: 12, time: 1.2, effect: 'raises fish yield', state: 'blocked', reach: 1, tech: 'Net fishery' },
+        { name: 'Ropewalk', type: 'generator', inputs: ['biomass'], outputs: ['rope'], cost: '14 biomass 3e', inputCost: 14, time: 0.8, effect: 'turns Biomass into rope', state: 'locked', reach: 1, tech: 'Loom & ropewalk' },
+        { name: 'Fishing net', type: 'tool', inputs: ['biomass'], outputs: ['food'], cost: '12 biomass 2e', inputCost: 12, time: 1.2, effect: 'raises fish yield', state: 'locked', reach: 1, tech: 'Net fishery' },
         { name: 'Cut stone', type: 'material', inputs: ['minerals'], outputs: ['minerals'], cost: '12 minerals 4e', inputCost: 12, time: 1.1, effect: 'worked stone stock', state: 'reach', reach: 0.75, stateCopy: '9/12 minerals' },
         { name: 'Carpenter bench', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['tools'], cost: '24 biomass 2 metal 3e', inputCost: 26, time: 2.4, effect: 'complex wood capital', state: 'reach', reach: 0.65, stateCopy: '18/24 biomass · 1/2 metal' },
         { name: 'Forge', type: 'generator', inputs: ['minerals', 'biomass', 'metal'], outputs: ['metal'], cost: '10 minerals 8 biomass 4 metal 4e', inputCost: 22, time: 2.3, effect: 'metalworking site', state: 'reach', reach: 0.35, stateCopy: 'short 1 mineral · 3 metal' },
@@ -537,44 +539,44 @@
         { name: 'Hand tools', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['tools'], cost: '10 metal 8 biomass 2e', inputCost: 18, time: 1.4, effect: 'general work takes less time', state: 'reach', reach: 0.42, stateCopy: 'short 10 metal' },
         { name: 'Water cistern', type: 'storage', inputs: ['minerals', 'metal'], outputs: ['water'], cost: '24 minerals 6 metal 4e', inputCost: 30, time: 2.0, effect: 'buffers Water supply', state: 'reach', reach: 0.30, stateCopy: 'short 24 minerals · 6 metal' },
         { name: 'Cart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '24 biomass 8 metal 4e', inputCost: 32, time: 2.2, effect: 'moves local goods faster', state: 'reach', reach: 0.28, stateCopy: 'short 8 metal' },
-        { name: 'Granary', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '20 biomass 16 minerals 5e', inputCost: 36, time: 2.8, effect: 'stores Food at settlement scale', state: 'blocked', reach: 0.25, tech: 'Granary' },
-        { name: 'Irrigation pump', type: 'generator', inputs: ['metal', 'biomass'], outputs: ['water'], cost: '28 metal 16 biomass 6e', inputCost: 44, time: 3.4, effect: 'moves Water without river access', state: 'blocked', reach: 0.22, tech: 'Pumping station' },
-        { name: 'Grain mill', type: 'generator', inputs: ['biomass', 'metal', 'minerals'], outputs: ['food'], cost: '20 biomass 16 metal 12 minerals 7e', inputCost: 48, time: 3.5, effect: 'multiplies prepared Food output', state: 'blocked', reach: 0.20, tech: 'Food processing' },
-        { name: 'Steam engine', type: 'generator', inputs: ['metal', 'fuel', 'water'], outputs: ['power'], cost: '28 metal 18 fuel 10 water 8e', inputCost: 56, time: 5.2, effect: 'turns Fuel and Water into power', state: 'blocked', reach: 0.18, tech: 'Steam engine' },
-        { name: 'River barge', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '42 biomass 16 metal 6e', inputCost: 58, time: 4.8, effect: 'moves bulk goods by Water', state: 'blocked', reach: 0.17, tech: 'Fishing boats' },
-        { name: 'Brick press', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '32 minerals 10 fuel 5e', inputCost: 42, time: 3.1, effect: 'standardizes structural brick', state: 'blocked', reach: 0.16, tech: 'Brickworks' },
-        { name: 'Glass pane', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '30 minerals 16 fuel 6e', inputCost: 46, time: 3.6, effect: 'weatherproofs lit interiors', state: 'blocked', reach: 0.14, tech: 'Glassblowing' },
-        { name: 'Work clothes', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '24 biomass 3e', inputCost: 24, time: 1.7, effect: 'reduces exposure and strain', state: 'blocked', reach: 0.12, tech: 'Loom & ropewalk' },
-        { name: 'Bathhouse', type: 'comfort', inputs: ['minerals', 'water', 'fuel'], outputs: ['comfort'], cost: '28 minerals 14 water 10 fuel 8e', inputCost: 52, time: 4.0, effect: 'raises shared health and comfort', state: 'blocked', reach: 0.10, tech: 'Sanitation' },
-        { name: 'Plough team', type: 'tool', inputs: ['biomass', 'metal', 'food'], outputs: ['food'], cost: '18 biomass 12 metal 8 food 6e', inputCost: 38, time: 2.9, effect: 'raises field Food yield', state: 'blocked', reach: 0.08, tech: 'Animal husbandry' },
+        { name: 'Granary', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '20 biomass 16 minerals 5e', inputCost: 36, time: 2.8, effect: 'stores Food at settlement scale', state: 'locked', reach: 0.25, tech: 'Granary' },
+        { name: 'Irrigation pump', type: 'generator', inputs: ['metal', 'biomass'], outputs: ['water'], cost: '28 metal 16 biomass 6e', inputCost: 44, time: 3.4, effect: 'moves Water without river access', state: 'locked', reach: 0.22, tech: 'Pumping station' },
+        { name: 'Grain mill', type: 'generator', inputs: ['biomass', 'metal', 'minerals'], outputs: ['food'], cost: '20 biomass 16 metal 12 minerals 7e', inputCost: 48, time: 3.5, effect: 'multiplies prepared Food output', state: 'locked', reach: 0.20, tech: 'Food processing' },
+        { name: 'Steam engine', type: 'generator', inputs: ['metal', 'fuel', 'water'], outputs: ['power'], cost: '28 metal 18 fuel 10 water 8e', inputCost: 56, time: 5.2, effect: 'turns Fuel and Water into power', state: 'locked', reach: 0.18, tech: 'Steam engine' },
+        { name: 'River barge', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '42 biomass 16 metal 6e', inputCost: 58, time: 4.8, effect: 'moves bulk goods by Water', state: 'locked', reach: 0.17, tech: 'Fishing boats' },
+        { name: 'Brick press', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '32 minerals 10 fuel 5e', inputCost: 42, time: 3.1, effect: 'standardizes structural brick', state: 'locked', reach: 0.16, tech: 'Brickworks' },
+        { name: 'Glass pane', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '30 minerals 16 fuel 6e', inputCost: 46, time: 3.6, effect: 'weatherproofs lit interiors', state: 'locked', reach: 0.14, tech: 'Glassblowing' },
+        { name: 'Work clothes', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '24 biomass 3e', inputCost: 24, time: 1.7, effect: 'reduces exposure and strain', state: 'locked', reach: 0.12, tech: 'Loom & ropewalk' },
+        { name: 'Bathhouse', type: 'comfort', inputs: ['minerals', 'water', 'fuel'], outputs: ['comfort'], cost: '28 minerals 14 water 10 fuel 8e', inputCost: 52, time: 4.0, effect: 'raises shared health and comfort', state: 'locked', reach: 0.10, tech: 'Sanitation' },
+        { name: 'Plough team', type: 'tool', inputs: ['biomass', 'metal', 'food'], outputs: ['food'], cost: '18 biomass 12 metal 8 food 6e', inputCost: 38, time: 2.9, effect: 'raises field Food yield', state: 'locked', reach: 0.08, tech: 'Animal husbandry' },
         { name: 'Handcart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '16 biomass 4 metal 3e', inputCost: 20, time: 1.5, effect: 'moves hand-carried loads farther', state: 'reach', reach: 0.58, stateCopy: 'short 4 metal' },
-        { name: 'Smokehouse', type: 'storage', inputs: ['biomass', 'fuel'], outputs: ['food'], cost: '20 biomass 8 fuel 4e', inputCost: 28, time: 2.1, effect: 'preserves meat and fish', state: 'blocked', reach: 0.55, tech: 'Food preservation' },
-        { name: 'Well bucket', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['water'], cost: '12 biomass 2 metal 2e', inputCost: 14, time: 0.9, effect: 'raises Water drawing yield', state: 'blocked', reach: 0.52, tech: 'Spring well' },
-        { name: 'Clay crock', type: 'storage', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '14 minerals 4 fuel 2e', inputCost: 18, time: 1.0, effect: 'stores prepared Food in sealed lots', state: 'blocked', reach: 0.50, tech: 'Pottery' },
-        { name: 'Saw pit', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['biomass'], cost: '20 biomass 6 metal 4e', inputCost: 26, time: 2.0, effect: 'turns timber into regular boards', state: 'blocked', reach: 0.48, tech: 'Sawmill' },
-        { name: 'Timber wall', type: 'material', inputs: ['biomass'], outputs: ['comfort'], cost: '34 biomass 5e', inputCost: 34, time: 2.7, effect: 'shelters a larger common boundary', state: 'blocked', reach: 0.46, tech: 'Timber framing' },
-        { name: 'Lime kiln', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '26 minerals 12 fuel 5e', inputCost: 38, time: 3.0, effect: 'produces mortar and whitewash', state: 'blocked', reach: 0.44, tech: 'Lime burning' },
-        { name: 'Weaver frame', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['comfort'], cost: '22 biomass 4 metal 4e', inputCost: 26, time: 2.2, effect: 'turns fiber into regular cloth', state: 'blocked', reach: 0.41, tech: 'Loom & ropewalk' },
-        { name: 'Bakery oven', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '24 minerals 10 fuel 5e', inputCost: 34, time: 2.8, effect: 'bakes Food in settlement batches', state: 'blocked', reach: 0.39, tech: 'Food processing' },
-        { name: 'Apiary', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '26 biomass 4e', inputCost: 26, time: 2.4, effect: 'adds honey and wax yield', state: 'blocked', reach: 0.37, tech: 'Apiculture' },
-        { name: 'Tannery', type: 'material', inputs: ['water', 'biomass'], outputs: ['comfort'], cost: '18 water 24 biomass 6e', inputCost: 42, time: 3.3, effect: 'turns hides into durable leather', state: 'blocked', reach: 0.34, tech: 'Tanning' },
-        { name: 'Sail loft', type: 'tool', inputs: ['biomass'], outputs: ['transport'], cost: '36 biomass 6e', inputCost: 36, time: 3.2, effect: 'equips boats for longer routes', state: 'blocked', reach: 0.32, tech: 'Fishing boats' },
-        { name: 'Waterwheel', type: 'generator', inputs: ['biomass', 'metal'], outputs: ['power'], cost: '42 biomass 12 metal 7e', inputCost: 54, time: 4.1, effect: 'turns stream flow into shaft power', state: 'blocked', reach: 0.30, tech: 'Water power' },
-        { name: 'Canal lock', type: 'transport', inputs: ['minerals', 'biomass', 'metal'], outputs: ['transport'], cost: '48 minerals 28 biomass 14 metal 9e', inputCost: 90, time: 6.0, effect: 'moves barges between water levels', state: 'blocked', reach: 0.27, tech: 'Canal engineering' },
-        { name: 'Warehouse', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['storage'], cost: '44 biomass 32 minerals 8e', inputCost: 76, time: 5.0, effect: 'consolidates settlement trade stock', state: 'blocked', reach: 0.25, tech: 'Warehousing' },
-        { name: 'Seed drill', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['food'], cost: '22 metal 18 biomass 6e', inputCost: 40, time: 3.4, effect: 'reduces seed and planting labor', state: 'blocked', reach: 0.23, tech: 'Seed drill' },
-        { name: 'Printing press', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['comfort'], cost: '30 metal 24 biomass 8e', inputCost: 54, time: 4.6, effect: 'duplicates records and instructions', state: 'blocked', reach: 0.21, tech: 'Printing press' },
-        { name: 'Infirmary', type: 'comfort', inputs: ['biomass', 'minerals', 'water'], outputs: ['comfort'], cost: '34 biomass 24 minerals 12 water 8e', inputCost: 70, time: 4.5, effect: 'concentrates care and recovery', state: 'blocked', reach: 0.20, tech: 'Sanitation' },
-        { name: 'Street lamp', type: 'comfort', inputs: ['metal', 'fuel'], outputs: ['comfort'], cost: '18 metal 14 fuel 5e', inputCost: 32, time: 2.7, effect: 'extends safe movement after dark', state: 'blocked', reach: 0.19, tech: 'Gas lighting' },
-        { name: 'Brewery', type: 'comfort', inputs: ['food', 'water', 'fuel'], outputs: ['comfort'], cost: '22 food 18 water 12 fuel 7e', inputCost: 52, time: 4.0, effect: 'turns grain into a storable drink', state: 'blocked', reach: 0.18, tech: 'Brewing' },
-        { name: 'Foundry', type: 'generator', inputs: ['minerals', 'metal', 'fuel'], outputs: ['metal'], cost: '40 minerals 24 metal 20 fuel 10e', inputCost: 84, time: 6.2, effect: 'casts repeatable Metal components', state: 'blocked', reach: 0.17, tech: 'Foundry' },
-        { name: 'Machine shop', type: 'tool', inputs: ['metal', 'fuel'], outputs: ['tools'], cost: '46 metal 18 fuel 11e', inputCost: 64, time: 6.5, effect: 'makes interchangeable machine parts', state: 'blocked', reach: 0.16, tech: 'Machine tools' },
-        { name: 'Rail cart', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '38 metal 22 biomass 9e', inputCost: 60, time: 5.4, effect: 'moves heavy lots on fixed rails', state: 'blocked', reach: 0.15, tech: 'Rail transport' },
-        { name: 'Telegraph station', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '34 metal 20 biomass 9e', inputCost: 54, time: 5.0, effect: 'coordinates distant market messages', state: 'blocked', reach: 0.14, tech: 'Telegraphy' },
-        { name: 'Pump house', type: 'generator', inputs: ['metal', 'fuel', 'minerals'], outputs: ['water'], cost: '32 metal 20 fuel 18 minerals 9e', inputCost: 70, time: 5.1, effect: 'pressurizes Water for a district', state: 'blocked', reach: 0.13, tech: 'Pumping station' },
-        { name: 'Cold store', type: 'storage', inputs: ['metal', 'fuel', 'minerals'], outputs: ['food'], cost: '36 metal 24 fuel 20 minerals 10e', inputCost: 80, time: 5.8, effect: 'slows Food loss at market scale', state: 'blocked', reach: 0.12, tech: 'Refrigeration' },
-        { name: 'Assembly hall', type: 'comfort', inputs: ['biomass', 'minerals'], outputs: ['comfort'], cost: '52 biomass 38 minerals 10e', inputCost: 90, time: 6.0, effect: 'gives collective decisions a place', state: 'blocked', reach: 0.11, tech: 'Civic administration' },
-        { name: 'Cement mixer', type: 'material', inputs: ['minerals', 'metal', 'fuel'], outputs: ['minerals'], cost: '42 minerals 18 metal 12 fuel 9e', inputCost: 72, time: 4.9, effect: 'mixes structural cement consistently', state: 'blocked', reach: 0.10, tech: 'Portland cement' },
+        { name: 'Smokehouse', type: 'storage', inputs: ['biomass', 'fuel'], outputs: ['food'], cost: '20 biomass 8 fuel 4e', inputCost: 28, time: 2.1, effect: 'preserves meat and fish', state: 'locked', reach: 0.55, tech: 'Food preservation' },
+        { name: 'Well bucket', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['water'], cost: '12 biomass 2 metal 2e', inputCost: 14, time: 0.9, effect: 'raises Water drawing yield', state: 'locked', reach: 0.52, tech: 'Spring well' },
+        { name: 'Clay crock', type: 'storage', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '14 minerals 4 fuel 2e', inputCost: 18, time: 1.0, effect: 'stores prepared Food in sealed lots', state: 'locked', reach: 0.50, tech: 'Pottery' },
+        { name: 'Saw pit', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['biomass'], cost: '20 biomass 6 metal 4e', inputCost: 26, time: 2.0, effect: 'turns timber into regular boards', state: 'locked', reach: 0.48, tech: 'Sawmill' },
+        { name: 'Timber wall', type: 'material', inputs: ['biomass'], outputs: ['comfort'], cost: '34 biomass 5e', inputCost: 34, time: 2.7, effect: 'shelters a larger common boundary', state: 'locked', reach: 0.46, tech: 'Timber framing' },
+        { name: 'Lime kiln', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '26 minerals 12 fuel 5e', inputCost: 38, time: 3.0, effect: 'produces mortar and whitewash', state: 'locked', reach: 0.44, tech: 'Lime burning' },
+        { name: 'Weaver frame', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['comfort'], cost: '22 biomass 4 metal 4e', inputCost: 26, time: 2.2, effect: 'turns fiber into regular cloth', state: 'locked', reach: 0.41, tech: 'Loom & ropewalk' },
+        { name: 'Bakery oven', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '24 minerals 10 fuel 5e', inputCost: 34, time: 2.8, effect: 'bakes Food in settlement batches', state: 'locked', reach: 0.39, tech: 'Food processing' },
+        { name: 'Apiary', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '26 biomass 4e', inputCost: 26, time: 2.4, effect: 'adds honey and wax yield', state: 'locked', reach: 0.37, tech: 'Apiculture' },
+        { name: 'Tannery', type: 'material', inputs: ['water', 'biomass'], outputs: ['comfort'], cost: '18 water 24 biomass 6e', inputCost: 42, time: 3.3, effect: 'turns hides into durable leather', state: 'locked', reach: 0.34, tech: 'Tanning' },
+        { name: 'Sail loft', type: 'tool', inputs: ['biomass'], outputs: ['transport'], cost: '36 biomass 6e', inputCost: 36, time: 3.2, effect: 'equips boats for longer routes', state: 'locked', reach: 0.32, tech: 'Fishing boats' },
+        { name: 'Waterwheel', type: 'generator', inputs: ['biomass', 'metal'], outputs: ['power'], cost: '42 biomass 12 metal 7e', inputCost: 54, time: 4.1, effect: 'turns stream flow into shaft power', state: 'locked', reach: 0.30, tech: 'Water power' },
+        { name: 'Canal lock', type: 'transport', inputs: ['minerals', 'biomass', 'metal'], outputs: ['transport'], cost: '48 minerals 28 biomass 14 metal 9e', inputCost: 90, time: 6.0, effect: 'moves barges between water levels', state: 'locked', reach: 0.27, tech: 'Canal engineering' },
+        { name: 'Warehouse', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['storage'], cost: '44 biomass 32 minerals 8e', inputCost: 76, time: 5.0, effect: 'consolidates settlement trade stock', state: 'locked', reach: 0.25, tech: 'Warehousing' },
+        { name: 'Seed drill', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['food'], cost: '22 metal 18 biomass 6e', inputCost: 40, time: 3.4, effect: 'reduces seed and planting labor', state: 'locked', reach: 0.23, tech: 'Seed drill' },
+        { name: 'Printing press', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['comfort'], cost: '30 metal 24 biomass 8e', inputCost: 54, time: 4.6, effect: 'duplicates records and instructions', state: 'locked', reach: 0.21, tech: 'Printing press' },
+        { name: 'Infirmary', type: 'comfort', inputs: ['biomass', 'minerals', 'water'], outputs: ['comfort'], cost: '34 biomass 24 minerals 12 water 8e', inputCost: 70, time: 4.5, effect: 'concentrates care and recovery', state: 'locked', reach: 0.20, tech: 'Sanitation' },
+        { name: 'Street lamp', type: 'comfort', inputs: ['metal', 'fuel'], outputs: ['comfort'], cost: '18 metal 14 fuel 5e', inputCost: 32, time: 2.7, effect: 'extends safe movement after dark', state: 'locked', reach: 0.19, tech: 'Gas lighting' },
+        { name: 'Brewery', type: 'comfort', inputs: ['food', 'water', 'fuel'], outputs: ['comfort'], cost: '22 food 18 water 12 fuel 7e', inputCost: 52, time: 4.0, effect: 'turns grain into a storable drink', state: 'locked', reach: 0.18, tech: 'Brewing' },
+        { name: 'Foundry', type: 'generator', inputs: ['minerals', 'metal', 'fuel'], outputs: ['metal'], cost: '40 minerals 24 metal 20 fuel 10e', inputCost: 84, time: 6.2, effect: 'casts repeatable Metal components', state: 'locked', reach: 0.17, tech: 'Foundry' },
+        { name: 'Machine shop', type: 'tool', inputs: ['metal', 'fuel'], outputs: ['tools'], cost: '46 metal 18 fuel 11e', inputCost: 64, time: 6.5, effect: 'makes interchangeable machine parts', state: 'locked', reach: 0.16, tech: 'Machine tools' },
+        { name: 'Rail cart', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '38 metal 22 biomass 9e', inputCost: 60, time: 5.4, effect: 'moves heavy lots on fixed rails', state: 'locked', reach: 0.15, tech: 'Rail transport' },
+        { name: 'Telegraph station', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '34 metal 20 biomass 9e', inputCost: 54, time: 5.0, effect: 'coordinates distant market messages', state: 'locked', reach: 0.14, tech: 'Telegraphy' },
+        { name: 'Pump house', type: 'generator', inputs: ['metal', 'fuel', 'minerals'], outputs: ['water'], cost: '32 metal 20 fuel 18 minerals 9e', inputCost: 70, time: 5.1, effect: 'pressurizes Water for a district', state: 'locked', reach: 0.13, tech: 'Pumping station' },
+        { name: 'Cold store', type: 'storage', inputs: ['metal', 'fuel', 'minerals'], outputs: ['food'], cost: '36 metal 24 fuel 20 minerals 10e', inputCost: 80, time: 5.8, effect: 'slows Food loss at market scale', state: 'locked', reach: 0.12, tech: 'Refrigeration' },
+        { name: 'Assembly hall', type: 'comfort', inputs: ['biomass', 'minerals'], outputs: ['comfort'], cost: '52 biomass 38 minerals 10e', inputCost: 90, time: 6.0, effect: 'gives collective decisions a place', state: 'locked', reach: 0.11, tech: 'Civic administration' },
+        { name: 'Cement mixer', type: 'material', inputs: ['minerals', 'metal', 'fuel'], outputs: ['minerals'], cost: '42 minerals 18 metal 12 fuel 9e', inputCost: 72, time: 4.9, effect: 'mixes structural cement consistently', state: 'locked', reach: 0.10, tech: 'Portland cement' },
         { name: 'Leaf bed', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '8 biomass 2e', inputCost: 8, time: 0.4, effect: 'raises vigor ceiling', state: 'owned', reach: 1, owned: 1 },
         { name: 'Root cellar', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '8 biomass 10 minerals 4e', inputCost: 18, time: 1.4, effect: 'keeps Food twice as long', state: 'owned', reach: 1, owned: 1 }
       ];
@@ -607,7 +609,6 @@
 
       function recipeStateMarkup(recipe) {
         if (recipe.state === 'ready') return '<span class="state-copy state-ready">ready</span>';
-        if (recipe.state === 'blocked') return `<span class="state-copy state-blocked">needs ${escapeMarkup(recipe.tech)}</span>`;
         if (recipe.state === 'owned') return `<span class="state-copy">owned ×${recipe.owned || 1}</span>`;
         return `${reachMeter(recipe.reach)}<span class="state-copy">${escapeMarkup(recipe.stateCopy || 'out of reach')}</span>`;
       }
@@ -675,7 +676,7 @@
         if (!candidates) return false;
         return options.some(option => {
           const normalized = option === 'built' ? 'owned' : option;
-          if (field === 'state' && normalized === 'in-reach') return state === 'ready' || ((state === 'reach' || state === 'blocked') && recipe.reach >= 0.5);
+          if (field === 'state' && normalized === 'in-reach') return state === 'ready' || (state === 'reach' && recipe.reach >= 0.5);
           return candidates.some(candidate => candidate.toLowerCase().includes(normalized));
         });
       }
@@ -751,14 +752,15 @@
         const defaultRows = new Set(ordered.filter(row => {
           const recipe = recipeByRow.get(row);
           const state = row.dataset.state;
-          return state !== 'owned' && (state === 'ready' || ((state === 'reach' || state === 'blocked') && recipe.reach >= 0.5));
+          return state !== 'owned' && (state === 'ready' || (state === 'reach' && recipe.reach >= 0.5));
         }));
         let visible = 0;
         rows.forEach(row => {
           const recipe = recipeByRow.get(row);
           const always = row === buildingRow;
+          const locked = row.dataset.state === 'locked';
           const queryVisible = matchesBuildQuery(recipe, row);
-          row.hidden = !(always || (hasQuery ? queryVisible : defaultRows.has(row)));
+          row.hidden = locked ? !always : !(always || (hasQuery ? queryVisible : defaultRows.has(row)));
           if (!row.hidden) visible += 1;
         });
         summary.textContent = `${visible} of ${rows.length} recipes shown`;
@@ -847,9 +849,11 @@
       window.setPrototypeRecipeUnlocked = (name, unlocked) => {
         const recipe = buildRecipes.find(candidate => candidate.name === name);
         if (!recipe?.tech) return false;
-        recipe.state = unlocked ? 'ready' : 'blocked';
+        const wasLocked = recipe.state === 'locked';
+        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'locked';
         renderRecipeState(recipe);
         applyBuildView();
+        if (unlocked && wasLocked) window.addPrototypeLog?.(`A new recipe is within reach: ${recipe.name}.`);
         return true;
       };
 
@@ -901,8 +905,8 @@
         document.querySelector('#market-copy').textContent = actThree ? 'standing trading floor · permanent books · open market.' : '9 lots · water, fuel, metal, minerals, goods.';
         document.querySelector('#market-action').textContent = actThree ? 'ENTER →' : 'TRADE →';
         document.querySelector('#market-dialog-kicker').textContent = actThree ? 'EXCHANGE · PERMANENT MARKET' : 'MERCHANT · MARKET OPEN 2.4 DAYS';
-        document.querySelector('#merchant-title').textContent = actThree ? 'What will the floor clear?' : 'What will you buy or sell?';
-        document.querySelector('#merchant-stock-title').textContent = actThree ? 'EXCHANGE OFFERS' : 'MERCHANT STOCK';
+        document.querySelector('#merchant-title').textContent = actThree ? 'What will the floor clear?' : 'What will you trade?';
+        document.querySelector('#merchant-stock-title').textContent = actThree ? 'EXCHANGE OFFERS' : 'THEIR STOCK';
         document.querySelector('#market-dialog-close').setAttribute('aria-label', actThree ? 'Close Exchange' : 'Close merchant');
         document.querySelector('#market-dialog-note').textContent = actThree ? 'Permanent venue · posted Coin prices · settlement stock and outside offers.' : 'Coin prices · finite stock · limited market time. Later lots may be repriced.';
       }
@@ -1041,7 +1045,7 @@
         if (!offer) return;
         selectedOffer = offer;
         offers.forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === offer)));
-        document.querySelector('#preview-give-label').textContent = tradeMode === 'buy' ? 'YOU PAY' : 'YOU SELL';
+        document.querySelector('#preview-give-label').textContent = tradeMode === 'buy' ? 'YOU PAY' : 'YOU GIVE';
         document.querySelector('#preview-receive-label').textContent = 'YOU RECEIVE';
         document.querySelector('#preview-give').textContent = offer.dataset.cost;
         document.querySelector('#preview-receive').textContent = offer.dataset.receive;

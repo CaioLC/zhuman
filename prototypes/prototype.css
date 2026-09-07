@@ -155,13 +155,13 @@ button:disabled {
 
 .stockline {
   gap: 9px;
-  font-size: 19px;
+  font-size: 17px;
   color: var(--fg);
 }
 
 .stockline.compact {
   gap: 8px;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .stockline .sep,
@@ -171,6 +171,35 @@ button:disabled {
 
 .stock-label {
   color: var(--dim);
+}
+
+.lbl-full {
+  display: none;
+}
+
+.stock-token:hover .lbl-abbr,
+.stock-token:focus-within .lbl-abbr {
+  display: none;
+}
+
+.stock-token:hover .lbl-full,
+.stock-token:focus-within .lbl-full {
+  display: inline;
+}
+
+.stock-token:hover .stock-label,
+.stock-token:focus-within .stock-label {
+  color: var(--fg);
+}
+
+/* Act II: also enlarge the token on hover for legibility of the fuller word. */
+.stockline.compact .stock-token {
+  transition: font-size 90ms ease-out;
+}
+
+.stockline.compact .stock-token:hover,
+.stockline.compact .stock-token:focus-within {
+  font-size: 17px;
 }
 
 .stock-value {
@@ -194,12 +223,33 @@ button:disabled {
   justify-content: flex-end;
   gap: 8px;
   color: var(--dim);
-  font-size: 19px;
+  font-size: 17px;
 }
 
 .runline strong {
   color: var(--fg);
   font-weight: 400;
+}
+
+.energy-rate {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-right: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.energy-rate > span[aria-hidden="true"]:first-child {
+  margin-right: 3px;
+}
+
+.energy-rate .energy-gen {
+  color: var(--acc);
+}
+
+.energy-rate .energy-use {
+  color: var(--warn);
 }
 
 .text-button,
@@ -487,7 +537,6 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.passerby-strip,
 .merchant-strip,
 .activity-strip {
   display: grid;
@@ -500,7 +549,6 @@ button:disabled {
   font-size: 12px;
 }
 
-.passerby-strip,
 .merchant-strip {
   margin: 0 0 6px;
 }
@@ -537,12 +585,10 @@ button:disabled {
   color: var(--warn);
 }
 
-.passerby-strip .signal,
 .merchant-strip .signal {
   color: var(--warn);
 }
 
-.passerby-strip strong,
 .merchant-strip strong {
   overflow: hidden;
   color: var(--fg);
@@ -1136,6 +1182,146 @@ button:disabled {
 .shelter-requirements strong {
   color: var(--danger);
   font-weight: 400;
+}
+
+/* Shared collapsible milestone goal card (Act I shelter, Act II exchange base). */
+.milestone-goal {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+  border-left: 2px solid var(--danger);
+  background: linear-gradient(90deg, rgb(185 88 74 / 8%), transparent 76%);
+}
+
+.milestone-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 34px;
+  padding: 3px 5px 3px 10px;
+}
+
+.milestone-disclosure {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  color: var(--fg);
+  background: var(--bg);
+  text-align: left;
+}
+
+.milestone-disclosure:hover,
+.milestone-disclosure:focus-visible {
+  color: var(--acc);
+  outline: 0;
+}
+
+.milestone-disclosure strong {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.milestone-readiness,
+.milestone-compact,
+.milestone-more {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milestone-readiness {
+  justify-self: start;
+  color: var(--danger);
+}
+
+.milestone-compact,
+.milestone-more {
+  color: var(--dim);
+}
+
+.milestone-bar > .primary-action {
+  min-width: 132px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+.milestone-details {
+  display: grid;
+  gap: 4px;
+  padding: 6px 10px 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.milestone-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.milestone-kicker {
+  color: var(--acc);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.milestone-cost {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.milestone-details > p {
+  margin: 0;
+  color: var(--fg);
+  font-size: 10px;
+}
+
+.milestone-requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 13px;
+  color: var(--line-2);
+  font-size: 8.5px;
+}
+
+.milestone-requirements strong {
+  color: var(--danger);
+  font-weight: 400;
+}
+
+.milestone-requirements strong.is-met {
+  color: var(--good);
+}
+
+.milestone-action-row {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.milestone-action-row > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milestone-goal.is-ready,
+.milestone-goal.is-done {
+  border-left-color: var(--good);
+  background: linear-gradient(90deg, rgb(119 156 113 / 11%), transparent 76%);
+}
+
+.milestone-goal.is-ready .milestone-readiness,
+.milestone-goal.is-done .milestone-readiness {
+  color: var(--good);
 }
 .exchange-goal {
   display: grid;
@@ -2206,10 +2392,6 @@ button:disabled {
 .act-two .stockline.compact {
   gap: 4px;
   font-size: 10px;
-}
-
-.act-two .runline {
-  font-size: 17px;
 }
 
 .act-two .surface-nav {
