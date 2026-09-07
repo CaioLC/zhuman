@@ -1244,25 +1244,6 @@ button:disabled {
   gap: 9px;
 }
 
-.hybrid-template-select {
-  width: 116px;
-  height: 25px;
-  padding: 2px 5px;
-  border: 1px solid var(--line-2);
-  border-radius: 0;
-  outline: 0;
-  color: var(--dim);
-  background: var(--bg);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.hybrid-template-select:hover,
-.hybrid-template-select:focus-visible {
-  border-color: var(--dim);
-  color: var(--fg);
-}
-
 .search-box {
   width: 136px;
   height: 25px;
@@ -1357,18 +1338,12 @@ button:disabled {
   text-align: center;
 }
 
-.sector-label,
-.rim-label {
+.sector-label {
   fill: #abb0b8;
   font: 9px var(--font);
   letter-spacing: 0.075em;
   pointer-events: none;
   text-anchor: middle;
-}
-
-.rim-label {
-  fill: #7f858e;
-  font-size: 8px;
 }
 
 .hex-tile {
@@ -1465,7 +1440,7 @@ button:disabled {
 }
 
 .resource-rail {
-  display: none;
+  display: inline;
   fill: none;
   stroke-width: 2.2;
   stroke-linecap: round;
@@ -1474,11 +1449,6 @@ button:disabled {
   pointer-events: none;
   vector-effect: non-scaling-stroke;
   transition: opacity 110ms linear;
-}
-
-.hex-board[data-hybrid-rails="true"] .hybrid-rail,
-.hex-board[data-pure-rails="true"] .pure-rail {
-  display: inline;
 }
 
 .tech-tile.locked .resource-rail {
@@ -1929,10 +1899,6 @@ button:disabled {
   .board-toolbar {
     justify-content: flex-start;
     overflow-x: auto;
-  }
-
-  .hybrid-template-select {
-    width: 104px;
   }
 
   .search-box {

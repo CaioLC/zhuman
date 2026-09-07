@@ -209,14 +209,13 @@
               <div class="structure-title"><h1 id="structure-title">STRUCTURE</h1><p>What exists, and what does it take?</p></div>
               <div class="board-toolbar" aria-label="Research board controls">
                 <div class="control-group" data-board-filter-group><button class="chip" type="button" aria-pressed="false" data-board-filter="researched">researched</button><button class="chip" type="button" aria-pressed="false" aria-label="Available and researched" data-board-filter="available">available</button><button class="chip" type="button" aria-pressed="true" data-board-filter="all">all</button></div>
-                <select class="hybrid-template-select" id="hybrid-template-select" aria-label="Tile rendering template"></select>
                 <input class="search-box" id="board-search" type="search" placeholder="find a technology" aria-label="Find a technology">
               </div>
             </header>
             <div class="structure-layout">
               <div class="board-pane" id="board-pane">
                 <svg class="hex-board" id="structure-board" viewBox="0 0 620 620" role="group" aria-label="Act II research board. Ring zero is a neutral foundation hex; rings one through four contain sixty technologies.">
-                  <defs id="board-defs"></defs><g id="board-camera"><g id="board-tiles"></g><g id="board-labels" aria-hidden="true"></g></g>
+                  <g id="board-camera"><g id="board-tiles"></g><g id="board-labels" aria-hidden="true"></g></g>
                 </svg>
                 <div class="board-view-controls" role="group" aria-label="Board zoom and pan controls"><button class="board-view-button" type="button" data-board-zoom-out aria-label="Zoom out">-</button><output class="board-zoom-level" id="board-zoom-level" aria-label="Board zoom" aria-live="polite">100%</output><button class="board-view-button" type="button" data-board-zoom-in aria-label="Zoom in">+</button><button class="board-view-button reset" type="button" data-board-reset aria-label="Reset board pan and zoom">reset</button></div>
                 <div class="board-tooltip" id="board-tooltip" role="tooltip" hidden></div>
@@ -227,7 +226,7 @@
             </div>
           </section>
           <footer class="structure-footer">
-            <div class="legend-row" aria-label="Resource palette, material-reference dots, and hybrid template"><span><i class="legend-dot" style="color:var(--resource-food)"></i>FOOD</span><span><i class="legend-dot" style="color:var(--resource-water)"></i>WATER</span><span><i class="legend-dot" style="color:var(--resource-fuel)"></i>FUEL</span><span><i class="legend-dot" style="color:var(--resource-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--resource-minerals)"></i>MINERALS</span><span><i class="legend-dot" style="color:var(--resource-biomass)"></i>BIOMASS</span><span id="hybrid-template-legend">tiles = rails all</span></div>
+            <div class="legend-row" aria-label="Resource palette and material-reference dots"><span><i class="legend-dot" style="color:var(--resource-food)"></i>FOOD</span><span><i class="legend-dot" style="color:var(--resource-water)"></i>WATER</span><span><i class="legend-dot" style="color:var(--resource-fuel)"></i>FUEL</span><span><i class="legend-dot" style="color:var(--resource-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--resource-minerals)"></i>MINERALS</span><span><i class="legend-dot" style="color:var(--resource-biomass)"></i>BIOMASS</span></div>
             <div class="board-hints"><span id="structure-status">Select an available or researched technology</span><span>Wheel zoom / drag pan</span><span>Arrows move · Esc clears</span></div>
           </footer>
         </section>
@@ -568,14 +567,6 @@
       ];
       const eras = { 1: 'CRUDE PRODUCTION', 2: 'SETTLEMENT WORKS', 3: 'CRAFT', 4: 'EARLY INDUSTRIAL' };
       const params = new URLSearchParams(location.search);
-      const hybridTemplates = Object.freeze({
-        'rails-all': Object.freeze({ label: 'rails all', pureBody: 'muted-resource', hybridBody: 'muted-midpoint', pureRails: true, hybridRails: true }),
-        rails: Object.freeze({ label: 'rails', pureBody: 'resource', hybridBody: 'muted-midpoint', pureRails: false, hybridRails: true }),
-        blend: Object.freeze({ label: 'blend', pureBody: 'resource', hybridBody: 'gradient', pureRails: false, hybridRails: false })
-      });
-      const requestedHybridTemplate = params.get('hybrid') || 'rails-all';
-      let activeHybridTemplate = Object.hasOwn(hybridTemplates, requestedHybridTemplate) ? requestedHybridTemplate : 'rails-all';
-
       const definitions = [
         { q: 1, r: 0, name: 'Foraging', short: 'FORAGE', effect: 'Establishes Food gathering at Act II population scale without re-unlocking the personal Forage action.', cost: {}, unlocks: ['Food production'] },
         { q: 0, r: 1, name: 'Spring well', short: 'WELL', effect: 'Establishes local fresh-water production.', cost: { food: 4, biomass: 8 }, unlocks: ['Water production'] },
@@ -643,7 +634,6 @@
       ];
 
       const svg = document.querySelector('#structure-board');
-      const defs = document.querySelector('#board-defs');
       const camera = document.querySelector('#board-camera');
       const tileGroup = document.querySelector('#board-tiles');
       const labelGroup = document.querySelector('#board-labels');
@@ -653,8 +643,6 @@
       const zoomInButton = document.querySelector('[data-board-zoom-in]');
       const resetBoardButton = document.querySelector('[data-board-reset]');
       const zoomLevelOutput = document.querySelector('#board-zoom-level');
-      const hybridTemplateSelect = document.querySelector('#hybrid-template-select');
-      const hybridTemplateLegend = document.querySelector('#hybrid-template-legend');
       const detail = document.querySelector('#structure-detail');
       const statusOutput = document.querySelector('#structure-status');
       const balances = window.prototypeResources;
@@ -868,81 +856,10 @@
         };
       }
 
-      function hybridGradientId(tile) {
-        const encode = value => value < 0 ? `n${Math.abs(value)}` : `p${value}`;
-        return `hybrid-${encode(tile.q)}-${encode(tile.r)}`;
-      }
-
-      function tileFill(tile, templateName = activeHybridTemplate) {
-        const template = hybridTemplates[templateName];
-        if (!template) throw new Error(`Unknown tile template ${templateName}`);
-        const bodyMode = tile.kind === 'pure' ? template.pureBody : template.hybridBody;
-        if (bodyMode === 'resource') return resources[tile.resources[0]].color;
-        if (bodyMode === 'gradient' && tile.kind === 'hybrid') return `url(#${hybridGradientId(tile)})`;
-        if (bodyMode === 'muted-resource' && tile.kind === 'pure') return blendHexColors(resources[tile.resources[0]].color, '#555b63', 0.28);
-        if (bodyMode === 'muted-midpoint' && tile.kind === 'hybrid') {
-          const midpoint = mixHexColors(resources[tile.resources[0]].color, resources[tile.resources[1]].color);
-          return blendHexColors(midpoint, '#555b63', 0.28);
-        }
-        throw new Error(`Unsupported ${tile.kind} body mode ${bodyMode}`);
-      }
-
-      function makeGradients() {
-        tiles.filter(tile => tile.kind === 'hybrid').forEach(tile => {
-          const [firstResource, secondResource] = tile.resources;
-          const radialX = tile.x - center.x;
-          const radialY = tile.y - center.y;
-          const radialLength = Math.hypot(radialX, radialY);
-          const tangentX = -radialY / radialLength;
-          const tangentY = radialX / radialLength;
-          const gradient = node('linearGradient', {
-            id: hybridGradientId(tile),
-            gradientUnits: 'userSpaceOnUse',
-            x1: (tile.x - tangentX * visibleHexSize).toFixed(2),
-            y1: (tile.y - tangentY * visibleHexSize).toFixed(2),
-            x2: (tile.x + tangentX * visibleHexSize).toFixed(2),
-            y2: (tile.y + tangentY * visibleHexSize).toFixed(2),
-            'data-first-resource': resources[firstResource].key,
-            'data-second-resource': resources[secondResource].key
-          });
-          gradient.append(
-            node('stop', { offset: '0%', 'stop-color': resources[firstResource].color }),
-            node('stop', { offset: '32%', 'stop-color': resources[firstResource].color }),
-            node('stop', { offset: '50%', 'stop-color': mixHexColors(resources[firstResource].color, resources[secondResource].color) }),
-            node('stop', { offset: '68%', 'stop-color': resources[secondResource].color }),
-            node('stop', { offset: '100%', 'stop-color': resources[secondResource].color })
-          );
-          defs.append(gradient);
-        });
-      }
-
-      function setHybridTemplate(name, updateUrl = true) {
-        if (!Object.hasOwn(hybridTemplates, name)) return false;
-        activeHybridTemplate = name;
-        svg.dataset.hybridTemplate = name;
-        svg.dataset.hybridRails = String(hybridTemplates[name].hybridRails);
-        svg.dataset.pureRails = String(hybridTemplates[name].pureRails);
-        tiles.filter(tile => tile.shape).forEach(tile => tile.shape.setAttribute('fill', tileFill(tile, name)));
-        hybridTemplateSelect.value = name;
-        hybridTemplateLegend.textContent = `tiles = ${hybridTemplates[name].label}`;
-        if (updateUrl) {
-          const nextUrl = new URL(location.href);
-          nextUrl.searchParams.set('hybrid', name);
-          history.replaceState(null, '', nextUrl);
-        }
-        dispatchEvent(new CustomEvent('prototype-hybrid-template-changed', { detail: { name } }));
-        return true;
-      }
-
-      function setupHybridTemplateControl() {
-        Object.entries(hybridTemplates).forEach(([name, template]) => {
-          const option = document.createElement('option');
-          option.value = name;
-          option.textContent = template.label;
-          hybridTemplateSelect.append(option);
-        });
-        hybridTemplateSelect.addEventListener('change', () => setHybridTemplate(hybridTemplateSelect.value));
-        setHybridTemplate(activeHybridTemplate, false);
+      function tileFill(tile) {
+        if (tile.kind === 'pure') return blendHexColors(resources[tile.resources[0]].color, '#555b63', 0.28);
+        const midpoint = mixHexColors(resources[tile.resources[0]].color, resources[tile.resources[1]].color);
+        return blendHexColors(midpoint, '#555b63', 0.28);
       }
 
       function drawBackdrop() {
@@ -953,9 +870,6 @@
           label.textContent = resources[resource].name.toUpperCase();
           labelGroup.append(label);
         }
-        const rim = node('text', { class: 'rim-label', x: center.x, y: 612 });
-        rim.textContent = 'ACT II · RINGS 0–4 · 61 LOGICAL HEXES';
-        labelGroup.append(rim);
       }
 
       function buildHub() {
@@ -1224,11 +1138,9 @@
         });
       }
 
-      makeGradients();
       drawBackdrop();
       buildHub();
       tiles.forEach(createTechnologyTile);
-      setupHybridTemplateControl();
       updateAllStates();
       syncBuildUnlocks();
       setupBoardCamera();
@@ -1264,10 +1176,7 @@
         zoomBoard,
         panBoard,
         resetBoardView,
-        boardViewState,
-        hybridTemplates,
-        setHybridTemplate,
-        activeHybridTemplate: () => activeHybridTemplate
+        boardViewState
       };
     })();
   </script>
