@@ -149,9 +149,21 @@ Each technology hex has exactly one progression state:
 |**Available**|Resource color at inviting mid-high opacity (~66%); label visible; interactive; subtle pulse optional|
 |**Researched**|Resource color at full opacity; label visible; interactive for inspection; thin dark outline in the same color family|
 
-Pure hexes use a solid fill. Give every hybrid hex its own smooth user-space gradient between its two adjacent domain colors. Orient the gradient on the local tangent of the tile's ring around the board center: its midpoint seam is radial to that center, the `0%` side faces the first resource's centered spoke, and the `100%` side faces the second. This makes the visible seam rotate continuously around the outer rings instead of preserving one diagonal per resource pair. Hold the endpoint colors through `32%` and from `68%`, blending smoothly between them through the computed midpoint color; this keeps the rotation legible without reverting to a hard split. Do not reuse one fixed angle for an entire resource pair. The `HYBRID` detail tag and tooltip remain the textual cue when the tile is inspectable.
+Pure hexes use a solid fill. Hybrid rendering is selected through a named visual template; templates must not alter technology identity, progression state, selection, filtering, camera state, costs, or material dots.
 
-Every technology tile carries compact material-reference dots near its lower edge. These are an at-a-glance composition cue, not a replacement for the complete authored cost shown in the detail pane. Domain resources appear first; when an advanced tile needs another dot, use the first distinct resource in its authored research cost:
+|Template id|Body|Resource treatment|Purpose|
+|-|-|-|-|
+|`rails-all` (default)|Muted resource body for pure; muted midpoint for hybrid|One full six-edge pure rail; two three-edge hybrid rails|Consistent rail language across every technology tile|
+|`rails`|Solid resource body for pure; muted midpoint for hybrid|No pure rail; two three-edge hybrid rails|Hybrid-only rail comparison|
+|`blend`|Solid resource body for pure; smooth two-color hybrid gradient|No rails|Retained comparison baseline|
+
+In `rails-all`, every pure technology receives one inset closed rail covering all six edges in its resource color. Every hybrid retains two rails: each domain resource owns exactly three contiguous edges by nearest radial resource direction, and the pair partitions all six edges without overlap. Pure bodies are toned toward neutral so a same-color rail remains legible; hybrid bodies use the toned resource midpoint. Ring 0 stays neutral and has no rail.
+
+The `rails` template preserves full-color pure bodies without pure rails while keeping the same hybrid body and split rails. The `blend` template preserves full-color pure bodies and tile-specific hybrid gradients; each gradient's local tangent makes its midpoint seam radial to the board center, with endpoint colors held through `32%`/`68%`.
+
+Populate the STRUCTURE toolbar selector from the template registry. `?hybrid=rails-all`, `?hybrid=rails`, and `?hybrid=blend` select shareable initial states. `window.prototypeBoard.setHybridTemplate(id)` switches existing nodes in place, and `activeHybridTemplate()` reports the current id. Adding a future option should extend the registry and its SVG/CSS treatment rather than replace another template.
+
+The `HYBRID` detail tag and tooltip remain textual cues in every template. Every technology tile carries compact material-reference dots near its lower edge. These are an at-a-glance composition cue, not a replacement for the complete authored cost shown in the detail pane. Domain resources appear first; when an advanced tile needs another dot, use the first distinct resource in its authored research cost:
 
 |Ring|Pure tile dots|Hybrid tile dots|
 |-|-|-|
@@ -160,7 +172,7 @@ Every technology tile carries compact material-reference dots near its lower edg
 |3|2|2|
 |4|2|3|
 
-Use this equal-lightness resource palette so individual fills remain distinct and adjacent hybrid gradients interpolate without a harsh luminance seam:
+Use this equal-lightness resource palette so pure fills, hybrid rails, dots, and retained blend gradients remain distinct without harsh luminance seams:
 
 |Resource|Color|
 |-|-|
@@ -403,7 +415,10 @@ Hybrid (`k = 1..3`, low `k` nearer the first resource):
 - Ring `n` has exactly 6 pure and `6(n - 1)` hybrid hexes.
 - The complete Act II board is rings 0–4 and contains exactly 61 logical hexes; it exposes no placeholder rings for Act III.
 - Hybrid identity comes from exact axial coordinates, not screen-angle rounding.
-- All 36 hybrids use unique smooth two-color gradients tangent to their ring position, so each midpoint seam is radial to the board center and visibly rotates around the outer rings. Endpoint colors hold through `32%`/`68%`; no hard split remains. The textual `HYBRID` detail/tooltip cue remains.
+- Hybrid templates are switchable through the generated toolbar selector, `?hybrid=<id>`, and the public board API without rebuilding tiles or changing progression/camera state.
+- `rails-all` is the default: 24 pure technologies each have one full six-edge rail, while 36 hybrids each have two three-edge rails, for 96 resource-rail paths total; R0 has none.
+- `rails` keeps only the 72 hybrid rail paths visible and restores unmuted pure bodies.
+- `blend` hides all rails, restores unmuted pure bodies, and gives all 36 hybrids their unique tangent gradients with `32%`/`68%` held endpoints and radial midpoint seams.
 - Material-reference markers follow the exact count table: ring 1 = 6 dots total, ring 2 = 18, ring 3 = 36, and ring 4 = 66; pure ring-3/ring-4 tiles have two, while ring-4 hybrids have three.
 - Dashed stage-circle guides and `R0`/`R1`-`R4` board overlays are absent; perimeter resource labels and the bottom board summary remain.
 

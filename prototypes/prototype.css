@@ -1244,6 +1244,25 @@ button:disabled {
   gap: 9px;
 }
 
+.hybrid-template-select {
+  width: 116px;
+  height: 25px;
+  padding: 2px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  outline: 0;
+  color: var(--dim);
+  background: var(--bg);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.hybrid-template-select:hover,
+.hybrid-template-select:focus-visible {
+  border-color: var(--dim);
+  color: var(--fg);
+}
+
 .search-box {
   width: 136px;
   height: 25px;
@@ -1443,6 +1462,36 @@ button:disabled {
 .tech-tile.researched .hex-label {
   fill: #15181d;
   font-weight: 700;
+}
+
+.resource-rail {
+  display: none;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+  transition: opacity 110ms linear;
+}
+
+.hex-board[data-hybrid-rails="true"] .hybrid-rail,
+.hex-board[data-pure-rails="true"] .pure-rail {
+  display: inline;
+}
+
+.tech-tile.locked .resource-rail {
+  opacity: 0.42;
+}
+
+.tech-tile.available .resource-rail {
+  opacity: 0.9;
+}
+
+.tech-tile.researched .resource-rail,
+.tech-tile.selected .resource-rail {
+  opacity: 1;
 }
 
 .material-marker {
@@ -1880,6 +1929,10 @@ button:disabled {
   .board-toolbar {
     justify-content: flex-start;
     overflow-x: auto;
+  }
+
+  .hybrid-template-select {
+    width: 104px;
   }
 
   .search-box {

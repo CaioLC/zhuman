@@ -209,6 +209,7 @@
               <div class="structure-title"><h1 id="structure-title">STRUCTURE</h1><p>What exists, and what does it take?</p></div>
               <div class="board-toolbar" aria-label="Research board controls">
                 <div class="control-group" data-board-filter-group><button class="chip" type="button" aria-pressed="false" data-board-filter="researched">researched</button><button class="chip" type="button" aria-pressed="false" aria-label="Available and researched" data-board-filter="available">available</button><button class="chip" type="button" aria-pressed="true" data-board-filter="all">all</button></div>
+                <select class="hybrid-template-select" id="hybrid-template-select" aria-label="Tile rendering template"></select>
                 <input class="search-box" id="board-search" type="search" placeholder="find a technology" aria-label="Find a technology">
               </div>
             </header>
@@ -226,7 +227,7 @@
             </div>
           </section>
           <footer class="structure-footer">
-            <div class="legend-row" aria-label="Resource palette, material-reference dots, and hybrid blends"><span><i class="legend-dot" style="color:var(--resource-food)"></i>FOOD</span><span><i class="legend-dot" style="color:var(--resource-water)"></i>WATER</span><span><i class="legend-dot" style="color:var(--resource-fuel)"></i>FUEL</span><span><i class="legend-dot" style="color:var(--resource-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--resource-minerals)"></i>MINERALS</span><span><i class="legend-dot" style="color:var(--resource-biomass)"></i>BIOMASS</span><span>dots = materials / blend = hybrid</span></div>
+            <div class="legend-row" aria-label="Resource palette, material-reference dots, and hybrid template"><span><i class="legend-dot" style="color:var(--resource-food)"></i>FOOD</span><span><i class="legend-dot" style="color:var(--resource-water)"></i>WATER</span><span><i class="legend-dot" style="color:var(--resource-fuel)"></i>FUEL</span><span><i class="legend-dot" style="color:var(--resource-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--resource-minerals)"></i>MINERALS</span><span><i class="legend-dot" style="color:var(--resource-biomass)"></i>BIOMASS</span><span id="hybrid-template-legend">tiles = rails all</span></div>
             <div class="board-hints"><span id="structure-status">Select an available or researched technology</span><span>Wheel zoom / drag pan</span><span>Arrows move · Esc clears</span></div>
           </footer>
         </section>
@@ -567,6 +568,13 @@
       ];
       const eras = { 1: 'CRUDE PRODUCTION', 2: 'SETTLEMENT WORKS', 3: 'CRAFT', 4: 'EARLY INDUSTRIAL' };
       const params = new URLSearchParams(location.search);
+      const hybridTemplates = Object.freeze({
+        'rails-all': Object.freeze({ label: 'rails all', pureBody: 'muted-resource', hybridBody: 'muted-midpoint', pureRails: true, hybridRails: true }),
+        rails: Object.freeze({ label: 'rails', pureBody: 'resource', hybridBody: 'muted-midpoint', pureRails: false, hybridRails: true }),
+        blend: Object.freeze({ label: 'blend', pureBody: 'resource', hybridBody: 'gradient', pureRails: false, hybridRails: false })
+      });
+      const requestedHybridTemplate = params.get('hybrid') || 'rails-all';
+      let activeHybridTemplate = Object.hasOwn(hybridTemplates, requestedHybridTemplate) ? requestedHybridTemplate : 'rails-all';
 
       const definitions = [
         { q: 1, r: 0, name: 'Foraging', short: 'FORAGE', effect: 'Establishes Food gathering at Act II population scale without re-unlocking the personal Forage action.', cost: {}, unlocks: ['Food production'] },
@@ -645,6 +653,8 @@
       const zoomInButton = document.querySelector('[data-board-zoom-in]');
       const resetBoardButton = document.querySelector('[data-board-reset]');
       const zoomLevelOutput = document.querySelector('#board-zoom-level');
+      const hybridTemplateSelect = document.querySelector('#hybrid-template-select');
+      const hybridTemplateLegend = document.querySelector('#hybrid-template-legend');
       const detail = document.querySelector('#structure-detail');
       const statusOutput = document.querySelector('#structure-status');
       const balances = window.prototypeResources;
@@ -781,11 +791,12 @@
         return { x: x + Math.cos(angle) * size, y: y + Math.sin(angle) * size };
       }
 
+      function hexVertices(x, y, size = visibleHexSize) {
+        return [-30, 30, 90, 150, 210, 270].map(angle => pointAt(x, y, size, angle));
+      }
+
       function hexPoints(x, y, size = visibleHexSize) {
-        return [-30, 30, 90, 150, 210, 270].map(angle => {
-          const point = pointAt(x, y, size, angle);
-          return `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
-        }).join(' ');
+        return hexVertices(x, y, size).map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
       }
 
       function classify(q, r) {
@@ -806,9 +817,17 @@
         throw new Error(`Cannot classify axial coordinate ${q},${r}`);
       }
 
-      function mixHexColors(first, second) {
-        const channels = [1, 3, 5].map(offset => Math.round((parseInt(first.slice(offset, offset + 2), 16) + parseInt(second.slice(offset, offset + 2), 16)) / 2));
+      function blendHexColors(first, second, secondWeight = 0.5) {
+        const channels = [1, 3, 5].map(offset => {
+          const firstChannel = parseInt(first.slice(offset, offset + 2), 16);
+          const secondChannel = parseInt(second.slice(offset, offset + 2), 16);
+          return Math.round(firstChannel * (1 - secondWeight) + secondChannel * secondWeight);
+        });
         return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+      }
+
+      function mixHexColors(first, second) {
+        return blendHexColors(first, second);
       }
 
       function materialResourcesFor(tile) {
@@ -823,9 +842,49 @@
         return materialResources.slice(0, markerCount);
       }
 
+      function angleDistance(first, second) {
+        return Math.abs(((first - second + 540) % 360) - 180);
+      }
+
+      function hybridRailGeometry(tile, resource) {
+        const otherResource = tile.resources.find(candidate => candidate !== resource);
+        const vertices = hexVertices(tile.x, tile.y, visibleHexSize - 2.6);
+        const edges = [0, 1, 2, 3, 4, 5].filter(edge => angleDistance(edge * 60, resource * 60) < angleDistance(edge * 60, otherResource * 60));
+        if (edges.length !== 3) throw new Error(`Expected three rail edges for ${tile.name}`);
+        const edgeSet = new Set(edges);
+        const start = edges.find(edge => !edgeSet.has((edge + 5) % 6));
+        const points = [0, 1, 2, 3].map(step => vertices[(start + step) % 6]);
+        return {
+          edges,
+          path: points.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+        };
+      }
+
+      function pureRailGeometry(tile) {
+        const vertices = hexVertices(tile.x, tile.y, visibleHexSize - 2.6);
+        return {
+          edges: [0, 1, 2, 3, 4, 5],
+          path: `${vertices.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')} Z`
+        };
+      }
+
       function hybridGradientId(tile) {
         const encode = value => value < 0 ? `n${Math.abs(value)}` : `p${value}`;
         return `hybrid-${encode(tile.q)}-${encode(tile.r)}`;
+      }
+
+      function tileFill(tile, templateName = activeHybridTemplate) {
+        const template = hybridTemplates[templateName];
+        if (!template) throw new Error(`Unknown tile template ${templateName}`);
+        const bodyMode = tile.kind === 'pure' ? template.pureBody : template.hybridBody;
+        if (bodyMode === 'resource') return resources[tile.resources[0]].color;
+        if (bodyMode === 'gradient' && tile.kind === 'hybrid') return `url(#${hybridGradientId(tile)})`;
+        if (bodyMode === 'muted-resource' && tile.kind === 'pure') return blendHexColors(resources[tile.resources[0]].color, '#555b63', 0.28);
+        if (bodyMode === 'muted-midpoint' && tile.kind === 'hybrid') {
+          const midpoint = mixHexColors(resources[tile.resources[0]].color, resources[tile.resources[1]].color);
+          return blendHexColors(midpoint, '#555b63', 0.28);
+        }
+        throw new Error(`Unsupported ${tile.kind} body mode ${bodyMode}`);
       }
 
       function makeGradients() {
@@ -855,6 +914,35 @@
           );
           defs.append(gradient);
         });
+      }
+
+      function setHybridTemplate(name, updateUrl = true) {
+        if (!Object.hasOwn(hybridTemplates, name)) return false;
+        activeHybridTemplate = name;
+        svg.dataset.hybridTemplate = name;
+        svg.dataset.hybridRails = String(hybridTemplates[name].hybridRails);
+        svg.dataset.pureRails = String(hybridTemplates[name].pureRails);
+        tiles.filter(tile => tile.shape).forEach(tile => tile.shape.setAttribute('fill', tileFill(tile, name)));
+        hybridTemplateSelect.value = name;
+        hybridTemplateLegend.textContent = `tiles = ${hybridTemplates[name].label}`;
+        if (updateUrl) {
+          const nextUrl = new URL(location.href);
+          nextUrl.searchParams.set('hybrid', name);
+          history.replaceState(null, '', nextUrl);
+        }
+        dispatchEvent(new CustomEvent('prototype-hybrid-template-changed', { detail: { name } }));
+        return true;
+      }
+
+      function setupHybridTemplateControl() {
+        Object.entries(hybridTemplates).forEach(([name, template]) => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = template.label;
+          hybridTemplateSelect.append(option);
+        });
+        hybridTemplateSelect.addEventListener('change', () => setHybridTemplate(hybridTemplateSelect.value));
+        setHybridTemplate(activeHybridTemplate, false);
       }
 
       function drawBackdrop() {
@@ -911,12 +999,33 @@
       function createTechnologyTile(tile) {
         const primary = resources[tile.resources[0]];
         const secondary = tile.resources.length > 1 ? resources[tile.resources[1]] : null;
-        const fill = secondary ? `url(#${hybridGradientId(tile)})` : primary.color;
+        const fill = tileFill(tile);
         const stroke = secondary ? mixHexColors(primary.color, secondary.color) : primary.color;
         const materialKeys = tile.materialResources.map(resource => resources[resource].key);
         const group = node('g', { class: `hex-tile tech-tile ${tile.kind}`, 'data-name': tile.name, 'data-q': tile.q, 'data-r': tile.r, 'data-ring': tile.ring, 'data-material-count': materialKeys.length, 'data-materials': materialKeys.join(',') });
         const title = node('title');
         const polygon = node('polygon', { class: 'hex-shape', points: hexPoints(tile.x, tile.y), fill, stroke });
+        const resourceRails = secondary ? tile.resources.map(resource => {
+          const geometry = hybridRailGeometry(tile, resource);
+          return node('path', {
+            class: 'resource-rail hybrid-rail',
+            d: geometry.path,
+            stroke: resources[resource].color,
+            'data-resource': resources[resource].key,
+            'data-edges': geometry.edges.join(','),
+            'aria-hidden': 'true'
+          });
+        }) : [(() => {
+          const geometry = pureRailGeometry(tile);
+          return node('path', {
+            class: 'resource-rail pure-rail',
+            d: geometry.path,
+            stroke: primary.color,
+            'data-resource': primary.key,
+            'data-edges': geometry.edges.join(','),
+            'aria-hidden': 'true'
+          });
+        })()];
         const label = node('text', { class: 'hex-label', x: tile.x, y: tile.y + 2.5 });
         label.textContent = tile.short;
         const markerSpacing = 5.5;
@@ -930,7 +1039,7 @@
           'data-resource': resources[resource].key,
           'aria-hidden': 'true'
         }));
-        group.append(title, polygon, label, ...materialMarkers);
+        group.append(title, polygon, ...resourceRails, label, ...materialMarkers);
         group.append(node('circle', { class: 'research-marker', cx: tile.x + 17, cy: tile.y - 16, r: 2.6 }));
         group.addEventListener('click', () => selectTile(tile.name));
         group.addEventListener('keydown', event => onTileKey(event, tile));
@@ -940,6 +1049,8 @@
         tileGroup.append(group);
         tile.el = group;
         tile.title = title;
+        tile.shape = polygon;
+        tile.rails = resourceRails;
         updateTileState(tile);
       }
 
@@ -1117,6 +1228,7 @@
       drawBackdrop();
       buildHub();
       tiles.forEach(createTechnologyTile);
+      setupHybridTemplateControl();
       updateAllStates();
       syncBuildUnlocks();
       setupBoardCamera();
@@ -1141,7 +1253,22 @@
         if (target && tileState(target) !== 'locked') { selectTile(target.name); researchTile(target); }
       });
 
-      window.prototypeBoard = { tiles, tileByName, researched, tileState, selectTile, researchTile, stateCounts, zoomBoard, panBoard, resetBoardView, boardViewState };
+      window.prototypeBoard = {
+        tiles,
+        tileByName,
+        researched,
+        tileState,
+        selectTile,
+        researchTile,
+        stateCounts,
+        zoomBoard,
+        panBoard,
+        resetBoardView,
+        boardViewState,
+        hybridTemplates,
+        setHybridTemplate,
+        activeHybridTemplate: () => activeHybridTemplate
+      };
     })();
   </script>
 </body>
