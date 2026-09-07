@@ -19,7 +19,7 @@ Act I deliberately has only two economic stocks:
 
 Act I already includes personal-scale Forage and Split wood behavior. Their ring-1 counterparts must not unlock those verbs a second time. Ring-1 **Foraging** and **Woodcutting** instead mean that Food and Biomass production are established as Act II resource domains that can support a growing population.
 
-Raising **Shelter** ends Act I: other people ask to move in, population can rise above one, and Act II opens. The Act II UI increments this shell rather than replacing it. STRUCTURE remains a tab beside ACTIONS and BUILD; leaving STRUCTURE returns to the preserved Holdings/BODY/eating/activity experience. The Act II prototype drops the persistent event-log footer so the active surface, especially the research board, receives that vertical space.
+Raising **Shelter** ends Act I: other people ask to move in, population can rise above one, and Act II opens. The Act II UI increments this shell rather than replacing it. STRUCTURE remains a tab beside ACTIONS and BUILD; the same Holdings/BODY rail stays available on every tab and defaults to collapsed in STRUCTURE, while eating and activity behavior remain intact. The Act II prototype drops the persistent event-log footer so the active surface, especially the research board, receives that vertical space.
 
 ### Transition into Act II
 
@@ -235,7 +235,7 @@ Show the factual deficit only. Do not append acquisition-route advice or direct 
 
 ## 8. Board interaction contract
 
-- STRUCTURE remains a tab beside ACTIONS and BUILD. It may use the approved focused layout that temporarily hides Holdings, the merchant row, and the activity strip so the map and right detail pane have room; those systems remain intact on the other tabs.
+- STRUCTURE remains a tab beside ACTIONS and BUILD. Its focused layout keeps the shared Holdings/BODY rail available at the left, collapsed by default, while temporarily hiding the merchant row and activity strip so the map and right detail pane retain room. Expanding or collapsing Holdings must not rebuild or reset the board.
 - Ring 0 is a neutral, noninteractive foundation hex and never opens a detail or research action.
 - Available and Researched technology tiles can be selected with pointer or keyboard. Locked tiles are absent from the focus order and expose no click action.
 - The right detail pane shows: technology name, ring/era, pure or hybrid domain, progression state, effect, authored resource cost, current affordability/deficits, and what the technology enables.
@@ -414,5 +414,5 @@ Hybrid (`k = 1..3`, low `k` nearer the first resource):
 - Research uses **RESEARCH →**, consumes its authored resource bundle atomically, and never consumes Coin, Knowledge, or generic Materials.
 - Researching a tile lights only eligible immediate outward neighbors; nothing opens elsewhere.
 - Research never constructs an item directly; resulting goods remain in BUILD.
-- The board preserves ACTIONS, BUILD, Holdings/BODY, eating policy, and activity. The Act II prototype intentionally omits the persistent event-log footer to reserve vertical space.
+- The board preserves ACTIONS, BUILD, Holdings/BODY, eating policy, and activity. STRUCTURE exposes the same Holdings/BODY rail collapsed by default; ACTIONS and BUILD retain their expanded defaults, and each view remembers user toggles. The Act II prototype intentionally omits the persistent event-log footer to reserve vertical space.
 - Filters compound as Researched < Available < All, and zoom/pan/reset do not interfere with tile, ring-0, search, or keyboard interactions.

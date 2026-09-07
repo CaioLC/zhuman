@@ -1731,12 +1731,6 @@ button:disabled {
   margin-bottom: 8px;
 }
 
-.act-two.is-structure-focus .page-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-}
-
-.act-two.is-structure-focus .side-rail,
 .act-two.is-structure-focus .merchant-strip,
 .act-two.is-structure-focus .activity-strip {
   display: none;

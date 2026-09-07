@@ -281,8 +281,31 @@
       window.refreshPrototypeResources = refreshPrototypeResources;
       refreshPrototypeResources();
 
+      const pageGrid = document.querySelector('#page-grid');
+      const collapseHoldings = document.querySelector('#holdings-collapse');
+      const restoreHoldings = document.querySelector('#holdings-restore');
+      const requestedHoldingsState = prototypeParams.get('holdings');
+      const holdingsCollapsedByView = {
+        actions: requestedHoldingsState === 'collapsed',
+        build: requestedHoldingsState === 'collapsed',
+        structure: requestedHoldingsState !== 'expanded'
+      };
+      let activeView = null;
+      let holdingsCollapsed = false;
+
+      function setHoldingsCollapsed(collapsed, remember = true) {
+        holdingsCollapsed = collapsed;
+        pageGrid.classList.toggle('is-holdings-collapsed', collapsed);
+        collapseHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.hidden = !collapsed;
+        if (remember && activeView) holdingsCollapsedByView[activeView] = collapsed;
+      }
+
       function setView(name, updateHash = true) {
         if (!views[name]) name = 'actions';
+        if (activeView) holdingsCollapsedByView[activeView] = holdingsCollapsed;
+        activeView = name;
         document.querySelector('.act-two').classList.toggle('is-structure-focus', name === 'structure');
         Object.entries(views).forEach(([key, view]) => {
           view.hidden = key !== name;
@@ -290,27 +313,15 @@
           tab.setAttribute('aria-selected', String(key === name));
           tab.tabIndex = key === name ? 0 : -1;
         });
+        setHoldingsCollapsed(holdingsCollapsedByView[name], false);
         if (updateHash && location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
-      }
-
-      tabs.forEach(tab => tab.addEventListener('click', () => setView(tab.dataset.view)));
-      addEventListener('hashchange', () => setView(location.hash.slice(1), false));
-      setView(location.hash.slice(1) || 'actions', false);
-
-      const pageGrid = document.querySelector('#page-grid');
-      const collapseHoldings = document.querySelector('#holdings-collapse');
-      const restoreHoldings = document.querySelector('#holdings-restore');
-
-      function setHoldingsCollapsed(collapsed) {
-        pageGrid.classList.toggle('is-holdings-collapsed', collapsed);
-        collapseHoldings.setAttribute('aria-expanded', String(!collapsed));
-        restoreHoldings.setAttribute('aria-expanded', String(!collapsed));
-        restoreHoldings.hidden = !collapsed;
       }
 
       collapseHoldings.addEventListener('click', () => setHoldingsCollapsed(true));
       restoreHoldings.addEventListener('click', () => setHoldingsCollapsed(false));
-      setHoldingsCollapsed(prototypeParams.get('holdings') === 'collapsed');
+      tabs.forEach(tab => tab.addEventListener('click', () => setView(tab.dataset.view)));
+      addEventListener('hashchange', () => setView(location.hash.slice(1), false));
+      setView(location.hash.slice(1) || 'actions', false);
 
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
