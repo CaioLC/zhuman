@@ -200,6 +200,51 @@ reads the model to render placeholder, a caret bar or guillemet-bracketed select
 focus-visible chrome, a `danger` outline while `refused`, and a pointer "✕" clear
 affordance; the keyboard clear is Ctrl+A then Backspace against the same model.
 
+## Semantic model (`semantics.zig`)
+
+INPUT-08 adds a fully host-side accessibility model — the source INPUT-09's platform
+bridge will read, **not** a second source of truth. The generic `src/ui` engine knows
+nothing about roles, labels, or announcements; everything here is keyed by the same stable
+`node.key` the interaction/focus/command registries use, so a control's semantics can
+never disagree with what it publishes through `publishControlState`.
+
+A `SemanticNode` carries the stable `key`, a `Role`
+(`button`/`icon_button`/`radio`/`checkbox`/`text_input`/`progress_bar`/`tile`/`group`
+/`dialog`/`text`), an **owned** accessible `label` and an optional **owned** `value` text,
+`SemanticState` (disabled/focused/selected/checked/expanded), stable-key `Relations`
+(`controls` and `described_by`, bounded to `max_relations` with explicit overflow refusal),
+and a `LiveRegion` policy (`off`/`polite`/`assertive`). Strings live in fixed `OwnedText`
+buffers that copy the source bytes and **refuse an over-long value as a whole** (setting
+`truncated`, keeping `len = 0`) rather than storing a silently cut prefix — the editor's
+non-silent-refusal policy.
+
+`SemanticRegistry` is the same double-buffer as `command.Registry`: `beginBuild` clears the
+building buffer, `publish` appends nodes **in UI/control paint order**, and `endBuild`
+swaps the completed build into the published `snapshot`. Because every node owns its
+strings by value, the swap moves owned storage and the prior snapshot never borrows the
+frame arena — a reader (the bridge) may hold it across the arena reset. Duplicate keys in
+one build update the existing entry in place, preserving first-seen order (deterministic
+update/order policy). Node overflow past the fixed cap and any per-field/relation refusal
+are surfaced non-silently via `snapshotOverflow` / `snapshotFieldRefused` and the per-node
+`truncated` flags; earlier nodes are preserved on overflow.
+
+`AnnouncementChannel` is a bounded polite live-region queue with owned text, a monotonic
+session `generation`, **consecutive-duplicate dedup** (the live-region contract: do not
+re-announce the message already stated), and explicit `overflow` refusal for a full queue
+or an over-long message. `drainThrough(gen)` compacts messages a reader has spoken. It is
+presentation plumbing only — nothing here has authority over the simulation.
+
+Lifecycle is wired like the command registry: `Resources` holds `semantics` and
+`announcements`; `main` calls `semantics.beginBuild()` before `build_ui` and
+`semantics.endBuild()` after `endFrame()`. Representative `describe*` helpers turn
+authoritative widget/domain facts into a `SemanticNode`; controls call them right where
+they already call `publishControlState` (stock `button`/`icon_button`/`progress_bar`
+/`text_input`/`modal`, and game `tabs`/`ration_dial`/`build_list`/`capital_row`
+/`action_tile`). Honest limitations: an icon button and a bare progress bar have no widget
+string for a name (they publish an empty label; a named variant/domain helper supplies
+one), `expanded` is owned only by the dialog shell, and no production board/search/modal
+*consumer* exists yet — the model describes the controls that do exist.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

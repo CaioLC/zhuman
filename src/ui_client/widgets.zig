@@ -13,6 +13,7 @@ const sdl = @import("sdl3");
 const cb = @import("./ctx_binding.zig");
 const drag = @import("./drag.zig");
 const feat = @import("./features/root.zig");
+const semantics = @import("./semantics.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -69,6 +70,15 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
     _ = inner.with_layout(.top_left, null)
         .with_size(ui.features.Size.init(.{ .pct_of_parent = frac }, .{ .pct_of_parent = 1.0 }));
 
+    // INPUT-08: a determinate value indicator. The bar has no name of its own (the caller
+    // labels it in surrounding copy), so the stock widget publishes an unnamed progress_bar
+    // with an authoritative percentage readout formatted from the same `frac` it fills to.
+    // A named readout comes from the domain helper when a caller wants a spoken name.
+    var pbuf: [8]u8 = undefined;
+    const pct = std.math.clamp(frac, 0, 1) * 100;
+    const readout = std.fmt.bufPrint(&pbuf, "{d:.0}%", .{pct}) catch "?";
+    ctx.res.semantics.publish(semantics.describeProgressBar(outer.key, "", readout));
+
     return outer;
 }
 
@@ -106,6 +116,9 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
         .focused = focused,
         .focus_visible = focused,
     });
+    // INPUT-08: mirror the same authoritative facts into the host semantic snapshot, in
+    // paint order. Label is the button's own text; state matches what was just published.
+    ctx.res.semantics.publish(semantics.describeButton(outer.key, text, enabled, focused));
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
     const c = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg;
@@ -135,6 +148,13 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
         .focused = focused,
         .focus_visible = focused,
     });
+    // INPUT-08: an icon button has no text of its own, so it cannot supply an accessible
+    // name from a widget fact — the sprite is not a string. The stock widget therefore
+    // publishes an *unnamed* icon_button (empty label), and the field-refusal/empty-name
+    // is honest: a game control that wants a spoken name must call the named variant (a
+    // future `icon_button_named`) or describe it through a domain helper. Recorded rather
+    // than invented. State still matches the interaction pool.
+    ctx.res.semantics.publish(semantics.describeIconButton(node.key, "", enabled, focused));
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
     node.render_data.outline = .{ .color = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg };
@@ -316,6 +336,12 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
 
     _ = try label(ctx, box, "title", title);
 
+    // INPUT-08: the dialog shell. `expanded` is genuinely owned here — a modal is either
+    // built (open) or absent — and the scrim/dialog is a polite live region so opening it
+    // can be announced. Title is the authoritative name. Published in paint order after
+    // its title label so the bridge sees the container after its name node.
+    ctx.res.semantics.publish(semantics.describeDialog(root.key, title, ctx.isFocused(root.key)));
+
     return .{ .root = root, .box = box };
 }
 
@@ -351,6 +377,16 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     // Current desktop policy keeps every focused text field visibly outlined; INPUT-06
     // can later distinguish keyboard-origin focus without changing the vocabulary.
     cb.publishControlState(ctx, node.key, .{ .focused = focused, .focus_visible = focused });
+    // INPUT-08: the accessible name is the placeholder/purpose; the value is the model's
+    // authoritative text (never the caret/selection display string). A refused edit is
+    // surfaced as an assertive live region, matching the widget's `danger` outline.
+    ctx.res.semantics.publish(semantics.describeTextInput(
+        node.key,
+        placeholder,
+        state.text(),
+        focused,
+        state.refused,
+    ));
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.startTextInput(ctx.res.platform.window) catch {};
     } else if (ctx.focusedKey() == null and sdl.keyboard.textInputActive(ctx.res.platform.window)) {

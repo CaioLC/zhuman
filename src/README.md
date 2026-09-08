@@ -70,12 +70,19 @@ Each frame:
 3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.
 4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
    returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
+   The command registry and the host **semantic snapshot** (`res.semantics`, INPUT-08) both
+   `beginBuild` here, so interactive controls publish their prior-build command owners and
+   their owned accessibility metadata (role/label/value/state/relationships/live-region) in
+   paint order as they build.
 5. **Layout** — `set_global_pos()` per root: solve sizes, then resolve positions. Pure — content
    was measured at build time.
 6. **Stamp** — `ui.stamp_rects(root)` copies each queried node's rect into its slot, feeding
    the next frame's step 2.
 7. **Render** — `ui_client.draw_tree()` per root in list order, so later trees paint on top.
-   Then `ui.endFrame()`.
+   Then `ui.endFrame()`; the command registry and the semantic snapshot `endBuild` here,
+   double-buffer-swapping this frame's build into the completed prior snapshot the next
+   event stage (and INPUT-09's platform bridge) reads — the semantic snapshot owns its
+   strings by value, so it never borrows the frame arena that resets in step 4.
 
 There is no retained tree between frames. The interaction slot pool is what bridges the
 boundary.

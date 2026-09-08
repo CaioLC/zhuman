@@ -16,6 +16,7 @@ const widgets = @import("./widgets.zig");
 const cursor = @import("./cursor.zig");
 const drag = @import("./drag.zig");
 const command = @import("./command.zig");
+const semantics = @import("./semantics.zig");
 
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
@@ -42,6 +43,17 @@ pub const PointerActivation = activation.PointerActivation;
 pub const Command = command.Command;
 pub const CommandRegistry = command.Registry;
 pub const commandFromKeyEvent = command.fromKeyEvent;
+
+// INPUT-08 host-side semantic model (INPUT-09's platform-bridge source). All host-side;
+// the generic engine never sees it. See `semantics.zig`.
+pub const semantic = semantics;
+pub const SemanticRole = semantics.Role;
+pub const SemanticState = semantics.SemanticState;
+pub const SemanticLiveRegion = semantics.LiveRegion;
+pub const SemanticNode = semantics.SemanticNode;
+pub const SemanticRelations = semantics.Relations;
+pub const SemanticRegistry = semantics.SemanticRegistry;
+pub const AnnouncementChannel = semantics.AnnouncementChannel;
 pub const CursorKind = cursor.Kind;
 pub const CursorState = cursor.State;
 pub const PlatformCursors = cursor.PlatformCursors;
@@ -111,4 +123,5 @@ test {
     _ = cursor;
     _ = drag;
     _ = command;
+    _ = semantics;
 }

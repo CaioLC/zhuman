@@ -24,6 +24,7 @@ const command = @import("./ui_client/command.zig");
 const cursor = @import("./ui_client/cursor.zig");
 const drag = @import("./ui_client/drag.zig");
 const editor = @import("./ui_client/editor.zig");
+const semantics = @import("./ui_client/semantics.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
@@ -33,6 +34,7 @@ test {
     _ = cursor; // cursor request lifecycle and SDL system-shape mappings
     _ = drag; // strict threshold and capture-backed scrollbar drag tests
     _ = editor; // authoritative single-line editor model: UTF-8/selection/refusal tests
+    _ = semantics; // INPUT-08 host-side semantic registry + announcement channel tests
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

@@ -473,6 +473,7 @@ pub fn main() !void {
         app.ui.beginFrame();
         app.resources.cursor.beginFrame();
         app.resources.commands.beginBuild();
+        app.resources.semantics.beginBuild(); // INPUT-08: rebuild the semantic tree in paint order
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
         app.platform_cursors.apply(app.resources.cursor.requested);
@@ -517,6 +518,7 @@ pub fn main() !void {
 
         app.ui.endFrame();
         app.resources.commands.endBuild();
+        app.resources.semantics.endBuild(); // INPUT-08: publish this frame's snapshot for the bridge
     }
 }
 

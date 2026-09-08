@@ -139,6 +139,12 @@ pub const Resources = struct {
     input: Input = .{},
     cursor: @import("./ui_client/cursor.zig").State = .{},
     commands: @import("./ui_client/command.zig").Registry = .{},
+    /// Host-side accessibility model (INPUT-08): the double-buffered semantic snapshot the
+    /// platform bridge (INPUT-09) will read, plus the polite live-announcement channel.
+    /// Presentation plumbing only — no simulation system reads or writes it. Built in paint
+    /// order during `build_ui` and published after end-frame, exactly like `commands`.
+    semantics: @import("./ui_client/semantics.zig").SemanticRegistry = .{},
+    announcements: @import("./ui_client/semantics.zig").AnnouncementChannel = .{},
     time: Time = .{},
     sim: Sim,
     config: Config = .{},

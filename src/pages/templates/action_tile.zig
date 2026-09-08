@@ -63,6 +63,17 @@ pub fn tile(
         .focused = focused,
         .focus_visible = focused,
     });
+    // INPUT-08: an action tile is a composite actionable node. Its accessible name is the
+    // action's own name (authoritative); `enabled` is the same affordability/running gate.
+    // When running it carries a determinate progress readout as its value, from the same
+    // `progress` fraction the underbar fills to — so the bridge can speak "62%".
+    var tile_node = uic.semantic.describeTile(box_key, name, enabled, focused, &[_]u64{});
+    if (progress) |p| {
+        var pbuf: [8]u8 = undefined;
+        const readout = std.fmt.bufPrint(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?";
+        _ = tile_node.setValue(readout);
+    }
+    ctx.res.semantics.publish(tile_node);
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.held or q.hovering or focused) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives

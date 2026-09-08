@@ -61,6 +61,13 @@ fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool, is
         .selected = on and !is_check,
         .checked = on and is_check,
     });
+    // INPUT-08: the "built" toggle is a checkbox (its `on` is a checked fact); the sort/
+    // show/tier chips are single-selection radios linked to their group (the parent). The
+    // authoritative `on`/`is_check` values match what was just published to the pool.
+    if (is_check)
+        ctx.res.semantics.publish(uic.semantic.describeCheckbox(box_key, label, on, focused))
+    else
+        ctx.res.semantics.publish(uic.semantic.describeRadio(box_key, label, on, focused, parent.get().key));
     if (q.hovering) ctx.res.cursor.request(.pointer);
     const c = if (on) th.acc else if (q.held or q.hovering or focused) th.fg else th.dim;
     _ = (try el.text(ctx, box, "t", label)).with_style(.{ style.body, Style{ .text = c } });
@@ -295,6 +302,10 @@ fn goal_card(
     else
         std.fmt.bufPrint(&mbuf, "{d:.0}/{d:.0} materials", .{ stock.v, cost.materials }) catch "";
     _ = (try el.text(ctx, go, "t", label)).with_style(.{ style.body, Style{ .text = c } });
+    // INPUT-08: the goal action is a button whose accessible name is the same authoritative
+    // label the player sees (either the go text or the materials shortfall), and whose
+    // enabled fact is `ready`. Published after its own text node, in paint order.
+    ctx.res.semantics.publish(uic.semantic.describeButton(go_key, label, ready, focused));
     if (ready and q.clicked) capital.begin_build(world, e, ctx.res, G);
 }
 

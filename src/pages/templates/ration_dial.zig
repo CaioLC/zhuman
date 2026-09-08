@@ -33,15 +33,19 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
 
     const bar = try el.div(ctx, parent, id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(8);
+    const bar_key = bar.get().key;
     _ = (try el.text(ctx, bar, "lbl", "eating"))
         .with_style(.{ style.body, Style{ .text = th.dim } });
+
+    var member_keys: [uic.semantic.max_relations]u64 = undefined;
+    var member_len: usize = 0;
 
     for (options, 0..) |opt, i| {
         const key = try std.fmt.allocPrint(ctx.arena, "opt{d}", .{i});
         const chip = try el.div(ctx, bar, key);
         const chip_key = chip.get().key;
         const q = chip.query();
-        ctx.registerRovingFocus(bar.get().key, chip_key, true);
+        ctx.registerRovingFocus(bar_key, chip_key, true);
         if (q.clicked) _ = ctx.requestFocus(chip_key);
         const focused = ctx.isFocused(chip_key);
         if (q.hovering) ctx.res.cursor.request(.pointer);
@@ -52,6 +56,14 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
             .focus_visible = focused,
             .selected = is_active,
         });
+        // INPUT-08: a ration choice is a single-selection member; the authoritative
+        // `selected` fact is `met.setting == opt.s` (sim state on the agent). Linked to
+        // the eating group by key.
+        ctx.res.semantics.publish(uic.semantic.describeRadio(chip_key, opt.name, is_active, focused, bar_key));
+        if (member_len < member_keys.len) {
+            member_keys[member_len] = chip_key;
+            member_len += 1;
+        }
 
         // The eating pulse: the active chip fills with progress through the *current
         // food unit* (`ceil(F) − F`) and resets as each unit is consumed — a repeating
@@ -80,6 +92,9 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});
         chip.get().size.baseline = lbl.get().size.baseline_off(); // padded chip in a row
     }
+
+    // The dial is a single-selection group ("eating") controlling its ration members.
+    ctx.res.semantics.publish(uic.semantic.describeGroup(bar_key, "eating", member_keys[0..member_len]));
 
     return bar;
 }

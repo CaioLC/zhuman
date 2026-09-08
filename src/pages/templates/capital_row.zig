@@ -139,6 +139,7 @@ pub fn capital_row(
     const corner = try el.div(ctx, row, "cn");
     _ = corner.with_size(.{ .fixed = w_corner }, .fit_children);
     var cancelled = false;
+    var cancel_key: ?u64 = null;
     if (kind == .building) {
         const x = try el.div(ctx, corner, "x");
         _ = x.with_layout(.center_right);
@@ -155,7 +156,22 @@ pub fn capital_row(
         _ = (try el.text(ctx, x, "t", "\u{00d7}"))
             .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or x_focused) th.danger else th.line2 } });
         cancelled = x.consume(.clicked);
+        cancel_key = x_key;
+        // INPUT-08: the cancel corner is a button named for what it does to the build.
+        ctx.res.semantics.publish(uic.semantic.describeIconButton(x_key, "Cancel build", true, x_focused));
     }
+
+    // INPUT-08: the row is a composite tile. Its accessible name is the good's display
+    // name (authoritative widget fact); `hot` is the same enabled fact the build click
+    // gates on; it controls its cancel sub-action when one exists. Published after its own
+    // descendants so children precede the container in paint order.
+    var subs: [1]u64 = undefined;
+    var subs_len: usize = 0;
+    if (cancel_key) |ck| {
+        subs[0] = ck;
+        subs_len = 1;
+    }
+    ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, focused, subs[0..subs_len]));
 
     return .{
         .kind = kind,
