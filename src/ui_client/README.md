@@ -143,6 +143,13 @@ supply hex containment without putting hex knowledge in the engine. The declarat
 frame-scoped and must not capture arena data; omitting it on the next build restores the
 normal rectangular hit box.
 
+`UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
+its queried key on press, lets subsequent `mark` calls route motion/release flags to that
+owner outside its box, then owner-releases; the event layer cancels on platform
+cancellation or window-focus loss. Disappearing owners are pruned automatically. This
+step supplies the generic mechanism only—pointer IDs, held/released flags, thresholds,
+and concrete slider/scrollbar/board wiring belong to the INPUT roadmap.
+
 **Why a handle rather than `*Node` methods:** applying a `font` re-measures the text, which
 needs the font backend on `ctx`, and the engine's `Node` is deliberately ctx-agnostic. `El`
 is also the layer's lingua franca — parents are taken as `El` and templates return `El`, so

@@ -238,6 +238,15 @@ geometry — so **hit-testing iterates the live slots, never the node tree**:
   neighbor or backdrop. The callback is a static function pointer copied into the slot —
   it cannot borrow frame-arena data — and is tagged with its declaring build frame, so
   omission on the next build automatically restores ordinary rectangular behavior.
+
+  Pointer capture is singular and stable-keyed. `capturePointer(key)` accepts an existing
+  live interaction slot; while owned, every `mark` routes directly to that key and its
+  stamped ancestors before coordinate, pass-through, clip, rectangle, or shape checks,
+  so an outside drag/release cannot hit controls underneath. The owner releases with
+  `releasePointerCapture(key)`; hosts use `cancelPointerCapture()` for cancellation or
+  window-focus loss. Interaction pruning clears capture automatically when its owner
+  disappears. The engine remains pointer-ID and event-vocabulary agnostic; those are host
+  input-model concerns.
 - **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and records each
   *already-queried* node's geometry into its slot (`stampRect` no-ops for keys with no
   slot). This is what feeds the next frame's `mark`, and it carries three things down

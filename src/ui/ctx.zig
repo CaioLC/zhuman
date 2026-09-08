@@ -99,6 +99,9 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// Event-stage commands traverse the last completed frame; build registration
         /// fills the next order, which `endFrame` repairs and publishes.
         focus: focus_mod.Focus,
+        /// Singular pointer capture owner. While set, `mark` routes directly to this
+        /// stable key and its stamped ancestors, independent of pointer coordinates.
+        pointer_capture: ?u64 = null,
 
         pub fn init(res: *Res, gpa: std.mem.Allocator, arena: std.mem.Allocator) Self {
             return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{}, .focus = focus_mod.Focus.init(gpa) };
@@ -167,6 +170,36 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.focus.moveInGroup(group, direction, wrap);
         }
 
+        /// Capture pointer routing for an existing live interaction key. Capture is
+        /// singular; acquiring a different key transfers ownership deliberately.
+        pub fn capturePointer(self: *Self, key: u64) bool {
+            const idx = self.interactions.index.get(key) orelse return false;
+            if (!self.interactions.slots.items[idx].live) return false;
+            self.pointer_capture = key;
+            return true;
+        }
+
+        pub fn capturedPointerKey(self: *const Self) ?u64 {
+            return self.pointer_capture;
+        }
+
+        pub fn hasPointerCapture(self: *const Self, key: u64) bool {
+            return self.pointer_capture == key;
+        }
+
+        /// Release only when `key` still owns capture, preventing an unrelated control
+        /// from clearing a capture it does not own.
+        pub fn releasePointerCapture(self: *Self, key: u64) bool {
+            if (self.pointer_capture != key) return false;
+            self.pointer_capture = null;
+            return true;
+        }
+
+        /// Unconditionally cancel capture for host cancellation/window-focus loss.
+        pub fn cancelPointerCapture(self: *Self) void {
+            self.pointer_capture = null;
+        }
+
         /// Set one interaction flag for key `k` directly (no hit-test). `flag` is
         /// checked against the host's `IntFlags` fields at comptime. Acquiring keeps
         /// the slot alive this frame.
@@ -228,9 +261,25 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return true;
         }
 
-        /// Event-stage hit-test: set `flag` on the **topmost** node containing (x, y),
-        /// then on its ancestors. O(interactive) — walks the paint-order list, not the
-        /// node tree. The geometry is last frame's (stamped after that frame's layout);
+        fn routeFlag(self: *Self, idx: u32, comptime flag: FlagEnum) void {
+            const slot = &self.interactions.slots.items[idx];
+            @field(slot.value.flags, @tagName(flag)) = true;
+            var pk = slot.value.parent_key;
+            var guard: u32 = 0;
+            while (pk) |k| : (guard += 1) {
+                if (guard > 256) break; // a cycle can only come from a corrupt stamp
+                const pidx = self.interactions.index.get(k) orelse break;
+                const parent = &self.interactions.slots.items[pidx];
+                if (!parent.live) break;
+                @field(parent.value.flags, @tagName(flag)) = true;
+                pk = parent.value.parent_key;
+            }
+        }
+
+        /// Event-stage routing: while a live key owns pointer capture, set `flag` on it
+        /// and its ancestors regardless of (x, y). Otherwise hit-test the **topmost**
+        /// node containing (x, y), then bubble to its ancestors. O(interactive) — walks
+        /// the paint-order list, not the node tree. The geometry is last frame's (stamped after that frame's layout);
         /// the point is passed in (mouse/touch/gamepad — the engine never asks where it
         /// came from).
         ///
@@ -240,6 +289,17 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// stays hovered while the pointer is over its own button — containment keeps
         /// working; only the nodes *underneath* the hit are left alone.
         pub fn mark(self: *Self, comptime flag: FlagEnum, x: f32, y: f32) void {
+            if (self.pointer_capture) |key| {
+                if (self.interactions.index.get(key)) |idx| {
+                    if (self.interactions.slots.items[idx].live) {
+                        self.routeFlag(idx, flag);
+                        return;
+                    }
+                }
+                // Defensive repair; normal disappearance is handled at endFrame.
+                self.pointer_capture = null;
+            }
+
             var i = self.order.items.len;
             while (i > 0) {
                 i -= 1;
@@ -255,17 +315,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
                     if (slot.value.hit_test) |predicate| if (!predicate(r, x, y)) continue;
                 }
 
-                @field(slot.value.flags, @tagName(flag)) = true;
-                var pk = slot.value.parent_key;
-                var guard: u32 = 0;
-                while (pk) |k| : (guard += 1) {
-                    if (guard > 256) break; // a cycle can only come from a corrupt stamp
-                    const pidx = self.interactions.index.get(k) orelse break;
-                    const parent = &self.interactions.slots.items[pidx];
-                    if (!parent.live) break;
-                    @field(parent.value.flags, @tagName(flag)) = true;
-                    pk = parent.value.parent_key;
-                }
+                self.routeFlag(idx, flag);
                 return;
             }
         }
@@ -297,6 +347,10 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
                 @field(self.pools, f.name).prune(self.gpa, self.frame) catch {};
             }
             self.interactions.prune(self.gpa, self.frame) catch {};
+            if (self.pointer_capture) |key| {
+                const idx = self.interactions.index.get(key);
+                if (idx == null or !self.interactions.slots.items[idx.?].live) self.pointer_capture = null;
+            }
             self.focus.endFrame();
             self.clearTransient();
         }
@@ -406,6 +460,88 @@ test "shape predicate expires when the next build omits it" {
     u.endFrame();
     u.mark(.clicked, 5, 5);
     try std.testing.expect(u.interactionOf(shape).clicked);
+}
+
+test "captured slider drag routes outside and cannot click through" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const background = cache_mod.key(0, "background");
+    const slider = cache_mod.key(0, "slider");
+    const thumb = cache_mod.key(slider, "thumb");
+    tstamp(&u, background, .{ .x = 0, .y = 0, .w = 200, .h = 100 }, null, null);
+    tstamp(&u, slider, .{ .x = 0, .y = 0, .w = 100, .h = 30 }, null, null);
+    tstamp(&u, thumb, .{ .x = 0, .y = 0, .w = 20, .h = 30 }, null, slider);
+
+    try std.testing.expect(!u.capturePointer(cache_mod.key(0, "missing")));
+    try std.testing.expect(u.capturePointer(thumb));
+    try std.testing.expect(u.hasPointerCapture(thumb));
+
+    // Far outside the thumb and slider, over the background: motion/drag-style flags
+    // still route to the owner and bubble, while the covered target cannot click through.
+    u.mark(.hovering, 180, 80);
+    try std.testing.expect(u.interactionOf(thumb).hovering);
+    try std.testing.expect(u.interactionOf(slider).hovering);
+    try std.testing.expect(!u.interactionOf(background).hovering);
+}
+
+test "release outside routes first then restores ordinary targeting" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const background = cache_mod.key(0, "background");
+    const scrollbar = cache_mod.key(0, "scrollbar");
+    tstamp(&u, background, .{ .x = 0, .y = 0, .w = 200, .h = 100 }, null, null);
+    tstamp(&u, scrollbar, .{ .x = 0, .y = 0, .w = 20, .h = 100 }, null, null);
+    try std.testing.expect(u.capturePointer(scrollbar));
+
+    // A host routes its release flag before dropping ownership.
+    u.mark(.clicked, 180, 50);
+    try std.testing.expect(u.interactionOf(scrollbar).clicked);
+    try std.testing.expect(!u.interactionOf(background).clicked);
+    try std.testing.expect(!u.releasePointerCapture(background));
+    try std.testing.expect(u.releasePointerCapture(scrollbar));
+    try std.testing.expectEqual(@as(?u64, null), u.capturedPointerKey());
+
+    u.clearTransient();
+    u.mark(.clicked, 180, 50);
+    try std.testing.expect(!u.interactionOf(scrollbar).clicked);
+    try std.testing.expect(u.interactionOf(background).clicked);
+}
+
+test "capture transfers singularly and cancellation clears board pan owner" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const scrollbar = cache_mod.key(0, "scrollbar");
+    const board = cache_mod.key(0, "board");
+    tstamp(&u, scrollbar, .{ .x = 0, .y = 0, .w = 20, .h = 100 }, null, null);
+    tstamp(&u, board, .{ .x = 20, .y = 0, .w = 180, .h = 100 }, null, null);
+    try std.testing.expect(u.capturePointer(scrollbar));
+    try std.testing.expect(u.capturePointer(board));
+    try std.testing.expect(!u.hasPointerCapture(scrollbar));
+    try std.testing.expect(u.hasPointerCapture(board));
+    u.cancelPointerCapture(); // host cancellation or window-focus loss
+    try std.testing.expectEqual(@as(?u64, null), u.capturedPointerKey());
+}
+
+test "disappearing capture owner is repaired at frame end" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+
+    const owner = cache_mod.key(0, "temporary-drag-owner");
+    u.beginFrame();
+    tstamp(&u, owner, .{ .x = 0, .y = 0, .w = 20, .h = 20 }, null, null);
+    try std.testing.expect(u.capturePointer(owner));
+    u.endFrame();
+    try std.testing.expect(u.hasPointerCapture(owner));
+
+    u.beginFrame();
+    u.endFrame(); // owner was not touched, so interaction pruning removes it
+    try std.testing.expectEqual(@as(?u64, null), u.capturedPointerKey());
 }
 
 test "mark hits the topmost node only — later paint order wins" {
