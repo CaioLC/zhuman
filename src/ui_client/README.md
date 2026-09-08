@@ -72,6 +72,22 @@ pub const Node  = ui.Node(RenderData);
 - **`icon_sprite(res, col, row)`** — the one place that knows the icon sheet lives on
   `res.platform.icons` and how big a cell is.
 
+## Frame input (`input.zig`)
+
+`Resources.input` is an allocator-free host frame model rather than a set of SDL event
+edges. `Input.beginFrame()` is the single reset boundary: it clears pointer delta and
+wheel x/y, button press/release/click counts, key events, copied text, focus edges,
+cancellation, and overflow reports while preserving pointer position/identity, held
+buttons/keys, modifiers, and window focus.
+
+The desktop event stage normalizes SDL mouse, touch, and pen identities into one active
+pointer; records all five button states as pressed/held/released; distinguishes key
+press/repeat/release with modifier snapshots; copies ephemeral UTF-8 text bytes; and
+records focus gain/loss. Focus loss and platform/touch cancellation release every held
+button/key and cancel engine pointer capture. Key events, held keys, and text use explicit
+fixed capacities (`64`, `32`, and `256` bytes respectively); their overflow flags make
+refusal observable without adding allocator ownership to `Resources`.
+
 ## Focus binding
 
 The engine owns focus identity, traversal order, and lifecycle repair; this layer decides

@@ -25,6 +25,16 @@ pub const elements = @import("./elements.zig");
 pub const theme = @import("./theme.zig");
 
 // ctx_binding
+
+// frame input model
+pub const input = @import("./input.zig");
+pub const Input = input.Input;
+pub const InputPoint = input.Point;
+pub const PointerKind = input.PointerKind;
+pub const PointerButton = input.PointerButton;
+pub const KeyAction = input.KeyAction;
+pub const Modifiers = input.Modifiers;
+
 pub const UiCtx = ctx_binding.UiCtx;
 pub const Node = ctx_binding.Node;
 pub const Color = ctx_binding.Color; // the host color type (SDL's), carried on RenderData
@@ -73,6 +83,7 @@ pub const modal = widgets.modal;
 pub const text_input = widgets.text_input;
 
 test {
+    _ = input;
     _ = theme;
     _ = ctx_binding;
     _ = features;

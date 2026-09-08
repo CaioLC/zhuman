@@ -55,8 +55,8 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
 
     const max_offset = @max(0.0, content_h - height);
     const st = outer.get().state(ctx, ScrollState);
-    if (viewport.query().hovering and ctx.res.input.wheel_y != 0) {
-        st.offset -= ctx.res.input.wheel_y * scroll_speed; // wheel up ⇒ toward the top
+    if (viewport.query().hovering and ctx.res.input.pointer.wheel.y != 0) {
+        st.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ toward the top
     }
     st.offset = std.math.clamp(st.offset, 0, max_offset);
     content_node.layout.scroll_y = st.offset; // translate content's children, no second pass

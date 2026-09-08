@@ -205,8 +205,8 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
 
     const max_offset = @max(0.0, content_h - height);
     const state = outer.state(ctx, UiState.ScrollState);
-    if (viewport.query(ctx).hovering and ctx.res.input.wheel_y != 0) {
-        state.offset -= ctx.res.input.wheel_y * scroll_speed; // wheel up ⇒ scroll toward the top
+    if (viewport.query(ctx).hovering and ctx.res.input.pointer.wheel.y != 0) {
+        state.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ scroll toward the top
     }
     state.offset = std.math.clamp(state.offset, 0, max_offset);
     content.layout.scroll_y = state.offset;
@@ -256,7 +256,7 @@ pub const Modal = struct {
 /// ...`) or skip building it while the modal is open.
 ///
 /// **Dismiss is likewise the caller's call**, not this widget's: compare
-/// `ctx.res.input.mouse_down` against `modal.box.rect(ctx)` for click-outside-to-close
+/// `ctx.res.input.pointer.buttons.primary.pressed` against `modal.box.rect(ctx)` for click-outside-to-close
 /// (see `ui_gameover` in `ui_client/pages.zig`). That reads *last frame's* rect — this frame's
 /// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
 /// its rect) alive for that read, exactly like `scroll_view`'s `content`.
@@ -299,7 +299,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     const q = node.query(ctx);
     if (q.clicked) {
         _ = ctx.requestFocus(node.key);
-    } else if (ctx.isFocused(node.key) and ctx.res.input.mouse_down) {
+    } else if (ctx.isFocused(node.key) and ctx.res.input.pointer.buttons.primary.pressed) {
         ctx.clearFocus(); // clicked elsewhere this frame
     }
     const focused = ctx.isFocused(node.key);

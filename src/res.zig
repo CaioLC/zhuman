@@ -32,17 +32,8 @@ pub const Time = struct {
     dt: f32 = 0,
 };
 
-/// Host input state for this frame, fed by the event loop. Shared by both the
-/// UI (hit-testing via `mark`) and ECS systems — one source of truth.
-pub const Input = struct {
-    mouse_x: f32 = 0,
-    mouse_y: f32 = 0,
-    /// A press occurred during this frame's event poll (one-frame edge).
-    mouse_down: bool = false,
-    /// Vertical wheel delta this frame (one-frame edge; 0 when idle). Positive = away
-    /// from the user (SDL convention) — `scroll_view` treats that as "scroll up".
-    wheel_y: f32 = 0,
-};
+/// Host frame input state, fed by the event loop and shared by UI/ECS consumers.
+pub const Input = @import("./ui_client/input.zig").Input;
 
 /// How tired an agent is, in bands. One vocabulary for the condition word, the vigor
 /// chip's color, the "you feel weak" log lines and labor's yield penalty — they all key

@@ -20,6 +20,51 @@ fn nsToUs(ns: u64) f64 {
     return @as(f64, @floatFromInt(ns)) / std.time.ns_per_us;
 }
 
+const PointerIdentity = struct { kind: ui_client.PointerKind, id: ?u64 };
+
+fn modifiersFromSdl(mod: sdl.keycode.KeyModifier) ui_client.Modifiers {
+    return .{
+        .shift = mod.left_shift or mod.right_shift or mod.level5_shift,
+        .control = mod.left_control or mod.right_control,
+        .alt = mod.left_alt or mod.right_alt,
+        .gui = mod.left_gui or mod.right_gui,
+        .caps_lock = mod.caps_lock,
+        .num_lock = mod.num_lock,
+        .scroll_lock = mod.scroll_lock,
+        .mode = mod.mode,
+    };
+}
+
+fn mouseIdentity(id: ?sdl.mouse.Id) PointerIdentity {
+    const value = id orelse return .{ .kind = .mouse, .id = null };
+    const kind: ui_client.PointerKind = if (value.value == sdl.mouse.Id.touch.value)
+        .touch
+    else if (value.value == sdl.mouse.Id.pen.value)
+        .pen
+    else
+        .mouse;
+    return .{ .kind = kind, .id = @intCast(value.value) };
+}
+
+fn pointerButton(button: sdl.mouse.Button) ?ui_client.PointerButton {
+    return switch (button) {
+        .left => .primary,
+        .middle => .middle,
+        .right => .secondary,
+        .x1 => .aux1,
+        .x2 => .aux2,
+        else => null,
+    };
+}
+
+fn syncMouseButtons(input: *ui_client.Input, state: sdl.mouse.ButtonFlags) void {
+    input.syncButtonHeld(.primary, state.left);
+    input.syncButtonHeld(.middle, state.middle);
+    input.syncButtonHeld(.secondary, state.right);
+    input.syncButtonHeld(.aux1, state.side1);
+    input.syncButtonHeld(.aux2, state.side2);
+}
+
 // END CONFIGS
 
 const App = struct {
@@ -98,58 +143,119 @@ pub fn main() !void {
 
     while (!quit) {
         // Event Stage
-        app.resources.input.mouse_down = false; // edge: true only on a press this frame
-        app.resources.input.wheel_y = 0; // edge: nonzero only on a wheel tick this frame
+        const input = &app.resources.input;
+        input.beginFrame();
         while (sdl.events.poll()) |event| {
             switch (event) {
                 .quit, .terminating => quit = true,
-                .key_down => |key| if (key.key) |kc| {
-                    if (kc == .escape) {
-                        if (app.ui.focusedKey() != null) {
-                            // Typing: Escape unfocuses the field rather than quitting.
-                            app.ui.clearFocus();
-                            sdl.keyboard.stopTextInput(app.window) catch {};
-                        } else {
-                            quit = true;
-                        }
-                    } else if (kc == .backspace) {
-                        if (app.ui.focusedKey()) |fk| {
-                            const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
-                            const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
-                            var n = st.len;
-                            if (n > 0) {
-                                n -= 1;
-                                while (n > 0 and (st.buf[n] & 0xC0) == 0x80) n -= 1; // skip UTF-8 continuation bytes
-                                st.len = n;
-                            }
-                        }
+                .key_down, .key_up => |key| if (key.key) |kc| {
+                    const action: ui_client.KeyAction = if (!key.down)
+                        .release
+                    else if (key.repeat)
+                        .repeat
+                    else
+                        .press;
+                    input.recordKey(kc, action, modifiersFromSdl(key.mod));
+                },
+                .text_input => |text| input.appendText(text.text),
+                .mouse_motion => |motion| {
+                    const pointer = mouseIdentity(motion.id);
+                    input.recordMotion(
+                        pointer.kind,
+                        pointer.id,
+                        .{ .x = motion.x, .y = motion.y },
+                        .{ .x = motion.x_rel, .y = motion.y_rel },
+                    );
+                    syncMouseButtons(input, motion.state);
+                },
+                .mouse_button_down, .mouse_button_up => |button| if (pointerButton(button.button)) |mapped| {
+                    const pointer = mouseIdentity(button.id);
+                    input.recordButton(
+                        pointer.kind,
+                        pointer.id,
+                        mapped,
+                        button.down,
+                        button.clicks,
+                        .{ .x = button.x, .y = button.y },
+                    );
+                },
+                .mouse_wheel => |wheel| {
+                    const pointer = mouseIdentity(wheel.id);
+                    input.recordWheel(
+                        pointer.kind,
+                        pointer.id,
+                        .{ .x = wheel.x, .y = wheel.y },
+                        .{ .x = wheel.scroll_x, .y = wheel.scroll_y },
+                    );
+                },
+                .finger_down, .finger_up, .finger_motion => |finger| {
+                    const ww, const wh = try app.window.getSize();
+                    const width: f32 = @floatFromInt(ww);
+                    const height: f32 = @floatFromInt(wh);
+                    const id: u64 = @intCast(finger.finger_id.value);
+                    const position = ui_client.InputPoint{ .x = finger.x * width, .y = finger.y * height };
+                    switch (event) {
+                        .finger_down => input.recordButton(.touch, id, .primary, true, 1, position),
+                        .finger_up => input.recordButton(.touch, id, .primary, false, 1, position),
+                        .finger_motion => input.recordMotion(
+                            .touch,
+                            id,
+                            position,
+                            .{ .x = finger.dx * width, .y = finger.dy * height },
+                        ),
+                        else => unreachable,
                     }
                 },
-                .text_input => |ti| if (app.ui.focusedKey()) |fk| {
-                    const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
-                    const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
-                    if (st.len + ti.text.len <= st.buf.len) {
-                        @memcpy(st.buf[st.len..][0..ti.text.len], ti.text);
-                        st.len += ti.text.len;
-                    }
+                .finger_canceled => {
+                    input.cancel();
+                    app.ui.cancelPointerCapture();
                 },
-                .mouse_motion => |mm| {
-                    app.resources.input.mouse_x = mm.x;
-                    app.resources.input.mouse_y = mm.y;
-                },
-                .mouse_button_down => |mb| {
-                    app.resources.input.mouse_x = mb.x;
-                    app.resources.input.mouse_y = mb.y;
-                    if (mb.button == .left) {
-                        app.resources.input.mouse_down = true;
-                        app.ui.mark(.clicked, mb.x, mb.y);
-                    }
-                },
-                .mouse_wheel => |mw| {
-                    app.resources.input.wheel_y = mw.scroll_y;
+                .window_focus_gained => input.setWindowFocus(true),
+                .window_focus_lost, .did_enter_background => {
+                    input.setWindowFocus(false);
+                    app.ui.cancelPointerCapture();
+                    sdl.keyboard.stopTextInput(app.window) catch {};
                 },
                 else => {},
             }
+        }
+
+        // Preserve current editing/quit policy while sourcing it from the frame model.
+        for (input.keyEvents()) |key| {
+            if (key.action == .release) continue;
+            if (key.key == .escape) {
+                if (app.ui.focusedKey() != null) {
+                    app.ui.clearFocus();
+                    sdl.keyboard.stopTextInput(app.window) catch {};
+                } else {
+                    quit = true;
+                }
+            } else if (key.key == .backspace) {
+                if (app.ui.focusedKey()) |fk| {
+                    const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
+                    const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
+                    var n = st.len;
+                    if (n > 0) {
+                        n -= 1;
+                        while (n > 0 and (st.buf[n] & 0xC0) == 0x80) n -= 1;
+                        st.len = n;
+                    }
+                }
+            }
+        }
+        if (app.ui.focusedKey()) |fk| {
+            const text = input.text();
+            if (text.len > 0) {
+                const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
+                const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
+                if (st.len + text.len <= st.buf.len) {
+                    @memcpy(st.buf[st.len..][0..text.len], text);
+                    st.len += text.len;
+                }
+            }
+        }
+        if (input.pointer.buttons.primary.pressed) {
+            app.ui.mark(.clicked, input.pointer.position.x, input.pointer.position.y);
         }
 
         // Update Stage
@@ -170,7 +276,7 @@ pub fn main() !void {
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         }
         // 3. update ui
-        app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
+        app.ui.mark(.hovering, input.pointer.position.x, input.pointer.position.y);
         app.ui.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
