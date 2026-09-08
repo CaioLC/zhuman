@@ -13,6 +13,7 @@ const focus_mod = @import("focus.zig");
 const geometry = @import("geometry.zig");
 
 pub const Rect = geometry.Rect;
+pub const Geometry = geometry.Geometry;
 
 /// Optional host-supplied local-shape predicate for an interaction slot. The engine
 /// first enforces clip and rectangular bounds, then calls this with the stamped rect
@@ -218,13 +219,20 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.interactions.get(idx).flags;
         }
 
-        /// The rect last stamped on key `k`'s slot (i.e. its laid-out box from a prior
-        /// frame), or null if `k` has no slot or was never stamped. Reads without
-        /// creating a slot — for positioning one node relative to another's last rect
-        /// (e.g. a tooltip above a hovered icon) before this frame's layout runs.
-        pub fn rectOf(self: *Self, k: u64) ?Rect {
+        /// The full geometry last stamped for key `k` by a prior frame's layout, or null
+        /// for a missing/unstamped slot. This non-allocating read makes timing explicit:
+        /// current-frame geometry does not exist until layout and stamping after build.
+        pub fn priorGeometryOf(self: *Self, k: u64) ?Geometry {
             const idx = self.interactions.index.get(k) orelse return null;
-            return self.interactions.slots.items[idx].value.rect;
+            const slot = &self.interactions.slots.items[idx];
+            const rect = slot.value.rect orelse return null;
+            return .{ .rect = rect, .clip = slot.value.clip };
+        }
+
+        /// Compatibility projection of `priorGeometryOf`; prefer the explicit accessor
+        /// when doing coordinate conversion or effective-clip calculations.
+        pub fn rectOf(self: *Self, k: u64) ?Rect {
+            return (self.priorGeometryOf(k) orelse return null).rect;
         }
 
         /// Observe and consume one typed flag on `k` and its stamped ancestor chain.
@@ -403,12 +411,33 @@ fn tstamp(u: *TestCtx, k: u64, r: Rect, clip: ?Rect, parent: ?u64) void {
     _ = u.stampRect(k, r, clip, parent);
 }
 
+test "prior geometry is null until stamped and carries inherited clip" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const key = cache_mod.key(0, "geometry");
+    try std.testing.expectEqual(@as(?Geometry, null), u.priorGeometryOf(key));
+    _ = u.interactionOf(key);
+    try std.testing.expectEqual(@as(?Geometry, null), u.priorGeometryOf(key));
+
+    const rect = Rect{ .x = 25, .y = 40, .w = 100, .h = 60 };
+    const clip = Rect{ .x = 40, .y = 50, .w = 50, .h = 20 };
+    _ = u.stampRect(key, rect, clip, null);
+    const prior = u.priorGeometryOf(key).?;
+    try std.testing.expectEqual(rect, prior.rect);
+    try std.testing.expectEqual(@as(?Rect, clip), prior.clip);
+    try std.testing.expectEqual(Rect{ .x = 15, .y = 10, .w = 50, .h = 20 }, prior.effectiveClipLocal());
+    try std.testing.expectEqual(rect, u.rectOf(key).?);
+}
+
 /// Test-only host geometry: a flat-top hex inscribed in `rect`. Production engine code
 /// knows only the callback type; a board binding can supply this or any other predicate.
 fn testFlatHex(rect: Rect, x: f32, y: f32) bool {
     if (rect.w <= 0 or rect.h <= 0) return false;
-    const local_x = (x - rect.x) / rect.w;
-    const local_y = (y - rect.y) / rect.h;
+    const local = rect.globalToLocalPoint(.{ .x = x, .y = y });
+    const local_x = local.x / rect.w;
+    const local_y = local.y / rect.h;
     if (local_x < 0 or local_x > 1 or local_y < 0 or local_y > 1) return false;
     const edge_height = 1 - 2 * @abs(local_x - 0.5);
     return @abs(local_y - 0.5) <= @min(@as(f32, 0.5), edge_height);

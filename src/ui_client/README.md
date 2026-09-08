@@ -133,7 +133,11 @@ Leaves are `root` (fullscreen, sized to the live window, the only non-`.relative
 `div`, `text`, `image`, `sprite`, `svg`, plus `el(…, content, spec)` sugar pairing a leaf
 with a style spec in one call. Content leaves default to `.relative`, so flowed layout is
 the zero-config case. `.get()` drops to the raw `*Node` for geometry reads, or for handing
-a root to the render walk.
+a root to the render walk. `El.prior_geometry()` explicitly reads the last stamped global
+rect plus inherited clip (null before a slot is stamped). Its `Geometry` value converts
+points/rects between global and node-local pixel space and exposes effective global/local
+clips; use it for overlays, board math, zoom anchors, and drag thresholds instead of
+manual coordinate subtraction.
 
 Behavior refinements also chain on `El`. `pass_through()` removes a geometry-only probe
 from hit testing; `hit_test(predicate)` installs a static host predicate with signature

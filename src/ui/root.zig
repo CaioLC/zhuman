@@ -12,7 +12,9 @@ pub const FocusDirection = focus.Direction;
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const HitTestFn = @import("./ctx.zig").HitTestFn;
+pub const Point = geometry.Point;
 pub const Rect = geometry.Rect;
+pub const Geometry = geometry.Geometry;
 pub const key = cache.key;
 pub const key_i = cache.key_i;
 // Note: no `Color` here — RGBA is host policy (the engine carries `RenderData`

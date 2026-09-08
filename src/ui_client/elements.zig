@@ -45,6 +45,11 @@ pub const El = struct {
         return self.node;
     }
 
+    /// Last stamped geometry (global rect + inherited clip) from a prior frame.
+    pub fn prior_geometry(self: El) ?ui.Geometry {
+        return self.node.priorGeometry(self.ctx);
+    }
+
     /// This node's interaction this frame (buttons read `.clicked`). Uses the handle's ctx.
     pub fn query(self: El) UiCtx.Interaction {
         return self.node.query(self.ctx);

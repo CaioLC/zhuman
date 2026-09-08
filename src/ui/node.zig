@@ -193,12 +193,15 @@ pub fn Node(comptime RenderData: type) type {
             return u.interactionOf(self.key);
         }
 
-        /// This node's rect from a *prior* frame's layout (read off its interaction
-        /// slot), or null if it has no live slot yet. Use to place something relative
-        /// to where this node was last drawn — the current frame's rect isn't resolved
-        /// until layout runs after build. `u` is the duck-typed concrete `Ctx`.
+        /// This node's full geometry from a prior frame's layout/stamp, including the
+        /// inherited global clip, or null before it has a stamped interaction slot.
+        pub fn priorGeometry(self: *Self, u: anytype) ?geometry.Geometry {
+            return u.priorGeometryOf(self.key);
+        }
+
+        /// Compatibility rect projection; use `priorGeometry` for conversions/clips.
         pub fn rect(self: *Self, u: anytype) ?Rect {
-            return u.rectOf(self.key);
+            return (self.priorGeometry(u) orelse return null).rect;
         }
 
         /// This node's cached render-state of type `T`: acquire-or-create the slot for

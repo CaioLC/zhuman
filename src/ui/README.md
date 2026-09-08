@@ -303,11 +303,20 @@ at the event stage — both survive the arena reset, so no `prev_root` is retain
 
 Slots are **lazy**: a store slot exists only after `acquire` — called by
 `interactionOf` (a `query` *read*) or `setFlag` (a direct write). `stampRect`,
-`rectOf`, and `mark` only ever touch *existing* slots, so a node nobody queries gets
-no slot, no rect, and no hit-test — cost ≈ (queried nodes), not node count. `rectOf`
-(via `node.rect`) reads back the slot's last-stamped rect without creating one — for
-positioning one node relative to where another was drawn last frame. A slot stays alive
-only while *touched* (acquired) each frame:
+`priorGeometryOf`, and `mark` only ever touch *existing* slots, so a node nobody queries
+gets no slot, geometry, or hit-test — cost ≈ (queried nodes), not node count.
+`priorGeometryOf` (via `node.priorGeometry`) reads the full global rect and inherited
+global clip stamped by a prior frame, without creating a slot; missing and unstamped slots
+return null. The explicit name matters because current-frame coordinates do not exist until
+layout after build. Legacy `rectOf` / `node.rect` remain projections for dimension-only
+callers.
+
+`Geometry` translates points and rects between global and node-local **pixel** coordinates
+with no scaling, and reports the node's effective clip both globally and locally (its full
+rect intersected with the inherited clip, or the full rect when unclipped). `Rect` exposes
+the same translation primitives directly. Overlay placement, board math, pointer-centered
+zoom, and drag thresholds should use these helpers rather than repeat origin subtraction.
+A slot stays alive only while *touched* (acquired) each frame:
 
 - A node not `query`'d this frame is pruned at `endFrame`, dropping straight out of
   next frame's hit-test set.
@@ -346,8 +355,9 @@ Two orthogonal axes, both Unity-inspired:
   overlay/tooltip layer — anywhere on screen by giving its root an origin:
   `Layout.init(.top_left, ..).with_origin(x, y)`. A root rendered last draws on top, and
   being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
-  to an existing node, read that node's prior-frame rect with **`node.rect(ctx)`**
-  (→ `Ctx.rectOf(key)`, the rect `stamp_rects` recorded last frame) and derive the origin.
+  to an existing node, read **`node.priorGeometry(ctx)`** (the geometry `stamp_rects`
+  recorded last frame), then use its rect/conversion/effective-clip helpers to derive the
+  origin. `node.rect(ctx)` remains a compatibility projection for width/height-only reads.
 - **`offset_x`/`offset_y`** — a displacement in px applied *after* the anchor (or the
   parent's flow) has resolved, so it moves a placement instead of replacing one. This is
   the only way to put a node at a coordinate you computed yourself: nine anchor presets
