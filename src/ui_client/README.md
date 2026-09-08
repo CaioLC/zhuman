@@ -47,7 +47,7 @@ pub const Node  = ui.Node(RenderData);
   A state with semantic defaults declares no-argument `init() T`; states without it
   explicitly use the engine's bitwise-zero fallback. Every fresh slot and reused hole
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
-  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a node is one line either way), `ScrollState`,
+  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while staying POD), `ScrollState`,
   `TabsState`, `StepState`,
   `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
   *variable-length* data — a polyline's points, since `RenderData` holds a single payload
@@ -469,6 +469,38 @@ palette blend and a pulsing readout both need.
 `measure(text, px)`), one loaded font per point size, because `TTF_SetFontSize` clears the
 glyph cache on every call and rescaling a loaded pixel font is lossy. A text leaf measures
 at `font.default_px`; a resolved `font` fragment re-measures at its size.
+
+### Constrained multiline text (TEXT-02)
+
+A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
+over the content box, the fast path dense rows pay nothing for. `El.with_wrap(max_w)` (or
+the `el.textWrapped` sugar) opts a node into **constrained multiline**: it stores an explicit
+maximum content width and re-measures, so the node reports the wrapped `width`×`height` and
+renders exactly those lines.
+
+The line breaking lives in `features/wrap.zig` as a **pure, allocation-free** routine
+`wrapLines`, parameterized by a small `Measurer` (`width`/`prefixBytes`) so it stays
+callback-free at the engine boundary *and* SDL-free to test. `features/text.zig` backs the
+`Measurer` with the live font, and **both** `attach` (measure) and `draw` (render) run the
+*same* routine over the same metrics — so the reserved box and the drawn glyphs cannot drift,
+the TEXT-01 "measure and draw read one source" invariant extended to N lines. The algorithm
+is greedy word wrap: it packs space-separated words while the line fits, breaks on `\n`
+(`\n\n` yields a genuine empty line), collapses run-of-space at breaks, and hard-breaks a
+single over-long word on **codepoint boundaries** via `TTF_MeasureString` (always ≥ 1
+codepoint, so tiny positive widths terminate and never split UTF-8). It deliberately does **not**
+use SDL's own `renderTextSolidWrapped`/`GetStringSizeWrapped`, which do not guarantee
+measured-lines == rendered-lines and whose over-long-word handling is not this deterministic
+hard-break. Height is `line_count * font.getLineSkip()`; the reported `baseline` is the *last*
+line's descent, so a wrapped block still baseline-aligns as the final line in a row.
+
+Wrap is **placement, not style** (it sets a measurement constraint), so it is imperative like
+`with_size`; a later `with_style(.{ font })` re-measures through the same shared routine and
+re-wraps at the same width. `wrap_width` stays **POD** (spans are recomputed, never stored),
+so the pool contract is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a
+too-long source is still refused whole and reserves a zero box, wrapping or not. The explicit
+width is the seam VIEW-01's `ViewMetrics` will later feed; today `log_view` passes the scroll
+column width and `act_one_end` passes an explicit dialog prose width. Overflow clip/ellipsis
+(TEXT-03) and the typography contract (TEXT-04) are separate slices and are **not** done here.
 
 ## Frame assembly (`tree.zig`)
 

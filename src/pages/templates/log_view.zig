@@ -48,12 +48,17 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
     const flines: f32 = @floatFromInt(lines);
     const height = flines * line_height(ctx) + (flines - 1) * sv.content_gap;
     const view = try sv.scroll_view(ctx, parent, id, width - sv.scrollbar_w, height);
+    // The viewport's content column is exactly this wide (fixed, gutter already reserved),
+    // so a long entry wraps to the column instead of being clipped by the scroll viewport.
+    // An explicit, template-known width — the seam VIEW-01's ViewMetrics will later supply.
+    const wrap_w = width - sv.scrollbar_w;
 
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
         const key = try std.fmt.allocPrint(ctx.arena, "log{d}", .{i});
         const line = try el.text(ctx, view.content, key, entry.text());
-        _ = line.with_style(.{ style.body, Style{ .text = log_tone_color(th, entry.tone) } });
+        _ = line.with_wrap(wrap_w)
+            .with_style(.{ style.body, Style{ .text = log_tone_color(th, entry.tone) } });
     }
 }

@@ -24,6 +24,11 @@ const StepState = uic.UiState.StepState;
 
 const t = @import("./templates/root.zig");
 
+/// The prose column width for the curtain's note, in px — an explicit dialog measure so the
+/// note wraps as a paragraph rather than stretching the `fit_children` panel to one long
+/// line. A template constant today; VIEW-01's `ViewMetrics` will feed the same parameter.
+const dialog_prose_w: f32 = 320;
+
 /// The curtain's script. The last beat's button is the one that starts a new run.
 const Beat = struct { line: []const u8, note: []const u8, button: []const u8 };
 const beats = [_]Beat{
@@ -54,7 +59,12 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     // way every other rebuilt leaf does.
     _ = (try el.text(ctx, dialog, "line", beat.line))
         .with_style(.{ style.h2, Style{ .text = th.fg } });
+    // The note is genuine prose, longer than a heading and worth reading as a paragraph —
+    // constrain it to an explicit dialog column so it wraps on word boundaries instead of
+    // stretching the panel to a single long line. The width is a template constant (the
+    // dialog's prose measure); VIEW-01's ViewMetrics will later feed the same parameter.
     _ = (try el.text(ctx, dialog, "note", beat.note))
+        .with_wrap(dialog_prose_w)
         .with_style(.{ style.body, Style{ .text = th.dim } });
 
     const go = try t.button(ctx, dialog, "go", beat.button, true);

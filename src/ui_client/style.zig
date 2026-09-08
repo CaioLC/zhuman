@@ -145,12 +145,12 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         if (s.text) |c| node.render_data.text = c;
         if (s.font) |px| {
             const st = node.state(ctx, cb.UiState.TextState);
-            if (st.text()) |str| {
-                const tw, const th, const baseline = ctx.res.platform.font.measureBaseline(str, px) catch return;
-                node.size.data_width = @floatFromInt(tw);
-                node.size.data_height = @floatFromInt(th);
-                node.size.baseline = baseline; // re-measure the baseline too, so a heading row still aligns
-                st.px = px; // set only on a successful re-measure, so box + render agree
+            if (st.text()) |_| {
+                st.px = px; // set the size, then re-measure through the one shared routine
+                // `text.remeasure` re-runs the same single-line-or-wrapped measure the leaf
+                // used, so a heading (or a wrapped block) re-measures at this px and — when
+                // `wrap_width` is set — re-wraps at the same constraint. Box + render agree.
+                @import("features/text.zig").remeasure(ctx, node);
             }
         }
     } else {

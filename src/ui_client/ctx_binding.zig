@@ -46,9 +46,18 @@ pub const UiState = struct {
         /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
+        /// Maximum content width, in px, for constrained multiline text (TEXT-02). `0` (the
+        /// default) is the **single-line fast path**: the node measures/draws one line
+        /// exactly as before, so dense rows pay nothing for the wrap machinery. A positive
+        /// value makes `attach`/`draw` run the pure `features/wrap.zig` routine — the same
+        /// routine for both, so the measured box and the rendered lines always agree. Set by
+        /// `El.with_wrap` (imperative placement, before style re-measures); `style.apply`
+        /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
+        /// so the pool contract is unchanged (line spans are recomputed, never stored).
+        wrap_width: f32 = 0,
 
         pub fn init() TextState {
-            return .{ .buf = undefined, .len = 0, .refused = false, .px = 0 };
+            return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };
         }
 
         /// Copy `t` into the persistent buffer **in full**, or refuse it **as a whole** if

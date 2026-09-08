@@ -114,6 +114,23 @@ pub const El = struct {
         return self;
     }
 
+    /// Constrain this text node to `max_w` px and wrap it onto multiple lines (TEXT-02).
+    /// Word-boundary greedy wrap with a deterministic UTF-8-safe hard-break for an
+    /// over-long word; the reserved box grows to the wrapped `width`×`height` and the render
+    /// draws exactly those lines. `max_w <= 0` restores the single-line fast path. This is
+    /// *placement* (it sets a measurement constraint), so it is imperative like `with_size`,
+    /// not a style fragment; apply it after the content leaf and before/independent of
+    /// `with_style` — a later `with_style(.{ font })` re-measures at the same constraint.
+    ///
+    /// The explicit width is the seam `ViewMetrics` (VIEW-01) will later feed; today a
+    /// template passes a column/dialog width it already knows.
+    pub fn with_wrap(self: El, max_w: f32) El {
+        const st = self.node.state(self.ctx, cb.UiState.TextState);
+        st.wrap_width = max_w;
+        feat.text.remeasure(self.ctx, self.node);
+        return self;
+    }
+
     /// Take this node out of hit-testing: it is neither flagged nor does it occlude
     /// what is drawn beneath it. For a node queried *only* to read its own geometry
     /// back — `scroll_view`'s content, which needs last frame's height for the scroll
@@ -168,6 +185,13 @@ pub fn text(ctx: *UiCtx, parent: El, id: []const u8, str: []const u8) !El {
     const node = try child(ctx, parent, id);
     try feat.data_text(ctx, node, str);
     return .{ .ctx = ctx, .node = node };
+}
+
+/// A content-sized text node holding `str`, constrained to `max_w` px and wrapped onto
+/// multiple lines (TEXT-02). Sugar for `text(...).with_wrap(max_w)`. Recolor/resize with
+/// `with_style` afterward — a `font` fragment re-wraps at the same width.
+pub fn textWrapped(ctx: *UiCtx, parent: El, id: []const u8, str: []const u8, max_w: f32) !El {
+    return (try text(ctx, parent, id, str)).with_wrap(max_w);
 }
 
 /// A whole-texture image node, sized to the texture.
