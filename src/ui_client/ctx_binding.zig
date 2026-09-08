@@ -24,8 +24,22 @@ pub const UiState = struct {
     /// state in the feature and referencing it back here would be an import cycle. The
     /// feature exposes it as `pub const State = cb.UiState.TextState` for the contract.
     pub const TextState = struct {
-        buf: [64]u8,
+        /// Longest cached string, in bytes. Sized to comfortably hold real UI strings —
+        /// labels, values, a full `max_query_bytes = 128` search query rendered as text,
+        /// and the game's short log/status copy — with headroom. A source past this is
+        /// **refused as a whole** (see `update`), never a silently cut prefix, so the
+        /// renderer never draws half a string or a severed UTF-8 codepoint. TEXT-02
+        /// wrapping/ellipsis is the mechanism for text that genuinely needs to be longer.
+        pub const cap = 256;
+
+        buf: [cap]u8,
         len: usize,
+        /// The last `update` was refused because the source exceeded `cap` (or was not a
+        /// codepoint-aligned prefix of a longer string — an impossible-to-render partial).
+        /// The renderer treats a refused state as "no reliable text here" — it draws
+        /// nothing rather than a cut string, matching the `semantics.OwnedText` policy and
+        /// the editor's non-silent refusal. Cleared by the next accepted `update`.
+        refused: bool,
         /// Point size to render this text at, in px. Set by the `text` feature's `attach`
         /// (default) and overridden by `style.apply` when a `font` fragment resolves — so
         /// the size travels from build to the feature's `draw`, which renders at it. The
@@ -34,21 +48,35 @@ pub const UiState = struct {
         px: f32,
 
         pub fn init() TextState {
-            return .{ .buf = undefined, .len = 0, .px = 0 };
+            return .{ .buf = undefined, .len = 0, .refused = false, .px = 0 };
         }
 
-        /// Copy `text` into the persistent buffer.
-        pub fn update(self: *TextState, t: []const u8) void {
-            const n = @min(t.len, self.buf.len);
-            @memcpy(self.buf[0..n], t[0..n]);
-            self.len = n;
+        /// Copy `t` into the persistent buffer **in full**, or refuse it **as a whole** if
+        /// it would not fit `cap`. Returns whether it was accepted. On refusal the buffer
+        /// is cleared (`len = 0`) and `refused` is set, so a reader/renderer never observes
+        /// a truncated or mid-codepoint prefix — the same non-silent contract as
+        /// `semantics.OwnedText.set` and the editor's whole-edit refusal. An empty slice
+        /// clears the field (accepted). POD by construction: no allocator, no `deinit`, so
+        /// the pool contract (init on fresh/reused slots, no eviction resource) is unchanged.
+        pub fn update(self: *TextState, t: []const u8) bool {
+            if (t.len > cap) {
+                self.len = 0;
+                self.refused = true;
+                return false;
+            }
+            @memcpy(self.buf[0..t.len], t);
+            self.len = t.len;
+            self.refused = false;
+            return true;
         }
 
-        /// The current text, reconstructed from `buf` + `len` at the call site.
-        /// Returns `null` (renders nothing) when empty. Never store the result
-        /// across a pool `acquire` — the slot may move; call this again instead.
+        /// The current text, reconstructed from `buf` + `len` at the call site. Returns
+        /// `null` (renders nothing) when empty **or when the last `update` was refused** —
+        /// a refused string is never partially rendered. Never store the result across a
+        /// pool `acquire` — the slot may move; call this again instead.
         pub fn text(self: *const TextState) ?[]const u8 {
-            return if (self.len == 0) null else self.buf[0..self.len];
+            if (self.refused or self.len == 0) return null;
+            return self.buf[0..self.len];
         }
     };
     /// A scroll container's persisted offset and active thumb-drag anchors, keyed by its
@@ -363,4 +391,150 @@ test "held dragging and captured states follow pointer owners and reset" {
     u.clearTransient();
     const cleared = u.interactionOf(key);
     try std.testing.expect(!cleared.held and !cleared.dragging and !cleared.captured);
+}
+
+// --- TextState (TEXT-01): non-silent, whole-string cached text -------------------------
+
+const TextStateT = UiState.TextState;
+
+test "TextState copies a fitting string in full and round-trips" {
+    var st = TextStateT.init();
+    try std.testing.expect(st.text() == null); // empty renders nothing
+    try std.testing.expect(st.update("Forage the ridge"));
+    try std.testing.expect(!st.refused);
+    try std.testing.expectEqualStrings("Forage the ridge", st.text().?);
+    // An empty slice clears the field and is accepted (not a refusal).
+    try std.testing.expect(st.update(""));
+    try std.testing.expect(!st.refused);
+    try std.testing.expect(st.text() == null);
+}
+
+test "TextState accepts a string exactly at capacity" {
+    var st = TextStateT.init();
+    var at_cap: [TextStateT.cap]u8 = undefined;
+    @memset(&at_cap, 'a');
+    try std.testing.expect(st.update(&at_cap));
+    try std.testing.expect(!st.refused);
+    try std.testing.expectEqual(@as(usize, TextStateT.cap), st.text().?.len);
+}
+
+test "TextState refuses an over-capacity string as a whole, never a cut prefix" {
+    var st = TextStateT.init();
+    // Seed with accepted text first, to prove a refusal clears rather than keeps a prefix.
+    try std.testing.expect(st.update("kept"));
+    var over: [TextStateT.cap + 1]u8 = undefined;
+    @memset(&over, 'x');
+    try std.testing.expect(!st.update(&over));
+    try std.testing.expect(st.refused);
+    try std.testing.expectEqual(@as(usize, 0), st.len);
+    try std.testing.expect(st.text() == null); // renders nothing, not a truncated prefix
+    // A subsequent fitting update clears the refusal.
+    try std.testing.expect(st.update("ok"));
+    try std.testing.expect(!st.refused);
+    try std.testing.expectEqualStrings("ok", st.text().?);
+}
+
+test "TextState refuses long multibyte UTF-8 whole, never cutting a codepoint" {
+    var st = TextStateT.init();
+    // Fill just past cap with 3-byte codepoints (U+2603 SNOWMAN = E2 98 83). A silent
+    // @min-style truncation would have severed the final codepoint mid-sequence; the
+    // whole-string refusal must instead keep nothing and flag it.
+    const snowman = "\u{2603}";
+    var buf: [TextStateT.cap + 3]u8 = undefined;
+    var n: usize = 0;
+    while (n + snowman.len <= buf.len) : (n += snowman.len) @memcpy(buf[n .. n + snowman.len], snowman);
+    try std.testing.expect(n > TextStateT.cap); // genuinely over capacity
+    try std.testing.expect(!st.update(buf[0..n]));
+    try std.testing.expect(st.refused);
+    try std.testing.expectEqual(@as(usize, 0), st.len);
+    try std.testing.expect(st.text() == null);
+    // A multibyte string that *fits* is stored intact, byte-for-byte.
+    const short = snowman ** 4; // 12 bytes, well within cap
+    try std.testing.expect(st.update(short));
+    try std.testing.expect(std.unicode.utf8ValidateSlice(st.text().?));
+    try std.testing.expectEqualStrings(short, st.text().?);
+}
+
+const Pool = ui.cache.Pool;
+
+test "TextState pool: fresh + reused slots initialize clean via init contract" {
+    const alloc = std.testing.allocator;
+    var p: Pool(TextStateT) = .{};
+    defer p.deinit(alloc);
+
+    // Fresh slot starts empty/unrefused (the declared init defaults, not garbage).
+    const a = try p.acquire(alloc, 111, 1);
+    try std.testing.expect(p.get(a).text() == null);
+    try std.testing.expect(!p.get(a).refused);
+
+    // Dirty it (accepted text + then a refusal latch), prune, and prove the reused hole
+    // is reinitialized to clean defaults rather than inheriting the previous occupant.
+    try std.testing.expect(p.get(a).update("stale"));
+    var over: [TextStateT.cap + 1]u8 = undefined;
+    @memset(&over, 'z');
+    try std.testing.expect(!p.get(a).update(&over));
+    try std.testing.expect(p.get(a).refused);
+    try p.prune(alloc, 2);
+
+    const reused = try p.acquire(alloc, 222, 2);
+    try std.testing.expectEqual(a, reused);
+    try std.testing.expect(p.get(reused).text() == null);
+    try std.testing.expect(!p.get(reused).refused);
+    try std.testing.expectEqual(@as(usize, 0), p.get(reused).len);
+}
+
+test "TextState pool: values survive pool growth (handle, not pointer)" {
+    const alloc = std.testing.allocator;
+    var p: Pool(TextStateT) = .{};
+    defer p.deinit(alloc);
+
+    const h0 = try p.acquire(alloc, 1, 1);
+    try std.testing.expect(p.get(h0).update("anchor"));
+
+    // Force many appends so the backing array reallocates/moves.
+    var n: u64 = 2;
+    while (n < 300) : (n += 1) {
+        const h = try p.acquire(alloc, n, 1);
+        try std.testing.expect(p.get(h).update("filler"));
+    }
+    // Re-deref the original handle: its owned bytes are intact across the move.
+    try std.testing.expectEqualStrings("anchor", p.get(h0).text().?);
+}
+
+test "TextState pool: deinit under a failing allocator does not leak (POD state)" {
+    // TextState owns no heap (fixed inline buffer), so a mid-growth allocation failure
+    // must leave the pool safely deinitializable with the testing allocator asserting no
+    // leak. This guards the POD ownership claim behind the Option A design.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 8 });
+    const alloc = failing.allocator();
+    var p: Pool(TextStateT) = .{};
+    defer p.deinit(alloc);
+
+    var n: u64 = 0;
+    while (n < 64) : (n += 1) {
+        const h = p.acquire(alloc, n, 1) catch break; // stop at the injected failure
+        try std.testing.expect(p.get(h).update("x"));
+    }
+    // Reaching here (and the deferred deinit) proves teardown is clean after a failure.
+}
+
+test "INPUT-07 regression: text input keeps its 128-byte whole-edit refusal" {
+    // TEXT-01 migrates the *render-cache* TextState; the authoritative text-input editor
+    // (INPUT-07) must be untouched — still the 128-byte LineEditor that refuses an
+    // over-length edit as a whole rather than becoming unbounded or truncating.
+    const LineEditor = editor.LineEditor;
+    try std.testing.expectEqual(UiState.TextInputState, LineEditor);
+    try std.testing.expectEqual(@as(usize, 128), LineEditor.max_query_bytes);
+
+    var ed: LineEditor = .{};
+    try std.testing.expect(!ed.refused);
+    try std.testing.expectEqual(LineEditor.Result.accepted, ed.insert("iron ore"));
+    try std.testing.expectEqualStrings("iron ore", ed.text());
+
+    // An edit that would exceed max_query_bytes is refused whole, mutating nothing.
+    var over: [LineEditor.max_query_bytes + 1]u8 = undefined;
+    @memset(&over, 'a');
+    try std.testing.expectEqual(LineEditor.Result.refused, ed.insert(&over));
+    try std.testing.expect(ed.refused); // visible, non-silent refusal latch
+    try std.testing.expectEqualStrings("iron ore", ed.text()); // unchanged, not truncated
 }

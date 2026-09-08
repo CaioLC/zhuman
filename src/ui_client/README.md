@@ -46,8 +46,8 @@ pub const Node  = ui.Node(RenderData);
 - **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`.
   A state with semantic defaults declares no-argument `init() T`; states without it
   explicitly use the engine's bitwise-zero fallback. Every fresh slot and reused hole
-  follows that same contract. The registry currently contains `TextState` (a **64-byte** buffer + the px to render at — `update` clamps to it, so a
-  longer string is truncated silently, and a node is one line either way), `ScrollState`,
+  follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
+  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a node is one line either way), `ScrollState`,
   `TabsState`, `StepState`,
   `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
   *variable-length* data — a polyline's points, since `RenderData` holds a single payload

@@ -218,9 +218,10 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
         }
     }
     if (hidden > 0 and st.show != .all) {
-        // Two nodes, not one sentence: a text node holds 64 bytes and `TextState.update`
-        // truncates past that *silently*, so a long line loses its tail rather than
-        // wrapping or erroring.
+        // Two nodes, not one sentence: a text node's cached string is bounded
+        // (`TextState.cap`) and now *refuses* a source past it as a whole rather than
+        // rendering a cut tail, so a single long line would vanish rather than wrap.
+        // Splitting keeps each line well inside the cap; TEXT-02 adds real wrapping.
         var hbuf: [64]u8 = undefined;
         const msg = std.fmt.bufPrint(&hbuf, "{d} more are priced past one pair of hands.", .{hidden}) catch "";
         const foot = try el.div(ctx, outer, "hint");
