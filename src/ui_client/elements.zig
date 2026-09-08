@@ -131,6 +131,38 @@ pub const El = struct {
         return self;
     }
 
+    /// Constrain this text node to a single-line **cell** of `cell_w` px with an explicit
+    /// overflow discipline (TEXT-03): `.clip` renders the whole string but scopes the
+    /// renderer's clip to the cell, `.ellipsis` renders the longest codepoint-aligned prefix
+    /// that fits `cell_w − ellipsis_width` plus a deterministic ellipsis token. `.visible`
+    /// clears the constraint (back to the measured-glyph fast path).
+    ///
+    /// The point of a cell is geometry: the node's layout box and hit box become exactly
+    /// `cell_w`, *never* the unbounded glyph width — so a widening label (a longer stock
+    /// token, a long recipe name) can never shove its neighbors, and the cell reserves its
+    /// full width for stable column alignment even when the text is shorter. Like `with_wrap`
+    /// this is *placement* (a measurement constraint), so it is imperative, applied after the
+    /// content leaf; a later `with_style(.{ font })` re-measures at the same cell.
+    ///
+    /// `cell_w` must be **nonnegative** (a required allocated width; `0` is a legal
+    /// zero-width cell that draws nothing). Mutually exclusive with `with_wrap` — a cell is
+    /// single-line — so this clears `wrap_width`; the explicit width is the seam
+    /// `ViewMetrics` (VIEW-01) will feed, exactly like `with_wrap`'s width today.
+    pub fn with_cell(self: El, mode: cb.UiState.TextState.Overflow, cell_w: f32) El {
+        std.debug.assert(cell_w >= 0);
+        const st = self.node.state(self.ctx, cb.UiState.TextState);
+        st.wrap_width = 0; // single-line cell; wrapping and overflow are mutually exclusive
+        st.overflow = mode;
+        st.overflow_width = cell_w;
+        // A `.clip` cell also routes through the engine's generic `Layout.overflow=.clip` so
+        // the node's *subtree* (any decoration children) is cropped to its box for free and
+        // hit-testing already rejects outside the viewport; the leaf's own glyphs are cropped
+        // renderer-scoped in `text.draw`. `.ellipsis`/`.visible` leave layout overflow alone.
+        self.node.layout.overflow = if (mode == .clip) .clip else self.node.layout.overflow;
+        feat.text.remeasure(self.ctx, self.node);
+        return self;
+    }
+
     /// Take this node out of hit-testing: it is neither flagged nor does it occlude
     /// what is drawn beneath it. For a node queried *only* to read its own geometry
     /// back — `scroll_view`'s content, which needs last frame's height for the scroll

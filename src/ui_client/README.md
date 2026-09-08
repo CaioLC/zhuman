@@ -499,8 +499,47 @@ re-wraps at the same width. `wrap_width` stays **POD** (spans are recomputed, ne
 so the pool contract is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a
 too-long source is still refused whole and reserves a zero box, wrapping or not. The explicit
 width is the seam VIEW-01's `ViewMetrics` will later feed; today `log_view` passes the scroll
-column width and `act_one_end` passes an explicit dialog prose width. Overflow clip/ellipsis
-(TEXT-03) and the typography contract (TEXT-04) are separate slices and are **not** done here.
+column width and `act_one_end` passes an explicit dialog prose width.
+
+### Single-line overflow cells (TEXT-03)
+
+Where a label must live in a slot of an **explicitly allocated width** — a catalog name
+column, a status readout in a narrow tile — `El.with_cell(mode, cell_w)` opts the node into a
+single-line *cell* with an explicit overflow discipline. It sets `TextState.overflow`
+(`.visible` / `.clip` / `.ellipsis`) and `overflow_width` (a **required nonnegative** cell
+width; `0` is a legal zero-width cell), clears `wrap_width` (a cell is single-line; wrapping
+and overflow are mutually exclusive, and wrapping wins if both are somehow set), and
+re-measures — placement, not style, exactly like `with_wrap`.
+
+The point is **geometry**: `remeasure` writes `data_width = overflow_width`, so the node's
+layout box *and* hit box are the allocated cell, **never** the unbounded glyph width — a
+widening label can never shove its neighbors, and a shorter one still reserves its column;
+`data_height`/`baseline` still come from the font, so a cell baseline-aligns like a plain
+label. Only the *visible glyphs* are bounded:
+
+- **`.clip`** — `draw` blits the whole accepted string, but scopes the SDL renderer clip to
+  the intersection of the *prior* clip and the cell, then **restores the prior clip in a
+  `defer`, including on error**. It snapshots both `getClipEnabled` and `getClipRect`, because
+  the SDL binding reports an enabled zero-area clip as `null`, just like disabled clipping;
+  preserving the enable bit keeps a fully clipped ancestor fully clipped instead of widening
+  it to the text cell. Restoring that normalized prior state also means a cell nested in an ancestor `.clip` like a scroll viewport never leaks outside it. This is
+  done in the feature because the engine's `Layout.overflow = .clip` crops a node's *children*,
+  and a text leaf paints its own glyphs before that narrowing; the cell also sets that layout
+  flag so any decoration subtree and hit-testing get the same box.
+- **`.ellipsis`** — `draw` recomputes the pure, SDL-free `wrap.ellipsisFit` (deterministic, one
+  source of truth for measure and render): if the string fits it draws whole; else, with the
+  glyph budget `cell_w − ellipsis_width` (the ellipsis `"\u{2026}"` width is **font-measured**),
+  it draws the longest **codepoint-aligned** prefix that fits plus the ellipsis. A budget `≤ 0`
+  (cell narrower than the ellipsis) draws **nothing** — never a glyph wider than the allocated
+  cell, never a split codepoint. If a live SDL font measurement fails, the renderer returns
+  without drawing that cell.
+
+Both modes keep `overflow` **POD** (the fit is recomputed, never stored), so the pool contract
+is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a refused string draws
+nothing and reserves the cell (or zero) box, cell or not. `.visible` + 0 is the unchanged
+fast/wrapped path. Integrated at two representative sites: `capital_row`'s name column
+(`.ellipsis` at its fixed column width) and `mock`'s heartbeat readout (`.clip` at 64px). The
+typography contract (TEXT-04) and rendered-text caching (TEXT-05) are separate slices.
 
 ## Frame assembly (`tree.zig`)
 

@@ -206,6 +206,51 @@ fn wrapParagraph(
     return true;
 }
 
+// --- Single-line overflow: ellipsis fitting (TEXT-03) -----------------------------------
+//
+// The pure counterpart to `wrapLines` for the *single-line* overflow case. Like wrap, it is
+// SDL-free (it asks the same `Measurer` for widths) and deterministic, so `text.remeasure`
+// and `text.draw` compute the identical fit from identical inputs — the drawn glyphs and the
+// selection agree, and both are testable with the 1px/byte fake below.
+
+/// The result of fitting `text` into a cell for `.ellipsis` overflow. `prefix_len` is the
+/// byte length of the codepoint-aligned prefix of `text` to draw; `elided` is whether the
+/// ellipsis token is appended after it. When `!elided`, the whole string fit and
+/// `prefix_len == text.len` (no ellipsis). When `elided`, draw `text[0..prefix_len]` then
+/// the ellipsis; `prefix_len` may be `0` (ellipsis alone, or a zero-width result when even
+/// the ellipsis does not fit).
+pub const Fit = struct {
+    prefix_len: usize,
+    elided: bool,
+};
+
+/// Deterministically choose the longest codepoint-aligned prefix of `text` that, followed
+/// by an ellipsis of measured width `ellipsis_w`, fits the allocated cell `cell_w`. Pure and
+/// UTF-8-safe (the prefix comes from `Measurer.prefixBytes`, which never cuts mid-codepoint).
+///
+/// Algorithm — one source of truth for measure and render:
+///  1. `cell_w <= 0` (a zero/degenerate cell): draw nothing. `{ prefix_len = 0, elided = false }`.
+///  2. The whole string already fits (`width(text) <= cell_w`): no elision — draw it whole.
+///     `{ prefix_len = text.len, elided = false }`. (Measure and draw both draw everything.)
+///  3. Otherwise the string is too wide, so an ellipsis is needed. The budget for real
+///     glyphs is `cell_w - ellipsis_w`:
+///       - budget `<= 0` (the cell is narrower than the ellipsis token itself, or a
+///         font-measure error reported `ellipsis_w >= cell_w`): **deterministic empty** —
+///         draw neither prefix nor ellipsis (`{ 0, false }`), never a floating ellipsis
+///         wider than the allocated cell. No overdraw, ever.
+///       - budget `> 0`: `prefix_len = prefixBytes(text, budget)` (codepoint-aligned, may be
+///         `0`), and `elided = true` — draw the prefix (possibly empty) plus the ellipsis.
+///
+/// Because step 3 only fires when the string is genuinely too wide, an ellipsis is drawn
+/// **iff** the text is clipped — a caller can trust `elided` as "was anything hidden".
+pub fn ellipsisFit(text: []const u8, cell_w: f32, ellipsis_w: f32, measure: Measurer) Fit {
+    if (cell_w <= 0) return .{ .prefix_len = 0, .elided = false };
+    if (measure.width(text) <= cell_w) return .{ .prefix_len = text.len, .elided = false };
+    const budget = cell_w - ellipsis_w;
+    if (budget <= 0) return .{ .prefix_len = 0, .elided = false };
+    return .{ .prefix_len = measure.prefixBytes(text, budget), .elided = true };
+}
+
 // --- Tests: deterministic, SDL-free (fake 1px/byte measurer) ----------------------------
 //
 // The wrap routine is pure and parameterized by `Measurer`, so these run with a fake that
@@ -409,4 +454,99 @@ test "wrap: measure and render agreement — one routine, identical spans" {
     for (a.lines.items, b.lines.items) |la, lb| {
         try testing.expectEqualStrings(la, lb);
     }
+}
+
+// --- Tests: ellipsisFit (TEXT-03), same 1px/byte fake ----------------------------------
+//
+// The fake bills 1px/byte and its `prefixBytes` returns the codepoint-aligned bytes fitting
+// `floor(max_w)`. So a cell width reads as a byte budget, and every fit/boundary/UTF-8/tiny
+// case below is exact without a font — the same property the wrap tests rely on.
+
+/// Convenience: run `ellipsisFit` with the 1px/byte fake.
+fn fit(text: []const u8, cell_w: f32, ellipsis_w: f32) Fit {
+    var f = FakeFont{};
+    return ellipsisFit(text, cell_w, ellipsis_w, f.measurer());
+}
+
+test "ellipsisFit: whole string fits exactly → no elision, full prefix" {
+    // 5 bytes, cell 5 → fits exactly, draw it all, no ellipsis.
+    const r = fit("hello", 5, 1);
+    try testing.expect(!r.elided);
+    try testing.expectEqual(@as(usize, 5), r.prefix_len);
+}
+
+test "ellipsisFit: one pixel less than full → elides on a codepoint boundary, fits budget" {
+    // 5 bytes, cell 4 (one less) with ellipsis_w 1 → budget 3 → prefix "hel", elided.
+    const r = fit("hello", 4, 1);
+    try testing.expect(r.elided);
+    try testing.expectEqual(@as(usize, 3), r.prefix_len); // "hel"
+    // prefix + ellipsis must fit the cell: 3 + 1 == 4 <= 4.
+    try testing.expect(@as(f32, @floatFromInt(r.prefix_len)) + 1 <= 4);
+}
+
+test "ellipsisFit: multibyte prefix never splits a codepoint" {
+    // Snowman U+2603 is 3 bytes. Five of them = 15 bytes; cell 8, ellipsis_w 2 → budget 6 →
+    // exactly two snowmen (6 bytes), never a mid-sequence 7th byte.
+    const snowman = "\u{2603}";
+    const src = snowman ** 5;
+    const r = fit(src, 8, 2);
+    try testing.expect(r.elided);
+    try testing.expectEqual(@as(usize, 6), r.prefix_len); // two whole snowmen
+    try testing.expect(std.unicode.utf8ValidateSlice(src[0..r.prefix_len]));
+}
+
+test "ellipsisFit: budget zero (cell == ellipsis width) → deterministic empty, no overdraw" {
+    // Too wide to fit, and ellipsis alone would consume the whole cell → draw nothing.
+    const r = fit("hello", 3, 3);
+    try testing.expect(!r.elided);
+    try testing.expectEqual(@as(usize, 0), r.prefix_len);
+}
+
+test "ellipsisFit: cell narrower than the ellipsis → deterministic empty" {
+    // budget = cell - ellipsis_w = 2 - 5 < 0 → empty, never a floating ellipsis > cell.
+    const r = fit("hello", 2, 5);
+    try testing.expect(!r.elided);
+    try testing.expectEqual(@as(usize, 0), r.prefix_len);
+}
+
+test "ellipsisFit: zero-width cell → draws nothing, terminates" {
+    const r = fit("hello", 0, 1);
+    try testing.expect(!r.elided);
+    try testing.expectEqual(@as(usize, 0), r.prefix_len);
+}
+
+test "ellipsisFit: tiny positive cell smaller than one codepoint → empty prefix + ellipsis" {
+    // Snowman (3 bytes). cell 2, ellipsis_w 1 → budget 1 → prefixBytes floors to 0 whole
+    // codepoints, so empty prefix but ellipsis is applied (deterministic, no split, no loop).
+    const r = fit("\u{2603}", 2, 1);
+    try testing.expect(r.elided);
+    try testing.expectEqual(@as(usize, 0), r.prefix_len);
+}
+
+test "ellipsisFit: font-error surrogate (width 0) degrades to no elision" {
+    // A width function that always reports 0 (the real FontMeasurer's error path) makes the
+    // whole string "fit" any positive cell → no elision, draw whole (safe, never loops).
+    const Zero = struct {
+        fn width(_: *const anyopaque, _: []const u8) f32 {
+            return 0;
+        }
+        fn prefixBytes(_: *const anyopaque, _: []const u8, _: f32) usize {
+            return 0;
+        }
+        fn measurer(self: *const @This()) Measurer {
+            return .{ .ptr = self, .widthFn = width, .prefixBytesFn = prefixBytes };
+        }
+    };
+    var z = Zero{};
+    const r = ellipsisFit("anything", 10, 3, z.measurer());
+    try testing.expect(!r.elided);
+    try testing.expectEqual(@as(usize, "anything".len), r.prefix_len);
+}
+
+test "ellipsisFit: determinism — identical inputs yield identical fit (measure == draw)" {
+    // remeasure and draw call this with the same inputs; the result must be bit-identical.
+    const a = fit("a long enough label to elide", 12, 3);
+    const b = fit("a long enough label to elide", 12, 3);
+    try testing.expectEqual(a.elided, b.elided);
+    try testing.expectEqual(a.prefix_len, b.prefix_len);
 }

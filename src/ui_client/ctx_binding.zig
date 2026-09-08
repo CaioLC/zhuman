@@ -55,6 +55,34 @@ pub const UiState = struct {
         /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
         /// so the pool contract is unchanged (line spans are recomputed, never stored).
         wrap_width: f32 = 0,
+        /// Single-line overflow discipline for a *cell* of an explicitly allocated width
+        /// (TEXT-03). This is the vocabulary for a fixed-width slot — a stock token, a
+        /// catalog name column, a status readout in a narrow tile — where the drawn glyphs
+        /// must never redefine the box: the layout/hit geometry stays the allocated cell,
+        /// only the *visible* glyphs are constrained. Explicit, never implicit:
+        ///   - `.visible` (default) — the fast/wrapped path unchanged; no cell constraint,
+        ///     the box is the measured glyph width (or wrapped width).
+        ///   - `.clip` — draw the whole accepted string but scope the renderer's clip to
+        ///     the content cell (and restore the prior clip after, including on error).
+        ///   - `.ellipsis` — draw the longest codepoint-aligned prefix that fits
+        ///     `overflow_width − ellipsis_width` plus a deterministic ellipsis token.
+        /// Mutually exclusive with `wrap_width`: wrapping is multiline, overflow is
+        /// single-line; if both are set the wrap path wins (a wrapped node is not a cell).
+        overflow: Overflow = .visible,
+        /// The allocated cell width, in px, for `overflow != .visible` (TEXT-03). A
+        /// **required nonnegative** value the caller allocates (a column/token/tile width);
+        /// `0` is a degenerate but legal zero-width cell (draws nothing, reserves nothing).
+        /// When positive and not wrapping, `remeasure` writes `data_width = overflow_width`
+        /// — the box and hit geometry are this cell, *never* the unbounded glyph width — so
+        /// a widening label can never shove its neighbors. `data_height`/`baseline` still
+        /// come from the font (a single line). POD like `wrap_width`; no allocator.
+        overflow_width: f32 = 0,
+
+        /// TEXT-03 single-line overflow modes. `.visible` is today's behavior (no cell
+        /// constraint); `.clip` and `.ellipsis` bound the drawn glyphs to `overflow_width`
+        /// while the layout box stays that allocated cell. Declared here (not with the
+        /// feature) for the same import-cycle reason as `TextState` itself.
+        pub const Overflow = enum { visible, clip, ellipsis };
 
         pub fn init() TextState {
             return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };

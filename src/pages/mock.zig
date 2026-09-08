@@ -62,7 +62,13 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const vpanel = try t.panel(ctx, root, "vpanel", "Vitals");
     const vrow = try t.row(ctx, vpanel, "vrow");
     try t.figure(ctx, vrow, t.figure_glyphs(0.7), th.acc);
-    _ = try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }});
+    // TEXT-03 clip cell: the heartbeat is status copy in a narrow readout. A `.clip` cell of
+    // a fixed width keeps the row's geometry stable — the box and hit target are exactly the
+    // 64px cell, and the glyphs are cropped to it (renderer-scoped, prior clip restored)
+    // rather than letting a longer readout widen the vitals row. The short `<3 <3 <3` draws
+    // in full; the cell only bites if the copy grows.
+    _ = (try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }}))
+        .with_cell(.clip, 64);
 
     // Actions — exercises `action_button` + `actor_status` against the live player.
     const q = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };

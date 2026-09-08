@@ -48,6 +48,21 @@ fn cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, c
     _ = (try el.text(ctx, inner, "t", text)).with_style(.{ style.body, Style{ .text = color } });
 }
 
+/// A catalog **name** cell (TEXT-03): the label is an ellipsis cell of exactly the column
+/// width, so a long good name is elided (`Reinforced Timber Fra…`) instead of stretching the
+/// row and knocking every downstream column out of its lane. The box and hit geometry stay
+/// the allocated `width`; only the visible glyphs are bounded. Ordinary (short) names draw in
+/// full — the cell only bites when the name genuinely exceeds its column.
+fn name_cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, color: Color) !void {
+    const box = try el.div(ctx, parent, id);
+    _ = box.with_size(.{ .fixed = width }, .fit_children);
+    const inner = try el.div(ctx, box, "i");
+    _ = inner.with_layout(.center_left);
+    _ = (try el.text(ctx, inner, "t", text))
+        .with_style(.{ style.body, Style{ .text = color } })
+        .with_cell(.ellipsis, width);
+}
+
 /// One row. `state` decides the colors and what the last two columns say; the caller has
 /// already decided the row belongs on screen at all (see `build_list`).
 pub fn capital_row(
@@ -88,7 +103,7 @@ pub fn capital_row(
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
         .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or focused)) th.panel else null } });
 
-    try cell(ctx, row, "nm", w_name, gt.display_name(GoodT), lit, false);
+    try name_cell(ctx, row, "nm", w_name, gt.display_name(GoodT), lit);
 
     var cbuf: [24]u8 = undefined;
     const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e", .{ cost.materials, cost.energy }) catch "?";

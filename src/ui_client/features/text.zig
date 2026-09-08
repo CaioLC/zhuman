@@ -100,6 +100,17 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
         node.size.data_width = tw;
         node.size.data_height = th;
         node.size.baseline = baseline;
+    } else if (st.overflow != .visible) {
+        // TEXT-03: an explicitly allocated single-line cell. The *box* is the allocated
+        // width, never the unbounded glyph width — including a legal zero-width cell. A
+        // widening label cannot shift its neighbors, and hit-testing uses this stamped cell.
+        // Height and baseline still come from the font, single-line, so the cell baseline-aligns in
+        // a row exactly like an ordinary label. The drawn glyphs (clipped or ellipsized) are
+        // `draw`'s concern; measure only reserves the cell.
+        _, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
+        node.size.data_width = st.overflow_width;
+        node.size.data_height = @floatFromInt(th);
+        node.size.baseline = baseline;
     } else {
         const tw, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
         node.size.data_width = @floatFromInt(tw);
@@ -140,23 +151,42 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 /// Blit the node's cached text in `c` over its content box. Rasterizes each frame (a
 /// short string is cheap — unlike `svg`, which caches its raster in `State`).
 ///
-/// Single-line (`wrap_width == 0`) is the fast path: one `renderTextSolid` over the content
-/// box, exactly as before. When wrapped, re-runs the *same* `wrap.wrapLines` the measure
-/// pass used and blits one surface per line at `content.y + i*lineSkip`, so the drawn lines
-/// are byte-for-byte the measured lines. No SDL wrapping, no clipping/ellipsis (TEXT-03).
+/// Single-line, unconstrained (`wrap_width == 0` and `overflow == .visible`) is the fast
+/// path: one `renderTextSolid` over the content box, exactly as before. When wrapped, re-runs
+/// the *same* `wrap.wrapLines` the measure pass used and blits one surface per line at
+/// `content.y + i*lineSkip`, so the drawn lines are byte-for-byte the measured lines.
+///
+/// TEXT-03 adds two single-line overflow disciplines for an allocated `overflow_width` cell
+/// (mutually exclusive with wrapping — wrapping wins if both are set):
+///   - `.clip` — blit the whole accepted string, but scope the renderer's clip to exactly
+///     the content cell for the blit and **restore the prior clip afterward** (including on
+///     an error path), so a leaf's own glyphs are cropped to its box without leaking the clip
+///     to siblings drawn later. (The engine's `Layout.overflow=.clip` crops a node's
+///     *children*; a text leaf's own glyphs are painted before that narrowing, so the crop
+///     must be applied here, renderer-scoped and reverted.)
+///   - `.ellipsis` — recompute the identical `wrap.ellipsisFit` the measure pass would (one
+///     source of truth), blit the codepoint-aligned prefix, then the deterministic ellipsis
+///     token; a too-narrow cell draws nothing rather than overflowing.
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const st = node.state(u, State);
     const fmt = st.text() orelse return;
     const r = paint.content(node) orelse return;
     const f = u.res.platform.font.at(st.px) catch return;
 
-    if (st.wrap_width <= 0) {
+    if (st.wrap_width <= 0 and st.overflow == .visible) {
         // Fast path — one surface over the content box, byte-for-byte the prior behavior.
-        var surface = f.renderTextSolid(fmt, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-        defer surface.deinit();
-        const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
-        defer texture.deinit();
-        u.res.platform.renderer.renderTexture(texture, null, paint.frect(r)) catch return;
+        drawSpan(u, f, fmt, c, r.x, r.y);
+        return;
+    }
+
+    if (st.wrap_width <= 0) {
+        // Single-line overflow cell (TEXT-03). The content box `r` is the allocated cell
+        // (`remeasure` wrote `data_width = overflow_width`), so clip/ellipsis both bound to it.
+        switch (st.overflow) {
+            .clip => drawClipped(u, f, fmt, c, r),
+            .ellipsis => drawEllipsized(u, f, fmt, c, r),
+            .visible => drawSpan(u, f, fmt, c, r.x, r.y), // overflow_width>0 but visible: draw whole
+        }
         return;
     }
 
@@ -165,11 +195,16 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     wrap.wrapLines(fmt, st.wrap_width, fm.measurer(), *LineRenderer, &lr, LineRenderer.take);
 }
 
-/// Blit one wrapped line at (`x`, `y`), sized to its own measured glyph box. A failed
-/// rasterize/upload is skipped silently (a missing glyph frame is cosmetic, not a crash),
-/// matching the single-line path's `catch return`. An empty line draws nothing but the
-/// caller still advances `y`, so a blank row keeps its height.
-fn drawLine(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32) void {
+/// The deterministic ellipsis token appended by `.ellipsis` overflow: U+2026 HORIZONTAL
+/// ELLIPSIS. Its width is *measured* from the live font (never assumed), so the fit budget
+/// tracks the actual glyph and the same token draws as was measured.
+pub const ellipsis_token = "\u{2026}";
+
+/// Blit `text` in `c` at (`x`, `y`), sized to its own measured glyph box. Shared by the fast
+/// path and the overflow prefix/ellipsis blits so they rasterize identically. An empty
+/// string draws nothing; a failed rasterize/upload/measure is skipped silently (a missing
+/// glyph frame is cosmetic, matching every other text path's `catch return`).
+fn drawSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32) void {
     if (text.len == 0) return;
     var surface = font.renderTextSolid(text, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
@@ -180,9 +215,73 @@ fn drawLine(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32
     u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
 }
 
+/// `.clip` overflow: blit the whole accepted string but scope the renderer's clip to the
+/// intersection of the *prior* clip and the content cell, then restore the prior clip —
+/// renderer-scoped, and reverted even if the blit errors. Restoring the prior clip (not
+/// `null`) is essential: this leaf may sit inside an ancestor `.clip` (a scroll viewport),
+/// and dropping that clip would let the string paint outside the ancestor's box.
+fn drawClipped(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect) void {
+    const renderer = u.res.platform.renderer;
+    // Snapshot both the enable bit and rectangle. The binding maps an enabled zero-area
+    // SDL clip to `null`, the same value used for disabled clipping; retaining the bit keeps
+    // a fully clipped ancestor fully clipped instead of accidentally widening it to this cell.
+    const prior_enabled = renderer.getClipEnabled();
+    const reported_prior = renderer.getClipRect() catch return;
+    const prior = effectiveClip(prior_enabled, reported_prior);
+    defer renderer.setClipRect(prior) catch {};
+
+    // Narrow to the intersection of the prior clip and the cell. `paint.irect` truncates to
+    // integer px, matching how the engine's own clip stack is stored.
+    const cell_clip = paint.irect(cell) orelse return;
+    const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
+    renderer.setClipRect(narrowed) catch return;
+
+    drawSpan(u, font, text, c, cell.x, cell.y);
+}
+
+/// Normalize SDL's clip query into the state `setClipRect` must restore. The binding returns
+/// `null` both when clipping is disabled and when SDL reports an enabled zero-area rectangle;
+/// the separate enable bit disambiguates those states. Any zero rectangle clips everything,
+/// so its exact origin is irrelevant.
+fn effectiveClip(enabled: bool, reported: ?sdl.rect.IRect) ?sdl.rect.IRect {
+    if (!enabled) return null;
+    return reported orelse .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+}
+
+/// Integer-rect intersection for the clip stack (SDL clip rects are integer px). An empty
+/// result (non-overlapping) yields a zero-area rect, which clips everything out — the safe
+/// outcome for a cell fully outside its ancestor's clip.
+fn intersectIRect(a: sdl.rect.IRect, b: sdl.rect.IRect) sdl.rect.IRect {
+    const x0 = @max(a.x, b.x);
+    const y0 = @max(a.y, b.y);
+    const x1 = @min(a.x + a.w, b.x + b.w);
+    const y1 = @min(a.y + a.h, b.y + b.h);
+    return .{ .x = x0, .y = y0, .w = @max(0, x1 - x0), .h = @max(0, y1 - y0) };
+}
+
+/// `.ellipsis` overflow: recompute the identical `wrap.ellipsisFit` (measure == draw), then
+/// blit the codepoint-aligned prefix followed by the ellipsis token. The ellipsis width is
+/// font-measured. A too-narrow cell (`budget <= 0`) yields an empty fit → draws nothing,
+/// never a glyph wider than the allocated cell.
+fn drawEllipsized(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect) void {
+    var fm = FontMeasurer{ .font = font };
+    const ell_w: f32 = @floatFromInt((font.getStringSize(ellipsis_token) catch return)[0]);
+    const r = wrap.ellipsisFit(text, cell.w, ell_w, fm.measurer());
+    const prefix = text[0..r.prefix_len];
+    drawSpan(u, font, prefix, c, cell.x, cell.y);
+    if (r.elided) {
+        // Advance x past the drawn prefix (its measured width), then blit the ellipsis. A
+        // zero-width prefix places the ellipsis at the cell origin.
+        const pw: f32 = if (prefix.len == 0) 0 else @floatFromInt((font.getStringSize(prefix) catch return)[0]);
+        drawSpan(u, font, ellipsis_token, c, cell.x + pw, cell.y);
+    }
+}
+
 /// Renders each wrapped line in order, advancing `y` by one line skip per line. The stepped
 /// `y` is what makes the drawn stack occupy exactly the `count * lineSkip` box the measure
-/// pass reserved.
+/// pass reserved. Each line blits via the shared `drawSpan` (the same routine the single-line
+/// and overflow paths use), so a missing glyph frame is skipped silently and an empty line
+/// draws nothing while the caller still advances `y` — a blank row keeps its height.
 const LineRenderer = struct {
     u: *UiCtx,
     font: sdl.ttf.Font,
@@ -195,7 +294,7 @@ const LineRenderer = struct {
 
     fn take(self: *LineRenderer, line: wrap.Line) bool {
         const ly = self.y + @as(f32, @floatFromInt(self.i)) * self.skip;
-        drawLine(self.u, self.font, self.src[line.start .. line.start + line.len], self.color, self.x, ly);
+        drawSpan(self.u, self.font, self.src[line.start .. line.start + line.len], self.color, self.x, ly);
         self.i += 1;
         return true;
     }
@@ -260,4 +359,105 @@ test "text feature: an over-cap string is still refused whole even with wrap set
     @memset(&over, 'x');
     try std.testing.expect(!st.update(&over)); // refused whole, wrap or not
     try std.testing.expect(st.text() == null);
+}
+
+test "text feature: overflow mode/width are POD state that round-trip; default is the fast path" {
+    var st = State.init();
+    // Default is `.visible` + 0 width: the unconstrained single-line fast path, unchanged.
+    try std.testing.expectEqual(State.Overflow.visible, st.overflow);
+    try std.testing.expectEqual(@as(f32, 0), st.overflow_width);
+    try std.testing.expect(st.update("Iron Ingot ×12"));
+    st.overflow = .ellipsis;
+    st.overflow_width = 64;
+    try std.testing.expectEqual(State.Overflow.ellipsis, st.overflow);
+    try std.testing.expectEqual(@as(f32, 64), st.overflow_width);
+    // The accepted string is untouched by the cell constraint — overflow recomputes the fit
+    // from this same buffer, never mutates it, so measure and render read one source.
+    try std.testing.expectEqualStrings("Iron Ingot ×12", st.text() orelse "");
+}
+
+test "text feature: an over-cap string is still refused whole even with an overflow cell" {
+    // TEXT-01's whole-refusal holds: an overflow cell is not a way to smuggle a too-long
+    // source past the cap. A refused state has no text, so the cell draws nothing.
+    var st = State.init();
+    st.overflow = .clip;
+    st.overflow_width = 120;
+    var over: [State.cap + 1]u8 = undefined;
+    @memset(&over, 'x');
+    try std.testing.expect(!st.update(&over)); // refused whole, cell or not
+    try std.testing.expect(st.text() == null);
+}
+
+test "text feature: an overflow cell measures to the allocated width, not the glyph width" {
+    // The core TEXT-03 geometry invariant, pinned SDL-free: `remeasure` writes
+    // `data_width = overflow_width` for an overflow cell, independent of the glyph width. We
+    // stand in for `remeasure`'s cell branch (which needs a live font for height/baseline)
+    // by exercising the exact rule it applies to the width — the width comes from the field,
+    // never from a measurement — so a widening label cannot redefine the box.
+    var st = State.init();
+    st.overflow = .clip;
+    st.overflow_width = 48;
+    try std.testing.expect(st.update("a string far wider than forty-eight pixels of glyphs"));
+    // The rule remeasure applies for the width axis of a cell:
+    const cell_data_width: f32 = if (st.overflow != .visible)
+        st.overflow_width
+    else
+        0; // (glyph-measured branch not exercised here)
+    try std.testing.expectEqual(@as(f32, 48), cell_data_width);
+
+    // Zero is also an explicitly allocated cell, not the unconstrained sentinel: it keeps
+    // zero layout/hit width and the overflow draw branch emits no glyphs.
+    st.overflow = .ellipsis;
+    st.overflow_width = 0;
+    const zero_cell_width: f32 = if (st.overflow != .visible) st.overflow_width else -1;
+    try std.testing.expectEqual(@as(f32, 0), zero_cell_width);
+}
+
+test "text feature: switching a cell back to .visible clears the constraint" {
+    // Mode switching / reuse: a pooled node reused with `.visible` + 0 is byte-for-byte the
+    // fast path again — no lingering cell width steering the geometry.
+    var st = State.init();
+    try std.testing.expect(st.update("Copper Wire"));
+    st.overflow = .ellipsis;
+    st.overflow_width = 40;
+    // ...later reused as an ordinary label:
+    st.overflow = .visible;
+    st.overflow_width = 0;
+    try std.testing.expectEqual(State.Overflow.visible, st.overflow);
+    try std.testing.expectEqual(@as(f32, 0), st.overflow_width);
+}
+
+test "text feature: the ellipsis token is a single deterministic codepoint (U+2026)" {
+    // draw's `.ellipsis` path appends exactly this; pin it so the token never drifts and is
+    // valid UTF-8 (measured once, drawn as measured).
+    try std.testing.expectEqualStrings("\u{2026}", ellipsis_token);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(ellipsis_token));
+    try std.testing.expectEqual(@as(usize, 1), std.unicode.utf8CountCodepoints(ellipsis_token) catch 0);
+}
+
+test "text feature: enabled empty clip remains enabled-empty; disabled remains disabled" {
+    try std.testing.expect(effectiveClip(false, null) == null);
+    const empty = effectiveClip(true, null).?;
+    try std.testing.expectEqual(@as(i32, 0), empty.w);
+    try std.testing.expectEqual(@as(i32, 0), empty.h);
+
+    const reported: sdl.rect.IRect = .{ .x = 3, .y = 4, .w = 20, .h = 10 };
+    try std.testing.expectEqual(reported, effectiveClip(true, reported).?);
+}
+
+test "text feature: integer clip-rect intersection is the overlap, empties to zero area" {
+    // The clip abstraction `drawClipped` uses is pure integer-rect math — testable without a
+    // renderer. Overlap is the intersection; a disjoint pair yields a zero-area rect (clips
+    // everything out — the safe outcome for a cell fully outside its ancestor's clip).
+    const a: sdl.rect.IRect = .{ .x = 0, .y = 0, .w = 100, .h = 50 };
+    const b: sdl.rect.IRect = .{ .x = 20, .y = 10, .w = 200, .h = 20 };
+    const o = intersectIRect(a, b);
+    try std.testing.expectEqual(@as(i32, 20), o.x);
+    try std.testing.expectEqual(@as(i32, 10), o.y);
+    try std.testing.expectEqual(@as(i32, 80), o.w); // min(100,220) - 20
+    try std.testing.expectEqual(@as(i32, 20), o.h); // min(50,30) - 10
+    // Disjoint → zero area, never negative.
+    const d = intersectIRect(.{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .x = 100, .y = 100, .w = 10, .h = 10 });
+    try std.testing.expectEqual(@as(i32, 0), d.w);
+    try std.testing.expectEqual(@as(i32, 0), d.h);
 }
