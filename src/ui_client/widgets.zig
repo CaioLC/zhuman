@@ -123,7 +123,9 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
 /// Tooltip: a floating, filled + bordered, padded box holding a single text line.
 /// Built as its **own root** (no parent) so the host can place it as an overlay layer —
 /// position it with `node.layout.with_origin(x, y)` and render it after the main tree so
-/// it sits on top. Opaque fill so the text reads over whatever's behind it. Returns the box.
+/// it sits on top. Its opaque root is queried, so the same later order blocks pointer
+/// events from controls covered by the popup; call `setPassThrough` explicitly for a
+/// deliberately non-blocking overlay. Returns the box.
 pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
     box.render_data.fill = ctx.res.view.theme.panel;
@@ -131,6 +133,7 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     _ = box.with_layout(.top_left, .{ .dir = .column })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     box.size.padding = ui.features.Padding.init(6); // padding is a style property now, not a Size.init arg
+    _ = box.query(ctx); // opaque popup: later paint order also blocks covered controls
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", box);
     try data_text(ctx, lbl, text);
@@ -171,8 +174,8 @@ pub const ScrollView = struct {
 
 /// Vertical scroll container: a fixed `width`×`height` `viewport` (clipped, via
 /// `RenderData.clip`) holding a `fit_children` `content` column the caller appends rows
-/// to. Scrolls via mouse wheel while the viewport is hovered; the offset lives in a
-/// `ScrollState` slot keyed by `key` (persists like `active` does) and is folded into
+/// to. Scrolls only when ordered hit/capture routing marks the viewport with `.wheel`;
+/// its `ScrollState` offset persists by `key` (like `active`) and is folded into
 /// `content.layout.scroll_y`, which `place` uses to shift `content`'s children without a
 /// second layout pass.
 ///
@@ -205,7 +208,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
 
     const max_offset = @max(0.0, content_h - height);
     const state = outer.state(ctx, UiState.ScrollState);
-    if (viewport.query(ctx).hovering and ctx.res.input.pointer.wheel.y != 0) {
+    if (viewport.query(ctx).wheel and ctx.res.input.pointer.wheel.y != 0) {
         state.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ scroll toward the top
     }
     state.offset = std.math.clamp(state.offset, 0, max_offset);
@@ -248,24 +251,24 @@ pub const Modal = struct {
 /// own root, caller places it in the list" shape, but fills the whole window instead of
 /// floating at a point.
 ///
-/// **"Input capture" is host policy, not a mechanism here.** Hit-testing is a flat,
-/// occlusion-unaware scan over live interaction slots (see `src/ui/README.md`) — the
-/// scrim drawing on top doesn't itself stop a click from also landing on whatever's
-/// still built (and queried) underneath. If the content behind a modal has a
-/// non-idempotent click handler, the call site must guard it (e.g. `if (!confirm_open)
-/// ...`) or skip building it while the modal is open.
+/// The root and dialog both query interaction slots. Because independent roots are
+/// stamped in draw order, listing this root last makes its fullscreen scrim the topmost
+/// target outside the box, while the box and its controls win inside it. Hover, press,
+/// release, wheel, and completed clicks therefore cannot reach the covered screen; no
+/// caller-side `modal_open` guards are required.
 ///
-/// **Dismiss is likewise the caller's call**, not this widget's: compare
-/// `ctx.res.input.pointer.buttons.primary.pressed` against `modal.box.rect(ctx)` for click-outside-to-close
-/// (see `ui_gameover` in `ui_client/pages.zig`). That reads *last frame's* rect — this frame's
-/// `box` isn't laid out yet — so `box` is queried here purely to keep its slot (and so
-/// its rect) alive for that read, exactly like `scroll_view`'s `content`.
+/// Dismiss remains caller policy. After building dialog descendants, call
+/// `ctx.consumeFlag(modal.box.key, .clicked)`; a subsequent
+/// `modal.root.query(ctx).clicked` is then an outside activation. The same typed bubbling
+/// and consumption rules used by nested controls apply. The box is queried here both as
+/// a blocking target and to preserve its prior-frame geometry.
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     const ww, const wh = try ctx.res.platform.window.getSize();
     const root = try Node.create(ctx.arena, key);
     _ = root.with_layout(.top_left, null)
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh)));
     root.render_data.fill = ctx.res.view.theme.bg;
+    _ = root.query(ctx); // fullscreen scrim: queried root structurally blocks lower trees
 
     const box = try Node.pcreate(ctx.arena, "box", root);
     _ = box.with_layout(.center, .{ .dir = .column })

@@ -75,6 +75,7 @@ fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position
 }
 
 fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    _ = app.ui.markTarget(.released, position.x, position.y);
     const target = app.ui.targetAt(position.x, position.y);
     if (app.pointer_activation.release(target, kind, id, position)) |key| {
         _ = app.ui.markKey(key, .clicked);
@@ -219,6 +220,7 @@ pub fn main() !void {
                         .{ .x = wheel.x, .y = wheel.y },
                         .{ .x = wheel.scroll_x, .y = wheel.scroll_y },
                     );
+                    app.ui.mark(.wheel, wheel.x, wheel.y);
                 },
                 .finger_down, .finger_up, .finger_motion => |finger| {
                     const ww, const wh = try app.window.getSize();

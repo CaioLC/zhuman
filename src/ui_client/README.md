@@ -105,6 +105,22 @@ the one shared `.clicked` flag, so changing the event-stage policy migrates them
 `.pressed` remains separately available for controls that need press-time behavior; text
 input uses it to distinguish an inside press from an outside focus-clear.
 
+## Ordered pointer routing and overlays
+
+Every pointer event reaches the interaction store through the engine's reverse paint-order
+walk. Hover and primary press use capture-aware `mark`/`markTarget`; every primary up
+routes `.released` before geometric click validation; every SDL wheel event routes
+`.wheel` at its own pointer position. Scroll views require their viewport's routed
+`.wheel` flag before consuming the frame model's accumulated x/y delta, so mere hover no
+longer authorizes unrelated scroll containers. Capture, when present, wins before geometry
+for all four routed event types.
+
+Opaque independent overlays participate by querying their root. `tooltip` queries its
+popup box, and `modal` queries both the fullscreen scrim and dialog; because roots are
+stamped in the same order they draw, listing them after the screen blocks covered controls
+for hover, press, release, wheel, and click without `modal_open` guards. Geometry-only or
+intentionally transparent overlays must opt out explicitly with `pass_through`.
+
 ## Focus binding
 
 The engine owns focus identity, traversal order, and lifecycle repair; this layer decides

@@ -422,10 +422,12 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
 
 const TestFlags = packed struct {
     hovering: bool = false,
-    clicked: bool = false,
+    pressed: bool = false,
     released: bool = false,
+    wheel: bool = false,
+    clicked: bool = false,
     active: bool = false,
-    pub const transient = [_][]const u8{ "hovering", "clicked", "released" };
+    pub const transient = [_][]const u8{ "hovering", "pressed", "released", "wheel", "clicked" };
 };
 const TestCtx = Ctx(struct {}, TestFlags, u8);
 
@@ -703,6 +705,68 @@ test "markTarget reports capture routing while targetAt remains geometric" {
     try std.testing.expectEqual(@as(?u64, captured), u.markTarget(.clicked, 60, 10));
     try std.testing.expect(u.interactionOf(captured).clicked);
     try std.testing.expect(!u.interactionOf(under_pointer).clicked);
+}
+
+test "modal scrim and dialog block every routed pointer event from covered controls" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const covered = cache_mod.key(0, "covered-control");
+    const scrim = cache_mod.key(0, "modal-scrim");
+    const dialog = cache_mod.key(scrim, "dialog");
+    tstamp(&u, covered, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
+    tstamp(&u, scrim, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
+    tstamp(&u, dialog, .{ .x = 30, .y = 30, .w = 40, .h = 40 }, null, scrim);
+
+    u.mark(.hovering, 10, 10);
+    u.mark(.pressed, 10, 10);
+    u.mark(.released, 10, 10);
+    u.mark(.wheel, 10, 10);
+    u.mark(.clicked, 10, 10);
+    const outside = u.interactionOf(scrim);
+    try std.testing.expect(outside.hovering and outside.pressed and outside.released and outside.wheel and outside.clicked);
+    const blocked_outside = u.interactionOf(covered);
+    try std.testing.expect(!blocked_outside.hovering and !blocked_outside.pressed and !blocked_outside.released and !blocked_outside.wheel and !blocked_outside.clicked);
+    try std.testing.expect(!u.interactionOf(dialog).hovering);
+
+    u.clearTransient();
+    u.mark(.hovering, 50, 50);
+    u.mark(.pressed, 50, 50);
+    u.mark(.released, 50, 50);
+    u.mark(.wheel, 50, 50);
+    u.mark(.clicked, 50, 50);
+    const inside = u.interactionOf(dialog);
+    try std.testing.expect(inside.hovering and inside.pressed and inside.released and inside.wheel and inside.clicked);
+    const bubbled = u.interactionOf(scrim);
+    try std.testing.expect(bubbled.hovering and bubbled.pressed and bubbled.released and bubbled.wheel and bubbled.clicked);
+    const blocked_inside = u.interactionOf(covered);
+    try std.testing.expect(!blocked_inside.hovering and !blocked_inside.pressed and !blocked_inside.released and !blocked_inside.wheel and !blocked_inside.clicked);
+}
+
+test "later popup root blocks covered control and ordinary targeting resumes outside" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const covered = cache_mod.key(0, "popup-covered");
+    const popup = cache_mod.key(0, "popup");
+    tstamp(&u, covered, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
+    tstamp(&u, popup, .{ .x = 25, .y = 25, .w = 50, .h = 50 }, null, null);
+
+    u.mark(.hovering, 50, 50);
+    u.mark(.pressed, 50, 50);
+    u.mark(.released, 50, 50);
+    u.mark(.wheel, 50, 50);
+    const over_popup = u.interactionOf(popup);
+    try std.testing.expect(over_popup.hovering and over_popup.pressed and over_popup.released and over_popup.wheel);
+    const blocked = u.interactionOf(covered);
+    try std.testing.expect(!blocked.hovering and !blocked.pressed and !blocked.released and !blocked.wheel);
+
+    u.clearTransient();
+    u.mark(.pressed, 10, 10);
+    try std.testing.expect(!u.interactionOf(popup).pressed);
+    try std.testing.expect(u.interactionOf(covered).pressed);
 }
 
 test "mark hits the topmost node only — later paint order wins" {

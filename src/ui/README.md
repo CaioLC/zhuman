@@ -202,18 +202,21 @@ field names nor what they mean. Today's host (`ui_client/ctx_binding.zig`):
 pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
     hovering: bool = false,
     pressed:  bool = false,  // primary press edge on this target
+    released: bool = false,  // primary release edge, including invalid clicks
+    wheel:    bool = false,  // this target owns the frame's wheel delta
     clicked:  bool = false,  // valid host-completed release activation
     active:   bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "pressed", "clicked" };
+    pub const transient = [_][]const u8{ "hovering", "pressed", "released", "wheel", "clicked" };
 };
 ```
 
 The **transient/latched split is host policy too**: `clearTransient` (run in
 `endFrame`) reads the host's `transient` field-name list and zeroes only those
 fields. Fields *not* listed latch — they persist across frames until the host clears
-them. Here hover, press, and completed activation are recomputed from input; `active`
-latches. Add a field (`dragging`, `focused`) by editing the host struct — no engine change.
+them. Here hover, press/release, wheel ownership, and completed activation are recomputed
+from input; `active` latches. Add a field (`dragging`, `focused`) by editing the host
+struct — no engine change.
 
 The interaction store is a `Pool(Slot)` where each slot carries flags, its full rect,
 inherited clip, parent key, pass-through state, and an optional frame-scoped `HitTestFn`.
@@ -233,6 +236,10 @@ geometry — so **hit-testing iterates the live slots, never the node tree**:
   a click means. Three things fall out of stopping at the first hit:
   - **Occlusion is a mechanism.** A node genuinely blocks what is drawn beneath it, so
     an overlay no longer has to trust that whatever it covers is harmless to double-fire.
+    Independent roots are stamped in the same order they draw; querying a modal scrim or
+    opaque popup therefore puts it after—and above—the covered screen for hover, press,
+    release, wheel, and activation alike. A deliberately non-blocking overlay must opt
+    out explicitly with `pass_through`; callers do not scatter modal-open guards.
   - **Containment still reads**, because ancestors are flagged by bubbling — a row stays
     hovered while the pointer is over its own button.
   - **Nodes block by default**, and a node queried only to read its own geometry back

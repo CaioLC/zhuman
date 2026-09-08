@@ -146,10 +146,12 @@ pub const Stroke = struct { color: Color, width: f32 = 1 };
 pub const Interaction = packed struct {
     hovering: bool = false,
     pressed: bool = false,
+    released: bool = false,
+    wheel: bool = false,
     clicked: bool = false,
     active: bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "pressed", "clicked" };
+    pub const transient = [_][]const u8{ "hovering", "pressed", "released", "wheel", "clicked" };
 };
 
 /// Concrete UI context type, bound here where `ui` and `res` meet.
@@ -218,16 +220,20 @@ test "interaction store: active latches, transient flags clear each frame" {
     const k = ui.key(0, "btn");
     u.setFlag(k, .hovering, true);
     u.setFlag(k, .pressed, true);
+    u.setFlag(k, .released, true);
+    u.setFlag(k, .wheel, true);
     u.setFlag(k, .clicked, true);
     u.setFlag(k, .active, true);
 
     const on = u.interactionOf(k);
-    try std.testing.expect(on.hovering and on.pressed and on.clicked and on.active);
+    try std.testing.expect(on.hovering and on.pressed and on.released and on.wheel and on.clicked and on.active);
 
     u.clearTransient();
     const after = u.interactionOf(k);
     try std.testing.expect(!after.hovering);
     try std.testing.expect(!after.pressed);
+    try std.testing.expect(!after.released);
+    try std.testing.expect(!after.wheel);
     try std.testing.expect(!after.clicked);
     try std.testing.expect(after.active); // latched — survives the frame boundary
 }
@@ -251,6 +257,10 @@ test "control activation marks press immediately and click once on valid release
     try std.testing.expect(u.interactionOf(parent).pressed);
     try std.testing.expect(!u.interactionOf(control).clicked);
 
+    try std.testing.expectEqual(@as(?u64, control), u.markTarget(.released, 80, 20));
+    try std.testing.expect(u.interactionOf(control).released);
+    try std.testing.expect(u.interactionOf(parent).released);
+    try std.testing.expect(!u.interactionOf(control).clicked);
     if (gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 })) |key| {
         try std.testing.expect(u.markKey(key, .clicked));
     }

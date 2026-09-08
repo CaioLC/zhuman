@@ -1,7 +1,7 @@
 //! `scroll_view` template — a fixed-size, clipped viewport over a `fit_children` content
-//! column the caller appends rows to. Wheel-scrolls while hovered (offset persisted in a
-//! `ScrollState` slot, folded into `content.layout.scroll_y`); a track + thumb ride beside
-//! it once content overflows. Behavior-heavy: built from `El` for the structure, dropping to
+//! column the caller appends rows to. Wheel-scrolls only when ordered routing marks its
+//! viewport with `.wheel`; the offset persists in a `ScrollState` slot and folds into
+//! `content.layout.scroll_y`. A track + thumb rides beside it once content overflows. Behavior-heavy: built from `El` for the structure, dropping to
 //! `.get()` only for the state/geometry reads. Scroll math unchanged from the old widget.
 //! Returns `El` handles (shelf convention) — callers append rows into `.content`.
 
@@ -55,7 +55,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
 
     const max_offset = @max(0.0, content_h - height);
     const st = outer.get().state(ctx, ScrollState);
-    if (viewport.query().hovering and ctx.res.input.pointer.wheel.y != 0) {
+    if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0) {
         st.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ toward the top
     }
     st.offset = std.math.clamp(st.offset, 0, max_offset);
