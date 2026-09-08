@@ -112,12 +112,28 @@ const CommandRoute = struct {
     suppress_text: bool = false,
 };
 
-fn eraseLastCodepoint(state: *ui_client.UiState.TextInputState) void {
-    var n = state.len;
-    if (n == 0) return;
-    n -= 1;
-    while (n > 0 and (state.buf[n] & 0xC0) == 0x80) n -= 1;
-    state.len = n;
+/// The authoritative editor model for the currently focused text owner, or null when the
+/// focused control is not a registered text field. `main` only *routes* into this model;
+/// all editing rules live in `ui_client/editor.zig` (INPUT-07).
+fn focusedEditor(app: *App) ?*ui_client.UiState.TextInputState {
+    const key = app.ui.focusedKey() orelse return null;
+    if (!app.resources.commands.isTextOwner(key)) return null;
+    const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
+    return app.ui.pool(ui_client.UiState.TextInputState).get(idx);
+}
+
+/// Copy the current selection to the SDL clipboard when both a selection and clipboard
+/// support exist. Returns whether the platform accepted the text. The editor slice is
+/// only valid until the next mutation, so it is NUL-terminated into a stack buffer first.
+fn copySelectionToClipboard(ed: *ui_client.UiState.TextInputState) bool {
+    if (!ed.hasSelection()) return false;
+    const sel = ed.selectionSlice();
+    var tmp: [ui_client.UiState.TextInputState.max_query_bytes + 1]u8 = undefined;
+    if (sel.len > tmp.len - 1) return false;
+    @memcpy(tmp[0..sel.len], sel);
+    tmp[sel.len] = 0;
+    sdl.clipboard.setText(tmp[0..sel.len :0]) catch return false;
+    return true;
 }
 
 fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
@@ -159,17 +175,78 @@ fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
             return .{ .handled = handled, .suppress_text = handled };
         },
         .delete_backward => {
-            const key = app.ui.focusedKey() orelse return .{};
-            if (!app.resources.commands.isTextOwner(key)) return .{};
-            const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
-            eraseLastCodepoint(app.ui.pool(ui_client.UiState.TextInputState).get(idx));
+            const ed = focusedEditor(app) orelse return .{};
+            _ = ed.deleteBackward();
             return .{ .handled = true };
         },
-        // The current editor is end-anchored. Delete/Home/End are still routed only to
-        // its registered owner; INPUT-07 adds caret/selection semantics behind them.
-        .delete_forward, .line_start, .line_end => {
-            const key = app.ui.focusedKey() orelse return .{};
-            return .{ .handled = app.resources.commands.isTextOwner(key) };
+        .delete_forward => {
+            const ed = focusedEditor(app) orelse return .{};
+            _ = ed.deleteForward();
+            return .{ .handled = true };
+        },
+        .line_start => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.home(false);
+            return .{ .handled = true };
+        },
+        .line_end => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.end(false);
+            return .{ .handled = true };
+        },
+        .select_left => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.moveLeft(true);
+            return .{ .handled = true };
+        },
+        .select_right => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.moveRight(true);
+            return .{ .handled = true };
+        },
+        .select_line_start => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.home(true);
+            return .{ .handled = true };
+        },
+        .select_line_end => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.end(true);
+            return .{ .handled = true };
+        },
+        .select_all => {
+            const ed = focusedEditor(app) orelse return .{};
+            ed.selectAll();
+            return .{ .handled = true, .suppress_text = true };
+        },
+        .clipboard_copy => {
+            const ed = focusedEditor(app) orelse return .{};
+            _ = copySelectionToClipboard(ed);
+            // Handled by the focused editor regardless: Ctrl+C must never fall through to
+            // typing a 'c', even when there is nothing selected to copy.
+            return .{ .handled = true, .suppress_text = true };
+        },
+        .clipboard_cut => {
+            const ed = focusedEditor(app) orelse return .{};
+            if (copySelectionToClipboard(ed)) _ = ed.deleteBackward(); // delete-selection
+            return .{ .handled = true, .suppress_text = true };
+        },
+        .clipboard_paste => {
+            const ed = focusedEditor(app) orelse return .{};
+            if (sdl.clipboard.hasText()) {
+                if (sdl.clipboard.getText()) |clip| {
+                    defer sdl.free(clip);
+                    // The editor validates and refuses non-single-line / oversized text
+                    // as a whole; refusal is surfaced by its `refused` flag in the widget.
+                    _ = ed.insert(clip);
+                } else |_| {}
+            }
+            return .{ .handled = true, .suppress_text = true };
+        },
+        .clear_field => {
+            const ed = focusedEditor(app) orelse return .{};
+            _ = ed.clear();
+            return .{ .handled = true, .suppress_text = true };
         },
     }
 }
@@ -364,17 +441,13 @@ pub fn main() !void {
         publishPointerVisualState(&app, input);
 
         const suppress_text = routeKeyboardCommands(&app, input);
-        if (!suppress_text) if (app.ui.focusedKey()) |key| {
-            if (app.resources.commands.isTextOwner(key)) {
-                const text = input.text();
-                if (text.len > 0) {
-                    const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
-                    const state = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
-                    if (state.len + text.len <= state.buf.len) {
-                        @memcpy(state.buf[state.len..][0..text.len], text);
-                        state.len += text.len;
-                    }
-                }
+        if (!suppress_text) if (focusedEditor(&app)) |ed| {
+            const text = input.text();
+            if (text.len > 0) {
+                // The editor enforces UTF-8 / single-line admissibility and the explicit
+                // max query length, refusing oversized or incompatible text as a whole and
+                // raising its non-silent `refused` flag for the widget to surface.
+                _ = ed.insert(text);
             }
         };
 

@@ -319,14 +319,19 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     return .{ .root = root, .box = box };
 }
 
-/// Single-line search/text box: a bordered, fixed-width field holding a persisted UTF-8
-/// buffer (`UiState.TextInputState`, keyed like `ScrollState`). It registers its stable
-/// node key in global traversal order and requests singular engine focus when clicked.
-/// SDL still delivers `.text_input`/backspace as raw events, so `main.zig` routes them to
-/// `ctx.focusedKey()` and mutates this same state slot. Shows `placeholder` (dimmed) when
-/// empty and unfocused, the typed text with a trailing caret while focused, plain text
-/// otherwise. The widget starts SDL text input when it takes focus; Escape and outside
-/// clicks clear focus, with the host stopping SDL text input on Escape.
+/// Single-line search/text box backed by the authoritative host editor model
+/// (`UiState.TextInputState` = `editor.LineEditor`, keyed like `ScrollState`). It registers
+/// its stable node key in global traversal order and requests singular engine focus when
+/// clicked. SDL delivers `.text_input` and key events as raw events, so `main.zig` routes
+/// them into this same model — text through `insert` and caret/selection/clipboard/delete
+/// through the editor's methods — against whichever key `ctx.focusedKey()` returns. Shows
+/// `placeholder` (dimmed) when empty and unfocused; while focused it renders the model's
+/// caret as a bar (or the selection wrapped in guillemets); plain text otherwise. Focus
+/// draws accent chrome, and a refused edit (overflow / invalid / multi-line) draws a
+/// `danger` outline until the next accepted edit. A trailing "✕" clears the field on click
+/// (the pointer clear action; keyboard clear is Ctrl+A then Backspace, same model). The
+/// widget starts SDL text input when it takes focus; Escape and outside clicks clear focus,
+/// with the host stopping SDL text input on Escape.
 pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []const u8, width: f32) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
     _ = node.with_layout(.relative, null);
@@ -352,19 +357,62 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
         sdl.keyboard.stopTextInput(ctx.res.platform.window) catch {};
     }
 
-    var buf: [66]u8 = undefined;
-    const shown: []const u8 = if (state.len == 0 and !focused)
-        placeholder
-    else if (focused)
-        std.fmt.bufPrint(&buf, "{s}_", .{state.buf[0..state.len]}) catch state.buf[0..state.len]
-    else
-        state.buf[0..state.len];
+    // Compose the display string from the authoritative editor model (INPUT-07). The
+    // primitive `data_text` feature paints a single run and cannot place a sub-glyph
+    // caret or a coloured selection band, so the caret is shown as a visible marker at
+    // its codepoint position and a selection is bracketed. This honestly reflects the
+    // model's caret/anchor without pretending to pixel-accurate glyph hit-testing that
+    // the current text feature does not provide.
+    var buf: [UiState.TextInputState.max_query_bytes + 8]u8 = undefined;
+    const shown: []const u8 = blk: {
+        if (state.len == 0 and !focused) break :blk placeholder;
+        if (!focused) break :blk state.text();
+        const sel = state.selectionRange();
+        if (state.hasSelection()) {
+            // …selected…  → wrap the selected run in guillemets, caret side implicit.
+            break :blk std.fmt.bufPrint(&buf, "{s}\u{00AB}{s}\u{00BB}{s}", .{
+                state.buf[0..sel.start],
+                state.buf[sel.start..sel.end],
+                state.buf[sel.end..state.len],
+            }) catch state.text();
+        }
+        // No selection: a caret bar at the caret byte offset.
+        break :blk std.fmt.bufPrint(&buf, "{s}|{s}", .{
+            state.buf[0..state.caret],
+            state.buf[state.caret..state.len],
+        }) catch state.text();
+    };
 
     try data_text(ctx, node, shown);
     node.size.padding = ui.features.Padding.initSymmetric(8, 4);
     node.size.w = .{ .fixed = width }; // data_text sized both axes to content — pin width
     node.render_data.text = if (state.len == 0 and !focused) ctx.res.view.theme.dim else ctx.res.view.theme.fg;
-    node.render_data.outline = .{ .color = if (focused) ctx.res.view.theme.acc else ctx.res.view.theme.line2 };
+    // Focus-visible chrome, with a non-silent refusal cue: a rejected edit (overflow or
+    // invalid/multi-line text) tints the outline `danger` until the next accepted edit.
+    const outline_color = if (state.refused)
+        ctx.res.view.theme.danger
+    else if (focused)
+        ctx.res.view.theme.acc
+    else
+        ctx.res.view.theme.line2;
+    node.render_data.outline = .{ .color = outline_color };
+
+    // Pointer clear affordance: a trailing "✕" hit region that empties the field on click
+    // (the pointer half of the clear action; keyboard clear is Ctrl+A then Backspace, both
+    // routed to the same model). Only shown while there is text to clear.
+    if (!state.isEmpty()) {
+        const clear_btn = try Node.pcreate(ctx.arena, "clear", node);
+        _ = clear_btn.with_layout(.center_right, null);
+        try data_text(ctx, clear_btn, "\u{2715}");
+        clear_btn.size.padding = ui.features.Padding.initSymmetric(4, 0);
+        const cq = clear_btn.query(ctx);
+        if (cq.hovering) ctx.res.cursor.request(.pointer);
+        clear_btn.render_data.text = if (cq.hovering) ctx.res.view.theme.fg else ctx.res.view.theme.dim;
+        if (cq.clicked) {
+            _ = state.clear();
+            _ = ctx.requestFocus(node.key); // keep focus in the field after clearing
+        }
+    }
 
     return node;
 }

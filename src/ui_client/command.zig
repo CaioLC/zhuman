@@ -15,6 +15,19 @@ pub const Command = enum {
     delete_forward,
     line_start,
     line_end,
+    // INPUT-07 single-line editing: anchored selection, clipboard, and clear. Selection
+    // variants mirror the movement commands with the anchor held (Shift held). Clipboard
+    // commands are gated to the focused text owner and to SDL clipboard availability by
+    // the host; the mapping here is pure and platform-agnostic.
+    select_left,
+    select_right,
+    select_line_start,
+    select_line_end,
+    select_all,
+    clipboard_copy,
+    clipboard_cut,
+    clipboard_paste,
+    clear_field,
 };
 
 /// Normalize SDL key events into host semantic commands. Release edges never command;
@@ -25,8 +38,8 @@ pub fn fromKeyEvent(event: input.KeyEvent) ?Command {
     return switch (event.key) {
         .tab => if (one_shot) (if (event.modifiers.shift) .focus_previous else .focus_next) else null,
         .left_tab => if (one_shot) .focus_previous else null,
-        .left => .move_left,
-        .right => .move_right,
+        .left => if (event.modifiers.shift) .select_left else .move_left,
+        .right => if (event.modifiers.shift) .select_right else .move_right,
         .up => .move_up,
         .down => .move_down,
         .return_key, .return_key2, .kp_enter, .space => if (one_shot) .activate else null,
@@ -34,10 +47,23 @@ pub fn fromKeyEvent(event: input.KeyEvent) ?Command {
         .slash => if (one_shot and !event.modifiers.control and !event.modifiers.alt and !event.modifiers.gui) .focus_search else null,
         .backspace, .kp_backspace => .delete_backward,
         .delete => .delete_forward,
-        .home => .line_start,
-        .end => .line_end,
+        .home => if (event.modifiers.shift) .select_line_start else .line_start,
+        .end => if (event.modifiers.shift) .select_line_end else .line_end,
+        // Clipboard / select-all use the platform accelerator (Ctrl on desktop). Require
+        // the accelerator and forbid Alt so plain typed letters never trigger them; the
+        // host still gates these to the focused text owner and to clipboard availability.
+        .a => if (one_shot and accel(event.modifiers)) .select_all else null,
+        .c => if (one_shot and accel(event.modifiers)) .clipboard_copy else null,
+        .x => if (one_shot and accel(event.modifiers)) .clipboard_cut else null,
+        .v => if (one_shot and accel(event.modifiers)) .clipboard_paste else null,
         else => null,
     };
+}
+
+/// The desktop editing accelerator: Control held, without Alt (which would form an
+/// AltGr/other chord). Kept in one place so every clipboard/select-all mapping agrees.
+fn accel(mods: input.Modifiers) bool {
+    return mods.control and !mods.alt;
 }
 
 /// Prior-build command owners used during the next event stage. Fixed capacity keeps
@@ -129,6 +155,38 @@ test "key events map to complete command vocabulary with repeat policy" {
     try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .space, .action = repeat, .modifiers = .{} }));
     try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .escape, .action = .release, .modifiers = .{} }));
     try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .slash, .action = press, .modifiers = .{ .control = true } }));
+}
+
+test "shift and accelerator chords map to INPUT-07 selection, clipboard, and select-all" {
+    const press = input.KeyAction.press;
+    const repeat = input.KeyAction.repeat;
+    const shift = input.Modifiers{ .shift = true };
+    const ctrl = input.Modifiers{ .control = true };
+
+    // Shift + movement keys select instead of moving; repeat still extends selection.
+    try std.testing.expectEqual(Command.select_left, fromKeyEvent(.{ .key = .left, .action = press, .modifiers = shift }).?);
+    try std.testing.expectEqual(Command.select_right, fromKeyEvent(.{ .key = .right, .action = repeat, .modifiers = shift }).?);
+    try std.testing.expectEqual(Command.select_line_start, fromKeyEvent(.{ .key = .home, .action = press, .modifiers = shift }).?);
+    try std.testing.expectEqual(Command.select_line_end, fromKeyEvent(.{ .key = .end, .action = press, .modifiers = shift }).?);
+
+    // Without shift the same keys keep their plain movement meaning.
+    try std.testing.expectEqual(Command.move_left, fromKeyEvent(.{ .key = .left, .action = press, .modifiers = .{} }).?);
+    try std.testing.expectEqual(Command.line_start, fromKeyEvent(.{ .key = .home, .action = press, .modifiers = .{} }).?);
+    try std.testing.expectEqual(Command.line_end, fromKeyEvent(.{ .key = .end, .action = press, .modifiers = .{} }).?);
+
+    // Ctrl accelerators: select-all / copy / cut / paste, all one-shot only.
+    try std.testing.expectEqual(Command.select_all, fromKeyEvent(.{ .key = .a, .action = press, .modifiers = ctrl }).?);
+    try std.testing.expectEqual(Command.clipboard_copy, fromKeyEvent(.{ .key = .c, .action = press, .modifiers = ctrl }).?);
+    try std.testing.expectEqual(Command.clipboard_cut, fromKeyEvent(.{ .key = .x, .action = press, .modifiers = ctrl }).?);
+    try std.testing.expectEqual(Command.clipboard_paste, fromKeyEvent(.{ .key = .v, .action = press, .modifiers = ctrl }).?);
+    try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .a, .action = repeat, .modifiers = ctrl }));
+    try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .v, .action = repeat, .modifiers = ctrl }));
+
+    // Plain letters without the accelerator are never editing commands — they type.
+    try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .a, .action = press, .modifiers = .{} }));
+    try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .c, .action = press, .modifiers = .{} }));
+    // Alt held cancels the accelerator (AltGr / other chords must not clobber typing).
+    try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .c, .action = press, .modifiers = .{ .control = true, .alt = true } }));
 }
 
 test "registry publishes prior-build text search and topmost escape owners" {

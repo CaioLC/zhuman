@@ -5,6 +5,7 @@ const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
 const theme = @import("./theme.zig");
 const Resources = @import("../res.zig").Resources;
+const editor = @import("./editor.zig");
 
 /// The host color type, re-exposed here so the whole `ui_client` layer names one `Color`
 /// (SDL's `pixels.Color`) — the engine carries it opaquely on `RenderData` and never
@@ -99,11 +100,15 @@ pub const UiState = struct {
             return .{};
         }
     };
-    /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
-    /// event loop appends `.text_input` events and handles backspace directly against
-    /// whichever stable key `UiCtx.focusedKey()` returns; the widget registers that key
-    /// each frame and reads focus to render. See `text_input`.
-    pub const TextInputState = struct { buf: [64]u8 = undefined, len: usize = 0 };
+    /// A `text_input`'s persisted, authoritative editing model (INPUT-07). This is the
+    /// full host editor — buffer plus caret/anchor selection, UTF-8 and single-line
+    /// validation, an explicit `max_query_bytes`, and non-silent refusal — defined in
+    /// `ui_client/editor.zig` so the generic engine stays unaware of editor semantics.
+    /// The widget acquires it via `node.state(ctx, UiState.TextInputState)` each frame and
+    /// reads caret/selection to render; `main.zig` routes SDL text/clipboard/command
+    /// events into its methods against whichever stable key `UiCtx.focusedKey()` returns.
+    /// See `text_input`.
+    pub const TextInputState = editor.LineEditor;
     /// The `svg` feature's cached rasterization (see `ui_client/features/svg.zig`): the
     /// texture SDL_image produced for the current source+size, plus the `src_key` hash
     /// that produced it — so the feature's `attach` re-rasterizes only when the source

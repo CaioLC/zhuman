@@ -172,9 +172,33 @@ The fixed `CommandRegistry` publishes each build's text/search and latest Escape
 the next event stage. A focused text owner consumes Escape first; otherwise the topmost
 registered overlay/view receives transient `.dismissed`. Unhandled Escape does not quit;
 only SDL quit/terminating does. Slash focuses the registered search field without inserting
-its shortcut byte. Editing commands and SDL text bytes are gated to registered text owners;
-the current end-anchored Backspace behavior remains, while caret/selection semantics for
-Delete/Home/End belong to INPUT-07.
+its shortcut byte. Editing commands and SDL text bytes are gated to registered text owners.
+
+## Single-line editing (`editor.zig`)
+
+`ui_client` owns the authoritative host editor model; the generic `src/ui` engine knows
+nothing about carets, selections, UTF-8, or a maximum length. `editor.LineEditor` (aliased
+as `UiState.TextInputState`, so a `Pool` is still generated for it) holds a fixed
+`max_query_bytes = 128` UTF-8 buffer plus byte-offset `caret`/`anchor` that always sit on
+codepoint boundaries; `caret == anchor` means no selection. Every mutation is a method so
+the rules are one place and testable without SDL: codepoint-wise `insert`, `deleteBackward`
+/`deleteForward` (which delete the selection when present), `moveLeft`/`moveRight`/`home`
+/`end` with a plain-vs-`extend` (anchored) distinction, `selectAll`, `clear`, and a
+`cutSelection`/`selectionSlice` copy accessor.
+
+Admissibility is one rule, `isSingleLineUtf8`: valid UTF-8 with no C0/C1/DEL controls and
+no line breaks. Insertion and paste are validated against it and against `max_query_bytes`
+*after* replacing the current selection, and are refused **as a whole** — never truncated
+or stripped — setting the visible, non-silent `refused` latch that clears on the next
+accepted edit. `command.zig` maps Shift+Left/Right/Home/End to the selection variants and
+one-shot Ctrl+A/C/X/V to select-all/copy/cut/paste (Alt cancels the accelerator so plain
+typing is never intercepted). `main.zig` only *routes*: SDL text bytes go through `insert`;
+caret/selection/delete commands drive the focused registered owner's model; and the SDL
+0.15.2 clipboard (`clipboard.hasText`/`getText` + `free`/`setText`) is bridged for
+copy/cut/paste, with paste passing through the same whole-text validation. `text_input`
+reads the model to render placeholder, a caret bar or guillemet-bracketed selection,
+focus-visible chrome, a `danger` outline while `refused`, and a pointer "✕" clear
+affordance; the keyboard clear is Ctrl+A then Backspace against the same model.
 
 ## Paint features (`features/`)
 
