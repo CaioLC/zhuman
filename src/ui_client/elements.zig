@@ -111,6 +111,15 @@ pub const El = struct {
         self.ctx.setPassThrough(self.node.key, true);
         return self;
     }
+
+    /// Refine this node's rectangular hit box with a static host-supplied predicate.
+    /// The engine still applies clipping, paint order, pass-through, and bubbling.
+    /// The callback receives the stamped global rect and point, so it can derive local
+    /// coordinates without storing a pointer into the per-frame arena.
+    pub fn hit_test(self: El, predicate: ui.HitTestFn) El {
+        self.ctx.setHitTest(self.node.key, predicate);
+        return self;
+    }
 };
 
 /// A fresh child node, anchored `.relative` — the default for content leaves.

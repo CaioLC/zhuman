@@ -212,9 +212,10 @@ fields. Fields *not* listed latch — they persist across frames until the host 
 them. Here `hovering`/`clicked` are recomputed every frame; `active` latches. Add a
 field (`dragging`, `focused`) by editing the host struct — no engine change.
 
-The interaction store is a `Pool(Slot)` where `Slot = { flags, rect }`. A slot exists
-only for a key that's been `query`'d, and it carries that node's last laid-out rect —
-so **hit-testing iterates the live slots, never the node tree**:
+The interaction store is a `Pool(Slot)` where each slot carries flags, its full rect,
+inherited clip, parent key, pass-through state, and an optional frame-scoped `HitTestFn`.
+A slot exists only for a key that's been `query`'d, and it carries that node's last laid-out
+geometry — so **hit-testing iterates the live slots, never the node tree**:
 
 - **`ui.mark(flag, x, y)` (mechanism, event stage):** walks the frame's paint-order
   list **backwards** and flags the *topmost* node containing the point, then walks that
@@ -231,7 +232,12 @@ so **hit-testing iterates the live slots, never the node tree**:
     would leave `mark` unable to stop, which is the whole point of the ordered walk.
 
   A slot whose stamped `clip` excludes the point is skipped: a node scrolled out of its
-  viewport keeps its rect but stops being hittable.
+  viewport keeps its rect but stops being hittable. After clip and rectangular broad-phase
+  checks, an optional host `HitTestFn(Rect, x, y)` may refine the local shape. Returning
+  false continues down paint order, allowing transparent corners to reach an overlapping
+  neighbor or backdrop. The callback is a static function pointer copied into the slot —
+  it cannot borrow frame-arena data — and is tagged with its declaring build frame, so
+  omission on the next build automatically restores ordinary rectangular behavior.
 - **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and records each
   *already-queried* node's geometry into its slot (`stampRect` no-ops for keys with no
   slot). This is what feeds the next frame's `mark`, and it carries three things down

@@ -14,6 +14,11 @@ const geometry = @import("geometry.zig");
 
 pub const Rect = geometry.Rect;
 
+/// Optional host-supplied local-shape predicate for an interaction slot. The engine
+/// first enforces clip and rectangular bounds, then calls this with the stamped rect
+/// and global point. Callbacks must be static/persistent; no frame-arena context is kept.
+pub const HitTestFn = *const fn (rect: Rect, x: f32, y: f32) bool;
+
 /// `IntFlags` is a host-defined packed struct of interaction flags (e.g. hovering,
 /// clicked, active). The engine stores it opaquely, keyed by widget key — it owns
 /// neither the vocabulary nor the transient/latched policy. The host type must
@@ -55,6 +60,14 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             /// Default false: nodes block, because a default that blocks nothing makes
             /// `mark` unable to stop, which is the whole point of the ordered walk.
             pass_through: bool = false,
+            /// Optional host geometry refinement. `mark` invokes it only after the point
+            /// passes the inherited clip and full rectangular box. Returning false
+            /// rejects this slot and continues down paint order, enabling transparent
+            /// corners to fall through without teaching the engine any concrete shape.
+            hit_test: ?HitTestFn = null,
+            /// Build frame that supplied `hit_test`. Slots persist, but behavior is
+            /// immediate-mode: omitting the declaration next build restores a rectangle.
+            hit_test_frame: u64 = 0,
         };
 
         res: *Res,
@@ -189,6 +202,17 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             self.interactions.get(idx).pass_through = v;
         }
 
+        /// Refine key `k`'s rectangular hit box with host-owned geometry for this build.
+        /// The callback pointer is copied into the persistent slot, so it must not capture
+        /// frame data. If the key is rebuilt without calling this, the predicate expires
+        /// and ordinary rectangular hit testing resumes; null also clears it explicitly.
+        pub fn setHitTest(self: *Self, k: u64, predicate: ?HitTestFn) void {
+            const idx = self.interactions.acquire(self.gpa, k, self.frame) catch @panic("ui interaction OOM");
+            const slot = self.interactions.get(idx);
+            slot.hit_test = predicate;
+            slot.hit_test_frame = self.frame;
+        }
+
         /// Record this node's geometry on key `k`'s slot and append it to the frame's
         /// paint-order list — but only if the slot already exists (i.e. the node was
         /// `query`'d this frame). Returns whether it stamped, which is what lets the
@@ -227,6 +251,9 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
                 // Cropped out of its scroll viewport: still laid out, no longer hittable.
                 if (slot.value.clip) |c| if (!c.contains(x, y)) continue;
                 if (!r.contains(x, y)) continue;
+                if (slot.value.hit_test_frame == self.frame) {
+                    if (slot.value.hit_test) |predicate| if (!predicate(r, x, y)) continue;
+                }
 
                 @field(slot.value.flags, @tagName(flag)) = true;
                 var pk = slot.value.parent_key;
@@ -295,6 +322,90 @@ const TestCtx = Ctx(struct {}, TestFlags, u8);
 fn tstamp(u: *TestCtx, k: u64, r: Rect, clip: ?Rect, parent: ?u64) void {
     _ = u.interactionOf(k); // a node has no slot until it is queried
     _ = u.stampRect(k, r, clip, parent);
+}
+
+/// Test-only host geometry: a flat-top hex inscribed in `rect`. Production engine code
+/// knows only the callback type; a board binding can supply this or any other predicate.
+fn testFlatHex(rect: Rect, x: f32, y: f32) bool {
+    if (rect.w <= 0 or rect.h <= 0) return false;
+    const local_x = (x - rect.x) / rect.w;
+    const local_y = (y - rect.y) / rect.h;
+    if (local_x < 0 or local_x > 1 or local_y < 0 or local_y > 1) return false;
+    const edge_height = 1 - 2 * @abs(local_x - 0.5);
+    return @abs(local_y - 0.5) <= @min(@as(f32, 0.5), edge_height);
+}
+
+test "shape corners fall through to the correct neighbor and background" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const background = cache_mod.key(0, "background");
+    const neighbor = cache_mod.key(0, "neighbor");
+    const top = cache_mod.key(0, "top");
+    tstamp(&u, background, .{ .x = 0, .y = 0, .w = 200, .h = 100 }, null, null);
+    u.setHitTest(neighbor, testFlatHex);
+    tstamp(&u, neighbor, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
+    u.setHitTest(top, testFlatHex);
+    tstamp(&u, top, .{ .x = 50, .y = 0, .w = 100, .h = 100 }, null, null);
+
+    // Inside the top hex's rectangular bounds but above its transparent left edge;
+    // the overlapping neighbor accepts the same point.
+    u.mark(.clicked, 55, 30);
+    try std.testing.expect(!u.interactionOf(top).clicked);
+    try std.testing.expect(u.interactionOf(neighbor).clicked);
+    try std.testing.expect(!u.interactionOf(background).clicked);
+
+    u.clearTransient();
+    // The opposite transparent corner overlaps no neighbor, so it reaches the backdrop.
+    u.mark(.clicked, 145, 10);
+    try std.testing.expect(!u.interactionOf(top).clicked);
+    try std.testing.expect(!u.interactionOf(neighbor).clicked);
+    try std.testing.expect(u.interactionOf(background).clicked);
+}
+
+test "clip rejects a shaped node before it can claim the hit" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const background = cache_mod.key(0, "background");
+    const shape = cache_mod.key(0, "shape");
+    tstamp(&u, background, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
+    u.setHitTest(shape, testFlatHex);
+    tstamp(
+        &u,
+        shape,
+        .{ .x = 0, .y = 0, .w = 100, .h = 100 },
+        .{ .x = 0, .y = 0, .w = 50, .h = 100 },
+        null,
+    );
+
+    // The point is in the hex and its full rect, but outside its effective viewport.
+    u.mark(.clicked, 75, 50);
+    try std.testing.expect(!u.interactionOf(shape).clicked);
+    try std.testing.expect(u.interactionOf(background).clicked);
+}
+
+test "shape predicate expires when the next build omits it" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+
+    const shape = cache_mod.key(0, "changing-shape");
+    const box = Rect{ .x = 0, .y = 0, .w = 100, .h = 100 };
+
+    u.beginFrame();
+    u.setHitTest(shape, testFlatHex);
+    tstamp(&u, shape, box, null, null);
+    u.endFrame();
+    u.mark(.clicked, 5, 5); // transparent hex corner
+    try std.testing.expect(!u.interactionOf(shape).clicked);
+
+    u.beginFrame();
+    tstamp(&u, shape, box, null, null); // same key, now an ordinary rectangle
+    u.endFrame();
+    u.mark(.clicked, 5, 5);
+    try std.testing.expect(u.interactionOf(shape).clicked);
 }
 
 test "mark hits the topmost node only — later paint order wins" {

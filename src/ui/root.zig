@@ -11,6 +11,7 @@ pub const Focus = focus.Focus;
 pub const FocusDirection = focus.Direction;
 
 pub const Ctx = @import("./ctx.zig").Ctx;
+pub const HitTestFn = @import("./ctx.zig").HitTestFn;
 pub const Rect = geometry.Rect;
 pub const key = cache.key;
 pub const key_i = cache.key_i;

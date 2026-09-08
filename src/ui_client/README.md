@@ -135,6 +135,14 @@ with a style spec in one call. Content leaves default to `.relative`, so flowed 
 the zero-config case. `.get()` drops to the raw `*Node` for geometry reads, or for handing
 a root to the render walk.
 
+Behavior refinements also chain on `El`. `pass_through()` removes a geometry-only probe
+from hit testing; `hit_test(predicate)` installs a static host predicate with signature
+`fn(ui.Rect, x, y) bool`. Core still checks pass-through, inherited clip, and the full
+rectangle first. A false result falls through to the next painted slot, so a board can
+supply hex containment without putting hex knowledge in the engine. The declaration is
+frame-scoped and must not capture arena data; omitting it on the next build restores the
+normal rectangular hit box.
+
 **Why a handle rather than `*Node` methods:** applying a `font` re-measures the text, which
 needs the font backend on `ctx`, and the engine's `Node` is deliberately ctx-agnostic. `El`
 is also the layer's lingua franca — parents are taken as `El` and templates return `El`, so
