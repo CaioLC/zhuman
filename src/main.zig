@@ -309,6 +309,12 @@ const App = struct {
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
         self.font = try ha.font.Fonts.init(allocator, font_path, ui_client.style.default_font);
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
+        // Resolve the reduced-motion policy ONCE here (INPUT-10): an explicit
+        // `HA_REDUCED_MOTION` override wins, else the platform probe (Windows
+        // `SPI_GETCLIENTAREAANIMATION`; deterministic `false` elsewhere), else a `false`
+        // fallback. No per-frame OS call — `build_ui` only projects this onto
+        // `view.reduced_motion` each frame.
+        self.resources.motion = ui_client.resolveMotionFromEnv(allocator, ui_client.PlatformMotionProbe.instance());
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
         self.resources.sim.log.push(.dim, "You wake alone. Cold. Hungry.");

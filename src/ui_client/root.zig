@@ -18,6 +18,7 @@ const drag = @import("./drag.zig");
 const command = @import("./command.zig");
 const semantics = @import("./semantics.zig");
 const a11y = @import("./a11y.zig");
+const motion = @import("./motion.zig");
 
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
@@ -65,6 +66,22 @@ pub const AccessibilityStatus = a11y.Status;
 pub const AccessibilityCapabilities = a11y.Capabilities;
 pub const AccessibilityProvider = a11y.Provider;
 pub const NoopAccessibilityProvider = a11y.NoopProvider;
+
+// INPUT-10 host-side reduced-motion policy: a one-bit `Policy` resolved once at init (an
+// explicit `HA_REDUCED_MOTION` override, else a Windows `SPI_GETCLIENTAREAANIMATION` probe,
+// else a deterministic `false` fallback) and projected onto `view.reduced_motion` each frame.
+// Optional/decorative transitions snap under it via `Policy.snap`/`Policy.phase`; functional
+// progress/state/focus and the simulation are never gated. All platform policy stays here in
+// `ui_client`; `src/ui` never sees it. See `motion.zig`.
+pub const motion_policy = motion;
+pub const MotionPolicy = motion.Policy;
+pub const MotionProbe = motion.Probe;
+pub const PlatformMotionProbe = motion.PlatformProbe;
+pub const FixedMotionProbe = motion.FixedProbe;
+pub const nullMotionProbe = motion.nullProbe;
+pub const resolveMotionFromEnv = motion.resolveFromEnv;
+pub const resolveMotion = motion.resolve;
+pub const parseMotionOverride = motion.parseOverride;
 pub const CursorKind = cursor.Kind;
 pub const CursorState = cursor.State;
 pub const PlatformCursors = cursor.PlatformCursors;
@@ -136,4 +153,5 @@ test {
     _ = command;
     _ = semantics;
     _ = a11y;
+    _ = motion;
 }

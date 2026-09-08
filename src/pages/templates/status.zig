@@ -12,8 +12,17 @@ const Color = uic.Color;
 
 /// A pulsing color between `t.dim` and `t.acc` (period ~1.1s) — the "heartbeat". Driven by
 /// `elapsed` (the run clock), so it freezes the instant the actor dies.
-pub fn heartbeat_color(t: Theme, elapsed: f32) Color {
-    const phase = 0.5 + 0.5 * std.math.sin(elapsed * (2.0 * std.math.pi / 1.1));
+///
+/// This is the one genuinely *decorative* time-varying visual in the project (a clock-driven
+/// oscillation with no functional readout — it lives only on the mock showcase screen). Under
+/// reduced motion (INPUT-10) it snaps: the sine phase is frozen to a constant `0.5`
+/// mid-blend, so the color holds still at the midpoint between `dim` and `acc` instead of
+/// oscillating. Functional readouts (the action-tile underbar, the ration-dial fill) and all
+/// state/focus cues are *not* gated by this — they remain fully visible regardless.
+pub fn heartbeat_color(t: Theme, elapsed: f32, motion: uic.MotionPolicy) Color {
+    const live = 0.5 + 0.5 * std.math.sin(elapsed * (2.0 * std.math.pi / 1.1));
+    // Snap the oscillation to its midpoint when the user prefers reduced motion.
+    const phase = motion.phase(live, 0.5);
     return uic.mix(t.dim, t.acc, phase);
 }
 

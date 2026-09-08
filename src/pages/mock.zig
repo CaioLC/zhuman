@@ -62,7 +62,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const vpanel = try t.panel(ctx, root, "vpanel", "Vitals");
     const vrow = try t.row(ctx, vpanel, "vrow");
     try t.figure(ctx, vrow, t.figure_glyphs(0.7), th.acc);
-    _ = try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed) }});
+    _ = try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }});
 
     // Actions — exercises `action_button` + `actor_status` against the live player.
     const q = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };

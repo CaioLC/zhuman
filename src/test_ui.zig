@@ -26,6 +26,7 @@ const drag = @import("./ui_client/drag.zig");
 const editor = @import("./ui_client/editor.zig");
 const semantics = @import("./ui_client/semantics.zig");
 const a11y = @import("./ui_client/a11y.zig");
+const motion = @import("./ui_client/motion.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
@@ -37,6 +38,7 @@ test {
     _ = editor; // authoritative single-line editor model: UTF-8/selection/refusal tests
     _ = semantics; // INPUT-08 host-side semantic registry + announcement channel tests
     _ = a11y; // INPUT-09 host-side accessibility bridge: lifecycle, capabilities, seam, drain tests
+    _ = motion; // INPUT-10 host-side reduced-motion policy: override parse/precedence/fallback + snap/phase gate tests
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

@@ -277,6 +277,42 @@ the vendored binding are the risky, policy-leaking dependencies this layer forbi
 HTML/ARIA parity is therefore unavailable and is not claimed. All Windows/platform policy
 stays here in `ui_client`; `src/ui` remains accessibility-unaware.
 
+## Reduced-motion policy (`motion.zig`)
+
+INPUT-10 adds a one-bit host-side **reduced-motion policy** that decides whether *optional*
+transitions animate or **snap** — while functional progress, state changes, pointer/focus
+cues, and the simulation always stay visible. `Policy { reduced_motion }` is resolved
+**once at init** (`App.setup`, right after `Resources.init`), stored on `Resources.motion`,
+and only *projected* onto `View.reduced_motion` in `build_ui`'s prologue each frame — so
+there is no per-frame OS call.
+
+Resolution precedence is total and non-panicking: an **explicit override** (env
+`HA_REDUCED_MOTION`, or an injected bool) wins; else the **platform probe**; else a
+deterministic **`false`** (motion allowed). `parseOverride` is case-insensitive and total —
+`1/true/yes/on`→true, `0/false/no/off`→false, and **anything else (empty/whitespace/garbage)
+is ignored** (`null`, falling through to the probe) so bad input never panics. The probe is
+a narrow injectable `Probe` vtable (mirroring `a11y.Provider`): `PlatformProbe` does the
+real query, `FixedProbe`/`nullProbe` keep every test SDL/OS-free.
+
+On Windows the platform query calls `SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, …)`
+**once** — the documented live-state "client area animation" flag (Settings → Accessibility
+→ Visual effects → Animation effects), with `reduced_motion = !animations_enabled`. It links
+against `user32` (already linked by the vendored SDL C build), so no `build.zig` change and
+no registry read. SDL exposes no cross-platform reduced-motion abstraction, so on every
+non-Windows target the probe deterministically reports `null`→`false` rather than pretending
+a preference was read.
+
+**Inventory and the functional/decorative split:** the action-tile underbar and the
+ration-dial fill are *functional determinate progress/simulation readouts* — they remain
+visible under reduced motion, unchanged. The one genuinely decorative clock-driven
+oscillation is `status.heartbeat_color` (used only on the dev `mock.zig` showcase); under
+reduced motion it freezes its sine phase to the `0.5` midpoint via `Policy.phase`. No
+production optional transitions exist yet (no tween engine — that is RENDER-08), so the
+policy ships a reusable **snap gate**, `Policy.snap(T, to, value)`, returning the end state
+`to` when reduced motion is on and the caller's interpolated `value` otherwise, ready for
+RENDER-08 to route every future optional transition through one policy check. `src/ui`
+stays motion-unaware.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

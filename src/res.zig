@@ -129,6 +129,12 @@ pub const View = struct {
     /// This frame's palette — `build_ui` installs one over the foundation's neutral
     /// defaults.
     theme: thememod.Theme = .{},
+    /// This frame's reduced-motion policy (INPUT-10), projected from `Resources.motion`
+    /// in `build_ui`'s prologue. When `true`, *optional/decorative* transitions must snap
+    /// to their end state (via `ui_client.MotionPolicy.snap`/`.phase`); functional progress
+    /// indicators, state changes, pointer/focus cues, and the simulation stay visible and
+    /// are never gated by it.
+    reduced_motion: bool = false,
 };
 
 /// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per
@@ -152,6 +158,13 @@ pub const Resources = struct {
     /// says so honestly. All platform policy stays host-side; no simulation system touches it.
     a11y: @import("./ui_client/a11y.zig").Bridge =
         @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
+    /// Host-side reduced-motion policy (INPUT-10): a one-bit preference resolved **once** at
+    /// init — an explicit `HA_REDUCED_MOTION` override, else the Windows
+    /// `SPI_GETCLIENTAREAANIMATION` probe, else a deterministic `false` fallback — and then
+    /// projected onto `view.reduced_motion` every frame in `build_ui`. Avoids per-frame OS
+    /// calls. Presentation policy only; no simulation system reads or writes it. Defaults to
+    /// motion-allowed until `init` resolves the real preference.
+    motion: @import("./ui_client/motion.zig").Policy = .{},
     time: Time = .{},
     sim: Sim,
     config: Config = .{},
