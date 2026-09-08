@@ -79,8 +79,8 @@ a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
 The host loop drives the engine in a fixed order (`src/main.zig`):
 
 ```
-1. poll events            → write host input (Resources.input)
-2. ui.mark(flag, x, y)    → event stage: hit-test last frame's paint order, flag the top
+1. poll events            → update Resources.input; host routes pointer edges in event order
+2. ui.mark/markTarget     → hit-test last frame's paint order and flag the top target
 3. ui.beginFrame()        → frame += 1
 4. arena.reset()          → last frame's tree dies
 5. build_ui(&ui, …)       → construct a fresh node tree (widgets read cache + world)
@@ -91,9 +91,11 @@ The host loop drives the engine in a fixed order (`src/main.zig`):
 ```
 
 The one-frame delay is inherent and intentional: at the event stage (step 2) this
-frame's geometry doesn't exist yet, so `mark` hit-tests the rects stamped after the
+frame's geometry doesn't exist yet, so targeting reads the rects stamped after the
 *previous* frame's layout (step 7). The interaction **slot pool** — not a retained
-node tree — is what carries that geometry across the frame boundary.
+node tree — is what carries that geometry across the frame boundary. The engine only
+finds stable targets and routes typed flags; the host decides that a primary press emits
+`pressed` immediately and only a matching, undragged release emits `clicked`.
 
 ## Where node state lives (the one rule)
 
@@ -199,18 +201,19 @@ field names nor what they mean. Today's host (`ui_client/ctx_binding.zig`):
 ```zig
 pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
     hovering: bool = false,
-    clicked:  bool = false,
+    pressed:  bool = false,  // primary press edge on this target
+    clicked:  bool = false,  // valid host-completed release activation
     active:   bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "clicked" };  // engine zeroes these each frame
+    pub const transient = [_][]const u8{ "hovering", "pressed", "clicked" };
 };
 ```
 
 The **transient/latched split is host policy too**: `clearTransient` (run in
 `endFrame`) reads the host's `transient` field-name list and zeroes only those
 fields. Fields *not* listed latch — they persist across frames until the host clears
-them. Here `hovering`/`clicked` are recomputed every frame; `active` latches. Add a
-field (`dragging`, `focused`) by editing the host struct — no engine change.
+them. Here hover, press, and completed activation are recomputed from input; `active`
+latches. Add a field (`dragging`, `focused`) by editing the host struct — no engine change.
 
 The interaction store is a `Pool(Slot)` where each slot carries flags, its full rect,
 inherited clip, parent key, pass-through state, and an optional frame-scoped `HitTestFn`.
@@ -222,7 +225,12 @@ geometry — so **hit-testing iterates the live slots, never the node tree**:
   node's `parent_key` chain and flags its ancestors. **O(interactive)**, not O(all).
   `flag` is comptime-checked against the host's `Interaction` fields
   (`std.meta.FieldEnum`); the point is passed *in* (mouse/touch/gamepad — the engine
-  never asks where from). Three things fall out of stopping at the first hit:
+  never asks where from). `markTarget` performs the same capture-aware routing and
+  returns the stable key it selected. `targetAt` performs only geometric topmost lookup
+  (ignoring capture and changing no flags), while `markKey` bubbles a flag from one
+  existing stable key. Together they let host policy remember a press target, validate
+  a release geometrically, and route a completed activation without teaching core what
+  a click means. Three things fall out of stopping at the first hit:
   - **Occlusion is a mechanism.** A node genuinely blocks what is drawn beneath it, so
     an overlay no longer has to trust that whatever it covers is harmless to double-fire.
   - **Containment still reads**, because ancestors are flagged by bubbling — a row stays

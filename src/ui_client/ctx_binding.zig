@@ -145,10 +145,11 @@ pub const Stroke = struct { color: Color, width: f32 = 1 };
 /// Add a field (e.g. `dragging`, `focused`) the day a widget grows a new behaviour.
 pub const Interaction = packed struct {
     hovering: bool = false,
+    pressed: bool = false,
     clicked: bool = false,
     active: bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "clicked" };
+    pub const transient = [_][]const u8{ "hovering", "pressed", "clicked" };
 };
 
 /// Concrete UI context type, bound here where `ui` and `res` meet.
@@ -216,15 +217,44 @@ test "interaction store: active latches, transient flags clear each frame" {
 
     const k = ui.key(0, "btn");
     u.setFlag(k, .hovering, true);
+    u.setFlag(k, .pressed, true);
     u.setFlag(k, .clicked, true);
     u.setFlag(k, .active, true);
 
     const on = u.interactionOf(k);
-    try std.testing.expect(on.hovering and on.clicked and on.active);
+    try std.testing.expect(on.hovering and on.pressed and on.clicked and on.active);
 
     u.clearTransient();
     const after = u.interactionOf(k);
     try std.testing.expect(!after.hovering);
+    try std.testing.expect(!after.pressed);
     try std.testing.expect(!after.clicked);
     try std.testing.expect(after.active); // latched — survives the frame boundary
+}
+
+test "control activation marks press immediately and click once on valid release" {
+    var u = UiCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const parent = ui.key(0, "activation-parent");
+    const control = ui.key(parent, "activation-control");
+    _ = u.interactionOf(parent);
+    _ = u.stampRect(parent, .{ .x = 0, .y = 0, .w = 100, .h = 40 }, null, null);
+    _ = u.interactionOf(control);
+    _ = u.stampRect(control, .{ .x = 60, .y = 0, .w = 40, .h = 40 }, null, parent);
+
+    var gesture: @import("activation.zig").PointerActivation = .{};
+    const pressed_target = u.markTarget(.pressed, 80, 20);
+    gesture.press(pressed_target, .mouse, 1, .{ .x = 80, .y = 20 });
+    try std.testing.expect(u.interactionOf(control).pressed);
+    try std.testing.expect(u.interactionOf(parent).pressed);
+    try std.testing.expect(!u.interactionOf(control).clicked);
+
+    if (gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 })) |key| {
+        try std.testing.expect(u.markKey(key, .clicked));
+    }
+    try std.testing.expect(u.interactionOf(control).clicked);
+    try std.testing.expect(u.interactionOf(parent).clicked);
+    try std.testing.expectEqual(@as(?u64, null), gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 }));
 }

@@ -88,6 +88,23 @@ button/key and cancel engine pointer capture. Key events, held keys, and text us
 fixed capacities (`64`, `32`, and `256` bytes respectively); their overflow flags make
 refusal observable without adding allocator ownership to `Resources`.
 
+## Pointer activation (`activation.zig`)
+
+`PointerActivation` converts primary-pointer edges into control semantics without moving
+those semantics into generic `ui`. On down, main routes transient `.pressed` immediately
+and stores the topmost stable key, pointer kind/ID, and origin. Motion farther than 4
+logical pixels permanently classifies that gesture as a drag. A matching pointer release
+emits one `.clicked` only when its geometric topmost key is still the pressed key; release
+outside, target changes, drag, focus loss, touch cancellation, pointer mismatch, and a
+second release are suppressed. SDL mouse events synthesized from touch are excluded from
+this routing because direct finger events carry the real touch ID and would otherwise
+process the gesture twice.
+
+All build, action, tab/ration, nested cancel, Continue, and restart call sites still read
+the one shared `.clicked` flag, so changing the event-stage policy migrates them together.
+`.pressed` remains separately available for controls that need press-time behavior; text
+input uses it to distinguish an inside press from an outside focus-clear.
+
 ## Focus binding
 
 The engine owns focus identity, traversal order, and lifecycle repair; this layer decides
@@ -185,10 +202,11 @@ guard to keep the containing build action from firing.
 
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that
-owner outside its box, then owner-releases; the event layer cancels on platform
-cancellation or window-focus loss. Disappearing owners are pruned automatically. This
-step supplies the generic mechanism only—pointer IDs, held/released flags, thresholds,
-and concrete slider/scrollbar/board wiring belong to the INPUT roadmap.
+owner outside its box, then owner-releases; the event layer cancels capture and pending
+activation on platform cancellation or window-focus loss. Disappearing owners are pruned
+automatically. This is still generic mechanism: `PointerActivation` owns pointer identity
+and the 4px click-suppression threshold, while concrete slider/scrollbar/board capture
+wiring remains INPUT-05 work.
 
 **Why a handle rather than `*Node` methods:** applying a `font` re-measures the text, which
 needs the font backend on `ctx`, and the engine's `Node` is deliberately ctx-agnostic. `El`

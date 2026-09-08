@@ -50,8 +50,10 @@ struct's address is fixed). `main.zig` owns `App`, the event loop, the sim tick,
 
 Each frame:
 
-1. **Events** — the SDL poll writes into `res.input`; a left click also calls
-   `ui.mark(.clicked, x, y)`.
+1. **Events** — the SDL poll updates `res.input`. Primary down routes an explicit
+   `.pressed` to the topmost stable key; motion tracks a 4px drag threshold; matching
+   release over the same key routes one `.clicked`. Drag, cancellation, focus loss,
+   pointer mismatch, and release elsewhere suppress activation.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.

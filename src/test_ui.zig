@@ -20,10 +20,12 @@ const widgets = @import("./ui_client/widgets.zig");
 const style = @import("./ui_client/style.zig");
 const elements = @import("./ui_client/elements.zig");
 const input = @import("./ui_client/input.zig");
+const activation = @import("./ui_client/activation.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
     _ = input; // host frame-input model + deterministic edge/state tests
+    _ = activation; // release activation, drag/cancel suppression, and one-shot tests
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

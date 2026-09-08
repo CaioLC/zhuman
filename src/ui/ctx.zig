@@ -309,6 +309,57 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             }
         }
 
+        fn targetIndexAt(self: *const Self, x: f32, y: f32) ?u32 {
+            var i = self.order.items.len;
+            while (i > 0) {
+                i -= 1;
+                const idx = self.order.items[i];
+                if (idx >= self.interactions.slots.items.len) continue;
+                const slot = &self.interactions.slots.items[idx];
+                if (!slot.live or slot.value.pass_through) continue;
+                const r = slot.value.rect orelse continue;
+                if (slot.value.clip) |c| if (!c.contains(x, y)) continue;
+                if (!r.contains(x, y)) continue;
+                if (slot.value.hit_test_frame == self.frame) {
+                    if (slot.value.hit_test) |predicate| if (!predicate(r, x, y)) continue;
+                }
+                return idx;
+            }
+            return null;
+        }
+
+        /// Return the stable key of the topmost eligible slot at a point, ignoring
+        /// pointer capture and without changing flags. Hosts use this to validate that
+        /// a release still lands on the same control that received its press.
+        pub fn targetAt(self: *const Self, x: f32, y: f32) ?u64 {
+            const idx = self.targetIndexAt(x, y) orelse return null;
+            return self.interactions.slots.items[idx].key;
+        }
+
+        /// Route a typed flag to one existing live key and its stamped ancestors.
+        /// This is mechanism only: the host decides whether a completed gesture merits
+        /// the flag. Returns false for a missing or stale target without allocating.
+        pub fn markKey(self: *Self, key: u64, comptime flag: FlagEnum) bool {
+            const idx = self.interactions.index.get(key) orelse return false;
+            if (!self.interactions.slots.items[idx].live) return false;
+            self.routeFlag(idx, flag);
+            return true;
+        }
+
+        /// Capture-aware event-stage routing that also reports the stable key which
+        /// received the flag. The ordinary `mark` wrapper remains source-compatible.
+        pub fn markTarget(self: *Self, comptime flag: FlagEnum, x: f32, y: f32) ?u64 {
+            if (self.pointer_capture) |key| {
+                if (self.markKey(key, flag)) return key;
+                // Defensive repair; normal disappearance is handled at endFrame.
+                self.pointer_capture = null;
+            }
+
+            const idx = self.targetIndexAt(x, y) orelse return null;
+            self.routeFlag(idx, flag);
+            return self.interactions.slots.items[idx].key;
+        }
+
         /// Event-stage routing: while a live key owns pointer capture, set `flag` on it
         /// and its ancestors regardless of (x, y). Otherwise hit-test the **topmost**
         /// node containing (x, y), then bubble to its ancestors. O(interactive) — walks
@@ -322,35 +373,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// stays hovered while the pointer is over its own button — containment keeps
         /// working; only the nodes *underneath* the hit are left alone.
         pub fn mark(self: *Self, comptime flag: FlagEnum, x: f32, y: f32) void {
-            if (self.pointer_capture) |key| {
-                if (self.interactions.index.get(key)) |idx| {
-                    if (self.interactions.slots.items[idx].live) {
-                        self.routeFlag(idx, flag);
-                        return;
-                    }
-                }
-                // Defensive repair; normal disappearance is handled at endFrame.
-                self.pointer_capture = null;
-            }
-
-            var i = self.order.items.len;
-            while (i > 0) {
-                i -= 1;
-                const idx = self.order.items[i];
-                if (idx >= self.interactions.slots.items.len) continue;
-                const slot = &self.interactions.slots.items[idx];
-                if (!slot.live or slot.value.pass_through) continue;
-                const r = slot.value.rect orelse continue;
-                // Cropped out of its scroll viewport: still laid out, no longer hittable.
-                if (slot.value.clip) |c| if (!c.contains(x, y)) continue;
-                if (!r.contains(x, y)) continue;
-                if (slot.value.hit_test_frame == self.frame) {
-                    if (slot.value.hit_test) |predicate| if (!predicate(r, x, y)) continue;
-                }
-
-                self.routeFlag(idx, flag);
-                return;
-            }
+            _ = self.markTarget(flag, x, y);
         }
 
         /// Reset the host's *transient* flags on every live slot, leaving latched
@@ -400,8 +423,9 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
 const TestFlags = packed struct {
     hovering: bool = false,
     clicked: bool = false,
+    released: bool = false,
     active: bool = false,
-    pub const transient = [_][]const u8{ "hovering", "clicked" };
+    pub const transient = [_][]const u8{ "hovering", "clicked", "released" };
 };
 const TestCtx = Ctx(struct {}, TestFlags, u8);
 
@@ -600,17 +624,17 @@ test "release outside routes first then restores ordinary targeting" {
     try std.testing.expect(u.capturePointer(scrollbar));
 
     // A host routes its release flag before dropping ownership.
-    u.mark(.clicked, 180, 50);
-    try std.testing.expect(u.interactionOf(scrollbar).clicked);
-    try std.testing.expect(!u.interactionOf(background).clicked);
+    u.mark(.released, 180, 50);
+    try std.testing.expect(u.interactionOf(scrollbar).released);
+    try std.testing.expect(!u.interactionOf(background).released);
     try std.testing.expect(!u.releasePointerCapture(background));
     try std.testing.expect(u.releasePointerCapture(scrollbar));
     try std.testing.expectEqual(@as(?u64, null), u.capturedPointerKey());
 
     u.clearTransient();
-    u.mark(.clicked, 180, 50);
-    try std.testing.expect(!u.interactionOf(scrollbar).clicked);
-    try std.testing.expect(u.interactionOf(background).clicked);
+    u.mark(.released, 180, 50);
+    try std.testing.expect(!u.interactionOf(scrollbar).released);
+    try std.testing.expect(u.interactionOf(background).released);
 }
 
 test "capture transfers singularly and cancellation clears board pan owner" {
@@ -644,6 +668,41 @@ test "disappearing capture owner is repaired at frame end" {
     u.beginFrame();
     u.endFrame(); // owner was not touched, so interaction pruning removes it
     try std.testing.expectEqual(@as(?u64, null), u.capturedPointerKey());
+}
+
+test "target lookup is non-mutating and keyed routing bubbles" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const row = cache_mod.key(0, "row-target");
+    const control = cache_mod.key(row, "control-target");
+    tstamp(&u, row, .{ .x = 0, .y = 0, .w = 100, .h = 40 }, null, null);
+    tstamp(&u, control, .{ .x = 70, .y = 0, .w = 30, .h = 40 }, null, row);
+
+    try std.testing.expectEqual(@as(?u64, control), u.targetAt(80, 20));
+    try std.testing.expect(!u.interactionOf(control).clicked);
+    try std.testing.expect(u.markKey(control, .clicked));
+    try std.testing.expect(u.interactionOf(control).clicked);
+    try std.testing.expect(u.interactionOf(row).clicked);
+    try std.testing.expect(!u.markKey(cache_mod.key(0, "missing-target"), .clicked));
+}
+
+test "markTarget reports capture routing while targetAt remains geometric" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const captured = cache_mod.key(0, "captured-target");
+    const under_pointer = cache_mod.key(0, "geometric-target");
+    tstamp(&u, captured, .{ .x = 0, .y = 0, .w = 20, .h = 20 }, null, null);
+    tstamp(&u, under_pointer, .{ .x = 50, .y = 0, .w = 20, .h = 20 }, null, null);
+    try std.testing.expect(u.capturePointer(captured));
+
+    try std.testing.expectEqual(@as(?u64, under_pointer), u.targetAt(60, 10));
+    try std.testing.expectEqual(@as(?u64, captured), u.markTarget(.clicked, 60, 10));
+    try std.testing.expect(u.interactionOf(captured).clicked);
+    try std.testing.expect(!u.interactionOf(under_pointer).clicked);
 }
 
 test "mark hits the topmost node only — later paint order wins" {

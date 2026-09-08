@@ -26,14 +26,16 @@ pub const theme = @import("./theme.zig");
 
 // ctx_binding
 
-// frame input model
+// frame input and activation model
 pub const input = @import("./input.zig");
+pub const activation = @import("./activation.zig");
 pub const Input = input.Input;
 pub const InputPoint = input.Point;
 pub const PointerKind = input.PointerKind;
 pub const PointerButton = input.PointerButton;
 pub const KeyAction = input.KeyAction;
 pub const Modifiers = input.Modifiers;
+pub const PointerActivation = activation.PointerActivation;
 
 pub const UiCtx = ctx_binding.UiCtx;
 pub const Node = ctx_binding.Node;
@@ -84,6 +86,7 @@ pub const text_input = widgets.text_input;
 
 test {
     _ = input;
+    _ = activation;
     _ = theme;
     _ = ctx_binding;
     _ = features;

@@ -65,6 +65,27 @@ fn syncMouseButtons(input: *ui_client.Input, state: sdl.mouse.ButtonFlags) void 
     input.syncButtonHeld(.aux2, state.side2);
 }
 
+fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    const target = app.ui.markTarget(.pressed, position.x, position.y);
+    app.pointer_activation.press(target, kind, id, position);
+}
+
+fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    app.pointer_activation.motion(kind, id, position);
+}
+
+fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    const target = app.ui.targetAt(position.x, position.y);
+    if (app.pointer_activation.release(target, kind, id, position)) |key| {
+        _ = app.ui.markKey(key, .clicked);
+    }
+}
+
+fn cancelPointerGesture(app: *App) void {
+    app.pointer_activation.cancel();
+    app.ui.cancelPointerCapture();
+}
+
 // END CONFIGS
 
 const App = struct {
@@ -77,6 +98,7 @@ const App = struct {
     world: ha.world.World,
     frame_arena: std.heap.ArenaAllocator,
     ui: ui_client.UiCtx,
+    pointer_activation: ui_client.PointerActivation = .{},
     ui_profiler: ui_client.FrameProfiler = .{},
 
     fn init() !App {
@@ -167,17 +189,27 @@ pub fn main() !void {
                         .{ .x = motion.x_rel, .y = motion.y_rel },
                     );
                     syncMouseButtons(input, motion.state);
+                    if (pointer.kind != .touch) {
+                        routePointerMotion(&app, pointer.kind, pointer.id, .{ .x = motion.x, .y = motion.y });
+                    }
                 },
                 .mouse_button_down, .mouse_button_up => |button| if (pointerButton(button.button)) |mapped| {
                     const pointer = mouseIdentity(button.id);
+                    const position = ui_client.InputPoint{ .x = button.x, .y = button.y };
                     input.recordButton(
                         pointer.kind,
                         pointer.id,
                         mapped,
                         button.down,
                         button.clicks,
-                        .{ .x = button.x, .y = button.y },
+                        position,
                     );
+                    if (mapped == .primary and pointer.kind != .touch) {
+                        if (button.down)
+                            routePointerPress(&app, pointer.kind, pointer.id, position)
+                        else
+                            routePointerRelease(&app, pointer.kind, pointer.id, position);
+                    }
                 },
                 .mouse_wheel => |wheel| {
                     const pointer = mouseIdentity(wheel.id);
@@ -195,25 +227,34 @@ pub fn main() !void {
                     const id: u64 = @intCast(finger.finger_id.value);
                     const position = ui_client.InputPoint{ .x = finger.x * width, .y = finger.y * height };
                     switch (event) {
-                        .finger_down => input.recordButton(.touch, id, .primary, true, 1, position),
-                        .finger_up => input.recordButton(.touch, id, .primary, false, 1, position),
-                        .finger_motion => input.recordMotion(
-                            .touch,
-                            id,
-                            position,
-                            .{ .x = finger.dx * width, .y = finger.dy * height },
-                        ),
+                        .finger_down => {
+                            input.recordButton(.touch, id, .primary, true, 1, position);
+                            routePointerPress(&app, .touch, id, position);
+                        },
+                        .finger_up => {
+                            input.recordButton(.touch, id, .primary, false, 1, position);
+                            routePointerRelease(&app, .touch, id, position);
+                        },
+                        .finger_motion => {
+                            input.recordMotion(
+                                .touch,
+                                id,
+                                position,
+                                .{ .x = finger.dx * width, .y = finger.dy * height },
+                            );
+                            routePointerMotion(&app, .touch, id, position);
+                        },
                         else => unreachable,
                     }
                 },
                 .finger_canceled => {
                     input.cancel();
-                    app.ui.cancelPointerCapture();
+                    cancelPointerGesture(&app);
                 },
                 .window_focus_gained => input.setWindowFocus(true),
                 .window_focus_lost, .did_enter_background => {
                     input.setWindowFocus(false);
-                    app.ui.cancelPointerCapture();
+                    cancelPointerGesture(&app);
                     sdl.keyboard.stopTextInput(app.window) catch {};
                 },
                 else => {},
@@ -253,9 +294,6 @@ pub fn main() !void {
                     st.len += text.len;
                 }
             }
-        }
-        if (input.pointer.buttons.primary.pressed) {
-            app.ui.mark(.clicked, input.pointer.position.x, input.pointer.position.y);
         }
 
         // Update Stage

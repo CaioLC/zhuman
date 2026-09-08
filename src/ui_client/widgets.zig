@@ -73,7 +73,7 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 
 /// Button: an outlined box that hugs its text label (plus a little padding so the
 /// glyphs clear the border), wired to `parent` under `key`. Returns the outer node;
-/// the caller reads `btn.query(ctx).clicked` to act on a press — querying also keeps
+/// the caller reads `btn.query(ctx).clicked` to act on a completed release — querying also keeps
 /// the node's interaction slot alive so its rect is stamped for next frame's hit-test.
 /// The whole box is the clickable surface. The padding lives on the *label*, not the
 /// box (the box carries none, so parent-padding inset is moot here): `draw_text` insets
@@ -299,8 +299,8 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     const q = node.query(ctx);
     if (q.clicked) {
         _ = ctx.requestFocus(node.key);
-    } else if (ctx.isFocused(node.key) and ctx.res.input.pointer.buttons.primary.pressed) {
-        ctx.clearFocus(); // clicked elsewhere this frame
+    } else if (ctx.isFocused(node.key) and ctx.res.input.pointer.buttons.primary.pressed and !q.pressed) {
+        ctx.clearFocus(); // primary press landed outside this field
     }
     const focused = ctx.isFocused(node.key);
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
