@@ -69,6 +69,10 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
             const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
+                // BUILD owns this state on its conditional root. Retain only the existing
+                // slot while hidden; this call cannot allocate the child or its state.
+                _ = center.get().retainChildState(ctx, "buildlist", uic.UiState.BuildViewState);
+
                 // Production row, in the grammar the card taught. A tile exists iff the
                 // agent holds the action component — so an unlocked verb appears here the
                 // frame its tool is finished, and not before. Innate: Forage, Scavenge.
@@ -91,12 +95,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 // meanwhile this is the tab where "why does Forage cost 1.7?" gets asked.
                 _ = try t.holdings(ctx, center, world, e, "holdings");
             } else {
-                // One question — what can I act on now — answered in rows, sorted so the
-                // top of the list is the next thing. The view state is keyed on `center`
-                // rather than on the list: the list only exists while its tab is active,
-                // and a pool slot is pruned the frame its node stops being built, so sort
-                // and filter would reset on every visit to ACTIONS.
-                _ = try t.build_list(ctx, center, world, e, center, "buildlist");
+                _ = try t.build_list(ctx, center, world, e, "buildlist");
             }
         }
     }
@@ -119,4 +118,3 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
 
     return root.get();
 }
-

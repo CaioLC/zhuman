@@ -60,16 +60,15 @@ fn group_label(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8) !El {
     return g;
 }
 
-/// The BUILD tab. `state_key` must be a node built on *every* frame — its pool slot is
-/// pruned the moment it stops being built, and the list itself only exists while its tab
-/// is active, so keying the view state on the list would reset sort and filter on every
-/// visit to ACTIONS.
-pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, state_key: El, id: []const u8) !El {
+/// The BUILD tab owns its view state on its outer node. An always-built shell may retain
+/// that existing slot while this conditional subtree is hidden; building the list itself
+/// is still the only operation that can allocate the slot.
+pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !El {
     const th = ctx.res.view.theme;
-    const st = state_key.get().state(ctx, BuildViewState);
 
     const outer = try el.div(ctx, parent, id);
     _ = outer.with_flow(.{ .dir = .column }).with_gap(6);
+    const st = outer.get().state(ctx, BuildViewState);
 
     // --- the control strip ---------------------------------------------------------
     const strip = try el.div(ctx, outer, "strip");

@@ -212,6 +212,16 @@ pub fn Node(comptime RenderData: type) type {
         pub fn state(self: *Self, u: anytype, comptime T: type) *T {
             return u.pool(T).get(u.cache(self.key, T));
         }
+
+        /// Keep an existing `T` state slot for a conditionally hidden direct child alive
+        /// this frame. Derives the same structural key that `add_child` would assign,
+        /// but creates neither the child nor a state slot. Returning false means that
+        /// child has never acquired this state (or was already pruned). The caller must
+        /// be built and call this every hidden frame; when it disappears or stops, normal
+        /// pruning resumes.
+        pub fn retainChildState(self: *Self, u: anytype, child_id: []const u8, comptime T: type) bool {
+            return u.retainState(key(self.key, child_id), T);
+        }
     };
 }
 

@@ -115,6 +115,13 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.pool(T).acquire(self.gpa, k, self.frame) catch @panic("ui cache OOM");
         }
 
+        /// Keep an existing `T` slot alive for this frame without acquiring or creating
+        /// one. This lets an always-built shell preserve selected state owned by a hidden
+        /// conditional child. Retention ends as soon as the shell stops calling it.
+        pub fn retainState(self: *Self, k: u64, comptime T: type) bool {
+            return self.pool(T).retain(k, self.frame);
+        }
+
         /// Set one interaction flag for key `k` directly (no hit-test). `flag` is
         /// checked against the host's `IntFlags` fields at comptime. Acquiring keeps
         /// the slot alive this frame.

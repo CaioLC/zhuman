@@ -56,6 +56,10 @@ pub const Node  = ui.Node(RenderData);
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
   feature re-exports it as `pub const State` to keep the contract readable.
+  Per-view state normally lives in one aggregate on an always-built shell. When a
+  conditional child is the clearer owner, the shell may call `retainChildState` each
+  hidden frame; this keeps only an existing typed slot and stops automatically with
+  the shell. `BuildViewState` uses that path while ACTIONS hides the BUILD root.
 - **`Interaction`** — `hovering` / `clicked` / `active`, with `transient` naming the first
   two. The engine stores it opaquely; both the vocabulary and the transient/latched split
   are decided here.

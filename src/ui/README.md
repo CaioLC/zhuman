@@ -165,6 +165,13 @@ slot-map:
   (handles re-fetched every frame), so no handle ever spans a removal.
 - **Prune at the frame boundary.** A slot not *touched* (acquired) this frame is
   freed next `endFrame`. Touch = stay alive.
+- **Retain without allocation.** `retain(k, frame)` touches an existing slot but
+  returns false instead of creating one when the key is absent. An always-built
+  owner can therefore preserve selected state for a conditionally hidden child
+  by calling `retainChildState` every hidden frame. Retention stops as soon as
+  that owner disappears or stops requesting it, so the next prune reclaims the
+  slot. This retains state only—never an arena node or tree. Prefer one aggregate
+  state on the always-built shell when several fields share the same lifetime.
 - **Initialize on occupancy.** A fresh slot and a reused hole follow the same
   contract: if `T` declares `pub fn init() T`, the pool calls it; otherwise `T`
   opts into `std.mem.zeroes(T)`. States with semantic nonzero defaults declare

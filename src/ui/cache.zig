@@ -98,6 +98,15 @@ pub fn Pool(comptime T: type) type {
             return idx;
         }
 
+        /// Keep an existing slot alive for `frame` without acquiring or creating it.
+        /// Returns false when `k` has no live slot. Callers must opt in every frame they
+        /// want retention; stopping lets the ordinary end-of-frame prune reclaim it.
+        pub fn retain(self: *Self, k: u64, frame: u64) bool {
+            const idx = self.index.get(k) orelse return false;
+            self.slots.items[idx].touched = frame;
+            return true;
+        }
+
         /// Dereference a handle. Never hold the result across another `acquire`
         /// on this pool — the backing array may grow. Store the index instead.
         pub fn get(self: *Self, idx: u32) *T {
@@ -179,6 +188,30 @@ test "prune frees untouched slots and frees are reused" {
     // 222 was untouched → its slot is now a hole; re-acquiring reuses index x.
     const y = try p.acquire(alloc, 222, 2);
     try std.testing.expectEqual(x, y);
+}
+
+test "retain keeps only an existing slot alive for the requested frame" {
+    const alloc = std.testing.allocator;
+    var p: Pool(u32) = .{};
+    defer p.deinit(alloc);
+
+    // Retaining a speculative key is a no-op: persistence cannot allocate state.
+    try std.testing.expect(!p.retain(111, 1));
+    try std.testing.expectEqual(@as(usize, 0), p.index.count());
+
+    const h = try p.acquire(alloc, 111, 1);
+    p.get(h).* = 42;
+
+    // The hidden owner does not acquire on frame 2, but its shell explicitly retains it.
+    try std.testing.expect(p.retain(111, 2));
+    try p.prune(alloc, 2);
+    try std.testing.expectEqual(@as(u32, 42), p.get(h).*);
+    try std.testing.expect(p.index.contains(111));
+
+    // One frame without retention restores default pruning immediately.
+    try p.prune(alloc, 3);
+    try std.testing.expect(!p.index.contains(111));
+    try std.testing.expect(!p.retain(111, 4));
 }
 
 test "acquire honors init defaults for fresh and reused slots" {
