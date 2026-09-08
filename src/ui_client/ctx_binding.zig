@@ -50,10 +50,27 @@ pub const UiState = struct {
             return if (self.len == 0) null else self.buf[0..self.len];
         }
     };
-    /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
-    /// the frame-arena reset the same way `TextData` does. It has no `init`, so it uses
-    /// the pool's documented zeroable fallback.
-    pub const ScrollState = struct { offset: f32 = 0 };
+    /// A scroll container's persisted offset and active thumb-drag anchors, keyed by its
+    /// own `node.key`. The offset survives frame-arena reset; drag ownership remains in
+    /// generic `Ctx` capture and these fields only preserve host scroll math.
+    pub const ScrollState = struct {
+        offset: f32 = 0,
+        dragging: bool = false,
+        drag_origin_y: f32 = 0,
+        drag_origin_offset: f32 = 0,
+        drag_pointer_kind: @import("input.zig").PointerKind = .unknown,
+        drag_pointer_id: ?u64 = null,
+        drag_owner_key: ?u64 = null,
+
+        pub fn clearDrag(self: *ScrollState) void {
+            self.dragging = false;
+            self.drag_origin_y = 0;
+            self.drag_origin_offset = 0;
+            self.drag_pointer_kind = .unknown;
+            self.drag_pointer_id = null;
+            self.drag_owner_key = null;
+        }
+    };
     /// A tab strip's persisted selection (an index into its labels), keyed by the strip's
     /// own `node.key` — the `ScrollState` pattern for content that switches. Tab 0 is the
     /// semantic and bitwise-zero default, so this state uses the zeroable fallback.

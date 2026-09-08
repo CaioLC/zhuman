@@ -54,6 +54,7 @@ pub fn tile(
     // projection and explicitly clears stale disabled state when the facts change.
     uic.publishControlState(ctx, box.get().key, .{ .disabled = running or !can });
     const q = box.query();
+    if (q.hovering) ctx.res.cursor.request(if (q.disabled) .not_allowed else .pointer);
     const chrome = if (running) th.fg else if (q.disabled) th.dim else if (q.held or q.hovering) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans

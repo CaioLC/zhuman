@@ -52,6 +52,7 @@ fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool, is
         .checked = on and is_check,
     });
     const q = box.query();
+    if (q.hovering) ctx.res.cursor.request(.pointer);
     const c = if (on) th.acc else if (q.held or q.hovering) th.fg else th.dim;
     _ = (try el.text(ctx, box, "t", label)).with_style(.{ style.body, Style{ .text = c } });
     return q.clicked;
@@ -269,6 +270,7 @@ fn goal_card(
     const go = try el.div(ctx, card, "go");
     uic.publishControlState(ctx, go.get().key, .{ .disabled = !ready });
     const q = go.query();
+    if (q.hovering) ctx.res.cursor.request(if (q.disabled) .not_allowed else .pointer);
     const c = if (q.disabled) th.line2 else if (q.held or q.hovering) th.acc else th.fg;
     var mbuf: [48]u8 = undefined;
     const label = if (ready)

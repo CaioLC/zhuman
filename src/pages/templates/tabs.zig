@@ -35,6 +35,7 @@ pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8)
         const key = try std.fmt.allocPrint(ctx.arena, "tab{d}", .{i});
         const chip = try el.div(ctx, bar, key);
         const q = chip.query();
+        if (q.hovering) ctx.res.cursor.request(.pointer);
         if (q.clicked) st.active = i;
 
         const is_active = st.active == i;

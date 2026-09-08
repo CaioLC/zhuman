@@ -11,6 +11,7 @@ const std = @import("std");
 const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
 const cb = @import("./ctx_binding.zig");
+const drag = @import("./drag.zig");
 const feat = @import("./features/root.zig");
 
 const UiCtx = cb.UiCtx;
@@ -98,6 +99,7 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     // including false so a key cannot retain stale semantics across state changes.
     cb.publishControlState(ctx, outer.key, .{ .disabled = !enabled });
     const q = outer.query(ctx);
+    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
     const c = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg;
     outer.render_data.outline = .{ .color = c };
@@ -119,6 +121,7 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     _ = node.with_layout(.relative, null);
     cb.publishControlState(ctx, node.key, .{ .disabled = !enabled });
     const q = node.query(ctx);
+    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
     node.render_data.outline = .{ .color = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg };
     return node;
@@ -178,8 +181,9 @@ pub const ScrollView = struct {
 
 /// Vertical scroll container: a fixed `width`×`height` `viewport` (clipped, via
 /// `RenderData.clip`) holding a `fit_children` `content` column the caller appends rows
-/// to. Scrolls only when ordered hit/capture routing marks the viewport with `.wheel`;
-/// its `ScrollState` offset persists by `key` and is folded into
+/// to. Routed wheel input scrolls the viewport; once content overflows, the thumb captures
+/// primary input and maps outside-track pointer travel to the clamped offset. Its
+/// `ScrollState` persists offset and host drag anchors by `key`, and the offset folds into
 /// `content.layout.scroll_y`, which `place` uses to shift `content`'s children without a
 /// second layout pass.
 ///
@@ -190,8 +194,8 @@ pub const ScrollView = struct {
 /// flags. One-frame-stale means a newly-taller/shorter content clamps a frame late —
 /// invisible at 60fps.
 ///
-/// A thin track + thumb rides beside the viewport, shown only once content overflows it
-/// (no drag yet — wheel-only, per the M2 scope).
+/// A thin track + thumb rides beside the viewport only while content overflows. It uses
+/// grab/grabbing cursor requests and owner-checked capture release.
 pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, height: f32) !ScrollView {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     _ = outer.with_layout(.relative, .{ .dir = .row })
@@ -216,7 +220,6 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
         state.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ scroll toward the top
     }
     state.offset = std.math.clamp(state.offset, 0, max_offset);
-    content.layout.scroll_y = state.offset;
 
     if (max_offset > 0) {
         const track = try Node.pcreate(ctx.arena, "track", outer);
@@ -224,22 +227,33 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
             .with_size(ui.features.Size.initFixed(scrollbar_w, height));
         track.render_data.fill = ctx.res.view.theme.line;
 
-        // Thumb height reflects how much of the content is visible; its position within
-        // the track reflects `offset` — built as two stacked fixed-height children (an
-        // invisible spacer, then the thumb) rather than an absolute offset, so ordinary
-        // vertical flow places it with no extra mechanism.
-        const thumb_h = @max(16.0, height * height / content_h);
-        const thumb_y = (state.offset / max_offset) * (height - thumb_h);
+        // The thumb owns capture from press through release, so capture-first routing
+        // continues outside its narrow track. Pointer travel maps linearly to content.
+        const thumb_h = @min(height, @max(16.0, height * height / content_h));
+        const thumb_travel = height - thumb_h;
 
         const spacer = try Node.pcreate(ctx.arena, "above", track);
-        _ = spacer.with_layout(.relative, null)
-            .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_y));
+        _ = spacer.with_layout(.relative, null);
 
         const thumb = try Node.pcreate(ctx.arena, "thumb", track);
         _ = thumb.with_layout(.relative, null)
             .with_size(ui.features.Size.initFixed(scrollbar_w, thumb_h));
-        thumb.render_data.fill = ctx.res.view.theme.line2;
+        const thumb_q = thumb.query(ctx);
+        drag.updateScrollThumb(ctx, state, thumb.key, thumb_q.pressed, max_offset, thumb_travel);
+        if (state.dragging) {
+            ctx.res.cursor.request(.grabbing);
+        } else if (thumb_q.hovering) {
+            ctx.res.cursor.request(.grab);
+        }
+        thumb.render_data.fill = if (state.dragging) ctx.res.view.theme.acc else ctx.res.view.theme.line2;
+
+        const thumb_y = (state.offset / max_offset) * thumb_travel;
+        _ = spacer.with_size(ui.features.Size.initFixed(scrollbar_w, thumb_y));
+    } else if (state.dragging) {
+        drag.cancelScrollThumb(ctx, state);
     }
+
+    content.layout.scroll_y = state.offset;
 
     return .{ .outer = outer, .viewport = viewport, .content = content };
 }
@@ -304,6 +318,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
     ctx.registerFocus(node.key, true);
 
     const q = node.query(ctx);
+    if (q.hovering) ctx.res.cursor.request(.text);
     if (q.clicked) {
         _ = ctx.requestFocus(node.key);
     } else if (ctx.isFocused(node.key) and ctx.res.input.pointer.buttons.primary.pressed and !q.pressed) {

@@ -1,6 +1,7 @@
 //! `scroll_view` template — a fixed-size, clipped viewport over a `fit_children` content
-//! column the caller appends rows to. Wheel-scrolls only when ordered routing marks its
-//! viewport with `.wheel`; the offset persists in a `ScrollState` slot and folds into
+//! column the caller appends rows to. Routed wheel input scrolls its viewport; an
+//! overflowing thumb captures primary input and keeps dragging outside the narrow track.
+//! Offset and drag anchors persist in `ScrollState` and fold into
 //! `content.layout.scroll_y`. A track + thumb rides beside it once content overflows. Behavior-heavy: built from `El` for the structure, dropping to
 //! `.get()` only for the state/geometry reads. Scroll math unchanged from the old widget.
 //! Returns `El` handles (shelf convention) — callers append rows into `.content`.
@@ -59,7 +60,6 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
         st.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ toward the top
     }
     st.offset = std.math.clamp(st.offset, 0, max_offset);
-    content_node.layout.scroll_y = st.offset; // translate content's children, no second pass
 
     if (max_offset > 0) {
         const track = try el.div(ctx, outer, "track");
@@ -67,18 +67,27 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
             .with_size(.{ .fixed = scrollbar_w }, .{ .fixed = height })
             .with_style(.{Style{ .fill = th.line }});
 
-        // Thumb: two stacked fixed children (an invisible spacer, then the thumb) so ordinary
-        // vertical flow positions it — no absolute offset needed.
-        const thumb_h = @max(16.0, height * height / content_h);
-        const thumb_y = (st.offset / max_offset) * (height - thumb_h);
+        const thumb_h = @min(height, @max(16.0, height * height / content_h));
+        const thumb_travel = height - thumb_h;
 
         const spacer = try el.div(ctx, track, "above");
-        _ = spacer.with_size(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_y });
-
         const thumb = try el.div(ctx, track, "thumb");
-        _ = thumb.with_size(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_h })
-            .with_style(.{Style{ .fill = th.line2 }});
+        _ = thumb.with_size(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_h });
+        const thumb_q = thumb.query();
+        uic.updateScrollThumb(ctx, st, thumb.get().key, thumb_q.pressed, max_offset, thumb_travel);
+        if (st.dragging) {
+            ctx.res.cursor.request(.grabbing);
+        } else if (thumb_q.hovering) {
+            ctx.res.cursor.request(.grab);
+        }
+        _ = thumb.with_style(.{Style{ .fill = if (st.dragging) th.acc else th.line2 }});
+
+        const thumb_y = (st.offset / max_offset) * thumb_travel;
+        _ = spacer.with_size(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_y });
+    } else if (st.dragging) {
+        uic.cancelScrollThumb(ctx, st);
     }
 
+    content_node.layout.scroll_y = st.offset; // translate content's children, no second pass
     return .{ .outer = outer, .viewport = viewport, .content = content };
 }

@@ -67,6 +67,7 @@ pub fn capital_row(
     const hot = kind == .ready;
     uic.publishControlState(ctx, row.get().key, .{ .disabled = !hot });
     const q = row.query();
+    if (q.hovering) ctx.res.cursor.request(if (hot) .pointer else .not_allowed);
     const lit: Color = switch (kind) {
         .ready => if (q.held or q.hovering) th.acc else th.fg,
         .building => th.fg,
@@ -135,6 +136,7 @@ pub fn capital_row(
         _ = x.with_layout(.center_right);
         uic.publishControlState(ctx, x.get().key, .{});
         const xq = x.query();
+        if (xq.hovering) ctx.res.cursor.request(.pointer);
         _ = (try el.text(ctx, x, "t", "\u{00d7}"))
             .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering) th.danger else th.line2 } });
         cancelled = x.consume(.clicked);

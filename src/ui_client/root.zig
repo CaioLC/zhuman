@@ -13,6 +13,8 @@ const features = @import("./features/root.zig");
 const draw = @import("./draw.zig");
 const tree = @import("./tree.zig");
 const widgets = @import("./widgets.zig");
+const cursor = @import("./cursor.zig");
+const drag = @import("./drag.zig");
 
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
@@ -36,6 +38,13 @@ pub const PointerButton = input.PointerButton;
 pub const KeyAction = input.KeyAction;
 pub const Modifiers = input.Modifiers;
 pub const PointerActivation = activation.PointerActivation;
+pub const CursorKind = cursor.Kind;
+pub const CursorState = cursor.State;
+pub const PlatformCursors = cursor.PlatformCursors;
+pub const ThresholdDrag = drag.ThresholdDrag;
+pub const drag_threshold = drag.drag_threshold;
+pub const updateScrollThumb = drag.updateScrollThumb;
+pub const cancelScrollThumb = drag.cancelScrollThumb;
 
 pub const UiCtx = ctx_binding.UiCtx;
 pub const ControlState = ctx_binding.ControlState;
@@ -95,4 +104,6 @@ test {
     _ = draw;
     _ = tree;
     _ = widgets;
+    _ = cursor;
+    _ = drag;
 }

@@ -40,6 +40,7 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
         const key = try std.fmt.allocPrint(ctx.arena, "opt{d}", .{i});
         const chip = try el.div(ctx, bar, key);
         const q = chip.query();
+        if (q.hovering) ctx.res.cursor.request(.pointer);
         if (q.clicked) met.setting = opt.s;
         const is_active = met.setting == opt.s;
         uic.publishControlState(ctx, chip.get().key, .{ .selected = is_active });

@@ -1,9 +1,8 @@
 //! Compile + test entry for the **reusable UI layer in isolation** — the generic engine
 //! (`src/ui/`) plus the host binding (`ctx_binding`/`features`/`draw`/`widgets`), but
-//! *not* `pages.zig`. `pages.zig` is game-content screen building and imports the parked,
-//! mid-refactor `main.zig` (see the manual-review workflow), which is why the full
-//! `zig build test` is red. This root lets `zig build test-ui` verify the UI refactor on
-//! its own while the sim half of the app is being rebuilt. See `build.zig`'s `test-ui` step.
+//! *not* `pages.zig`. `pages.zig` is game-content screen building and imports `main.zig`;
+//! the focused target deliberately validates the reusable UI boundary separately from the
+//! complete project `test` step. See `build.zig`'s `test-ui` step.
 //!
 //! Lives in `src/` (not `src/ui_client/`) so its module path covers `ui/`, `ui_client/`,
 //! and `res.zig` — Zig forbids `@import`ing files above a module's root. Referencing
@@ -21,11 +20,15 @@ const style = @import("./ui_client/style.zig");
 const elements = @import("./ui_client/elements.zig");
 const input = @import("./ui_client/input.zig");
 const activation = @import("./ui_client/activation.zig");
+const cursor = @import("./ui_client/cursor.zig");
+const drag = @import("./ui_client/drag.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
     _ = input; // host frame-input model + deterministic edge/state tests
     _ = activation; // release activation, drag/cancel suppression, and one-shot tests
+    _ = cursor; // cursor request lifecycle and SDL system-shape mappings
+    _ = drag; // strict threshold and capture-backed scrollbar drag tests
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

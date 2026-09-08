@@ -22,6 +22,8 @@ pub const ButtonState = struct {
     held: bool = false,
     released: bool = false,
     clicks: u8 = 0,
+    /// Stable down position for controls that acquire capture during the build stage.
+    press_position: Point = .{},
 
     fn beginFrame(self: *ButtonState) void {
         self.pressed = false;
@@ -137,6 +139,7 @@ pub const Input = struct {
             state.pressed = true;
             state.held = true;
             state.clicks = @max(state.clicks, clicks);
+            state.press_position = position;
         } else {
             state.released = true;
             state.held = false;
@@ -238,6 +241,7 @@ test "beginFrame clears edges and deltas while preserving held state and positio
     input.beginFrame();
     try std.testing.expectEqual(Point{ .x = 20, .y = 30 }, input.pointer.position);
     try std.testing.expect(input.pointer.buttons.primary.held);
+    try std.testing.expectEqual(Point{ .x = 20, .y = 30 }, input.pointer.buttons.primary.press_position);
     try std.testing.expect(!input.pointer.buttons.primary.pressed);
     try std.testing.expect(!input.pointer.buttons.primary.released);
     try std.testing.expectEqual(@as(u8, 0), input.pointer.buttons.primary.clicks);

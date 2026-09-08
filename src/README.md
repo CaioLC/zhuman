@@ -56,7 +56,11 @@ Each frame:
    release over the same key emits one `.clicked`. Drag, cancellation, focus loss, pointer
    mismatch, and release elsewhere suppress activation. Each frame republishes `.held` on
    the stable press key, `.dragging` after threshold crossing, and `.captured` only on the
-   exact capture owner. Scroll consumers require routed `.wheel`, not merely hover.
+   exact capture owner. Scroll consumers require routed `.wheel`, not merely hover; their
+   thumbs preserve the press origin, capture through outside movement, apply the release
+   position, and owner-release. UI build resets and resolves cursor requests (pointer,
+   text, grab/grabbing, horizontal-resize, not-allowed) before SDL applies the supported
+   system shape, with default/move fallbacks where needed.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.

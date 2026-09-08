@@ -118,6 +118,7 @@ const App = struct {
     frame_arena: std.heap.ArenaAllocator,
     ui: ui_client.UiCtx,
     pointer_activation: ui_client.PointerActivation = .{},
+    platform_cursors: ui_client.PlatformCursors,
     ui_profiler: ui_client.FrameProfiler = .{},
 
     fn init() !App {
@@ -147,6 +148,7 @@ const App = struct {
             .world = undefined,
             .frame_arena = undefined,
             .ui = undefined,
+            .platform_cursors = ui_client.PlatformCursors.init(),
         };
     }
 
@@ -167,6 +169,7 @@ const App = struct {
         self.world.deinit();
         self.resources.deinit();
         self.font.deinit();
+        self.platform_cursors.deinit();
         self.renderer.deinit();
         self.window.deinit();
         sdl.ttf.quit();
@@ -338,8 +341,10 @@ pub fn main() !void {
         // 3. update ui
         app.ui.mark(.hovering, input.pointer.position.x, input.pointer.position.y);
         app.ui.beginFrame();
+        app.resources.cursor.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
+        app.platform_cursors.apply(app.resources.cursor.requested);
         var ui_sample: ui_client.FrameProfileSample = .{};
         // Profile the solver's three internal passes per independent root, then stamp all
         // roots as one aggregate pass. The normal set_global_pos entry remains clock-free.
