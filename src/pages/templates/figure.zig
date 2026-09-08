@@ -1,5 +1,5 @@
 //! `figure` template — the 3-line ASCII vitals figure (flavor), plus the glyph sets and
-//! the warmth→figure mapping. Each line is a content leaf (`el.text`) tinted by the color.
+//! the vigor→figure mapping. Each line is a content leaf (`el.text`) tinted by the color.
 
 const ha = @import("ha");
 
@@ -17,9 +17,10 @@ pub const fig_ok = Figure{ .l1 = "   O", .l2 = "  /|\\", .l3 = "  / \\" };
 pub const fig_weary = Figure{ .l1 = "   o", .l2 = "  /|", .l3 = "  /" };
 pub const fig_dead = Figure{ .l1 = "   x", .l2 = "  -|-", .l3 = "  / \\" };
 
-pub fn figure_glyphs(warmth: f32) Figure {
-    if (warmth < 0.25) return fig_weary;
-    if (warmth > 0.6) return fig_robust;
+/// Pick the figure for a 0..1 vigor fraction — spent slumps, rested stands.
+pub fn figure_glyphs(vigor_frac: f32) Figure {
+    if (vigor_frac < 0.25) return fig_weary;
+    if (vigor_frac > 0.6) return fig_robust;
     return fig_ok;
 }
 

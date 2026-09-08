@@ -15,7 +15,7 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 |---|---|---|---|
 | Engine | `src/ui/` | nothing | `Node`, the key-cache, the layout solve, interaction slots |
 | Foundation | `src/ui_client/` | the engine + SDL | the concrete bindings, paint features, the render walk, content elements, the style fold, the `Theme` roles |
-| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `ration_dial`, … |
+| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `build_list`, `holdings`, … |
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
 The foundation owns the **roles** a widget paints from; the game owns the **values**. So
@@ -44,8 +44,12 @@ pub const Node  = ui.Node(RenderData);
 ```
 
 - **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`:
-  `TextState` (buffer + the px to render at), `ScrollState`, `TabsState`, `TextInputState`,
-  and `SvgState`. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
+  `TextState` (a **64-byte** buffer + the px to render at — `update` clamps to it, so a
+  longer string is truncated silently, and a node is one line either way), `ScrollState`,
+  `TabsState`, `StepState`,
+  `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
+  *variable-length* data — a polyline's points, since `RenderData` holds a single payload
+  per feature and coordinates don't fit in a tint; fixed capacity keeps it POD. `SvgState` owns a GPU texture, so it declares `deinit` and the cache's
   eviction hook frees it when the node disappears. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
@@ -75,7 +79,7 @@ A *feature* is one kind of thing a node can be, as a module co-locating its whol
 | `attach` | no | the build-time mixin: measure, size, set payload/state |
 
 ```zig
-pub const list = .{ fill, image, svg, text, outline };  // back → front
+pub const list = .{ fill, image, svg, line, text, outline };  // back → front
 ```
 
 **The list's order is the z-order** — outline last, so a hover ring shows over an opaque
@@ -142,7 +146,7 @@ composition stays free.
 **Placement is deliberately not a fold.** A `Placement` partial with `row`/`col`/`fill`
 presets was built and then removed: it was a second vocabulary shadowing the engine's own
 `Layout`/`Size`, and every value had to be restated in it. Placement is now written
-straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` /
+straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` / `with_offset` /
 `with_size` / `with_overflow`. Style composes because a button's look is genuinely built
 from reusable pieces; placement does not, because a node sits in exactly one place.
 
@@ -157,7 +161,7 @@ forgets to install a palette looks unfinished rather than subtly wrong.
 
 A game supplies values by assigning a whole `Theme` onto `res.view.theme`; this layer
 never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`), whose
-`cold`/`warm` poles and `lerp(t)` blend are art direction and live outside this folder.
+`theme` values are art direction and live outside this folder.
 Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
 `ctx.res.view.theme` — none of them imports the palette module.
 

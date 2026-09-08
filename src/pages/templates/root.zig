@@ -17,10 +17,12 @@ const log_view_mod = @import("./log_view.zig");
 const resource_bar_mod = @import("./resource_bar.zig");
 const action_card_mod = @import("./action_card.zig");
 const action_tile_mod = @import("./action_tile.zig");
-const capital_tile_mod = @import("./capital_tile.zig");
 const ration_dial_mod = @import("./ration_dial.zig");
-const capital_good_tile_mod = @import("./capital_good_tile.zig");
 const tabs_mod = @import("./tabs.zig");
+const holdings_mod = @import("./holdings.zig");
+const build_list_mod = @import("./build_list.zig");
+const capital_row_mod = @import("./capital_row.zig");
+const good_text_mod = @import("./good_text.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -34,11 +36,13 @@ pub const resource_bar = resource_bar_mod.resource_bar;
 pub const action_button = action_button_mod.action_button;
 pub const action_card = action_card_mod.action_card;
 pub const action_tile = action_tile_mod.action_tile;
-pub const capital_tile = capital_tile_mod.capital_tile;
 pub const ration_dial = ration_dial_mod.ration_dial;
-pub const capital_good_tile = capital_good_tile_mod.capital_good_tile;
 pub const Tabs = tabs_mod.Tabs;
 pub const tabs = tabs_mod.tabs;
+pub const holdings = holdings_mod.holdings;
+pub const build_list = build_list_mod.build_list;
+pub const capital_row = capital_row_mod.capital_row;
+pub const good_text = good_text_mod;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
@@ -53,4 +57,3 @@ pub const figure = figure_mod.figure;
 pub const Status = status_mod.Status;
 pub const actor_status = status_mod.actor_status;
 pub const heartbeat_color = status_mod.heartbeat_color;
-pub const compute_warmth = status_mod.compute_warmth;

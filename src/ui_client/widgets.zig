@@ -1,12 +1,11 @@
 //! The widget palette: functions that own a node's whole subtree — graph, keyed data,
 //! color, and layout. Built on `ctx_binding`'s concrete types and the feature `attach`
 //! mixins (`features/`, re-exported as `data_text`/`data_img`/`data_sprite`).
-//! Widgets paint themselves from `ctx.res.view.theme` (the current frame's COLD↔WARM palette,
-//! resolved once in `build_ui` — see `ui_client/theme.zig`) rather than fixed module colors, so
-//! the whole HUD reacts to the actor's warmth together. Interaction *states*
-//! (idle/hover/disabled) still map to fixed theme *roles* (fg/acc/dim respectively): a
-//! role's actual RGB just isn't constant across a run anymore. Kept here (host policy) so
-//! the engine stays color-agnostic — it only carries `node.render_data`.
+//! Widgets paint themselves from `ctx.res.view.theme` (the palette `build_ui` installs —
+//! see `ui_client/theme.zig`) rather than fixed module colors, so one palette swap moves the
+//! whole HUD. Interaction *states* (idle/hover/disabled) map to theme *roles* (fg/acc/dim
+//! respectively). Kept here (host policy) so the engine stays color-agnostic — it only
+//! carries `node.render_data`.
 
 const std = @import("std");
 const ui = @import("../ui/root.zig");
@@ -201,6 +200,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: *Node, key: []const u8, width: f32, heig
     _ = content.with_layout(.relative, .{ .dir = .column });
     content.layout.gap = 4;
     const content_h = if (content.rect(ctx)) |r| r.h else 0;
+    ctx.setPassThrough(content.key, true); // geometry probe only — must not take the hit
     _ = content.query(ctx); // keep the slot alive so `content.rect` resolves next frame
 
     const max_offset = @max(0.0, content_h - height);

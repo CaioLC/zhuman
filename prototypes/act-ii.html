@@ -1,0 +1,1719 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Human Action — Act II UX prototype</title>
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <main class="terminal act-two" aria-label="Human Action Act II interface prototype">
+    <header class="hud-header">
+      <div class="stockline compact" aria-label="Population and current stocks">
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">PO</span><span class="lbl-full">POPULATION</span>:</span> <span class="stock-value" id="population-value">7/12</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">VI</span><span class="lbl-full">VIGOR</span>:</span> <span class="stock-value">13/15</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FO</span><span class="lbl-full">FOOD</span>:</span> <span class="stock-value" data-resource-balance="food">23</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">WA</span><span class="lbl-full">WATER</span>:</span> <span class="stock-value low" data-resource-balance="water">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FU</span><span class="lbl-full">FUEL</span>:</span> <span class="stock-value low" data-resource-balance="fuel">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">ME</span><span class="lbl-full">METAL</span>:</span> <span class="stock-value low" data-resource-balance="metal">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MI</span><span class="lbl-full">MINERALS</span>:</span> <span class="stock-value low" data-resource-balance="minerals">0</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">BI</span><span class="lbl-full">BIOMASS</span>:</span> <span class="stock-value" data-resource-balance="biomass">30</span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">CO</span><span class="lbl-full">COIN</span>:</span> <span class="stock-value accent" data-coin-balance>42</span></span>
+      </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span></div>
+    </header>
+
+    <div class="page-grid" id="page-grid">
+      <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Holdings" hidden><span aria-hidden="true">›</span><span class="restore-label">HOLDINGS</span></button>
+
+        <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
+          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>8 kinds, 22</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Holdings">‹</button></span></h2>
+          <ul class="holdings-list">
+            <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
+            <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
+            <li class="holding-row"><span>Leaf bed</span><span>vigor ceiling +1</span></li>
+            <li class="holding-row"><span>Hatchet ×2</span><span>can split wood</span></li>
+            <li class="holding-row"><span>Planks ×8</span><span>worked Biomass</span></li>
+            <li class="holding-row"><span>Charcoal ×5</span><span>fuel · trade stock</span></li>
+            <li class="holding-row"><span>Timber frame ×2</span><span>capital stock</span></li>
+            <li class="holding-row"><span>Metal stock</span><span>scarce</span></li>
+          </ul>
+          <hr class="holdings-divider">
+          <h3 class="block-heading">MARGINS</h3>
+          <ul class="margin-list">
+            <li class="margin-row"><span>Forage</span><span class="positive">2.0e → 1.7e</span></li>
+            <li class="margin-row"><span>Split wood</span><span class="positive">2.5e → 2.0e</span></li>
+            <li class="margin-row"><span>Food spoilage</span><span class="positive">0.05 → 0.03/day</span></li>
+            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
+            <li class="margin-row"><span>Biomass work</span><span class="positive">time ×0.80</span></li>
+          </ul>
+        </section>
+
+        <section class="panel side-note" aria-label="Current body policy and recovery">
+          <span class="eyebrow">BODY</span><br>
+          Eating <strong id="body-policy-label">normal</strong>.<br>
+          Food lasts <strong id="food-coverage">10.3d</strong>.<br>
+          Full vigor in <strong id="vigor-recovery">0.4d</strong>.
+        </section>
+      </aside>
+
+      <section class="surface" aria-label="Act II play surface">
+        <nav class="surface-nav" aria-label="Act II surfaces">
+          <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
+          <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
+          <button class="tab" id="tab-structure" type="button" role="tab" aria-selected="false" aria-controls="view-structure" data-view="structure">STRUCTURE</button>
+        </nav>
+
+        <div class="merchant-strip" id="market-strip" role="status">
+          <span class="signal" id="market-signal">● MERCHANT</span>
+          <strong id="market-copy">9 lots · water, fuel, metal, minerals, goods.</strong>
+          <button class="link-button" id="market-action" type="button" data-open-merchant>TRADE →</button>
+        </div>
+
+        <div class="activity-strip is-idle" id="activity-strip" role="status" aria-live="polite">
+          <span class="activity-kind" id="activity-kind">○ IDLING</span>
+          <strong id="activity-subject">no work in progress</strong>
+          <span class="activity-meta" id="activity-meta">ready</span>
+        </div>
+
+        <section class="catalog-view action-view" id="view-actions" role="tabpanel" aria-labelledby="tab-actions">
+          <div class="surface-heading action-heading">
+            <div><h1>ACTIONS</h1><p>What will this body do now?</p></div>
+            <span class="eyebrow" id="action-catalog-count">20 verbs</span>
+          </div>
+
+          <div class="build-query-bar action-query-bar">
+            <label class="build-query-field" for="action-query"><span class="build-query-icon" aria-hidden="true">⌕</span><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food in:biomass state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
+            <button class="build-sort-toggle" id="action-sort-toggle" type="button" aria-expanded="false" aria-controls="action-sort-panel" aria-label="Sort actions" title="Sort actions"><span aria-hidden="true">⇅</span></button>
+          </div>
+          <div class="build-sort-panel action-sort-panel" id="action-sort-panel" role="group" aria-label="Action sorting" hidden>
+            <label class="build-sort-control" for="action-sort-kind"><span>Sort by</span><select id="action-sort-kind"><option value="none">None</option><option value="ready">Ready</option><option value="time">Time</option><option value="energy">Energy</option><option value="name">Name</option></select></label>
+            <label class="build-sort-control" for="action-sort-direction"><span>Direction</span><select id="action-sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+          </div>
+
+          <div class="build-summary action-summary" id="action-summary" aria-live="polite">20 of 20 actions shown</div>
+          <div class="catalog-scroll action-results" id="action-results" tabindex="0" aria-label="Available actions; scroll for more">
+            <div class="action-grid" id="action-rows"></div>
+          </div>
+
+          <section class="policy-tile action-policy" aria-labelledby="eating-policy-title">
+            <div class="policy-head"><h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
+            <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
+            <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
+          </section>
+        </section>
+
+        <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
+          <div class="surface-heading build-heading">
+            <div><h1>BUILD</h1><p>Find the next useful recipe across a growing settlement catalog.</p></div>
+            <span class="eyebrow" id="build-catalog-count">50 recipes</span>
+          </div>
+
+          <div class="build-query-bar">
+            <label class="build-query-field" for="build-query"><span class="build-query-icon" aria-hidden="true">⌕</span><input id="build-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search recipes · type:generator in:biomass out:food" aria-label="Search and filter recipes"><kbd aria-hidden="true">/</kbd></label>
+            <button class="build-sort-toggle" id="build-sort-toggle" type="button" aria-expanded="false" aria-controls="build-sort-panel" aria-label="Sort recipes" title="Sort recipes"><span aria-hidden="true">⇅</span></button>
+          </div>
+          <div class="build-sort-panel" id="build-sort-panel" role="group" aria-label="Recipe sorting" hidden>
+            <label class="build-sort-control" for="build-sort-kind"><span>Sort by</span><select id="build-sort-kind"><option value="none">None</option><option value="reach">Reach</option><option value="inputs">Cost</option><option value="time">Time</option><option value="name">Name</option></select></label>
+            <label class="build-sort-control" for="build-sort-direction"><span>Direction</span><select id="build-sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+          </div>
+
+          <div class="build-summary" id="build-summary" aria-live="polite">9 of 50 recipes shown</div>
+          <div class="catalog-scroll build-table" id="build-table" tabindex="0" aria-label="Buildable recipes; scroll for more">
+            <div class="build-header" aria-hidden="true"><span>recipe</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
+            <div id="build-rows"></div>
+          </div>
+
+          <section class="exchange-goal" id="exchange-goal" aria-labelledby="exchange-title" data-state="locked" data-open="false">
+            <div class="exchange-bar">
+              <button class="exchange-disclosure" id="exchange-toggle" type="button" aria-expanded="false" aria-controls="exchange-details"><strong id="exchange-title">Exchange</strong><span class="exchange-readiness" id="exchange-readiness">locked · 2 conditions</span><span class="exchange-compact" id="exchange-compact">ring 4 0/1 · people 7/501</span><span class="exchange-more">details ↓</span></button>
+              <button class="primary-action" id="raise-exchange" type="button" disabled>LOCKED</button>
+            </div>
+            <div class="exchange-details" id="exchange-details" hidden>
+              <div class="exchange-detail-head"><span class="exchange-kicker">ACT II CURTAIN · A MARKET WITH A PLACE</span><span class="exchange-cost">80 biomass · 40 minerals · 24 metal · 18d</span></div>
+              <p id="exchange-copy">Raise a standing trading floor. Once it opens, passing lots give way to a permanent market and Act III begins.</p>
+              <div class="exchange-requirements" id="exchange-requirements" aria-label="Exchange requirements"><span>RING 4 <strong id="exchange-ring-four">0/1</strong></span><span>PEOPLE <strong id="exchange-population">7/501</strong></span><span>BIOMASS <strong id="exchange-biomass">30/80</strong></span><span>MINERALS <strong id="exchange-minerals">0/40</strong></span><span>METAL <strong id="exchange-metal">0/24</strong></span></div>
+              <div class="exchange-action-row"><span id="exchange-detail">Research any ring-4 technology and grow beyond 500 people.</span></div>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-structure" role="tabpanel" aria-labelledby="tab-structure" hidden>
+          <section class="structure-surface" aria-labelledby="structure-title">
+            <header class="structure-topbar">
+              <div class="structure-title"><h1 id="structure-title">STRUCTURE</h1><p>What exists, and what does it take?</p></div>
+              <div class="board-toolbar" aria-label="Research board controls">
+                <div class="control-group" data-board-filter-group><button class="chip" type="button" aria-pressed="false" data-board-filter="researched">researched</button><button class="chip" type="button" aria-pressed="false" aria-label="Available and researched" data-board-filter="available">available</button><button class="chip" type="button" aria-pressed="true" data-board-filter="all">all</button></div>
+                <input class="search-box" id="board-search" type="search" placeholder="find a technology" aria-label="Find a technology">
+              </div>
+            </header>
+            <div class="structure-layout">
+              <div class="board-pane" id="board-pane">
+                <svg class="hex-board" id="structure-board" viewBox="0 0 620 620" role="group" aria-label="Act II research board. Ring zero is a neutral foundation hex; rings one through four contain sixty technologies.">
+                  <g id="board-camera"><g id="board-tiles"></g><g id="board-labels" aria-hidden="true"></g></g>
+                </svg>
+                <div class="board-view-controls" role="group" aria-label="Board zoom and pan controls"><button class="board-view-button" type="button" data-board-zoom-out aria-label="Zoom out">-</button><output class="board-zoom-level" id="board-zoom-level" aria-label="Board zoom" aria-live="polite">100%</output><button class="board-view-button" type="button" data-board-zoom-in aria-label="Zoom in">+</button><button class="board-view-button reset" type="button" data-board-reset aria-label="Reset board pan and zoom">reset</button></div>
+                <div class="board-tooltip" id="board-tooltip" role="tooltip" hidden></div>
+              </div>
+              <aside class="structure-detail" id="structure-detail" aria-live="polite" aria-label="Selected technology details">
+                <div class="detail-kicker">RING 2 · SETTLEMENT WORKS</div><div class="detail-head"><h2 class="detail-name">Gamekeeping</h2></div><div class="detail-tags"><span class="detail-tag">PURE</span><span class="detail-tag">FOOD</span><span class="detail-tag">AVAILABLE</span></div><p class="detail-copy">Select an Available or Researched tile to inspect its cost, effect, and outward possibilities.</p>
+              </aside>
+            </div>
+          </section>
+          <footer class="structure-footer">
+            <div class="legend-row" aria-label="Resource palette and material-reference dots"><span><i class="legend-dot" style="color:var(--resource-food)"></i>FOOD</span><span><i class="legend-dot" style="color:var(--resource-water)"></i>WATER</span><span><i class="legend-dot" style="color:var(--resource-fuel)"></i>FUEL</span><span><i class="legend-dot" style="color:var(--resource-metal)"></i>METAL</span><span><i class="legend-dot" style="color:var(--resource-minerals)"></i>MINERALS</span><span><i class="legend-dot" style="color:var(--resource-biomass)"></i>BIOMASS</span></div>
+            <div class="board-hints"><span id="structure-status">Select an available or researched technology</span><span>Wheel zoom / drag pan</span><span>Arrows move · Esc clears</span></div>
+          </footer>
+        </section>
+      </section>
+    </div>
+
+    <footer class="screen-footer" id="event-log" aria-label="Event log" aria-live="polite">
+      <div class="log-line"><span class="time">19:08</span><span>A merchant is taking orders beside the east path.</span></div>
+      <div class="log-line"><span class="time">18:22</span><span>The carpenter bench still lacks Biomass and Metal.</span></div>
+      <div class="log-line"><span class="time">17:04</span><span>Seven people now share the settlement's stores.</span></div>
+      <div class="log-line"><span class="time">16:11</span><span>You return with 4 Biomass.</span></div>
+    </footer>
+  </main>
+
+  <dialog class="terminal-dialog" id="merchant-dialog" aria-labelledby="merchant-title">
+    <form class="dialog-shell" method="dialog">
+      <header class="dialog-header"><div><div class="dialog-kicker" id="market-dialog-kicker">MERCHANT · MARKET OPEN 2.4 DAYS</div><h2 class="dialog-title" id="merchant-title">What will you trade?</h2></div><button class="dialog-close" id="market-dialog-close" type="submit" value="cancel" aria-label="Close merchant">×</button></header>
+      <div class="dialog-tabs" role="tablist" aria-label="Merchant direction"><button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY</button><button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL</button></div>
+      <div class="dialog-body"><div class="trade-grid">
+        <section class="trade-column" aria-labelledby="merchant-stock-title"><h3 class="column-heading" id="merchant-stock-title">THEIR STOCK</h3><div class="offer-list" id="merchant-offers">
+          <button class="offer-button" type="button" aria-pressed="true" data-mode="buy" data-name="Water" data-cost="5 coin" data-coins="5" data-receive="Water +6" data-effect="Six units enter your Water stock. Local production is not required." data-stock="3" data-resource="water" data-quantity="6"><span>Water +6<small>typed resource · 5 coin</small></span><span class="stock-count">×3</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Minerals" data-cost="7 coin" data-coins="7" data-receive="Minerals +5" data-effect="Five units enter your Minerals stock before or after Quarry pit." data-stock="2" data-resource="minerals" data-quantity="5"><span>Minerals +5<small>typed resource · 7 coin</small></span><span class="stock-count">×2</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Fuel" data-cost="8 coin" data-coins="8" data-receive="Fuel +4" data-effect="Four units enter your Fuel stock without changing local production." data-stock="2" data-resource="fuel" data-quantity="4"><span>Fuel +4<small>typed resource · 8 coin</small></span><span class="stock-count">×2</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Metal" data-cost="12 coin" data-coins="12" data-receive="Metal +3" data-effect="Three units enter your Metal stock as one scarce lot." data-stock="2" data-resource="metal" data-quantity="3"><span>Metal +3<small>typed resource · 12 coin</small></span><span class="stock-count">×2</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Fishing net" data-cost="18 coin" data-coins="18" data-receive="Fishing net ×1" data-effect="A finished good can be imported even before its local BUILD recipe is established." data-stock="1"><span>Fishing net<small>finished capital · 18 coin</small></span><span class="stock-count">×1</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Food" data-cost="Food ×8" data-coins="4" data-receive="4 coin" data-effect="Eight units leave your larder as one market lot." data-stock="2" data-resource="food" data-quantity="8" hidden><span>Food ×8<small>merchant pays 4 coin</small></span><span class="stock-count">×2</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Biomass" data-cost="Biomass ×6" data-coins="5" data-receive="5 coin" data-effect="Six units leave your Biomass stock as one market lot." data-stock="3" data-resource="biomass" data-quantity="6" hidden><span>Biomass ×6<small>merchant pays 5 coin</small></span><span class="stock-count">×3</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Planks" data-cost="Planks ×4" data-coins="6" data-receive="6 coin" data-effect="Four finished planks leave your Holdings as one lot." data-stock="2" hidden><span>Planks ×4<small>merchant pays 6 coin</small></span><span class="stock-count">×2</span></button>
+          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-coins="7" data-receive="7 coin" data-effect="A spare pair is sold first; your equipped Sandals keep their Forage margin." data-stock="2" hidden><span>Sandals ×1<small>merchant pays 7 coin</small></span><span class="stock-count">×2</span></button>
+        </div></section>        <section class="trade-preview" aria-label="Merchant trade preview"><div class="preview-line"><span id="preview-give-label">YOU PAY</span><strong id="preview-give">5 coin</strong></div><div class="trade-arrow" aria-hidden="true">⇄</div><div class="preview-line"><span id="preview-receive-label">YOU RECEIVE</span><strong id="preview-receive">Water +6</strong></div><div class="preview-effect" id="preview-effect">Six units enter your Water stock. Local production is not required.</div></section>
+        <section class="trade-column" aria-labelledby="your-stock-title"><h3 class="column-heading" id="your-stock-title">YOU HOLD</h3><ul class="inventory-list"><li class="inventory-row"><span>Coin</span><strong class="accent" data-coin-balance>42</strong></li><li class="inventory-row"><span>Food</span><strong data-resource-balance="food">23</strong></li><li class="inventory-row"><span>Water</span><strong data-resource-balance="water">0</strong></li><li class="inventory-row"><span>Fuel</span><strong data-resource-balance="fuel">0</strong></li><li class="inventory-row"><span>Metal</span><strong data-resource-balance="metal">0</strong></li><li class="inventory-row"><span>Minerals</span><strong data-resource-balance="minerals">0</strong></li><li class="inventory-row"><span>Biomass</span><strong data-resource-balance="biomass">30</strong></li></ul><p class="side-note">The price is final for this lot. Coin and stock settle together.</p></section>      </div></div>
+      <footer class="dialog-footer"><span class="dialog-note" id="market-dialog-note">Coin prices · finite stock · limited market time. Later lots may be repriced.</span><div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">BUY →</button></div></footer>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      const tabs = [...document.querySelectorAll('[data-view]')];
+      const views = {
+        actions: document.querySelector('#view-actions'),
+        build: document.querySelector('#view-build'),
+        structure: document.querySelector('#view-structure')
+      };
+      const eventLog = document.querySelector('#event-log');
+      const prototypeParams = new URLSearchParams(location.search);
+      const requestedPopulation = prototypeParams.get('population');
+      const seededPopulation = requestedPopulation === null ? Number.NaN : Number(requestedPopulation);
+      const population = Number.isFinite(seededPopulation) ? Math.max(0, Math.floor(seededPopulation)) : 7;
+      const requestedCapacity = prototypeParams.get('capacity');
+      const seededCapacity = requestedCapacity === null ? Number.NaN : Number(requestedCapacity);
+      const populationCapacity = Number.isFinite(seededCapacity) ? Math.max(population, Math.floor(seededCapacity)) : population > 12 ? Math.max(640, population) : 12;
+      document.querySelector('#population-value').textContent = `${population}/${populationCapacity}`;
+      window.prototypePopulation = Object.freeze({ current: population, capacity: populationCapacity });
+      const resourceKeys = ['food', 'water', 'fuel', 'metal', 'minerals', 'biomass'];
+      const resourceBalances = window.prototypeResources = { food: 23, water: 0, fuel: 0, metal: 0, minerals: 0, biomass: 30 };
+      resourceKeys.forEach(key => {
+        if (!prototypeParams.has(key)) return;
+        const seeded = Number(prototypeParams.get(key));
+        if (Number.isFinite(seeded)) resourceBalances[key] = Math.max(0, seeded);
+      });
+      function refreshPrototypeResources() {
+        resourceKeys.forEach(key => document.querySelectorAll(`[data-resource-balance="${key}"]`).forEach(output => {
+          output.textContent = resourceBalances[key];
+          output.classList.toggle('low', resourceBalances[key] <= 0);
+        }));
+        dispatchEvent(new CustomEvent('prototype-resources-changed', { detail: { ...resourceBalances } }));
+      }
+      window.refreshPrototypeResources = refreshPrototypeResources;
+      refreshPrototypeResources();
+
+      const pageGrid = document.querySelector('#page-grid');
+      const collapseHoldings = document.querySelector('#holdings-collapse');
+      const restoreHoldings = document.querySelector('#holdings-restore');
+      const requestedHoldingsState = prototypeParams.get('holdings');
+      const holdingsCollapsedByView = {
+        actions: requestedHoldingsState === 'collapsed',
+        build: requestedHoldingsState === 'collapsed',
+        structure: requestedHoldingsState !== 'expanded'
+      };
+      let activeView = null;
+      let holdingsCollapsed = false;
+
+      function setHoldingsCollapsed(collapsed, remember = true) {
+        holdingsCollapsed = collapsed;
+        pageGrid.classList.toggle('is-holdings-collapsed', collapsed);
+        collapseHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.setAttribute('aria-expanded', String(!collapsed));
+        restoreHoldings.hidden = !collapsed;
+        if (remember && activeView) holdingsCollapsedByView[activeView] = collapsed;
+      }
+
+      function setView(name, updateHash = true) {
+        if (!views[name]) name = 'actions';
+        if (activeView) holdingsCollapsedByView[activeView] = holdingsCollapsed;
+        activeView = name;
+        document.querySelector('.act-two').classList.toggle('is-structure-focus', name === 'structure');
+        eventLog.hidden = name === 'structure';
+        Object.entries(views).forEach(([key, view]) => {
+          view.hidden = key !== name;
+          const tab = document.querySelector(`[data-view="${key}"]`);
+          tab.setAttribute('aria-selected', String(key === name));
+          tab.tabIndex = key === name ? 0 : -1;
+        });
+        setHoldingsCollapsed(name === 'structure' ? true : holdingsCollapsedByView[name], false);
+        if (updateHash && location.hash !== `#${name}`) {
+          const nextUrl = new URL(location.href);
+          nextUrl.hash = name;
+          history.replaceState(null, '', nextUrl);
+        }
+      }
+
+      collapseHoldings.addEventListener('click', () => setHoldingsCollapsed(true));
+      restoreHoldings.addEventListener('click', () => setHoldingsCollapsed(false));
+      tabs.forEach(tab => tab.addEventListener('click', () => setView(tab.dataset.view)));
+      addEventListener('hashchange', () => setView(location.hash.slice(1), false));
+      setView(location.hash.slice(1) || 'actions', false);
+
+      const actionCatalog = [
+        { name: 'Forage', type: 'gather', energy: 1.7, time: 4, duration: '4h', inputs: [], outputs: ['food'], yield: '+1–3f', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
+        { name: 'Scavenge', type: 'gather', energy: 2.0, time: 5, duration: '5h', inputs: [], outputs: ['biomass', 'minerals'], yield: '+0–7b', distribution: 'exponential', state: 'ready', stateCopy: 'ready' },
+        { name: 'Split wood', type: 'process', energy: 2.5, time: 5, duration: '5h', inputs: ['biomass'], outputs: ['biomass'], yield: '+3–5b', distribution: 'uniform', state: 'ready', stateCopy: 'ready' },
+        { name: 'Fish', type: 'gather', energy: 2.0, time: 6, duration: '6h', inputs: [], outputs: ['food'], yield: '+2–5f', distribution: 'poisson', state: 'ready', stateCopy: 'ready' },
+        { name: 'Check traps', type: 'gather', energy: 1.0, time: 2, duration: '2h', inputs: ['biomass'], outputs: ['food'], yield: '+1–4f', distribution: 'poisson', state: 'ready', stateCopy: 'ready' },
+        { name: 'Draw water', type: 'gather', energy: 1.2, time: 3, duration: '3h', inputs: [], outputs: ['water'], yield: '+3–6w', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
+        { name: 'Tend gardens', type: 'cultivate', energy: 1.5, time: 4, duration: '4h', inputs: ['water'], outputs: ['food'], yield: '+3–5f', distribution: 'uniform', state: 'ready', stateCopy: 'ready' },
+        { name: 'Gather clay', type: 'gather', energy: 2.1, time: 5, duration: '5h', inputs: ['water'], outputs: ['minerals'], yield: '+2–6m', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
+        { name: 'Burn charcoal', type: 'process', energy: 1.3, time: 7, duration: '7h', inputs: ['biomass'], outputs: ['fuel'], yield: '+3–5fu', distribution: 'uniform', state: 'ready', stateCopy: 'ready' },
+        { name: 'Quarry stone', type: 'gather', energy: 3.2, time: 6, duration: '6h', inputs: [], outputs: ['minerals'], yield: '+2–5m', distribution: 'poisson', state: 'ready', stateCopy: 'ready' },
+        { name: 'Repair tools', type: 'maintain', energy: 1.6, time: 3, duration: '3h', inputs: ['biomass'], outputs: ['tools'], yield: 'wear −2', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
+        { name: 'Carry freight', type: 'transport', energy: 2.4, time: 5, duration: '5h', inputs: ['food'], outputs: ['transport'], yield: '+1 lot', distribution: 'uniform', state: 'ready', stateCopy: 'ready' },
+        { name: 'Fell timber', type: 'gather', energy: 3.0, time: 6, duration: '6h', inputs: [], outputs: ['biomass'], yield: '+5–9b', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
+        { name: 'Harvest reeds', type: 'gather', energy: 1.4, time: 4, duration: '4h', inputs: ['water'], outputs: ['biomass'], yield: '+2–6b', distribution: 'exponential', state: 'ready', stateCopy: 'ready' },
+        { name: 'Mine ore', type: 'gather', energy: 3.5, time: 8, duration: '8h', inputs: ['tools'], outputs: ['metal'], yield: '+1–3me', distribution: 'poisson', state: 'short', stateCopy: 'short tools' },
+        { name: 'Smelt metal', type: 'process', energy: 2.8, time: 7, duration: '7h', inputs: ['fuel', 'minerals'], outputs: ['metal'], yield: '+2–4me', distribution: 'uniform', state: 'short', stateCopy: 'short fuel' },
+        { name: 'Mill grain', type: 'process', energy: 2.0, time: 5, duration: '5h', inputs: ['food'], outputs: ['food'], yield: '+4–7f', distribution: 'normal', state: 'short', stateCopy: 'short grain' },
+        { name: 'Bake bread', type: 'process', energy: 1.8, time: 4, duration: '4h', inputs: ['food', 'fuel'], outputs: ['food'], yield: '+3–6f', distribution: 'uniform', state: 'short', stateCopy: 'short fuel' },
+        { name: 'Weave cloth', type: 'craft', energy: 2.2, time: 6, duration: '6h', inputs: ['biomass'], outputs: ['comfort'], yield: '+1 cloth', distribution: 'normal', state: 'short', stateCopy: 'short fiber' },
+        { name: 'Treat illness', type: 'care', energy: 1.5, time: 5, duration: '5h', inputs: ['food', 'water'], outputs: ['comfort'], yield: 'recovery +', distribution: 'exponential', state: 'short', stateCopy: 'short herbs' }
+      ];
+      const actionSorts = ['none', 'ready', 'time', 'energy', 'name'];
+      const actionDirections = ['asc', 'desc'];
+      const actionControls = {
+        query: prototypeParams.get('actionq') || '',
+        sort: actionSorts.includes(prototypeParams.get('actionsort')) ? prototypeParams.get('actionsort') : 'none',
+        direction: actionDirections.includes(prototypeParams.get('actiondir')) ? prototypeParams.get('actiondir') : 'desc',
+        sortOpen: prototypeParams.get('actionsortopen') === '1'
+      };
+      if (actionControls.sort === 'none') actionControls.direction = 'desc';
+      const actionQuery = document.querySelector('#action-query');
+      const actionSortToggle = document.querySelector('#action-sort-toggle');
+      const actionSortPanel = document.querySelector('#action-sort-panel');
+      const actionSortKind = document.querySelector('#action-sort-kind');
+      const actionSortDirection = document.querySelector('#action-sort-direction');
+      const actionResults = document.querySelector('#action-results');
+      const actionHost = document.querySelector('#action-rows');
+      const actionSummary = document.querySelector('#action-summary');
+      const actionEscapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+      const escapeActionMarkup = value => String(value).replace(/[&<>"']/g, character => actionEscapes[character]);
+      const distributionLabels = { normal: 'normal distribution', exponential: 'exponential distribution', uniform: 'uniform distribution', poisson: 'Poisson distribution' };
+      const actionRows = actionCatalog.map(action => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = `action-tile${action.state === 'ready' ? '' : ' unavailable'}`;
+        row.dataset.action = action.name;
+        row.dataset.duration = action.duration;
+        row.dataset.state = action.state;
+        row.disabled = action.state !== 'ready';
+        row.innerHTML = `<span class="action-head"><span class="action-name">${escapeActionMarkup(action.name)}</span><span class="action-state">${escapeActionMarkup(action.stateCopy)}</span></span><span class="action-metrics"><span>−${action.energy}e · ${escapeActionMarkup(action.duration)}</span><img class="dist-icon" src="../assets/svg/dist_${action.distribution}.svg" alt="${distributionLabels[action.distribution]}"><span class="yield">${escapeActionMarkup(action.yield)}</span></span>`;
+        actionHost.append(row);
+        return { action, row };
+      });
+      actionQuery.value = actionControls.query;
+      document.querySelector('#action-catalog-count').textContent = `${actionCatalog.length} verbs`;
+
+      function actionQueryTerms(value) {
+        return value.trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+      }
+
+      function actionFieldMatches(field, value, action) {
+        const options = value.split(',').map(option => option.trim()).filter(Boolean);
+        if (!options.length) return true;
+        const fields = {
+          in: action.inputs,
+          input: action.inputs,
+          out: action.outputs,
+          output: action.outputs,
+          type: [action.type],
+          kind: [action.type],
+          state: [action.state],
+          status: [action.state]
+        };
+        if (field === 'is') fields.is = [action.state, action.type];
+        const candidates = fields[field];
+        return Boolean(candidates && options.some(option => candidates.some(candidate => candidate.toLowerCase().includes(option))));
+      }
+
+      function matchesActionQuery(action) {
+        const haystack = [action.name, action.type, action.state, action.stateCopy, action.duration, action.yield, ...action.inputs, ...action.outputs].join(' ').toLowerCase();
+        return actionQueryTerms(actionControls.query).every(rawTerm => {
+          let term = rawTerm.toLowerCase();
+          let excluded = false;
+          if (term.startsWith('-') && term.length > 1) { excluded = true; term = term.slice(1); }
+          if (term.startsWith('"') && term.endsWith('"')) term = term.slice(1, -1);
+          const separator = term.indexOf(':');
+          const matched = term === '*' ? true : separator > 0 ? actionFieldMatches(term.slice(0, separator), term.slice(separator + 1), action) : haystack.includes(term);
+          return excluded ? !matched : matched;
+        });
+      }
+
+      function syncActionSortControls() {
+        actionSortKind.value = actionControls.sort;
+        actionSortDirection.value = actionControls.direction;
+        actionSortDirection.disabled = actionControls.sort === 'none';
+        actionSortToggle.setAttribute('aria-expanded', String(actionControls.sortOpen));
+        actionSortPanel.hidden = !actionControls.sortOpen;
+      }
+
+      function syncActionUrl() {
+        const nextUrl = new URL(location.href);
+        if (actionControls.query.trim()) nextUrl.searchParams.set('actionq', actionControls.query.trim());
+        else nextUrl.searchParams.delete('actionq');
+        if (actionControls.sort !== 'none') nextUrl.searchParams.set('actionsort', actionControls.sort);
+        else nextUrl.searchParams.delete('actionsort');
+        if (actionControls.sort !== 'none' && actionControls.direction !== 'desc') nextUrl.searchParams.set('actiondir', actionControls.direction);
+        else nextUrl.searchParams.delete('actiondir');
+        if (actionControls.sortOpen) nextUrl.searchParams.set('actionsortopen', '1');
+        else nextUrl.searchParams.delete('actionsortopen');
+        history.replaceState(null, '', nextUrl);
+      }
+
+      function setActionSortPanel(open, updateUrl = true) {
+        actionControls.sortOpen = Boolean(open);
+        syncActionSortControls();
+        if (updateUrl) syncActionUrl();
+      }
+
+      function applyActionView(updateUrl = false) {
+        const ordered = [...actionRows];
+        if (actionControls.sort !== 'none') {
+          ordered.sort((a, b) => {
+            let comparison = 0;
+            if (actionControls.sort === 'ready') comparison = Number(a.action.state === 'ready') - Number(b.action.state === 'ready');
+            else if (actionControls.sort === 'time') comparison = a.action.time - b.action.time;
+            else if (actionControls.sort === 'energy') comparison = a.action.energy - b.action.energy;
+            else comparison = a.action.name.localeCompare(b.action.name);
+            if (actionControls.direction === 'desc') comparison *= -1;
+            return comparison || a.action.name.localeCompare(b.action.name);
+          });
+        }
+        ordered.forEach(({ row }) => actionHost.append(row));
+        let visible = 0;
+        actionRows.forEach(({ action, row }) => {
+          row.hidden = !matchesActionQuery(action);
+          if (!row.hidden) visible += 1;
+        });
+        actionSummary.textContent = `${visible} of ${actionCatalog.length} actions shown`;
+        syncActionSortControls();
+        if (updateUrl) { actionResults.scrollTop = 0; syncActionUrl(); }
+      }
+
+      actionQuery.addEventListener('input', () => { actionControls.query = actionQuery.value; applyActionView(true); });
+      actionQuery.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && actionQuery.value) {
+          event.preventDefault();
+          actionQuery.value = '';
+          actionControls.query = '';
+          applyActionView(true);
+        }
+      });
+      actionSortToggle.addEventListener('click', () => setActionSortPanel(!actionControls.sortOpen));
+      actionSortKind.addEventListener('change', () => {
+        actionControls.sort = actionSortKind.value;
+        if (actionControls.sort === 'none') actionControls.direction = 'desc';
+        applyActionView(true);
+      });
+      actionSortDirection.addEventListener('change', () => { actionControls.direction = actionSortDirection.value; applyActionView(true); });
+      actionSortPanel.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setActionSortPanel(false);
+          actionSortToggle.focus();
+        }
+      });
+      addEventListener('keydown', event => {
+        const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
+        if (activeView === 'actions' && event.key === '/' && !editable && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          actionQuery.focus();
+        }
+      });
+      applyActionView();
+      window.prototypeActions = {
+        actions: actionCatalog,
+        controls: actionControls,
+        setQuery(value) { actionQuery.value = String(value); actionControls.query = actionQuery.value; applyActionView(true); },
+        setSort(kind, direction = actionControls.direction) {
+          const normalizedKind = kind == null || kind === '' ? 'none' : String(kind);
+          if (!actionSorts.includes(normalizedKind)) return false;
+          if (normalizedKind !== 'none' && !actionDirections.includes(direction)) return false;
+          actionControls.sort = normalizedKind;
+          actionControls.direction = normalizedKind === 'none' ? 'desc' : direction;
+          applyActionView(true);
+          return true;
+        },
+        clearSort() { actionControls.sort = 'none'; actionControls.direction = 'desc'; applyActionView(true); return true; },
+        setSortOpen: open => setActionSortPanel(open),
+        visibleNames: () => [...actionHost.querySelectorAll('.action-tile:not([hidden])')].map(row => row.dataset.action)
+      };
+
+      const eatingSlider = document.querySelector('#eating-policy-range');
+      const eatingValue = document.querySelector('#eating-policy-value');
+      const bodyPolicyLabel = document.querySelector('#body-policy-label');
+      const foodCoverage = document.querySelector('#food-coverage');
+      const vigorRecovery = document.querySelector('#vigor-recovery');
+      const eatingWords = [
+        { max: 12, word: 'meager' },
+        { max: 28, word: 'lean' },
+        { max: 44, word: 'modest' },
+        { max: 58, word: 'normal' },
+        { max: 72, word: 'hearty' },
+        { max: 88, word: 'generous' },
+        { max: 100, word: 'lavish' }
+      ];
+
+      const bodyConfig = { baseCoverage: 10.3, baseRecovery: 0.448 };
+
+      function updateEatingPolicy(rawValue) {
+        const value = Number(rawValue);
+        const word = eatingWords.find(entry => value <= entry.max).word;
+        const rate = 0.5 * Math.pow(4, value / 100);
+        const coverage = bodyConfig.baseCoverage / rate;
+        const recovery = bodyConfig.baseRecovery / rate;
+        eatingSlider.style.setProperty('--ration-position', `${value}%`);
+        eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
+        eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
+        bodyPolicyLabel.textContent = word;
+        foodCoverage.textContent = `${coverage.toFixed(1)}d`;
+        vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
+      }
+
+      const seededEating = prototypeParams.get('eating');
+      if (seededEating !== null) eatingSlider.value = String(Math.max(0, Math.min(100, Number(seededEating))));
+      eatingSlider.addEventListener('input', event => updateEatingPolicy(event.currentTarget.value));
+      updateEatingPolicy(eatingSlider.value);
+
+      const activityStrip = document.querySelector('#activity-strip');
+      const activityKind = document.querySelector('#activity-kind');
+      const activitySubject = document.querySelector('#activity-subject');
+      const activityMeta = document.querySelector('#activity-meta');
+
+      function setActivity(kind, subject, meta) {
+        const labels = { idle: '○ IDLING', working: '● WORKING', building: '■ BUILDING' };
+        activityStrip.className = `activity-strip is-${kind}`;
+        activityKind.textContent = labels[kind];
+        activitySubject.textContent = subject;
+        activityMeta.textContent = meta;
+      }
+
+      document.querySelectorAll('[data-action]').forEach(button => {
+        button.addEventListener('click', () => {
+          setActivity('working', button.dataset.action, `${button.dataset.duration} left`);
+          addLog(`You begin ${button.dataset.action.toLowerCase()}. The stated price is paid now.`);
+        });
+      });
+
+      const buildRecipes = [
+        { name: 'Garden bed', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '8 biomass 4e', inputCost: 8, time: 0.7, effect: 'grows Food on its own', state: 'ready', reach: 1, stateCopy: 'ready' },
+        { name: 'Ropewalk', type: 'generator', inputs: ['biomass'], outputs: ['rope'], cost: '14 biomass 3e', inputCost: 14, time: 0.8, effect: 'turns Biomass into rope', state: 'locked', reach: 1, tech: 'Loom & ropewalk' },
+        { name: 'Fishing net', type: 'tool', inputs: ['biomass'], outputs: ['food'], cost: '12 biomass 2e', inputCost: 12, time: 1.2, effect: 'raises fish yield', state: 'locked', reach: 1, tech: 'Net fishery' },
+        { name: 'Cut stone', type: 'material', inputs: ['minerals'], outputs: ['minerals'], cost: '12 minerals 4e', inputCost: 12, time: 1.1, effect: 'worked stone stock', state: 'reach', reach: 0.75, stateCopy: '9/12 minerals' },
+        { name: 'Carpenter bench', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['tools'], cost: '24 biomass 2 metal 3e', inputCost: 26, time: 2.4, effect: 'complex wood capital', state: 'reach', reach: 0.65, stateCopy: '18/24 biomass · 1/2 metal' },
+        { name: 'Forge', type: 'generator', inputs: ['minerals', 'biomass', 'metal'], outputs: ['metal'], cost: '10 minerals 8 biomass 4 metal 4e', inputCost: 22, time: 2.3, effect: 'metalworking site', state: 'reach', reach: 0.35, stateCopy: 'short 1 mineral · 3 metal' },
+        { name: 'Charcoal kiln', type: 'generator', inputs: ['biomass', 'minerals'], outputs: ['fuel'], cost: '18 biomass 4 minerals 3e', inputCost: 22, time: 1.8, effect: 'converts Biomass into Fuel', state: 'reach', reach: 0.45, stateCopy: 'short 4 minerals' },
+        { name: 'Hand tools', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['tools'], cost: '10 metal 8 biomass 2e', inputCost: 18, time: 1.4, effect: 'general work takes less time', state: 'reach', reach: 0.42, stateCopy: 'short 10 metal' },
+        { name: 'Water cistern', type: 'storage', inputs: ['minerals', 'metal'], outputs: ['water'], cost: '24 minerals 6 metal 4e', inputCost: 30, time: 2.0, effect: 'buffers Water supply', state: 'reach', reach: 0.30, stateCopy: 'short 24 minerals · 6 metal' },
+        { name: 'Cart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '24 biomass 8 metal 4e', inputCost: 32, time: 2.2, effect: 'moves local goods faster', state: 'reach', reach: 0.28, stateCopy: 'short 8 metal' },
+        { name: 'Granary', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '20 biomass 16 minerals 5e', inputCost: 36, time: 2.8, effect: 'stores Food at settlement scale', state: 'locked', reach: 0.25, tech: 'Granary' },
+        { name: 'Irrigation pump', type: 'generator', inputs: ['metal', 'biomass'], outputs: ['water'], cost: '28 metal 16 biomass 6e', inputCost: 44, time: 3.4, effect: 'moves Water without river access', state: 'locked', reach: 0.22, tech: 'Pumping station' },
+        { name: 'Grain mill', type: 'generator', inputs: ['biomass', 'metal', 'minerals'], outputs: ['food'], cost: '20 biomass 16 metal 12 minerals 7e', inputCost: 48, time: 3.5, effect: 'multiplies prepared Food output', state: 'locked', reach: 0.20, tech: 'Food processing' },
+        { name: 'Steam engine', type: 'generator', inputs: ['metal', 'fuel', 'water'], outputs: ['power'], cost: '28 metal 18 fuel 10 water 8e', inputCost: 56, time: 5.2, effect: 'turns Fuel and Water into power', state: 'locked', reach: 0.18, tech: 'Steam engine' },
+        { name: 'River barge', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '42 biomass 16 metal 6e', inputCost: 58, time: 4.8, effect: 'moves bulk goods by Water', state: 'locked', reach: 0.17, tech: 'Fishing boats' },
+        { name: 'Brick press', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '32 minerals 10 fuel 5e', inputCost: 42, time: 3.1, effect: 'standardizes structural brick', state: 'locked', reach: 0.16, tech: 'Brickworks' },
+        { name: 'Glass pane', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '30 minerals 16 fuel 6e', inputCost: 46, time: 3.6, effect: 'weatherproofs lit interiors', state: 'locked', reach: 0.14, tech: 'Glassblowing' },
+        { name: 'Work clothes', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '24 biomass 3e', inputCost: 24, time: 1.7, effect: 'reduces exposure and strain', state: 'locked', reach: 0.12, tech: 'Loom & ropewalk' },
+        { name: 'Bathhouse', type: 'comfort', inputs: ['minerals', 'water', 'fuel'], outputs: ['comfort'], cost: '28 minerals 14 water 10 fuel 8e', inputCost: 52, time: 4.0, effect: 'raises shared health and comfort', state: 'locked', reach: 0.10, tech: 'Sanitation' },
+        { name: 'Plough team', type: 'tool', inputs: ['biomass', 'metal', 'food'], outputs: ['food'], cost: '18 biomass 12 metal 8 food 6e', inputCost: 38, time: 2.9, effect: 'raises field Food yield', state: 'locked', reach: 0.08, tech: 'Animal husbandry' },
+        { name: 'Handcart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '16 biomass 4 metal 3e', inputCost: 20, time: 1.5, effect: 'moves hand-carried loads farther', state: 'reach', reach: 0.58, stateCopy: 'short 4 metal' },
+        { name: 'Smokehouse', type: 'storage', inputs: ['biomass', 'fuel'], outputs: ['food'], cost: '20 biomass 8 fuel 4e', inputCost: 28, time: 2.1, effect: 'preserves meat and fish', state: 'locked', reach: 0.55, tech: 'Food preservation' },
+        { name: 'Well bucket', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['water'], cost: '12 biomass 2 metal 2e', inputCost: 14, time: 0.9, effect: 'raises Water drawing yield', state: 'locked', reach: 0.52, tech: 'Spring well' },
+        { name: 'Clay crock', type: 'storage', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '14 minerals 4 fuel 2e', inputCost: 18, time: 1.0, effect: 'stores prepared Food in sealed lots', state: 'locked', reach: 0.50, tech: 'Pottery' },
+        { name: 'Saw pit', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['biomass'], cost: '20 biomass 6 metal 4e', inputCost: 26, time: 2.0, effect: 'turns timber into regular boards', state: 'locked', reach: 0.48, tech: 'Sawmill' },
+        { name: 'Timber wall', type: 'material', inputs: ['biomass'], outputs: ['comfort'], cost: '34 biomass 5e', inputCost: 34, time: 2.7, effect: 'shelters a larger common boundary', state: 'locked', reach: 0.46, tech: 'Timber framing' },
+        { name: 'Lime kiln', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '26 minerals 12 fuel 5e', inputCost: 38, time: 3.0, effect: 'produces mortar and whitewash', state: 'locked', reach: 0.44, tech: 'Lime burning' },
+        { name: 'Weaver frame', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['comfort'], cost: '22 biomass 4 metal 4e', inputCost: 26, time: 2.2, effect: 'turns fiber into regular cloth', state: 'locked', reach: 0.41, tech: 'Loom & ropewalk' },
+        { name: 'Bakery oven', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '24 minerals 10 fuel 5e', inputCost: 34, time: 2.8, effect: 'bakes Food in settlement batches', state: 'locked', reach: 0.39, tech: 'Food processing' },
+        { name: 'Apiary', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '26 biomass 4e', inputCost: 26, time: 2.4, effect: 'adds honey and wax yield', state: 'locked', reach: 0.37, tech: 'Apiculture' },
+        { name: 'Tannery', type: 'material', inputs: ['water', 'biomass'], outputs: ['comfort'], cost: '18 water 24 biomass 6e', inputCost: 42, time: 3.3, effect: 'turns hides into durable leather', state: 'locked', reach: 0.34, tech: 'Tanning' },
+        { name: 'Sail loft', type: 'tool', inputs: ['biomass'], outputs: ['transport'], cost: '36 biomass 6e', inputCost: 36, time: 3.2, effect: 'equips boats for longer routes', state: 'locked', reach: 0.32, tech: 'Fishing boats' },
+        { name: 'Waterwheel', type: 'generator', inputs: ['biomass', 'metal'], outputs: ['power'], cost: '42 biomass 12 metal 7e', inputCost: 54, time: 4.1, effect: 'turns stream flow into shaft power', state: 'locked', reach: 0.30, tech: 'Water power' },
+        { name: 'Canal lock', type: 'transport', inputs: ['minerals', 'biomass', 'metal'], outputs: ['transport'], cost: '48 minerals 28 biomass 14 metal 9e', inputCost: 90, time: 6.0, effect: 'moves barges between water levels', state: 'locked', reach: 0.27, tech: 'Canal engineering' },
+        { name: 'Warehouse', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['storage'], cost: '44 biomass 32 minerals 8e', inputCost: 76, time: 5.0, effect: 'consolidates settlement trade stock', state: 'locked', reach: 0.25, tech: 'Warehousing' },
+        { name: 'Seed drill', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['food'], cost: '22 metal 18 biomass 6e', inputCost: 40, time: 3.4, effect: 'reduces seed and planting labor', state: 'locked', reach: 0.23, tech: 'Seed drill' },
+        { name: 'Printing press', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['comfort'], cost: '30 metal 24 biomass 8e', inputCost: 54, time: 4.6, effect: 'duplicates records and instructions', state: 'locked', reach: 0.21, tech: 'Printing press' },
+        { name: 'Infirmary', type: 'comfort', inputs: ['biomass', 'minerals', 'water'], outputs: ['comfort'], cost: '34 biomass 24 minerals 12 water 8e', inputCost: 70, time: 4.5, effect: 'concentrates care and recovery', state: 'locked', reach: 0.20, tech: 'Sanitation' },
+        { name: 'Street lamp', type: 'comfort', inputs: ['metal', 'fuel'], outputs: ['comfort'], cost: '18 metal 14 fuel 5e', inputCost: 32, time: 2.7, effect: 'extends safe movement after dark', state: 'locked', reach: 0.19, tech: 'Gas lighting' },
+        { name: 'Brewery', type: 'comfort', inputs: ['food', 'water', 'fuel'], outputs: ['comfort'], cost: '22 food 18 water 12 fuel 7e', inputCost: 52, time: 4.0, effect: 'turns grain into a storable drink', state: 'locked', reach: 0.18, tech: 'Brewing' },
+        { name: 'Foundry', type: 'generator', inputs: ['minerals', 'metal', 'fuel'], outputs: ['metal'], cost: '40 minerals 24 metal 20 fuel 10e', inputCost: 84, time: 6.2, effect: 'casts repeatable Metal components', state: 'locked', reach: 0.17, tech: 'Foundry' },
+        { name: 'Machine shop', type: 'tool', inputs: ['metal', 'fuel'], outputs: ['tools'], cost: '46 metal 18 fuel 11e', inputCost: 64, time: 6.5, effect: 'makes interchangeable machine parts', state: 'locked', reach: 0.16, tech: 'Machine tools' },
+        { name: 'Rail cart', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '38 metal 22 biomass 9e', inputCost: 60, time: 5.4, effect: 'moves heavy lots on fixed rails', state: 'locked', reach: 0.15, tech: 'Rail transport' },
+        { name: 'Telegraph station', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '34 metal 20 biomass 9e', inputCost: 54, time: 5.0, effect: 'coordinates distant market messages', state: 'locked', reach: 0.14, tech: 'Telegraphy' },
+        { name: 'Pump house', type: 'generator', inputs: ['metal', 'fuel', 'minerals'], outputs: ['water'], cost: '32 metal 20 fuel 18 minerals 9e', inputCost: 70, time: 5.1, effect: 'pressurizes Water for a district', state: 'locked', reach: 0.13, tech: 'Pumping station' },
+        { name: 'Cold store', type: 'storage', inputs: ['metal', 'fuel', 'minerals'], outputs: ['food'], cost: '36 metal 24 fuel 20 minerals 10e', inputCost: 80, time: 5.8, effect: 'slows Food loss at market scale', state: 'locked', reach: 0.12, tech: 'Refrigeration' },
+        { name: 'Assembly hall', type: 'comfort', inputs: ['biomass', 'minerals'], outputs: ['comfort'], cost: '52 biomass 38 minerals 10e', inputCost: 90, time: 6.0, effect: 'gives collective decisions a place', state: 'locked', reach: 0.11, tech: 'Civic administration' },
+        { name: 'Cement mixer', type: 'material', inputs: ['minerals', 'metal', 'fuel'], outputs: ['minerals'], cost: '42 minerals 18 metal 12 fuel 9e', inputCost: 72, time: 4.9, effect: 'mixes structural cement consistently', state: 'locked', reach: 0.10, tech: 'Portland cement' },
+        { name: 'Leaf bed', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '8 biomass 2e', inputCost: 8, time: 0.4, effect: 'raises vigor ceiling', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Root cellar', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '8 biomass 10 minerals 4e', inputCost: 18, time: 1.4, effect: 'keeps Food twice as long', state: 'owned', reach: 1, owned: 1 }
+      ];
+      const validBuildSorts = ['none', 'reach', 'inputs', 'time', 'name'];
+      const validBuildDirections = ['asc', 'desc'];
+      const controls = {
+        sort: validBuildSorts.includes(prototypeParams.get('buildsort')) ? prototypeParams.get('buildsort') : 'reach',
+        direction: validBuildDirections.includes(prototypeParams.get('builddir')) ? prototypeParams.get('builddir') : 'desc',
+        query: prototypeParams.get('buildq') || '',
+        sortOpen: prototypeParams.get('buildsortopen') === '1'
+      };
+      if (controls.sort === 'none') controls.direction = 'desc';
+      const rowHost = document.querySelector('#build-rows');
+      const buildTable = document.querySelector('#build-table');
+      const summary = document.querySelector('#build-summary');
+      const buildQuery = document.querySelector('#build-query');
+      const buildSortToggle = document.querySelector('#build-sort-toggle');
+      const buildSortPanel = document.querySelector('#build-sort-panel');
+      const buildSortKind = document.querySelector('#build-sort-kind');
+      const buildSortDirection = document.querySelector('#build-sort-direction');
+      const markupEscapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+      const escapeMarkup = value => String(value).replace(/[&<>"']/g, character => markupEscapes[character]);
+      const recipeByRow = new Map();
+      let buildingRow = null;
+
+      function reachMeter(reach) {
+        const active = Math.max(0, Math.min(3, Math.round(reach * 3)));
+        return `<span class="meter" aria-hidden="true">${[0, 1, 2].map(index => `<i${index < active ? ' class="on"' : ''}></i>`).join('')}</span>`;
+      }
+
+      function recipeStateMarkup(recipe) {
+        if (recipe.state === 'ready') return '<span class="state-copy state-ready">ready</span>';
+        if (recipe.state === 'owned') return `<span class="state-copy">owned ×${recipe.owned || 1}</span>`;
+        return `${reachMeter(recipe.reach)}<span class="state-copy">${escapeMarkup(recipe.stateCopy || 'out of reach')}</span>`;
+      }
+
+      function recipeActionMarkup(recipe) {
+        if (recipe.state === 'ready') return '<button class="row-action" type="button" data-start-build>Build →</button>';
+        if (recipe.state === 'owned') return '<button class="row-action" type="button" data-start-build>Build +1</button>';
+        return '<span class="row-action-placeholder" aria-hidden="true"></span>';
+      }
+
+      function renderRecipeState(recipe) {
+        const row = recipe.row;
+        if (!row || row === buildingRow) return;
+        row.dataset.state = recipe.state;
+        row.className = `build-row ${recipe.state}`;
+        row.querySelector('.build-state').innerHTML = recipeStateMarkup(recipe);
+        row.querySelector('.build-action').innerHTML = recipeActionMarkup(recipe);
+        const action = row.querySelector('[data-start-build]');
+        if (action && buildingRow) action.disabled = true;
+      }
+
+      function createRecipeRow(recipe) {
+        const row = document.createElement('article');
+        recipe.row = row;
+        recipeByRow.set(row, recipe);
+        row.dataset.name = recipe.name;
+        row.dataset.reach = String(recipe.reach);
+        row.dataset.inputs = String(recipe.inputCost);
+        row.dataset.time = String(recipe.time);
+        row.dataset.type = recipe.type;
+        row.dataset.inputResources = recipe.inputs.join(' ');
+        row.dataset.outputResources = recipe.outputs.join(' ');
+        if (recipe.tech) row.dataset.tech = recipe.tech;
+        row.innerHTML = `<span class="good-name"><strong>${escapeMarkup(recipe.name)}</strong><small>${escapeMarkup(recipe.type)}</small></span><span class="recipe-cost">${escapeMarkup(recipe.cost)}</span><span>${recipe.time.toFixed(1)}d</span><span class="effect">${escapeMarkup(recipe.effect)}</span><span class="build-state"></span><span class="build-action"></span>`;
+        rowHost.append(row);
+        renderRecipeState(recipe);
+        return row;
+      }
+
+      const rows = buildRecipes.map(createRecipeRow);
+      buildQuery.value = controls.query;
+      document.querySelector('#build-catalog-count').textContent = `${rows.length} recipes`;
+
+      function buildQueryTerms(value) {
+        return value.trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+      }
+
+      function queryFieldMatches(field, value, recipe, row) {
+        const options = value.split(',').map(option => option.trim()).filter(Boolean);
+        if (!options.length) return true;
+        const state = row.dataset.state;
+        const fields = {
+          in: recipe.inputs,
+          input: recipe.inputs,
+          out: recipe.outputs,
+          output: recipe.outputs,
+          type: [recipe.type],
+          kind: [recipe.type],
+          state: [state],
+          status: [state],
+          tech: [recipe.tech || '']
+        };
+        if (field === 'is') fields.is = [state, recipe.type];
+        const candidates = fields[field];
+        if (!candidates) return false;
+        return options.some(option => {
+          const normalized = option === 'built' ? 'owned' : option;
+          if (field === 'state' && normalized === 'in-reach') return state === 'ready' || (state === 'reach' && recipe.reach >= 0.5);
+          return candidates.some(candidate => candidate.toLowerCase().includes(normalized));
+        });
+      }
+
+      function matchesBuildQuery(recipe, row) {
+        const haystack = [recipe.name, recipe.type, recipe.cost, recipe.effect, recipe.tech || '', ...recipe.inputs, ...recipe.outputs, row.dataset.state].join(' ').toLowerCase();
+        return buildQueryTerms(controls.query).every(rawTerm => {
+          let term = rawTerm.toLowerCase();
+          let excluded = false;
+          if (term.startsWith('-') && term.length > 1) { excluded = true; term = term.slice(1); }
+          if (term.startsWith('"') && term.endsWith('"')) term = term.slice(1, -1);
+          const separator = term.indexOf(':');
+          const matched = term === '*'
+            ? true
+            : separator > 0
+              ? queryFieldMatches(term.slice(0, separator), term.slice(separator + 1), recipe, row)
+              : haystack.includes(term);
+          return excluded ? !matched : matched;
+        });
+      }
+
+      function syncBuildSortControls() {
+        buildSortKind.value = controls.sort;
+        buildSortDirection.value = controls.direction;
+        buildSortDirection.disabled = controls.sort === 'none';
+        buildSortToggle.setAttribute('aria-expanded', String(controls.sortOpen));
+        buildSortPanel.hidden = !controls.sortOpen;
+      }
+
+      function syncBuildUrl() {
+        const nextUrl = new URL(location.href);
+        if (controls.query.trim()) nextUrl.searchParams.set('buildq', controls.query.trim());
+        else nextUrl.searchParams.delete('buildq');
+        if (controls.sort !== 'reach') nextUrl.searchParams.set('buildsort', controls.sort);
+        else nextUrl.searchParams.delete('buildsort');
+        if (controls.sort !== 'none' && controls.direction !== 'desc') nextUrl.searchParams.set('builddir', controls.direction);
+        else nextUrl.searchParams.delete('builddir');
+        if (controls.sortOpen) nextUrl.searchParams.set('buildsortopen', '1');
+        else nextUrl.searchParams.delete('buildsortopen');
+        nextUrl.searchParams.delete('buildshow');
+        nextUrl.searchParams.delete('built');
+        history.replaceState(null, '', nextUrl);
+      }
+
+      function setBuildSortPanel(open, updateUrl = true) {
+        controls.sortOpen = Boolean(open);
+        syncBuildSortControls();
+        if (updateUrl) syncBuildUrl();
+      }
+
+      function applyBuildView(updateUrl = false) {
+        const ordered = [...rows];
+        if (controls.sort !== 'none') {
+          ordered.sort((a, b) => {
+            const first = recipeByRow.get(a);
+            const second = recipeByRow.get(b);
+            let comparison = 0;
+            if (controls.sort === 'inputs') comparison = first.inputCost - second.inputCost;
+            else if (controls.sort === 'time') comparison = first.time - second.time;
+            else if (controls.sort === 'name') comparison = first.name.localeCompare(second.name);
+            else comparison = first.reach - second.reach;
+            if (controls.direction === 'desc') comparison *= -1;
+            return comparison || first.name.localeCompare(second.name);
+          });
+        }
+        if (buildingRow) {
+          const buildingIndex = ordered.indexOf(buildingRow);
+          if (buildingIndex > 0) ordered.unshift(...ordered.splice(buildingIndex, 1));
+        }
+        ordered.forEach(row => rowHost.append(row));
+
+        const hasQuery = Boolean(controls.query.trim());
+        const defaultRows = new Set(ordered.filter(row => {
+          const recipe = recipeByRow.get(row);
+          const state = row.dataset.state;
+          return state !== 'owned' && (state === 'ready' || (state === 'reach' && recipe.reach >= 0.5));
+        }));
+        let visible = 0;
+        rows.forEach(row => {
+          const recipe = recipeByRow.get(row);
+          const always = row === buildingRow;
+          const locked = row.dataset.state === 'locked';
+          const queryVisible = matchesBuildQuery(recipe, row);
+          row.hidden = locked ? !always : !(always || (hasQuery ? queryVisible : defaultRows.has(row)));
+          if (!row.hidden) visible += 1;
+        });
+        summary.textContent = `${visible} of ${rows.length} recipes shown`;
+        syncBuildSortControls();
+        if (updateUrl) { buildTable.scrollTop = 0; syncBuildUrl(); }
+      }
+
+      buildQuery.addEventListener('input', () => { controls.query = buildQuery.value; applyBuildView(true); });
+      buildQuery.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && buildQuery.value) {
+          event.preventDefault();
+          buildQuery.value = '';
+          controls.query = '';
+          applyBuildView(true);
+        }
+      });
+      buildSortToggle.addEventListener('click', () => setBuildSortPanel(!controls.sortOpen));
+      buildSortKind.addEventListener('change', () => {
+        controls.sort = buildSortKind.value;
+        if (controls.sort === 'none') controls.direction = 'desc';
+        applyBuildView(true);
+      });
+      buildSortDirection.addEventListener('change', () => {
+        controls.direction = buildSortDirection.value;
+        applyBuildView(true);
+      });
+      buildSortPanel.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setBuildSortPanel(false);
+          buildSortToggle.focus();
+        }
+      });
+      addEventListener('keydown', event => {
+        const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
+        if (activeView === 'build' && event.key === '/' && !editable && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          buildQuery.focus();
+        }
+      });
+
+      rowHost.addEventListener('click', event => {
+        const start = event.target.closest('[data-start-build]');
+        const cancel = event.target.closest('[data-cancel-build]');
+        if (start && !start.disabled) beginPrototypeBuild(start.closest('.build-row'));
+        if (cancel) cancelPrototypeBuild();
+      });
+
+      function setBuildButtonsDisabled(disabled) {
+        rows.forEach(row => {
+          const button = row.querySelector('[data-start-build]');
+          if (button) button.disabled = disabled && row !== buildingRow;
+        });
+      }
+
+      function beginPrototypeBuild(row, duration = `${row.dataset.time}d`) {
+        if (buildingRow) return false;
+        const recipe = recipeByRow.get(row);
+        if (!recipe || !['ready', 'owned'].includes(recipe.state)) return false;
+        buildingRow = row;
+        row.dataset.state = 'building';
+        row.className = 'build-row is-building';
+        row.querySelector('.build-state').innerHTML = `<span class="state-copy accent">${duration} left</span><span class="build-progress" aria-hidden="true"></span>`;
+        row.querySelector('.build-action').innerHTML = '<button class="row-action cancel-build" type="button" data-cancel-build aria-label="Cancel build">×</button>';
+        setActivity('building', recipe.name, `${duration} left`);
+        setBuildButtonsDisabled(true);
+        applyBuildView();
+        buildTable.scrollTop = 0;
+        addLog(`You begin ${recipe.name}. Inputs are paid; cancel still loses time and energy.`);
+        return true;
+      }
+
+      function cancelPrototypeBuild() {
+        if (!buildingRow) return false;
+        const row = buildingRow;
+        const recipe = recipeByRow.get(row);
+        buildingRow = null;
+        renderRecipeState(recipe);
+        setActivity('idle', 'no work in progress', 'ready');
+        setBuildButtonsDisabled(false);
+        applyBuildView();
+        addLog(`You abandon ${recipe.name}. Some inputs return; the spent hours do not.`);
+        return true;
+      }
+
+      window.setPrototypeRecipeUnlocked = (name, unlocked) => {
+        const recipe = buildRecipes.find(candidate => candidate.name === name);
+        if (!recipe?.tech) return false;
+        const wasLocked = recipe.state === 'locked';
+        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'locked';
+        renderRecipeState(recipe);
+        applyBuildView();
+        if (unlocked && wasLocked) window.addPrototypeLog?.(`A new recipe is within reach: ${recipe.name}.`);
+        return true;
+      };
+
+      const exchangeCost = Object.freeze({ biomass: 80, minerals: 40, metal: 24 });
+      const exchangeGoal = document.querySelector('#exchange-goal');
+      const exchangeReadiness = document.querySelector('#exchange-readiness');
+      const exchangeToggle = document.querySelector('#exchange-toggle');
+      const exchangeDetails = document.querySelector('#exchange-details');
+      const exchangeCompact = document.querySelector('#exchange-compact');
+      const exchangeMore = exchangeToggle.querySelector('.exchange-more');
+      const exchangeCopy = document.querySelector('#exchange-copy');
+      const exchangeDetail = document.querySelector('#exchange-detail');
+      const exchangeAction = document.querySelector('#raise-exchange');
+      const requestedExchangeStanding = prototypeParams.get('exchange') === 'standing';
+      let exchangeRingFour = [];
+      let exchangeStanding = false;
+      let exchangeOpen = prototypeParams.get('exchangeopen') === '1';
+
+      function syncExchangeDisclosure(updateUrl = false) {
+        exchangeGoal.dataset.open = String(exchangeOpen);
+        exchangeToggle.setAttribute('aria-expanded', String(exchangeOpen));
+        exchangeDetails.hidden = !exchangeOpen;
+        exchangeMore.textContent = exchangeOpen ? 'close ↑' : 'details ↓';
+        if (updateUrl) {
+          const nextUrl = new URL(location.href);
+          if (exchangeOpen) nextUrl.searchParams.set('exchangeopen', '1');
+          else nextUrl.searchParams.delete('exchangeopen');
+          history.replaceState(null, '', nextUrl);
+        }
+      }
+
+      function exchangeDeficits() {
+        return Object.entries(exchangeCost).filter(([resource, amount]) => resourceBalances[resource] < amount).map(([resource, amount]) => ({ resource, amount: amount - resourceBalances[resource] }));
+      }
+
+      function exchangeState() {
+        const populationMet = population > 500;
+        const researchMet = exchangeRingFour.length > 0;
+        const deficits = exchangeDeficits();
+        return { population, populationMet, researchMet, ringFour: [...exchangeRingFour], deficits, unlocked: populationMet && researchMet, ready: populationMet && researchMet && deficits.length === 0, standing: exchangeStanding };
+      }
+
+      function applyMarketIdentity() {
+        const actThree = exchangeStanding;
+        document.querySelector('.act-two').classList.toggle('has-exchange', actThree);
+        document.querySelector('.act-two').dataset.act = actThree ? '3' : '2';
+        document.querySelector('#act-label').textContent = actThree ? 'Act III' : 'Act II';
+        document.querySelector('#market-signal').textContent = actThree ? '◆ EXCHANGE' : '● MERCHANT';
+        document.querySelector('#market-copy').textContent = actThree ? 'standing trading floor · permanent books · open market.' : '9 lots · water, fuel, metal, minerals, goods.';
+        document.querySelector('#market-action').textContent = actThree ? 'ENTER →' : 'TRADE →';
+        document.querySelector('#market-dialog-kicker').textContent = actThree ? 'EXCHANGE · PERMANENT MARKET' : 'MERCHANT · MARKET OPEN 2.4 DAYS';
+        document.querySelector('#merchant-title').textContent = actThree ? 'What will the floor clear?' : 'What will you trade?';
+        document.querySelector('#merchant-stock-title').textContent = actThree ? 'EXCHANGE OFFERS' : 'THEIR STOCK';
+        document.querySelector('#market-dialog-close').setAttribute('aria-label', actThree ? 'Close Exchange' : 'Close merchant');
+        document.querySelector('#market-dialog-note').textContent = actThree ? 'Permanent venue · posted Coin prices · settlement stock and outside offers.' : 'Coin prices · finite stock · limited market time. Later lots may be repriced.';
+      }
+
+      function refreshExchangeMilestone() {
+        const state = exchangeState();
+        if (requestedExchangeStanding && state.unlocked) exchangeStanding = true;
+        const current = exchangeState();
+        exchangeGoal.dataset.state = current.standing ? 'standing' : current.ready ? 'ready' : current.unlocked ? 'unfunded' : 'locked';
+        exchangeGoal.classList.toggle('is-ready', current.ready && !current.standing);
+        exchangeGoal.classList.toggle('is-standing', current.standing);
+        document.querySelector('#exchange-ring-four').textContent = `${current.ringFour.length ? 1 : 0}/1`;
+        document.querySelector('#exchange-ring-four').title = current.ringFour.join(', ') || 'No ring-4 technology researched';
+        document.querySelector('#exchange-population').textContent = `${population}/501`;
+        document.querySelector('#exchange-biomass').textContent = current.standing ? '80 paid' : `${resourceBalances.biomass}/80`;
+        document.querySelector('#exchange-minerals').textContent = current.standing ? '40 paid' : `${resourceBalances.minerals}/40`;
+        document.querySelector('#exchange-metal').textContent = current.standing ? '24 paid' : `${resourceBalances.metal}/24`;
+        const requirementStates = current.standing
+          ? [true, true, true, true, true]
+          : [current.researchMet, current.populationMet, resourceBalances.biomass >= 80, resourceBalances.minerals >= 40, resourceBalances.metal >= 24];
+        [...document.querySelectorAll('#exchange-requirements strong')].forEach((output, index) => output.classList.toggle('is-met', requirementStates[index]));
+        exchangeCompact.textContent = current.standing ? 'permanent market · Act III' : current.ready ? `${current.ringFour[0]} · ${population} people · inputs ready` : current.unlocked ? `inputs short · ${current.deficits.length} kind${current.deficits.length === 1 ? '' : 's'}` : `ring 4 ${current.researchMet ? 1 : 0}/1 · people ${population}/501`;
+        if (current.standing) {
+          exchangeReadiness.textContent = 'standing · ACT III';
+          exchangeCopy.textContent = 'The Exchange gives trade a permanent place. Passing lots become posted offers and the settlement enters Act III.';
+          exchangeDetail.textContent = `opened after ${current.ringFour[0] || 'ring-4 research'} · permanent market established`;
+          exchangeAction.textContent = 'ACT III OPEN';
+          exchangeAction.disabled = true;
+        } else if (current.ready) {
+          exchangeReadiness.textContent = 'ready to raise';
+          exchangeDetail.textContent = `${current.ringFour[0]} established · ${population} people · all inputs held`;
+          exchangeAction.textContent = 'RAISE EXCHANGE →';
+          exchangeAction.disabled = false;
+        } else if (current.unlocked) {
+          exchangeReadiness.textContent = 'recipe unlocked · inputs short';
+          exchangeDetail.textContent = `needs ${current.deficits.map(deficit => `${deficit.amount} ${deficit.resource}`).join(' · ')}`;
+          exchangeAction.textContent = 'NEEDS INPUTS';
+          exchangeAction.disabled = true;
+        } else {
+          const unmet = Number(!current.researchMet) + Number(!current.populationMet);
+          exchangeReadiness.textContent = `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`;
+          exchangeDetail.textContent = !current.researchMet && !current.populationMet ? 'Research any ring-4 technology and grow beyond 500 people.' : !current.researchMet ? 'Research any ring-4 technology.' : `Grow beyond 500 people · ${population}/501.`;
+          exchangeAction.textContent = 'LOCKED';
+          exchangeAction.disabled = true;
+        }
+        applyMarketIdentity();
+      }
+
+      function raiseExchange() {
+        const state = exchangeState();
+        if (!state.ready || state.standing) return false;
+        exchangeStanding = true;
+        exchangeOpen = true;
+        syncExchangeDisclosure(true);
+        Object.entries(exchangeCost).forEach(([resource, amount]) => { resourceBalances[resource] -= amount; });
+        refreshPrototypeResources();
+        refreshExchangeMilestone();
+        setActivity('idle', 'Exchange standing', 'Act III open');
+        addLog('The Exchange stands. Passing merchants become a permanent market; Act III opens.');
+        dispatchEvent(new CustomEvent('prototype-act-transition', { detail: { from: 2, to: 3, building: 'Exchange' } }));
+        return true;
+      }
+
+      exchangeAction.addEventListener('click', raiseExchange);
+      exchangeToggle.addEventListener('click', () => { exchangeOpen = !exchangeOpen; syncExchangeDisclosure(true); });
+      addEventListener('prototype-resources-changed', refreshExchangeMilestone);
+      window.refreshPrototypeExchange = names => {
+        exchangeRingFour = [...new Set(names)].sort();
+        refreshExchangeMilestone();
+      };
+
+      applyBuildView();
+      refreshExchangeMilestone();
+      syncExchangeDisclosure();
+      window.refreshPrototypeBuild = applyBuildView;
+
+      const seededActivity = prototypeParams.get('activity');
+      if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
+      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Garden bed'));
+
+      window.beginBuildFromStructure = (name, duration) => {
+        if (buildingRow) return false;
+        const row = rows.find(candidate => candidate.dataset.name === name);
+        if (row?.querySelector('[data-start-build]')) return beginPrototypeBuild(row, duration);
+        setActivity('building', name, `${duration} left`);
+        addLog(`You begin ${name}. The quoted inputs are paid now.`);
+        return true;
+      };
+      window.prototypeBuild = {
+        recipes: buildRecipes,
+        controls,
+        setQuery(value) { buildQuery.value = String(value); controls.query = buildQuery.value; applyBuildView(true); },
+        setSort(kind, direction = controls.direction) {
+          const normalizedKind = kind == null || kind === '' ? 'none' : String(kind);
+          if (!validBuildSorts.includes(normalizedKind)) return false;
+          if (normalizedKind !== 'none' && !validBuildDirections.includes(direction)) return false;
+          controls.sort = normalizedKind;
+          controls.direction = normalizedKind === 'none' ? 'desc' : direction;
+          applyBuildView(true);
+          return true;
+        },
+        clearSort() {
+          controls.sort = 'none';
+          controls.direction = 'desc';
+          applyBuildView(true);
+          return true;
+        },
+        setSortOpen: open => setBuildSortPanel(open),
+        activeQuery: () => controls.query,
+        sortState: () => ({ kind: controls.sort, direction: controls.direction, open: controls.sortOpen }),
+        visibleNames: () => [...rowHost.querySelectorAll('.build-row:not([hidden])')].map(row => row.dataset.name),
+        begin: name => beginPrototypeBuild(rows.find(row => row.dataset.name === name)),
+        cancel: cancelPrototypeBuild,
+        exchangeState,
+        raiseExchange,
+        exchangeOpen: () => exchangeOpen,
+        setExchangeOpen(open) { exchangeOpen = Boolean(open); syncExchangeDisclosure(true); return exchangeOpen; }
+      };
+      const dialog = document.querySelector('#merchant-dialog');
+      const offers = [...document.querySelectorAll('.offer-button')];
+      const modeTabs = [...document.querySelectorAll('[data-trade-mode]')];
+      const coinOutputs = [...document.querySelectorAll('[data-coin-balance]')];
+      let coinBalance = 42;
+      let tradeMode = 'buy';
+      let selectedOffer = offers[0];
+      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', () => dialog.showModal()));
+      modeTabs.forEach(button => button.addEventListener('click', () => {
+        tradeMode = button.dataset.tradeMode;
+        modeTabs.forEach(candidate => candidate.setAttribute('aria-selected', String(candidate === button)));
+        offers.forEach(offer => offer.hidden = offer.dataset.mode !== tradeMode);
+        selectedOffer = offers.find(offer => offer.dataset.mode === tradeMode && Number(offer.dataset.stock) > 0) || offers.find(offer => offer.dataset.mode === tradeMode);
+        selectOffer(selectedOffer);
+      }));
+      offers.forEach(offer => offer.addEventListener('click', () => selectOffer(offer)));
+      function selectOffer(offer) {
+        if (!offer) return;
+        selectedOffer = offer;
+        offers.forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === offer)));
+        document.querySelector('#preview-give-label').textContent = tradeMode === 'buy' ? 'YOU PAY' : 'YOU GIVE';
+        document.querySelector('#preview-receive-label').textContent = 'YOU RECEIVE';
+        document.querySelector('#preview-give').textContent = offer.dataset.cost;
+        document.querySelector('#preview-receive').textContent = offer.dataset.receive;
+        document.querySelector('#preview-effect').textContent = offer.dataset.effect;
+        const soldOut = Number(offer.dataset.stock) <= 0;
+        const unaffordableCoin = tradeMode === 'buy' && Number(offer.dataset.coins) > coinBalance;
+        const unaffordableStock = tradeMode === 'sell' && offer.dataset.resource && resourceBalances[offer.dataset.resource] < Number(offer.dataset.quantity);
+        const action = document.querySelector('#complete-trade');
+        action.disabled = soldOut || unaffordableCoin || unaffordableStock;
+        action.textContent = soldOut ? 'GONE' : unaffordableCoin ? 'NOT ENOUGH COIN' : unaffordableStock ? `NOT ENOUGH ${offer.dataset.resource.toUpperCase()}` : tradeMode === 'buy' ? 'BUY →' : 'SELL →';
+      }
+      document.querySelector('#complete-trade').addEventListener('click', () => {
+        if (!selectedOffer || Number(selectedOffer.dataset.stock) <= 0) return;
+        const coins = Number(selectedOffer.dataset.coins);
+        const resource = selectedOffer.dataset.resource;
+        const quantity = Number(selectedOffer.dataset.quantity || 0);
+        if (tradeMode === 'buy' && coins > coinBalance) return;
+        if (tradeMode === 'sell' && resource && resourceBalances[resource] < quantity) return;
+        coinBalance += tradeMode === 'buy' ? -coins : coins;
+        coinOutputs.forEach(output => output.textContent = coinBalance);
+        if (resource) resourceBalances[resource] += tradeMode === 'buy' ? quantity : -quantity;
+        refreshPrototypeResources();
+        selectedOffer.dataset.stock = String(Number(selectedOffer.dataset.stock) - 1);
+        selectedOffer.querySelector('.stock-count').textContent = `×${selectedOffer.dataset.stock}`;
+        const direction = tradeMode === 'buy' ? `You buy ${selectedOffer.dataset.name} for ${coins} coin.` : `The merchant buys ${selectedOffer.dataset.name} for ${coins} coin.`;
+        addLog(`${direction} Coin and stock settle together.`);
+        dialog.close('traded');
+      });
+      const seededMode = prototypeParams.get('trade') === 'sell' ? 'sell' : 'buy';
+      modeTabs.find(button => button.dataset.tradeMode === seededMode).click();
+      const seededOfferName = prototypeParams.get('offer');
+      const seededOffer = offers.find(offer => offer.dataset.mode === seededMode && offer.dataset.name === seededOfferName);
+      if (seededOffer) selectOffer(seededOffer);
+
+      function addLog(message) {
+        const lines = [...document.querySelectorAll('.screen-footer .log-line')];
+        if (!lines.length) return;
+        for (let i = lines.length - 1; i > 0; i -= 1) lines[i].innerHTML = lines[i - 1].innerHTML;
+        lines[0].innerHTML = `<span class="time">NOW</span><span>${message}</span>`;
+      }
+      window.addPrototypeLog = addLog;
+
+      if (prototypeParams.get('modal') === 'merchant') requestAnimationFrame(() => dialog.showModal());
+      if (prototypeParams.get('settle') === 'selected') requestAnimationFrame(() => {
+        if (!dialog.open) dialog.showModal();
+        document.querySelector('#complete-trade').click();
+      });
+    })();
+  </script>
+
+  <script>
+    (() => {
+      const SVG = 'http://www.w3.org/2000/svg';
+      const center = { x: 310, y: 310 };
+      const hexSize = 31;
+      const visibleHexSize = hexSize - 1.5;
+      const directions = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+      const resources = [
+        { key: 'food', name: 'Food', color: '#d97966' },
+        { key: 'water', name: 'Water', color: '#5b9fc4' },
+        { key: 'fuel', name: 'Fuel', color: '#d5a64e' },
+        { key: 'metal', name: 'Metal', color: '#8497a3' },
+        { key: 'minerals', name: 'Minerals', color: '#9a7cb4' },
+        { key: 'biomass', name: 'Biomass', color: '#78a276' }
+      ];
+      const eras = { 1: 'CRUDE PRODUCTION', 2: 'SETTLEMENT WORKS', 3: 'CRAFT', 4: 'EARLY INDUSTRIAL' };
+      const params = new URLSearchParams(location.search);
+      const definitions = [
+        { q: 1, r: 0, name: 'Foraging', short: 'FORAGE', effect: 'Establishes Food gathering at Act II population scale without re-unlocking the personal Forage action.', cost: {}, unlocks: ['Food production'] },
+        { q: 0, r: 1, name: 'Spring well', short: 'WELL', effect: 'Establishes local fresh-water production.', cost: { food: 4, biomass: 8 }, unlocks: ['Water production'] },
+        { q: -1, r: 1, name: 'Firepit', short: 'FIRE', effect: 'Establishes local conversion of Biomass into Fuel.', cost: { food: 3, biomass: 6 }, unlocks: ['Fuel production'] },
+        { q: -1, r: 0, name: 'Surface ore', short: 'ORE', effect: 'Establishes local gathering of native copper and bog iron.', cost: { food: 5, biomass: 10 }, unlocks: ['Metal production'] },
+        { q: 0, r: -1, name: 'Quarry pit', short: 'QUARRY', effect: 'Establishes local gathering of loose stone and clay.', cost: { food: 4, biomass: 7 }, unlocks: ['Minerals production'] },
+        { q: 1, r: -1, name: 'Woodcutting', short: 'WOOD', effect: 'Establishes Biomass gathering at Act II population scale without re-unlocking Split wood.', cost: {}, unlocks: ['Biomass production'] },
+
+        { q: 2, r: 0, name: 'Gamekeeping', short: 'GAME', effect: 'Managed traps and hunting grounds provide steadier food from wildlife.', cost: { food: 8, biomass: 6 } },
+        { q: 0, r: 2, name: 'Well & cistern', short: 'CISTRN', effect: 'Reliable water extraction and storage buffers dry periods.', cost: { water: 8, biomass: 6 } },
+        { q: -2, r: 2, name: 'Charcoal works', short: 'CHAR', effect: 'Controlled conversion of Biomass into Fuel at improved yield.', cost: { food: 4, biomass: 10 } },
+        { q: -2, r: 0, name: 'Smithy', short: 'SMITH', effect: 'Shapes and repairs available metal; unlocks basic metal tools.', cost: { metal: 5, biomass: 8 } },
+        { q: 0, r: -2, name: 'Stoneworks', short: 'STONE', effect: 'Dressed stone and aggregate support sturdier foundations and buildings.', cost: { minerals: 8, biomass: 6 } },
+        { q: 2, r: -2, name: 'Loom & ropewalk', short: 'LOOM', effect: 'Produces rope and cloth; enables clothing and rigging.', cost: { biomass: 12, food: 4 }, unlocks: ['Ropewalk · BUILD'] },
+        { q: 1, r: 1, name: 'Net fishery', short: 'NET', effect: 'Organized coastal fishing turns water access into a reliable food margin.', cost: { biomass: 10, water: 2 }, unlocks: ['Fishing net · BUILD'] },
+        { q: -1, r: 2, name: 'Peat works', short: 'PEAT', effect: 'Drains, cuts, and dries wetland peat for Fuel.', cost: { water: 4, biomass: 8 } },
+        { q: -2, r: 1, name: 'Smelting hearth', short: 'SMELT', effect: 'Charcoal-fired ore reduction establishes worked-metal production.', cost: { fuel: 4, metal: 3, biomass: 6 } },
+        { q: -1, r: -1, name: 'Masonry workshop', short: 'MASON', effect: 'Metal tooling shapes stone and improves Minerals yield.', cost: { metal: 2, minerals: 6, biomass: 4 } },
+        { q: 1, r: -2, name: 'Pottery works', short: 'POTTRY', effect: 'Fired vessels improve storage and reduce spoilage.', cost: { biomass: 8, minerals: 3 } },
+        { q: 2, r: -1, name: 'Field cultivation', short: 'FIELD', effect: 'Expands garden-scale growing into reliable crop production.', cost: { food: 10, biomass: 8 } },
+
+        { q: 3, r: 0, name: 'Salting & smoking', short: 'PRESRV', effect: 'Preserves food and sharply lowers spoilage.', cost: { food: 14, fuel: 4, minerals: 2 } },
+        { q: 0, r: 3, name: 'Aqueduct', short: 'AQUED', effect: 'Moves water across distance.', cost: { water: 14, minerals: 8, biomass: 4 } },
+        { q: -3, r: 3, name: 'Coal mining', short: 'COAL', effect: 'Extracts coal seams for a large Fuel yield.', cost: { fuel: 8, metal: 3, biomass: 6 } },
+        { q: -3, r: 0, name: 'Bronze casting', short: 'BRONZE', effect: 'Alloys support better tools and weapons.', cost: { metal: 12, fuel: 5, minerals: 3 } },
+        { q: 0, r: -3, name: 'Brickworks', short: 'BRICK', effect: 'Fired brick enables cheap, durable construction.', cost: { minerals: 14, fuel: 5, biomass: 4 } },
+        { q: 3, r: -3, name: 'Carpentry', short: 'CARP', effect: 'Joinery and planks support larger wooden buildings.', cost: { biomass: 18, metal: 2, food: 4 } },
+        { q: 2, r: 1, name: 'Fishing boats', short: 'FBOAT', effect: 'Reaches deep water and increases food yield.', cost: { biomass: 16, water: 8, metal: 2 } },
+        { q: 1, r: 2, name: 'Irrigation canals', short: 'IRRIG', effect: 'Farms no longer need river adjacency.', cost: { water: 12, minerals: 8, biomass: 6 } },
+        { q: -1, r: 3, name: 'Water wheel', short: 'WHEEL', effect: 'Provides mechanical power from rivers.', cost: { water: 10, biomass: 14, metal: 4 } },
+        { q: -2, r: 3, name: 'Tar pits', short: 'TAR', effect: 'Collects surface oil and bitumen.', cost: { fuel: 8, water: 6, biomass: 5 } },
+        { q: -3, r: 2, name: 'Bellows forge', short: 'BELLO', effect: 'Hotter fires make smelting faster.', cost: { fuel: 10, metal: 8, biomass: 4 } },
+        { q: -3, r: 1, name: 'Iron smelting', short: 'IRON', effect: 'Iron replaces bronze in core tools and structures.', cost: { fuel: 12, metal: 10, minerals: 4 } },
+        { q: -2, r: -1, name: 'Nails & fittings', short: 'NAILS', effect: 'Standard fasteners make construction cheaper.', cost: { metal: 12, fuel: 5, biomass: 4 } },
+        { q: -1, r: -2, name: 'Glassblowing', short: 'GLASS', effect: 'Produces glass from sand for windows and vessels.', cost: { minerals: 12, fuel: 8, biomass: 3 } },
+        { q: 1, r: -3, name: 'Lime kiln', short: 'LIME', effect: 'Mortar lets stone buildings gain height.', cost: { minerals: 14, fuel: 7, biomass: 4 } },
+        { q: 2, r: -3, name: 'Papermaking', short: 'PAPER', effect: 'Paper improves coordination and record-keeping.', cost: { biomass: 14, water: 8, minerals: 3 } },
+        { q: 3, r: -2, name: 'Animal husbandry', short: 'HERDS', effect: 'Livestock provides food plus hide.', cost: { food: 12, biomass: 10, water: 4 } },
+        { q: 3, r: -1, name: 'Granary', short: 'GRNRY', effect: 'Provides bulk food storage.', cost: { biomass: 12, minerals: 8, food: 6 } },
+
+        { q: 4, r: 0, name: 'Selective breeding', short: 'BREED', effect: 'Raises crop and livestock yields.', cost: { food: 24, water: 8, biomass: 10 } },
+        { q: 0, r: 4, name: 'Pumping station', short: 'PUMP', effect: 'Deep wells provide water almost anywhere.', cost: { water: 20, metal: 10, fuel: 6 } },
+        { q: -4, r: 4, name: 'Coke ovens', short: 'COKE', effect: 'Refines coal into high-grade coke.', cost: { fuel: 20, minerals: 8, metal: 4 } },
+        { q: -4, r: 0, name: 'Precision machining', short: 'MACH', effect: 'Machine parts improve efficiency across metal buildings.', cost: { metal: 24, fuel: 12, minerals: 6 } },
+        { q: 0, r: -4, name: 'Portland cement', short: 'CEMENT', effect: 'Produces modern concrete.', cost: { minerals: 24, fuel: 10, metal: 4 } },
+        { q: 4, r: -4, name: 'Managed forests', short: 'FOREST', effect: 'Provides sustainable, high-yield timber.', cost: { biomass: 28, water: 8, food: 6 } },
+        { q: 3, r: 1, name: 'Fish farming', short: 'AQUA', effect: 'Controls food production from water tiles.', cost: { food: 18, water: 14, biomass: 8 } },
+        { q: 2, r: 2, name: 'Ice houses', short: 'ICE', effect: 'Cold storage reduces spoilage to nearly zero.', cost: { water: 12, fuel: 10, minerals: 10 } },
+        { q: 1, r: 3, name: 'Sanitation', short: 'SANIT', effect: 'Clean water improves population health and growth.', cost: { water: 20, minerals: 10, metal: 4 } },
+        { q: -1, r: 4, name: 'Hydropower', short: 'HYDRO', effect: 'Dams provide large mechanical and electric energy.', cost: { water: 22, metal: 10, minerals: 8 } },
+        { q: -2, r: 4, name: 'Steam engine', short: 'STEAM', effect: 'Turns Fuel into work and powers factories.', cost: { fuel: 22, metal: 14, water: 6 } },
+        { q: -3, r: 4, name: 'Oil drilling', short: 'OIL', effect: 'Applies well technology to petroleum extraction.', cost: { fuel: 16, metal: 14, water: 8 } },
+        { q: -4, r: 3, name: 'Blast furnace', short: 'BLAST', effect: 'Uses coke to produce iron at scale.', cost: { fuel: 22, metal: 16, minerals: 8 } },
+        { q: -4, r: 2, name: 'Steelmaking', short: 'STEEL', effect: 'Unlocks steel and late structures.', cost: { fuel: 20, metal: 22, minerals: 8 } },
+        { q: -4, r: 1, name: 'Railways', short: 'RAIL', effect: 'Moves goods across the map at industrial scale.', cost: { metal: 24, fuel: 14, minerals: 10 } },
+        { q: -3, r: -1, name: 'Deep mining', short: 'DEEP', effect: 'Shaft mines improve both ore and stone yields.', cost: { metal: 14, minerals: 20, fuel: 10 } },
+        { q: -2, r: -2, name: 'Reinforced concrete', short: 'RCONC', effect: 'Steel and concrete support tall buildings.', cost: { metal: 18, minerals: 22, fuel: 8 } },
+        { q: -1, r: -3, name: 'Plate glass', short: 'PGLASS', effect: 'Large panes enable greenhouses and factories.', cost: { minerals: 20, fuel: 14, metal: 6 } },
+        { q: 1, r: -4, name: 'Porcelain', short: 'PORCLN', effect: 'Creates fine ceramics for trade goods and money.', cost: { minerals: 18, biomass: 8, fuel: 10 } },
+        { q: 2, r: -4, name: 'Pulp mill', short: 'PULP', effect: 'Industrial paper provides a large coordination boost.', cost: { biomass: 22, water: 12, metal: 6 } },
+        { q: 3, r: -4, name: 'Lumber yard', short: 'LUMBER', effect: 'Standardized timber makes building faster and cheaper.', cost: { biomass: 24, metal: 8, minerals: 6 } },
+        { q: 4, r: -3, name: 'Fertilizer', short: 'FERT', effect: 'Compost and manure raise farm yield.', cost: { biomass: 18, food: 12, minerals: 8 } },
+        { q: 4, r: -2, name: 'Crop rotation', short: 'ROTATE', effect: 'Sustains soil and prevents yield decay.', cost: { food: 18, biomass: 16, water: 8 } },
+        { q: 4, r: -1, name: 'Food processing', short: 'PROCESS', effect: 'Mills and presses multiply food output.', cost: { food: 22, biomass: 12, metal: 8 } }
+      ];
+
+      const svg = document.querySelector('#structure-board');
+      const camera = document.querySelector('#board-camera');
+      const tileGroup = document.querySelector('#board-tiles');
+      const labelGroup = document.querySelector('#board-labels');
+      const tooltip = document.querySelector('#board-tooltip');
+      const boardPane = document.querySelector('#board-pane');
+      const zoomOutButton = document.querySelector('[data-board-zoom-out]');
+      const zoomInButton = document.querySelector('[data-board-zoom-in]');
+      const resetBoardButton = document.querySelector('[data-board-reset]');
+      const zoomLevelOutput = document.querySelector('#board-zoom-level');
+      const detail = document.querySelector('#structure-detail');
+      const statusOutput = document.querySelector('#structure-status');
+      const balances = window.prototypeResources;
+      const tiles = [];
+      const tileByName = new Map();
+      const tileByCoord = new Map();
+      const researched = new Set(['Foraging', 'Woodcutting']);
+      let selected = null;
+      const requestedBoardFilter = params.get('filter') || 'all';
+      let boardFilter = ['researched', 'available', 'all'].includes(requestedBoardFilter) ? requestedBoardFilter : 'all';
+      const minBoardScale = 0.75;
+      const maxBoardScale = 2.5;
+      let boardScale = 1;
+      let boardPanX = 0;
+      let boardPanY = 0;
+      let boardDrag = null;
+      let suppressBoardClick = false;
+
+      function node(name, attrs = {}) {
+        const element = document.createElementNS(SVG, name);
+        Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+        return element;
+      }
+
+      function applyBoardView() {
+        camera.setAttribute('transform', `matrix(${boardScale} 0 0 ${boardScale} ${boardPanX} ${boardPanY})`);
+        zoomLevelOutput.textContent = `${Math.round(boardScale * 100)}%`;
+        zoomOutButton.disabled = boardScale <= minBoardScale + 0.001;
+        zoomInButton.disabled = boardScale >= maxBoardScale - 0.001;
+        resetBoardButton.disabled = Math.abs(boardScale - 1) < 0.001 && Math.abs(boardPanX) < 0.001 && Math.abs(boardPanY) < 0.001;
+      }
+
+      function zoomBoard(nextScale, focus = center) {
+        const targetScale = Math.max(minBoardScale, Math.min(maxBoardScale, nextScale));
+        if (Math.abs(targetScale - boardScale) < 0.001) return false;
+        const ratio = targetScale / boardScale;
+        boardPanX = focus.x - (focus.x - boardPanX) * ratio;
+        boardPanY = focus.y - (focus.y - boardPanY) * ratio;
+        boardScale = targetScale;
+        applyBoardView();
+        return true;
+      }
+
+      function panBoard(deltaX, deltaY) {
+        boardPanX += deltaX;
+        boardPanY += deltaY;
+        applyBoardView();
+      }
+
+      function resetBoardView() {
+        boardScale = 1;
+        boardPanX = 0;
+        boardPanY = 0;
+        applyBoardView();
+      }
+
+      function boardViewState() {
+        return { scale: boardScale, panX: boardPanX, panY: boardPanY };
+      }
+
+      function clientToBoardPoint(clientX, clientY) {
+        const rect = svg.getBoundingClientRect();
+        const viewBox = svg.viewBox.baseVal;
+        return { x: viewBox.x + (clientX - rect.left) * viewBox.width / rect.width, y: viewBox.y + (clientY - rect.top) * viewBox.height / rect.height };
+      }
+
+      function finishBoardDrag(event, allowClickSuppression) {
+        if (!boardDrag || event.pointerId !== boardDrag.pointerId) return;
+        if (allowClickSuppression && boardDrag.moved) {
+          suppressBoardClick = true;
+          requestAnimationFrame(() => { suppressBoardClick = false; });
+        }
+        if (svg.hasPointerCapture?.(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+        boardDrag = null;
+        svg.classList.remove('is-panning');
+      }
+
+      function setupBoardCamera() {
+        zoomOutButton.addEventListener('click', () => zoomBoard(boardScale - 0.2));
+        zoomInButton.addEventListener('click', () => zoomBoard(boardScale + 0.2));
+        resetBoardButton.addEventListener('click', resetBoardView);
+        svg.addEventListener('wheel', event => {
+          event.preventDefault();
+          const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+          zoomBoard(boardScale * factor, clientToBoardPoint(event.clientX, event.clientY));
+        }, { passive: false });
+        svg.addEventListener('pointerdown', event => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          boardDrag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, panX: boardPanX, panY: boardPanY, moved: false };
+        });
+        svg.addEventListener('pointermove', event => {
+          if (!boardDrag || event.pointerId !== boardDrag.pointerId) return;
+          const dx = event.clientX - boardDrag.startX;
+          const dy = event.clientY - boardDrag.startY;
+          if (!boardDrag.moved) {
+            if (Math.hypot(dx, dy) < 4) return;
+            boardDrag.moved = true;
+            svg.setPointerCapture?.(event.pointerId);
+          }
+          const rect = svg.getBoundingClientRect();
+          const viewBox = svg.viewBox.baseVal;
+          boardPanX = boardDrag.panX + dx * viewBox.width / rect.width;
+          boardPanY = boardDrag.panY + dy * viewBox.height / rect.height;
+          svg.classList.add('is-panning');
+          hideTooltip();
+          applyBoardView();
+          event.preventDefault();
+        });
+        svg.addEventListener('pointerup', event => finishBoardDrag(event, true));
+        svg.addEventListener('pointercancel', event => finishBoardDrag(event, false));
+        svg.addEventListener('click', event => {
+          if (!suppressBoardClick) return;
+          suppressBoardClick = false;
+          event.preventDefault();
+          event.stopPropagation();
+        }, true);
+        applyBoardView();
+      }
+
+      function ringOf(q, r) {
+        return Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+      }
+
+      function coordKey(q, r) {
+        return `${q},${r}`;
+      }
+
+      function axialToPixel(q, r) {
+        return { x: center.x + Math.sqrt(3) * hexSize * (q + r / 2), y: center.y + 1.5 * hexSize * r };
+      }
+
+      function pointAt(x, y, size, degrees) {
+        const angle = degrees * Math.PI / 180;
+        return { x: x + Math.cos(angle) * size, y: y + Math.sin(angle) * size };
+      }
+
+      function hexVertices(x, y, size = visibleHexSize) {
+        return [-30, 30, 90, 150, 210, 270].map(angle => pointAt(x, y, size, angle));
+      }
+
+      function hexPoints(x, y, size = visibleHexSize) {
+        return hexVertices(x, y, size).map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+      }
+
+      function classify(q, r) {
+        const ring = ringOf(q, r);
+        for (let resource = 0; resource < 6; resource += 1) {
+          if (q === ring * directions[resource][0] && r === ring * directions[resource][1]) {
+            return { ring, kind: 'pure', resources: [resource] };
+          }
+        }
+        for (let resource = 0; resource < 6; resource += 1) {
+          const next = (resource + 1) % 6;
+          for (let k = 1; k < ring; k += 1) {
+            const candidateQ = ring * directions[resource][0] + k * (directions[next][0] - directions[resource][0]);
+            const candidateR = ring * directions[resource][1] + k * (directions[next][1] - directions[resource][1]);
+            if (q === candidateQ && r === candidateR) return { ring, kind: 'hybrid', resources: [resource, next], k };
+          }
+        }
+        throw new Error(`Cannot classify axial coordinate ${q},${r}`);
+      }
+
+      function blendHexColors(first, second, secondWeight = 0.5) {
+        const channels = [1, 3, 5].map(offset => {
+          const firstChannel = parseInt(first.slice(offset, offset + 2), 16);
+          const secondChannel = parseInt(second.slice(offset, offset + 2), 16);
+          return Math.round(firstChannel * (1 - secondWeight) + secondChannel * secondWeight);
+        });
+        return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+      }
+
+      function mixHexColors(first, second) {
+        return blendHexColors(first, second);
+      }
+
+      function materialResourcesFor(tile) {
+        const markerCount = tile.ring === 4 && tile.kind === 'hybrid' ? 3 : tile.ring >= 3 ? 2 : tile.resources.length;
+        const materialResources = [...tile.resources];
+        for (const key of Object.keys(tile.cost)) {
+          const resource = resources.findIndex(candidate => candidate.key === key);
+          if (resource >= 0 && !materialResources.includes(resource)) materialResources.push(resource);
+          if (materialResources.length === markerCount) break;
+        }
+        if (materialResources.length < markerCount) throw new Error(`Not enough material references for ${tile.name}`);
+        return materialResources.slice(0, markerCount);
+      }
+
+      function angleDistance(first, second) {
+        return Math.abs(((first - second + 540) % 360) - 180);
+      }
+
+      function hybridRailGeometry(tile, resource) {
+        const otherResource = tile.resources.find(candidate => candidate !== resource);
+        const vertices = hexVertices(tile.x, tile.y, visibleHexSize - 2.6);
+        const edges = [0, 1, 2, 3, 4, 5].filter(edge => angleDistance(edge * 60, resource * 60) < angleDistance(edge * 60, otherResource * 60));
+        if (edges.length !== 3) throw new Error(`Expected three rail edges for ${tile.name}`);
+        const edgeSet = new Set(edges);
+        const start = edges.find(edge => !edgeSet.has((edge + 5) % 6));
+        const points = [0, 1, 2, 3].map(step => vertices[(start + step) % 6]);
+        return {
+          edges,
+          path: points.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+        };
+      }
+
+      function pureRailGeometry(tile) {
+        const vertices = hexVertices(tile.x, tile.y, visibleHexSize - 2.6);
+        return {
+          edges: [0, 1, 2, 3, 4, 5],
+          path: `${vertices.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')} Z`
+        };
+      }
+
+      function tileFill(tile) {
+        if (tile.kind === 'pure') return blendHexColors(resources[tile.resources[0]].color, '#555b63', 0.28);
+        const midpoint = mixHexColors(resources[tile.resources[0]].color, resources[tile.resources[1]].color);
+        return blendHexColors(midpoint, '#555b63', 0.28);
+      }
+
+      function drawBackdrop() {
+        for (let resource = 0; resource < 6; resource += 1) {
+          const angle = resource * 60;
+          const labelPoint = pointAt(center.x, center.y, 274, angle);
+          const label = node('text', { class: 'sector-label', x: labelPoint.x, y: labelPoint.y + 3 });
+          label.textContent = resources[resource].name.toUpperCase();
+          labelGroup.append(label);
+        }
+      }
+
+      function buildHub() {
+        const hub = node('g', { class: 'hex-tile resource-hub researched', role: 'img', 'aria-label': 'Ring 0 foundation', 'data-ring': '0' });
+        const title = node('title');
+        title.textContent = 'Ring 0 foundation';
+        const shape = node('polygon', { class: 'hub-shape', points: hexPoints(center.x, center.y) });
+        hub.append(title, shape);
+        tileGroup.append(hub);
+      }
+
+      definitions.forEach(definition => {
+        const classification = classify(definition.q, definition.r);
+        const point = axialToPixel(definition.q, definition.r);
+        const tile = { ...definition, ...classification, ...point };
+        tile.materialResources = materialResourcesFor(tile);
+        if (tileByCoord.has(coordKey(tile.q, tile.r))) throw new Error(`Duplicate technology coordinate ${tile.q},${tile.r}`);
+        tileByCoord.set(coordKey(tile.q, tile.r), tile);
+        tileByName.set(tile.name, tile);
+        tiles.push(tile);
+      });
+      if (tiles.length !== 60) throw new Error(`Expected 60 technologies, found ${tiles.length}`);
+
+      const seededResearch = params.get('researched');
+      if (seededResearch) seededResearch.split(',').map(name => name.trim()).filter(name => tileByName.has(name)).forEach(name => researched.add(name));
+
+      function neighbors(tile) {
+        return directions.map(([dq, dr]) => tileByCoord.get(coordKey(tile.q + dq, tile.r + dr))).filter(Boolean);
+      }
+
+      function tileState(tile) {
+        if (researched.has(tile.name)) return 'researched';
+        if (tile.ring === 1) return 'available';
+        return neighbors(tile).some(candidate => candidate.ring < tile.ring && researched.has(candidate.name)) ? 'available' : 'locked';
+      }
+
+      function outwardNeighbors(tile) {
+        return neighbors(tile).filter(candidate => candidate.ring > tile.ring);
+      }
+
+      function createTechnologyTile(tile) {
+        const primary = resources[tile.resources[0]];
+        const secondary = tile.resources.length > 1 ? resources[tile.resources[1]] : null;
+        const fill = tileFill(tile);
+        const stroke = secondary ? mixHexColors(primary.color, secondary.color) : primary.color;
+        const materialKeys = tile.materialResources.map(resource => resources[resource].key);
+        const group = node('g', { class: `hex-tile tech-tile ${tile.kind}`, 'data-name': tile.name, 'data-q': tile.q, 'data-r': tile.r, 'data-ring': tile.ring, 'data-material-count': materialKeys.length, 'data-materials': materialKeys.join(',') });
+        const title = node('title');
+        const polygon = node('polygon', { class: 'hex-shape', points: hexPoints(tile.x, tile.y), fill, stroke });
+        const resourceRails = secondary ? tile.resources.map(resource => {
+          const geometry = hybridRailGeometry(tile, resource);
+          return node('path', {
+            class: 'resource-rail hybrid-rail',
+            d: geometry.path,
+            stroke: resources[resource].color,
+            'data-resource': resources[resource].key,
+            'data-edges': geometry.edges.join(','),
+            'aria-hidden': 'true'
+          });
+        }) : [(() => {
+          const geometry = pureRailGeometry(tile);
+          return node('path', {
+            class: 'resource-rail pure-rail',
+            d: geometry.path,
+            stroke: primary.color,
+            'data-resource': primary.key,
+            'data-edges': geometry.edges.join(','),
+            'aria-hidden': 'true'
+          });
+        })()];
+        const label = node('text', { class: 'hex-label', x: tile.x, y: tile.y + 2.5 });
+        label.textContent = tile.short;
+        const markerSpacing = 5.5;
+        const markerStartX = tile.x - (tile.materialResources.length - 1) * markerSpacing / 2;
+        const materialMarkers = tile.materialResources.map((resource, index) => node('circle', {
+          class: 'material-marker',
+          cx: markerStartX + index * markerSpacing,
+          cy: tile.y + 16,
+          r: 2,
+          fill: resources[resource].color,
+          'data-resource': resources[resource].key,
+          'aria-hidden': 'true'
+        }));
+        group.append(title, polygon, ...resourceRails, label, ...materialMarkers);
+        group.append(node('circle', { class: 'research-marker', cx: tile.x + 17, cy: tile.y - 16, r: 2.6 }));
+        group.addEventListener('click', () => selectTile(tile.name));
+        group.addEventListener('keydown', event => onTileKey(event, tile));
+        group.addEventListener('mouseenter', () => showTooltip(tile));
+        group.addEventListener('mousemove', moveTooltip);
+        group.addEventListener('mouseleave', hideTooltip);
+        tileGroup.append(group);
+        tile.el = group;
+        tile.title = title;
+        tile.shape = polygon;
+        tile.rails = resourceRails;
+        updateTileState(tile);
+      }
+
+      function updateTileState(tile) {
+        const state = tileState(tile);
+        tile.state = state;
+        tile.el.classList.remove('locked', 'available', 'researched');
+        tile.el.classList.add(state);
+        tile.el.dataset.state = state;
+        if (state === 'locked') {
+          tile.el.removeAttribute('role');
+          tile.el.removeAttribute('tabindex');
+          tile.el.removeAttribute('aria-label');
+          tile.el.setAttribute('aria-hidden', 'true');
+          tile.title.textContent = 'Locked technology';
+        } else {
+          const domain = tile.resources.map(index => resources[index].name).join(' + ');
+          tile.el.setAttribute('role', 'button');
+          tile.el.setAttribute('tabindex', '0');
+          tile.el.setAttribute('aria-label', `${tile.name}, ring ${tile.ring}, ${domain}, ${state}`);
+          tile.el.removeAttribute('aria-hidden');
+          tile.title.textContent = `${tile.name} · ${domain} · ${state}`;
+        }
+      }
+
+      function updateAllStates() {
+        tiles.forEach(updateTileState);
+        applyBoardFilters();
+      }
+
+      function formatCost(cost) {
+        const entries = Object.entries(cost);
+        return entries.length ? entries.map(([key, amount]) => `${amount} ${resources.find(resource => resource.key === key).name.toUpperCase()}`).join(' · ') : 'CARRIED FROM ACT I';
+      }
+
+      function deficitsFor(cost) {
+        return Object.entries(cost).filter(([key, amount]) => (balances?.[key] ?? 0) < amount).map(([key, amount]) => ({ key, amount: amount - (balances?.[key] ?? 0) }));
+      }
+
+      function formatDeficits(deficits) {
+        return deficits.map(({ key, amount }) => `${amount} ${resources.find(resource => resource.key === key).name.toUpperCase()}`).join(' · ');
+      }
+
+      function renderDetail(tile) {
+        const state = tileState(tile);
+        const resourceTags = tile.resources.map(index => `<span class="detail-tag">${resources[index].name.toUpperCase()}</span>`).join('');
+        const costEntries = Object.entries(tile.cost);
+        const costs = costEntries.length ? costEntries.map(([key, amount]) => `<li><strong>${amount} ${resources.find(resource => resource.key === key).name}</strong><span>${balances?.[key] ?? 0} held</span></li>`).join('') : '<li><strong>Act I foundation</strong><span>paid</span></li>';
+        const deficits = deficitsFor(tile.cost);
+        const canResearch = state === 'available' && deficits.length === 0;
+        const actionLabel = state === 'researched' ? 'RESEARCHED' : deficits.length ? `NEEDS ${formatDeficits(deficits)}` : 'RESEARCH →';
+        const outward = outwardNeighbors(tile);
+        const outwardMarkup = outward.length ? outward.map(candidate => `<li><strong>${candidate.name}</strong><span>${tileState(candidate)}</span></li>`).join('') : '<li><strong>Act III frontier</strong><span>outside this board</span></li>';
+        const explicitUnlocks = tile.unlocks?.length ? tile.unlocks.map(name => `<li><strong>${name}</strong><span>enabled</span></li>`).join('') : '';
+        detail.innerHTML = `<div class="detail-kicker">RING ${tile.ring} · ${eras[tile.ring]}</div><div class="detail-head"><h2 class="detail-name">${tile.name}</h2></div><div class="detail-tags"><span class="detail-tag">${tile.kind.toUpperCase()}</span>${resourceTags}<span class="detail-tag">${state.toUpperCase()}</span></div><div class="structure-research-action"><button class="primary-action" type="button" id="research-selected" ${canResearch ? '' : 'disabled'}>${actionLabel}</button><span>${formatCost(tile.cost)}</span></div><p class="detail-copy">${tile.effect}</p><section class="detail-section"><h3>RESEARCH COST</h3><ul class="detail-list">${costs}</ul></section><section class="detail-section"><h3>ENABLES OUTWARD</h3><ul class="detail-list">${explicitUnlocks}${outwardMarkup}</ul></section>`;
+        const action = detail.querySelector('#research-selected');
+        if (canResearch) action.addEventListener('click', () => researchTile(tile));
+      }
+
+      function renderEmptyDetail() {
+        detail.innerHTML = '<div class="detail-kicker">NO TECHNOLOGY SELECTED</div><div class="detail-head"><h2 class="detail-name">Research board</h2></div><p class="detail-copy">Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.</p>';
+      }
+
+      function selectTile(name, focus = false) {
+        const tile = tileByName.get(name);
+        if (!tile || tileState(tile) === 'locked') return false;
+        selected = tile;
+        tiles.forEach(candidate => {
+          candidate.el.classList.toggle('selected', candidate === tile);
+          candidate.el.classList.toggle('outward', outwardNeighbors(tile).includes(candidate));
+        });
+        renderDetail(tile);
+        const counts = stateCounts();
+        statusOutput.textContent = `${tile.name} selected · ${counts.researched} researched · ${counts.available} available`;
+        if (focus) tile.el.focus();
+        return true;
+      }
+
+      function clearSelection() {
+        selected = null;
+        tiles.forEach(tile => tile.el.classList.remove('selected', 'outward'));
+        renderEmptyDetail();
+        statusOutput.textContent = 'Selection cleared';
+      }
+
+      function stateCounts() {
+        return tiles.reduce((counts, tile) => { counts[tileState(tile)] += 1; return counts; }, { researched: 0, available: 0, locked: 0 });
+      }
+
+      function researchTile(tile) {
+        if (tileState(tile) !== 'available') return false;
+        const deficits = deficitsFor(tile.cost);
+        if (deficits.length) return false;
+        const before = new Set(tiles.filter(candidate => tileState(candidate) === 'available').map(candidate => candidate.name));
+        Object.entries(tile.cost).forEach(([key, amount]) => { balances[key] -= amount; });
+        researched.add(tile.name);
+        window.refreshPrototypeResources?.();
+        updateAllStates();
+        syncBuildUnlocks();
+        const newlyAvailable = tiles.filter(candidate => tileState(candidate) === 'available' && !before.has(candidate.name)).map(candidate => candidate.name);
+        renderDetail(tile);
+        const suffix = newlyAvailable.length ? ` ${newlyAvailable.join(', ')} now available.` : '';
+        statusOutput.textContent = `${tile.name} researched.${suffix}`;
+        window.addPrototypeLog?.(`${tile.name} is established. ${formatCost(tile.cost)} paid.${suffix}`);
+        dispatchEvent(new CustomEvent('prototype-research-changed', { detail: { name: tile.name, newlyAvailable } }));
+        return true;
+      }
+
+      function syncBuildUnlocks() {
+        document.querySelectorAll('.build-row[data-tech]').forEach(row => {
+          window.setPrototypeRecipeUnlocked?.(row.dataset.name, researched.has(row.dataset.tech));
+        });
+        window.refreshPrototypeExchange?.(tiles.filter(tile => tile.ring === 4 && researched.has(tile.name)).map(tile => tile.name));
+        window.refreshPrototypeBuild?.();
+      }
+
+      function showTooltip(tile) {
+        if (tileState(tile) === 'locked') return;
+        const domain = tile.resources.map(index => resources[index].name).join(' + ');
+        tooltip.innerHTML = `<span class="accent">${tile.name}</span><br>ring ${tile.ring} · ${domain.toLowerCase()} · ${tileState(tile)}`;
+        tooltip.hidden = false;
+      }
+
+      function moveTooltip(event) {
+        const rect = boardPane.getBoundingClientRect();
+        tooltip.style.left = `${Math.min(event.clientX - rect.left + 12, rect.width - 220)}px`;
+        tooltip.style.top = `${Math.max(4, event.clientY - rect.top + 12)}px`;
+      }
+
+      function hideTooltip() {
+        tooltip.hidden = true;
+      }
+
+      function onTileKey(event, tile) {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTile(tile.name); return; }
+        if (event.key === 'Escape') { event.preventDefault(); clearSelection(); return; }
+        const vectors = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        const direction = vectors[event.key];
+        if (!direction) return;
+        event.preventDefault();
+        const candidates = tiles.filter(candidate => candidate !== tile && tileState(candidate) !== 'locked' && !candidate.el.classList.contains('filtered-out') && !candidate.el.classList.contains('search-dim')).map(candidate => {
+          const dx = candidate.x - tile.x;
+          const dy = candidate.y - tile.y;
+          const forward = dx * direction[0] + dy * direction[1];
+          const lateral = Math.abs(dx * direction[1] - dy * direction[0]);
+          return { candidate, score: forward > 0 ? lateral * 3 + Math.hypot(dx, dy) : Infinity };
+        }).sort((a, b) => a.score - b.score);
+        if (candidates[0] && Number.isFinite(candidates[0].score)) selectTile(candidates[0].candidate.name, true);
+      }
+
+      function applyBoardFilters() {
+        const query = document.querySelector('#board-search').value.trim().toLowerCase();
+        tiles.forEach(tile => {
+          const state = tileState(tile);
+          const filterOut = boardFilter === 'researched' ? state !== 'researched' : boardFilter === 'available' ? state === 'locked' : false;
+          const searchDim = Boolean(query) && (state === 'locked' || !tile.name.toLowerCase().includes(query));
+          tile.el.classList.toggle('filtered-out', filterOut);
+          tile.el.classList.toggle('search-dim', searchDim);
+          if (state !== 'locked') tile.el.setAttribute('tabindex', filterOut || searchDim ? '-1' : '0');
+        });
+      }
+
+      drawBackdrop();
+      buildHub();
+      tiles.forEach(createTechnologyTile);
+      updateAllStates();
+      syncBuildUnlocks();
+      setupBoardCamera();
+
+      document.querySelectorAll('[data-board-filter]').forEach(button => {
+        const active = button.dataset.boardFilter === boardFilter;
+        button.setAttribute('aria-pressed', String(active));
+        button.addEventListener('click', () => {
+          boardFilter = button.dataset.boardFilter;
+          document.querySelectorAll('[data-board-filter]').forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === button)));
+          applyBoardFilters();
+        });
+      });
+      document.querySelector('#board-search').addEventListener('input', applyBoardFilters);
+      addEventListener('prototype-resources-changed', () => { if (selected) renderDetail(selected); });
+
+      const seededTech = params.get('tech') || 'Gamekeeping';
+      if (!selectTile(seededTech)) selectTile('Gamekeeping');
+      const researchParam = params.get('research');
+      if (researchParam) requestAnimationFrame(() => {
+        const target = researchParam === 'selected' ? selected : tileByName.get(researchParam);
+        if (target && tileState(target) !== 'locked') { selectTile(target.name); researchTile(target); }
+      });
+
+      window.prototypeBoard = {
+        tiles,
+        tileByName,
+        researched,
+        tileState,
+        selectTile,
+        researchTile,
+        stateCounts,
+        zoomBoard,
+        panBoard,
+        resetBoardView,
+        boardViewState
+      };
+    })();
+  </script>
+</body>
+</html>

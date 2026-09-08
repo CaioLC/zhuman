@@ -8,7 +8,7 @@
 //!   snares → Check traps, Air rifle → Hunt). Roundabout production made literal: spend
 //!   today's vigor, materials and hours, and a new verb exists tomorrow.
 //! - an **ActionModifier** mutates an *existing* margin once, at build and at break — an
-//!   action's Requires/Yields (Boots, Work gloves, Bicycle, Chainsaw), the larder's
+//!   action's Requires/Yields (Sandals, Work gloves, Bicycle, Chainsaw), the larder's
 //!   quality/spoilage (Cookpot, Root cellar), or the body's vigor ceiling (Bed, Pantry,
 //!   Medicine chest). The apply/remove pairs are that creation/destruction side effect.
 //! - a **Generator** runs continuously instead: `run_generator` pays its `upkeep` and
@@ -44,9 +44,10 @@ const Resources = res_mod.Resources;
 /// needs to sweep the catalog.
 pub const buildable_bundle = .{
     comp.FishRod,     comp.Hatchet,    comp.WireSnares,    comp.AirRifle,
-    comp.Boots,       comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
-    comp.RootCellar,  comp.Chainsaw,   comp.Bed,           comp.Pantry,
+    comp.Sandals,     comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
+    comp.RootCellar,  comp.Chainsaw,   comp.LeafBed,       comp.Pantry,
     comp.MedicineChest, comp.GardenBed, comp.ChickenCoop,
+    comp.Shelter,
 };
 
 /// The `Busy.Doing` name for a good's build — what `resolve_busy` dispatches on.
@@ -56,17 +57,18 @@ pub fn doing_of_good(comptime GoodT: type) comp.Busy.Doing {
         comp.Hatchet => .build_hatchet,
         comp.WireSnares => .build_wire_snares,
         comp.AirRifle => .build_air_rifle,
-        comp.Boots => .build_boots,
+        comp.Sandals => .build_sandals,
         comp.WorkGloves => .build_work_gloves,
         comp.Bicycle => .build_bicycle,
         comp.Cookpot => .build_cookpot,
         comp.RootCellar => .build_root_cellar,
         comp.Chainsaw => .build_chainsaw,
-        comp.Bed => .build_bed,
+        comp.LeafBed => .build_leaf_bed,
         comp.Pantry => .build_pantry,
         comp.MedicineChest => .build_medicine_chest,
         comp.GardenBed => .build_garden_bed,
         comp.ChickenCoop => .build_chicken_coop,
+        comp.Shelter => .build_shelter,
         else => @compileError("no Busy.Doing for " ++ @typeName(GoodT)),
     };
 }
@@ -82,10 +84,45 @@ pub fn prereq_of(comptime GoodT: type) ?type {
     };
 }
 
+/// Whether a good is **crude** — scrap-and-hands work, the tier one person can actually
+/// make in half a day. Everything else is manufactured, carrying ×8 the materials and ×10
+/// the hours (see `components.zig`). The split cuts across the three behavioral variants
+/// rather than restating them, and it is the roster's own fact, so it lives here beside
+/// `good_name` rather than in whichever screen happens to group by it.
+pub fn is_crude(comptime GoodT: type) bool {
+    return switch (GoodT) {
+        comp.Sandals, comp.LeafBed, comp.WireSnares, comp.RootCellar, comp.GardenBed => true,
+        else => false,
+    };
+}
+
 /// Whether `GoodT`'s prerequisite (if it has one) is satisfied on this agent.
 pub fn prereq_met(w: *World, e: Entity, comptime GoodT: type) bool {
     if (prereq_of(GoodT)) |P| return w.has(e, P);
     return true;
+}
+
+/// How many goods from the catalog this agent owns - the "you have made a life here"
+/// count an `unlock` measures against.
+pub fn goods_owned(w: *World, e: Entity) u32 {
+    var n: u32 = 0;
+    inline for (buildable_bundle) |G| {
+        if (w.has(e, G)) n += 1;
+    }
+    return n;
+}
+
+/// Whether the builder meets `GoodT`'s standing conditions - the second gate, beside
+/// `prereq_met`. A good with no `unlock` field has none, which is all of them but the
+/// Shelter. Checked at `begin_build` and not again: a dip mid-build doesn't stop work
+/// already paid for, the same rule every other act follows.
+pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
+    if (!@hasField(GoodT, "unlock")) return true;
+    const u = (GoodT{}).unlock;
+    const vigor, const food = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryFood });
+    if (vigor.v / vigor.max < u.vigor_frac) return false;
+    if (food.v < u.food) return false;
+    return goods_owned(w, e) >= u.goods;
 }
 
 /// The receipt line for a completed build.
@@ -95,17 +132,18 @@ fn built_msg(comptime GoodT: type) []const u8 {
         comp.Hatchet => "You built a hatchet. You can split wood now.",
         comp.WireSnares => "You set wire snares. Check them for game.",
         comp.AirRifle => "You assembled an air rifle. You can hunt now.",
-        comp.Boots => "You cobbled boots. Foraging costs less.",
+        comp.Sandals => "You bound sandals from bark. Foraging costs a little less.",
         comp.WorkGloves => "You stitched work gloves. Splitting wood costs less.",
         comp.Bicycle => "You rebuilt a bicycle. Distance got cheap.",
         comp.Cookpot => "You built a cookpot. Cooked food feeds you further.",
         comp.RootCellar => "You dug a root cellar. Food keeps twice as long.",
         comp.Chainsaw => "You got a chainsaw running. The engine works, not your back.",
-        comp.Bed => "You built a bed. You sleep properly now.",
+        comp.LeafBed => "You piled a leaf bed. You sleep off the ground now.",
         comp.Pantry => "You built a pantry. You eat properly now.",
         comp.MedicineChest => "You stocked a medicine chest. You mend properly now.",
         comp.GardenBed => "You planted a garden bed. It grows without you.",
         comp.ChickenCoop => "You raised a chicken coop. The hens lay without you.",
+        comp.Shelter => "You raised a shelter. There is room here for others.",
         else => @compileError("no build message for " ++ @typeName(GoodT)),
     };
 }
@@ -119,18 +157,21 @@ fn grant(w: *World, e: Entity, comptime GoodT: type) void {
         comp.WireSnares => w.add(e, comp.ActionCheckTraps{}),
         comp.AirRifle => w.add(e, comp.ActionHunt{}),
         // Modifiers: a one-shot mutation of a margin.
-        comp.Boots => apply_boots(w, e),
+        comp.Sandals => apply_sandals(w, e),
         comp.WorkGloves => apply_work_gloves(w, e),
         comp.Bicycle => apply_bicycle(w, e),
         comp.Cookpot => apply_cookpot(w, e),
         comp.RootCellar => apply_root_cellar(w, e),
         comp.Chainsaw => apply_chainsaw(w, e),
-        comp.Bed => health_apply(w, e, 2.0),
+        comp.LeafBed => health_apply(w, e, 1.0),
         comp.Pantry => health_apply(w, e, 2.0),
         comp.MedicineChest => health_apply(w, e, 2.0),
         // Generators: holding the component is the whole effect — `run_generators`
         // finds it by query from the next tick on.
         comp.GardenBed, comp.ChickenCoop => {},
+        // Shelter: holding it is the whole effect too, but what reads it is the screen -
+        // owning a shelter is the end of Act I (`pages.build_ui` routes on it).
+        comp.Shelter => {},
         else => @compileError("no grant for " ++ @typeName(GoodT)),
     }
 }
@@ -143,16 +184,16 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
         comp.Hatchet => w.remove(e, comp.ActionChopWood),
         comp.WireSnares => w.remove(e, comp.ActionCheckTraps),
         comp.AirRifle => w.remove(e, comp.ActionHunt),
-        comp.Boots => remove_boots(w, e),
+        comp.Sandals => remove_sandals(w, e),
         comp.WorkGloves => remove_work_gloves(w, e),
         comp.Bicycle => remove_bicycle(w, e),
         comp.Cookpot => remove_cookpot(w, e),
         comp.RootCellar => remove_root_cellar(w, e),
         comp.Chainsaw => remove_chainsaw(w, e),
-        comp.Bed => health_remove(w, e, 2.0),
+        comp.LeafBed => health_remove(w, e, 1.0),
         comp.Pantry => health_remove(w, e, 2.0),
         comp.MedicineChest => health_remove(w, e, 2.0),
-        comp.GardenBed, comp.ChickenCoop => {},
+        comp.GardenBed, comp.ChickenCoop, comp.Shelter => {},
         else => @compileError("no revoke for " ++ @typeName(GoodT)),
     }
 }
@@ -162,12 +203,12 @@ fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
 /// Begin building `GoodT`: pay its build price upfront and start the work — the good
 /// (and whatever it grants) arrives only when `finish_build` resolves, `requires.hours`
 /// later. Refuses silently if already owned, already busy (one body, one act), missing
-/// the good's prerequisite verb, or unaffordable — same gates as labor (energy strict,
+/// the good's prerequisite verb, short of its standing `unlock` conditions, or unaffordable — same gates as labor (energy strict,
 /// vigor 0 is death; materials may be spent to exactly 0). Dying mid-build loses the work.
 pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    if (w.has(e, GoodT)) return; // one per agent (SparseSet.add doesn't guard dupes)
     if (w.has(e, comp.Busy)) return; // one body, one act
     if (!prereq_met(w, e, GoodT)) return; // nothing to modify yet
+    if (!unlock_met(w, e, GoodT)) return; // standing conditions not met
     const vigor, const stock = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryMaterial });
     const cost = (GoodT{}).requires;
     if (cost.energy >= vigor.v or cost.materials > stock.v) return;
@@ -182,15 +223,85 @@ pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) 
 /// Completion of a build: own the good, apply what it does, log the receipt. Called by
 /// `systems.resolve_busy`; `begin_build`'s gates guarantee the good doesn't exist yet.
 pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
+    // A repeat build is stock, not a second effect: increment and say so. `w.add` a
+    // second time would not overwrite — `SparseSet.add` doesn't guard duplicates, so it
+    // would append a second dense entry and leave the index pointing at one of them.
+    if (w.get(e, GoodT)) |held| {
+        held.count += 1;
+        var buf: [64]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "Another {s}. You have {d}.", .{ good_name(GoodT), held.count }) catch "You made another.";
+        res.sim.log.push(.good, msg);
+        return;
+    }
     w.add(e, GoodT{});
-    grant(w, e, GoodT);
+    grant(w, e, GoodT); // the effect lands once, on the way in from absent
     res.sim.log.push(.good, built_msg(GoodT));
+}
+
+/// The good a `Busy.Doing` is building, or null for the labor verbs — the inverse of
+/// `doing_of_good`, and the reason a cancel can recover a price it was never handed.
+/// Comptime, so the caller reaches it through an `inline else` over the tag.
+fn good_of_doing(comptime d: comp.Busy.Doing) ?type {
+    return switch (d) {
+        .build_fish_rod => comp.FishRod,
+        .build_hatchet => comp.Hatchet,
+        .build_wire_snares => comp.WireSnares,
+        .build_air_rifle => comp.AirRifle,
+        .build_sandals => comp.Sandals,
+        .build_work_gloves => comp.WorkGloves,
+        .build_bicycle => comp.Bicycle,
+        .build_cookpot => comp.Cookpot,
+        .build_root_cellar => comp.RootCellar,
+        .build_chainsaw => comp.Chainsaw,
+        .build_leaf_bed => comp.LeafBed,
+        .build_pantry => comp.Pantry,
+        .build_medicine_chest => comp.MedicineChest,
+        .build_garden_bed => comp.GardenBed,
+        .build_chicken_coop => comp.ChickenCoop,
+        .build_shelter => comp.Shelter,
+        .forage, .scavenge, .fish, .chop_wood, .check_traps, .hunt => null, // labor, not a build
+    };
+}
+
+/// Abandon a build in progress: salvage `config.cancel_refund` of its materials and free
+/// the body. The energy and every hour already spent are gone — this is an exit from a
+/// four-day build with an emptying larder, not an undo.
+///
+/// Refuses on a labor verb: `Busy` covers both, and half-foraging is not a thing you can
+/// take materials back from. Returns whether it cancelled.
+pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
+    const busy = w.get(e, comp.Busy) orelse return false;
+    switch (busy.doing) {
+        inline else => |d| {
+            if (comptime good_of_doing(d)) |G| {
+                const refund = (G{}).requires.materials * res.config.cancel_refund;
+                const stock = ecs.getMany(w, e, .{comp.InventoryMaterial});
+                stock.v += refund;
+                w.remove(e, comp.Busy);
+                var buf: [96]u8 = undefined;
+                const msg = std.fmt.bufPrint(
+                    &buf,
+                    "You gave up on the {s}. Salvaged {d:.0} materials.",
+                    .{ good_name(G), refund },
+                ) catch "You gave up on the build.";
+                res.sim.log.push(.warn, msg);
+                return true;
+            }
+            return false;
+        },
+    }
 }
 
 /// Break a good: its effect leaves with it. Nothing calls this yet (no durability);
 /// written now so every grant/revoke pair stays symmetric.
 pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    if (!w.has(e, GoodT)) return;
+    const held = w.get(e, GoodT) orelse return;
+    // Spares go first, and the effect only leaves with the last one — losing a spare
+    // pair of sandals must not cost you the discount you are still wearing.
+    if (held.count > 1) {
+        held.count -= 1;
+        return;
+    }
     revoke(w, e, GoodT);
     w.remove(e, GoodT);
     var buf: [64]u8 = undefined;
@@ -205,15 +316,16 @@ pub fn good_name(comptime GoodT: type) []const u8 {
         comp.Hatchet => "hatchet",
         comp.WireSnares => "wire snares",
         comp.AirRifle => "air rifle",
-        comp.Boots => "boots",
+        comp.Sandals => "sandals",
         comp.WorkGloves => "work gloves",
         comp.Bicycle => "bicycle",
         comp.Cookpot => "cookpot",
         comp.RootCellar => "root cellar",
         comp.Chainsaw => "chainsaw",
-        comp.Bed => "bed",
+        comp.LeafBed => "leaf bed",
         comp.Pantry => "pantry",
         comp.MedicineChest => "medicine chest",
+        comp.Shelter => "shelter",
         comp.GardenBed => "garden bed",
         comp.ChickenCoop => "chicken coop",
         else => @compileError("no name for " ++ @typeName(GoodT)),
@@ -240,13 +352,13 @@ pub fn break_fish_rod(w: *World, e: Entity, res: *Resources) void {
 // mean/scale) and `.sd` together so the distribution's relative shape is preserved (and
 // `.sd == 0`, meaning "auto-derive", stays exactly 0 either way).
 
-pub fn apply_boots(w: *World, agent: Entity) void {
+pub fn apply_sandals(w: *World, agent: Entity) void {
     const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy *= 0.7;
+    forage.requires.energy *= 0.85;
 }
-pub fn remove_boots(w: *World, agent: Entity) void {
+pub fn remove_sandals(w: *World, agent: Entity) void {
     const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy /= 0.7;
+    forage.requires.energy /= 0.85;
 }
 
 pub fn apply_work_gloves(w: *World, agent: Entity) void {
@@ -314,7 +426,7 @@ pub fn remove_chainsaw(w: *World, agent: Entity) void {
 // --- Health goods: capacity capital -------------------------------------------------
 // Bed / Pantry / Medicine chest each raise the vigor *ceiling*. Apply also fills what it
 // adds (first night in a real bed, you wake refreshed), so `v/max` — the fraction the
-// warmth theme, the status word and `yield_factor` all read — never dips on an upgrade.
+// status word, the vitals figure and `yield_factor` all read — never dips on an upgrade.
 // All mutations are relative (+=/−=), so a future aging system decrementing `max`
 // composes underneath without special cases.
 
@@ -396,9 +508,10 @@ fn spawn_test_agent(w: *World) Entity {
 test "build pays upfront and starts the work; finish grants the rod and the verb" {
     var w = World.init();
     var res = test_res();
+    const price = (comp.FishRod{}).requires; // from the catalog, so a re-price can't rot this
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
-        comp.InventoryMaterial{ .v = 8 }, // exactly the price — spendable to 0
+        comp.InventoryMaterial{ .v = price.materials }, // exactly the price — spendable to 0
     });
     try std.testing.expect(!w.has(e, comp.ActionFish)); // no rod, no verb
 
@@ -407,11 +520,11 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
     // Paid and busy — the rod doesn't exist until the work completes.
     try std.testing.expect(!w.has(e, comp.FishRod));
     try std.testing.expect(!w.has(e, comp.ActionFish));
-    try std.testing.expectEqual(@as(f32, 7), w.get(e, comp.Vigor).?.v); // 10 − 3 energy
-    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // 8 − 8
+    try std.testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
+    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // spent to 0
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.build_fish_rod, b.doing);
-    try std.testing.expectEqual(res_mod.hours_to_secs(12, res.config.secs_per_day), b.total);
+    try std.testing.expectEqual(res_mod.hours_to_secs(price.hours, res.config.secs_per_day), b.total);
 
     finish_fish_rod(&w, e, &res);
     try std.testing.expect(w.has(e, comp.FishRod));
@@ -419,28 +532,61 @@ test "build pays upfront and starts the work; finish grants the rod and the verb
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
-test "build_fish_rod refuses when unaffordable, owned, or busy" {
+test "build_fish_rod refuses when unaffordable or busy" {
     var w = World.init();
     var res = test_res();
+    const price = (comp.FishRod{}).requires;
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
-        comp.InventoryMaterial{ .v = 7 }, // one material short
+        comp.InventoryMaterial{ .v = price.materials - 1 }, // one material short
     });
 
     build_fish_rod(&w, e, &res);
     try std.testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
 
-    w.get(e, comp.InventoryMaterial).?.v = 20;
+    w.get(e, comp.InventoryMaterial).?.v = price.materials + 12;
     build_fish_rod(&w, e, &res); // starts the build
     build_fish_rod(&w, e, &res); // busy — must refuse, not double-pay
     try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v); // paid once
 
     w.remove(e, comp.Busy);
     finish_fish_rod(&w, e, &res);
-    build_fish_rod(&w, e, &res); // owned — must refuse (one per agent)
+    build_fish_rod(&w, e, &res); // owned, but 12 materials short of the price
     try std.testing.expect(!w.has(e, comp.Busy));
     try std.testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v);
+}
+
+test "a repeat build is stock: the count rises, the effect does not" {
+    var w = World.init();
+    var res = test_res();
+    const price = (comp.Sandals{}).requires;
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = price.materials * 3;
+    const base = w.get(e, comp.ActionForage).?.requires.energy;
+
+    begin_build(&w, e, &res, comp.Sandals);
+    finish_build(&w, e, &res, comp.Sandals);
+    const once = w.get(e, comp.ActionForage).?.requires.energy;
+    try std.testing.expectEqual(@as(u32, 1), w.get(e, comp.Sandals).?.count);
+    try std.testing.expect(once < base); // the first pair is capital in use
+
+    // Owning it no longer refuses the build — that is what makes a good sellable.
+    begin_build(&w, e, &res, comp.Sandals);
+    finish_build(&w, e, &res, comp.Sandals);
+    try std.testing.expectEqual(@as(u32, 2), w.get(e, comp.Sandals).?.count);
+    try std.testing.expectEqual(once, w.get(e, comp.ActionForage).?.requires.energy); // no second discount
+
+    // Kinds, not units: four pairs of sandals are never four goods built.
+    try std.testing.expectEqual(@as(u32, 1), goods_owned(&w, e));
+
+    // Losing a spare keeps the discount; losing the last pair takes it back.
+    break_good(&w, e, &res, comp.Sandals);
+    try std.testing.expectEqual(@as(u32, 1), w.get(e, comp.Sandals).?.count);
+    try std.testing.expectEqual(once, w.get(e, comp.ActionForage).?.requires.energy);
+    break_good(&w, e, &res, comp.Sandals);
+    try std.testing.expect(!w.has(e, comp.Sandals));
+    try std.testing.expectApproxEqAbs(base, w.get(e, comp.ActionForage).?.requires.energy, 1e-5);
 }
 
 test "break_fish_rod revokes the verb with the tool" {
@@ -499,15 +645,18 @@ test "modifier pairs are symmetric — apply then remove restores the margin" {
     var w = World.init();
     const e = spawn_test_agent(&w);
 
-    apply_boots(&w, e);
+    apply_sandals(&w, e);
     apply_bicycle(&w, e);
     const forage = w.get(e, comp.ActionForage).?;
     const scav = w.get(e, comp.ActionScavenge).?;
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.7 * 0.6), forage.requires.energy, 1e-5);
+    // Two goods on one verb stack rather than supersede: crude footwear and a bicycle are
+    // both in use at once. A *better tool replacing a weaker one* is the other rule, and
+    // it has no subject yet (docs/roadmap.md, Act I).
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.85 * 0.6), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.6), scav.requires.energy, 1e-5);
 
     remove_bicycle(&w, e);
-    remove_boots(&w, e);
+    remove_sandals(&w, e);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0), scav.requires.energy, 1e-5);
 }
@@ -538,14 +687,14 @@ test "health goods raise the ceiling and fill what they add; removal clamps" {
     const e = spawn_test_agent(&w);
     w.get(e, comp.InventoryMaterial).?.v = 10;
 
-    begin_build(&w, e, &res, comp.Bed);
-    finish_build(&w, e, &res, comp.Bed);
+    begin_build(&w, e, &res, comp.LeafBed);
+    finish_build(&w, e, &res, comp.LeafBed);
     const vigor = w.get(e, comp.Vigor).?;
-    try std.testing.expectEqual(@as(f32, 12), vigor.max);
-    // 10 − 3 energy paid at begin = 7, then +2 filled on completion.
+    try std.testing.expectEqual(@as(f32, 11), vigor.max); // the crude bed buys 1, not 2
+    // 10 − 2 energy paid at begin = 8, then +1 filled on completion.
     try std.testing.expectEqual(@as(f32, 9), vigor.v);
 
-    break_good(&w, e, &res, comp.Bed);
+    break_good(&w, e, &res, comp.LeafBed);
     try std.testing.expectEqual(@as(f32, 10), vigor.max);
     try std.testing.expectEqual(@as(f32, 9), vigor.v); // still under the ceiling
 }
@@ -585,4 +734,121 @@ test "a generator pays its upkeep and deposits its flow, per day" {
     // Broke now — the next day can't pay the upkeep, so nothing moves.
     run_generators(&w, &res);
     try std.testing.expectApproxEqAbs(fed, w.get(e, comp.InventoryFood).?.v, 1e-6);
+}
+
+/// An agent stocked to build a shelter: the unlock's three conditions all met, and enough
+/// materials for the price. Individual conditions are then knocked out one at a time.
+fn spawn_settler(w: *World) Entity {
+    return w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 }, // 1.0 >= 0.8
+        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= 20
+        comp.InventoryMaterial{ .v = 100 }, // >= the 80 price
+        comp.Sandals{},
+        comp.LeafBed{},
+        comp.Cookpot{},
+        comp.WireSnares{}, // four goods owned >= 4
+    });
+}
+
+test "the shelter is offered only once its standing conditions are met" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_settler(&w);
+
+    try std.testing.expectEqual(@as(u32, 4), goods_owned(&w, e));
+    try std.testing.expect(unlock_met(&w, e, comp.Shelter));
+
+    begin_build(&w, e, &res, comp.Shelter);
+    const b = w.get(e, comp.Busy).?;
+    try std.testing.expectEqual(comp.Busy.Doing.build_shelter, b.doing);
+    try std.testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 10 - 6 energy
+    try std.testing.expectEqual(@as(f32, 20), w.get(e, comp.InventoryMaterial).?.v); // 100 - 80
+
+    // Vigor fell below the fraction mid-build - the work is already paid for, so it stands.
+    try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+
+    finish_build(&w, e, &res, comp.Shelter);
+    try std.testing.expect(w.has(e, comp.Shelter));
+    try std.testing.expectEqual(@as(u32, 4), w.get(e, comp.Shelter).?.capacity);
+}
+
+test "each standing condition refuses the shelter on its own" {
+    var res = test_res();
+
+    // Too tired: 7/10 is under the 0.8 fraction, though the absolute is plentiful.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.get(e, comp.Vigor).?.v = 7;
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+    // Larder too thin.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.get(e, comp.InventoryFood).?.v = 19;
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+    // Nothing built yet - a full larder is not a settled life.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        w.remove(e, comp.Sandals);
+        try std.testing.expectEqual(@as(u32, 3), goods_owned(&w, e));
+        try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
+        begin_build(&w, e, &res, comp.Shelter);
+        try std.testing.expect(!w.has(e, comp.Busy));
+    }
+}
+
+test "a good with no unlock field has no standing conditions" {
+    var w = World.init();
+    const e = spawn_test_agent(&w); // 0 food, nothing built, and it does not matter
+    try std.testing.expect(unlock_met(&w, e, comp.FishRod));
+    try std.testing.expect(unlock_met(&w, e, comp.ChickenCoop));
+}
+
+test "cancel salvages half the materials, frees the body, and grants nothing" {
+    var w = World.init();
+    var res = test_res();
+    const price = (comp.FishRod{}).requires;
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryMaterial{ .v = price.materials },
+    });
+
+    build_fish_rod(&w, e, &res);
+    try std.testing.expect(w.has(e, comp.Busy));
+    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // paid in full
+
+    try std.testing.expect(cancel_build(&w, e, &res));
+    try std.testing.expect(!w.has(e, comp.Busy)); // the body is free again
+    try std.testing.expect(!w.has(e, comp.FishRod)); // and owns nothing for the trouble
+    try std.testing.expect(!w.has(e, comp.ActionFish));
+    try std.testing.expectApproxEqAbs(
+        price.materials * res.config.cancel_refund,
+        w.get(e, comp.InventoryMaterial).?.v,
+        1e-5,
+    );
+    // The energy is gone with the hours — cancelling is an exit, not an undo.
+    try std.testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
+}
+
+test "cancel refuses on labor, and on an idle body" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+
+    try std.testing.expect(!cancel_build(&w, e, &res)); // nothing in progress
+
+    w.add(e, comp.Busy{ .doing = .forage, .total = 10, .remaining = 4, .quality = 1 });
+    try std.testing.expect(w.has(e, comp.Busy));
+    const before = w.get(e, comp.InventoryMaterial).?.v;
+    try std.testing.expect(!cancel_build(&w, e, &res)); // `Busy` covers labor too
+    try std.testing.expect(w.has(e, comp.Busy)); // still foraging
+    try std.testing.expectEqual(before, w.get(e, comp.InventoryMaterial).?.v);
 }

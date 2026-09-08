@@ -46,7 +46,7 @@ pub const Style = struct {
 pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
 // Every scalar below is authored at one reference resolution and never adapts to the window.
-// The scale-factor fix is in docs/roadmap.md under "UI foundation"; it multiplies in here, at
+// The scale-factor fix is in docs/roadmap.md under "Act I"; it multiplies in here, at
 // `apply` time.
 
 // A generic typography scale (font size only — colors are game art direction and live

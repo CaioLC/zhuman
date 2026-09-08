@@ -26,13 +26,14 @@ pub const fill = @import("fill.zig");
 pub const outline = @import("outline.zig");
 pub const image = @import("image.zig");
 pub const svg = @import("svg.zig");
+pub const line = @import("line.zig");
 
 /// The registered features, **in draw order** (back → front): a solid fill under any
 /// image/vector, under text, with the outline ring last so it shows over opaque tiles.
 /// The list's order *is* the z-order — the render walk (`draw.draw_tree`) iterates it
 /// per node. Add a feature by adding its module and one entry here (and its `RenderData`
 /// field). Only nodes sharing several aspects (a button's text+outline) see the order.
-pub const list = .{ fill, image, svg, text, outline };
+pub const list = .{ fill, image, svg, line, text, outline };
 
 /// Compile-time conformance check for one feature `F` — the closest Zig gets to
 /// "implements Interface". Verifies the required surface *and* that the hand-written
@@ -58,6 +59,7 @@ comptime {
 // Keeps widget/call-site churn to zero while the definitions live with their feature.
 
 pub const data_text = text.attach;
+pub const data_line = line.attach;
 pub const data_img = image.attach_texture;
 pub const data_sprite = image.attach_sprite;
 pub const data_svg = svg.attach;

@@ -33,6 +33,8 @@ pub const mix = theme.mix; // per-channel color blend
 pub const rgb = theme.rgb; // opaque RGB shorthand
 pub const UiState = ctx_binding.UiState;
 pub const Sprite = ctx_binding.Sprite;
+pub const Point = ctx_binding.Point; // a polyline vertex in a node's unit square (see features/line.zig)
+pub const Stroke = ctx_binding.Stroke; // what a polyline is drawn with — color + width
 pub const icon_sprite = ctx_binding.icon_sprite;
 
 // draw

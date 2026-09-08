@@ -80,6 +80,15 @@ pub const El = struct {
         return self;
     }
 
+    /// Displace this node in px from wherever its anchor or its parent's flow put it.
+    /// `.center` plus a computed delta is polar placement — the way anything positioned
+    /// by its own arithmetic (a radial board, a graph) reaches the screen.
+    pub fn with_offset(self: El, dx: f32, dy: f32) El {
+        self.node.layout.offset_x = dx;
+        self.node.layout.offset_y = dy;
+        return self;
+    }
+
     /// Overflow handling for this node's content (`.visible` / `.clip`).
     pub fn with_overflow(self: El, o: ui.features.Overflow) El {
         self.node.layout.overflow = o;
@@ -89,6 +98,16 @@ pub const El = struct {
     /// Compose a style spec onto the node (see `style.apply`) — style only, no placement.
     pub fn with_style(self: El, spec: anytype) El {
         style.apply(self.ctx, self.node, spec);
+        return self;
+    }
+
+    /// Take this node out of hit-testing: it is neither flagged nor does it occlude
+    /// what is drawn beneath it. For a node queried *only* to read its own geometry
+    /// back — `scroll_view`'s content, which needs last frame's height for the scroll
+    /// clamp — because `mark` stops at the topmost node it hits, and a bare geometry
+    /// probe sitting over a button would otherwise swallow the click.
+    pub fn pass_through(self: El) El {
+        self.ctx.setPassThrough(self.node.key, true);
         return self;
     }
 };
@@ -147,6 +166,16 @@ pub fn sprite(ctx: *UiCtx, parent: El, id: []const u8, spr: Sprite, px: f32) !El
 pub fn svg(ctx: *UiCtx, parent: El, id: []const u8, path: [:0]const u8, px: f32) !El {
     const node = try child(ctx, parent, id);
     try feat.data_svg(ctx, node, path, px);
+    return .{ .ctx = ctx, .node = node };
+}
+
+/// A polyline through `pts` — node-local coordinates in the unit square, so (0,0) is this
+/// node's top-left and (1,1) its bottom-right. Unlike the other content leaves this one
+/// does **not** size itself: points are relative, so the caller gives the node a box
+/// (`with_size`) and the line stretches to fill it.
+pub fn line(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, stroke: cb.Stroke) !El {
+    const node = try child(ctx, parent, id);
+    feat.data_line(ctx, node, pts, stroke);
     return .{ .ctx = ctx, .node = node };
 }
 

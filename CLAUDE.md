@@ -41,6 +41,7 @@ got there — git holds the history.
 | How does the UI engine work? nodes, the key-cache, interaction, layout | [`src/ui/README.md`](src/ui/README.md) |
 | How do I build a screen? elements, `El`, the style fold, paint features, the theme | [`src/ui_client/README.md`](src/ui_client/README.md) |
 | What is the game *for*? the vision, the acts, the locked decisions | [`docs/design.md`](docs/design.md) |
+| How should a screen be shaped? the surfaces, the grammar, the constraints | [`docs/ui_design.md`](docs/ui_design.md) |
 | What is next, what is broken, what is deliberately not built? | [`docs/roadmap.md`](docs/roadmap.md) |
 
 ## Layers

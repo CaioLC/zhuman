@@ -32,10 +32,13 @@ const App = struct {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
         try sdl.init(.{ .video = true, .events = true });
         try sdl.ttf.init();
+        // Sized to the BUILD panel, which is the tallest screen: five shelves of tiles whose
+        // width grew with the manufactured tier's three-digit prices, so they wrap two to a
+        // row. Resizable, and the columns do not yet reflow (docs/roadmap.md, Act I).
         const window, const renderer = try sdl.render.Renderer.initWithWindow(
             "Human Action",
-            800,
-            600,
+            900,
+            820,
             .{ .resizable = true },
         );
         var frame_capper = sdl.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
@@ -146,14 +149,20 @@ pub fn main() !void {
         // Update Stage
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
-        // 2. update game systems
-        ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
-        ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
-        ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
-        ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
-        ha.capital.run_generators(&app.world, &app.resources); // capital that runs itself
-        ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
-        ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
+        // 2. update game systems — but only while the run is still being played. A housed
+        // actor has ended Act I, and the curtain is a still frame: without this the world
+        // would keep spoiling and starving behind the dialog, and a win left on screen
+        // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
+        const housed = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = &app.world };
+        if (housed.get() == null) {
+            ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
+            ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
+            ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
+            ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
+            ha.capital.run_generators(&app.world, &app.resources); // capital that runs itself
+            ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
+            ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
+        }
         // 3. update ui
         app.ui.mark(.hovering, app.resources.input.mouse_x, app.resources.input.mouse_y);
         app.ui.beginFrame();
@@ -168,7 +177,7 @@ pub fn main() !void {
         }
 
         // Render Stage
-        // window — cleared to the theme's own background, so it shifts cold/warm too
+        // window — cleared to the theme's own background, not a fixed color
         const bg = app.resources.view.theme.bg;
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();

@@ -1,125 +1,380 @@
-# Roadmap
+# Product roadmap
 
-**The only document that discusses what isn't built.** Everything else describes what is —
-the game's design is [`design.md`](design.md), the code is [`../src/README.md`](../src/README.md),
-[`../src/ui/README.md`](../src/ui/README.md) and
-[`../src/ui_client/README.md`](../src/ui_client/README.md). A gap, a limitation, an intention
-or an argument about a future feature belongs here, and only here.
+**The only document that discusses what is not built.** Gaps, limitations, sequencing, deferred ideas, and arguments about future work belong here and nowhere else. Present-tense product rules live in [`design.md`](design.md) and [`ui_design.md`](ui_design.md); implemented architecture lives in [`../src/README.md`](../src/README.md), [`../src/ui/README.md`](../src/ui/README.md), and [`../src/ui_client/README.md`](../src/ui_client/README.md).
 
-## The horizon: Act II
+This roadmap preserves the pre-existing simulation, economics, content, later-act, engine, performance, and tooling work while mapping the finalized Act I/II HTML prototypes exhaustively onto the Zig/SDL product. Prototype parity is the immediate delivery focus, not permission to erase unrelated future work.
 
-Multi-agent simulation — per-agent vigor and inventories, per-agent demands, typed materials
-and recipes, barter with exchange-ratio discovery, specialization by comparative advantage.
-Blocked on the open design questions in [`design.md`](design.md), which can't be settled before
-agents exist.
+Work is split below by architectural responsibility and tied back together by the dependency spine. `src/ui/` remains a generic, extractable immediate-mode engine; `src/ui_client/` binds that engine to SDL; `src/pages/templates/` owns game-specific reusable compositions; `src/pages/` owns screens and applies user intent to the simulation; simulation modules own authoritative rules and atomic state changes.
 
-Two pieces of Act I's foundation were built and then removed in the actions/capital redesign.
-Both have to come back before Act II can start:
+## 0. Contract for using the prototypes
 
-- **Population + carrying capacity** — Act I's win condition (crossing to pop 2) and the
-  shelter-sets-capacity growth model of locked decision #2. No `Population` component exists
-  today.
-- **The decider abstraction** — the `decide → act` split with a non-UI decider driving the same
-  resolution the player's clicks do. The split exists in shape (the player is the only decider);
-  no AI decider does.
+### Source precedence
 
-## Sim
+When two references disagree, use this order:
 
-- **Balance the numbers.** Every rate is a first guess: `base_rate` 1.5 food/day at normal
-  ration, the ½× / 1× / 2× ration multipliers, starvation at 4 vigor/day, spoilage at 0.05/s,
-  the ×0.7 penalty below 35% vigor, and the per-action hour costs (Forage 4h, Fish 5h, Chop 6h,
-  rod build 12h). Playtesting retunes them. The *global* rates are `res.Config` fields, so
-  retuning those is a field edit; the per-agent ones (`Metabolism.base_rate`,
-  `InventoryFood.spoils`, each action's `Requires`/`Yields`) are component defaults at the
-  spawn site.
-- **Capital decay** — durable goods should degrade on a slow trickle and need maintenance, the
-  way food spoils fast. Nothing wears today; goods are permanent once built.
-- **Cancelling a running act** — deliberately not built. A `Busy` runs to completion or dies
-  with the agent. The refund question can wait until a 12h build feels like a trap.
-- **Finish the category tags.** `tags.zig` has `Food` / `Comfort` / `Tool` / `WoodCutting` and
-  stops. Nothing reads them yet, so the set is neither complete nor load-bearing — settle it
-  when something (the catalog browser's chips, an AI decider's preferences) actually needs to
-  group goods.
-- **SparseSet memory scaling** — `world.zig`'s `SparseSet(T)` allocates three
-  `[MAX_ENTITIES]`-sized arrays (`dense_ids`, `dense_values`, `sparse`) per component type
-  regardless of how many entities carry `T`, so cost is `num_types × MAX_ENTITIES`, not
-  occupancy. Harmless at one agent and ~10 types; real once the capital roster reaches the
-  hundreds, or `MAX_ENTITIES` has to grow to fit more agents — entity ids are never recycled, so
-  it is a lifetime-spawn cap, not a live-population one. The fix: size the dense arrays to
-  occupancy, and back the `sparse` index with a hashmap for cold component types while hot ones
-  (`Vigor`, `InventoryFood`) keep the flat array — a per-type storage policy decided once, where
-  `Storages(ns)` builds each `SparseSet(T)`. Contained to `world.zig` (the storage swap) and
-  `ecs.zig`, whose `Query` driver loop reads `.dense_ids` / `.dense_values` / `.len` directly
-  and would have to go through methods instead.
+1. `prototypes/act-i.html` and `prototypes/act-ii.html` as the rendered-product and interaction truth, including their current embedded scripts.
+2. `prototypes/prototype.css` for exact visual tokens, density, state styling, breakpoints, clipping, and transition timing.
+3. `prototypes/UNIFIED_UI_SPEC.md` for cross-act component identity, vocabulary, and normalization decisions.
+4. `docs/hex_tech_board_spec.md` for the canonical Act II board topology, coordinates, technology roster, migration rules, and board invariants.
+5. Screenshots in `prototypes/` as visual regression fixtures. Screenshots with older merchant wording or the obsolete direct-barter Act II exchange do not override current HTML.
+6. `docs/design.md` and `docs/ui_design.md` for game rules outside the rendered prototype. An unresolved economic rule remains a blocker or fixture-backed interface; UI code must not silently invent it.
 
-## HUD
+The final prototype commit deliberately removed the visible `blocked` recipe state, normalized the merchant modal, adopted query-and-sort BUILD in both acts, made milestone cards collapsible, and established per-view Holdings collapse. Dead CSS or stale screenshot text is not a feature request. HTML is authoritative for rendered behavior; the explicit cross-act economic and topology invariants below override fixture-data drift. In particular, the unified `1:1` rule makes the Act I `12m` versus Act II `8 biomass` Garden bed mismatch a bug: normalize the shared recipe to `8` rather than preserving two prices.
 
-- **Finish removing COLD↔WARM.** The temperature identity is two-thirds gone and the leftovers
-  are inert: `draw_scanlines` no longer exists, `compute_warmth` is defined and re-exported but
-  never called, and `build_ui` pins the theme at a hardcoded `palette.lerp(0.6)`. Decide it
-  either way — revive warmth by wiring `compute_warmth` back into `build_ui`, or finish the
-  removal and collapse `palette.zig` to a single palette, dropping `cold`/`warm`/`lerp` and
-  `compute_warmth`. Leaving it half-done means the code reads as if a mechanic exists that does
-  not.
-- **Vigor sparkline** — needs a new persistence mechanism: a `Vigor`-history component plus a
-  system sampling it on a fixed cadence, reset on death.
-- **Distribution-curve glyph** — needs a new engine draw primitive. Nothing renders a polyline
-  today; only rect fill/outline, text, image and svg.
-- **Catalog browser + capital tray** — a second, text-first presentation of the action and
-  capital rosters. Returns with the design prototype's favorites (`☆`/`★`), hover tooltips and
-  per-good build state folded in.
-- **Progress-ring polish** — a glanceable in-progress build indicator on the capital tile; the
-  only cue today is the hover tooltip.
-- **Scroll-thumb dragging** — `pages/templates/scroll_view.zig` is wheel-only; the track and
-  thumb render but don't respond to drag.
+### Native translation rules
 
-## UI foundation (`src/ui_client/`)
+The implementation is not a browser port and must not grow a CSS or DOM interpreter.
 
-- **Retire `widgets.zig`.** The pre-`elements` palette is unreferenced — nothing outside
-  `ui_client/` calls it, since the screens moved onto `pages/templates/`. Deleting it and
-  `root.zig`'s re-exports also drops the duplicate `scroll_speed` / `scrollbar_w` constants that
-  `pages/templates/scroll_view.zig` already carries. Its `modal`, `tooltip` and `text_input`
-  have no template equivalent yet, so those three want rebuilding on the foundation first rather
-  than plain deletion. `text_input` in particular has no live consumer at all — it returns with
-  the catalog browser's search box.
-- **Responsive scaling** — every UI scalar (the `default_font`/`h1` ladder, `pad`/`pad_sym`,
-  `gap`, `stroke_w`, and the fixed px sizes callers pass) is authored at one reference
-  resolution in `style.zig` and never adapts, so the HUD reads too small or too large on a much
-  bigger, smaller, or high-DPI screen. The fix: a global scale factor derived once per frame
-  from window size and DPI, held on `res.view` beside `theme`, that the style fragments multiply
-  into every dimension at `apply` time — authoring stays in reference units while output tracks
-  the display. Composes with responsive layout below: scale each box, then reflow the scaled
-  boxes.
-- **Responsive layout** — the Resources/Log column (`top_left`) and the tabbed center column can
-  overlap at some window sizes and aspect ratios. Independent anchors don't collision-avoid:
-  each places from its own point and lets `fit_children` grow as large as it grows. The fix is a
-  layout pass that reflows and shrinks columns against the live window size instead of anchoring
-  and growing.
+- CSS selectors become explicit Zig template state and style fragments.
+- CSS grid layouts become the smallest required engine sizing primitive plus ordinary row/column composition. A general web-grid engine is out of scope.
+- Media queries become frame-local `ViewMetrics` and explicit compact/narrow template branches.
+- ARIA becomes keyboard behavior, visible focus, semantic metadata, and an accessibility bridge where the platform supports one.
+- URL hashes/query parameters are prototype review controls, not player-facing desktop requirements. Equivalent deterministic states belong in a development fixture/deep-link harness; normal tab, query, sort, disclosure, camera, and collapse state persists in keyed UI/session state.
+- Native HTML controls (`dialog`, `search`, `select`, `range`) become reusable SDL controls with equivalent pointer, keyboard, focus, disabled, and dismissal behavior.
+- Prototype JavaScript that mutates balances is illustrative wiring. Production UI calls authoritative simulation operations and never completes half of a trade, build, research payment, or act transition locally.
 
-## UI engine (`src/ui/`)
+### Non-negotiable product invariants
 
-Gaps in the extraction unit itself. Its README describes only what the engine *does*.
+- Act I has Vigor, Food, and generic Materials; Act II has Vigor, Population, Coin, Food, Water, Fuel, Metal, Minerals, and Biomass.
+- At the Act I curtain, Food carries unchanged and unspent Materials converts to Biomass at exactly `1:1`. Built goods remain built. Same-named Act I material costs and Act II biomass costs remain numerically equal.
+- Energy is a flow/rate in the runline, never a stockline balance.
+- Act I has ACTIONS and BUILD. Act II adds STRUCTURE.
+- Act I ACTIONS is a compact static roster; Act II ACTIONS is a 20-entry searchable/sortable catalog.
+- BUILD uses one data-generated six-column recipe catalog in both acts. Impossible/prerequisite-locked recipes are absent, not grey `blocked` rows. Newly eligible recipes appear with an event-log announcement.
+- Recipe states visible to the player are `ready`, `reach`, `owned`, and `building`; milestone states are `locked`, `unfunded`, `ready`, and `done` (`built`/`standing` copy is act-specific).
+- Shelter and Exchange share one milestone component. Passerby, Merchant, and Exchange share one market-strip/trade-dialog skeleton with identity-specific wording.
+- Holdings collapse is remembered separately for ACTIONS and BUILD. Entering STRUCTURE forces collapse each time without overwriting those memories.
+- ACTIONS and BUILD retain the four-line event log. STRUCTURE alone hides it.
+- The Act II board contains one noninteractive ring-0 foundation plus exactly 60 technology tiles in rings 1–4. It does not reserve Act III rings.
 
-- **Sizing combinators** — `range`/`max_of`, `stretch`/`align-content`, and a `strictness: f32`
-  driving a violation-resolution pass that distributes slack and overflow among siblings. The
-  per-axis `SizeRule` solve is in place; this extends it.
-- **Clip-aware hit-testing** — `Layout.overflow` crops the render walk, but `mark` still tests a
-  slot's raw rect, so a node scrolled out of its viewport stays clickable. The fix is
-  intersecting the clip rect in `mark` — the second consumer that put `overflow` in core rather
-  than in the host's `RenderData`. This is also what would make **input capture** a mechanism
-  rather than host policy: today a modal does not block the widgets built underneath it, which
-  is safe only while the guarded action is idempotent.
-- **O(interactive) `stamp_rects`** — the event stage is already O(interactive), since `mark`
-  iterates live slots carrying their own rects with no tree walk. `stamp_rects` is the one
-  O(all) pass left, because it reads geometry that only exists on the tree. It could match if
-  `query` pushed nodes onto a per-frame list, at the cost of threading that list through `Ctx`.
-- **Focus pruning** — `Ctx.focused` is not swept the way interaction slots are, so a focused
-  node that stops being built leaves it set. The host clears it today.
+### Repository constraints
 
-## Tooling
+- [ ] **BASE-01 — Keep all layer boundaries enforceable.** `src/ui/` imports no SDL, game, theme value, or `Resources` field; `src/ui_client/` imports only the engine and SDL-facing resources; templates/screens may know game vocabulary; simulation modules know no UI types.
+- [ ] **BASE-02 — Keep ECS reflection files pure.** `src/components.zig` and `src/tags.zig` contain only public component/tag struct declarations. Helpers, enums not intended as components, catalog metadata, quote types, and algorithms live in non-reflected modules or private declarations.
+- [ ] **BASE-03 — Preserve the green baseline after every implementation slice.** Required commands are `zig build test-ui`, `zig build test`, and `zig build`. Add a new focused build step only when it shortens a real loop; do not weaken an existing target to make it pass.
+- [ ] **BASE-04 — Update present-tense documentation with each landed capability.** A finished engine/client change updates the matching README in the same slice and removes its future entry here. Do not leave stale “not built” comments in code.
+- [ ] **BASE-05 — Give every repeated row/tile a stable domain ID.** Node keys must derive from stable action/recipe/technology/offer IDs, not current sort position, translated display text, pointer address, or filtered index. Selection, focus, scroll anchors, animation, and cached textures must survive reorder/filter operations.
+- [ ] **BASE-06 — Add debug duplicate-key diagnostics.** In debug builds, detect duplicate sibling/path keys during frame construction and report the full structural path before pooled state aliases silently. Cover loops and conditionally inserted children.
 
-- **`q.iter()` completion.** A query's `next()` returns a `@Type`-constructed tuple, which no
-  language server evaluates, so destructuring it resolves to nothing. Worked around by
-  annotating multi-fetch destructures. Declaring `Query`'s params as a concrete `[]const type`
-  instead of `anytype` was measured and changes nothing — the limit is `@Type`, and it lifts on
-  its own if ZLS's comptime interpreter grows support for it.
+## 1. Current baseline to retain
+
+Do not replace working mechanisms merely because the HTML used a browser feature.
+
+- The ephemeral arena tree, structural Wyhash keys, typed keyed pools, pruning/eviction, and handle-not-pointer rule remain the persistence model.
+- Last-frame geometry, paint-order hit testing, topmost occlusion, clip-aware rejection, pass-through probes, and ancestor bubbling remain the interaction foundation.
+- Fixed/content/percent/fit sizing, row/column flow, wrapping, reverse order, main-axis distribution, cross-axis alignment, baseline alignment, gap, padding, anchors, offsets, scroll translation, and overflow clipping remain the layout foundation.
+- Multi-root rendering remains the overlay/layering model.
+- The feature registry and `RenderData` conformance check remain the rendering extension seam.
+- `El`, content leaves, style fragments, game templates, and direct inline intent handling remain the composition model.
+- Existing action/build affordability, distribution statistics, `Busy` progress, build cancellation/refund, good counts, spare-first breaking, log storage, and the basic Shelter food/goods gates are starting points rather than work to recreate.
+
+## 2. Dependency spine and delivery slices
+
+Implement and validate vertical slices in this order. A later slice may use deterministic fixture data before its simulation backend is complete, but fixture-only behavior is not product completion.
+
+1. **Foundation safety:** BASE tasks, input/focus, text, responsive metrics, remaining-space sizing, geometry, and reusable overlay/scroll controls.
+2. **Shared visual language:** tokens, shell, header, rail, navigation, strips, catalog controls, rows/tiles, Body, milestone, trade modal, and log.
+3. **Act I parity:** static actions, live BUILD, continuous eating, live Shelter, passerby barter, responsive shell, and transition migration.
+4. **Act II shell/catalog parity:** typed HUD, population/coin, searchable actions, 50-recipe-capable BUILD, coin merchant, and Exchange lifecycle.
+5. **STRUCTURE:** hex math, geometry, shape hits, research state, detail, camera, filters/search, keyboard, and BUILD/Exchange synchronization.
+6. **Hardening:** screenshot matrix, keyboard-only journeys, semantic bridge, performance/leak checks, cleanup, and stale-path removal.
+
+Critical dependencies:
+
+- Persistent Holdings requires `VIEW-01`, `UIE-03`, and `KIT-05`.
+- Search/sort and trade dialogs require `INPUT-01..07`, `TEXT-01..04`, and `KIT-08`/`KIT-15`.
+- Honest distribution curves and board tiles require `RENDER-03`.
+- Board selection requires `UIE-05`; board panning requires `INPUT-05`; board keyboard navigation requires `UIE-04` and `INPUT-06`.
+- Act I trade UI requires authoritative encounter state, quotes, atomic barter, marginal pricing, and supersession (`ACT1-12..16`), not just a modal.
+- Live Act II UI requires typed ledgers/catalog snapshots (`ACT2-01..07`). Board chrome can be fixture-built earlier, but research completion cannot ship against prototype-local balances.
+
+## 3. Generic engine work — `src/ui/`
+
+### Persistent state and identity
+
+- [ ] **UIE-01 — Honor state initialization rather than blindly zeroing every type.** Extend `Pool(T)` with an explicit initialization convention (`T.init`, a supplied initializer, or a documented zeroable trait). Preserve zero initialization for truly zeroable states. Add tests proving nonzero enum/default values initialize correctly, holes reuse safely, and resource-owning states still deinitialize exactly once.
+- [ ] **UIE-02 — Add optional persistence policy for conditionally hidden UI state.** Per-view query/sort/scroll/collapse state must not disappear merely because its subtree is not built for one tab. Prefer one always-built shell state containing all view state; if the pool gains retention/grace frames, keep that mechanism generic, bounded, and tested. Do not retain whole trees.
+
+### Layout and responsive composition
+
+- [ ] **UIE-03 — Add the minimum remaining-space and constraint sizing needed by the shell.** Support a child that consumes available main-axis space beside fixed siblings, plus per-axis minimum/maximum bounds. Define deterministic overflow/shrink behavior and preserve the current pure, callback-free solve. Required cases: `252px rail + gap + flexible surface`, `36px collapsed rail + flexible surface`, dialog side columns plus a flexible preview, and a viewport whose header/footer stay fixed while the result collection fills the remainder.
+  - Test nested fixed/flexible rows and columns, padding, wrap, min/max clamping, zero remaining space, and multiple grow children.
+  - Do not implement a CSS grid parser; synchronized catalog columns may remain a template concern.
+- [ ] **UIE-04 — Add a generic focus registry and lifecycle.** A frame can register focusable keys in traversal order, identify the focused key, move next/previous, and prune or repair focus when a key disappears or becomes disabled. Keep focus singular and key-based. Support roving groups so tabs and the board can own directional navigation without every tile entering global Tab order.
+  - Test focus removal, disabled targets, wrap/no-wrap traversal, conditional subtrees, and stable focus after reorder by domain key.
+- [ ] **UIE-05 — Add shape-aware hit testing.** Extend an interaction slot with optional host-supplied hit logic or equivalent local-shape metadata. `mark` still applies clip, paint order, pass-through, and ancestor bubbling, but rejects points outside the shape before claiming the hit.
+  - The generic engine must not know what a hexagon is.
+  - Test that transparent hex-bounding-box corners fall through to the correct neighbor/background and that a clipped shape cannot hit outside its viewport.
+- [ ] **UIE-06 — Add pointer capture by key.** Once a host captures a pointer for a key, motion/release is routed to that key even outside its last rect until explicit release, cancellation, disappearance, or focus loss. Capture must coexist with topmost hit testing and must be pruned safely.
+  - Test slider drag, scrollbar drag, board pan, release outside, disappearing capture owner, and no click-through after a captured drag.
+- [ ] **UIE-07 — Define event consumption across nested controls.** Preserve ancestor hover bubbling, but let a child action such as build-cancel consume activation so the containing row does not also start a build. The API must remain immediate-mode and typed; do not add a callback bus.
+- [ ] **UIE-08 — Expose enough local/global geometry conversion for overlays and board math.** Provide tested helpers for point/rect conversion relative to a node and its effective clip. Keep prior-frame reads explicit. Tooltips, pointer-centered zoom, popup placement, and drag thresholds must not duplicate ad-hoc coordinate subtraction.
+- [ ] **UIE-09 — Keep stamping complexity in perspective.** Do not block the 61-hex board on an O(interactive) `stamp_rects` rewrite. Profile the complete five-pass frame first; optimize stamping only if measured frame data identifies it as material.
+
+## 4. Host input, focus, and semantics — `src/ui_client/`, `src/res.zig`, `src/main.zig`
+
+- [ ] **INPUT-01 — Replace edge-only mouse input with a frame event/state model.** Track pointer position/delta, button pressed/held/released, wheel x/y, click count, active pointer ID/type, modifier keys, key press/repeat/release, text input, window focus, and cancellation. Reset frame edges in one place.
+- [ ] **INPUT-02 — Activate controls on release, not raw mouse-down.** A click begins on press, activates only when a valid release completes, and is suppressed after a drag/cancel. Keep an explicit press event for controls that need it. Verify build, action, offer, tab, disclosure, and close controls cannot double-fire.
+- [ ] **INPUT-03 — Route input through the engine's ordered hit/capture mechanisms.** Pointer hover/press/release/wheel targets the topmost eligible slot. Modal scrims and popups block covered controls by construction; callers do not sprinkle `if (!modal_open)` guards across unrelated screens.
+- [ ] **INPUT-04 — Add interaction states required by the visual contract.** The host vocabulary must represent at least hover, pressed/held, released/clicked, disabled, focused/focus-visible, selected/checked, and dragging/captured where applicable. Keep semantic state (selected/disabled) authoritative in widget/domain state rather than as unowned latching flags.
+- [ ] **INPUT-05 — Wire pointer capture and drag thresholds.** Sliders, scroll thumbs, and board panning use capture. Board pan starts only after a 4px logical movement threshold and suppresses the tile click generated by the same gesture. Cursor state supports default, pointer, text, grab/grabbing, horizontal-resize, and not-allowed where SDL/platform APIs permit.
+- [ ] **INPUT-06 — Implement keyboard command routing.** Support Tab/Shift+Tab, arrows, Enter, Space, Escape, `/`, Backspace/Delete, Home/End, and text input without the current global Escape-to-quit conflict. The focused overlay/view receives Escape first; quitting is a separate unhandled command.
+- [ ] **INPUT-07 — Complete single-line editing.** Search fields support UTF-8 insertion/deletion, caret movement, selection, Home/End, clipboard shortcuts when available, placeholder, clear action, focus-visible chrome, and an explicit maximum query length with visible/non-silent refusal.
+- [ ] **INPUT-08 — Add semantic metadata to interactive nodes/templates.** Represent role, accessible label, value text, selected/expanded/disabled/checked state, relationships where useful, and polite live announcements. Keep it host-side if core need not inspect it.
+- [ ] **INPUT-09 — Implement and document the platform accessibility bridge.** Expose the semantic tree to Windows accessibility APIs if feasible through the chosen SDL/native integration. At minimum, ship full keyboard operation, visible focus, non-color state cues, and live-announcement plumbing; explicitly record any screen-reader limitation rather than claiming HTML ARIA parity that SDL does not provide.
+- [ ] **INPUT-10 — Add reduced-motion policy.** Read a platform preference when possible and expose `view.reduced_motion`; all optional transitions snap when enabled. Functional state changes and focus remain visible without motion.
+
+## 5. Text and typography — `src/font.zig`, `src/ui_client/features/text.zig`, style
+
+- [ ] **TEXT-01 — Remove silent 64-byte truncation.** Replace fixed `TextState.buf` behavior with owned/capacity-managed cached text or a safely larger explicit cap that reports overflow. Pool eviction must free owned memory correctly. Apply the same rule to text input and log/display strings.
+- [ ] **TEXT-02 — Add constrained multiline text.** A text block accepts a maximum width, wraps on word boundaries with a deterministic hard-break fallback, reports measured width/height/baseline, and renders exactly the measured lines. Preserve a fast single-line path for dense rows.
+  - Keep the engine callback-free by measuring in the host with an explicit constraint derived from `ViewMetrics`/template layout. If later layout-dependent measurement is unavoidable, add a narrow documented measure phase rather than hidden relayout.
+- [ ] **TEXT-03 — Add single-line overflow modes.** Support clip and ellipsis for stock tokens, catalog cells, status copy, and narrow layouts. Hit/box geometry remains the allocated cell, not the unbounded glyph width.
+- [ ] **TEXT-04 — Implement the prototype typography contract.** Load JetBrains Mono, disable ligature assumptions, support body `14`, small `11`, heading `21` logical px, regular weight, global `-0.025em` tracking, heading `-0.04em` tracking, and uppercase eyebrow tracking in the `0.05–0.09em` range. Centralize logical-to-device scaling and cache fonts/textures by all render-affecting attributes.
+- [ ] **TEXT-05 — Cache rendered text textures.** Avoid rasterizing every unchanged string every frame. Invalidate on content, font size, tracking, wrap width, color strategy, renderer reset, or scale change. Verify pool eviction releases textures and no per-frame GPU leak occurs while filtering catalogs.
+- [ ] **TEXT-06 — Support rotated/vertical collapsed-rail copy.** Either add a transformed texture/text draw payload or implement a deliberate stacked-glyph equivalent with matching focus/hit bounds. Do not rotate layout geometry without rotating rendering and hit expectations together.
+
+## 6. Rendering capabilities — `src/ui_client/features/`
+
+- [ ] **RENDER-01 — Verify alpha blending end to end.** Solid fills, text, SVG/image tint, geometry, and overlays must honor alpha consistently. Configure SDL blend modes explicitly and add a visual fixture for translucent row hover, backdrop, locked tiles, and gradient washes.
+- [ ] **RENDER-02 — Extend style payloads without turning style into placement.** Add text tint/size/tracking/wrap/overflow and relevant SVG/image tint fields while preserving last-fragment-wins behavior. Placement remains imperative through `El`/layout.
+- [ ] **RENDER-03 — Add a geometry feature backed by `renderGeometry`.** It must draw untextured colored triangles/polygons and honest thick polylines with correct joins/caps. This is shared by hex bodies/rails/markers, distribution curves, slider diamonds, and any diagonal indicator.
+  - Add pooled variable-length vertex/index state with explicit capacity/ownership and eviction.
+  - Test convex hex fill, mixed-color triangles if used for gradients, closed rails, acute joins, clipping, alpha, and scale.
+  - Replace the current first-segment-normal thick-line approximation after parity consumers migrate.
+- [ ] **RENDER-04 — Add linear-gradient composition.** Support the eating-slider split track and milestone/state washes, either as geometry vertex colors or a narrow gradient feature. Required orientations and stops should be explicit; a full CSS gradient grammar is out of scope.
+- [ ] **RENDER-05 — Add reusable shadow/backdrop composition.** Cover the centered terminal shadow, dialog shadow, popup shadow, and modal backdrop with bounded layers or a simple shadow feature. Match the understated prototype; do not introduce rounded cards or glossy effects.
+- [ ] **RENDER-06 — Preserve crisp logical hairlines at scale.** One-logical-pixel borders, dashed/dotted outlines, rails, and focus rings remain legible on high-DPI displays. Define rounding/snapping so adjacent catalog columns and hex rails do not shimmer.
+- [ ] **RENDER-07 — Add per-node visual opacity/tint composition where it removes duplication.** Board filter dimming and disabled states should not require recomputing every child color independently. Opacity must not change hit eligibility; state logic decides that separately.
+- [ ] **RENDER-08 — Add small transition/tween state in the host layer.** Support the prototype's functional transitions: Holdings column/gap `120ms`, stock token font change `90ms`, and board opacity/stroke changes around `100–110ms`. Key animations by stable node/domain ID, interrupt/reverse cleanly, and obey reduced motion. No general timeline engine or decorative keyframes are required.
+
+## 7. Frame-local view metrics and responsive layout
+
+- [ ] **VIEW-01 — Add `ViewMetrics` to `Resources.View`.** Compute once per frame from window pixel size, drawable size/DPI, and the `900×820` reference. Include logical scale, logical viewport, terminal rect, and width classes matching `760`, `560`, and `440` logical px breakpoints.
+- [ ] **VIEW-02 — Scale all authored dimensions consistently.** Font sizes, padding, gaps, fixed sizes, stroke widths, drag thresholds, scrollbar widths, and icon sizes consume logical units through one helper. Do not scale simulation values or camera percentages.
+- [ ] **VIEW-03 — Implement the centered terminal workspace.** At/above the reference size, cap the terminal at `900×820`, center it on `#090806`, retain its border and shadow, and clip internal surfaces. At `≤760`, switch to full-width/auto-height/full-window composition and drop the outer frame as the prototype does.
+- [ ] **VIEW-04 — Implement explicit responsive branches.** At `≤760`, stack the page grid, release nested catalog scrolling in favor of document/page flow, stack trade columns and board/detail, and keep the log at the end. At `≤560`, use `10px` page padding, hide optional runline/subtitle copy, force two action columns, hide the BUILD effect column, and stack dialog actions. At `≤440`, use one action column and hide the BUILD cost column. Preserve control reachability and labels when columns disappear.
+- [ ] **VIEW-05 — Handle resize without state loss.** Recompute layout/clip/scroll limits, clamp camera and popups, retain stable focus/selection/query/sort/collapse, and avoid a one-frame clickable ghost at obsolete geometry after a major resize.
+
+## 8. Shared visual system and reusable templates — `src/pages/templates/`
+
+### Tokens and primitive chrome
+
+- [ ] **KIT-01 — Encode the finalized design tokens once.** Use exact palette values: `bg #0e0c09`, `panel #15120f`, `line #23221e`, `line2 #3c3a33`, `dim #77746a`, `fg #b5b0a1`, `acc #a69671`, `warn #d7aa4c`, `danger #d25642`, `good #8f9b73`; resource colors Food `#d97966`, Water `#5b9fc4`, Fuel `#d5a64e`, Metal `#8497a3`, Minerals `#9a7cb4`, Biomass `#78a276`.
+  - Add `good` to the shared semantic theme role set.
+  - Keep six resource/sector colors in game `View`/palette data, not generic `Theme` roles.
+  - Centralize body/small/heading sizes, page padding, common gaps, hairline width, control heights, and transition durations.
+- [ ] **KIT-02 — Build primitive style/state fragments.** Cover panel, eyebrow/section heading, primary/secondary/text/icon/link buttons, tabs, chips, tags, semantic state text, row hover, focus-visible outline, disabled chrome, selected chrome, dashed provisional chrome, meter, thin progress bar, and resource legend dot.
+- [ ] **KIT-03 — Make button semantics consistent.** The whole outer box owns interaction; children remain content. Disabled controls cannot focus/activate, pressed state is visible, Enter/Space matches pointer activation, and nested cancel/close actions consume activation without losing ancestor hover.
+
+### Shared shell
+
+- [ ] **KIT-04 — Build one terminal shell template.** Compose header, flexible page grid, side rail, main surface, navigation, optional market/activity strips, view body, footer log, and overlay roots. The shell accepts act identity and view descriptors rather than duplicating Act I/II markup.
+- [ ] **KIT-05 — Build the collapsible Holdings/BODY rail.** Expanded width is `252`, collapsed width `36`, with a `120ms` transition and vertical restore affordance. Maintain separate ACTIONS/BUILD memories; force STRUCTURE collapsed on every entry without erasing those values. Expanded/collapsed state, labels, focus, and hit targets remain synchronized.
+- [ ] **KIT-06 — Rebuild Holdings as a live reusable panel.** Show header tail `{kinds} kinds, {units}`, owned rows/counts, act-specific MARGINS, positive/danger semantic values, and BODY projections. Derive all values from domain state/catalog baselines; no copied tuning constants.
+- [ ] **KIT-07 — Build shared tab/view navigation.** Exactly one tab is selected and globally focusable; arrows rove within the tablist; Enter/Space switches; inactive panels are not built/focusable but their state persists in the shell. Views restore their own scroll/collapse state.
+
+### Overlay and popup controls
+
+- [ ] **KIT-08 — Rebuild modal, tooltip, and text input on `El`.** Modal provides backdrop, centered shell, focus trap, initial focus, Escape/close/Leave dismissal, optional outside-click policy, and restoration to the opener. Tooltip is clamped to the terminal and never intercepts input. Text input uses the completed editing foundation.
+- [ ] **KIT-09 — Build a keyboard-operable select/popup control.** It supports label/value, open/close, arrows, Enter, Escape, disabled state, focus restoration, top-layer clipping, and compact `30px` logical height. Use it for sort kind/direction rather than recreating one per catalog.
+- [ ] **KIT-10 — Build a range slider.** Support pointer capture, arrows/PageUp/PageDown/Home/End, min/max/step, diamond thumb, split gradient track, focus ring, accessible value text, and live updates. The control owns no eating math.
+- [ ] **KIT-11 — Build a disclosure control.** Synchronize expanded state, details visibility, `details ↓`/`close ↑`, focus, and compact summary. Use it for milestone details and sort panels where anatomy permits.
+
+### Shared status and catalog components
+
+- [ ] **KIT-12 — Build StockToken and Runline.** Stock tokens render two-letter abbreviations, full labels on hover/focus, low/zero danger values, separators, and stable alignment while label width changes. Preserve Act I's direct abbreviation/full-label swap and Act II's compact-token font expansion (roughly `10→17px` in the current CSS) without shifting neighboring controls outside the stockline. Runline renders generated/consumed energy rate, act label, and day. Token order and membership come from the act descriptor.
+- [ ] **KIT-13 — Build MarketStrip and ActivityStrip.** Identity map selects `● PASSERBY`, `● MERCHANT`, or `◆ EXCHANGE`, copy, action label, and semantic color. Activity supports idle/working/building glyph, subject, metadata, live announcement, and exact dim/accent/warn styling. STRUCTURE can suppress both without losing state.
+- [ ] **KIT-14 — Extract one catalog query parser.** Parse whitespace terms with quotes, leading negation, `*`, `field:value`, comma-OR values, and case-insensitive matching without allocating per row. Parameterize allowed fields for actions (`in/input`, `out/output`, `type/kind`, `state/status`, `is`) and recipes (the same plus `tech`); `built` aliases `owned`, `state:in-reach` means ready or reach≥`0.5`, and `is` matches either state or type. Free text searches the complete presentation haystack. Unit-test malformed quotes, empty values, aliases, negation, phrases, wildcard, and combined fields.
+- [ ] **KIT-15 — Build CatalogControls.** Search field, `/` shortcut only for the active catalog view, Escape-clear, adjacent sort toggle, disclosed Sort-by and Direction selects, `none` direction disabling/reset, count-only live summary, deterministic name tie-break, and reset-to-top on query/sort change. Escape inside the sort row closes it and restores focus to its toggle. ACTIONS and BUILD keep independent query/sort/open/scroll state. Default filtering remains supplied by each surface—ACTIONS shows its entire unlocked roster, while BUILD applies its in-reach/unowned default.
+- [ ] **KIT-16 — Build one CatalogViewport.** Keep controls and Eating Policy/milestone/footer fixed while only results scroll at desktop sizes; reserve an `8px` logical scrollbar gutter with the prototype's inset thumb treatment; clamp/persist wheel and draggable-thumb state; reset on requested data changes; remove nested result scrolling at `≤760` and use one shell/page scroll region instead. BUILD's heading stays visually fixed by placing it outside the moving result content rather than requiring generic sticky positioning. Opening Exchange details consumes result-viewport height instead of increasing the terminal's total height.
+- [ ] **KIT-17 — Normalize ActionTile.** Render name, optional state line only when nonempty, metrics `−{energy}e {optional additional input costs} · {duration}`, distribution glyph with the shared normal/Poisson/uniform/exponential/fixed accessible labels, and expected yield. Support ready, unavailable/short, and working/progress states; additional costs such as Check traps' `−1m` remain in the price segment before the middot. The same renderer handles Act I and Act II records; catalogs decide density and columns.
+- [ ] **KIT-18 — Build RecipeRow/Table.** Data schema is name/type, cost, time, effect, state, action. Render name with secondary type, synchronized six columns, 3-segment reach meter, live progress/time, `Build →`, `Build +1`, and cancel `×`. A building row is pinned first and remains visible through every query/sort. Hidden columns follow width classes.
+- [ ] **KIT-19 — Build EatingPolicy/BODY.** Reuse a `0..100`, step-`1` range slider and map it exactly with `rate = 0.5 × 4^(value/100)` (`0.5×..2.0×`, `1.0×` at `50`). Word thresholds are `≤12 meager`, `≤28 lean`, `≤44 modest`, `≤58 normal`, `≤72 hearty`, `≤88 generous`, otherwise lavish. Render `{word} · {rate:.2}×`, aria/value narration `{word}, {rate:.2} times normal`, `coverage = baseCoverage/rate`, and `recovery = max(0.1, baseRecovery/rate)` rounded to one decimal day. Act I config is `5.2/0.224`; Act II is `10.3/0.448`. Keep the display/math implementation shared while the authoritative simulation stores the resulting bounded multiplier.
+- [ ] **KIT-20 — Build MilestoneGoal.** Shared anatomy: fixed left semantic bar/wash, disclosure, title, readiness, compact summary, primary action, details kicker/cost/copy, requirement row, and explanation. Shared lifecycle is locked → unfunded → ready → done; Shelter and Exchange supply wording, requirements, and terminal state copy. The component stays outside recipe filtering/sorting; disclosure uses allocated viewport space rather than growing the fixed terminal.
+- [ ] **KIT-21 — Build TradeDialog.** Shared header/tabs/three-column body/footer. Identity map supplies kicker/title, column headings, buy/sell give label, CTA, footer note, and venue identity. Offer list has exclusive selection, finite stock, disabled/refusal copy, preview give/receive/effect, live holdings, and atomic completion result handling. Mode change selects the first valid offer without discarding per-mode selection unnecessarily.
+- [ ] **KIT-22 — Normalize EventLog.** Four visible newest-first lines, newest emphasized, tone-to-theme mapping including `good`, timestamps/`NOW`, polite live announcements, shared ID/contract at screen level, preserved history beyond four in `Log`, and no independent scrolling unless history view is explicitly opened.
+- [ ] **KIT-23 — Build board-level Tag, CostList, Legend, ZoomControls, and EmptyState primitives.** Keep these generic game templates; technology/domain wording stays in the STRUCTURE screen.
+
+## 9. Act I authoritative backend and screen
+
+### Domain contracts
+
+- [ ] **ACT1-01 — Put starting baselines in authoritative component/catalog defaults.** Move Vigor ceiling, Food quality, and spoilage baselines out of `spawn_agent` literals so Holdings can derive current-vs-base margins. Spawn from those defaults. Test that a new player exactly matches catalog baseline.
+- [ ] **ACT1-02 — Replace the three-value metabolism enum with a bounded scalar.** `comp.Metabolism.Setting` currently exposes only ration/normal/feast. Replace it with a persisted agent-local eating multiplier in `[0.5, 2.0]`, normal at `1.0`. `systems.metabolize` uses it continuously; config defines range/default, not UI words. Migrate/reset old state deterministically.
+- [ ] **ACT1-03 — Add authoritative BODY projections.** Given current Food, Food quality/spoilage, Vigor deficit/ceiling, base metabolism, vigor-per-food, and selected rate, return food coverage and time to full vigor or explicit unavailable/no-recovery states. Unit-test empty food, full vigor, zero quality, min/normal/max rate, and rounding boundaries.
+- [ ] **ACT1-04 — Use an absolute Shelter Vigor requirement.** The finalized requirement is current Vigor `15`, not a percentage of an upgradeable ceiling. Extend catalog unlock data and use the same result for checklist, action enablement, and `begin_build`. Test `14.99` fails and `15` passes regardless of max Vigor.
+- [ ] **ACT1-05 — Define a stable action/recipe presentation catalog.** Map current typed action/good components to stable IDs, display name, type, input/output keys, effect copy, technology/prerequisite eligibility, and authored order. Reconcile existing `ActionHunt`/16 goods with the finalized Act I surface explicitly; do not accidentally show extra entries because a component exists.
+- [ ] **ACT1-06 — Add eligibility transition tracking.** Compare the current eligible recipe/action set with prior authoritative/session state, emit one “A new recipe is within reach: {name}.” log when a prerequisite becomes satisfied, and avoid repeats on tab switches, filter changes, load, or sort.
+
+### Act I shell and surfaces
+
+- [ ] **ACT1-07 — Replace the current `play_game.zig` composition with the shared shell.** Match the finalized `900×820` Act I layout, VI/FO/MA header, energy/day runline, persistent rail, ACTIONS/BUILD tabs, Passerby strip, activity strip, and four-line footer. Remove the tutorial-only alternate layout from the production parity path or redesign it as a deliberate pre-prototype state that transitions into the same shell without layout drift.
+- [ ] **ACT1-08 — Implement finalized ACTIONS.** Render exactly the canonical fixture roster—Forage (`−1.7e · 4h`, normal, `+1–3f`), Scavenge (`−2e · 5h`, exponential, `+0–7m`), Split wood (`−2.5e · 5h`, uniform, `+3–5m`), Fish (`−2e · 6h`, Poisson, `+2–5f`), Check traps (`−1e −1m · 2h`, Poisson, `+1–4f`)—plus Eating Policy in a two-column grid (one column at `≤440`). Values derive from live records/quotes; the fixture verifies presentation, not duplicated constants. Activation begins labor once, updates Activity, and logs the upfront payment copy. All-ready tiles omit the optional state line.
+- [ ] **ACT1-09 — Implement finalized BUILD over live catalog data.** Replace SORT/SHOW/TIER/built chips and old `Kind.blocked` with CatalogControls and RecipeRow. Default sort is reach descending. Blank query shows ready plus reach≥`0.5`, excluding owned; any nonblank query searches all non-locked records, including owned and more distant reach states. Prerequisite-locked rows remain absent, while a building row is always visible/pinned. The canonical 8-record fixture renders `4 of 8 recipes shown`; the total is the full authored catalog count even though locked rows have no result row. Remove the stale initial `4 of 6` copy. Summary always uses `{visible} of {authored total} recipes shown`.
+- [ ] **ACT1-10 — Preserve the real build lifecycle.** Starting a ready/owned recipe pays through `capital.begin_build`, pins the live `Busy` row, disables other starts, scrolls to top, and shows progress/time/cancel. Cancel calls the existing refund path, restores row state, updates Activity, and logs once. Completion increments/owns through the simulation and removes progress without UI-local timers.
+- [ ] **ACT1-11 — Implement live Shelter milestone.** Instantiate `MilestoneGoal` outside filtering. Canonical requirements are current Vigor `15`, Food `12`, eligible/built recipe kinds `5`, and Materials `60`; build price/copy shows `60m 6e · 6.0d`. Recompute every check from authoritative state, distinguish locked/unfunded/ready, disclose details, begin the real Shelter build, and transition only after completion. Keep consumed values/history meaningful after payment.
+
+### Passerby and barter
+
+- [ ] **ACT1-12 — Add merchant encounter state.** Model absent, approaching, present, and departed; stable encounter identity; arrival/departure events; remaining time; finite inventory; and availability independent of whichever tab is visible. The UI reads state and does not infer it from a hardcoded day.
+- [ ] **ACT1-13 — Define shared typed bundle and quote contracts.** Each offer has stable ID, direction, give/receive bundles, effect preview, stock, affordability/refusal reason, expiry, revision, and next marginal sell quote. Food, Materials, and owned goods use one transfer representation that can extend to Act II typed resources/Coin.
+- [ ] **ACT1-14 — Resolve barter atomically.** On acceptance, revalidate encounter/offer revision, affordability, stock, and ownership; transfer both bundles or neither; decrement finite stock; apply/revoke/supersede effects once; and emit one result/log. Return player-readable stale, departed, sold-out, and insufficient-stock reasons. Unit-test every refusal and rollback path.
+- [ ] **ACT1-15 — Implement diminishing marginal sell prices.** Author finite value schedules or a clear valuation rule so repeated units receive lower offers, expose the next quote before confirmation, and test monotonic decline without making all production-for-sale strictly dominated. These are the first explicit exchange numbers the game teaches and the largest unset numbers in Act I, so their economic implication is product design rather than arbitrary fixture tuning. Finite stock and the passerby's limited window complement diminishing marginal value; making selling simply lose to scavenging would make production for sale strictly dominated.
+- [ ] **ACT1-16 — Implement tool supersession and reversible effects correctly.** Give replacement families/ranks to Fishing rod → Fishing net and Hatchet → Hand axe. Equipping the better tool replaces action stats without duplicate `SparseSet.add`; physical counts remain sellable; removing the last effective tool restores the correct next-best state. Supersession is family-specific: independent modifiers that merely share a target still stack (for example, sandals and a bicycle may both cheapen Forage). Repair and test the known `health_apply`/`health_remove` asymmetry—apply raises `max` and fills `v`, while remove lowers `max` and only clamps—so the intended lifecycle is explicit rather than falsely assumed to round-trip. Repeated build → sell → build cycles must not accumulate floating-point drift in any apply/remove pair.
+- [ ] **ACT1-17 — Wire the Passerby strip and TradeDialog.** BUY/SELL tabs, offer stock, preview, `YOU GIVE` in both directions, live holdings, `TRADE →`, Leave/close/Escape, sold-out state, and modal focus/capture all use authoritative encounter/quote operations. Closing after a successful trade returns focus and refreshes header/Holdings/log in the same frame.
+
+### Act transition
+
+- [ ] **ACT1-18 — Implement a versioned Act I → II migration.** Carry Food unchanged; convert only unspent generic Materials to Biomass `1:1`; preserve goods/counts/effects; remove generic Materials from active Act II accounting; seed Foraging/Woodcutting researched and the remaining ring-1 states per the board spec; initialize population/capacity/market state exactly once. Unit-test idempotence and save-version boundaries.
+- [ ] **ACT1-19 — Enforce cross-act cost parity.** Add a catalog test that every same-named recipe/action using Act I Materials and Act II Biomass has identical numeric quantity unless an explicit reviewed exception exists. Garden bed and all migrated recipes participate.
+
+## 10. Act II authoritative backend and shell
+
+Prototype catalogs are deterministic UX fixtures, not permission to hardcode economic outcomes in templates. Stable interfaces may be implemented against fixtures first; live completion requires the following domain work.
+
+### Population, ownership, and catalogs
+
+- [ ] **ACT2-01 — Add population lifecycle and stable identities.** Shelter capacity, sustained surplus, and starvation drive arrivals/departures; every person has stable ID/display label, Vigor, current work, and specialization state. The player remains one agent. Expose current population/capacity as a frame-consistent read. Reuse the capacity already present as `comp.Shelter.capacity`—currently unread beyond Act I's `> 1` gate—rather than introducing a second ceiling.
+- [ ] **ACT2-02 — Add per-agent typed ledgers.** Represent Food, Water, Fuel, Metal, Minerals, Biomass, Coin, and goods with stable IDs and ownership transfer APIs. Settlement totals are derived snapshots, not a shared mutable inventory. Generic Materials cannot be earned/spent after migration.
+- [ ] **ACT2-03 — Build an authored catalog graph and complete category data.** Every action/material/good/technology has stable identity, act, sector(s), production stage, category/type, recipe, costs, duration, effects, inputs/outputs, and optional research linkage. Inputs distinguish consumed, retained/tooling, upkeep, and produced; consumed intermediates reuse the count semantics already exercised by Act I. Several inputs may converge on one output, and seam goods may name two sectors. The current roster is almost entirely sixteen second-order goods that make food/comfort while nothing makes them; author higher-order stages such as a forge, workbench, worked stone, charcoal, and planks. `src/tags.zig` currently stops at `Food`/`Comfort`/`Tool`/`WoodCutting` and nothing reads those tags, so complete the set as part of this catalog—the STRUCTURE specialization/category model is its first load-bearing consumer.
+- [ ] **ACT2-04 — Preserve economic openness.** Production structure is displayed and costed, not a hard dependency lock. Cross-specialization production remains legal at a penalty. Keep `prereq_of` only where a modifier truly requires a target verb. A merchant must remain an alternative, not a key that grants permission to build. This is the Ricardian point of the act: trade should pay even when a person could make everything themselves; forcing trade because an input is impossible would foreclose the comparative-advantage demonstration.
+- [ ] **ACT2-05 — Add production/action quotes per agent.** One calculation returns typed deficits, Vigor/energy/time price, expected output distribution, Busy/standing reason, specialization multiplier, and eligibility. ACTIONS, BUILD, STRUCTURE effects, AI decisions, and resolution consume the same quote. Test quote/resolution agreement.
+- [ ] **ACT2-06 — Expose a frame-consistent market/agent snapshot.** Selected agent, observable holdings/demands, counterparties, offers, revisions, population, catalogs, research state, and balances must come from one coherent revision while autonomous decisions run.
+- [ ] **ACT2-07 — Generalize decide → act.** The split currently exists only in shape: the player is the sole decider and there is no AI decider. AI agents must enumerate and invoke the same labor, consumption, action, build, offer, trade, and specialization operations as the player's UI. UI visibility must never be required for simulation progress.
+- [ ] **ACT2-08 — Resolve open demand/specialization/exchange-ratio rules before live wiring.** Specify subjective ordinal demands, quantity-sensitive marginal ranks, observability, comparative-advantage/learning rule, bilateral negotiation mechanism, and autonomous ranking policy in `docs/design.md`; keep this roadmap entry until implemented. Specialization state and the operation that changes it are simulation rules—the UI must not assign a profession merely because a player clicks a colored board wedge. Bilateral offers carry counterparty, give/receive typed bundles and quantities, expiry, revision, and status; counteroffers preserve lineage; acceptance settles atomically across both private ledgers and returns both agents' post-trade holdings. The chosen rule must say whether acceptance follows posted prices, bargaining, or a market mechanism. Do not substitute a shared utility score or hardcode every agent to a UI slider threshold.
+- [ ] **ACT2-09 — Record transaction evidence and model money emergence.** Completed trades feed bounded history keyed by good pair with quantity, time, and direction. Displayed ranges derive from evidence, state when evidence is absent, and never become an unexplained global price table. Act I's fixed merchant exchanges use the same transaction-record shape while remaining explicitly quoted trades, not fake market discovery. If a medium of exchange emerges, agents need acceptance of and demand for that good, and settlement must distinguish direct from mediated exchange. The HUD exposes the medium and balance only after the simulation recognizes one; a day/act threshold cannot create a coin counter.
+
+### Act II shell and catalogs
+
+- [ ] **ACT2-10 — Instantiate the shared shell for Act II.** Header order is PO, VI, FO, WA, FU, ME, MI, BI, CO with low-state values; runline shows energy rate, Act II, day; tabs are ACTIONS/BUILD/STRUCTURE; Merchant and Activity strips appear outside STRUCTURE; Holdings/BODY and event-log behavior follow shared rules.
+- [ ] **ACT2-11 — Implement the 20-action browser.** Use data records and `ActionTile` in a two-column compact collection. With a blank query, show all 20 unlocked actions in authored order, including `short`/unavailable disabled rows; unlike BUILD, ACTIONS has no default in-reach filter. Query fields/aliases/negation/quotes/wildcard match the prototype. Default sort is `none`; support none/ready/time/energy/name in both directions, with none restoring authored order and disabling Direction. Summary is `20 of 20 actions shown` for the blank canonical fixture and `{visible} of 20` after filtering. Activation is enabled only for ready quotes and updates Activity/log.
+- [ ] **ACT2-12 — Implement the scalable recipe browser.** Support at least the 50-record canonical fixture without markup changes. Default sort is reach descending. Blank query shows ready plus reach≥`0.5`, excludes owned, and yields `9 of 50 recipes shown` in the fixture; any nonblank query searches every non-locked record, including owned and distant reach states; `tech` works; a building row remains pinned and visible. Sort none/reach/inputs/time/name and both directions match prototype behavior; `none` restores authored order, resets/disables Direction, and totals always use the full authored catalog (`50`) even when locked records have no row.
+- [ ] **ACT2-13 — Synchronize research-linked recipes.** A technology becoming researched changes linked recipe eligibility in the same authoritative transaction/frame, inserts newly reachable rows, logs each first unlock once, and never leaves a stale `needs tech` row.
+- [ ] **ACT2-14 — Implement the Coin Merchant.** Shared TradeDialog uses `YOU PAY` for buys, `YOU GIVE` for sells, `BUY →`/`SELL →`, finite stock, Coin/resource/good bundles, refusal reasons, and atomic settlement. Market inventory and selected offer survive unrelated view switches; expiry/departure closes or invalidates safely.
+- [ ] **ACT2-15 — Implement Act II Holdings/BODY.** Show typed holdings/counts, act-specific margins/flows, population-relevant Body projections, and correct low/positive semantics. Do not display decorative durability/maintenance meters until those systems exist.
+- [ ] **ACT2-16 — Keep event/activity behavior coherent across autonomous updates.** ACTIONS/BUILD log and strips refresh from snapshots without tearing; STRUCTURE hides them visually but still receives events/history. Live announcements do not steal keyboard focus.
+
+### Exchange and Act III identity transition
+
+- [ ] **ACT2-17 — Implement Exchange milestone conditions exactly.** Unlock requires population strictly greater than `500` and at least one researched ring-4 technology. Unlock is distinct from funding. Recipe cost is `80 Biomass + 40 Minerals + 24 Metal`, duration `18d`. Test `500` fails, `501` passes only with ring 4, and every resource deficit independently.
+- [ ] **ACT2-18 — Raise the Exchange with the prototype's atomic immediate transition.** Revalidate readiness, deduct the complete bundle once, mark the Exchange standing, open its disclosure, record paid values, set Activity to `Exchange standing · Act III open`, emit one log/result, and dispatch the typed Act II → III transition in the same operation. The displayed `18d` remains authored milestone cost/context; do not introduce an unprototyped countdown or cancellation path without a separately approved design change. Refuse repeat activation.
+- [ ] **ACT2-19 — Swap shell identity without replacing the instrument.** Standing Exchange changes act label to Act III, `● MERCHANT` timed strip to permanent `◆ EXCHANGE`, and dialog kicker/headings/note through the identity map while preserving offers/accounting appropriate to the transition. The milestone reports `ACT III OPEN`/standing and cannot be raised twice.
+- [ ] **ACT2-20 — Preserve person-level economics through later scale transitions.** Individual decisions remain authoritative throughout the Act II band. If a later aggregate model replaces any of them, it must preserve person-level ownership, subjective ordinal demand, and transaction history as observable economic facts; aggregate totals must never silently become shared inventory.
+
+## 11. STRUCTURE research board
+
+### Pure grid and catalog validation
+
+- [ ] **BOARD-01 — Add a pure `src/grid/` hex module.** Implement axial/cube conversion, pointy-top axial→pixel, pixel→hex rounding, ring distance, six neighbors, rings, exact pure/hybrid classification, vertices, and point-in-hex. It imports no UI/game modules. Export it through the appropriate library/test roots.
+  - Test `ring = max(|q|, |r|, |q+r|)`, `6n` cells per ring, 61 cells rings 0–4, round trips, boundaries, and wedge order Food→Water→Fuel→Metal→Minerals→Biomass clockwise from 3 o'clock.
+- [ ] **BOARD-02 — Author/validate exactly 60 technology records.** Use `docs/hex_tech_board_spec.md` names, coordinates, rings/eras, pure/hybrid domains, effects, explicit costs, enable links, and stable IDs. Validate uniqueness, ring-coordinate agreement, 6 pure tiles per ring, `6(n−1)` hybrids, only adjacent-resource hybrids, and no Act III coordinates.
+- [ ] **BOARD-03 — Validate board visual counts.** Across rings 1–4 there are 24 pure and 36 hybrid technologies, 96 rail paths (24 full + 72 half-domain), and material-dot totals/ring counts from the spec. Fail tests on malformed authored data rather than silently drawing it.
+
+### Rendering and layout
+
+- [ ] **BOARD-04 — Build the clipped charcoal board viewport.** Center the pointy-top board, render one neutral unlabeled ring-0 foundation, six perimeter resource labels, and no wedge backdrop, stage circles, R0/R1–R4 labels, bottom summary, or Act III placeholders.
+- [ ] **BOARD-05 — Render technology bodies and progression states.** Locked uses resource-toned fill around 24% with no label/interaction; Available around 66% with label; Researched full opacity with label and dark/resource outline. Selected/focused/outward states use heavier fg/warn strokes without relying on color alone.
+- [ ] **BOARD-06 — Render pure/hybrid rails and material markers.** Pure gets one closed six-edge resource rail; hybrid gets two contiguous three-edge rails partitioned by nearest radial resource. Draw domain-first dots plus authored-cost extras according to ring counts. Keep stroke width visually stable during zoom where specified.
+- [ ] **BOARD-07 — Keep board layout independent from engine tiling knowledge.** Compute tile offsets/sizes from grid/camera math and use ordinary nodes/geometry. Recompute visible geometry without per-tile SVG rasterization. Clip all paint and hits to the board viewport.
+
+### Progression and detail
+
+- [ ] **BOARD-08 — Implement canonical entry state.** Ring 0 is logically researched but not counted. Foraging and Woodcutting start researched; Spring well, Firepit, Surface ore, Quarry pit start available; exactly Gamekeeping, Net fishery, Pottery works, Loom & ropewalk, and Field cultivation are initially available in ring 2; all other outer tiles are locked. STRUCTURE opens with the cumulative `all` filter active, so locked silhouettes establish the full board shape.
+- [ ] **BOARD-09 — Implement adjacency progression.** A locked tile becomes available when at least one strictly lower-ring neighbor is researched. Research can open only immediate outward neighbors. Hybrid entry works from either adjacent wedge. Unit-test unrelated tiles remain unchanged.
+- [ ] **BOARD-10 — Implement atomic research.** Revalidate selected tile is Available and every authored resource is held; deduct all or none; mark researched; update only affected neighbors; update header/detail/status/build links/Exchange checks together; log and emit one typed domain result. Coin, Vigor, Population, Knowledge, goods, and generic Materials are never research currency.
+- [ ] **BOARD-11 — Build the selected-technology detail pane and live status.** Show name, `RING n · ERA`, pure/hybrid and resource tags, progression state, effect, full cost with held/required values, factual deficits, and what it enables. Available+affordable shows `RESEARCH →`; unaffordable shows `NEEDS …`; researched has no repeat action. Status reports selected name plus researched/available counts and announces newly available names after research. Do not give acquisition advice and do not build an item directly.
+
+### Board interaction state machine
+
+- [ ] **BOARD-12 — Implement selection and tooltip behavior.** Available/Researched tiles select by pointer/keyboard; re-selecting the current tile keeps it selected, and only Escape/explicit clear removes selection. Locked and ring 0 never select/focus. Hover tooltip shows compact name/domain/state, clamps to viewport, and hides during pan/modal interaction.
+- [ ] **BOARD-13 — Implement cumulative filter and search.** `researched` shows Researched; `available` adds Available; `all` adds anonymous Locked silhouettes and is the default. Search/filter dim nonmatches without revealing locked labels or interactions. The selected tile and its detail remain selected while visually filtered/search-dimmed; filtering does not silently clear user context.
+- [ ] **BOARD-14 — Implement keyboard spatial navigation.** Use a roving focus among interactive tiles; arrows choose the best tile in that screen direction with deterministic distance/tie rules; Enter/Space selects; Escape clears; Tab reaches board controls/detail without traversing 60 cells. Focus survives camera moves and research state changes by stable ID.
+- [ ] **BOARD-15 — Implement camera controls.** Persist pan and scale per STRUCTURE session; default `100%`, clamp scale to `75–250%`, buttons step `20%`, reset restores scale `1` and pan `(0,0)`, output announces percentage, and buttons disable at scale bounds. Wheel multiplies scale by `1.12` (or its reciprocal) around the pointer so the world point remains fixed. Match the prototype's unbounded pan unless testing demonstrates a recovery issue; Reset is always the recovery path.
+- [ ] **BOARD-16 — Implement pointer/touch pan.** Pressing non-control board space or a tile may begin capture; crossing the 4px logical threshold enters grabbing/pan, updates camera in board coordinates, hides tooltip, and suppresses the release-click for that frame; an unmoved press still selects. Ring 0 can initiate pan. Do not add pan bounds absent an approved usability change.
+- [ ] **BOARD-17 — Synchronize STRUCTURE with shell state.** Entering forces Holdings collapsed, hides market/activity/log, and grants recovered height to board/detail. Leaving restores destination view's collapse/scroll state. Expanding Holdings while in STRUCTURE does not rebuild/reset selection, filters, research, or camera.
+- [ ] **BOARD-18 — Bridge research to BUILD and Exchange.** Linked recipes update immediately and announce once; ring-4 completion refreshes Exchange unlock; no `window.*` event-bus equivalent or duplicate local state exists.
+
+### Distribution visualization
+
+- [ ] **VIZ-01 — Ship the prototype distribution glyph contract.** Use the five existing normal/Poisson/uniform/exponential/fixed SVG shape assets in action tiles, tint/size them consistently, and expose the shared accessible labels. Preserve p10–p90/yield text; the glyph communicates distribution shape, not a separate success roll. This parity task does not depend on board geometry.
+
+## 12. Exact visual/state parity checklist
+
+- [ ] **PARITY-01 — Global visual grammar.** Dark-only terminal; square corners; regular-weight monospace; tight density; one-pixel lines; accent for interaction/progress; warn for attention/building; danger for shortage/failure/cancel; good for met/ready/standing; no unapproved rounded cards.
+- [ ] **PARITY-02 — Focus and disabled states.** Every interactive control has a `1px` warn focus-visible outline with `3px` logical offset or equivalent inset where clipping requires it. Disabled controls use line2/dim and reduced opacity, cannot activate, and retain readable reason text.
+- [ ] **PARITY-03 — Overflow.** Terminal/board/dialog clip correctly; catalog/side/detail scroll regions do not paint or hit outside; scrollbar gutter is stable; long single-line cells ellipsize; multiline copy wraps; no hidden control becomes unreachable at narrow widths.
+- [ ] **PARITY-04 — Motion.** Holdings, stock label sizing, board state, and opacity transitions match their short functional timing, interrupt cleanly, and snap under reduced motion. Build/research completion comes from simulation state, never a decorative timer.
+- [ ] **PARITY-05 — Semantic redundancy.** Locked/available/researched, deficit/met, idle/working/building, selected, and low-stock states are distinguishable by copy/glyph/border/opacity as well as hue.
+
+## 13. Verification and acceptance
+
+### Automated tests
+
+- [ ] **QA-01 — Keep three build gates green.** Run `zig build test-ui`, `zig build test`, and `zig build` after every relevant slice and at final verification. Record failures rather than bypassing a target.
+- [ ] **QA-02 — Add pure engine tests.** Cover state initialization/eviction, flexible/min/max sizing, focus registry/pruning, shape hit fall-through, capture lifecycle, event consumption, resize invalidation, clipping, and stable keys under reorder.
+- [ ] **QA-03 — Add foundation tests.** Cover query parser, UTF-8 editing, wrapped measurement, ellipsis, scroll clamping/reset/persistence, slider math/input, popup focus, modal capture/focus restoration, animation interpolation/reduced motion, geometry generation, and texture eviction.
+- [ ] **QA-04 — Add Act I domain tests.** Cover BODY projections, absolute Shelter threshold, eligibility announcements, quote revision/refusals, diminishing marginal prices, atomic barter, supersession, modifier round trips, build lifecycle, migration idempotence, and Materials→Biomass cost parity.
+- [ ] **QA-05 — Add Act II domain tests.** Cover typed transfer atomicity/ownership, population boundaries, quote-resolution equality, research adjacency/payment, technology↔recipe links, Merchant settlement, Exchange `500/501` boundary, Exchange payment/completion, and one-time Act III transition.
+- [ ] **QA-06 — Add grid/catalog invariant tests.** Cover all BOARD-01..03 counts/classification, canonical opening state, resource vocabulary, unique IDs/coordinates, no generic Materials research costs, and no unavailable resource type without an authored acquisition route.
+
+### Deterministic UI fixture harness
+
+- [ ] **QA-07 — Add a development-only fixture entry point.** Select named screen/state via CLI or compile-time dev menu, not production URL logic. Fixtures provide deterministic window size, time, catalogs, balances, focus/hover/selection where needed, and seeded domain snapshots while still exercising production templates.
+- [ ] **QA-08 — Support scripted input replay.** Feed synthetic pointer/key/text/wheel events into the host input model without SDL polling so interaction state machines can be regression-tested. Keep pixel rendering tests separate from pure input/layout assertions.
+- [ ] **QA-09 — Add a node/layout debug dump.** For a fixture, emit stable IDs, rects, clips, focus/selection, render features, and semantic metadata. Use it to diagnose overlap/clipping and to assert hidden/locked nodes are not focusable/hittable.
+
+### Screenshot matrix
+
+Capture at the reference `900×820` logical size and compare to the current HTML/screenshots. Also capture `760`, `560`, and `440` width classes plus one high-DPI scale.
+
+- [ ] **QA-10 — Act I screenshots.** ACTIONS; BUILD default; BUILD query/sort; active build/cancel; Holdings collapsed; Shelter locked/unfunded/ready/details; Passerby BUY; Passerby SELL; low-stock/disabled states; narrow layouts.
+- [ ] **QA-11 — Act II shell/catalog screenshots.** ACTIONS default/filtered; BUILD default/all-filtered/active build; Merchant BUY/SELL/sold-out/insufficient Coin; Holdings expanded/collapsed; Exchange locked/unfunded/ready/details/standing; Act III identity.
+- [ ] **QA-12 — STRUCTURE screenshots.** Canonical opening; researched/available/all filters; search dimming; selected available affordable; selected deficit; selected researched; outward unlock; tooltip; 75/100/250% camera; panned board; keyboard focus; expanded Holdings; narrow stacked board/detail.
+- [ ] **QA-13 — Overlay screenshots.** Modal backdrop and clipping, long offer copy wrapping, sort popup near edges, focus-visible states, reduced-motion terminal state, and terminal centered in an oversized window.
+
+### Interaction journeys
+
+- [ ] **QA-14 — Keyboard-only Act I journey.** Navigate tabs, change eating rate, start/cancel build, inspect/raise Shelter, open/switch/select/complete/close trade, and return focus correctly without a pointer.
+- [ ] **QA-15 — Keyboard-only Act II journey.** Search/sort actions and recipes, trade, open milestone details, enter STRUCTURE, change filters/search/zoom, navigate/select/research a tile, clear selection, and leave with view state preserved.
+- [ ] **QA-16 — Pointer/touch conflict tests.** Verify nested cancel does not start, modal blocks background, drag suppresses click, wheel targets the hovered scroll/board, resize removes stale hits, tooltip does not block, and clipped rows/tiles cannot activate.
+
+### Performance and resource acceptance
+
+- [ ] **QA-17 — Profile representative worst cases.** At minimum: 20 actions, 50 recipes, open dialog, and all 61 board cells with rails/markers at 250%. Maintain the application's frame target on the reference machine without per-frame SVG loads or unbounded arena/pool growth.
+- [ ] **QA-18 — Run leak/lifecycle checks.** Repeatedly switch tabs, filter catalogs, open/close overlays, resize, and enter/leave STRUCTURE; verify text/SVG/geometry textures and owned buffers evict, pointer capture/focus clears, and stale slots do not remain hittable.
+- [ ] **QA-19 — Verify copy/data provenance.** Every displayed balance, requirement, deficit, duration, progress, stock count, effect, and readiness comes from one authoritative snapshot/catalog/quote. Search the implementation for duplicated prototype fixture numbers outside fixture/catalog data.
+
+## 14. Cleanup after parity
+
+- [ ] **CLEAN-01 — Retire `src/ui_client/widgets.zig` only after replacements land.** Remove duplicate button/panel/scroll/modal/tooltip/text-input implementations and barrel re-exports; keep one foundation/template path.
+- [ ] **CLEAN-02 — Remove superseded BUILD state/types.** Delete chip-filter `BuildViewState` fields, `Kind.blocked`, blocked-row copy/styles, old tier/effect filtering, and stale “good” terminology. Keep `GoodT` as a domain type name only if technically useful; player-facing text says recipe/good according to context.
+- [ ] **CLEAN-03 — Remove static distribution assets only when no live/reference consumer remains.** Keep prototype files/screenshots as design fixtures; production should use generated curves only after DEFER-09 is approved, implemented, and every live consumer has migrated.
+- [ ] **CLEAN-04 — Remove prototype-only global event patterns from production design.** No equivalents of `window.prototype*`, DOM CustomEvents, hash routing, or query-parameter state in game code. Use typed domain results, session UI state, and the fixture harness.
+- [ ] **CLEAN-05 — Reconcile stale comments/docs.** Remove claims that full tests are red if current commands pass, old direct-barter Act II references, fixed 64-byte assumptions after text work, and obsolete input-capture caveats after ordered/captured input ships.
+- [ ] **CLEAN-06 — Audit accessibility labels and visible copy.** Ensure abbreviations have full names, distribution glyphs have labels, icon-only controls have names, live regions do not spam, and old screenshot vocabulary cannot reappear from duplicate strings.
+
+## 15. Explicit non-goals and deferred work
+
+These remain in this file because it is the only future-work document, but they do not block Act I/II prototype parity unless a measured dependency proves otherwise. Act III's economy is deliberately unspecified beyond the sketch in `design.md`: firms, deeper division of labor, and a global source of capital goods the city buys from. That content cannot be designed honestly before Act II's demand/negotiation model in ACT2-08 exists; opening Act III identity in ACT2-18/19 does not pretend otherwise.
+
+- [ ] **DEFER-01 — Pause/menu overlay.** Reuse the completed modal foundation. Pause is deliberately unresolved for economic, not architectural, reasons: dropping `Busy` already leaves the body doing exactly one thing, but pausing a long build would let the player chip at a hatchet between forage runs until the manufactured tier becomes reachable by attrition, removing pressure the passerby exists to relieve. Cancellation itself already exists as `capital.cancel_build`. Define that policy before adding pause. A menu may expose only values explicitly marked player-configurable, with validation, ranges, and reset; raw mutable access to all of `res.config` would turn tuning internals into accidental UI API. Decide persistence before promising it.
+- [ ] **DEFER-02 — Capital durability/maintenance.** Goods are currently permanent once built; nothing wears. Add authoritative slow decay, condition, and upkeep before Holdings or a board tile displays a meter. Do not ship decorative wear UI.
+- [ ] **DEFER-03 — Audio/music.** Add ambient music only after core UI/simulation lifecycle provides volume/configuration ownership.
+- [ ] **DEFER-04 — Act III board thirds.** A later site may split one hex into three rhombi meeting at its center. This should cost the engine no new tiling concept—the same tile geometry, offset placement, and host-supplied hit predicate can compose it—so preserve APIs that allow adoption without a rewrite, but do not render or reserve thirds in Act II.
+- [ ] **DEFER-05 — SparseSet scale policy.** `world.zig`'s `SparseSet(T)` currently allocates three `[MAX_ENTITIES]` arrays (`dense_ids`, `dense_values`, and `sparse`) per component type, so memory cost is `num_types × MAX_ENTITIES`, not occupancy. Entity IDs are never recycled, making `MAX_ENTITIES` a lifetime-spawn cap rather than a live-population cap. This becomes material when the capital roster reaches hundreds or the ID ceiling must grow for population—not merely when there are hundreds of component types. Size dense arrays to occupancy; use a hashmap-backed sparse index for rarely carried types while hot types such as `Vigor` and `InventoryFood` retain flat indexing. Choose the per-type policy where `Storages(ns)` constructs each storage. Keep the change contained to `world.zig` plus `ecs.zig`, whose `Query` driver must stop reading `.dense_ids`, `.dense_values`, and `.len` directly and use storage methods.
+- [ ] **DEFER-06 — Additional sizing combinators.** Add `range`/`max_of`, `stretch`/`align-content`, and—only if measured compositions require it—a `strictness: f32` violation pass that distributes slack/overflow among siblings. Do not pre-build web layout breadth when UIE-03 expresses the concrete responsive layouts.
+- [ ] **DEFER-07 — O(interactive) stamping.** Profile before attempting. The event stage is already O(interactive) because `mark` iterates live slots without a tree walk; `stamp_rects` is only one inexpensive O(all) pass among sizing, percentage resolution, placement, stamping, and drawing. Z-ordered hit testing does not retire it: the paint-order list must still be produced by this walk because query order is not paint order.
+- [ ] **DEFER-08 — ZLS query tuple ergonomics.** `q.iter().next()` returns an `@Type`-constructed tuple that ZLS does not evaluate, so multi-fetch destructuring currently needs explicit annotations. Declaring `Query` parameters as concrete `[]const type` instead of `anytype` was measured and changes nothing; the limit is `@Type`. Complete type visibility only if ZLS's comptime interpreter gains that support.
+- [ ] **DEFER-09 — Parameterized distribution curves.** If playtesting needs the mini-curve to encode an action's actual p10–p90 parameters rather than only its distribution family, generate it through the geometry feature and replace the five static parity SVGs. Treat that as a reviewed extension to the finalized prototype, not a board prerequisite.
+
+## Definition of done
+
+Act I/II implementation is complete only when all non-deferred checklist items are checked and evidenced:
+
+1. The production app reproduces the prototype shell, visual states, responsive layouts, and interaction state machines without HTML/DOM runtime code.
+2. Every shared instrument is one reusable Zig component with act-specific data/vocabulary, not parallel copies.
+3. All changing values and atomic operations are backed by authoritative simulation/catalog/quote state; fixtures exist only in the development harness.
+4. Pointer, keyboard, focus, modal capture, scrolling, slider, catalog, and board-camera interactions pass automated journeys and visual review.
+5. Act I transitions safely into Act II with the exact resource/research migration invariants; Act II can raise Exchange and switch to Act III identity exactly once.
+6. `zig build test-ui`, `zig build test`, and `zig build` are green; required screenshot matrices and leak/performance checks are recorded; no competing future-work document or escaped code TODO remains.

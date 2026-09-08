@@ -26,6 +26,19 @@ const Yields = struct {
     materials: dist.Dist,
 };
 
+/// What a good demands of the *builder* before it is offered at all - standing
+/// conditions, as against `Requires`, which is what the build spends. Read once, in
+/// `capital.begin_build`: a dip afterwards doesn't stop work already paid for.
+const Unlock = struct {
+    /// A vigor *fraction*, not an absolute: capacity capital raises `max`, and `v/max`
+    /// is the reading every other part of the game keys off.
+    vigor_frac: f32,
+    /// Units in the larder.
+    food: f32,
+    /// How many goods from the catalog the builder must already own.
+    goods: u32,
+};
+
 // NOTE: These are components
 pub const Label = struct { v: []const u8 };
 
@@ -138,17 +151,18 @@ pub const Busy = struct {
         build_hatchet,
         build_wire_snares,
         build_air_rifle,
-        build_boots,
+        build_sandals,
         build_work_gloves,
         build_bicycle,
         build_cookpot,
         build_root_cellar,
         build_chainsaw,
-        build_bed,
+        build_leaf_bed,
         build_pantry,
         build_medicine_chest,
         build_garden_bed,
         build_chicken_coop,
+        build_shelter,
     };
     doing: Doing,
     /// Total work time and what's left of it, in game-seconds (see `res.hours_to_secs`).
@@ -174,84 +188,125 @@ pub const Metabolism = struct {
 // once by `capital.begin_build`. What the good *does* once built is its category (see
 // capital.zig): an Unlocker grants a verb, an ActionModifier mutates a margin, a
 // Generator starts running. One per agent, backed by the sparse-set's structural
-// guarantee. Prices ladder from ~3 Scavenge draws (Boots) to a multi-day save (Chainsaw)
-// — that ladder *is* the time-preference lesson.
+// guarantee.
+//
+// Every good also carries a `count`, because once a trader will take goods off your
+// hands a lone actor stops building only what he means to use — a second pair of sandals
+// is stock, not a deeper discount. **Only the first unit carries the effect**: that is a
+// balance call, not a structural one, and it is why `finish_build` grants on the way in
+// from absent rather than on every completion.
+//
+// The roster splits in two, and the prices are what says which is which. **Crude** goods
+// — sandals, leaf bed, wire snares, root cellar, garden bed — are what a person alone can
+// make from scavenged scrap and their own hands: a few materials, half a day. **Manufactured**
+// goods are everything else, and a lone actor cannot sensibly produce them: they carry ×8 the
+// materials and ×10 the hours, so a hatchet is four days of building nothing else while the
+// larder drains. They stay buildable on purpose — nothing forbids them, they are simply
+// priced past what one body's time is worth, which is the argument for trading instead.
 
 // -- Unlockers: owning the tool is what makes the verb possible at all --------------------
 
 /// Fishing rod → `ActionFish`.
 pub const FishRod = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 8.0, .hours = 12 },
+    requires: Requires = .{ .energy = 3.0, .materials = 64.0, .hours = 120 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Hatchet → `ActionChopWood`. The first step off bare hands into steady materials.
 pub const Hatchet = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 6.0, .hours = 10 },
+    requires: Requires = .{ .energy = 2.0, .materials = 48.0, .hours = 100 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Wire snares → `ActionCheckTraps`.
 pub const WireSnares = struct {
     requires: Requires = .{ .energy = 2.0, .materials = 5.0, .hours = 8 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Air rifle → `ActionHunt`. The long save of the labor roster.
 pub const AirRifle = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 25.0, .hours = 16 },
+    requires: Requires = .{ .energy = 2.0, .materials = 200.0, .hours = 160 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 // -- ActionModifiers: a margin on a verb you already have ---------------------------------
 
-/// Boots: Forage costs less body.
-pub const Boots = struct {
-    requires: Requires = .{ .energy = 1.0, .materials = 4.0, .hours = 6 },
+/// Rudimentary sandals: Forage costs a little less body. Bark and cordage — crude, and
+/// priced like it; the margin is small because the footwear is bad.
+pub const Sandals = struct {
+    requires: Requires = .{ .energy = 1.0, .materials = 3.0, .hours = 6 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Work gloves: splitting wood costs less body.
 pub const WorkGloves = struct {
-    requires: Requires = .{ .energy = 1.0, .materials = 3.0, .hours = 5 },
+    requires: Requires = .{ .energy = 1.0, .materials = 24.0, .hours = 50 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Bicycle: distance gets cheap — both roaming verbs at once.
 pub const Bicycle = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 15.0, .hours = 14 },
+    requires: Requires = .{ .energy = 2.0, .materials = 120.0, .hours = 140 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Cookpot: consumption-side capital — cooking raises the larder's `quality`, so every
 /// stored unit of food converts to more vigor under the metabolism.
 pub const Cookpot = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 7.0, .hours = 8 },
+    requires: Requires = .{ .energy = 2.0, .materials = 56.0, .hours = 80 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Root cellar: storage capital — halves spoilage. Worth exactly what your surpluses are.
 pub const RootCellar = struct {
     requires: Requires = .{ .energy = 4.0, .materials = 10.0, .hours = 12 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Chainsaw: the Act One capstone and the Act II teaser — the first substitution of
 /// *external* energy for muscle. Splitting wood stops pricing the body and starts
 /// pricing fuel.
 pub const Chainsaw = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 60.0, .hours = 30 },
+    requires: Requires = .{ .energy = 3.0, .materials = 480.0, .hours = 300 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 // -- Health goods: capacity capital ------------------------------------------------------
 // Sleeps well / eats better / patched up properly ⟹ actually healthier: each raises the
-// vigor *ceiling* by 2 (see `capital.health_apply`). A future aging component decrementing
+// vigor *ceiling* (see `capital.health_apply`) — by 1 for the crude leaf bed, by 2 for the
+// two manufactured goods. A future aging component decrementing
 // `max` composes underneath, since every mutation here is relative.
 
-/// Bed.
-pub const Bed = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 10.0, .hours = 12 },
+/// Leaf bed — the crude one, so it buys half of what the built furniture does.
+pub const LeafBed = struct {
+    requires: Requires = .{ .energy = 2.0, .materials = 6.0, .hours = 10 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Pantry.
 pub const Pantry = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 14.0, .hours = 14 },
+    requires: Requires = .{ .energy = 2.0, .materials = 112.0, .hours = 140 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 /// Medicine chest.
 pub const MedicineChest = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 20.0, .hours = 16 },
+    requires: Requires = .{ .energy = 2.0, .materials = 160.0, .hours = 160 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
 };
 
 // -- Generators: capital that runs itself ------------------------------------------------
@@ -265,6 +320,8 @@ pub const MedicineChest = struct {
 /// for a little upkeep (water, stakes).
 pub const GardenBed = struct {
     requires: Requires = .{ .energy = 4.0, .materials = 12.0, .hours = 16 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
     upkeep: Requires = .{ .energy = 0.0, .materials = 0.1, .hours = 0 },
     yields: Yields = .{
         .food = .{ .kind = .uniform, .s = 1.5 },
@@ -274,10 +331,29 @@ pub const GardenBed = struct {
 
 /// Chicken coop: a bigger flow than the garden (poisson: eggs) for real upkeep (feed).
 pub const ChickenCoop = struct {
-    requires: Requires = .{ .energy = 3.0, .materials = 18.0, .hours = 20 },
+    requires: Requires = .{ .energy = 3.0, .materials = 144.0, .hours = 200 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
     upkeep: Requires = .{ .energy = 0.0, .materials = 0.3, .hours = 0 },
     yields: Yields = .{
         .food = .{ .kind = .poisson, .s = 2.5 },
         .materials = .{ .kind = .fixed, .s = 0 },
     },
+};
+
+// -- Shelter: the roof that ends Act I ---------------------------------------------------
+// The one good that is neither a verb, a margin, a ceiling nor a flow. Owning it *is* Act
+// I's win condition: a lone actor who can house four has stopped surviving and started
+// settling, which is what a second human can be invited into. `unlock` is why it reads as
+// an achievement rather than a purchase - the conditions say you already made a life here.
+
+/// Shelter.
+pub const Shelter = struct {
+    requires: Requires = .{ .energy = 6.0, .materials = 80.0, .hours = 48 },
+    /// How many of this good the agent holds. Only the first carries the effect.
+    count: u32 = 1,
+    unlock: Unlock = .{ .vigor_frac = 0.8, .food = 20.0, .goods = 4 },
+    /// How many humans live under it. Act II's population fills this; Act I only asks
+    /// whether it is more than one.
+    capacity: u32 = 4,
 };

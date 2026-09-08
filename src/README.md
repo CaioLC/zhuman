@@ -186,20 +186,32 @@ costs no materials at all).
 
 ### Capital
 
-Fifteen goods, all buildable end-to-end, in three behavioral variants over one build path.
+Sixteen goods, all buildable end-to-end, in four behavioral variants over one build path.
 `begin_build` / `finish_build` / `break_good` are comptime-parameterized over the good exactly
-as labor is over the action — the gate/pay/start half is identical for all fifteen, only
+as labor is over the action — the gate/pay/start half is identical for all sixteen, only
 `grant`/`revoke` differ.
 
 | Variant | Goods | Behavior |
 |---|---|---|
 | **Unlocker** | Fishing rod, Hatchet, Wire snares, Air rifle | grants an action component outright — owning the good is what makes the verb possible |
-| **`ActionModifier`** | Boots, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
+| **`ActionModifier`** | Sandals, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Leaf bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
 | **`Generator`** | Garden bed, Chicken coop | runs continuously: `requires` is the build order, `upkeep` the per-tick drain |
+| **Curtain** | Shelter | grants nothing mechanical: owning it is Act I's win condition, and `build_ui` routes to the curtain on it |
+
+Cutting across those variants is a second split, named by `capital.is_crude` and otherwise
+carried entirely by the prices. **Crude**
+goods — sandals, leaf bed, wire snares, root cellar, garden bed — are what one person makes
+from scavenged scrap in half a day. **Manufactured** goods are the rest, at ×8 the materials
+and ×10 the hours: a hatchet is four days of building nothing else while the larder drains.
+They are not forbidden, only priced past what one body's time is worth — buying one is meant
+to beat building it, which is the whole argument the merchant makes. Two goods may modify one
+verb and stack (sandals and a bicycle both cheapen Forage); a better tool *superseding* a
+weaker one is a different rule with no subject yet.
 
 A modifier's `apply_*`/`remove_*` pair *scales* its target's `.s`/`.sd` rather than replacing
 them, so a boost preserves the distribution's shape. The health trio is relative (`+=`/`-=`)
-and fills what it adds, so `v/max` never dips on an upgrade — which matters because the status
+and fills what it adds — 1 for the crude leaf bed, 2 each for the manufactured pair — so
+`v/max` never dips on an upgrade — which matters because the status
 word and `yield_factor` both read that fraction. The Chainsaw is the Act II teaser: chop energy
 ×0.3 but `requires.materials += 1` for fuel, the first substitution of external energy for
 muscle.
@@ -215,7 +227,29 @@ target `ActionChopWood`, which only exists once the Hatchet is built. It gates t
 the tile, so a modifier can never be applied to a component that is not there, which would
 panic in `getMany`. It is also the roster's only tech-tree edge.
 
-`begin_build` checks `has` **first**; `SparseSet.add` does not guard duplicates.
+`capital.unlock_met` is the second gate, and the Shelter is its only subject: a good may carry
+an `unlock` — a vigor *fraction*, a larder floor and a count of goods already owned — stating
+what it asks of the builder, as against `requires`, which is what the build spends. Goods with
+no `unlock` field are ungated (`@hasField`). The conditions are read at `begin_build` and not
+again, so a dip mid-build doesn't stop work already paid for. `capital.goods_owned` counts them
+by sweeping `buildable_bundle` with `has`, so it counts **kinds** — four pairs of sandals are
+never four goods built.
+
+Every good carries a `count`, and owning one is not a reason you can't make another: building
+for someone else is what a count is for. Only the **first unit carries the effect** — a second
+pair of sandals is stock, not a deeper discount — so `finish_build` increments an existing
+component and runs `grant` only on the way in from absent. It increments rather than re-adding
+because `SparseSet.add` does not guard duplicates: a second `add` would append a second dense
+entry and leave the index pointing at one of them. `break_good` takes spares first and revokes
+only with the last unit, so losing a spare can't cost you the discount you're still wearing.
+
+`capital.cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the
+materials and frees the body, while the energy and every hour already spent are gone. The refund
+is flat rather than prorated because materials are charged in full at `begin_build` and nothing
+draws them down over time — a time-proportional refund would imply a consumption schedule the
+sim doesn't run. `good_of_doing` inverts `doing_of_good` to recover the price from a `Busy` that
+was never handed one, and returns null for the six labor verbs, which is what refuses a cancel
+on a half-finished forage.
 
 ## Module map
 
@@ -230,10 +264,10 @@ panic in `getMany`. It is also the roster's only tech-tree edge.
 | `capital.zig` | the generic build path, the modifier pairs, the generator system |
 | `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band |
 | `res.zig` | `Resources`, grouped by who writes it: `platform`, `input`, `time`, `sim`, `config`, `view` |
-| `palette.zig` | the game's `cold`/`warm` palettes and the blend between them |
+| `palette.zig` | the game's palette — the nine `Theme` roles, filled in |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines. Leaf module |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
-| `pages/` | the screens (`build_ui`, `play_game`, `gameover`) and the template shelf |
+| `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`) and the template shelf |
 | `root.zig` | the `ha` library root and its re-exports |
 
 `build.zig` makes the module import *itself* as `ha`, so library-internal files can
