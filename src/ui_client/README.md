@@ -43,8 +43,10 @@ pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
 pub const Node  = ui.Node(RenderData);
 ```
 
-- **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`:
-  `TextState` (a **64-byte** buffer + the px to render at — `update` clamps to it, so a
+- **`UiState`** — the pool registry. One `Pool(T)` per declaration, keyed by `node.key`.
+  A state with semantic defaults declares no-argument `init() T`; states without it
+  explicitly use the engine's bitwise-zero fallback. Every fresh slot and reused hole
+  follows that same contract. The registry currently contains `TextState` (a **64-byte** buffer + the px to render at — `update` clamps to it, so a
   longer string is truncated silently, and a node is one line either way), `ScrollState`,
   `TabsState`, `StepState`,
   `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries

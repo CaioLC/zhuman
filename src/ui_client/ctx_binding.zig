@@ -27,8 +27,8 @@ pub const UiState = struct {
         len: usize,
         /// Point size to render this text at, in px. Set by the `text` feature's `attach`
         /// (default) and overridden by `style.apply` when a `font` fragment resolves — so
-        /// the size travels from build to the feature's `draw`, which renders at it. Pool
-        /// slots are zero-initialized, so `attach` (run every frame before `draw`) always
+        /// the size travels from build to the feature's `draw`, which renders at it. The
+        /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
 
@@ -51,25 +51,24 @@ pub const UiState = struct {
         }
     };
     /// A scroll container's persisted offset (px), keyed by its own `node.key` — survives
-    /// the frame-arena reset the same way `TextData` does. See `scroll_view`.
+    /// the frame-arena reset the same way `TextData` does. It has no `init`, so it uses
+    /// the pool's documented zeroable fallback.
     pub const ScrollState = struct { offset: f32 = 0 };
     /// A tab strip's persisted selection (an index into its labels), keyed by the strip's
-    /// own `node.key` — same pattern as `ScrollState`. NOTE: pool slots are seeded with
-    /// `std.mem.zeroes`, not the struct's field defaults — a fresh strip always starts on
-    /// tab 0, and a non-zero "default tab" would need the template to set it explicitly.
+    /// own `node.key` — the `ScrollState` pattern for content that switches. Tab 0 is the
+    /// semantic and bitwise-zero default, so this state uses the zeroable fallback.
     pub const TabsState = struct { active: usize = 0 };
     /// A multi-step panel's position in its sequence, keyed by the panel's own
     /// `node.key` — the `TabsState` pattern for content that advances rather than
     /// switches: the caller reads `step`, builds that step, and bumps it on a click.
-    /// Zero-seeded like the rest, so a freshly built panel always starts at step 0.
+    /// Step 0 is the semantic and bitwise-zero default.
     pub const StepState = struct { step: usize = 0 };
     /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
     /// the tab strip's container, not the list itself, which only exists while its tab is
     /// active and would have its slot pruned on every visit to the other one.
     ///
-    /// Every default here is deliberately tag 0 / false, because pool slots are seeded
-    /// with `std.mem.zeroes` and *ignore* a struct's field defaults. Reordering `Sort` or
-    /// `Show` silently changes what the player sees on a fresh run.
+    /// `init` returns the declared semantic defaults, so enum declaration order can
+    /// change without silently changing what the player sees on a fresh run.
     pub const BuildViewState = struct {
         pub const Sort = enum { reach, materials, time };
         pub const Show = enum { in_reach, ready, all };
@@ -78,6 +77,10 @@ pub const UiState = struct {
         show: Show = .in_reach,
         tier: Tier = .any,
         built: bool = false,
+
+        pub fn init() BuildViewState {
+            return .{};
+        }
     };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
@@ -91,13 +94,14 @@ pub const UiState = struct {
     /// so it declares `deinit`: the pool's eviction hook (`cache.zig`) frees the texture
     /// when the node disappears or the app tears down. Without it, the texture would leak
     /// every time a scrolled-away / closed SVG node's slot is pruned. `src_key == 0` means
-    /// "nothing rasterized yet" (a fresh, zero-initialized slot).
+    /// "nothing rasterized yet"; `SvgState` intentionally uses the zeroable fallback.
     /// A polyline's points, keyed by its own `node.key`. The first state that carries
     /// *variable-length* data rather than a handle or a scalar — which is why it exists
     /// at all: `RenderData` holds one payload per feature per node, and coordinates do
     /// not fit in a tint. Fixed capacity keeps it POD (no `deinit`, no allocator), and a
     /// caller with more points than this wants a second node rather than a bigger buffer.
-    /// Zero-seeded like the rest, so an unset line has `len == 0` and draws nothing.
+    /// `LineState` intentionally uses the zeroable fallback, so an unset line has
+    /// `len == 0` and draws nothing.
     pub const LineState = struct {
         pub const cap = 64;
         buf: [cap]Point = undefined,

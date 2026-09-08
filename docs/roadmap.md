@@ -92,7 +92,8 @@ Critical dependencies:
 
 ### Persistent state and identity
 
-- [ ] **UIE-01 — Honor state initialization rather than blindly zeroing every type.** Extend `Pool(T)` with an explicit initialization convention (`T.init`, a supplied initializer, or a documented zeroable trait). Preserve zero initialization for truly zeroable states. Add tests proving nonzero enum/default values initialize correctly, holes reuse safely, and resource-owning states still deinitialize exactly once.
+- [x] **UIE-01 — Honor state initialization rather than blindly zeroing every type.** Extend `Pool(T)` with an explicit initialization convention (`T.init`, a supplied initializer, or a documented zeroable trait). Preserve zero initialization for truly zeroable states. Add tests proving nonzero enum/default values initialize correctly, holes reuse safely, and resource-owning states still deinitialize exactly once.
+  - COMMENT: Implemented with a no-argument `T.init() T` hook plus a documented zeroable fallback. Fresh slots and reused holes share the same initialization path; focused tests cover semantic defaults, dirty-hole reuse, and exactly-once resource cleanup.
 - [ ] **UIE-02 — Add optional persistence policy for conditionally hidden UI state.** Per-view query/sort/scroll/collapse state must not disappear merely because its subtree is not built for one tab. Prefer one always-built shell state containing all view state; if the pool gains retention/grace frames, keep that mechanism generic, bounded, and tested. Do not retain whole trees.
 
 ### Layout and responsive composition

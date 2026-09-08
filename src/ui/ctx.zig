@@ -124,7 +124,8 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         }
 
         /// This key's interaction state. Zeroed (all flags off) the first frame a
-        /// widget appears, since `acquire` zero-inits new slots. This is the
+        /// widget appears. `Slot` has no semantic nonzero defaults, so it uses the
+        /// pool's zeroable fallback. This is the
         /// read-through query: calling it allocates-or-keeps the slot (a node has
         /// no interaction state until something marks or reads it — lazy slots).
         pub fn interactionOf(self: *Self, k: u64) IntFlags {

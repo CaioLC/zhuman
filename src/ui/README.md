@@ -165,13 +165,20 @@ slot-map:
   (handles re-fetched every frame), so no handle ever spans a removal.
 - **Prune at the frame boundary.** A slot not *touched* (acquired) this frame is
   freed next `endFrame`. Touch = stay alive.
-- **Eviction hook.** When a slot is dropped (pruned, its hole reused, or the pool
-  torn down), the pool calls `value.deinit()` if `T` declares one. POD states
+- **Initialize on occupancy.** A fresh slot and a reused hole follow the same
+  contract: if `T` declares `pub fn init() T`, the pool calls it; otherwise `T`
+  opts into `std.mem.zeroes(T)`. States with semantic nonzero defaults declare
+  `init` (usually returning `.{}`), so enum tag order and field layout cannot
+  silently choose behavior. Hole reuse initializes only after the old occupant
+  has been evicted.
+- **Eviction hook.** When a slot is dropped (pruned, before its hole is reused, or the pool
+  is torn down), the pool calls `value.deinit()` if `T` declares one. POD states
   (`TextData`, a scroll offset) need nothing; a state that *owns a resource* — an svg
   feature caching a rasterized `Texture` — declares `deinit` so the resource is freed
-  instead of leaked when its node disappears. The `@typeInfo` guard keeps this legal
-  for non-container `T`. Convention: `deinit` takes no allocator (a cached GPU/handle
-  frees itself; anything needing the gpa isn't pool-cached).
+  instead of leaked when its node disappears. The `@typeInfo` guard keeps both hooks
+  legal for non-container `T`. Conventions: `init` takes no arguments and returns `T`;
+  `deinit` takes no allocator (a cached GPU/handle frees itself; anything needing the
+  gpa isn't pool-cached).
 
 ## Interaction: hit-testing slots
 

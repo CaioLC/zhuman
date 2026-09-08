@@ -33,12 +33,26 @@ pub fn Pool(comptime T: type) type {
             live: bool,
         };
 
+        /// Construct a fresh slot value. A pooled container type may declare
+        /// `pub fn init() T` to establish semantic defaults; otherwise the type opts
+        /// into the zeroable fallback. Initialization runs for both appended slots and
+        /// reused holes, after the previous occupant has been evicted.
+        ///
+        /// The `@typeInfo` guard keeps `@hasDecl` legal for scalar `T` (for example the
+        /// `Pool(u32)` used in tests). A declared `init` is part of the pool contract:
+        /// it must take no arguments and return `T` directly.
+        fn initialValue() T {
+            return switch (@typeInfo(T)) {
+                .@"struct", .@"enum", .@"union", .@"opaque" => if (@hasDecl(T, "init")) T.init() else std.mem.zeroes(T),
+                else => std.mem.zeroes(T),
+            };
+        }
+
         /// Release a slot's resources before its storage is dropped. If `T` declares
         /// `pub fn deinit(self: *T) void`, call it; otherwise a no-op. This is the
         /// eviction hook: a POD state (`TextState`, `ScrollState`) needs nothing, but a
         /// state that *owns* a resource — an SVG feature caching a rasterized
-        /// `sdl.Texture` — would otherwise leak it when its node disappears, because
-        /// `prune` drops the value and `acquire` overwrites a reused hole with zeroes.
+        /// `sdl.Texture` — would otherwise leak it when its node disappears.
         /// The `@typeInfo` guard keeps `@hasDecl` legal for non-container `T` (e.g. the
         /// `Pool(u32)` in tests). Convention: `deinit` takes no allocator — a cached
         /// GPU/handle resource frees itself; anything needing the gpa isn't pool-cached.
@@ -68,18 +82,18 @@ pub fn Pool(comptime T: type) type {
                 self.slots.items[idx].touched = frame;
                 return idx;
             }
-            // Reuse a hole if one exists, else append a fresh slot. New slots are
-            // zero-initialized so a reader (e.g. comm reading a rect on the first
-            // frame, before it's written) sees a safe empty value, not garbage.
+            // Reuse a hole if one exists, else append a fresh slot. Both paths apply
+            // the same initialization contract so a reused handle cannot inherit the
+            // previous key's state.
             if (self.free.items.len != 0) {
                 const idx = self.free.items[self.free.items.len - 1];
                 self.free.items.len -= 1;
-                self.slots.items[idx] = .{ .value = std.mem.zeroes(T), .key = k, .touched = frame, .live = true };
+                self.slots.items[idx] = .{ .value = initialValue(), .key = k, .touched = frame, .live = true };
                 try self.index.put(alloc, k, idx);
                 return idx;
             }
             const idx: u32 = @intCast(self.slots.items.len);
-            try self.slots.append(alloc, .{ .value = std.mem.zeroes(T), .key = k, .touched = frame, .live = true });
+            try self.slots.append(alloc, .{ .value = initialValue(), .key = k, .touched = frame, .live = true });
             try self.index.put(alloc, k, idx);
             return idx;
         }
@@ -167,6 +181,37 @@ test "prune frees untouched slots and frees are reused" {
     try std.testing.expectEqual(x, y);
 }
 
+test "acquire honors init defaults for fresh and reused slots" {
+    const alloc = std.testing.allocator;
+    const State = struct {
+        const Mode = enum { zero, expected };
+
+        mode: Mode = .expected,
+        count: u8 = 7,
+
+        pub fn init() @This() {
+            return .{};
+        }
+    };
+
+    var p: Pool(State) = .{};
+    defer p.deinit(alloc);
+
+    const first = try p.acquire(alloc, 111, 1);
+    try std.testing.expectEqual(State.Mode.expected, p.get(first).mode);
+    try std.testing.expectEqual(@as(u8, 7), p.get(first).count);
+
+    // Dirty the value, prune it, then prove the same physical hole is initialized
+    // from semantic defaults rather than retaining the previous key's state.
+    p.get(first).* = .{ .mode = .zero, .count = 0 };
+    try p.prune(alloc, 2);
+
+    const reused = try p.acquire(alloc, 222, 2);
+    try std.testing.expectEqual(first, reused);
+    try std.testing.expectEqual(State.Mode.expected, p.get(reused).mode);
+    try std.testing.expectEqual(@as(u8, 7), p.get(reused).count);
+}
+
 test "values survive pool growth (handles, not pointers)" {
     const alloc = std.testing.allocator;
     var p: Pool(u32) = .{};
@@ -189,34 +234,44 @@ test "keys are deterministic and seed-sensitive" {
     try std.testing.expect(key_i(0, "item", 1) != key_i(0, "item", 2));
 }
 
-test "evict: prune and deinit call a slot's deinit; POD types are left alone" {
+test "resource states initialize on reuse and deinitialize exactly once per occupant" {
     const alloc = std.testing.allocator;
 
-    // A resource-owning state: counts how many times it was deinit'd (via a shared
-    // tally). The pointer is optional so `std.mem.zeroes` can seed a fresh slot — the
-    // same reason a real resource-owning state holds e.g. `tex: ?Texture = null`.
     var freed: usize = 0;
     const Res = struct {
         tally: ?*usize = null,
+        marker: u8 = 9,
+
+        pub fn init() @This() {
+            return .{};
+        }
+
         pub fn deinit(self: *@This()) void {
             if (self.tally) |t| t.* += 1;
+            self.tally = null;
         }
     };
 
     var p: Pool(Res) = .{};
 
-    // Two live slots on frame 1.
-    const a = try p.acquire(alloc, 1, 1);
-    p.get(a).* = .{ .tally = &freed };
-    const b = try p.acquire(alloc, 2, 1);
-    p.get(b).* = .{ .tally = &freed };
+    const first = try p.acquire(alloc, 1, 1);
+    try std.testing.expectEqual(@as(u8, 9), p.get(first).marker);
+    p.get(first).tally = &freed;
 
-    // Frame 2 re-touches only key 1 → key 2's slot is pruned and evicted once.
-    _ = try p.acquire(alloc, 1, 2);
+    // Pruning evicts the first occupant exactly once.
     try p.prune(alloc, 2);
     try std.testing.expectEqual(@as(usize, 1), freed);
 
-    // The surviving live slot (key 1) is evicted at pool deinit → tally reaches 2.
+    // Reuse initializes the hole, clearing the old resource pointer and restoring
+    // semantic defaults without evicting the already-dead occupant a second time.
+    const reused = try p.acquire(alloc, 2, 2);
+    try std.testing.expectEqual(first, reused);
+    try std.testing.expectEqual(@as(?*usize, null), p.get(reused).tally);
+    try std.testing.expectEqual(@as(u8, 9), p.get(reused).marker);
+    try std.testing.expectEqual(@as(usize, 1), freed);
+    p.get(reused).tally = &freed;
+
+    // Teardown evicts the second occupant once; each occupant was finalized once.
     p.deinit(alloc);
     try std.testing.expectEqual(@as(usize, 2), freed);
 }
