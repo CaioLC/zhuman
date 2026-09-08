@@ -9,6 +9,7 @@
 
 const std = @import("std");
 const cache_mod = @import("cache.zig");
+const focus_mod = @import("focus.zig");
 const geometry = @import("geometry.zig");
 
 pub const Rect = geometry.Rect;
@@ -81,17 +82,13 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// last frame, so `prune` kept them, and holes are only reused during the build
         /// that follows. `live` is still checked.
         order: std.ArrayList(u32) = .empty,
-        /// The node key that currently owns keyboard text, if any. Focus is singular
-        /// and global — unlike interaction, which is per-node — because a platform
-        /// delivers text and editing keys as raw events, not routed to whatever the
-        /// pointer is over. The engine stores it and reads it back; what *counts* as
-        /// taking focus, and what a focused widget does with the keys, stays host
-        /// policy. Known gap: a focused node that stops being built leaves this set,
-        /// so the host is responsible for clearing it when a screen closes.
-        focused: ?u64 = null,
+        /// Singular key-based keyboard focus plus the double-buffered traversal registry.
+        /// Event-stage commands traverse the last completed frame; build registration
+        /// fills the next order, which `endFrame` repairs and publishes.
+        focus: focus_mod.Focus,
 
         pub fn init(res: *Res, gpa: std.mem.Allocator, arena: std.mem.Allocator) Self {
-            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{}, .focused = null };
+            return .{ .res = res, .gpa = gpa, .arena = arena, .frame = 0, .pools = .{}, .interactions = .{}, .focus = focus_mod.Focus.init(gpa) };
         }
 
         pub fn deinit(self: *Self) void {
@@ -100,6 +97,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             }
             self.interactions.deinit(self.gpa);
             self.order.deinit(self.gpa);
+            self.focus.deinit();
         }
 
         /// The pool for state type `T` (must be registered in `StateNs`).
@@ -120,6 +118,40 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         /// conditional child. Retention ends as soon as the shell stops calling it.
         pub fn retainState(self: *Self, k: u64, comptime T: type) bool {
             return self.pool(T).retain(k, self.frame);
+        }
+
+        /// Register one stable key in this frame's global traversal order.
+        pub fn registerFocus(self: *Self, key: u64, enabled: bool) void {
+            self.focus.register(key, enabled);
+        }
+
+        /// Register a member whose group contributes one active global Tab stop.
+        pub fn registerRovingFocus(self: *Self, group: u64, key: u64, enabled: bool) void {
+            self.focus.registerRoving(group, key, enabled);
+        }
+
+        pub fn requestFocus(self: *Self, key: u64) bool {
+            return self.focus.request(key);
+        }
+
+        pub fn clearFocus(self: *Self) void {
+            self.focus.clear();
+        }
+
+        pub fn focusedKey(self: *const Self) ?u64 {
+            return self.focus.focusedKey();
+        }
+
+        pub fn isFocused(self: *const Self, key: u64) bool {
+            return self.focus.isFocused(key);
+        }
+
+        pub fn moveFocus(self: *Self, direction: focus_mod.Direction, wrap: bool) bool {
+            return self.focus.move(direction, wrap);
+        }
+
+        pub fn moveRovingFocus(self: *Self, group: u64, direction: focus_mod.Direction, wrap: bool) bool {
+            return self.focus.moveInGroup(group, direction, wrap);
         }
 
         /// Set one interaction flag for key `k` directly (no hit-test). `flag` is
@@ -230,6 +262,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             // input *before* beginning the frame, so the list has to outlive the
             // frame that built it and be dropped only once it has been read.
             self.order.clearRetainingCapacity();
+            self.focus.beginFrame();
         }
 
         pub fn endFrame(self: *Self) void {
@@ -237,6 +270,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
                 @field(self.pools, f.name).prune(self.gpa, self.frame) catch {};
             }
             self.interactions.prune(self.gpa, self.frame) catch {};
+            self.focus.endFrame();
             self.clearTransient();
         }
     };

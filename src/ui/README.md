@@ -254,15 +254,23 @@ input-agnostic.
 
 ### Keyboard focus
 
-`Ctx.focused: ?u64` names the node that currently owns keyboard text, or null. It sits
-beside the interaction pool but is shaped differently on purpose: **interaction is
-per-node, focus is singular and global**, because a platform delivers text and editing
-keys as raw events rather than routed to whatever the pointer is over. The engine stores
-the key and reads it back; what counts as *taking* focus, and what a focused widget does
-with the keys, is host policy (`widgets.text_input` claims it on click, the host event
-loop routes `.text_input`/backspace into that key's buffer). Unlike a slot, `focused` is
-not pruned — a focused node that stops being built leaves it set, so clearing it when a
-screen closes is the host's job.
+`Ctx` owns one singular, stable-key `Focus` registry. During build, widgets call
+`registerFocus(key, enabled)` in global traversal order; `registerRovingFocus(group,
+key, enabled)` registers directional members while exposing only the group's active
+member as a global Tab stop. The generic engine knows no keyboard vocabulary: the host
+maps commands onto `moveFocus`, `moveRovingFocus`, `requestFocus`, and `clearFocus`, then
+queries `focusedKey` / `isFocused` to route text and paint state.
+
+The registry is double-buffered to match the frame pipeline. The event stage traverses
+the last completed frame, `beginFrame` clears the build buffer, and `endFrame` repairs
+focus against the newly registered targets before publishing their order. An enabled
+focused key survives reorder by identity. If it disappears or becomes disabled, focus
+moves deterministically to the enabled global stop at the same prior ordinal (clamped to
+the new end); an empty registry clears it. Disabled targets are skipped, and next/
+previous traversal supports host-selected wrap or no-wrap behavior. A roving group's
+active member is repaired to its first enabled member, and groups absent from the build
+are pruned. Thus conditional screens cannot leave stale focus behind, while tabs and
+board tiles avoid flooding global Tab order.
 
 ### Persistence bridge & lazy slots
 

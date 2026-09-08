@@ -84,8 +84,8 @@ pub const UiState = struct {
     };
     /// A `text_input`'s persisted UTF-8 buffer, keyed by its own `node.key`. `main.zig`'s
     /// event loop appends `.text_input` events and handles backspace directly against
-    /// whichever field `UiCtx.focused` names — the widget itself only reads it
-    /// to render. See `text_input`.
+    /// whichever stable key `UiCtx.focusedKey()` returns; the widget registers that key
+    /// each frame and reads focus to render. See `text_input`.
     pub const TextInputState = struct { buf: [64]u8 = undefined, len: usize = 0 };
     /// The `svg` feature's cached rasterization (see `ui_client/features/svg.zig`): the
     /// texture SDL_image produced for the current source+size, plus the `src_key` hash

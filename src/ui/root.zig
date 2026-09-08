@@ -5,6 +5,10 @@
 pub const features = @import("./features/root.zig");
 pub const cache = @import("./cache.zig");
 pub const geometry = @import("./geometry.zig");
+pub const focus = @import("./focus.zig");
+
+pub const Focus = focus.Focus;
+pub const FocusDirection = focus.Direction;
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const Rect = geometry.Rect;
@@ -33,5 +37,6 @@ pub const stamp_rects = @import("./node.zig").stamp_rects;
 test {
     _ = @import("./node.zig");
     _ = cache;
+    _ = focus;
     _ = @import("./ctx.zig");
 }

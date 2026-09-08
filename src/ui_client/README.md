@@ -72,6 +72,16 @@ pub const Node  = ui.Node(RenderData);
 - **`icon_sprite(res, col, row)`** — the one place that knows the icon sheet lives on
   `res.platform.icons` and how big a cell is.
 
+## Focus binding
+
+The engine owns focus identity, traversal order, and lifecycle repair; this layer decides
+which widgets register and how platform events are routed. `widgets.text_input` registers
+its stable node key every build, requests it on click, and reads `isFocused` for caret and
+outline state. The SDL event stage reads `focusedKey()` to append text or erase a UTF-8
+codepoint from that key's `TextInputState`; Escape and an outside click call
+`clearFocus()`. SDL text-input activation remains host policy. Generic next/previous and
+roving-group movement are exposed by `UiCtx`; full command mapping belongs to INPUT-06.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

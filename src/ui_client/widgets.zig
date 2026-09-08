@@ -282,33 +282,30 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
 }
 
 /// Single-line search/text box: a bordered, fixed-width field holding a persisted UTF-8
-/// buffer (`UiState.TextInputState`, keyed like `ScrollState`). Click to focus — focus is
-/// host-global (`ctx.focused`), since SDL delivers `.text_input`/backspace as raw
-/// keyboard events rather than routed to a widget; `main.zig`'s event loop mutates the
-/// same `TextInputState` slot directly (via `ctx.cache(node.key, ...)`, the same key this
-/// widget computes) whenever this field owns focus. Shows `placeholder` (dimmed) when
+/// buffer (`UiState.TextInputState`, keyed like `ScrollState`). It registers its stable
+/// node key in global traversal order and requests singular engine focus when clicked.
+/// SDL still delivers `.text_input`/backspace as raw events, so `main.zig` routes them to
+/// `ctx.focusedKey()` and mutates this same state slot. Shows `placeholder` (dimmed) when
 /// empty and unfocused, the typed text with a trailing caret while focused, plain text
-/// otherwise. `main.zig` is responsible for calling `sdl.keyboard.start/stopTextInput` on
-/// focus change and for clearing focus (and stopping text input) when the surrounding
-/// screen closes — this widget only starts/stops on its own click/focus transitions.
+/// otherwise. The widget starts SDL text input when it takes focus; Escape and outside
+/// clicks clear focus, with the host stopping SDL text input on Escape.
 pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []const u8, width: f32) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
     _ = node.with_layout(.relative, null);
 
     const state = node.state(ctx, UiState.TextInputState);
+    ctx.registerFocus(node.key, true);
 
     const q = node.query(ctx);
-    var focused = ctx.focused == node.key;
     if (q.clicked) {
-        focused = true;
-        ctx.focused = node.key;
-    } else if (focused and ctx.res.input.mouse_down) {
-        focused = false; // clicked elsewhere this frame
-        ctx.focused = null;
+        _ = ctx.requestFocus(node.key);
+    } else if (ctx.isFocused(node.key) and ctx.res.input.mouse_down) {
+        ctx.clearFocus(); // clicked elsewhere this frame
     }
+    const focused = ctx.isFocused(node.key);
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.startTextInput(ctx.res.platform.window) catch {};
-    } else if (!focused and sdl.keyboard.textInputActive(ctx.res.platform.window)) {
+    } else if (ctx.focusedKey() == null and sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.stopTextInput(ctx.res.platform.window) catch {};
     }
 
