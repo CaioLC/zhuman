@@ -135,15 +135,15 @@ pub fn capital_row(
         const xq = x.query();
         _ = (try el.text(ctx, x, "t", "\u{00d7}"))
             .with_style(.{ style.h3, Style{ .text = if (xq.hovering) th.danger else th.line2 } });
-        cancelled = xq.clicked;
+        cancelled = x.consume(.clicked);
     }
 
     return .{
         .kind = kind,
         .reach = reach,
-        // The corner sits inside the row, so a click there reaches both — bubbling is
-        // what keeps the row lit while the pointer is on the ×. Cancel wins.
-        .clicked_build = hot and q.clicked and !cancelled,
+        // The corner sits inside the row, so hover still bubbles and keeps the row lit.
+        // Its activation is consumed above; re-query after descendants for the action.
+        .clicked_build = hot and row.query().clicked,
         .clicked_cancel = cancelled,
     };
 }

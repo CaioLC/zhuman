@@ -50,6 +50,13 @@ pub const El = struct {
         return self.node.query(self.ctx);
     }
 
+    /// Observe and consume one host interaction flag on this node and its stamped
+    /// ancestors. Descendants consume before ancestor action decisions; hover and
+    /// unrelated flags remain available.
+    pub fn consume(self: El, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
+        return self.ctx.consumeFlag(self.node.key, flag);
+    }
+
     /// Set this node's own anchor — how *it* sits within its parent. How this node arranges
     /// its own children is the separate concern `with_flow`.
     pub fn with_layout(self: El, anchor: ui.Anchor) El {

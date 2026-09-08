@@ -227,6 +227,31 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.interactions.slots.items[idx].value.rect;
         }
 
+        /// Observe and consume one typed flag on `k` and its stamped ancestor chain.
+        /// Missing/unset sources return false without allocation. Consumption is
+        /// flag-specific: hover and every unrelated host flag remain untouched.
+        pub fn consumeFlag(self: *Self, k: u64, comptime flag: FlagEnum) bool {
+            const idx = self.interactions.index.get(k) orelse return false;
+            const source = &self.interactions.slots.items[idx];
+            if (!source.live) return false;
+            source.touched = self.frame; // consuming is a read; keep the existing slot alive
+            const name = @tagName(flag);
+            if (!@field(source.value.flags, name)) return false;
+
+            @field(source.value.flags, name) = false;
+            var pk = source.value.parent_key;
+            var guard: u32 = 0;
+            while (pk) |key| : (guard += 1) {
+                if (guard > 256) break;
+                const pidx = self.interactions.index.get(key) orelse break;
+                const parent = &self.interactions.slots.items[pidx];
+                if (!parent.live) break;
+                @field(parent.value.flags, name) = false;
+                pk = parent.value.parent_key;
+            }
+            return true;
+        }
+
         /// Mark key `k` as pass-through: present for geometry, invisible to hit-testing.
         /// No-op if `k` has no slot. Set at build time, cleared by nothing — a node that
         /// stops declaring it gets a fresh (blocking) slot when its old one is pruned.
@@ -460,6 +485,54 @@ test "shape predicate expires when the next build omits it" {
     u.endFrame();
     u.mark(.clicked, 5, 5);
     try std.testing.expect(u.interactionOf(shape).clicked);
+}
+
+test "child consumption clears one flag through ancestors and preserves hover" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const grand = cache_mod.key(0, "grand");
+    const row = cache_mod.key(grand, "row");
+    const cancel = cache_mod.key(row, "cancel");
+    const sibling = cache_mod.key(grand, "sibling");
+    const box = Rect{ .x = 0, .y = 0, .w = 100, .h = 40 };
+    tstamp(&u, grand, box, null, null);
+    tstamp(&u, row, box, null, grand);
+    tstamp(&u, sibling, .{ .x = 120, .y = 0, .w = 20, .h = 20 }, null, grand);
+    tstamp(&u, cancel, .{ .x = 80, .y = 0, .w = 20, .h = 40 }, null, row);
+
+    u.mark(.hovering, 90, 20);
+    u.mark(.clicked, 90, 20);
+    u.setFlag(sibling, .clicked, true); // unrelated branch must remain untouched
+
+    try std.testing.expect(u.consumeFlag(cancel, .clicked));
+    try std.testing.expect(!u.interactionOf(cancel).clicked);
+    try std.testing.expect(!u.interactionOf(row).clicked);
+    try std.testing.expect(!u.interactionOf(grand).clicked);
+    try std.testing.expect(u.interactionOf(sibling).clicked);
+    try std.testing.expect(u.interactionOf(cancel).hovering);
+    try std.testing.expect(u.interactionOf(row).hovering);
+    try std.testing.expect(u.interactionOf(grand).hovering);
+    try std.testing.expect(!u.consumeFlag(cancel, .clicked));
+    try std.testing.expect(!u.consumeFlag(cache_mod.key(0, "missing"), .clicked));
+}
+
+test "captured child activation can be consumed without changing capture" {
+    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const row = cache_mod.key(0, "row");
+    const child = cache_mod.key(row, "child");
+    tstamp(&u, row, .{ .x = 0, .y = 0, .w = 100, .h = 40 }, null, null);
+    tstamp(&u, child, .{ .x = 80, .y = 0, .w = 20, .h = 40 }, null, row);
+    try std.testing.expect(u.capturePointer(child));
+
+    u.mark(.clicked, 500, 500);
+    try std.testing.expect(u.consumeFlag(child, .clicked));
+    try std.testing.expect(!u.interactionOf(row).clicked);
+    try std.testing.expect(u.hasPointerCapture(child));
 }
 
 test "captured slider drag routes outside and cannot click through" {

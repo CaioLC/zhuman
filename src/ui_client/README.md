@@ -143,6 +143,12 @@ supply hex containment without putting hex knowledge in the engine. The declarat
 frame-scoped and must not capture arena data; omitting it on the next build restores the
 normal rectangular hit box.
 
+For nested controls, `El.consume(.clicked)` observes and clears that typed flag on the
+child and its stamped ancestors while preserving hover and unrelated flags. Descendants
+consume before ancestor action decisions; ancestors re-query afterward. `capital_row`
+uses this for its nested cancel control, so cancel no longer needs a manual `!cancelled`
+guard to keep the containing build action from firing.
+
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that
 owner outside its box, then owner-releases; the event layer cancels on platform

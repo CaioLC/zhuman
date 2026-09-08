@@ -247,6 +247,14 @@ geometry — so **hit-testing iterates the live slots, never the node tree**:
   window-focus loss. Interaction pruning clears capture automatically when its owner
   disappears. The engine remains pointer-ID and event-vocabulary agnostic; those are host
   input-model concerns.
+
+  Nested controls can consume one host-typed flag with `consumeFlag(source, flag)`. The
+  call atomically observes and clears that flag on the source and its stamped ancestor
+  chain without allocating; hover, other flags, sibling branches, and capture ownership
+  are unchanged. This is immediate-mode ordering rather than callbacks: descendants
+  consume before ancestor action decisions, and an ancestor re-queries after building
+  descendants instead of acting from a stale copied query. Thus a cancel button can
+  retain row hover bubbling while suppressing the row's activation.
 - **`ui.stamp_rects(root)` (after layout):** walks the laid-out tree and records each
   *already-queried* node's geometry into its slot (`stampRect` no-ops for keys with no
   slot). This is what feeds the next frame's `mark`, and it carries three things down
