@@ -52,10 +52,19 @@ pub fn tile(
     const box = try el.div(ctx, parent, id);
     // Affordability/running remains authoritative here; publication is a visual/semantic
     // projection and explicitly clears stale disabled state when the facts change.
-    uic.publishControlState(ctx, box.get().key, .{ .disabled = running or !can });
+    const box_key = box.get().key;
+    const enabled = !running and can;
+    ctx.registerFocus(box_key, enabled);
     const q = box.query();
-    if (q.hovering) ctx.res.cursor.request(if (q.disabled) .not_allowed else .pointer);
-    const chrome = if (running) th.fg else if (q.disabled) th.dim else if (q.held or q.hovering) th.acc else th.fg;
+    if (q.clicked and enabled) _ = ctx.requestFocus(box_key);
+    const focused = ctx.isFocused(box_key);
+    uic.publishControlState(ctx, box_key, .{
+        .disabled = !enabled,
+        .focused = focused,
+        .focus_visible = focused,
+    });
+    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
+    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.held or q.hovering or focused) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.

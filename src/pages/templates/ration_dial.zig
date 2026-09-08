@@ -39,11 +39,19 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
     for (options, 0..) |opt, i| {
         const key = try std.fmt.allocPrint(ctx.arena, "opt{d}", .{i});
         const chip = try el.div(ctx, bar, key);
+        const chip_key = chip.get().key;
         const q = chip.query();
+        ctx.registerRovingFocus(bar.get().key, chip_key, true);
+        if (q.clicked) _ = ctx.requestFocus(chip_key);
+        const focused = ctx.isFocused(chip_key);
         if (q.hovering) ctx.res.cursor.request(.pointer);
         if (q.clicked) met.setting = opt.s;
         const is_active = met.setting == opt.s;
-        uic.publishControlState(ctx, chip.get().key, .{ .selected = is_active });
+        uic.publishControlState(ctx, chip_key, .{
+            .focused = focused,
+            .focus_visible = focused,
+            .selected = is_active,
+        });
 
         // The eating pulse: the active chip fills with progress through the *current
         // food unit* (`ceil(F) − F`) and resets as each unit is consumed — a repeating
@@ -66,7 +74,7 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
             }
         }
 
-        const c = if (is_active) th.fg else if (q.held or q.hovering) th.acc else th.dim;
+        const c = if (is_active) th.fg else if (q.held or q.hovering or focused) th.acc else th.dim;
         const lbl = (try el.text(ctx, chip, "l", opt.name))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});

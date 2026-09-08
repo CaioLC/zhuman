@@ -60,8 +60,9 @@ pub const Node  = ui.Node(RenderData);
   conditional child is the clearer owner, the shell may call `retainChildState` each
   hidden frame; this keeps only an existing typed slot and stops automatically with
   the shell. `BuildViewState` uses that path while ACTIONS hides the BUILD root.
-- **`Interaction`** — pointer-derived hover/press/held/release/wheel/click/drag/capture
-  plus semantic disabled/focus/focus-visible/selected/checked projections. Pointer fields
+- **`Interaction`** — pointer-derived hover/press/held/release/wheel/click/drag/capture,
+  transient command dismissal, plus semantic disabled/focus/focus-visible/selected/checked
+  projections. Pointer/command fields
   are transient; `publishControlState` writes every semantic field from its real owner
   each build, so no anonymous `active` latch exists.
 - **`RenderData`** — one *optional* field per paint feature, each carrying that feature's
@@ -159,13 +160,21 @@ keyboard command routing lands.
 
 ## Focus binding
 
-The engine owns focus identity, traversal order, and lifecycle repair; this layer decides
-which widgets register and how platform events are routed. `widgets.text_input` registers
-its stable node key every build, requests it on click, and reads `isFocused` for caret and
-outline state. The SDL event stage reads `focusedKey()` to append text or erase a UTF-8
-codepoint from that key's `TextInputState`; Escape and an outside click call
-`clearFocus()`. SDL text-input activation remains host policy. Generic next/previous and
-roving-group movement are exposed by `UiCtx`; full command mapping belongs to INPUT-06.
+The engine owns focus identity, traversal order, roving groups, and lifecycle repair; this
+layer maps SDL keys and registers owners. `command.zig` normalizes Tab/Shift+Tab, arrows,
+Enter/Space, Escape, slash, Backspace/Delete, and Home/End. Main traverses global focus,
+moves and activates roving choices, and emits `.clicked` for keyboard activation so call
+sites share pointer guards. Buttons, actions, rows, nested cancel, goals, tabs, ration, and
+build choices register enabled stable keys and publish visible focus; disabled targets are
+skipped. Pointer completion requests the same focus identity.
+
+The fixed `CommandRegistry` publishes each build's text/search and latest Escape owner for
+the next event stage. A focused text owner consumes Escape first; otherwise the topmost
+registered overlay/view receives transient `.dismissed`. Unhandled Escape does not quit;
+only SDL quit/terminating does. Slash focuses the registered search field without inserting
+its shortcut byte. Editing commands and SDL text bytes are gated to registered text owners;
+the current end-anchored Backspace behavior remains, while caret/selection semantics for
+Delete/Home/End belong to INPUT-07.
 
 ## Paint features (`features/`)
 

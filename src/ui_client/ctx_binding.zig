@@ -169,6 +169,7 @@ pub const Interaction = packed struct {
     clicked: bool = false,
     dragging: bool = false,
     captured: bool = false,
+    dismissed: bool = false,
 
     disabled: bool = false,
     focused: bool = false,
@@ -185,6 +186,7 @@ pub const Interaction = packed struct {
         "clicked",
         "dragging",
         "captured",
+        "dismissed",
     };
 };
 
@@ -278,6 +280,7 @@ test "pointer states reset while authoritative control states persist and republ
     u.setFlag(k, .clicked, true);
     u.setFlag(k, .dragging, true);
     u.setFlag(k, .captured, true);
+    u.setFlag(k, .dismissed, true);
     publishControlState(&u, k, .{
         .disabled = true,
         .focused = true,
@@ -288,13 +291,13 @@ test "pointer states reset while authoritative control states persist and republ
 
     const on = u.interactionOf(k);
     try std.testing.expect(on.hovering and on.pressed and on.held and on.released and on.wheel and on.clicked);
-    try std.testing.expect(on.dragging and on.captured);
+    try std.testing.expect(on.dragging and on.captured and on.dismissed);
     try std.testing.expect(on.disabled and on.focused and on.focus_visible and on.selected and on.checked);
 
     u.clearTransient();
     const after = u.interactionOf(k);
     try std.testing.expect(!after.hovering and !after.pressed and !after.held and !after.released and !after.wheel and !after.clicked);
-    try std.testing.expect(!after.dragging and !after.captured);
+    try std.testing.expect(!after.dragging and !after.captured and !after.dismissed);
     try std.testing.expect(after.disabled and after.focused and after.focus_visible and after.selected and after.checked);
 
     publishControlState(&u, k, .{});

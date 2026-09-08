@@ -97,11 +97,18 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
 
     // Publish disabled from the caller's authoritative `enabled` value every build,
     // including false so a key cannot retain stale semantics across state changes.
-    cb.publishControlState(ctx, outer.key, .{ .disabled = !enabled });
+    ctx.registerFocus(outer.key, enabled);
     const q = outer.query(ctx);
+    if (q.clicked and enabled) _ = ctx.requestFocus(outer.key);
+    const focused = ctx.isFocused(outer.key);
+    cb.publishControlState(ctx, outer.key, .{
+        .disabled = !enabled,
+        .focused = focused,
+        .focus_visible = focused,
+    });
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
-    const c = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg;
+    const c = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg;
     outer.render_data.outline = .{ .color = c };
     lbl.render_data.text = c;
 
@@ -119,11 +126,18 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_sprite(ctx, node, sprite, px);
     _ = node.with_layout(.relative, null);
-    cb.publishControlState(ctx, node.key, .{ .disabled = !enabled });
+    ctx.registerFocus(node.key, enabled);
     const q = node.query(ctx);
+    if (q.clicked and enabled) _ = ctx.requestFocus(node.key);
+    const focused = ctx.isFocused(node.key);
+    cb.publishControlState(ctx, node.key, .{
+        .disabled = !enabled,
+        .focused = focused,
+        .focus_visible = focused,
+    });
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     const t = ctx.res.view.theme;
-    node.render_data.outline = .{ .color = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg };
+    node.render_data.outline = .{ .color = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg };
     return node;
 }
 
@@ -275,7 +289,9 @@ pub const Modal = struct {
 /// release, wheel, and completed clicks therefore cannot reach the covered screen; no
 /// caller-side `modal_open` guards are required.
 ///
-/// Dismiss remains caller policy. After building dialog descendants, call
+/// Dismiss remains caller policy. This shell registers its root as the current topmost
+/// Escape target, which receives transient `.dismissed`; callers may also inspect outside
+/// pointer activation. After building dialog descendants, call
 /// `ctx.consumeFlag(modal.box.key, .clicked)`; a subsequent
 /// `modal.root.query(ctx).clicked` is then an outside activation. The same typed bubbling
 /// and consumption rules used by nested controls apply. The box is queried here both as
@@ -287,6 +303,7 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
         .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh)));
     root.render_data.fill = ctx.res.view.theme.bg;
     _ = root.query(ctx); // fullscreen scrim: queried root structurally blocks lower trees
+    ctx.res.commands.registerEscape(root.key);
 
     const box = try Node.pcreate(ctx.arena, "box", root);
     _ = box.with_layout(.center, .{ .dir = .column })
@@ -316,6 +333,7 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
 
     const state = node.state(ctx, UiState.TextInputState);
     ctx.registerFocus(node.key, true);
+    ctx.res.commands.registerText(node.key, true);
 
     const q = node.query(ctx);
     if (q.hovering) ctx.res.cursor.request(.text);

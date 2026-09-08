@@ -109,6 +109,18 @@ pub const Focus = struct {
         unreachable;
     }
 
+    /// Move within the roving group containing the currently focused target. Returns
+    /// false for ordinary focus targets or when the group cannot move.
+    pub fn moveFocusedInGroup(self: *Focus, direction: Direction, wrap: bool) bool {
+        const focused = self.focused orelse return false;
+        for (self.current.items) |target| {
+            if (target.key != focused) continue;
+            const group_key = target.group orelse return false;
+            return self.moveInGroup(group_key, direction, wrap);
+        }
+        return false;
+    }
+
     /// Repair group representatives and singular focus against the completed build,
     /// then publish its order for the next event stage.
     pub fn endFrame(self: *Focus) void {
@@ -300,9 +312,10 @@ test "roving group exposes one global stop and retains directional navigation" {
     try std.testing.expect(focus.move(.next, false));
     try std.testing.expectEqual(@as(?u64, 2), focus.focusedKey());
 
-    try std.testing.expect(focus.moveInGroup(100, .next, false));
+    try std.testing.expect(focus.request(11));
+    try std.testing.expect(focus.moveFocusedInGroup(.next, false));
     try std.testing.expectEqual(@as(?u64, 12), focus.focusedKey());
-    try std.testing.expect(!focus.moveInGroup(100, .next, false));
+    try std.testing.expect(!focus.moveFocusedInGroup(.next, false));
 
     publish(&focus, &.{
         .{ .key = 1, .enabled = true },

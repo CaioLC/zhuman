@@ -47,13 +47,22 @@ const Entry = struct { i: usize, kind: Kind, reach: f32, mats: f32, hours: f32 }
 fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool, is_check: bool) !bool {
     const th = ctx.res.view.theme;
     const box = try el.div(ctx, parent, id);
-    uic.publishControlState(ctx, box.get().key, .{
+    const box_key = box.get().key;
+    if (is_check)
+        ctx.registerFocus(box_key, true)
+    else
+        ctx.registerRovingFocus(parent.get().key, box_key, true);
+    const q = box.query();
+    if (q.clicked) _ = ctx.requestFocus(box_key);
+    const focused = ctx.isFocused(box_key);
+    uic.publishControlState(ctx, box_key, .{
+        .focused = focused,
+        .focus_visible = focused,
         .selected = on and !is_check,
         .checked = on and is_check,
     });
-    const q = box.query();
     if (q.hovering) ctx.res.cursor.request(.pointer);
-    const c = if (on) th.acc else if (q.held or q.hovering) th.fg else th.dim;
+    const c = if (on) th.acc else if (q.held or q.hovering or focused) th.fg else th.dim;
     _ = (try el.text(ctx, box, "t", label)).with_style(.{ style.body, Style{ .text = c } });
     return q.clicked;
 }
@@ -268,10 +277,18 @@ fn goal_card(
     const ready = capital.unlock_met(world, e, G) and cost.materials <= stock.v and
         cost.energy < vigor.v and !world.has(e, comp.Busy);
     const go = try el.div(ctx, card, "go");
-    uic.publishControlState(ctx, go.get().key, .{ .disabled = !ready });
+    const go_key = go.get().key;
+    ctx.registerFocus(go_key, ready);
     const q = go.query();
-    if (q.hovering) ctx.res.cursor.request(if (q.disabled) .not_allowed else .pointer);
-    const c = if (q.disabled) th.line2 else if (q.held or q.hovering) th.acc else th.fg;
+    if (q.clicked and ready) _ = ctx.requestFocus(go_key);
+    const focused = ctx.isFocused(go_key);
+    uic.publishControlState(ctx, go_key, .{
+        .disabled = !ready,
+        .focused = focused,
+        .focus_visible = focused,
+    });
+    if (q.hovering) ctx.res.cursor.request(if (ready) .pointer else .not_allowed);
+    const c = if (!ready) th.line2 else if (q.held or q.hovering or focused) th.acc else th.fg;
     var mbuf: [48]u8 = undefined;
     const label = if (ready)
         "Raise the shelter \u{2192}"

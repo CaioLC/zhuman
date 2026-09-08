@@ -171,6 +171,10 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.focus.moveInGroup(group, direction, wrap);
         }
 
+        pub fn moveFocusedRoving(self: *Self, direction: focus_mod.Direction, wrap: bool) bool {
+            return self.focus.moveFocusedInGroup(direction, wrap);
+        }
+
         /// Capture pointer routing for an existing live interaction key. Capture is
         /// singular; acquiring a different key transfers ownership deliberately.
         pub fn capturePointer(self: *Self, key: u64) bool {

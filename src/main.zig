@@ -107,6 +107,83 @@ fn publishPointerVisualState(app: *App, input: *const ui_client.Input) void {
 
 // END CONFIGS
 
+const CommandRoute = struct {
+    handled: bool = false,
+    suppress_text: bool = false,
+};
+
+fn eraseLastCodepoint(state: *ui_client.UiState.TextInputState) void {
+    var n = state.len;
+    if (n == 0) return;
+    n -= 1;
+    while (n > 0 and (state.buf[n] & 0xC0) == 0x80) n -= 1;
+    state.len = n;
+}
+
+fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
+    switch (command) {
+        .focus_next => return .{ .handled = app.ui.moveFocus(.next, true) },
+        .focus_previous => return .{ .handled = app.ui.moveFocus(.previous, true) },
+        .move_left, .move_up => {
+            const moved = app.ui.moveFocusedRoving(.previous, true);
+            if (moved) {
+                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
+            }
+            return .{ .handled = moved };
+        },
+        .move_right, .move_down => {
+            const moved = app.ui.moveFocusedRoving(.next, true);
+            if (moved) {
+                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
+            }
+            return .{ .handled = moved };
+        },
+        .activate => {
+            const key = app.ui.focusedKey() orelse return .{};
+            return .{ .handled = app.ui.markKey(key, .clicked) };
+        },
+        .dismiss => {
+            if (app.ui.focusedKey()) |key| {
+                if (app.resources.commands.isTextOwner(key)) {
+                    app.ui.clearFocus();
+                    sdl.keyboard.stopTextInput(app.window) catch {};
+                    return .{ .handled = true };
+                }
+            }
+            const target = app.resources.commands.escapeTarget() orelse return .{};
+            return .{ .handled = app.ui.markKey(target, .dismissed) };
+        },
+        .focus_search => {
+            const target = app.resources.commands.searchTarget() orelse return .{};
+            const handled = app.ui.requestFocus(target);
+            return .{ .handled = handled, .suppress_text = handled };
+        },
+        .delete_backward => {
+            const key = app.ui.focusedKey() orelse return .{};
+            if (!app.resources.commands.isTextOwner(key)) return .{};
+            const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
+            eraseLastCodepoint(app.ui.pool(ui_client.UiState.TextInputState).get(idx));
+            return .{ .handled = true };
+        },
+        // The current editor is end-anchored. Delete/Home/End are still routed only to
+        // its registered owner; INPUT-07 adds caret/selection semantics behind them.
+        .delete_forward, .line_start, .line_end => {
+            const key = app.ui.focusedKey() orelse return .{};
+            return .{ .handled = app.resources.commands.isTextOwner(key) };
+        },
+    }
+}
+
+fn routeKeyboardCommands(app: *App, input: *const ui_client.Input) bool {
+    var suppress_text = false;
+    for (input.keyEvents()) |event| {
+        const command = ui_client.commandFromKeyEvent(event) orelse continue;
+        const routed = routeCommand(app, command);
+        suppress_text = suppress_text or routed.suppress_text;
+    }
+    return suppress_text;
+}
+
 const App = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     window: sdl.video.Window,
@@ -286,40 +363,20 @@ pub fn main() !void {
 
         publishPointerVisualState(&app, input);
 
-        // Preserve current editing/quit policy while sourcing it from the frame model.
-        for (input.keyEvents()) |key| {
-            if (key.action == .release) continue;
-            if (key.key == .escape) {
-                if (app.ui.focusedKey() != null) {
-                    app.ui.clearFocus();
-                    sdl.keyboard.stopTextInput(app.window) catch {};
-                } else {
-                    quit = true;
-                }
-            } else if (key.key == .backspace) {
-                if (app.ui.focusedKey()) |fk| {
-                    const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
-                    const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
-                    var n = st.len;
-                    if (n > 0) {
-                        n -= 1;
-                        while (n > 0 and (st.buf[n] & 0xC0) == 0x80) n -= 1;
-                        st.len = n;
+        const suppress_text = routeKeyboardCommands(&app, input);
+        if (!suppress_text) if (app.ui.focusedKey()) |key| {
+            if (app.resources.commands.isTextOwner(key)) {
+                const text = input.text();
+                if (text.len > 0) {
+                    const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
+                    const state = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
+                    if (state.len + text.len <= state.buf.len) {
+                        @memcpy(state.buf[state.len..][0..text.len], text);
+                        state.len += text.len;
                     }
                 }
             }
-        }
-        if (app.ui.focusedKey()) |fk| {
-            const text = input.text();
-            if (text.len > 0) {
-                const idx = app.ui.cache(fk, ui_client.UiState.TextInputState);
-                const st = app.ui.pool(ui_client.UiState.TextInputState).get(idx);
-                if (st.len + text.len <= st.buf.len) {
-                    @memcpy(st.buf[st.len..][0..text.len], text);
-                    st.len += text.len;
-                }
-            }
-        }
+        };
 
         // Update Stage
         // 1. update game resources
@@ -342,6 +399,7 @@ pub fn main() !void {
         app.ui.mark(.hovering, input.pointer.position.x, input.pointer.position.y);
         app.ui.beginFrame();
         app.resources.cursor.beginFrame();
+        app.resources.commands.beginBuild();
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
         app.platform_cursors.apply(app.resources.cursor.requested);
@@ -385,6 +443,7 @@ pub fn main() !void {
         try app.renderer.present();
 
         app.ui.endFrame();
+        app.resources.commands.endBuild();
     }
 }
 

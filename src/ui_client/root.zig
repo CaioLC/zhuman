@@ -15,6 +15,7 @@ const tree = @import("./tree.zig");
 const widgets = @import("./widgets.zig");
 const cursor = @import("./cursor.zig");
 const drag = @import("./drag.zig");
+const command = @import("./command.zig");
 
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
@@ -38,6 +39,9 @@ pub const PointerButton = input.PointerButton;
 pub const KeyAction = input.KeyAction;
 pub const Modifiers = input.Modifiers;
 pub const PointerActivation = activation.PointerActivation;
+pub const Command = command.Command;
+pub const CommandRegistry = command.Registry;
+pub const commandFromKeyEvent = command.fromKeyEvent;
 pub const CursorKind = cursor.Kind;
 pub const CursorState = cursor.State;
 pub const PlatformCursors = cursor.PlatformCursors;
@@ -106,4 +110,5 @@ test {
     _ = widgets;
     _ = cursor;
     _ = drag;
+    _ = command;
 }

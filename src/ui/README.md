@@ -210,6 +210,7 @@ pub const Interaction = packed struct {
     clicked: bool = false,
     dragging: bool = false,
     captured: bool = false,
+    dismissed: bool = false,
 
     // Semantic projections: explicitly published from their real owner every build.
     disabled: bool = false,
@@ -219,7 +220,7 @@ pub const Interaction = packed struct {
     checked: bool = false,
 
     pub const transient = [_][]const u8{
-        "hovering", "pressed", "held", "released", "wheel", "clicked", "dragging", "captured",
+        "hovering", "pressed", "held", "released", "wheel", "clicked", "dragging", "captured", "dismissed",
     };
 };
 ```

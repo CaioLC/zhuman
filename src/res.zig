@@ -138,6 +138,7 @@ pub const Resources = struct {
     platform: Platform,
     input: Input = .{},
     cursor: @import("./ui_client/cursor.zig").State = .{},
+    commands: @import("./ui_client/command.zig").Registry = .{},
     time: Time = .{},
     sim: Sim,
     config: Config = .{},

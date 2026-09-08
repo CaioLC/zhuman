@@ -60,7 +60,11 @@ Each frame:
    thumbs preserve the press origin, capture through outside movement, apply the release
    position, and owner-release. UI build resets and resolves cursor requests (pointer,
    text, grab/grabbing, horizontal-resize, not-allowed) before SDL applies the supported
-   system shape, with default/move fallbacks where needed.
+   system shape, with default/move fallbacks where needed. Key events normalize into
+   semantic commands before build: Tab traverses, arrows move/activate roving groups,
+   Enter/Space emit the same `.clicked` as pointer release, `/` focuses registered search,
+   and editing/text reach registered text owners only. Escape is focus/overlay dismissal;
+   only SDL quit/terminating exits the process.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.

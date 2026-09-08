@@ -30,10 +30,18 @@ pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enable
     _ = lbl.with_style(.{ style.body, style.pad_sym(8, 4) });
 
     // Chrome reads the published state, whose authority remains the caller's `enabled`.
-    uic.publishControlState(ctx, outer.get().key, .{ .disabled = !enabled });
+    const outer_key = outer.get().key;
+    ctx.registerFocus(outer_key, enabled);
     const q = outer.query();
+    if (q.clicked and enabled) _ = ctx.requestFocus(outer_key);
+    const focused = ctx.isFocused(outer_key);
+    uic.publishControlState(ctx, outer_key, .{
+        .disabled = !enabled,
+        .focused = focused,
+        .focus_visible = focused,
+    });
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    const c = if (q.disabled) th.dim else if (q.held or q.hovering) th.acc else th.fg;
+    const c = if (!enabled) th.dim else if (q.held or q.hovering or focused) th.acc else th.fg;
     _ = lbl.with_style(.{Style{ .text = c }});
     _ = outer.with_style(.{Style{ .outline_color = c }});
 
