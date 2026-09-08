@@ -426,6 +426,23 @@ flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-si
 would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
 where height depends on the resolved width. We don't do that yet.)
 
+### Five-pass frame profiling
+
+`FrameProfiler` measures the five passes relevant to UI traversal cost: intrinsic sizing,
+relative/percentage/grow resolution, placement, stamping, and drawing. The normal
+`set_global_pos` remains clock-free and callback-free; its explicit diagnostic sibling
+`set_global_pos_profiled` times the same three internal calls and returns a `Sample`.
+The host owns stamping/drawing clocks, combines every root into one frame sample, and
+records it. Reports contain per-pass averages and maxima plus stamping's share of the
+measured total; totals use saturating arithmetic and each report window resets cleanly.
+
+The desktop host emits a report every 600 frames. These rolling observations are useful
+for development, but are not a substitute for QA-17's controlled worst cases (20 actions,
+50 recipes, dialog, and the full zoomed board on the reference machine). The current
+policy is deliberately evidence-gated: retain the simple O(all) stamp walk and its required
+paint-order production unless representative reports identify stamping as material. Do
+not infer a rewrite from node count alone.
+
 ## Writing a widget
 
 Build a node, wire it into the tree (which finalizes its `key`), then layer state

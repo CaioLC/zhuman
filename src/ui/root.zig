@@ -6,9 +6,13 @@ pub const features = @import("./features/root.zig");
 pub const cache = @import("./cache.zig");
 pub const geometry = @import("./geometry.zig");
 pub const focus = @import("./focus.zig");
+pub const profile = @import("./profile.zig");
 
 pub const Focus = focus.Focus;
 pub const FocusDirection = focus.Direction;
+pub const FrameProfileSample = profile.Sample;
+pub const FrameProfileReport = profile.Report;
+pub const FrameProfiler = profile.FrameProfiler;
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const HitTestFn = @import("./ctx.zig").HitTestFn;
@@ -41,5 +45,6 @@ test {
     _ = @import("./node.zig");
     _ = cache;
     _ = focus;
+    _ = profile;
     _ = @import("./ctx.zig");
 }

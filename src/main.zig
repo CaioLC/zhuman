@@ -15,6 +15,11 @@ const Resources = ha.res.Resources;
 // CONFIGS
 const fps = 60;
 const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
+
+fn nsToUs(ns: u64) f64 {
+    return @as(f64, @floatFromInt(ns)) / std.time.ns_per_us;
+}
+
 // END CONFIGS
 
 const App = struct {
@@ -27,6 +32,7 @@ const App = struct {
     world: ha.world.World,
     frame_arena: std.heap.ArenaAllocator,
     ui: ui_client.UiCtx,
+    ui_profiler: ui_client.FrameProfiler = .{},
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -168,13 +174,18 @@ pub fn main() !void {
         app.ui.beginFrame();
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
-        // Lay out + stamp each root tree, in list order. Each is independent — a screen
-        // is sized to the window and placed from (0,0); a floating overlay (the tooltip)
-        // carries its own layout origin, set in build_ui.
+        var ui_sample: ui_client.FrameProfileSample = .{};
+        // Profile the solver's three internal passes per independent root, then stamp all
+        // roots as one aggregate pass. The normal set_global_pos entry remains clock-free.
         for (frame) |t| {
-            try t.set_global_pos(app.ui.arena); // arena = scratch for the placement pass's child lists
-            ui_client.stamp_rects(&app.ui, t); // capture rects into interaction slots for next frame's hit-test
+            const layout_sample = try t.set_global_pos_profiled(app.ui.arena);
+            ui_sample.add(layout_sample);
         }
+        var ui_timer = try std.time.Timer.start();
+        for (frame) |t| {
+            ui_client.stamp_rects(&app.ui, t); // geometry + paint order for next event stage
+        }
+        ui_sample.stamping = ui_timer.read();
 
         // Render Stage
         // window — cleared to the theme's own background, not a fixed color
@@ -182,7 +193,23 @@ pub fn main() !void {
         try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
         try app.renderer.clear();
         // ui — trees painted in list order, so later ones (overlays) land on top
+        ui_timer.reset();
         for (frame) |t| ui_client.draw_tree(&app.ui, t);
+        ui_sample.drawing = ui_timer.read();
+        app.ui_profiler.record(ui_sample);
+        if (app.ui_profiler.takeIfReady(600)) |report| {
+            const avg = report.average;
+            const max = report.maximum;
+            const stamp_share: f64 = @as(f64, @floatFromInt(report.stampingPermille())) / 10.0;
+            std.log.info(
+                "ui five-pass {d}f avg us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}; stamp={d:.1}%",
+                .{ report.frames, nsToUs(avg.intrinsic), nsToUs(avg.relative), nsToUs(avg.placement), nsToUs(avg.stamping), nsToUs(avg.drawing), stamp_share },
+            );
+            std.log.info(
+                "ui five-pass max us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}",
+                .{ nsToUs(max.intrinsic), nsToUs(max.relative), nsToUs(max.placement), nsToUs(max.stamping), nsToUs(max.drawing) },
+            );
+        }
         // present
         try app.renderer.present();
 

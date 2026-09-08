@@ -115,6 +115,20 @@ node is a recursive pre-order paint carrying a clip stack: apply the inherited c
 clip for the subtree if this node is `.clip`. The traversal and the clip stack live here;
 the primitives live with their features, so adding a visual never edits this file.
 
+## Five-pass profiling
+
+The desktop loop uses the engine's profiled layout variant, sums its three solve timings
+across roots, then times aggregate `stamp_rects` and `draw_tree` loops. A generic
+`FrameProfiler` reports average/max microseconds and stamping share every 600 frames.
+Presentation, simulation, event polling, and UI construction are intentionally outside
+this diagnostic: the question is whether stamping is material relative to the other four
+UI tree passes. Representative worst-case capture remains QA-17; absent that evidence,
+the existing paint-order stamp walk stays unchanged. A bounded 600-frame desktop smoke
+capture on 2026-09-07 (current Act I screen, development build) reported averages of
+4.7µs intrinsic, 6.9µs relative/grow, 7.8µs placement, 8.2µs stamping, and 2370.5µs
+drawing: stamping was 0.3% of these five measured passes (93.6µs max in that window).
+This is evidence against a speculative rewrite, not a QA-17 worst-case result.
+
 ## Content: elements and the `El` handle (`elements.zig`)
 
 An element creates a node and sets *what is in it* — nothing else. Every constructor

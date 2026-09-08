@@ -44,6 +44,10 @@ pub const draw_tree = draw.draw_tree;
 // (never `ha.ui`). `stamp_rects` is the post-layout walk main runs each frame.
 pub const stamp_rects = @import("../ui/root.zig").stamp_rects;
 
+pub const FrameProfileSample = @import("../ui/root.zig").FrameProfileSample;
+pub const FrameProfileReport = @import("../ui/root.zig").FrameProfileReport;
+pub const FrameProfiler = @import("../ui/root.zig").FrameProfiler;
+
 // frame assembly
 pub const Trees = tree.Trees; // the return-type wrapper (host)
 pub const collect = Node.collect; // the flatten mechanism (engine)

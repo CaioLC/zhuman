@@ -185,6 +185,11 @@ pub fn Node(comptime RenderData: type) type {
             try features.set_global_pos(self, alloc);
         }
 
+        /// Diagnostic solve returning exact timings for the three internal layout passes.
+        pub fn set_global_pos_profiled(self: *Self, alloc: Allocator) !@import("profile.zig").Sample {
+            return features.set_global_pos_profiled(self, alloc);
+        }
+
         /// This node's interaction state this frame (read-through: allocates/keeps
         /// its store slot). **Panics** if the node has no `key`. `u` is duck-typed
         /// (the concrete `Ctx`); the return type is the host's interaction-flag
