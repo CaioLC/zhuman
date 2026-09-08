@@ -519,6 +519,15 @@ pub fn main() !void {
         app.ui.endFrame();
         app.resources.commands.endBuild();
         app.resources.semantics.endBuild(); // INPUT-08: publish this frame's snapshot for the bridge
+        // INPUT-09: the accessibility bridge consumes the just-published snapshot and drains
+        // the announcement channel to the active provider (a no-op sink on this build — no
+        // Windows UIA tree; see a11y.zig). Host-side only; the sim never sees it.
+        app.resources.a11y.poll(
+            app.resources.semantics.snapshot(),
+            app.resources.semantics.snapshotOverflow(),
+            app.resources.semantics.snapshotFieldRefused(),
+            &app.resources.announcements,
+        );
     }
 }
 

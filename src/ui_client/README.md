@@ -245,6 +245,38 @@ string for a name (they publish an empty label; a named variant/domain helper su
 one), `expanded` is owned only by the dialog shell, and no production board/search/modal
 *consumer* exists yet — the model describes the controls that do exist.
 
+## Accessibility bridge (`a11y.zig`)
+
+INPUT-09 adds the host-side **bridge** that consumes the INPUT-08 model — it never
+re-derives a semantic fact. `Bridge` has a deterministic, allocation-free lifecycle that
+mirrors the registries: `init(provider)` installs a provider and goes `active`, per-frame
+`poll(snapshot, overflow, field_refused, channel)` forwards this frame's published snapshot
+to the provider as its tree root and drains the announcement channel, and `deinit()` goes
+`inactive` (a guarded no-op `poll`). `poll` folds the registry's non-silent
+`snapshotOverflow`/`snapshotFieldRefused` into the bridge's own status, then forwards every
+announcement newer than a monotonic `spoken_generation` cursor and calls
+`AnnouncementChannel.drainThrough` so the bounded queue never stays full. The bridge borrows
+the snapshot only for the call and copies the last message into an owned `OwnedText` — it
+holds no frame-arena or channel pointer across frames. `Resources` holds `a11y` (defaulting
+to the inert `NoopProvider`); `main` polls it right after `semantics.endBuild()`.
+
+The future Windows UIA seam is a narrow `Provider` vtable
+(`getRoot`/`elementFromKey`/`mapRole`/`raiseFocus`/`raiseAnnouncement`) — exactly what a
+`WM_GETOBJECT`-answering `IRawElementProviderFragmentRoot` needs. The default `NoopProvider`
+implements it as inert sinks (no element, custom role id `0`, no-op raises), so the whole
+bridge runs and is tested with no platform surface, and a real provider slots in without the
+bridge, `src/ui`, or the semantics source changing.
+
+`Capabilities` is an honest report of what this build ships:
+`keyboard`/`visible_focus`/`non_color_state`/`live_region_plumbing` are `true` (all
+exercised today — see INPUT-04/06/07), and `screen_reader_export` is **`false`**. This build
+exports no live screen-reader tree because a UIA provider must hook the SDL-owned window's
+`WndProc` to answer `WM_GETOBJECT`, and `zig-sdl3` 0.1.6 does not implement
+`SDL_SetWindowsMessageHook` (only the X11 hook exists); hand-rolled subclassing or forking
+the vendored binding are the risky, policy-leaking dependencies this layer forbids. Genuine
+HTML/ARIA parity is therefore unavailable and is not claimed. All Windows/platform policy
+stays here in `ui_client`; `src/ui` remains accessibility-unaware.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

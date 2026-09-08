@@ -145,6 +145,13 @@ pub const Resources = struct {
     /// order during `build_ui` and published after end-frame, exactly like `commands`.
     semantics: @import("./ui_client/semantics.zig").SemanticRegistry = .{},
     announcements: @import("./ui_client/semantics.zig").AnnouncementChannel = .{},
+    /// Host-side accessibility bridge (INPUT-09): consumes the published `semantics` snapshot
+    /// and drains `announcements` to the active platform provider each frame. Default provider
+    /// is the inert `NoopProvider` — this build ships no Windows UIA screen-reader tree
+    /// (`zig-sdl3` 0.1.6 exposes no `WM_GETOBJECT` hook), and the bridge's capability report
+    /// says so honestly. All platform policy stays host-side; no simulation system touches it.
+    a11y: @import("./ui_client/a11y.zig").Bridge =
+        @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
     time: Time = .{},
     sim: Sim,
     config: Config = .{},

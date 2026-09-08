@@ -17,6 +17,7 @@ const cursor = @import("./cursor.zig");
 const drag = @import("./drag.zig");
 const command = @import("./command.zig");
 const semantics = @import("./semantics.zig");
+const a11y = @import("./a11y.zig");
 
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
@@ -54,6 +55,16 @@ pub const SemanticNode = semantics.SemanticNode;
 pub const SemanticRelations = semantics.Relations;
 pub const SemanticRegistry = semantics.SemanticRegistry;
 pub const AnnouncementChannel = semantics.AnnouncementChannel;
+
+// INPUT-09 host-side accessibility bridge: the deterministic seam that consumes the INPUT-08
+// snapshot + announcement channel and holds a future Windows UIA provider slot. All platform
+// policy stays here in `ui_client`; `src/ui` never sees it. See `a11y.zig`.
+pub const a11y_bridge = a11y;
+pub const AccessibilityBridge = a11y.Bridge;
+pub const AccessibilityStatus = a11y.Status;
+pub const AccessibilityCapabilities = a11y.Capabilities;
+pub const AccessibilityProvider = a11y.Provider;
+pub const NoopAccessibilityProvider = a11y.NoopProvider;
 pub const CursorKind = cursor.Kind;
 pub const CursorState = cursor.State;
 pub const PlatformCursors = cursor.PlatformCursors;
@@ -124,4 +135,5 @@ test {
     _ = drag;
     _ = command;
     _ = semantics;
+    _ = a11y;
 }
