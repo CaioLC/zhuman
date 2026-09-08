@@ -759,6 +759,162 @@ test "padding: an anchored child centres within the content box" {
     try std.testing.expectEqual(.{ 120, 90 }, .{ child.layout._global_x.?, child.layout._global_y.? });
 }
 
+test "grow fills row remainder after fixed sibling gap and parent padding" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(500, 100));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    root.size.padding = features.Padding.init(10);
+    root.layout.gap = 12;
+
+    const rail = try TestNode.pcreate(a, "rail", root);
+    _ = rail.with_size(Size.initFixed(252, 20)).with_layout(.relative, null);
+    const surface = try TestNode.pcreate(a, "surface", root);
+    _ = surface.with_size(Size.init(.grow, .{ .fixed = 20 })).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 236), surface.size.width); // 500 - 252 - 12
+    try std.testing.expectEqual(@as(f32, 10), rail.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 274), surface.layout._global_x.?);
+}
+
+test "nested column grow resolves descendants against its final size" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 400));
+    _ = root.with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    root.layout.gap = 10;
+
+    const header = try TestNode.pcreate(a, "header", root);
+    _ = header.with_size(Size.init(.{ .fixed = 300 }, .{ .fixed = 50 })).with_layout(.relative, null);
+    const body = try TestNode.pcreate(a, "body", root);
+    _ = body.with_size(Size.init(.{ .pct_of_parent = 1 }, .grow)).with_layout(.relative, .{ .dir = .column });
+    const half = try TestNode.pcreate(a, "half", body);
+    _ = half.with_size(Size.init(.{ .pct_of_parent = 1 }, .{ .pct_of_parent = 0.5 })).with_layout(.relative, null);
+    const footer = try TestNode.pcreate(a, "footer", root);
+    _ = footer.with_size(Size.init(.{ .fixed = 300 }, .{ .fixed = 30 })).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 300), body.size.height); // 400 - 50 - 30 - 2*10
+    try std.testing.expectEqual(@as(f32, 150), half.size.height);
+    try std.testing.expectEqual(@as(f32, 370), footer.layout._global_y.?);
+}
+
+test "multiple growers redistribute a max-capped share" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 50));
+    _ = root.with_layout(.top_left, .{ .dir = .row });
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(50, 10)).with_layout(.relative, null);
+    const capped = try TestNode.pcreate(a, "capped", root);
+    _ = capped.with_size(Size.init(.grow, .{ .fixed = 10 })).with_layout(.relative, null);
+    capped.size.max_width = 80;
+    const rest = try TestNode.pcreate(a, "rest", root);
+    _ = rest.with_size(Size.init(.grow, .{ .fixed = 10 })).with_layout(.relative, null);
+    rest.size.min_width = 20;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 80), capped.size.width);
+    try std.testing.expectEqual(@as(f32, 170), rest.size.width);
+}
+
+test "zero remaining space preserves grow minimum and deterministic overflow" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 30));
+    _ = root.with_layout(.top_left, .{ .dir = .row });
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(120, 10)).with_layout(.relative, null);
+    const grow = try TestNode.pcreate(a, "grow", root);
+    _ = grow.with_size(Size.init(.grow, .{ .fixed = 10 })).with_layout(.relative, null);
+    grow.size.min_width = 15;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 15), grow.size.width);
+    try std.testing.expectEqual(@as(f32, 120), grow.layout._global_x.?);
+}
+
+test "min and max constrain fixed content percent and conflicting bounds" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 100));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(20, 5)).with_layout(.relative, null);
+    fixed.size.min_width = 40;
+    const content = try TestNode.pcreate(a, "content", root);
+    content.size = Size.initContent(100, 5);
+    _ = content.with_layout(.relative, null);
+    content.size.max_width = 60;
+    const pct = try TestNode.pcreate(a, "pct", root);
+    _ = pct.with_size(Size.init(.{ .pct_of_parent = 0.8 }, .{ .fixed = 5 })).with_layout(.relative, null);
+    pct.size.max_width = 90;
+    const conflict = try TestNode.pcreate(a, "conflict", root);
+    _ = conflict.with_size(Size.initFixed(50, 5)).with_layout(.relative, null);
+    conflict.size.min_width = 70;
+    conflict.size.max_width = 30;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 40), fixed.size.width);
+    try std.testing.expectEqual(@as(f32, 60), content.size.width);
+    try std.testing.expectEqual(@as(f32, 90), pct.size.width);
+    try std.testing.expectEqual(@as(f32, 70), conflict.size.width);
+}
+
+test "wrap respects grow minimums and fit height counts overflow lines" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 100 }, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true, .cross = .start });
+    root.layout.gap = 5;
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(60, 10)).with_layout(.relative, null);
+    const grow = try TestNode.pcreate(a, "grow", root);
+    _ = grow.with_size(Size.init(.grow, .{ .fixed = 20 })).with_layout(.relative, null);
+    grow.size.min_width = 50;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 35), root.size.height); // 10 + line gap 5 + 20
+    try std.testing.expectEqual(@as(f32, 15), grow.layout._global_y.?);
+}
+
+test "grow falls back to measured content without a definite main-axis parent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row });
+    const child = try TestNode.pcreate(a, "child", root);
+    child.size = Size.init(.grow, .grow);
+    child.size.data_width = 30;
+    child.size.data_height = 12;
+    _ = child.with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 30), child.size.width);
+    try std.testing.expectEqual(@as(f32, 12), child.size.height);
+    try std.testing.expectEqual(@as(f32, 30), root.size.width);
+}
+
 /// Records what `stamp_walk` handed it, standing in for a `Ctx` — the walk takes its
 /// sink as `anytype`, so its ordering and clip logic test without a context, a pool or
 /// a window. `slots` names the keys that have an interaction slot; every other key is

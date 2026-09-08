@@ -22,13 +22,16 @@ pub const Padding = struct {
 /// which is what drives the multi-pass solve:
 ///   - `fixed` / `content` — leaf, *definite* (known without parent or children).
 ///   - `pct_of_parent`      — needs the parent; definite iff the parent's axis is.
+///   - `grow`               — consumes remaining space on a definite parent's main axis.
 ///   - `fit_children`       — needs the children; the only *indefinite* rule.
-/// A `.pct_of_parent` under an indefinite (`fit_children`) parent has no definite
-/// base, so it falls back to `content` (→ the node's measured `data_*`, or 0).
+/// A `.pct_of_parent` under an indefinite (`fit_children`) parent and a `.grow` that is
+/// root/out-of-flow/cross-axis or under an indefinite parent fall back to `content`
+/// (the node's measured `data_*`, or 0).
 pub const SizeRule = union(enum) {
     fixed: f32,
     content, // sizes to the host-measured `data_width`/`data_height`
     pct_of_parent: f32, // fraction in 0..1
+    grow, // equal share of definite parent main-axis remainder
     fit_children,
 };
 
@@ -36,6 +39,12 @@ pub const Size = struct {
     w: SizeRule,
     h: SizeRule,
     padding: Padding,
+    /// Per-axis bounds on the resolved **content box**; padding is added afterward.
+    /// Minimum defaults to 0, maximum to unbounded. If max is below min, min wins.
+    min_width: f32 = 0,
+    min_height: f32 = 0,
+    max_width: ?f32 = null,
+    max_height: ?f32 = null,
     /// Resolved box size (content-box + padding), filled by the solve passes.
     width: f32,
     height: f32,

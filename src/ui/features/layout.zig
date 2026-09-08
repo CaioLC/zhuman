@@ -195,8 +195,8 @@ pub const Layout = struct {
 // ============================ Public entry ===================================
 
 /// Solve the whole tree, then place it. Three passes:
-///   1. `recalculate_size` — bottom-up: resolve `fixed`/`content`/`fit_children`.
-///   2. `resolve_pct`       — top-down: finalize `pct_of_parent` vs. definite parents.
+///   1. `recalculate_size` — bottom-up: resolve intrinsic/fixed/fit provisional sizes.
+///   2. `resolve_pct`       — top-down: finalize percentages and sibling grow allocation.
 ///   3. `place`             — top-down: assign every node its global position.
 /// The sizing passes are pure (no host callback — `content` sizes read the host's
 /// pre-measured `data_width`/`data_height`, set on the node at build). `place` takes a
@@ -224,6 +224,38 @@ fn main_axis(flow: Flow) Axis {
 /// This box's extent along `axis`.
 fn extent(node: anytype, axis: Axis) f32 {
     return if (axis == .x) node.size.width else node.size.height;
+}
+
+fn padding_extent(s: *const Size, axis: Axis) f32 {
+    return if (axis == .x) s.padding.left + s.padding.right else s.padding.up + s.padding.down;
+}
+
+fn min_extent(s: *const Size, axis: Axis) f32 {
+    return @max(0, if (axis == .x) s.min_width else s.min_height);
+}
+
+fn max_extent(s: *const Size, axis: Axis) ?f32 {
+    const raw = if (axis == .x) s.max_width else s.max_height;
+    return if (raw) |v| @max(min_extent(s, axis), v) else null;
+}
+
+fn constrain_inner(s: *const Size, axis: Axis, value: f32) f32 {
+    var result = @max(min_extent(s, axis), value);
+    if (max_extent(s, axis)) |maximum| result = @min(result, maximum);
+    return result;
+}
+
+fn inner_extent(node: anytype, axis: Axis) f32 {
+    return extent(node, axis) - padding_extent(&node.size, axis);
+}
+
+fn set_inner_extent(node: anytype, axis: Axis, value: f32) void {
+    const resolved = constrain_inner(&node.size, axis, value) + padding_extent(&node.size, axis);
+    if (axis == .x) node.size.width = resolved else node.size.height = resolved;
+}
+
+fn axis_rule(node: anytype, axis: Axis) size_mod.SizeRule {
+    return if (axis == .x) node.size.w else node.size.h;
 }
 
 /// `fit_children` on one axis. On the **main** axis: sum of *in-flow* child extents plus
@@ -285,7 +317,7 @@ fn nth_flow_child(node: anytype, k: usize) @TypeOf(node) {
 fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow) ?f32 {
     const main_rule = if (main == .x) node.size.w else node.size.h;
     const main_size = switch (main_rule) {
-        .fixed => |n| n,
+        .fixed => |n| constrain_inner(&node.size, main, n),
         else => return null,
     };
     const gap = node.layout.gap;
@@ -363,46 +395,135 @@ fn recalculate_size(node: anytype) void {
     for (node.children.items) |c| recalculate_size(c);
     const s = &node.size;
     const main = main_axis(node.layout.flow);
-    s.width = bottom_up_axis(s.w, s.data_width, node, .x, main) + s.padding.left + s.padding.right;
-    s.height = bottom_up_axis(s.h, s.data_height, node, .y, main) + s.padding.up + s.padding.down;
+    const inner_w = constrain_inner(s, .x, bottom_up_axis(s.w, s.data_width, node, .x, main));
+    const inner_h = constrain_inner(s, .y, bottom_up_axis(s.h, s.data_height, node, .y, main));
+    s.width = inner_w + padding_extent(s, .x);
+    s.height = inner_h + padding_extent(s, .y);
 }
 
 fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Axis, main: Axis) f32 {
     return switch (rule) {
         .fixed => |n| n,
         .content => content,
-        .pct_of_parent => content, // provisional; resolve_pct finalizes vs. parent
+        .pct_of_parent, .grow => content, // provisional; pass 2 finalizes parent-relative rules
         .fit_children => fit_axis(node, axis, main),
     };
 }
 
-/// Pass 2 — top-down `pct_of_parent` finalize. An axis is *definite* (a usable
-/// base for a child's %) when it's known without consulting that child: `fixed`,
-/// `content`, or a `pct` once resolved. `fit_children` is indefinite, so a `pct`
-/// child of it has no definite base and falls back to `content` (→ the node's
-/// measured `data_*`, or 0). `p_inner_*` is the parent's content-box per axis.
+/// Pass 2 — top-down parent-relative finalize. Percentages resolve against definite
+/// parent content boxes, then in-flow `grow` children divide the parent's remaining
+/// main-axis space before their descendants resolve. `fit_children` is indefinite;
+/// percentages and growers without a definite usable parent fall back to content.
 fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
-    const s = &node.size;
-    const pad_w = s.padding.left + s.padding.right;
-    const pad_h = s.padding.up + s.padding.down;
-    const def_w, const inner_w = finalize_axis(s.w, s.data_width, s.width - pad_w, p_def_w, p_inner_w);
-    const def_h, const inner_h = finalize_axis(s.h, s.data_height, s.height - pad_h, p_def_h, p_inner_h);
-    s.width = inner_w + pad_w;
-    s.height = inner_h + pad_h;
-    for (node.children.items) |c| resolve_pct(c, def_w, def_h, inner_w, inner_h);
+    finalize_box(node, p_def_w, p_def_h, p_inner_w, p_inner_h);
+    resolve_children(node, rule_definite(node.size.w), rule_definite(node.size.h));
 }
 
-/// `(definite, inner_size)` for one axis. `pass1_inner` is the bottom-up
-/// content-box already computed (kept as-is for non-`pct` rules and as the `fit`
-/// value). A `pct` resolves to `parent_inner * f` when the parent axis is
-/// definite, else falls back to `content_seed` (null-safe 0).
-fn finalize_axis(rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p_def: bool, p_inner: f32) struct { bool, f32 } {
+fn finalize_box(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
+    const s = &node.size;
+    const inner_w = finalize_axis(s, .x, s.w, s.data_width, inner_extent(node, .x), p_def_w, p_inner_w);
+    const inner_h = finalize_axis(s, .y, s.h, s.data_height, inner_extent(node, .y), p_def_h, p_inner_h);
+    set_inner_extent(node, .x, inner_w);
+    set_inner_extent(node, .y, inner_h);
+}
+
+fn rule_definite(rule: size_mod.SizeRule) bool {
     return switch (rule) {
-        .fixed => |n| .{ true, n },
-        .content => .{ true, content_seed },
-        .fit_children => .{ false, pass1_inner },
-        .pct_of_parent => |f| if (p_def) .{ true, p_inner * f } else .{ true, content_seed },
+        .fit_children => false,
+        else => true,
     };
+}
+
+fn resolve_children(node: anytype, def_w: bool, def_h: bool) void {
+    const inner_w = inner_extent(node, .x);
+    const inner_h = inner_extent(node, .y);
+    for (node.children.items) |c| finalize_box(c, def_w, def_h, inner_w, inner_h);
+
+    const main = main_axis(node.layout.flow);
+    if ((main == .x and def_w) or (main == .y and def_h)) distribute_grow(node, main);
+
+    for (node.children.items) |c| resolve_children(c, rule_definite(c.size.w), rule_definite(c.size.h));
+}
+
+fn is_grow(rule: size_mod.SizeRule) bool {
+    return switch (rule) {
+        .grow => true,
+        else => false,
+    };
+}
+
+/// Equal-share water filling over the in-flow growers on the parent's main axis. Fixed
+/// siblings and minimums never shrink. A max-capped grower releases its unused share to
+/// the remaining growers; if fixed sizes plus minimums exceed the parent, they overflow.
+fn distribute_grow(node: anytype, main: Axis) void {
+    var flow_count: usize = 0;
+    var grow_count: usize = 0;
+    var fixed_sum: f32 = 0;
+    var grow_padding: f32 = 0;
+    var min_sum: f32 = 0;
+
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue;
+        flow_count += 1;
+        if (is_grow(axis_rule(c, main))) {
+            grow_count += 1;
+            grow_padding += padding_extent(&c.size, main);
+            const minimum = min_extent(&c.size, main);
+            min_sum += minimum;
+            set_inner_extent(c, main, minimum);
+        } else {
+            fixed_sum += extent(c, main);
+        }
+    }
+    if (grow_count == 0) return;
+
+    const uses_gap = switch (node.layout.flow.main) {
+        .start, .center, .end => true,
+        else => false,
+    };
+    const spacing = if (uses_gap and flow_count > 1)
+        node.layout.gap * @as(f32, @floatFromInt(flow_count - 1))
+    else
+        0;
+    const available = @max(0, inner_extent(node, main) - fixed_sum - grow_padding - spacing);
+    var remaining = @max(0, available - min_sum);
+
+    while (remaining > 0.0001) {
+        var active: usize = 0;
+        for (node.children.items) |c| {
+            if (c.layout.anchor != .relative or !is_grow(axis_rule(c, main))) continue;
+            const current = inner_extent(c, main);
+            if (max_extent(&c.size, main)) |maximum| {
+                if (current + 0.0001 < maximum) active += 1;
+            } else active += 1;
+        }
+        if (active == 0) break;
+
+        const share = remaining / @as(f32, @floatFromInt(active));
+        var used: f32 = 0;
+        for (node.children.items) |c| {
+            if (c.layout.anchor != .relative or !is_grow(axis_rule(c, main))) continue;
+            const current = inner_extent(c, main);
+            const capacity = if (max_extent(&c.size, main)) |maximum| @max(0, maximum - current) else share;
+            const add = @min(share, capacity);
+            if (add <= 0) continue;
+            set_inner_extent(c, main, current + add);
+            used += add;
+        }
+        if (used <= 0.0001) break;
+        remaining -= used;
+    }
+}
+
+fn finalize_axis(s: *const Size, axis: Axis, rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p_def: bool, p_inner: f32) f32 {
+    const raw = switch (rule) {
+        .fixed => |n| n,
+        .content => content_seed,
+        .fit_children => pass1_inner,
+        .pct_of_parent => |f| if (p_def) p_inner * f else content_seed,
+        .grow => content_seed,
+    };
+    return constrain_inner(s, axis, raw);
 }
 
 // ============================ Placement (pass 3) =============================

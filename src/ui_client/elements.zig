@@ -73,7 +73,8 @@ pub const El = struct {
         return self;
     }
 
-    /// Per-axis size rule — `.fit_children`, `.{ .fixed = 240 }`, `.{ .pct_of_parent = 1 }`, …
+    /// Per-axis size rule — `.fit_children`, `.grow`, `.{ .fixed = 240 }`,
+    /// `.{ .pct_of_parent = 1 }`, …
     pub fn with_size(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
         self.node.size.w = w;
         self.node.size.h = h;

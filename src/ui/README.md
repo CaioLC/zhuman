@@ -349,18 +349,31 @@ Two orthogonal axes, both Unity-inspired:
 ### Sizing
 
 Every node picks a `SizeRule` **per axis** (mandatory — width and height size
-independently): `fixed`, `content`, `pct_of_parent`, or `fit_children`. The
-*intrinsic content size* is host policy — the host **measures it at build** (text
+independently): `fixed`, `content`, `pct_of_parent`, `grow`, or `fit_children`.
+`grow` is meaningful for an in-flow child on its parent's main axis: under a definite
+parent, growers divide the content-box remainder after fixed siblings, their own padding,
+and packed-mode gaps. Each starts at its minimum; max-capped shares redistribute to the
+remaining growers. Fixed sizes and minimums never shrink, so an over-constrained run
+overflows deterministically. At root, out of flow, on the cross axis, or under an
+indefinite parent, `grow` falls back to measured content.
+
+Each axis also has a content-box minimum (default 0) and optional maximum; padding is
+added after clamping, and minimum wins a conflicting min/max pair. Constraints apply to
+every rule.
+
+The *intrinsic content size* is host policy — the host **measures it at build** (text
 metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
 the `content` rule sizes to those, and the host renderer draws to them. The *rule*
 that turns that seed / parent / children into the final box is core. The sizing passes
 are **pure** — no host callback. `set_global_pos` runs three passes:
 
-1. **`recalculate_size`** (bottom-up) — resolve `fixed`/`content`/`fit_children`;
-   `pct_of_parent` takes a provisional = its measured content size.
-2. **`resolve_pct`** (top-down) — finalize `pct_of_parent` against *definite*
-   parents. `fit_children` is the only **indefinite** rule, so a `%` under a
-   `fit` parent has no definite base and falls back to `content` (→ the node's
+1. **`recalculate_size`** (bottom-up) — resolve constrained
+   `fixed`/`content`/`fit_children`; parent-relative rules take measured-content
+   provisionals.
+2. **`resolve_pct`** (top-down) — finalize percentages against definite parent
+   content boxes and allocate each definite parent's main-axis remainder among its
+   in-flow growers before descending. `fit_children` is the only **indefinite** rule,
+   so parent-relative rules without a usable base fall back to `content` (the node's
    `data_*`, or a safe **0** when it has no measured content).
 3. **`place`** (top-down) — assign global positions via one line-based flow algorithm
    (break into lines → distribute each along `main` → align each child across it by
