@@ -38,6 +38,8 @@ pub const Modifiers = input.Modifiers;
 pub const PointerActivation = activation.PointerActivation;
 
 pub const UiCtx = ctx_binding.UiCtx;
+pub const ControlState = ctx_binding.ControlState;
+pub const publishControlState = ctx_binding.publishControlState;
 pub const Node = ctx_binding.Node;
 pub const Color = ctx_binding.Color; // the host color type (SDL's), carried on RenderData
 pub const Theme = theme.Theme; // the nine paint roles (neutral defaults; a game overrides)

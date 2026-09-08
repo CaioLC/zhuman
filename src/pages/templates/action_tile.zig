@@ -50,10 +50,11 @@ pub fn tile(
     const running = progress != null;
 
     const box = try el.div(ctx, parent, id);
-    // Query unconditionally: an unqueried node has no slot, so stamp_rects skips it and
-    // the prior-frame rect (which the underbar is sized from) would read null.
+    // Affordability/running remains authoritative here; publication is a visual/semantic
+    // projection and explicitly clears stale disabled state when the facts change.
+    uic.publishControlState(ctx, box.get().key, .{ .disabled = running or !can });
     const q = box.query();
-    const chrome = if (running) th.fg else if (!can) th.dim else if (q.hovering) th.acc else th.fg;
+    const chrome = if (running) th.fg else if (q.disabled) th.dim else if (q.held or q.hovering) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.

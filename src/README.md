@@ -54,8 +54,9 @@ Each frame:
    route through the last frame's reverse paint order (capture first). Primary down emits
    `.pressed`; motion tracks a 4px drag threshold; up emits `.released`, and matching
    release over the same key emits one `.clicked`. Drag, cancellation, focus loss, pointer
-   mismatch, and release elsewhere suppress activation. Scroll consumers require routed
-   `.wheel`, not merely hover.
+   mismatch, and release elsewhere suppress activation. Each frame republishes `.held` on
+   the stable press key, `.dragging` after threshold crossing, and `.captured` only on the
+   exact capture owner. Scroll consumers require routed `.wheel`, not merely hover.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.

@@ -139,20 +139,55 @@ pub const Point = struct { x: f32, y: f32 };
 pub const Stroke = struct { color: Color, width: f32 = 1 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
-/// keyed by widget key). `mark_*` writes fields at the event stage; the build reads
-/// them back via `node.query`. `transient` names the fields the engine zeroes every
-/// frame (recomputed from input); fields not listed latch until userland clears them.
-/// Add a field (e.g. `dragging`, `focused`) the day a widget grows a new behaviour.
+/// keyed by widget key). Pointer-derived fields are transient and republished from
+/// input/capture every frame. Semantic fields persist through the event stage, but a
+/// control must publish all of them from its authoritative widget/domain owner each
+/// build with `publishControlState`; none is an unowned toggle.
 pub const Interaction = packed struct {
     hovering: bool = false,
     pressed: bool = false,
+    held: bool = false,
     released: bool = false,
     wheel: bool = false,
     clicked: bool = false,
-    active: bool = false,
+    dragging: bool = false,
+    captured: bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "pressed", "released", "wheel", "clicked" };
+    disabled: bool = false,
+    focused: bool = false,
+    focus_visible: bool = false,
+    selected: bool = false,
+    checked: bool = false,
+
+    pub const transient = [_][]const u8{
+        "hovering",
+        "pressed",
+        "held",
+        "released",
+        "wheel",
+        "clicked",
+        "dragging",
+        "captured",
+    };
 };
+
+pub const ControlState = struct {
+    disabled: bool = false,
+    focused: bool = false,
+    focus_visible: bool = false,
+    selected: bool = false,
+    checked: bool = false,
+};
+
+/// Publish every semantic visual state, including false, from the control's actual
+/// owner. These values survive into the next event stage but never self-toggle/latch.
+pub fn publishControlState(ctx: *UiCtx, key: u64, state: ControlState) void {
+    ctx.setFlag(key, .disabled, state.disabled);
+    ctx.setFlag(key, .focused, state.focused);
+    ctx.setFlag(key, .focus_visible, state.focus_visible);
+    ctx.setFlag(key, .selected, state.selected);
+    ctx.setFlag(key, .checked, state.checked);
+}
 
 /// Concrete UI context type, bound here where `ui` and `res` meet.
 pub const UiCtx = ui.Ctx(UiState, Interaction, Resources);
@@ -211,7 +246,7 @@ pub const RenderData = struct {
 /// `node.key`, reached lazily via `node.state(u, T)` — the node itself holds no handle.
 pub const Node = ui.Node(RenderData);
 
-test "interaction store: active latches, transient flags clear each frame" {
+test "pointer states reset while authoritative control states persist and republish false" {
     // res/arena are untouched by the interaction methods, so `undefined` is safe.
     var u = UiCtx.init(undefined, std.testing.allocator, undefined);
     defer u.deinit();
@@ -220,22 +255,34 @@ test "interaction store: active latches, transient flags clear each frame" {
     const k = ui.key(0, "btn");
     u.setFlag(k, .hovering, true);
     u.setFlag(k, .pressed, true);
+    u.setFlag(k, .held, true);
     u.setFlag(k, .released, true);
     u.setFlag(k, .wheel, true);
     u.setFlag(k, .clicked, true);
-    u.setFlag(k, .active, true);
+    u.setFlag(k, .dragging, true);
+    u.setFlag(k, .captured, true);
+    publishControlState(&u, k, .{
+        .disabled = true,
+        .focused = true,
+        .focus_visible = true,
+        .selected = true,
+        .checked = true,
+    });
 
     const on = u.interactionOf(k);
-    try std.testing.expect(on.hovering and on.pressed and on.released and on.wheel and on.clicked and on.active);
+    try std.testing.expect(on.hovering and on.pressed and on.held and on.released and on.wheel and on.clicked);
+    try std.testing.expect(on.dragging and on.captured);
+    try std.testing.expect(on.disabled and on.focused and on.focus_visible and on.selected and on.checked);
 
     u.clearTransient();
     const after = u.interactionOf(k);
-    try std.testing.expect(!after.hovering);
-    try std.testing.expect(!after.pressed);
-    try std.testing.expect(!after.released);
-    try std.testing.expect(!after.wheel);
-    try std.testing.expect(!after.clicked);
-    try std.testing.expect(after.active); // latched — survives the frame boundary
+    try std.testing.expect(!after.hovering and !after.pressed and !after.held and !after.released and !after.wheel and !after.clicked);
+    try std.testing.expect(!after.dragging and !after.captured);
+    try std.testing.expect(after.disabled and after.focused and after.focus_visible and after.selected and after.checked);
+
+    publishControlState(&u, k, .{});
+    const cleared = u.interactionOf(k);
+    try std.testing.expect(!cleared.disabled and !cleared.focused and !cleared.focus_visible and !cleared.selected and !cleared.checked);
 }
 
 test "control activation marks press immediately and click once on valid release" {
@@ -267,4 +314,28 @@ test "control activation marks press immediately and click once on valid release
     try std.testing.expect(u.interactionOf(control).clicked);
     try std.testing.expect(u.interactionOf(parent).clicked);
     try std.testing.expectEqual(@as(?u64, null), gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 }));
+}
+
+test "held dragging and captured states follow pointer owners and reset" {
+    var u = UiCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    const key = ui.key(0, "drag-owner");
+    _ = u.interactionOf(key);
+    _ = u.stampRect(key, .{ .x = 0, .y = 0, .w = 40, .h = 40 }, null, null);
+
+    var gesture: @import("activation.zig").PointerActivation = .{};
+    gesture.press(key, .mouse, 1, .{ .x = 5, .y = 5 });
+    try std.testing.expect(u.markKey(gesture.pressedKey().?, .held));
+    gesture.motion(.mouse, 1, .{ .x = 10, .y = 5 });
+    try std.testing.expect(u.markKey(gesture.draggingKey().?, .dragging));
+    try std.testing.expect(u.capturePointer(key));
+    u.setFlag(u.capturedPointerKey().?, .captured, true);
+
+    const on = u.interactionOf(key);
+    try std.testing.expect(on.held and on.dragging and on.captured);
+    u.clearTransient();
+    const cleared = u.interactionOf(key);
+    try std.testing.expect(!cleared.held and !cleared.dragging and !cleared.captured);
 }

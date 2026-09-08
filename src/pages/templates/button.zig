@@ -4,10 +4,9 @@
 //! (`el.text`) plus style/placement composed via the fluent `El` handle. It owns none of
 //! that machinery; it just arranges it and picks the colors from `res.view.theme` + interaction.
 //!
-//! The chrome (dim if disabled, accent on hover, else fg) is computed inline off the outer
-//! box's own interaction slot. Returns the outer `El` (shelf convention — a template hands
-//! back the same handle an element would); the caller reads `.query().clicked` and still
-//! guards the click (`enabled` is only the look).
+//! The caller's `enabled` value remains authoritative and is published as `.disabled`;
+//! chrome is dim when disabled, accent on hover/held, otherwise fg. Returns the outer
+//! `El`; callers still enforce their domain gate when acting on `.query().clicked`.
 
 const ha = @import("ha");
 
@@ -30,8 +29,10 @@ pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enable
     const lbl = try el.text(ctx, outer, "lbl", label);
     _ = lbl.with_style(.{ style.body, style.pad_sym(8, 4) });
 
-    // Chrome: dim disabled, accent on hover (read off the box's slot), else soft fg.
-    const c = if (!enabled) th.dim else if (outer.query().hovering) th.acc else th.fg;
+    // Chrome reads the published state, whose authority remains the caller's `enabled`.
+    uic.publishControlState(ctx, outer.get().key, .{ .disabled = !enabled });
+    const q = outer.query();
+    const c = if (q.disabled) th.dim else if (q.held or q.hovering) th.acc else th.fg;
     _ = lbl.with_style(.{Style{ .text = c }});
     _ = outer.with_style(.{Style{ .outline_color = c }});
 

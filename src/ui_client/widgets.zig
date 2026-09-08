@@ -80,10 +80,10 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// by the text node's own padding, which centres the glyphs and lets the `fit_children`
 /// box wrap `text + padding` exactly.
 ///
-/// `enabled` drives the visual state (host policy): a disabled button is dimmed, an
-/// enabled one brightens on hover (read off its own slot, set at the event stage from
-/// last frame's rect) and is the soft idle color otherwise. The caller still guards
-/// the click — `enabled` is purely the look; pass it whatever "affordable" means.
+/// `enabled` remains caller authority and is published as `.disabled` every build. A
+/// disabled button is dimmed; an enabled one accents while hovered or held. Callers still
+/// enforce their domain gate when acting on `.clicked`; the interaction flag is a
+/// projection, not a second source of truth.
 pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     _ = outer.with_layout(.relative, .{ .dir = .row })
@@ -94,11 +94,12 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     lbl.size.padding = ui.features.Padding.initSymmetric(8, 4);
     _ = lbl.with_layout(.relative, null);
 
-    // State color: dim if disabled, else bright (accent) on hover, else idle (fg).
-    // Querying here also keeps the slot alive (same as the caller's `.clicked` read).
-    // The box draws an outline, the label its text — both in `c`.
+    // Publish disabled from the caller's authoritative `enabled` value every build,
+    // including false so a key cannot retain stale semantics across state changes.
+    cb.publishControlState(ctx, outer.key, .{ .disabled = !enabled });
+    const q = outer.query(ctx);
     const t = ctx.res.view.theme;
-    const c = if (!enabled) t.dim else if (outer.query(ctx).hovering) t.acc else t.fg;
+    const c = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg;
     outer.render_data.outline = .{ .color = c };
     lbl.render_data.text = c;
 
@@ -109,14 +110,17 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
 /// outline ringing it (host policy, mirroring `button`). The render walk draws the
 /// outline *after* the image, so the ring shows over the opaque icon tile. Querying
 /// keeps the slot alive for next frame's hit-test; the caller reads `.clicked` and
-/// still guards the click — `enabled` is purely the look (dim / bright-on-hover / idle).
+/// still enforces `enabled` as domain authority. The published projection drives
+/// dim / bright-on-hover-or-held / idle chrome.
 /// Text-on-hover is deferred; the icon alone is the affordance for now.
 pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, px: f32, enabled: bool) !*Node {
     const node = try Node.pcreate(ctx.arena, key, parent);
     try data_sprite(ctx, node, sprite, px);
     _ = node.with_layout(.relative, null);
+    cb.publishControlState(ctx, node.key, .{ .disabled = !enabled });
+    const q = node.query(ctx);
     const t = ctx.res.view.theme;
-    node.render_data.outline = .{ .color = if (!enabled) t.dim else if (node.query(ctx).hovering) t.acc else t.fg };
+    node.render_data.outline = .{ .color = if (q.disabled) t.dim else if (q.held or q.hovering) t.acc else t.fg };
     return node;
 }
 
@@ -175,7 +179,7 @@ pub const ScrollView = struct {
 /// Vertical scroll container: a fixed `width`×`height` `viewport` (clipped, via
 /// `RenderData.clip`) holding a `fit_children` `content` column the caller appends rows
 /// to. Scrolls only when ordered hit/capture routing marks the viewport with `.wheel`;
-/// its `ScrollState` offset persists by `key` (like `active`) and is folded into
+/// its `ScrollState` offset persists by `key` and is folded into
 /// `content.layout.scroll_y`, which `place` uses to shift `content`'s children without a
 /// second layout pass.
 ///
@@ -306,6 +310,9 @@ pub fn text_input(ctx: *UiCtx, parent: *Node, key: []const u8, placeholder: []co
         ctx.clearFocus(); // primary press landed outside this field
     }
     const focused = ctx.isFocused(node.key);
+    // Current desktop policy keeps every focused text field visibly outlined; INPUT-06
+    // can later distinguish keyboard-origin focus without changing the vocabulary.
+    cb.publishControlState(ctx, node.key, .{ .focused = focused, .focus_visible = focused });
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.startTextInput(ctx.res.platform.window) catch {};
     } else if (ctx.focusedKey() == null and sdl.keyboard.textInputActive(ctx.res.platform.window)) {

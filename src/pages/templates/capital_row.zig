@@ -64,10 +64,11 @@ pub fn capital_row(
     const cost = (GoodT{}).requires;
 
     const row = try el.div(ctx, parent, id);
-    const q = row.query();
     const hot = kind == .ready;
+    uic.publishControlState(ctx, row.get().key, .{ .disabled = !hot });
+    const q = row.query();
     const lit: Color = switch (kind) {
-        .ready => if (q.hovering) th.acc else th.fg,
+        .ready => if (q.held or q.hovering) th.acc else th.fg,
         .building => th.fg,
         .owned => th.dim,
         .reach, .blocked, .locked => th.dim,
@@ -76,7 +77,7 @@ pub fn capital_row(
 
     _ = row.with_size(.{ .fixed = w_name + w_cost + w_days + w_says + w_act + w_corner + 5 * 8 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and q.hovering) th.panel else null } });
+        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering)) th.panel else null } });
 
     try cell(ctx, row, "nm", w_name, gt.display_name(GoodT), lit, false);
 
@@ -132,9 +133,10 @@ pub fn capital_row(
     if (kind == .building) {
         const x = try el.div(ctx, corner, "x");
         _ = x.with_layout(.center_right);
+        uic.publishControlState(ctx, x.get().key, .{});
         const xq = x.query();
         _ = (try el.text(ctx, x, "t", "\u{00d7}"))
-            .with_style(.{ style.h3, Style{ .text = if (xq.hovering) th.danger else th.line2 } });
+            .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering) th.danger else th.line2 } });
         cancelled = x.consume(.clicked);
     }
 

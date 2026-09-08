@@ -42,12 +42,17 @@ const listed = capital.buildable_bundle.len - 1;
 
 const Entry = struct { i: usize, kind: Kind, reach: f32, mats: f32, hours: f32 };
 
-/// One clickable word in the control strip. Accented while it is the active choice.
-fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool) !bool {
+/// One clickable word in the control strip. State remains in `BuildViewState`; this
+/// projects either selected-choice or checked-toggle semantics for visuals/accessibility.
+fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool, is_check: bool) !bool {
     const th = ctx.res.view.theme;
     const box = try el.div(ctx, parent, id);
+    uic.publishControlState(ctx, box.get().key, .{
+        .selected = on and !is_check,
+        .checked = on and is_check,
+    });
     const q = box.query();
-    const c = if (on) th.acc else if (q.hovering) th.fg else th.dim;
+    const c = if (on) th.acc else if (q.held or q.hovering) th.fg else th.dim;
     _ = (try el.text(ctx, box, "t", label)).with_style(.{ style.body, Style{ .text = c } });
     return q.clicked;
 }
@@ -76,22 +81,22 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
         .with_style(.{style.pad_each(0, 0, 6, 0)});
 
     const g_sort = try group_label(ctx, strip, "gs", "SORT");
-    if (try chip(ctx, g_sort, "s0", "reach", st.sort == .reach)) st.sort = .reach;
-    if (try chip(ctx, g_sort, "s1", "materials", st.sort == .materials)) st.sort = .materials;
-    if (try chip(ctx, g_sort, "s2", "time", st.sort == .time)) st.sort = .time;
+    if (try chip(ctx, g_sort, "s0", "reach", st.sort == .reach, false)) st.sort = .reach;
+    if (try chip(ctx, g_sort, "s1", "materials", st.sort == .materials, false)) st.sort = .materials;
+    if (try chip(ctx, g_sort, "s2", "time", st.sort == .time, false)) st.sort = .time;
 
     const g_show = try group_label(ctx, strip, "gh", "SHOW");
-    if (try chip(ctx, g_show, "h0", "ready", st.show == .ready)) st.show = .ready;
-    if (try chip(ctx, g_show, "h1", "in reach", st.show == .in_reach)) st.show = .in_reach;
-    if (try chip(ctx, g_show, "h2", "all", st.show == .all)) st.show = .all;
+    if (try chip(ctx, g_show, "h0", "ready", st.show == .ready, false)) st.show = .ready;
+    if (try chip(ctx, g_show, "h1", "in reach", st.show == .in_reach, false)) st.show = .in_reach;
+    if (try chip(ctx, g_show, "h2", "all", st.show == .all, false)) st.show = .all;
 
     const g_tier = try group_label(ctx, strip, "gt", "TIER");
-    if (try chip(ctx, g_tier, "t0", "any", st.tier == .any)) st.tier = .any;
-    if (try chip(ctx, g_tier, "t1", "crude", st.tier == .crude)) st.tier = .crude;
-    if (try chip(ctx, g_tier, "t2", "made", st.tier == .manufactured)) st.tier = .manufactured;
+    if (try chip(ctx, g_tier, "t0", "any", st.tier == .any, false)) st.tier = .any;
+    if (try chip(ctx, g_tier, "t1", "crude", st.tier == .crude, false)) st.tier = .crude;
+    if (try chip(ctx, g_tier, "t2", "made", st.tier == .manufactured, false)) st.tier = .manufactured;
 
     const g_own = try el.div(ctx, strip, "go");
-    if (try chip(ctx, g_own, "b", if (st.built) "\u{25a0} built" else "\u{25a1} built", st.built)) st.built = !st.built;
+    if (try chip(ctx, g_own, "b", if (st.built) "\u{25a0} built" else "\u{25a1} built", st.built, true)) st.built = !st.built;
 
     // --- the body: one line for a busy body, then the rows --------------------------
     const busy = world.get(e, comp.Busy);
@@ -262,8 +267,9 @@ fn goal_card(
     const ready = capital.unlock_met(world, e, G) and cost.materials <= stock.v and
         cost.energy < vigor.v and !world.has(e, comp.Busy);
     const go = try el.div(ctx, card, "go");
+    uic.publishControlState(ctx, go.get().key, .{ .disabled = !ready });
     const q = go.query();
-    const c = if (!ready) th.line2 else if (q.hovering) th.acc else th.fg;
+    const c = if (q.disabled) th.line2 else if (q.held or q.hovering) th.acc else th.fg;
     var mbuf: [48]u8 = undefined;
     const label = if (ready)
         "Raise the shelter \u{2192}"

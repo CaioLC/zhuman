@@ -46,6 +46,14 @@ pub const PointerActivation = struct {
         self.* = .{};
     }
 
+    pub fn pressedKey(self: *const PointerActivation) ?u64 {
+        return self.pressed_key;
+    }
+
+    pub fn draggingKey(self: *const PointerActivation) ?u64 {
+        return if (self.dragged) self.pressed_key else null;
+    }
+
     fn samePointer(self: *const PointerActivation, kind: PointerKind, id: ?u64) bool {
         return self.pointer_kind == kind and self.pointer_id == id;
     }
@@ -68,14 +76,19 @@ test "release over a different target is suppressed" {
 test "movement through the threshold is tolerated but a drag is suppressed" {
     var activation: PointerActivation = .{};
     activation.press(11, .pen, 4, .{ .x = 10, .y = 10 });
+    try std.testing.expectEqual(@as(?u64, 11), activation.pressedKey());
+    try std.testing.expectEqual(@as(?u64, null), activation.draggingKey());
     activation.motion(.pen, 4, .{ .x = 14, .y = 10 });
     try std.testing.expect(!activation.dragged);
+    try std.testing.expectEqual(@as(?u64, null), activation.draggingKey());
     try std.testing.expectEqual(@as(?u64, 11), activation.release(11, .pen, 4, .{ .x = 14, .y = 10 }));
 
     activation.press(11, .pen, 4, .{ .x = 10, .y = 10 });
     activation.motion(.pen, 4, .{ .x = 14.01, .y = 10 });
     try std.testing.expect(activation.dragged);
+    try std.testing.expectEqual(@as(?u64, 11), activation.draggingKey());
     try std.testing.expectEqual(@as(?u64, null), activation.release(11, .pen, 4, .{ .x = 10, .y = 10 }));
+    try std.testing.expectEqual(@as(?u64, null), activation.pressedKey());
 }
 
 test "cancellation and a different pointer cannot complete a press" {

@@ -72,9 +72,13 @@ fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position:
 
 fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
     app.pointer_activation.motion(kind, id, position);
+    if (app.pointer_activation.draggingKey()) |key| {
+        _ = app.ui.markKey(key, .dragging);
+    }
 }
 
 fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    routePointerMotion(app, kind, id, position);
     _ = app.ui.markTarget(.released, position.x, position.y);
     const target = app.ui.targetAt(position.x, position.y);
     if (app.pointer_activation.release(target, kind, id, position)) |key| {
@@ -85,6 +89,20 @@ fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, positio
 fn cancelPointerGesture(app: *App) void {
     app.pointer_activation.cancel();
     app.ui.cancelPointerCapture();
+}
+
+fn publishPointerVisualState(app: *App, input: *const ui_client.Input) void {
+    if (input.pointer.buttons.primary.held) {
+        if (app.pointer_activation.pressedKey()) |key| {
+            _ = app.ui.markKey(key, .held);
+        }
+    }
+    if (app.pointer_activation.draggingKey()) |key| {
+        _ = app.ui.markKey(key, .dragging);
+    }
+    if (app.ui.capturedPointerKey()) |key| {
+        app.ui.setFlag(key, .captured, true);
+    }
 }
 
 // END CONFIGS
@@ -262,6 +280,8 @@ pub fn main() !void {
                 else => {},
             }
         }
+
+        publishPointerVisualState(&app, input);
 
         // Preserve current editing/quit policy while sourcing it from the frame model.
         for (input.keyEvents()) |key| {

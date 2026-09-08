@@ -34,7 +34,7 @@ Node(comptime RenderData: type)                                           // the
 - `StateNs` — a namespace of the render-state types the host wants cached (one
   `Pool(T)` is generated per declaration).
 - `IntFlags` — the host's interaction-flag type (a packed struct of defaulted
-  bools, e.g. `hovering`, `clicked`, `active`). The engine stores it opaquely in
+  bools, e.g. `hovering`, `clicked`, `disabled`). The engine stores it opaquely in
   the keyed interaction store and **never reads its meaning**; it must declare
   `pub const transient = [_][]const u8{ … }` naming the fields the engine zeroes
   each frame (the rest latch). Both the vocabulary *and* the transient/latched
@@ -117,8 +117,9 @@ carry *several* cached states (text **and** a rasterized svg) with no per-node
 bookkeeping. `render_data` is the one frame-local payload (color folds in here); the
 `node.key`-addressed pools are the persistent stores. Interaction can't fold into
 `render_data` precisely because they're opposite lifetimes: `render_data` is rebuilt
-each frame, while an interaction slot **must** persist (the rect stamped after frame N's
-layout is what frame N+1's event stage hit-tests, and `active` latches). Interaction's
+each frame, while an interaction slot **must** persist: frame N's stamped rect feeds
+frame N+1 hit testing, and host semantic projections published during build must remain
+available through that next event stage. Interaction's
 sibling is `TextData` — both are persistent and key-addressed — not `render_data`.
 
 ## Node & features
@@ -199,24 +200,36 @@ as the `IntFlags` parameter, and the engine stores it opaquely — it owns neith
 field names nor what they mean. Today's host (`ui_client/ctx_binding.zig`):
 
 ```zig
-pub const Interaction = packed struct {  // a flag SET — any combo can be on at once
+pub const Interaction = packed struct {
+    // Pointer-derived: host republishes these, engine clears them each frame.
     hovering: bool = false,
-    pressed:  bool = false,  // primary press edge on this target
-    released: bool = false,  // primary release edge, including invalid clicks
-    wheel:    bool = false,  // this target owns the frame's wheel delta
-    clicked:  bool = false,  // valid host-completed release activation
-    active:   bool = false,
+    pressed: bool = false,
+    held: bool = false,
+    released: bool = false,
+    wheel: bool = false,
+    clicked: bool = false,
+    dragging: bool = false,
+    captured: bool = false,
 
-    pub const transient = [_][]const u8{ "hovering", "pressed", "released", "wheel", "clicked" };
+    // Semantic projections: explicitly published from their real owner every build.
+    disabled: bool = false,
+    focused: bool = false,
+    focus_visible: bool = false,
+    selected: bool = false,
+    checked: bool = false,
+
+    pub const transient = [_][]const u8{
+        "hovering", "pressed", "held", "released", "wheel", "clicked", "dragging", "captured",
+    };
 };
 ```
 
-The **transient/latched split is host policy too**: `clearTransient` (run in
-`endFrame`) reads the host's `transient` field-name list and zeroes only those
-fields. Fields *not* listed latch — they persist across frames until the host clears
-them. Here hover, press/release, wheel ownership, and completed activation are recomputed
-from input; `active` latches. Add a field (`dragging`, `focused`) by editing the host
-struct — no engine change.
+The **transient/non-transient split is host policy too**. `clearTransient` (run in
+`endFrame`) zeroes pointer-derived fields; main republishes held/drag/capture from the
+active gesture and exact capture owner. Semantic fields must survive into the following
+event stage, but they are not self-toggling latches: host `publishControlState` writes
+*every* semantic field, including false, from authoritative widget/domain/focus state on
+every build. A disappearing control loses its whole slot at prune.
 
 The interaction store is a `Pool(Slot)` where each slot carries flags, its full rect,
 inherited clip, parent key, pass-through state, and an optional frame-scoped `HitTestFn`.
@@ -335,10 +348,12 @@ A slot stays alive only while *touched* (acquired) each frame:
 
 - A node not `query`'d this frame is pruned at `endFrame`, dropping straight out of
   next frame's hit-test set.
-- **Consequence for `active`:** latched state persists *only while the widget is
-  read every frame* (reads keep the slot alive). Stop reading a node → its slot is
-  pruned → `active` is lost. For normal widgets (read each frame in build) this is
-  exactly right.
+- **Consequence for semantic state:** `disabled`, `focused`/`focus_visible`,
+  `selected`, and `checked` remain readable during the next event stage only while their
+  widget is alive and republishes them. `publishControlState` writes true *and false*
+  every build; stopping the build prunes the slot. Selection itself still lives in
+  `TabsState`/simulation state, focus in the focus registry, and disabled truth in the
+  caller's domain checks—the interaction slot is only their visual/semantic projection.
 
 ## Layout
 

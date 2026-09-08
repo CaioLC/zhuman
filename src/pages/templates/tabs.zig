@@ -34,10 +34,12 @@ pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8)
     for (labels, 0..) |label, i| {
         const key = try std.fmt.allocPrint(ctx.arena, "tab{d}", .{i});
         const chip = try el.div(ctx, bar, key);
-        if (chip.query().clicked) st.active = i;
+        const q = chip.query();
+        if (q.clicked) st.active = i;
 
         const is_active = st.active == i;
-        const c = if (is_active) th.fg else if (chip.query().hovering) th.acc else th.dim;
+        uic.publishControlState(ctx, chip.get().key, .{ .selected = is_active });
+        const c = if (is_active) th.fg else if (q.held or q.hovering) th.acc else th.dim;
         const lbl = (try el.text(ctx, chip, "l", label))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});

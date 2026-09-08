@@ -60,9 +60,10 @@ pub const Node  = ui.Node(RenderData);
   conditional child is the clearer owner, the shell may call `retainChildState` each
   hidden frame; this keeps only an existing typed slot and stops automatically with
   the shell. `BuildViewState` uses that path while ACTIONS hides the BUILD root.
-- **`Interaction`** — `hovering` / `clicked` / `active`, with `transient` naming the first
-  two. The engine stores it opaquely; both the vocabulary and the transient/latched split
-  are decided here.
+- **`Interaction`** — pointer-derived hover/press/held/release/wheel/click/drag/capture
+  plus semantic disabled/focus/focus-visible/selected/checked projections. Pointer fields
+  are transient; `publishControlState` writes every semantic field from its real owner
+  each build, so no anonymous `active` latch exists.
 - **`RenderData`** — one *optional* field per paint feature, each carrying that feature's
   payload: `text`/`fill`/`svg` are `?Color`, `outline` is `?Outline` (color + width +
   solid/dashed/dotted), `img` is `?Sprite` (a texture plus an optional sheet cell). Present
@@ -120,6 +121,25 @@ popup box, and `modal` queries both the fullscreen scrim and dialog; because roo
 stamped in the same order they draw, listing them after the screen blocks covered controls
 for hover, press, release, wheel, and click without `modal_open` guards. Geometry-only or
 intentionally transparent overlays must opt out explicitly with `pass_through`.
+
+## Visual interaction state ownership
+
+The host vocabulary separates pointer facts from semantic facts. Main republishes `held`
+on the stable press key while primary input remains down, `dragging` once
+`PointerActivation` crosses 4px (including release-position movement), and `captured` on
+the exact `Ctx` capture owner. These are transient like hover/press/release/click; button,
+action, build-row, tab, ration, filter, and cancel chrome can react to held immediately.
+Concrete drag/capture controls remain INPUT-05 work.
+
+`ControlState` carries `disabled`, `focused`, `focus_visible`, `selected`, and `checked`.
+`publishControlState(ctx, key, state)` writes all five—including false—on every build.
+Authority stays elsewhere: enabled/affordability/readiness and row classification decide
+disabled; the focus registry decides text-input focus; `TabsState` and `BuildViewState`
+decide tab/filter/check state; simulation `Metabolism.setting` decides ration selection.
+The interaction slot is their cross-widget visual/semantic projection, never an
+independent toggle. Current desktop policy visibly outlines every focused text field, so
+its `focused` and `focus_visible` are both true; INPUT-06 may refine origin policy when
+keyboard command routing lands.
 
 ## Focus binding
 
