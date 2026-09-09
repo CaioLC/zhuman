@@ -23,6 +23,11 @@ const motion = @import("./motion.zig");
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
 pub const style = @import("./style.zig");
+/// The centralized typography contract (TEXT-04): the prototype text roles
+/// (`body`/`small`/`heading`/`eyebrow`), the single logical→device scale seam
+/// (`toDevice`), and the pure tracking math (`deviceTracking`). SDL-free host policy;
+/// `style` projects these roles into composable fragments. See `type.zig`.
+pub const typography = @import("./type.zig");
 /// The content layer — pure content leaves (`text`/`image`/`svg`) + the `el` sugar.
 pub const elements = @import("./elements.zig");
 /// The color vocabulary — `Color`, the blend math, and `Theme`'s nine roles with plain
@@ -154,4 +159,6 @@ test {
     _ = semantics;
     _ = a11y;
     _ = motion;
+    _ = style;
+    _ = typography;
 }

@@ -73,6 +73,15 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    // TEXT-04: package the UI typeface and its license next to the binary. SDL_ttf opens
+    // the font from `assets/fonts/...` at runtime (see `main.font_path`), so the packaged
+    // build must carry both the TTF and — as SIL OFL 1.1 §2 requires — the verbatim license
+    // + copyright notice alongside it. These `installFile` steps run on `zig build`
+    // (`installArtifact` above already wires the default install step), so `zig-out/` is a
+    // self-contained, legally-redistributable bundle. Provenance: `docs/fonts.md`.
+    b.installFile("assets/fonts/JetBrainsMonoNL-Regular.ttf", "assets/fonts/JetBrainsMonoNL-Regular.ttf");
+    b.installFile("assets/fonts/JetBrainsMono-OFL.txt", "assets/fonts/JetBrainsMono-OFL.txt");
+
     // Run App
     const run_exe = b.addRunArtifact(exe);
     const run_step = b.step("run", "Run the app");

@@ -42,8 +42,14 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const sizes = try t.row(ctx, root, "sizes");
     _ = try txt(ctx, sizes, "s1", "H1", .{ style.h1, Style{ .text = th.fg } });
     _ = try txt(ctx, sizes, "s2", "H2", .{ style.h2, Style{ .text = th.fg } });
-    _ = try txt(ctx, sizes, "s3", "H3", .{ style.h3, Style{ .text = th.acc } });
+    _ = try txt(ctx, sizes, "s3", "Heading", .{ style.heading, Style{ .text = th.acc } });
     _ = try txt(ctx, sizes, "sb", "body", .{ style.body, Style{ .text = th.dim } });
+    _ = try txt(ctx, sizes, "ssm", "small", .{ style.small, Style{ .text = th.dim } });
+
+    // TEXT-04 eyebrow role: a section label authored in normal case; the role uppercases it
+    // (ASCII fold) and applies the loosened in-band tracking. Proves the transform + tracking
+    // travel together from the role through `style.apply` to the drawn glyphs.
+    _ = try txt(ctx, root, "eyebrow", "Section Label", .{ style.eyebrow, Style{ .text = th.acc } });
 
     // Themed color roles on body text.
     const colors = try t.row(ctx, root, "colors");

@@ -550,3 +550,126 @@ test "ellipsisFit: determinism — identical inputs yield identical fit (measure
     try testing.expectEqual(a.elided, b.elided);
     try testing.expectEqual(a.prefix_len, b.prefix_len);
 }
+
+// --- Tests: TEXT-04 tracking-aware measurer feeds wrap/ellipsis unchanged ----------------
+//
+// TEXT-04's leverage point: `wrapLines`/`ellipsisFit` take ONLY a `Measurer`, so making the
+// measurer tracking-aware (add a fixed device-px `dx` between clusters) makes wrap and
+// ellipsis tracking-correct with ZERO changes to these pure routines. This fake bills
+// 1px/byte PLUS `dx` between adjacent ASCII bytes (one byte == one cluster here), exactly
+// mirroring the real `FontMeasurer`'s tracked path (Σ advances + dx*(n-1)). Because the same
+// routine drives both `text.remeasure` (box) and `text.draw` (glyph positions), proving the
+// break/fit points shift correctly here proves measure and draw agree under tracking.
+
+/// 1px/byte plus a fixed inter-byte `dx`. For an n-byte ASCII string the width is
+/// `n + dx*(n-1)` — the same shape as the font-backed tracked measurer, so break math is exact.
+const TrackedFake = struct {
+    dx: f32,
+    fn width(ptr: *const anyopaque, text: []const u8) f32 {
+        const self: *const TrackedFake = @ptrCast(@alignCast(ptr));
+        if (text.len == 0) return 0;
+        const n: f32 = @floatFromInt(text.len);
+        return n + self.dx * (n - 1);
+    }
+    fn prefixBytes(ptr: *const anyopaque, text: []const u8, max_w: f32) usize {
+        const self: *const TrackedFake = @ptrCast(@alignCast(ptr));
+        if (max_w <= 0) return 0;
+        // Largest k with k + dx*(k-1) <= max_w, walking cluster-by-cluster like the real one.
+        var k: usize = 0;
+        var w: f32 = 0;
+        while (k < text.len) {
+            var next = w;
+            if (k > 0) next += self.dx;
+            next += 1;
+            if (next > max_w) break;
+            w = next;
+            k += 1;
+        }
+        return k;
+    }
+    fn measurer(self: *const TrackedFake) Measurer {
+        return .{ .ptr = self, .widthFn = width, .prefixBytesFn = prefixBytes };
+    }
+};
+
+fn collectTracked(alloc: std.mem.Allocator, src: []const u8, max_w: f32, dx: f32) !Collector {
+    var f = TrackedFake{ .dx = dx };
+    var c = Collector{ .src = src, .alloc = alloc };
+    wrapLines(src, max_w, f.measurer(), *Collector, &c, Collector.take);
+    return c;
+}
+
+test "wrap+tracking: positive tracking makes a line that fit untracked now break" {
+    // "abcde fghij" is 11 bytes → untracked width 11 fits a cell of 11 on one line.
+    {
+        var c = try collect(testing.allocator, "abcde fghij", 11);
+        defer c.lines.deinit(testing.allocator);
+        try testing.expectEqual(@as(usize, 1), c.lines.items.len);
+    }
+    // With +1px tracking, "abcde fghij" (11 clusters) = 11 + 1*10 = 21 > 11, so it must wrap.
+    // "abcde" alone = 5 + 1*4 = 9 <= 11 fits; adding " fghij" pushes past → break before it.
+    {
+        var c = try collectTracked(testing.allocator, "abcde fghij", 11, 1);
+        defer c.lines.deinit(testing.allocator);
+        try testing.expectEqual(@as(usize, 2), c.lines.items.len);
+        try testing.expectEqualStrings("abcde", c.lines.items[0]);
+        try testing.expectEqualStrings("fghij", c.lines.items[1]);
+    }
+}
+
+test "wrap+tracking: negative tracking keeps a wider line on one row" {
+    // "abcdef ghijkl" is 13 bytes → untracked 13 > 12 wraps to two lines.
+    {
+        var c = try collect(testing.allocator, "abcdef ghijkl", 12);
+        defer c.lines.deinit(testing.allocator);
+        try testing.expectEqual(@as(usize, 2), c.lines.items.len);
+    }
+    // With -0.2px tracking the whole string is 13 + (-0.2)*12 = 10.6 <= 12 → one line.
+    {
+        var c = try collectTracked(testing.allocator, "abcdef ghijkl", 12, -0.2);
+        defer c.lines.deinit(testing.allocator);
+        try testing.expectEqual(@as(usize, 1), c.lines.items.len);
+        try testing.expectEqualStrings("abcdef ghijkl", c.lines.items[0]);
+    }
+}
+
+test "wrap+tracking: measure==draw — same tracked measurer yields identical spans twice" {
+    // remeasure and draw both feed the tracking-aware measurer; identical inputs must give
+    // byte-identical spans, so the reserved box and the drawn (spaced) lines cannot drift.
+    const src = "the quick brown fox";
+    var a = try collectTracked(testing.allocator, src, 12, 0.5);
+    defer a.lines.deinit(testing.allocator);
+    var b = try collectTracked(testing.allocator, src, 12, 0.5);
+    defer b.lines.deinit(testing.allocator);
+    try testing.expectEqual(a.lines.items.len, b.lines.items.len);
+    for (a.lines.items, b.lines.items) |la, lb| try testing.expectEqualStrings(la, lb);
+}
+
+/// Run `ellipsisFit` with the tracking-aware fake.
+fn fitTracked(text: []const u8, cell_w: f32, ellipsis_w: f32, dx: f32) Fit {
+    var f = TrackedFake{ .dx = dx };
+    return ellipsisFit(text, cell_w, ellipsis_w, f.measurer());
+}
+
+test "ellipsisFit+tracking: positive tracking shrinks the fitted prefix" {
+    // Untracked: "hello" (5) in cell 5 fits whole, no elision.
+    {
+        const r = fit("hello", 5, 1);
+        try testing.expect(!r.elided);
+        try testing.expectEqual(@as(usize, 5), r.prefix_len);
+    }
+    // With +1px tracking "hello" = 5 + 1*4 = 9 > 5, so it elides. Budget = 5 - 1 = 4;
+    // prefixBytes: "hel" = 3 + 1*2 = 5 > 4; "he" = 2 + 1*1 = 3 <= 4 → 2 bytes.
+    {
+        const r = fitTracked("hello", 5, 1, 1);
+        try testing.expect(r.elided);
+        try testing.expectEqual(@as(usize, 2), r.prefix_len);
+    }
+}
+
+test "ellipsisFit+tracking: determinism under tracking (measure == draw)" {
+    const a = fitTracked("a long label to elide", 12, 3, 0.5);
+    const b = fitTracked("a long label to elide", 12, 3, 0.5);
+    try testing.expectEqual(a.elided, b.elided);
+    try testing.expectEqual(a.prefix_len, b.prefix_len);
+}

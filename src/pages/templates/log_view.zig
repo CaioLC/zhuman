@@ -35,9 +35,11 @@ fn log_tone_color(t: Theme, tone: Tone) Color {
 }
 
 /// One row's height at the body font, measured live (falls back to the px itself if the
-/// font backend errors — roughly right, and only cosmetic).
+/// font backend errors — roughly right, and only cosmetic). The logical body size is routed
+/// through the one logical→device seam (`type.toDevice` with the frame scale) so the row
+/// height tracks the same device px the body text is measured/drawn at.
 fn line_height(ctx: *UiCtx) f32 {
-    const px = style.body.font.?;
+    const px = uic.typography.toDevice(style.body.font.?, ctx.res.view.scale);
     _, const h = ctx.res.platform.font.measure("Ag", px) catch return px;
     return @floatFromInt(h);
 }

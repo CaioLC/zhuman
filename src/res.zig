@@ -135,6 +135,14 @@ pub const View = struct {
     /// indicators, state changes, pointer/focus cues, and the simulation stay visible and
     /// are never gated by it.
     reduced_motion: bool = false,
+    /// This frame's **logical→device scale factor** (TEXT-04 seam for VIEW-01). Every font
+    /// size the host resolves is multiplied by this exactly once, in
+    /// `ui_client.type.toDevice`, before it reaches the font backend — so a heading at 21
+    /// *logical* px opens the font at `21 * scale` device px and tracking is computed at the
+    /// device size. Defaults to `1` (device px == logical px, today's behavior byte-for-byte)
+    /// until VIEW-01 computes the real DPI/reference-fit factor here each frame. Kept as a
+    /// single field so there is exactly one multiply point for the whole UI.
+    scale: f32 = 1,
 };
 
 /// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per

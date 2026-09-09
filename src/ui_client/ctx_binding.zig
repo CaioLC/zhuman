@@ -77,6 +77,19 @@ pub const UiState = struct {
         /// a widening label can never shove its neighbors. `data_height`/`baseline` still
         /// come from the font (a single line). POD like `wrap_width`; no allocator.
         overflow_width: f32 = 0,
+        /// **Device-px letter-spacing** added between glyph clusters when rendering and
+        /// measuring this text (TEXT-04). `0` (the default) is the **untracked fast path**:
+        /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, exactly
+        /// as before, so untracked text (and dense rows) pay nothing. A non-zero value (set by
+        /// `style.apply` from a role's `tracking_em` resolved through the frame `scale` at
+        /// `st.px`, via `type.deviceTracking`) makes both `remeasure` and `draw` run the *same*
+        /// per-cluster advance routine — the measured width and the drawn glyph positions add
+        /// the identical integer `dx` between the identical clusters, so box and render agree
+        /// exactly for single-line, wrapped, clip, and ellipsis paths. Already an **integer**
+        /// device px (rounded at resolve time) so it stays crisp (RENDER-06). POD like
+        /// `wrap_width`/`overflow`: no allocator, so the pool contract is unchanged. This is
+        /// one of the render-affecting attributes a future TEXT-05 texture cache keys on.
+        tracking: f32 = 0,
 
         /// TEXT-03 single-line overflow modes. `.visible` is today's behavior (no cell
         /// constraint); `.clip` and `.ellipsis` bound the drawn glyphs to `overflow_width`

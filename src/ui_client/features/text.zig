@@ -27,25 +27,136 @@ pub const State = cb.UiState.TextState;
 // over the *same* metrics. On a font error the width/prefix functions report 0, which
 // degrades to "nothing fits" rather than panicking mid-frame; the caller treats a failed
 // measure as an empty box (like a refused string), keeping box and render in agreement.
+//
+// **TEXT-04 tracking:** the measurer carries a device-px `tracking` delta added *between*
+// glyph clusters. When `tracking == 0` every width/prefix call falls through to SDL's own
+// `getStringSize`/`measureString` — byte-for-byte the pre-TEXT-04 behavior, so untracked
+// text costs nothing. When `tracking != 0`, width/prefix are computed by the shared
+// `trackedAdvance` routine that walks codepoint clusters accumulating per-glyph advances
+// (plus kerning) and adding `tracking` between clusters — the SAME routine `draw`'s
+// per-cluster blit loop uses to place glyphs, so measurement and rendering add the identical
+// integer `dx` between the identical clusters and cannot drift on any path (single-line,
+// wrap, clip, ellipsis). Walking per codepoint also means no multi-codepoint run is ever
+// handed to a shaper, so no ligature can form — the render-path half of TEXT-04's
+// two-layer "no ligatures" defense (the NL font asset is the other half).
 
 const FontMeasurer = struct {
     font: sdl.ttf.Font,
+    /// Device-px letter-spacing added between glyph clusters. `0` = SDL's native metrics.
+    tracking: f32 = 0,
 
     fn width(ptr: *const anyopaque, text: []const u8) f32 {
         const self: *const FontMeasurer = @ptrCast(@alignCast(ptr));
-        const w, _ = self.font.getStringSize(text) catch return 0;
-        return @floatFromInt(w);
+        if (self.tracking == 0) {
+            const w, _ = self.font.getStringSize(text) catch return 0;
+            return @floatFromInt(w);
+        }
+        return trackedWidth(self.font, text, self.tracking);
     }
     fn prefixBytes(ptr: *const anyopaque, text: []const u8, max_w: f32) usize {
         const self: *const FontMeasurer = @ptrCast(@alignCast(ptr));
-        const iw: c_int = if (max_w <= 0) 0 else @intFromFloat(max_w);
-        _, const len = self.font.measureString(text, iw) catch return 0;
-        return len;
+        if (self.tracking == 0) {
+            const iw: c_int = if (max_w <= 0) 0 else @intFromFloat(max_w);
+            _, const len = self.font.measureString(text, iw) catch return 0;
+            return len;
+        }
+        return trackedPrefixBytes(self.font, text, max_w, self.tracking);
     }
     fn measurer(self: *const FontMeasurer) wrap.Measurer {
         return .{ .ptr = self, .widthFn = width, .prefixBytesFn = prefixBytes };
     }
 };
+
+/// One glyph cluster's contribution while walking tracked text: the byte span it occupies
+/// and the device-px x-advance to add *after* placing it (its glyph advance plus the kerning
+/// against the previous cluster; the inter-cluster `tracking` delta is added by the caller).
+const Cluster = struct { start: usize, len: usize, advance: f32 };
+
+/// Walk `text` one UTF-8 codepoint cluster at a time, invoking `emit` with each cluster's
+/// byte span and per-glyph advance (glyph advance + kerning-from-previous). This is the ONE
+/// place cluster iteration + per-glyph metrics live, so the tracked measurer and the tracked
+/// draw loop step identically. Kerning is queried between consecutive codepoints (SDL returns
+/// 0 when the font has no kern pair, so this is a no-op for monospace-without-kerning too).
+/// A malformed byte is treated as a 1-byte cluster so the walk always terminates. On a font
+/// metric error the cluster's advance degrades to 0 (matching the width `catch 0` policy).
+fn walkClusters(
+    font: sdl.ttf.Font,
+    text: []const u8,
+    comptime Ctx: type,
+    ctx: Ctx,
+    comptime emit: fn (Ctx, Cluster) void,
+) void {
+    var i: usize = 0;
+    var prev_cp: ?u32 = null;
+    while (i < text.len) {
+        const seq = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        const end = @min(i + seq, text.len);
+        const cp: u32 = std.unicode.utf8Decode(text[i..end]) catch text[i];
+        const m = font.getGlyphMetrics(cp) catch null;
+        var adv: f32 = if (m) |mm| @floatFromInt(mm.advance) else 0;
+        if (prev_cp) |p| {
+            const k = font.getGlyphKerning(p, cp) catch 0;
+            adv += @floatFromInt(k);
+        }
+        emit(ctx, .{ .start = i, .len = end - i, .advance = adv });
+        prev_cp = cp;
+        i = end;
+    }
+}
+
+/// The tracked device-px width of `text`: Σ (per-glyph advance + kerning) + `tracking` ×
+/// (cluster_count − 1). The single width source for tracked single-line measure, wrap, and
+/// ellipsis budgeting — and it equals the cumulative x the draw loop reaches after the last
+/// glyph, so measure and draw agree. Empty text is width 0 (no trailing tracking).
+fn trackedWidth(font: sdl.ttf.Font, text: []const u8, tracking: f32) f32 {
+    const Acc = struct {
+        w: f32 = 0,
+        n: usize = 0,
+        tracking: f32,
+        fn take(self: *@This(), cl: Cluster) void {
+            if (self.n > 0) self.w += self.tracking; // gap before every cluster after the first
+            self.w += cl.advance;
+            self.n += 1;
+        }
+    };
+    var acc = Acc{ .tracking = tracking };
+    walkClusters(font, text, *Acc, &acc, Acc.take);
+    return @max(0, acc.w);
+}
+
+/// The largest **codepoint-aligned** byte length of `text` whose tracked width does not
+/// exceed `max_w` — the tracked counterpart of `TTF_MeasureString`, used only by the wrap
+/// hard-break fallback and (indirectly) ellipsis budgeting. Walks clusters accumulating the
+/// same running width as `trackedWidth`; stops before the first cluster that would exceed
+/// `max_w`. Always allows at least the running total to include a cluster boundary, never a
+/// mid-codepoint cut.
+fn trackedPrefixBytes(font: sdl.ttf.Font, text: []const u8, max_w: f32, tracking: f32) usize {
+    if (max_w <= 0) return 0;
+    const Acc = struct {
+        w: f32 = 0,
+        n: usize = 0,
+        fitted: usize = 0,
+        max_w: f32,
+        tracking: f32,
+        done: bool = false,
+        fn take(self: *@This(), cl: Cluster) void {
+            if (self.done) return;
+            var next = self.w;
+            if (self.n > 0) next += self.tracking;
+            next += cl.advance;
+            if (next > self.max_w) {
+                self.done = true;
+                return;
+            }
+            self.w = next;
+            self.n += 1;
+            self.fitted = cl.start + cl.len;
+        }
+    };
+    var acc = Acc{ .max_w = max_w, .tracking = tracking };
+    walkClusters(font, text, *Acc, &acc, Acc.take);
+    return acc.fitted;
+}
 
 /// The per-line vertical step, in px — one line's advance. Uses the font's line skip so
 /// stacked lines get the font's own leading (consistent with how a paragraph renders),
@@ -75,8 +186,8 @@ const MeasureAcc = struct {
 /// is the last line's baseline-from-bottom (the font descent) — a multi-line block's
 /// cross-axis reference is its final line, so a wrapped label still baseline-aligns in a
 /// row. Runs the *same* `wrap.wrapLines` `draw` runs, so box and glyphs agree.
-fn measureWrapped(font: sdl.ttf.Font, text: []const u8, max_w: f32) struct { f32, f32, f32 } {
-    var fm = FontMeasurer{ .font = font };
+fn measureWrapped(font: sdl.ttf.Font, text: []const u8, max_w: f32, tracking: f32) struct { f32, f32, f32 } {
+    var fm = FontMeasurer{ .font = font, .tracking = tracking };
     var acc = MeasureAcc{ .src = text, .m = fm.measurer() };
     wrap.wrapLines(text, max_w, fm.measurer(), *MeasureAcc, &acc, MeasureAcc.take);
     const skip = lineSkip(font);
@@ -96,7 +207,7 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     const measured = st.text() orelse "";
     if (st.wrap_width > 0) {
         const font = ctx.res.platform.font.at(st.px) catch return;
-        const tw, const th, const baseline = measureWrapped(font, measured, st.wrap_width);
+        const tw, const th, const baseline = measureWrapped(font, measured, st.wrap_width, st.tracking);
         node.size.data_width = tw;
         node.size.data_height = th;
         node.size.baseline = baseline;
@@ -112,8 +223,18 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
         node.size.data_height = @floatFromInt(th);
         node.size.baseline = baseline;
     } else {
+        // Single-line, unconstrained. Height/baseline always come from the font; the width
+        // is the tracking-aware advance when tracking is set (so the reserved box matches the
+        // spaced glyphs draw will place) and SDL's native width otherwise (the untracked fast
+        // path — byte-for-byte the pre-TEXT-04 measure).
         const tw, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
-        node.size.data_width = @floatFromInt(tw);
+        const w: f32 = if (st.tracking == 0)
+            @floatFromInt(tw)
+        else blk: {
+            const font = ctx.res.platform.font.at(st.px) catch break :blk @floatFromInt(tw);
+            break :blk trackedWidth(font, measured, st.tracking);
+        };
+        node.size.data_width = w;
         node.size.data_height = @floatFromInt(th);
         node.size.baseline = baseline;
     }
@@ -137,7 +258,11 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
 pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
     _ = st.update(text); // copies in full or refuses the whole string (sets `refused`)
-    st.px = style.default_font; // `style.apply` overrides + re-measures for a heading
+    // Seed the default (body) size through the one logical→device seam, so an unstyled leaf
+    // opens the font at the same device px a `style.body` leaf would; `style.apply` overrides
+    // + re-measures for a heading/eyebrow. Tracking defaults to 0 (untracked fast path) until
+    // a role fragment resolves it. See `ui_client/type.zig`.
+    st.px = @import("../type.zig").toDevice(style.default_font, ctx.res.view.scale);
     var size = node.size;
     size.w = .content;
     size.h = .content;
@@ -174,8 +299,9 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const f = u.res.platform.font.at(st.px) catch return;
 
     if (st.wrap_width <= 0 and st.overflow == .visible) {
-        // Fast path — one surface over the content box, byte-for-byte the prior behavior.
-        drawSpan(u, f, fmt, c, r.x, r.y);
+        // Fast path — one surface over the content box (tracking 0 ⟹ byte-for-byte the prior
+        // behavior; tracking != 0 ⟹ the per-cluster advance loop that mirrors the measurer).
+        drawSpan(u, f, fmt, c, r.x, r.y, st.tracking);
         return;
     }
 
@@ -183,15 +309,15 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
         // Single-line overflow cell (TEXT-03). The content box `r` is the allocated cell
         // (`remeasure` wrote `data_width = overflow_width`), so clip/ellipsis both bound to it.
         switch (st.overflow) {
-            .clip => drawClipped(u, f, fmt, c, r),
-            .ellipsis => drawEllipsized(u, f, fmt, c, r),
-            .visible => drawSpan(u, f, fmt, c, r.x, r.y), // overflow_width>0 but visible: draw whole
+            .clip => drawClipped(u, f, fmt, c, r, st.tracking),
+            .ellipsis => drawEllipsized(u, f, fmt, c, r, st.tracking),
+            .visible => drawSpan(u, f, fmt, c, r.x, r.y, st.tracking), // overflow_width>0 but visible: draw whole
         }
         return;
     }
 
-    var fm = FontMeasurer{ .font = f };
-    var lr = LineRenderer{ .u = u, .font = f, .src = fmt, .color = c, .x = r.x, .y = r.y, .skip = lineSkip(f) };
+    var fm = FontMeasurer{ .font = f, .tracking = st.tracking };
+    var lr = LineRenderer{ .u = u, .font = f, .src = fmt, .color = c, .x = r.x, .y = r.y, .skip = lineSkip(f), .tracking = st.tracking };
     wrap.wrapLines(fmt, st.wrap_width, fm.measurer(), *LineRenderer, &lr, LineRenderer.take);
 }
 
@@ -200,12 +326,18 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
 /// tracks the actual glyph and the same token draws as was measured.
 pub const ellipsis_token = "\u{2026}";
 
-/// Blit `text` in `c` at (`x`, `y`), sized to its own measured glyph box. Shared by the fast
-/// path and the overflow prefix/ellipsis blits so they rasterize identically. An empty
-/// string draws nothing; a failed rasterize/upload/measure is skipped silently (a missing
-/// glyph frame is cosmetic, matching every other text path's `catch return`).
-fn drawSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32) void {
+/// Blit `text` in `c` at (`x`, `y`). Shared by the fast path and the overflow prefix/ellipsis
+/// blits so they rasterize identically. An empty string draws nothing; a failed
+/// rasterize/upload/measure is skipped silently (a missing glyph frame is cosmetic, matching
+/// every other text path's `catch return`).
+///
+/// **TEXT-04:** `tracking == 0` is the untracked fast path — one `renderTextSolid` surface
+/// sized to its own `getStringSize` box, byte-for-byte the pre-TEXT-04 blit. `tracking != 0`
+/// switches to `drawTrackedSpan`, which blits each glyph cluster at the cumulative advance
+/// the measurer computed, so the drawn positions match the measured width exactly.
+fn drawSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, tracking: f32) void {
     if (text.len == 0) return;
+    if (tracking != 0) return drawTrackedSpan(u, font, text, c, x, y, tracking);
     var surface = font.renderTextSolid(text, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
     defer surface.deinit();
     const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
@@ -215,12 +347,56 @@ fn drawSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32
     u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
 }
 
+/// The tracked blit: place each glyph cluster at the cumulative x-advance the measurer's
+/// `walkClusters` produces, adding the integer device `tracking` delta *between* clusters.
+/// Each cluster is rasterized on its own via `renderTextSolid` (a single codepoint, so no
+/// ligature can form — the render-path half of the no-ligature defense) and blitted at its
+/// pen x. Because this reuses the same `walkClusters` iteration + advance rule as
+/// `trackedWidth`, the rightmost pen position equals the measured width, so measure and draw
+/// agree cluster-for-cluster on every tracked path (single-line, wrapped line, clip, prefix).
+/// A missing glyph frame is skipped silently, exactly like the fast path.
+fn drawTrackedSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, tracking: f32) void {
+    const Pen = struct {
+        u: *UiCtx,
+        font: sdl.ttf.Font,
+        src: []const u8,
+        color: cb.Color,
+        x: f32,
+        y: f32,
+        tracking: f32,
+        n: usize = 0,
+        fn take(self: *@This(), cl: Cluster) void {
+            if (self.n > 0) self.x += self.tracking; // inter-cluster gap, matching the measurer
+            const bytes = self.src[cl.start .. cl.start + cl.len];
+            blitCluster(self.u, self.font, bytes, self.color, self.x, self.y);
+            self.x += cl.advance;
+            self.n += 1;
+        }
+    };
+    var pen = Pen{ .u = u, .font = font, .src = text, .color = c, .x = x, .y = y, .tracking = tracking };
+    walkClusters(font, text, *Pen, &pen, Pen.take);
+}
+
+/// Blit one glyph cluster's own surface at (`x`, `y`), sized to its measured box. Split out of
+/// `drawSpan` so the tracked loop rasterizes a single codepoint identically to how the fast
+/// path rasterizes a whole span. A missing/failed glyph frame is skipped silently.
+fn blitCluster(u: *UiCtx, font: sdl.ttf.Font, bytes: []const u8, c: cb.Color, x: f32, y: f32) void {
+    if (bytes.len == 0) return;
+    var surface = font.renderTextSolid(bytes, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
+    defer surface.deinit();
+    const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
+    defer texture.deinit();
+    const w, const h = font.getStringSize(bytes) catch return;
+    const dst: ui.Rect = .{ .x = x, .y = y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
+    u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
+}
+
 /// `.clip` overflow: blit the whole accepted string but scope the renderer's clip to the
 /// intersection of the *prior* clip and the content cell, then restore the prior clip —
 /// renderer-scoped, and reverted even if the blit errors. Restoring the prior clip (not
 /// `null`) is essential: this leaf may sit inside an ancestor `.clip` (a scroll viewport),
 /// and dropping that clip would let the string paint outside the ancestor's box.
-fn drawClipped(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect) void {
+fn drawClipped(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect, tracking: f32) void {
     const renderer = u.res.platform.renderer;
     // Snapshot both the enable bit and rectangle. The binding maps an enabled zero-area
     // SDL clip to `null`, the same value used for disabled clipping; retaining the bit keeps
@@ -236,7 +412,7 @@ fn drawClipped(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cel
     const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
     renderer.setClipRect(narrowed) catch return;
 
-    drawSpan(u, font, text, c, cell.x, cell.y);
+    drawSpan(u, font, text, c, cell.x, cell.y, tracking);
 }
 
 /// Normalize SDL's clip query into the state `setClipRect` must restore. The binding returns
@@ -263,17 +439,23 @@ fn intersectIRect(a: sdl.rect.IRect, b: sdl.rect.IRect) sdl.rect.IRect {
 /// blit the codepoint-aligned prefix followed by the ellipsis token. The ellipsis width is
 /// font-measured. A too-narrow cell (`budget <= 0`) yields an empty fit → draws nothing,
 /// never a glyph wider than the allocated cell.
-fn drawEllipsized(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect) void {
-    var fm = FontMeasurer{ .font = font };
-    const ell_w: f32 = @floatFromInt((font.getStringSize(ellipsis_token) catch return)[0]);
-    const r = wrap.ellipsisFit(text, cell.w, ell_w, fm.measurer());
+fn drawEllipsized(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect, tracking: f32) void {
+    var fm = FontMeasurer{ .font = font, .tracking = tracking };
+    const m = fm.measurer();
+    // Ellipsis-token width via the same (tracking-aware) measurer, so the fit budget and the
+    // drawn token measure identically. A single codepoint, so tracked width == native width.
+    const ell_w: f32 = m.width(ellipsis_token);
+    const r = wrap.ellipsisFit(text, cell.w, ell_w, m);
     const prefix = text[0..r.prefix_len];
-    drawSpan(u, font, prefix, c, cell.x, cell.y);
+    drawSpan(u, font, prefix, c, cell.x, cell.y, tracking);
     if (r.elided) {
-        // Advance x past the drawn prefix (its measured width), then blit the ellipsis. A
-        // zero-width prefix places the ellipsis at the cell origin.
-        const pw: f32 = if (prefix.len == 0) 0 else @floatFromInt((font.getStringSize(prefix) catch return)[0]);
-        drawSpan(u, font, ellipsis_token, c, cell.x + pw, cell.y);
+        // Advance x past the drawn prefix (its tracked width), plus one inter-cluster gap to
+        // the ellipsis when tracked, then blit the ellipsis. A zero-width prefix places the
+        // ellipsis at the cell origin. Using the tracking-aware width keeps the token exactly
+        // where the measurer accounted for it.
+        var pw: f32 = if (prefix.len == 0) 0 else m.width(prefix);
+        if (tracking != 0 and prefix.len != 0) pw += tracking; // gap between prefix and ellipsis
+        drawSpan(u, font, ellipsis_token, c, cell.x + pw, cell.y, tracking);
     }
 }
 
@@ -290,11 +472,12 @@ const LineRenderer = struct {
     x: f32,
     y: f32,
     skip: f32,
+    tracking: f32 = 0,
     i: usize = 0,
 
     fn take(self: *LineRenderer, line: wrap.Line) bool {
         const ly = self.y + @as(f32, @floatFromInt(self.i)) * self.skip;
-        drawSpan(self.u, self.font, self.src[line.start .. line.start + line.len], self.color, self.x, ly);
+        drawSpan(self.u, self.font, self.src[line.start .. line.start + line.len], self.color, self.x, ly, self.tracking);
         self.i += 1;
         return true;
     }
@@ -460,4 +643,30 @@ test "text feature: integer clip-rect intersection is the overlap, empties to ze
     const d = intersectIRect(.{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .x = 100, .y = 100, .w = 10, .h = 10 });
     try std.testing.expectEqual(@as(i32, 0), d.w);
     try std.testing.expectEqual(@as(i32, 0), d.h);
+}
+
+test "text feature: tracking is POD state that round-trips; default is the untracked fast path" {
+    // TEXT-04: `tracking` defaults to 0 (the untracked fast path — one getStringSize measure
+    // and one renderTextSolid span, byte-for-byte the pre-TEXT-04 behavior). A resolved
+    // device-px delta round-trips like `wrap_width`/`overflow`, with no allocator (POD).
+    var st = State.init();
+    try std.testing.expectEqual(@as(f32, 0), st.tracking); // default: untracked
+    try std.testing.expect(st.update("IN REACH"));
+    st.tracking = 1; // e.g. +0.07em eyebrow at 11px device rounds to +1px
+    try std.testing.expectEqual(@as(f32, 1), st.tracking);
+    // Tracking never mutates the accepted string — measure and draw read one buffer.
+    try std.testing.expectEqualStrings("IN REACH", st.text() orelse "");
+    // Negative (tightening) tracking round-trips too.
+    st.tracking = -1;
+    try std.testing.expectEqual(@as(f32, -1), st.tracking);
+}
+
+test "text feature: an over-cap string is still refused whole even with tracking set" {
+    // TEXT-04 tracking is not a way to smuggle a too-long source past TEXT-01's cap.
+    var st = State.init();
+    st.tracking = 1;
+    var over: [State.cap + 1]u8 = undefined;
+    @memset(&over, 'x');
+    try std.testing.expect(!st.update(&over)); // refused whole, tracked or not
+    try std.testing.expect(st.text() == null); // draws nothing
 }

@@ -17,6 +17,7 @@
 const std = @import("std");
 const ui = @import("../ui/root.zig");
 const cb = @import("./ctx_binding.zig");
+const typ = @import("./type.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -24,10 +25,22 @@ const Color = cb.Color;
 
 /// A partial style descriptor — every field optional, so an unset field composes as
 /// "leave whatever an earlier fragment (or the default) set". Colors are the host's
-/// `Color` (SDL's); `font` is a point size (px) the content builder measures text at.
+/// `Color` (SDL's); `font` is a **logical** px size the content builder measures text at
+/// (multiplied by the frame `scale` through `type.toDevice` at `apply` time — the one
+/// logical→device seam). `tracking` is letter-spacing in `em` and `transform` is a case
+/// rule; both are the TEXT-04 typography payload and, like every field here, fold
+/// last-non-null-wins so a role fragment sets them and a later fragment can override.
 pub const Style = struct {
     font: ?f32 = null,
     text: ?Color = null,
+    /// Letter-spacing in `em` (negative = tighter, positive = looser). Resolved to an integer
+    /// device-px delta at `apply` time (`type.deviceTracking` at the device size) and stored
+    /// on `TextState.tracking`. Unset composes as "inherit"; the roles set the contract's
+    /// values (global -0.025em, heading -0.04em, eyebrow +0.07em).
+    tracking: ?f32 = null,
+    /// Case transform (`.none`/`.upper`) applied to the rendered bytes at `apply` time. Unset
+    /// composes as "inherit". Only the uppercase eyebrow role sets `.upper`.
+    transform: ?typ.Transform = null,
     fill: ?Color = null,
     /// Border color. Its presence is what makes a border draw; `outline_width` /
     /// `outline_style` only shape a border that a set `outline_color` turned on. Kept as
@@ -45,23 +58,38 @@ pub const Style = struct {
 // earlier `a = 0.0, r = 1.0` read as 0–1 floats and coerced to a=0 (transparent), r=1 (~black).
 pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
-// Every scalar below is authored at one reference resolution and never adapts to the window.
-// The scale-factor fix is in docs/roadmap.md under "Act I"; it multiplies in here, at
-// `apply` time.
+// Every scalar below is authored at one reference resolution; the responsive scale factor
+// (`View.scale`, VIEW-01) is applied at `apply` time through `type.toDevice` — the single
+// logical→device multiply point.
 
-// A generic typography scale (font size only — colors are game art direction and live
-// with the theme/templates).
+// The prototype typography contract lives in `type.zig` (sizes/tracking/transform, all
+// regular weight); the presets below are the *style-fragment* projection of those roles, so
+// a call site composes `.{ style.heading, ... }` while the numbers stay in one place.
 
 /// What a text leaf renders at when nothing styles it — the base of the ladder below, and
-/// the size `text.attach` seeds onto a fresh node. `body` is defined *from* it rather than
-/// repeating the number, so "unstyled" and "explicitly body" can never drift apart: an
-/// element that forgets `style.body` still matches the ones that ask for it.
-pub const default_font: f32 = 14;
+/// the size `text.attach` seeds onto a fresh node. Defined *from* the `body` role's logical
+/// size so "unstyled" and "explicitly body" can never drift apart.
+pub const default_font: f32 = typ.default_logical_px;
 
-pub const body: Style = .{ .font = default_font };
-pub const h3: Style = .{ .font = 22 };
-pub const h2: Style = .{ .font = 28 };
-pub const h1: Style = .{ .font = 36 };
+/// Turn a `type.Role` into a composable style fragment (logical size + tracking + transform).
+fn role(r: typ.Role) Style {
+    return .{ .font = r.size_logical_px, .tracking = r.tracking_em, .transform = r.transform };
+}
+
+pub const body: Style = role(typ.body);
+pub const small: Style = role(typ.small);
+/// The prototype heading (`--h3`, 21 logical px, -0.04em). `h3` is retained as an alias so
+/// existing call sites keep compiling; new sites should prefer `heading`.
+pub const heading: Style = role(typ.heading);
+pub const h3: Style = heading;
+/// Uppercase eyebrow / section label — 11px, UPPERCASE, +0.07em tracking.
+pub const eyebrow: Style = role(typ.eyebrow);
+
+// Legacy above-contract display sizes used by the mock showcase / Act curtain / capital
+// header. They are **not** part of the prototype body/small/heading contract; they inherit
+// the global tracking unless a fragment overrides it. Kept so those sites keep compiling.
+pub const h2: Style = .{ .font = 28, .tracking = typ.body.tracking_em };
+pub const h1: Style = .{ .font = 36, .tracking = typ.body.tracking_em };
 
 /// Padding as a style fragment (padding is a `Style` field — a visual inset). Lets a caller
 /// set padding without naming `ui.Padding`, keeping the game off the engine surface.
@@ -143,19 +171,46 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
 
     if (node.render_data.text != null) {
         if (s.text) |c| node.render_data.text = c;
-        if (s.font) |px| {
+        // The typography payload (size / tracking / transform) is applied together and then
+        // re-measured **once** through the one shared routine, so the reserved box always
+        // matches the spaced/transformed glyphs `draw` will place — the TEXT-01..03
+        // "measure and draw read one source" invariant, extended to TEXT-04 tracking/case.
+        const wants_type = s.font != null or s.tracking != null or s.transform != null;
+        if (wants_type) {
             const st = node.state(ctx, cb.UiState.TextState);
             if (st.text()) |_| {
-                st.px = px; // set the size, then re-measure through the one shared routine
-                // `text.remeasure` re-runs the same single-line-or-wrapped measure the leaf
-                // used, so a heading (or a wrapped block) re-measures at this px and — when
-                // `wrap_width` is set — re-wraps at the same constraint. Box + render agree.
+                // Case transform first — it may rewrite the buffer bytes, and everything
+                // downstream (measure, wrap, clip, draw) reads `st.text()`. ASCII fold keeps
+                // byte length/offsets, so wrap/clip byte math is unaffected.
+                if (s.transform) |t| applyTransformInPlace(st, t);
+                // Size: logical → device through the single `type.toDevice` seam (frame scale).
+                if (s.font) |logical_px| st.px = typ.toDevice(logical_px, ctx.res.view.scale);
+                // Tracking: em → integer device-px delta at the (now-final) device size. Stored
+                // as POD device px so measure and draw add the identical gap between clusters.
+                if (s.tracking) |em| st.tracking = typ.deviceTracking(em, st.px);
+                // Re-measure at the final px + tracking (and re-wrap at the same constraint if
+                // `wrap_width` is set). Box + render agree.
                 @import("features/text.zig").remeasure(ctx, node);
             }
         }
     } else {
-        std.debug.assert(s.text == null and s.font == null); // inert text style on a non-text node
+        // Inert typography style on a non-text node is a mistake — catch it in debug.
+        std.debug.assert(s.text == null and s.font == null and s.tracking == null and s.transform == null);
     }
+}
+
+/// Apply a case transform to a `TextState`'s buffer in place (TEXT-04). The uppercase fold is
+/// ASCII-only and length-preserving, so byte offsets used by wrap/clip/ellipsis stay valid,
+/// and `text()`'s length/`refused` invariants are untouched (we rewrite bytes, never the
+/// length). A `.none` transform is a no-op. Idempotent: re-applying is safe if `apply` runs
+/// more than once for the same node/frame.
+fn applyTransformInPlace(st: *cb.UiState.TextState, t: typ.Transform) void {
+    const cur = st.text() orelse return;
+    var tmp: [cb.UiState.TextState.cap]u8 = undefined;
+    const out = typ.applyTransform(t, cur, tmp[0..cur.len]);
+    // `applyTransform` returns `cur` unchanged for `.none` or a too-small buffer; only copy
+    // back when a real transform produced new bytes of the same length.
+    if (out.ptr != cur.ptr) @memcpy(st.buf[0..out.len], out);
 }
 
 // ============================ Tests ==========================================
@@ -217,4 +272,59 @@ test "apply: outline width/style without a color draw nothing (no border)" {
 
     apply(undefined, node, .{ stroke_w(3), dotted }); // no outline_color ⟹ no border
     try std.testing.expectEqual(@as(?cb.Outline, null), node.render_data.outline);
+}
+
+// ---- TEXT-04 typography roles ----------------------------------------------------------
+
+test "style: default_font equals the body role's logical size (unstyled == body)" {
+    try std.testing.expectEqual(typ.default_logical_px, default_font);
+    try std.testing.expectEqual(@as(f32, 14), default_font);
+    // The `body` fragment carries exactly the contract triple.
+    const s = resolve(undefined, undefined, body);
+    try std.testing.expectEqual(@as(?f32, 14), s.font);
+    try std.testing.expectEqual(@as(?f32, -0.025), s.tracking);
+    try std.testing.expectEqual(typ.Transform.none, s.transform.?);
+}
+
+test "style: role fragments carry the prototype contract (size + tracking + transform)" {
+    const sb = resolve(undefined, undefined, small);
+    try std.testing.expectEqual(@as(?f32, 11), sb.font);
+    try std.testing.expectEqual(@as(?f32, -0.025), sb.tracking);
+
+    const sh = resolve(undefined, undefined, heading);
+    try std.testing.expectEqual(@as(?f32, 21), sh.font); // the prototype --h3
+    try std.testing.expectEqual(@as(?f32, -0.04), sh.tracking);
+    // `h3` is a retained alias for `heading`.
+    const s3 = resolve(undefined, undefined, h3);
+    try std.testing.expectEqual(sh.font, s3.font);
+    try std.testing.expectEqual(sh.tracking, s3.tracking);
+
+    const se = resolve(undefined, undefined, eyebrow);
+    try std.testing.expectEqual(@as(?f32, 11), se.font);
+    try std.testing.expectEqual(typ.Transform.upper, se.transform.?);
+    try std.testing.expect(se.tracking.? >= typ.eyebrow_tracking_min);
+    try std.testing.expect(se.tracking.? <= typ.eyebrow_tracking_max);
+}
+
+test "style: a later fragment overrides a role's tracking/transform (last-wins fold)" {
+    // RENDER-02 payload composes for free through the field-wise merge — a caller can take
+    // the eyebrow role but override its tracking, or drop the uppercase transform.
+    const s = resolve(undefined, undefined, .{ eyebrow, Style{ .tracking = 0.05, .transform = .none } });
+    try std.testing.expectEqual(@as(?f32, 11), s.font); // kept from eyebrow
+    try std.testing.expectEqual(@as(?f32, 0.05), s.tracking); // overridden
+    try std.testing.expectEqual(typ.Transform.none, s.transform.?); // overridden
+}
+
+test "applyTransformInPlace: uppercases the buffer in place, preserving length; none is a no-op" {
+    var st = cb.UiState.TextState.init();
+    try std.testing.expect(st.update("In Reach"));
+    applyTransformInPlace(&st, .upper);
+    try std.testing.expectEqualStrings("IN REACH", st.text().?);
+    // Idempotent + length-preserving (byte offsets used by wrap/clip stay valid).
+    applyTransformInPlace(&st, .upper);
+    try std.testing.expectEqualStrings("IN REACH", st.text().?);
+    try std.testing.expectEqual(@as(usize, "In Reach".len), st.text().?.len);
+    // `.none` leaves the buffer untouched.
+    applyTransformInPlace(&st, .none);
+    try std.testing.expectEqualStrings("IN REACH", st.text().?);
 }
