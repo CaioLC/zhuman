@@ -334,6 +334,25 @@ the motion policy onto it each frame. Pure and SDL-free (the caller supplies `dt
 interpolation, interrupt/reverse, reduced-motion snap, and stable-key independence are unit-tested
 without a renderer or a clock. The named consumers (Holdings KIT-05, StockToken KIT-12, board
 BOARD-05) read this when they land.
+## Frame-local view metrics (`view.zig`)
+
+VIEW-01 computes a `ViewMetrics` once per frame in `build_ui`'s prologue and stores it on
+`Resources.view.metrics`. Everything responsive reads it. It keeps **two scales apart**: the
+**DPI scale** (`dpi_scale` = drawable pixels ÷ window coordinates) is the crispness factor set
+onto `View.scale`, so text opens the font at the right device size (`type.toDevice`) and
+hairlines snap to whole device pixels (RENDER-06) — it does *not* change layout, which is
+solved in logical (window-coordinate) space; and the **responsive class**, derived from the
+logical width against the prototype's `760/560/440` breakpoints, drives the layout branches
+(VIEW-04) and the framed/centered terminal (VIEW-03). `compute(logical_w, logical_h,
+pixel_density)` is pure and SDL-free (the prologue supplies the window's coordinate size and
+`getPixelDensity`, degrading to the reference metrics on a query error), so the reference-fit,
+centering, and breakpoint math are unit-tested without a window. `terminal` is the terminal
+rect in logical px — capped at the `900×820` reference and centered when framed (wider than
+760), else the full window; `width_class.atMost(.w560)` is the natural stacked-breakpoint test,
+and `metrics.framed()` gates the outer terminal chrome.
+
+## Paint features (`features/`)
+
 
 ## Paint features (`features/`)
 

@@ -162,6 +162,13 @@ pub const View = struct {
     /// until VIEW-01 computes the real DPI/reference-fit factor here each frame. Kept as a
     /// single field so there is exactly one multiply point for the whole UI.
     scale: f32 = 1,
+    /// This frame's **view metrics** (VIEW-01): the logical viewport, drawable/DPI scale, the
+    /// centered terminal rect, and the responsive width class — computed once per frame in
+    /// `build_ui`'s prologue from the window's coordinate size and pixel density against the
+    /// `900×820` reference. `scale` above is set from `metrics.dpi_scale`; the responsive
+    /// templates (VIEW-03/04) read `metrics.terminal`/`metrics.width_class`. Defaults to the
+    /// reference metrics so a view built before the prologue runs is still sane.
+    metrics: @import("./ui_client/view.zig").ViewMetrics = .{},
 };
 
 /// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per

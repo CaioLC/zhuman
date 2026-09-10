@@ -30,6 +30,12 @@ pub const shadow = @import("./shadow.zig");
 /// policy, with the prototype's functional durations. A value provider, not a node feature.
 pub const tween = @import("./tween.zig");
 
+/// Frame-local view metrics (VIEW-01): the logical viewport, DPI scale, centered terminal
+/// rect, and responsive width class computed once per frame against the 900×820 reference.
+/// `build_ui`'s prologue computes it into `Resources.view.metrics`; responsive templates read
+/// it. Pure `compute` + `ViewMetrics`/`WidthClass` types, SDL-free and unit-tested.
+pub const view = @import("./view.zig");
+
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
 pub const style = @import("./style.zig");

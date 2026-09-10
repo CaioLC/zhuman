@@ -25,6 +25,18 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // Project the init-resolved reduced-motion policy onto this frame's view (INPUT-10).
     // Probed once at init; here we only copy the bit so optional transitions can gate on it.
     ui_ctx.res.view.reduced_motion = ui_ctx.res.motion.reduced_motion;
+    // VIEW-01: compute this frame's view metrics from the window's logical (coordinate) size
+    // and its pixel density against the 900×820 reference, and set the one logical→device
+    // scale from the DPI factor. The layout is solved in logical px; `scale` only makes text
+    // and hairlines crisp on high-DPI. A query failure degrades to the reference metrics.
+    {
+        const win = ui_ctx.res.platform.window;
+        const lw, const lh = win.getSize() catch .{ @as(usize, @intFromFloat(uic.view.ref_w)), @as(usize, @intFromFloat(uic.view.ref_h)) };
+        const density = win.getPixelDensity() catch 1;
+        const m = uic.view.compute(@floatFromInt(lw), @floatFromInt(lh), density);
+        ui_ctx.res.view.metrics = m;
+        ui_ctx.res.view.scale = m.dpi_scale;
+    }
     var trees: std.ArrayList(*uic.Node) = .empty;
     // const mock = try mock_page(ui_ctx, world);
 
