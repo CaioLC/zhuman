@@ -119,6 +119,56 @@ pub fn fillConvexMulti(mesh: *Mesh, points: []const V2, flat: Rgba, colors: ?[]c
     }
 }
 
+/// The axis a linear gradient runs along (RENDER-04). Only the two axis-aligned directions
+/// the prototype uses — a full CSS gradient angle grammar is out of scope. `horizontal` runs
+/// along +x (left→right), `vertical` along +y (top→bottom), both in the unit square.
+pub const Dir = enum { horizontal, vertical };
+
+/// One explicit gradient color stop: a position along the axis (`pos` in 0..1) and the color
+/// there. `renderGeometry` interpolates linearly between consecutive stops. Two stops at the
+/// **same** `pos` make a **hard edge** (the eating-slider split track: `acc` then `line2`);
+/// a `color → transparent` pair makes a **wash** fade (a milestone/state tint). Stops must be
+/// ordered by non-decreasing `pos`.
+pub const Stop = struct { pos: f32, color: Rgba };
+
+/// Fill a rect (the node's unit square) with an **explicit linear gradient** along `dir`
+/// through ordered `stops` (RENDER-04). Between each consecutive pair of stops it emits a quad
+/// (two triangles) whose four corners carry the two stops' colors, so `renderGeometry`
+/// interpolates them across the span — a smooth ramp for distinct positions, a **hard split**
+/// for a duplicated position, and a **wash** when a stop's color is transparent. The cross
+/// axis spans the full 0..1 (a horizontal gradient's color is constant down each column, a
+/// vertical gradient's across each row), matching the prototype's `90deg`/vertical washes and
+/// the split track. Fewer than 2 stops is a no-op; positions are used as given (the caller
+/// authors them explicitly). Overflow is reported through the mesh.
+pub fn fillGradient(mesh: *Mesh, dir: Dir, stops: []const Stop) void {
+    if (stops.len < 2) return;
+    // Corner helper: (main, cross) → V2 mapped to the chosen axis.
+    const at = struct {
+        fn p(d: Dir, main: f32, cross: f32) V2 {
+            return switch (d) {
+                .horizontal => .{ .x = main, .y = cross },
+                .vertical => .{ .x = cross, .y = main },
+            };
+        }
+    }.p;
+
+    var s: usize = 0;
+    while (s + 1 < stops.len) : (s += 1) {
+        const a = stops[s];
+        const b = stops[s + 1];
+        // Quad corners: at stop a (cross 0 and 1) and stop b (cross 0 and 1). Both corners at
+        // a share a's color; both at b share b's — so the interpolation runs only along `dir`.
+        const a0 = mesh.addVertex(.{ .p = at(dir, a.pos, 0), .color = a.color });
+        const a1 = mesh.addVertex(.{ .p = at(dir, a.pos, 1), .color = a.color });
+        const b0 = mesh.addVertex(.{ .p = at(dir, b.pos, 0), .color = b.color });
+        const b1 = mesh.addVertex(.{ .p = at(dir, b.pos, 1), .color = b.color });
+        if (mesh.overflow) return;
+        // Quad (a0, a1, b1, b0) → triangles (a0,a1,b1) and (a0,b1,b0).
+        mesh.addTriangle(a0, a1, b1);
+        mesh.addTriangle(a0, b1, b0);
+    }
+}
+
 /// How a thick open polyline terminates at its two ends.
 pub const Cap = enum {
     /// Flush at the endpoint (no extension) — the default for a rail segment.
@@ -430,5 +480,91 @@ test "strokePolyline: fewer than 2 points or zero width is a no-op" {
     strokePolyline(&m, &[_]V2{.{ .x = 0, .y = 0 }}, 2, false, .butt, .{ .r = 1, .g = 1, .b = 1, .a = 255 });
     try testing.expectEqual(@as(usize, 0), m.indices().len);
     strokePolyline(&m, &[_]V2{ .{ .x = 0, .y = 0 }, .{ .x = 1, .y = 0 } }, 0, false, .butt, .{ .r = 1, .g = 1, .b = 1, .a = 255 });
+    try testing.expectEqual(@as(usize, 0), m.indices().len);
+}
+
+// ---- RENDER-04 linear-gradient composition --------------------------------------------
+
+test "fillGradient: a two-stop horizontal ramp is one quad spanning the cross axis" {
+    var v: [8]Vertex = undefined;
+    var idx: [12]u16 = undefined;
+    var m = scratch(&v, &idx);
+    const a = Rgba{ .r = 166, .g = 150, .b = 113, .a = 255 };
+    const transparent = Rgba{ .r = 166, .g = 150, .b = 113, .a = 0 };
+    // A wash: tint at 0 → transparent at 0.74 (the milestone/state wash shape).
+    fillGradient(&m, .horizontal, &[_]Stop{ .{ .pos = 0, .color = a }, .{ .pos = 0.74, .color = transparent } });
+    try testing.expect(!m.overflow);
+    try testing.expectEqual(@as(usize, 4), m.vertices().len); // one quad
+    try testing.expectEqual(@as(usize, 6), m.indices().len); // two triangles
+    // The two x=0 vertices carry the opaque tint; the two x=0.74 vertices are transparent.
+    for (m.vertices()) |vert| {
+        if (@abs(vert.p.x - 0) < 1e-6) try testing.expectEqual(@as(u8, 255), vert.color.a);
+        if (@abs(vert.p.x - 0.74) < 1e-6) try testing.expectEqual(@as(u8, 0), vert.color.a);
+        // Horizontal gradient: the cross axis (y) spans the full 0..1.
+        try testing.expect(vert.p.y == 0 or vert.p.y == 1);
+    }
+}
+
+test "fillGradient: a duplicated position makes a hard split (the eating-slider track)" {
+    var v: [16]Vertex = undefined;
+    var idx: [24]u16 = undefined;
+    var m = scratch(&v, &idx);
+    const acc = Rgba{ .r = 166, .g = 150, .b = 113, .a = 255 };
+    const line2 = Rgba{ .r = 60, .g = 58, .b = 51, .a = 255 };
+    // acc from 0..p (flat), then a hard edge at p, then line2 p..1 (flat) — 3 spans, but the
+    // middle span is zero-width so it draws nothing visible; the edge is hard.
+    const p: f32 = 0.4;
+    fillGradient(&m, .horizontal, &[_]Stop{
+        .{ .pos = 0, .color = acc },
+        .{ .pos = p, .color = acc },
+        .{ .pos = p, .color = line2 },
+        .{ .pos = 1, .color = line2 },
+    });
+    try testing.expect(!m.overflow);
+    // 3 spans → 3 quads → 12 vertices, 18 indices (the middle zero-width quad is degenerate
+    // but harmless — it has zero area, so it paints nothing).
+    try testing.expectEqual(@as(usize, 12), m.vertices().len);
+    try testing.expectEqual(@as(usize, 18), m.indices().len);
+    // Every vertex left of the split is acc; every vertex right is line2 (hard, no blend
+    // across the split because both stops at `p` are present with their own flat colors).
+    for (m.vertices()) |vert| {
+        if (vert.p.x < p - 1e-6) try testing.expectEqual(acc, vert.color);
+        if (vert.p.x > p + 1e-6) try testing.expectEqual(line2, vert.color);
+    }
+}
+
+test "fillGradient: vertical direction runs the ramp down the y axis" {
+    var v: [8]Vertex = undefined;
+    var idx: [12]u16 = undefined;
+    var m = scratch(&v, &idx);
+    const top = Rgba{ .r = 25, .g = 28, .b = 33, .a = 255 };
+    const bot = Rgba{ .r = 17, .g = 19, .b = 24, .a = 255 };
+    fillGradient(&m, .vertical, &[_]Stop{ .{ .pos = 0, .color = top }, .{ .pos = 1, .color = bot } });
+    try testing.expectEqual(@as(usize, 4), m.vertices().len);
+    for (m.vertices()) |vert| {
+        // Vertical gradient: color varies with y; the cross axis (x) spans 0..1.
+        try testing.expect(vert.p.x == 0 or vert.p.x == 1);
+        if (@abs(vert.p.y - 0) < 1e-6) try testing.expectEqual(top, vert.color);
+        if (@abs(vert.p.y - 1) < 1e-6) try testing.expectEqual(bot, vert.color);
+    }
+}
+
+test "fillGradient: fewer than 2 stops is a no-op" {
+    var v: [8]Vertex = undefined;
+    var idx: [8]u16 = undefined;
+    var m = scratch(&v, &idx);
+    fillGradient(&m, .horizontal, &[_]Stop{.{ .pos = 0, .color = .{ .r = 1, .g = 2, .b = 3, .a = 4 } }});
+    try testing.expectEqual(@as(usize, 0), m.indices().len);
+}
+
+test "fillGradient: overflow refuses the whole mesh" {
+    var v: [2]Vertex = undefined; // room for < one quad
+    var idx: [12]u16 = undefined;
+    var m = scratch(&v, &idx);
+    fillGradient(&m, .horizontal, &[_]Stop{
+        .{ .pos = 0, .color = .{ .r = 1, .g = 1, .b = 1, .a = 255 } },
+        .{ .pos = 1, .color = .{ .r = 2, .g = 2, .b = 2, .a = 255 } },
+    });
+    try testing.expect(m.overflow);
     try testing.expectEqual(@as(usize, 0), m.indices().len);
 }

@@ -36,6 +36,14 @@ pub const State = cb.UiState.GeometryState;
 /// The polyline end-cap discipline, re-exported so call sites (`El.polyline`) name one type.
 pub const Cap = tess.Cap;
 
+/// The gradient axis (RENDER-04), re-exported for call sites (`El.gradient`).
+pub const Dir = tess.Dir;
+
+/// One host-level gradient stop: a position along the axis (0..1) and a host `Color` there.
+/// The feature converts the `Color` to the tessellator's byte `Rgba`. Two stops at the same
+/// `pos` make a hard split; a `color → transparent` pair makes a wash. See `attach_gradient`.
+pub const GradientStop = struct { pos: f32, color: cb.Color };
+
 /// Give `node` a **convex-polygon fill** through `points` (node-local unit-square coords),
 /// flat `color`. Fan-triangulated by the pure tessellator into the pooled mesh. Like
 /// `line`, this does not size the node — points are relative, so the caller gives the node a
@@ -60,6 +68,26 @@ pub fn attach_polyline(ctx: *UiCtx, node: *Node, points: []const cb.Point, half_
     var ibuf: [State.icap]u16 = undefined;
     var mesh = tess.Mesh.init(&vbuf, &ibuf);
     tess.strokePolyline(&mesh, toV2(points), half_width, closed, cap, toRgba(color));
+    storeMesh(st, &mesh);
+    node.render_data.geometry = .{ .opacity = opacity };
+}
+
+/// Give `node` an **explicit linear gradient** fill (RENDER-04) along `dir` through ordered
+/// `stops` (node-local, positions 0..1 on the axis), drawn by the geometry feature via
+/// per-vertex-colored quads. Covers the eating-slider **split track** (two stops at the same
+/// position = a hard `acc`|`line2` edge) and milestone/state **washes** (a `tint → transparent`
+/// pair). Stops carry a full `Color` (alpha included), so a wash's transparent end is just an
+/// `a = 0` stop. Does not size the node — the gradient stretches to its box. `opacity` fades
+/// the whole mesh on top of the per-stop alpha.
+pub fn attach_gradient(ctx: *UiCtx, node: *Node, dir: Dir, stops: []const GradientStop, opacity: f32) void {
+    const st = node.state(ctx, State);
+    var sbuf: [State.vcap]tess.Stop = undefined;
+    const n = @min(stops.len, sbuf.len);
+    for (stops[0..n], 0..) |s, i| sbuf[i] = .{ .pos = s.pos, .color = toRgba(s.color) };
+    var vbuf: [State.vcap]tess.Vertex = undefined;
+    var ibuf: [State.icap]u16 = undefined;
+    var mesh = tess.Mesh.init(&vbuf, &ibuf);
+    tess.fillGradient(&mesh, dir, sbuf[0..n]);
     storeMesh(st, &mesh);
     node.render_data.geometry = .{ .opacity = opacity };
 }

@@ -33,6 +33,10 @@ const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 const Sprite = cb.Sprite;
 
+/// Re-exports so screens name the gradient vocabulary through `elements` (RENDER-04).
+pub const GradientStop = feat.geometry.GradientStop;
+pub const GradientDir = feat.geometry.Dir;
+
 /// A fluent handle over a built node: the node plus the `ctx` needed to style it. Returned
 /// by every element constructor. Placement methods write the engine `Layout`/`Size` fields
 /// directly; `with_style` folds a style spec. `.get()` drops to the raw `*Node`.
@@ -300,6 +304,17 @@ pub fn polygon(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, c
 pub fn polyline(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, half_width: f32, closed: bool, cap: feat.geometry.Cap, color: cb.Color, opacity: f32) !El {
     const node = try child(ctx, parent, id);
     feat.data_polyline(ctx, node, pts, half_width, closed, cap, color, opacity);
+    return .{ .ctx = ctx, .node = node };
+}
+
+/// A **linear gradient** fill (RENDER-04) along `dir` through ordered `stops` (positions
+/// 0..1 on the axis), drawn by the `geometry` feature via per-vertex colors. Two stops at the
+/// same position give a hard split (the eating-slider `acc`|`line2` track); a `tint →
+/// transparent` pair gives a wash (a milestone/state fade). `opacity` fades the whole mesh.
+/// Does not size the node — the gradient stretches to whatever box the caller gives it.
+pub fn gradient(ctx: *UiCtx, parent: El, id: []const u8, dir: feat.geometry.Dir, stops: []const feat.geometry.GradientStop, opacity: f32) !El {
+    const node = try child(ctx, parent, id);
+    feat.data_gradient(ctx, node, dir, stops, opacity);
     return .{ .ctx = ctx, .node = node };
 }
 

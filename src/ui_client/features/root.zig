@@ -66,6 +66,7 @@ pub const data_sprite = image.attach_sprite;
 pub const data_svg = svg.attach;
 pub const data_polygon = geometry.attach_polygon;
 pub const data_polyline = geometry.attach_polyline;
+pub const data_gradient = geometry.attach_gradient;
 
 test {
     std.testing.refAllDecls(@This());

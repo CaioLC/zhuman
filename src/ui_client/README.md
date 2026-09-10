@@ -353,6 +353,18 @@ graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zi
 first-segment-normal thick approximation is **not** yet retired — that waits until the board
 migrates onto this feature (roadmap RENDER-03).
 
+**Linear-gradient composition (RENDER-04).** The same feature draws an explicit linear
+gradient: `El.gradient(dir, stops, opacity)` fills the node box along `.horizontal`/`.vertical`
+through an ordered list of `{ pos, color }` stops, tessellated (`fillGradient`) into a quad
+strip whose per-vertex colors `renderGeometry` interpolates. It is deliberately narrow — the
+two axis-aligned directions and explicit stops the prototype uses, **not** a CSS gradient
+grammar. Two stops at the **same** position make a **hard split** (the eating-slider track:
+`acc` then `line2`); a `tint → transparent` pair (an `a = 0` end stop) makes a **wash** (a
+milestone/state fade), the transparent end compositing over what is under it via the RENDER-01
+`.blend` baseline. Stops carry a full `Color`, so alpha rides along. The named consumers (the
+range slider KIT-10/KIT-19, the milestone component KIT-20) are not built yet, so this ships
+the primitive and its stops explicitly, tested SDL-free.
+
 Clipping is *not* a feature. It is `Layout.overflow` in the engine, because it is geometry
 two consumers read (the render walk, and eventually hit-testing), not a paint the backend
 applies.
