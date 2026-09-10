@@ -29,6 +29,7 @@ const a11y = @import("./ui_client/a11y.zig");
 const motion = @import("./ui_client/motion.zig");
 const typography = @import("./ui_client/type.zig");
 const text_feature = @import("./ui_client/features/text.zig");
+const text_cache = @import("./ui_client/features/text_cache.zig");
 
 test {
     _ = @import("./ui/root.zig"); // engine's own unit tests + types
@@ -43,6 +44,7 @@ test {
     _ = motion; // INPUT-10 host-side reduced-motion policy: override parse/precedence/fallback + snap/phase gate tests
     _ = typography; // TEXT-04 typography contract: roles/scale/tracking/transform pure tests
     _ = text_feature; // TEXT-01..04 text feature state + tracking-aware advance/measure tests (pulls wrap.zig)
+    _ = text_cache; // TEXT-05 pure cache-key/decision/lifecycle seam + fake-backend counter tests (hit/miss/invalidate/failure/reset/prune/reuse/growth/deinit + catalog-filter perf)
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

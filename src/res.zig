@@ -25,6 +25,25 @@ pub const Platform = struct {
     /// here; the UI samples cells from it by source rect (see the `img` feature's
     /// `attach_sprite`, re-exported as `ui_client.data_sprite`).
     icons: sdl.render.Texture,
+    /// **Renderer generation** (TEXT-05). A monotonic counter bumped every time the SDL
+    /// renderer's device/targets are (re)set — the host loop advances it on an
+    /// `SDL_EVENT_RENDER_TARGETS_RESET` / `RENDER_DEVICE_RESET` / `RENDER_DEVICE_LOST`
+    /// event (`bumpGeneration`). It is folded into the text-texture cache key so a texture
+    /// uploaded under an older generation is never blitted after a reset invalidates it;
+    /// and it lets a cached slot distinguish an ordinary invalidation (renderer alive —
+    /// free the old texture) from a post-reset one (underlying GPU texture already dead —
+    /// abandon the handle, do **not** double-free). Starts at `0`; the first upload keys on
+    /// it. Read-only outside the host loop's reset handler and `Resources.init`.
+    generation: u32 = 0,
+
+    /// Advance the renderer generation (TEXT-05). Called by the host loop when SDL reports
+    /// a render targets/device reset or loss: every GPU texture uploaded under the prior
+    /// generation is now invalid, so bumping this makes the text cache miss (and abandon,
+    /// not free, the dead handles) and re-rasterize under the new generation. Saturates
+    /// rather than wraps so an absurdly long-lived process can never alias an old value.
+    pub fn bumpGeneration(self: *Platform) void {
+        self.generation +|= 1;
+    }
 };
 
 /// This frame's timestep, written by the host loop before the systems run.

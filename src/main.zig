@@ -440,6 +440,14 @@ pub fn main() !void {
                     cancelPointerGesture(&app);
                     sdl.keyboard.stopTextInput(app.window) catch {};
                 },
+                // TEXT-05: a render targets/device reset or loss invalidates every uploaded
+                // GPU texture (D3D/GPU device-lost). Bump the renderer generation so the
+                // text-texture cache misses and *abandons* (never double-frees) the now-dead
+                // handles, re-rasterizing under the new generation on the next draw. CPU-side
+                // ttf glyph caches (`font.zig`) are unaffected — only the uploaded textures die.
+                .render_targets_reset, .render_device_reset, .render_device_lost => {
+                    app.resources.platform.bumpGeneration();
+                },
                 else => {},
             }
         }

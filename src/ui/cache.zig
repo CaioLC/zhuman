@@ -50,9 +50,9 @@ pub fn Pool(comptime T: type) type {
 
         /// Release a slot's resources before its storage is dropped. If `T` declares
         /// `pub fn deinit(self: *T) void`, call it; otherwise a no-op. This is the
-        /// eviction hook: a POD state (`TextState`, `ScrollState`) needs nothing, but a
-        /// state that *owns* a resource — an SVG feature caching a rasterized
-        /// `sdl.Texture` — would otherwise leak it when its node disappears.
+        /// eviction hook: a POD state such as a scroll offset needs nothing, while a
+        /// state that *owns* a resource — for example a host feature caching a GPU
+        /// texture — would otherwise leak it when its node disappears.
         /// The `@typeInfo` guard keeps `@hasDecl` legal for non-container `T` (e.g. the
         /// `Pool(u32)` in tests). Convention: `deinit` takes no allocator — a cached
         /// GPU/handle resource frees itself; anything needing the gpa isn't pool-cached.

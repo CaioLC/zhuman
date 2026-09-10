@@ -87,9 +87,32 @@ pub const UiState = struct {
         /// the identical integer `dx` between the identical clusters, so box and render agree
         /// exactly for single-line, wrapped, clip, and ellipsis paths. Already an **integer**
         /// device px (rounded at resolve time) so it stays crisp (RENDER-06). POD like
-        /// `wrap_width`/`overflow`: no allocator, so the pool contract is unchanged. This is
-        /// one of the render-affecting attributes a future TEXT-05 texture cache keys on.
+        /// `wrap_width`/`overflow` in *shape*, but the state as a whole is **no longer POD**
+        /// (see `tex`/`cache_key` below): TEXT-05 gave it an owned GPU texture and a `deinit`.
+        /// This is the render-affecting attribute the TEXT-05 texture cache keys on.
         tracking: f32 = 0,
+
+        /// **TEXT-05 cached composite texture.** The uploaded, white-rasterized **composite**
+        /// for whatever variant this node draws — single-line (tracked or not), wrapped,
+        /// `.clip`, or `.ellipsis`, including the tracked combinations — tinted at blit via
+        /// `setColorMod`/`setAlphaMod` (so color is not a cache dimension — a hover/focus
+        /// recolor reuses this texture). One composite per `TextState`, generated atomically on
+        /// a cache miss (`features/text.zig`'s `renderComposite`) and blitted on every hit, so
+        /// no variant re-rasterizes per frame. `null` = nothing
+        /// cached yet (or a refused/empty string, or a just-abandoned post-reset handle). This
+        /// makes `TextState` a **resource-owning** state exactly like `SvgState`: the pool's
+        /// eviction hook (`cache.zig`) calls `deinit` on prune (scrolled-away / filtered-out
+        /// node) and once more at pool teardown, freeing the texture **exactly once** per live
+        /// occupant. The handle is a thin `sdl.render.Texture` (a `*SDL_Texture`), so it is
+        /// memcpy-safe and survives pool growth/relocation by value — the same relocation the
+        /// handles-not-pointers `Pool` contract already proves for `SvgState`. Never hold this
+        /// across a pool `acquire`; deref through the pool each frame.
+        tex: ?sdl.render.Texture = null,
+        /// The `text_cache.Key` (all render-affecting inputs) that produced `tex`, or `null`
+        /// when nothing is cached. `draw` compares the wanted key to this: equal ⇒ reuse;
+        /// differ ⇒ free-or-abandon `tex` and re-rasterize (see `text_cache.decide`). Stored
+        /// alongside the texture exactly like `SvgState.src_key`, generalized to the full key.
+        cache_key: ?@import("features/text_cache.zig").Key = null,
 
         /// TEXT-03 single-line overflow modes. `.visible` is today's behavior (no cell
         /// constraint); `.clip` and `.ellipsis` bound the drawn glyphs to `overflow_width`
@@ -101,13 +124,41 @@ pub const UiState = struct {
             return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };
         }
 
+        /// Release the cached GPU texture (TEXT-05) — the pool eviction hook. Called by
+        /// `Pool.evict` on prune (node disappeared) and once more at pool teardown for a live
+        /// slot; `initialValue` re-inits a reused hole so a freed slot never double-frees or
+        /// inherits a stale handle. Frees **exactly once** per occupant (the proven pattern,
+        /// tested for `SvgState` and, SDL-free, for the fake-backed slot in `text_cache.zig`).
+        /// Convention (see `cache.zig`): teardown order frees the ui pools **before** the
+        /// renderer (`main.zig`'s `App.deinit`), so this always runs while the renderer is
+        /// still alive — a normal free, never a post-reset abandon.
+        pub fn deinit(self: *TextState) void {
+            if (self.tex) |t| t.deinit();
+            self.tex = null;
+            self.cache_key = null;
+        }
+
+        /// Drop the cached texture **without** freeing it (TEXT-05 renderer-reset path). Used
+        /// only when a true render-device reset has already invalidated the underlying GPU
+        /// texture: calling `deinit` on it would double-free an object SDL already destroyed,
+        /// so the handle is **abandoned** instead. The ordinary content/px/tracking
+        /// invalidation frees (renderer alive); any renderer-generation mismatch abandons,
+        /// even when content or another key field changed during the reset frame — the
+        /// decision lives in `text_cache.decide`, this is just the effect.
+        pub fn abandonTexture(self: *TextState) void {
+            self.tex = null;
+            self.cache_key = null;
+        }
+
         /// Copy `t` into the persistent buffer **in full**, or refuse it **as a whole** if
         /// it would not fit `cap`. Returns whether it was accepted. On refusal the buffer
         /// is cleared (`len = 0`) and `refused` is set, so a reader/renderer never observes
         /// a truncated or mid-codepoint prefix — the same non-silent contract as
         /// `semantics.OwnedText.set` and the editor's whole-edit refusal. An empty slice
-        /// clears the field (accepted). POD by construction: no allocator, no `deinit`, so
-        /// the pool contract (init on fresh/reused slots, no eviction resource) is unchanged.
+        /// clears the field (accepted). The content buffer stays **inline/allocator-free**
+        /// (owned by value, safe under pool relocation); TEXT-05's cached texture is the
+        /// state's only heap/GPU resource and is released by `deinit`, so the pool contract
+        /// (init on fresh/reused slots, eviction frees the texture exactly once) holds.
         pub fn update(self: *TextState, t: []const u8) bool {
             if (t.len > cap) {
                 self.len = 0;

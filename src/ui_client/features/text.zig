@@ -11,6 +11,7 @@ const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
 const style = @import("../style.zig");
 const wrap = @import("wrap.zig");
+const text_cache = @import("text_cache.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -273,52 +274,62 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     node.render_data.text = ctx.res.view.theme.fg; // present ⟹ walk blits it; caller may recolor
 }
 
-/// Blit the node's cached text in `c` over its content box. Rasterizes each frame (a
-/// short string is cheap — unlike `svg`, which caches its raster in `State`).
+/// Blit the node's cached text in `c` over its content box. **Every** variant is cached as
+/// one composite white texture in `State.tex` (TEXT-05): a cache miss generates the composite
+/// once (see `renderComposite`), a hit blits it tinted — no variant re-rasterizes per frame,
+/// unlike a naive `renderTextSolid`-every-frame path.
 ///
-/// Single-line, unconstrained (`wrap_width == 0` and `overflow == .visible`) is the fast
-/// path: one `renderTextSolid` over the content box, exactly as before. When wrapped, re-runs
-/// the *same* `wrap.wrapLines` the measure pass used and blits one surface per line at
-/// `content.y + i*lineSkip`, so the drawn lines are byte-for-byte the measured lines.
-///
-/// TEXT-03 adds two single-line overflow disciplines for an allocated `overflow_width` cell
-/// (mutually exclusive with wrapping — wrapping wins if both are set):
-///   - `.clip` — blit the whole accepted string, but scope the renderer's clip to exactly
-///     the content cell for the blit and **restore the prior clip afterward** (including on
-///     an error path), so a leaf's own glyphs are cropped to its box without leaking the clip
-///     to siblings drawn later. (The engine's `Layout.overflow=.clip` crops a node's
-///     *children*; a text leaf's own glyphs are painted before that narrowing, so the crop
-///     must be applied here, renderer-scoped and reverted.)
-///   - `.ellipsis` — recompute the identical `wrap.ellipsisFit` the measure pass would (one
-///     source of truth), blit the codepoint-aligned prefix, then the deterministic ellipsis
-///     token; a too-narrow cell draws nothing rather than overflowing.
+/// The variant a node draws is decided by its state and reproduced *inside* the composite by
+/// `planVariant` (the one place each variant's glyph placement lives), so the cached pixels
+/// match the measure pass glyph-for-glyph:
+///   - single-line, unconstrained (`wrap_width == 0`, `overflow == .visible`) — the whole
+///     string (tracked: per-cluster at the measured advances; untracked: one span).
+///   - wrapped (`wrap_width > 0`) — the *same* `wrap.wrapLines` the measure pass ran, one
+///     stamped line per break at `i*lineSkip` (a blank line keeps its height), tracked or not.
+///   - `.clip` — the whole string is cached (its pixels depend only on keyed inputs); the
+///     clip **rect** is the one per-frame render-time op, scoped to the prior clip ∩ the cell
+///     around the blit and **restored afterward** (including on error) so a leaf's glyphs are
+///     cropped to its box without leaking the clip to siblings.
+///   - `.ellipsis` — the identical `wrap.ellipsisFit` (one source of truth): the
+///     codepoint-aligned prefix plus the deterministic ellipsis token, baked into the
+///     composite; a too-narrow cell composites nothing rather than overflowing.
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const st = node.state(u, State);
-    const fmt = st.text() orelse return;
+    const fmt = st.text() orelse {
+        // TEXT-01 refused/empty: nothing to draw. Release any texture still cached from a
+        // prior accepted string (renderer alive here) so an emptied label doesn't leak.
+        if (st.tex != null) st.deinit();
+        return;
+    };
     const r = paint.content(node) orelse return;
     const f = u.res.platform.font.at(st.px) catch return;
 
-    if (st.wrap_width <= 0 and st.overflow == .visible) {
-        // Fast path — one surface over the content box (tracking 0 ⟹ byte-for-byte the prior
-        // behavior; tracking != 0 ⟹ the per-cluster advance loop that mirrors the measurer).
-        drawSpan(u, f, fmt, c, r.x, r.y, st.tracking);
-        return;
-    }
+    // **TEXT-05 (all variants cached):** every accepted variant — normal, tracked, wrapped,
+    // clip, ellipsis, and their tracked combinations — is rasterized into **one composite
+    // white texture** on a cache miss and blitted (tinted) thereafter. The only per-frame,
+    // render-time-only operation is the `.clip` cell's clip rectangle: the *pixels* of a
+    // clipped string are the whole string (they depend only on keyed inputs), so they are
+    // cached like any other variant and the clip scope is applied around the cached blit.
+    // No variant re-rasterizes a glyph on a cache hit.
+    const clip_cell: ?ui.Rect = if (st.wrap_width <= 0 and st.overflow == .clip) r else null;
+    drawCached(u, st, f, fmt, c, r.x, r.y, clip_cell);
+}
 
-    if (st.wrap_width <= 0) {
-        // Single-line overflow cell (TEXT-03). The content box `r` is the allocated cell
-        // (`remeasure` wrote `data_width = overflow_width`), so clip/ellipsis both bound to it.
-        switch (st.overflow) {
-            .clip => drawClipped(u, f, fmt, c, r, st.tracking),
-            .ellipsis => drawEllipsized(u, f, fmt, c, r, st.tracking),
-            .visible => drawSpan(u, f, fmt, c, r.x, r.y, st.tracking), // overflow_width>0 but visible: draw whole
-        }
-        return;
-    }
-
-    var fm = FontMeasurer{ .font = f, .tracking = st.tracking };
-    var lr = LineRenderer{ .u = u, .font = f, .src = fmt, .color = c, .x = r.x, .y = r.y, .skip = lineSkip(f), .tracking = st.tracking };
-    wrap.wrapLines(fmt, st.wrap_width, fm.measurer(), *LineRenderer, &lr, LineRenderer.take);
+/// Build the TEXT-05 cache inputs from the current state + the live renderer generation.
+/// The one place `State` fields are projected onto the SDL-free key seam, so the enumerated
+/// key dimensions stay in sync with `text_cache.Key`. Color is deliberately absent (tint-on-
+/// blit). `content` is the accepted/transformed bytes (`fmt`), already folded by `attach`.
+fn cacheInputs(u: *UiCtx, st: *const State, fmt: []const u8) text_cache.Inputs {
+    return .{
+        .content = fmt,
+        .px = st.px,
+        .font_id = text_cache.default_font_id,
+        .tracking = st.tracking,
+        .overflow = @intFromEnum(st.overflow),
+        .overflow_width = st.overflow_width,
+        .wrap_width = st.wrap_width,
+        .generation = u.res.platform.generation,
+    };
 }
 
 /// The deterministic ellipsis token appended by `.ellipsis` overflow: U+2026 HORIZONTAL
@@ -326,93 +337,312 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
 /// tracks the actual glyph and the same token draws as was measured.
 pub const ellipsis_token = "\u{2026}";
 
-/// Blit `text` in `c` at (`x`, `y`). Shared by the fast path and the overflow prefix/ellipsis
-/// blits so they rasterize identically. An empty string draws nothing; a failed
-/// rasterize/upload/measure is skipped silently (a missing glyph frame is cosmetic, matching
-/// every other text path's `catch return`).
-///
-/// **TEXT-04:** `tracking == 0` is the untracked fast path — one `renderTextSolid` surface
-/// sized to its own `getStringSize` box, byte-for-byte the pre-TEXT-04 blit. `tracking != 0`
-/// switches to `drawTrackedSpan`, which blits each glyph cluster at the cumulative advance
-/// the measurer computed, so the drawn positions match the measured width exactly.
-fn drawSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, tracking: f32) void {
-    if (text.len == 0) return;
-    if (tracking != 0) return drawTrackedSpan(u, font, text, c, x, y, tracking);
-    var surface = font.renderTextSolid(text, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    defer surface.deinit();
-    const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
-    defer texture.deinit();
-    const w, const h = font.getStringSize(text) catch return;
-    const dst: ui.Rect = .{ .x = x, .y = y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
-    u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
-}
+// ============================ Unified composite cache (TEXT-05) ========================
+//
+// **Every** accepted variant — normal, tracked, wrapped, clip, ellipsis, and the tracked
+// combinations of wrap/clip/ellipsis — rasterizes into **one composite white texture** on a
+// cache miss and blits (tinted) thereafter. There is no per-frame `renderTextSolid` on a
+// hit for any variant. The composite is generated **atomically**: on a miss the renderer's
+// target/clip/draw-color/blend state is snapshotted, a fresh `.target` texture is made and
+// cleared transparent, the variant's white sub-spans are drawn into it at the exact relative
+// offsets the pre-cache per-frame paths used, and the prior render state is **always**
+// restored (including on any error path). If any step fails, the partial texture is freed
+// and **no** key is latched, so the next frame retries — a failure is never cached.
+//
+// Why white + tint-on-blit: the composite carries the glyph *shapes* only; color is applied
+// at blit via `setColorMod`/`setAlphaMod` (the `svg.draw` model), so a hover/focus recolor
+// reuses the same texture with zero cache churn — color is not a key dimension.
 
-/// The tracked blit: place each glyph cluster at the cumulative x-advance the measurer's
-/// `walkClusters` produces, adding the integer device `tracking` delta *between* clusters.
-/// Each cluster is rasterized on its own via `renderTextSolid` (a single codepoint, so no
-/// ligature can form — the render-path half of the no-ligature defense) and blitted at its
-/// pen x. Because this reuses the same `walkClusters` iteration + advance rule as
-/// `trackedWidth`, the rightmost pen position equals the measured width, so measure and draw
-/// agree cluster-for-cluster on every tracked path (single-line, wrapped line, clip, prefix).
-/// A missing glyph frame is skipped silently, exactly like the fast path.
-fn drawTrackedSpan(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, tracking: f32) void {
-    const Pen = struct {
-        u: *UiCtx,
-        font: sdl.ttf.Font,
-        src: []const u8,
-        color: cb.Color,
-        x: f32,
-        y: f32,
-        tracking: f32,
-        n: usize = 0,
-        fn take(self: *@This(), cl: Cluster) void {
-            if (self.n > 0) self.x += self.tracking; // inter-cluster gap, matching the measurer
-            const bytes = self.src[cl.start .. cl.start + cl.len];
-            blitCluster(self.u, self.font, bytes, self.color, self.x, self.y);
-            self.x += cl.advance;
-            self.n += 1;
+/// One white sub-span to stamp into the composite at a **composite-relative** offset. The
+/// bytes are a slice of the accepted buffer (a whole line, a single cluster, the ellipsis
+/// token, …). Collected by the per-variant planners and replayed against either a real SDL
+/// target (`renderComposite`) or a pure geometry sink (the SDL-free layout tests).
+const SubBlit = struct { bytes: []const u8, x: f32, y: f32 };
+
+/// A `Plan.Sink` callback that discards every sub-blit — used for the pure measurement pass
+/// (the composite bounds are the accumulated `Plan.w`/`Plan.h`, no SDL touched) and by the
+/// SDL-free layout tests as the "measure only" sink.
+fn noopEmit(_: *anyopaque, _: SubBlit) void {}
+
+/// A planner walks the variant once and emits each `SubBlit` plus the composite's bounding
+/// size, so the *same* placement code drives both measurement (composite size) and the
+/// actual white stamps — measure and render cannot drift. `emit` returns the drawn span's
+/// device width so a planner can advance a pen without re-measuring.
+const Plan = struct {
+    font: sdl.ttf.Font,
+    tracking: f32,
+    /// The running composite bounds (max x reached, max y+lineHeight reached).
+    w: f32 = 0,
+    h: f32 = 0,
+    sink: *Sink,
+
+    /// A sink receives each planned sub-blit. Two implementations: the real compositor
+    /// (stamps a white texture into the current target) and a pure collector (tests).
+    const Sink = struct {
+        ctx: *anyopaque,
+        emitFn: *const fn (*anyopaque, SubBlit) void,
+        fn emit(self: *Sink, b: SubBlit) void {
+            self.emitFn(self.ctx, b);
         }
     };
-    var pen = Pen{ .u = u, .font = font, .src = text, .color = c, .x = x, .y = y, .tracking = tracking };
-    walkClusters(font, text, *Pen, &pen, Pen.take);
+
+    /// The font's tracking-aware device width of `bytes`.
+    fn widthOf(self: *Plan, bytes: []const u8) f32 {
+        if (self.tracking == 0) {
+            const w, _ = self.font.getStringSize(bytes) catch return 0;
+            return @floatFromInt(w);
+        }
+        return trackedWidth(self.font, bytes, self.tracking);
+    }
+
+    fn lineHeight(self: *Plan) f32 {
+        // Minimum transparent line box for blank lines. Non-empty spans additionally grow
+        // the target to their actual `getStringSize` raster bounds in `span`, so a font whose
+        // surface height or glyph overhang differs from this nominal metric cannot be cropped.
+        return @floatFromInt(self.font.getHeight());
+    }
+
+    /// Stamp a whole span at composite-relative (`x`, `y`). Untracked: one sub-blit sized to
+    /// its actual raster box. Tracked: one sub-blit **per cluster** at the cumulative advance,
+    /// matching `trackedWidth`, while the composite bounds include both the logical pen and
+    /// each cluster's actual surface bounds. The nominal `line_h` preserves blank-line space;
+    /// real glyph dimensions may grow beyond it but can never be cropped by the target.
+    fn span(self: *Plan, bytes: []const u8, x: f32, y: f32, line_h: f32) void {
+        if (bytes.len == 0) {
+            self.grow(x, y, line_h);
+            return;
+        }
+        if (self.tracking == 0) {
+            const rw, const rh = self.font.getStringSize(bytes) catch return;
+            self.sink.emit(.{ .bytes = bytes, .x = x, .y = y });
+            self.grow(x + @as(f32, @floatFromInt(rw)), y, @max(line_h, @as(f32, @floatFromInt(rh))));
+            return;
+        }
+        const Ctx = struct {
+            plan: *Plan,
+            src: []const u8,
+            x: f32,
+            y: f32,
+            line_h: f32,
+            n: usize = 0,
+            fn take(s: *@This(), cl: Cluster) void {
+                if (s.n > 0) s.x += s.plan.tracking; // inter-cluster gap, matching the measurer
+                const b = s.src[cl.start .. cl.start + cl.len];
+                const glyph_x = s.x;
+                s.plan.sink.emit(.{ .bytes = b, .x = glyph_x, .y = s.y });
+                s.x += cl.advance;
+                const rw, const rh = s.plan.font.getStringSize(b) catch {
+                    s.n += 1;
+                    s.plan.grow(s.x, s.y, s.line_h);
+                    return;
+                };
+                const raster_right = glyph_x + @as(f32, @floatFromInt(rw));
+                s.plan.grow(@max(s.x, raster_right), s.y, @max(s.line_h, @as(f32, @floatFromInt(rh))));
+                s.n += 1;
+            }
+        };
+        var c = Ctx{ .plan = self, .src = bytes, .x = x, .y = y, .line_h = line_h };
+        walkClusters(self.font, bytes, *Ctx, &c, Ctx.take);
+    }
+
+    fn grow(self: *Plan, right: f32, top: f32, line_h: f32) void {
+        if (right > self.w) self.w = right;
+        const bottom = top + line_h;
+        if (bottom > self.h) self.h = bottom;
+    }
+};
+
+/// Walk a variant, emitting each white sub-blit to `sink` and returning the composite bounds
+/// (`w`, `h`) in device px. This is the ONE place a variant's glyph placement lives for the
+/// cache; `renderComposite` replays it against a real target, so the composite pixels match
+/// what the pre-cache per-frame paths drew glyph-for-glyph. `overflow_width`/`wrap_width` are
+/// read from `st`, matching `remeasure`'s cell/wrap branches.
+fn planVariant(st: *const State, font: sdl.ttf.Font, text: []const u8, sink: *Plan.Sink) struct { f32, f32 } {
+    var plan = Plan{ .font = font, .tracking = st.tracking, .sink = sink };
+    const skip = lineSkip(font);
+    const line_h = plan.lineHeight();
+
+    if (st.wrap_width > 0) {
+        // Wrapped (tracked or not): each line stamped at (0, i*skip); a blank line still
+        // advances `y` so the composite reserves its height, matching the measure pass.
+        const Ctx = struct {
+            plan: *Plan,
+            src: []const u8,
+            skip: f32,
+            line_h: f32,
+            i: usize = 0,
+            fn take(s: *@This(), line: wrap.Line) bool {
+                const ly = @as(f32, @floatFromInt(s.i)) * s.skip;
+                s.plan.span(s.src[line.start .. line.start + line.len], 0, ly, s.line_h);
+                s.i += 1;
+                return true;
+            }
+        };
+        var fm = FontMeasurer{ .font = font, .tracking = st.tracking };
+        var c = Ctx{ .plan = &plan, .src = text, .skip = skip, .line_h = line_h };
+        wrap.wrapLines(text, st.wrap_width, fm.measurer(), *Ctx, &c, Ctx.take);
+        return .{ plan.w, plan.h };
+    }
+
+    if (st.overflow == .ellipsis) {
+        // Ellipsis cell: the identical `wrap.ellipsisFit` (measure == draw), then the
+        // codepoint-aligned prefix and — if elided — the deterministic token at the prefix's
+        // tracked width plus one inter-cluster gap. A too-narrow cell yields an empty fit.
+        var fm = FontMeasurer{ .font = font, .tracking = st.tracking };
+        const m = fm.measurer();
+        const ell_w: f32 = m.width(ellipsis_token);
+        const r = wrap.ellipsisFit(text, st.overflow_width, ell_w, m);
+        const prefix = text[0..r.prefix_len];
+        plan.span(prefix, 0, 0, line_h);
+        if (r.elided) {
+            var pw: f32 = if (prefix.len == 0) 0 else m.width(prefix);
+            if (st.tracking != 0 and prefix.len != 0) pw += st.tracking;
+            plan.span(ellipsis_token, pw, 0, line_h);
+        }
+        return .{ plan.w, plan.h };
+    }
+
+    // Single line — normal, tracked, or `.clip` (clip renders the whole string; the clip
+    // *rect* is applied at blit, not baked into the pixels). One stamped span at the origin.
+    plan.span(text, 0, 0, line_h);
+    return .{ plan.w, plan.h };
 }
 
-/// Blit one glyph cluster's own surface at (`x`, `y`), sized to its measured box. Split out of
-/// `drawSpan` so the tracked loop rasterizes a single codepoint identically to how the fast
-/// path rasterizes a whole span. A missing/failed glyph frame is skipped silently.
-fn blitCluster(u: *UiCtx, font: sdl.ttf.Font, bytes: []const u8, c: cb.Color, x: f32, y: f32) void {
-    if (bytes.len == 0) return;
-    var surface = font.renderTextSolid(bytes, .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
-    defer surface.deinit();
-    const texture = u.res.platform.renderer.createTextureFromSurface(surface) catch return;
-    defer texture.deinit();
-    const w, const h = font.getStringSize(bytes) catch return;
-    const dst: ui.Rect = .{ .x = x, .y = y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
-    u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
-}
+/// The real compositor sink: stamps one white sub-span into whatever target is currently
+/// bound on the renderer. Each span's own surface is rasterized white and rendered at its
+/// composite-relative offset; a failed glyph frame is skipped silently and marks the plan
+/// incomplete so the caller can decide whether the composite is usable (it still is — a
+/// missing glyph is cosmetic, matching every text path's `catch return`).
+const Compositor = struct {
+    u: *UiCtx,
+    font: sdl.ttf.Font,
+    fn emit(ctx: *anyopaque, b: SubBlit) void {
+        const self: *Compositor = @ptrCast(@alignCast(ctx));
+        if (b.bytes.len == 0) return;
+        var surface = self.font.renderTextSolid(b.bytes, .{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+        defer surface.deinit();
+        const texture = self.u.res.platform.renderer.createTextureFromSurface(surface) catch return;
+        defer texture.deinit();
+        // Composite the glyph's own alpha onto the transparent target (Solid renders a
+        // paletted surface; `.blend` keeps its transparent margins transparent so only the
+        // glyph pixels carry alpha into the composite).
+        texture.setBlendMode(.blend) catch {};
+        const w, const h = self.font.getStringSize(b.bytes) catch return;
+        const dst: ui.Rect = .{ .x = b.x, .y = b.y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
+        self.u.res.platform.renderer.renderTexture(texture, null, paint.frect(dst)) catch return;
+    }
+    fn sink(self: *Compositor) Plan.Sink {
+        return .{ .ctx = self, .emitFn = emit };
+    }
+};
 
-/// `.clip` overflow: blit the whole accepted string but scope the renderer's clip to the
-/// intersection of the *prior* clip and the content cell, then restore the prior clip —
-/// renderer-scoped, and reverted even if the blit errors. Restoring the prior clip (not
-/// `null`) is essential: this leaf may sit inside an ancestor `.clip` (a scroll viewport),
-/// and dropping that clip would let the string paint outside the ancestor's box.
-fn drawClipped(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect, tracking: f32) void {
+/// Rasterize a whole variant into **one composite white texture**, uploaded once, sized to
+/// the variant's full pixel bounds. Returns the texture, or `null` on any failure — always
+/// leaving **no** partial owned state (the target texture is freed on any error) and never
+/// mutating persistent renderer state (target/clip/draw-color/blend are snapshotted and
+/// restored on every path). The composite is a `.target`-access texture with `.blend` blend
+/// mode so its transparent margins don't paint black at blit and its white glyphs tint
+/// cleanly. A zero-area variant (empty fit / blank) yields `null` (nothing to cache/draw).
+fn renderComposite(u: *UiCtx, st: *const State, font: sdl.ttf.Font, text: []const u8) ?sdl.render.Texture {
     const renderer = u.res.platform.renderer;
-    // Snapshot both the enable bit and rectangle. The binding maps an enabled zero-area
-    // SDL clip to `null`, the same value used for disabled clipping; retaining the bit keeps
-    // a fully clipped ancestor fully clipped instead of accidentally widening it to this cell.
+
+    // First pass: measure the composite bounds with a no-op sink (no SDL, no allocation).
+    var noop_ctx: u8 = 0;
+    var measure_sink = Plan.Sink{ .ctx = &noop_ctx, .emitFn = noopEmit };
+    const cw_f, const ch_f = planVariant(st, font, text, &measure_sink);
+    const cw: usize = @intFromFloat(@ceil(@max(0, cw_f)));
+    const ch: usize = @intFromFloat(@ceil(@max(0, ch_f)));
+    if (cw == 0 or ch == 0) return null; // nothing visible (empty fit, blank, refused-ish)
+
+    const target = renderer.createTexture(.packed_rgba_8_8_8_8, .target, cw, ch) catch return null;
+    // On any failure past this point the target must be freed (no partial owned state).
+    var ok = false;
+    defer if (!ok) target.deinit();
+    target.setBlendMode(.blend) catch return null;
+
+    // Snapshot every renderer state the composite pass mutates, and restore it on every path
+    // (success or error) so no sibling draw inherits our target/clip/color/blend.
+    const prior_target = renderer.getTarget();
     const prior_enabled = renderer.getClipEnabled();
-    const reported_prior = renderer.getClipRect() catch return;
-    const prior = effectiveClip(prior_enabled, reported_prior);
-    defer renderer.setClipRect(prior) catch {};
+    const prior_clip = effectiveClip(prior_enabled, renderer.getClipRect() catch null);
+    const prior_color = renderer.getDrawColor() catch null;
+    const prior_blend = renderer.getDrawBlendMode() catch null;
+    defer {
+        renderer.setTarget(prior_target) catch {};
+        renderer.setClipRect(prior_clip) catch {};
+        if (prior_color) |pc| renderer.setDrawColor(pc) catch {};
+        if (prior_blend) |pb| renderer.setDrawBlendMode(pb) catch {};
+    }
 
-    // Narrow to the intersection of the prior clip and the cell. `paint.irect` truncates to
-    // integer px, matching how the engine's own clip stack is stored.
-    const cell_clip = paint.irect(cell) orelse return;
-    const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
-    renderer.setClipRect(narrowed) catch return;
+    renderer.setTarget(target) catch return null;
+    // The composite lives in its own coordinate space: no inherited clip, and a transparent
+    // clear (blend on) so only the glyph pixels carry alpha.
+    renderer.setClipRect(null) catch {};
+    renderer.setDrawBlendMode(.blend) catch {};
+    renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 0 }) catch return null;
+    renderer.clear() catch return null;
 
-    drawSpan(u, font, text, c, cell.x, cell.y, tracking);
+    // Second pass: stamp each white sub-span into the target at its composite-relative offset,
+    // via the SAME planner that produced the bounds — so pixels match the measured layout.
+    var compositor = Compositor{ .u = u, .font = font };
+    var draw_sink = compositor.sink();
+    _ = planVariant(st, font, text, &draw_sink);
+
+    ok = true; // keep the target: it is the finished composite
+    return target;
+}
+
+/// The unified cached draw for **all** variants. Consults `text_cache.decide` against the
+/// stored key/texture: a **hit** blits the cached composite (no raster/upload, no free); a
+/// **miss** frees-or-abandons the old texture per the free-vs-reset rule, renders a fresh
+/// composite atomically, and latches the new key on success — or leaves the slot empty to
+/// retry next frame on failure. When `clip_cell` is set (`.clip` overflow) the renderer's
+/// clip is scoped to the prior clip ∩ the cell around the blit and restored after (even on
+/// error) — the only per-frame render-time op; the cached pixels are the whole string.
+fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, clip_cell: ?ui.Rect) void {
+    if (text.len == 0) return;
+    const wanted = text_cache.keyOf(cacheInputs(u, st, text));
+    switch (text_cache.decide(st.cache_key, st.tex != null, wanted)) {
+        .none => {
+            if (st.tex != null) st.deinit();
+            return;
+        },
+        .hit => {},
+        .miss => |m| {
+            if (m.free_old) st.deinit() else st.abandonTexture();
+            const tex = renderComposite(u, st, font, text) orelse return; // failure: nothing latched, retry
+            st.tex = tex;
+            st.cache_key = wanted; // latch only on success
+        },
+    }
+
+    if (clip_cell) |cell| {
+        // `.clip`: scope the renderer clip to the prior clip ∩ the cell for the blit, then
+        // restore the prior clip (never `null` — this leaf may sit inside an ancestor clip).
+        const renderer = u.res.platform.renderer;
+        const prior_enabled = renderer.getClipEnabled();
+        const reported_prior = renderer.getClipRect() catch return;
+        const prior = effectiveClip(prior_enabled, reported_prior);
+        defer renderer.setClipRect(prior) catch {};
+        const cell_clip = paint.irect(cell) orelse return;
+        const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
+        renderer.setClipRect(narrowed) catch return;
+        blitCached(u, st.tex.?, c, x, y);
+    } else {
+        blitCached(u, st.tex.?, c, x, y);
+    }
+}
+
+/// Blit an already-cached composite at (`x`, `y`), sized to the texture's own dimensions,
+/// tinted `c` via `setColorMod`/`setAlphaMod` — the `svg.draw` tint model. The size is read
+/// from the texture (`getSize`) rather than re-measuring the font, so a hit costs no font
+/// call. A failed tint/blit is skipped silently (cosmetic, matching every text path).
+fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, x: f32, y: f32) void {
+    const w, const h = tex.getSize() catch return;
+    tex.setColorMod(c.r, c.g, c.b) catch {};
+    tex.setAlphaMod(c.a) catch {};
+    const dst: ui.Rect = .{ .x = x, .y = y, .w = w, .h = h };
+    u.res.platform.renderer.renderTexture(tex, null, paint.frect(dst)) catch return;
 }
 
 /// Normalize SDL's clip query into the state `setClipRect` must restore. The binding returns
@@ -434,54 +664,6 @@ fn intersectIRect(a: sdl.rect.IRect, b: sdl.rect.IRect) sdl.rect.IRect {
     const y1 = @min(a.y + a.h, b.y + b.h);
     return .{ .x = x0, .y = y0, .w = @max(0, x1 - x0), .h = @max(0, y1 - y0) };
 }
-
-/// `.ellipsis` overflow: recompute the identical `wrap.ellipsisFit` (measure == draw), then
-/// blit the codepoint-aligned prefix followed by the ellipsis token. The ellipsis width is
-/// font-measured. A too-narrow cell (`budget <= 0`) yields an empty fit → draws nothing,
-/// never a glyph wider than the allocated cell.
-fn drawEllipsized(u: *UiCtx, font: sdl.ttf.Font, text: []const u8, c: cb.Color, cell: ui.Rect, tracking: f32) void {
-    var fm = FontMeasurer{ .font = font, .tracking = tracking };
-    const m = fm.measurer();
-    // Ellipsis-token width via the same (tracking-aware) measurer, so the fit budget and the
-    // drawn token measure identically. A single codepoint, so tracked width == native width.
-    const ell_w: f32 = m.width(ellipsis_token);
-    const r = wrap.ellipsisFit(text, cell.w, ell_w, m);
-    const prefix = text[0..r.prefix_len];
-    drawSpan(u, font, prefix, c, cell.x, cell.y, tracking);
-    if (r.elided) {
-        // Advance x past the drawn prefix (its tracked width), plus one inter-cluster gap to
-        // the ellipsis when tracked, then blit the ellipsis. A zero-width prefix places the
-        // ellipsis at the cell origin. Using the tracking-aware width keeps the token exactly
-        // where the measurer accounted for it.
-        var pw: f32 = if (prefix.len == 0) 0 else m.width(prefix);
-        if (tracking != 0 and prefix.len != 0) pw += tracking; // gap between prefix and ellipsis
-        drawSpan(u, font, ellipsis_token, c, cell.x + pw, cell.y, tracking);
-    }
-}
-
-/// Renders each wrapped line in order, advancing `y` by one line skip per line. The stepped
-/// `y` is what makes the drawn stack occupy exactly the `count * lineSkip` box the measure
-/// pass reserved. Each line blits via the shared `drawSpan` (the same routine the single-line
-/// and overflow paths use), so a missing glyph frame is skipped silently and an empty line
-/// draws nothing while the caller still advances `y` — a blank row keeps its height.
-const LineRenderer = struct {
-    u: *UiCtx,
-    font: sdl.ttf.Font,
-    src: []const u8,
-    color: cb.Color,
-    x: f32,
-    y: f32,
-    skip: f32,
-    tracking: f32 = 0,
-    i: usize = 0,
-
-    fn take(self: *LineRenderer, line: wrap.Line) bool {
-        const ly = self.y + @as(f32, @floatFromInt(self.i)) * self.skip;
-        drawSpan(self.u, self.font, self.src[line.start .. line.start + line.len], self.color, self.x, ly, self.tracking);
-        self.i += 1;
-        return true;
-    }
-};
 
 // --- Tests ------------------------------------------------------------------------------
 //
@@ -629,9 +811,9 @@ test "text feature: enabled empty clip remains enabled-empty; disabled remains d
 }
 
 test "text feature: integer clip-rect intersection is the overlap, empties to zero area" {
-    // The clip abstraction `drawClipped` uses is pure integer-rect math — testable without a
-    // renderer. Overlap is the intersection; a disjoint pair yields a zero-area rect (clips
-    // everything out — the safe outcome for a cell fully outside its ancestor's clip).
+    // The clip abstraction `drawCached` uses for a `.clip` cell is pure integer-rect math —
+    // testable without a renderer. Overlap is the intersection; a disjoint pair yields a
+    // zero-area rect (clips everything out — the safe outcome for a cell fully outside its ancestor's clip).
     const a: sdl.rect.IRect = .{ .x = 0, .y = 0, .w = 100, .h = 50 };
     const b: sdl.rect.IRect = .{ .x = 20, .y = 10, .w = 200, .h = 20 };
     const o = intersectIRect(a, b);
