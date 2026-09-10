@@ -43,6 +43,9 @@ pub fn attach(ctx: *UiCtx, node: *Node, path: [:0]const u8, px: f32) !void {
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     const tex = node.state(u, State).tex orelse return;
     const r = paint.content(node) orelse return;
+    // RENDER-01: honor the tint alpha explicitly rather than relying on the texture's
+    // default blend mode, so a dimmed/translucent icon composites consistently.
+    tex.setBlendMode(.blend) catch {};
     tex.setColorMod(c.r, c.g, c.b) catch {};
     tex.setAlphaMod(c.a) catch {};
     u.res.platform.renderer.renderTexture(tex, null, paint.frect(r)) catch return;

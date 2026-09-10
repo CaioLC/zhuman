@@ -346,6 +346,22 @@ node is a recursive pre-order paint carrying a clip stack: apply the inherited c
 clip for the subtree if this node is `.clip`. The traversal and the clip stack live here;
 the primitives live with their features, so adding a visual never edits this file.
 
+**Alpha-blending policy (RENDER-01).** The renderer's draw blend mode is set to `.blend`
+explicitly — once at renderer creation (`main.zig`), and again at the top of every
+`draw_tree` so the baseline is self-healing after a device reset. SDL's default is `.none`
+(source *replaces* destination, ignoring `a`), which would render a translucent hover row,
+modal scrim, dimmed/locked tile, or wash fully opaque; `.blend` makes the geometry
+primitives every feature paints (`fill`/`outline`/`line` via `renderFillRect`/`renderLines`)
+alpha-composite against what is under them. Texture features carry their own per-texture
+blend mode: `svg`, `img`, and the cached `text` composite each set `.blend` before their
+tinted blit, so a tint's `a` (a dimmed icon, a translucent label) composites consistently
+rather than depending on a texture's creation default. The text compositor's render-target
+pass (`renderComposite`) snapshots and restores the draw blend mode, so it never disturbs
+this baseline. Colors carry alpha in their `a` byte (`Color` is SDL's `pixels.Color`), so a
+translucent aspect is authored, not a separate feature. The dev `mock.zig` showcase carries
+a "Blending" fixture — a translucent row-hover tint, a backdrop scrim over a bright block, a
+dimmed locked tile, and a stacked-band wash — that reads correctly only when blending is on.
+
 ## Five-pass profiling
 
 The desktop loop uses the engine's profiled layout variant, sums its three solve timings

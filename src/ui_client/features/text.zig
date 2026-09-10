@@ -675,6 +675,9 @@ fn blitPlacement(orientation: State.Orientation, box: ui.Rect, texture_w: f32, t
 /// rotation, matching `orientMetrics`' swapped layout/focus/hit box.
 fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, box: ui.Rect, orientation: State.Orientation) void {
     const w, const h = tex.getSize() catch return;
+    // RENDER-01: honor the tint alpha explicitly (the composite is already generated with
+    // `.blend`, but set it here too so a translucent/dimmed label composites consistently).
+    tex.setBlendMode(.blend) catch {};
     tex.setColorMod(c.r, c.g, c.b) catch {};
     tex.setAlphaMod(c.a) catch {};
     const placement = blitPlacement(orientation, box, w, h);

@@ -292,6 +292,12 @@ const App = struct {
         renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
             frame_capper.mode = .{ .limited = fps };
         };
+        // RENDER-01: configure the draw blend mode explicitly. SDL defaults to `.none`
+        // (source replaces destination, ignoring alpha); `.blend` makes translucent fills,
+        // rings, scrims, and dimming alpha-composite. The render walk re-asserts this per
+        // tree so it survives a device reset, but set it here so the initial clear and any
+        // pre-walk draw share the same known baseline.
+        renderer.setDrawBlendMode(.blend) catch {};
         return .{
             .gpa = gpa,
             .window = window,

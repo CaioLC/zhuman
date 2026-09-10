@@ -32,5 +32,8 @@ pub fn attach_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
 /// Blit `sprite` (whole texture, or its `src` cell) into the node's content box.
 pub fn draw(u: *UiCtx, node: *Node, sprite: Sprite) void {
     const r = paint.content(node) orelse return;
+    // RENDER-01: set the texture blend mode explicitly so a translucent sprite (a dimmed
+    // or locked tile) alpha-composites rather than relying on the renderer/texture default.
+    sprite.texture.setBlendMode(.blend) catch {};
     u.res.platform.renderer.renderTexture(sprite.texture, sprite.src, paint.frect(r)) catch return;
 }
