@@ -200,45 +200,54 @@ fn measureWrapped(font: sdl.ttf.Font, text: []const u8, max_w: f32, tracking: f3
     return .{ acc.max_line_w, height, baseline };
 }
 
+const Metrics = struct { width: f32, height: f32, baseline: f32 };
+
+/// Apply the final axis-aligned text orientation to upright metrics. A 90° rotation swaps
+/// width/height exactly; its baseline is zero because a vertical control label does not
+/// participate in horizontal row-baseline alignment. This pure rule is also the hit/focus
+/// contract: the engine stamps the resulting node box, so its rectangle matches the pixels.
+fn orientMetrics(orientation: State.Orientation, upright: Metrics) Metrics {
+    return switch (orientation) {
+        .horizontal => upright,
+        .counter_clockwise_90 => .{ .width = upright.height, .height = upright.width, .baseline = 0 },
+    };
+}
+
 /// Shared write-through of measured metrics onto a node's size — used by `attach` and by
 /// `style.apply`'s re-measure so the two never diverge. Public so `style.zig` can call it
 /// without duplicating the wrap-vs-single-line branch.
 pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     const st = node.state(ctx, State);
     const measured = st.text() orelse "";
-    if (st.wrap_width > 0) {
+    const upright: Metrics = if (st.wrap_width > 0) blk: {
         const font = ctx.res.platform.font.at(st.px) catch return;
         const tw, const th, const baseline = measureWrapped(font, measured, st.wrap_width, st.tracking);
-        node.size.data_width = tw;
-        node.size.data_height = th;
-        node.size.baseline = baseline;
-    } else if (st.overflow != .visible) {
+        break :blk .{ .width = tw, .height = th, .baseline = baseline };
+    } else if (st.overflow != .visible) blk: {
         // TEXT-03: an explicitly allocated single-line cell. The *box* is the allocated
         // width, never the unbounded glyph width — including a legal zero-width cell. A
         // widening label cannot shift its neighbors, and hit-testing uses this stamped cell.
-        // Height and baseline still come from the font, single-line, so the cell baseline-aligns in
-        // a row exactly like an ordinary label. The drawn glyphs (clipped or ellipsized) are
-        // `draw`'s concern; measure only reserves the cell.
+        // Height and baseline still come from the font, single-line, so the cell baseline-aligns
+        // like an ordinary label. The drawn glyphs are `draw`'s concern.
         _, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
-        node.size.data_width = st.overflow_width;
-        node.size.data_height = @floatFromInt(th);
-        node.size.baseline = baseline;
-    } else {
+        break :blk .{ .width = st.overflow_width, .height = @floatFromInt(th), .baseline = baseline };
+    } else blk: {
         // Single-line, unconstrained. Height/baseline always come from the font; the width
-        // is the tracking-aware advance when tracking is set (so the reserved box matches the
-        // spaced glyphs draw will place) and SDL's native width otherwise (the untracked fast
-        // path — byte-for-byte the pre-TEXT-04 measure).
+        // is the tracking-aware advance when tracking is set and SDL's native width otherwise.
         const tw, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
         const w: f32 = if (st.tracking == 0)
             @floatFromInt(tw)
-        else blk: {
-            const font = ctx.res.platform.font.at(st.px) catch break :blk @floatFromInt(tw);
-            break :blk trackedWidth(font, measured, st.tracking);
+        else tracked: {
+            const font = ctx.res.platform.font.at(st.px) catch break :tracked @floatFromInt(tw);
+            break :tracked trackedWidth(font, measured, st.tracking);
         };
-        node.size.data_width = w;
-        node.size.data_height = @floatFromInt(th);
-        node.size.baseline = baseline;
-    }
+        break :blk .{ .width = w, .height = @floatFromInt(th), .baseline = baseline };
+    };
+
+    const oriented = orientMetrics(st.orientation, upright);
+    node.size.data_width = oriented.width;
+    node.size.data_height = oriented.height;
+    node.size.baseline = oriented.baseline;
 }
 
 /// Give `node` cached text — measured at build (the host has the font on hand),
@@ -312,7 +321,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     // cached like any other variant and the clip scope is applied around the cached blit.
     // No variant re-rasterizes a glyph on a cache hit.
     const clip_cell: ?ui.Rect = if (st.wrap_width <= 0 and st.overflow == .clip) r else null;
-    drawCached(u, st, f, fmt, c, r.x, r.y, clip_cell);
+    drawCached(u, st, f, fmt, c, r, clip_cell);
 }
 
 /// Build the TEXT-05 cache inputs from the current state + the live renderer generation.
@@ -599,7 +608,7 @@ fn renderComposite(u: *UiCtx, st: *const State, font: sdl.ttf.Font, text: []cons
 /// retry next frame on failure. When `clip_cell` is set (`.clip` overflow) the renderer's
 /// clip is scoped to the prior clip ∩ the cell around the blit and restored after (even on
 /// error) — the only per-frame render-time op; the cached pixels are the whole string.
-fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb.Color, x: f32, y: f32, clip_cell: ?ui.Rect) void {
+fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb.Color, box: ui.Rect, clip_cell: ?ui.Rect) void {
     if (text.len == 0) return;
     const wanted = text_cache.keyOf(cacheInputs(u, st, text));
     switch (text_cache.decide(st.cache_key, st.tex != null, wanted)) {
@@ -627,22 +636,53 @@ fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb
         const cell_clip = paint.irect(cell) orelse return;
         const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
         renderer.setClipRect(narrowed) catch return;
-        blitCached(u, st.tex.?, c, x, y);
+        blitCached(u, st.tex.?, c, box, st.orientation);
     } else {
-        blitCached(u, st.tex.?, c, x, y);
+        blitCached(u, st.tex.?, c, box, st.orientation);
     }
 }
 
-/// Blit an already-cached composite at (`x`, `y`), sized to the texture's own dimensions,
-/// tinted `c` via `setColorMod`/`setAlphaMod` — the `svg.draw` tint model. The size is read
-/// from the texture (`getSize`) rather than re-measuring the font, so a hit costs no font
-/// call. A failed tint/blit is skipped silently (cosmetic, matching every text path).
-fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, x: f32, y: f32) void {
+const BlitPlacement = struct {
+    dst: ui.Rect,
+    clockwise_degrees: ?f64,
+};
+
+/// Place an upright cached texture inside its already-oriented content box. Horizontal text
+/// starts at the box origin. For 90° CCW, center the unrotated `w×h` destination on the
+/// swapped `h×w` box; rotating that destination 270° clockwise around its own center lands
+/// the final pixels exactly on the oriented box. Pure geometry keeps this testable without SDL.
+fn blitPlacement(orientation: State.Orientation, box: ui.Rect, texture_w: f32, texture_h: f32) BlitPlacement {
+    return switch (orientation) {
+        .horizontal => .{
+            .dst = .{ .x = box.x, .y = box.y, .w = texture_w, .h = texture_h },
+            .clockwise_degrees = null,
+        },
+        .counter_clockwise_90 => .{
+            .dst = .{
+                .x = box.x + (box.w - texture_w) / 2,
+                .y = box.y + (box.h - texture_h) / 2,
+                .w = texture_w,
+                .h = texture_h,
+            },
+            .clockwise_degrees = 270,
+        },
+    };
+}
+
+/// Blit an already-cached upright composite, tinted in `c`. Orientation is deliberately a
+/// final-blit transform: horizontal and vertical uses share the same TEXT-05 texture and a
+/// mode switch causes no glyph raster/upload churn. The 90° path uses an axis-aligned center
+/// rotation, matching `orientMetrics`' swapped layout/focus/hit box.
+fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, box: ui.Rect, orientation: State.Orientation) void {
     const w, const h = tex.getSize() catch return;
     tex.setColorMod(c.r, c.g, c.b) catch {};
     tex.setAlphaMod(c.a) catch {};
-    const dst: ui.Rect = .{ .x = x, .y = y, .w = w, .h = h };
-    u.res.platform.renderer.renderTexture(tex, null, paint.frect(dst)) catch return;
+    const placement = blitPlacement(orientation, box, w, h);
+    if (placement.clockwise_degrees) |angle| {
+        u.res.platform.renderer.renderTextureRotated(tex, null, paint.frect(placement.dst), angle, null, .{}) catch return;
+    } else {
+        u.res.platform.renderer.renderTexture(tex, null, paint.frect(placement.dst)) catch return;
+    }
 }
 
 /// Normalize SDL's clip query into the state `setClipRect` must restore. The binding returns
@@ -851,4 +891,49 @@ test "text feature: an over-cap string is still refused whole even with tracking
     @memset(&over, 'x');
     try std.testing.expect(!st.update(&over)); // refused whole, tracked or not
     try std.testing.expect(st.text() == null); // draws nothing
+}
+
+test "text feature: orientation defaults horizontal and preserves accepted content" {
+    var st = State.init();
+    try std.testing.expectEqual(State.Orientation.horizontal, st.orientation);
+    try std.testing.expect(st.update("HOLDINGS"));
+    st.orientation = .counter_clockwise_90;
+    try std.testing.expectEqual(State.Orientation.counter_clockwise_90, st.orientation);
+    try std.testing.expectEqualStrings("HOLDINGS", st.text() orelse "");
+}
+
+test "text feature: counter-clockwise orientation swaps layout axes and clears baseline" {
+    const upright = Metrics{ .width = 72, .height = 11, .baseline = 3 };
+    try std.testing.expectEqual(upright, orientMetrics(.horizontal, upright));
+
+    const vertical = orientMetrics(.counter_clockwise_90, upright);
+    try std.testing.expectEqual(@as(f32, 11), vertical.width);
+    try std.testing.expectEqual(@as(f32, 72), vertical.height);
+    try std.testing.expectEqual(@as(f32, 0), vertical.baseline);
+}
+
+test "text feature: rotated blit is centered on the swapped content box" {
+    // Upright texture 72×11 becomes an axis-aligned 11×72 footprint at (20,30).
+    const box: ui.Rect = .{ .x = 20, .y = 30, .w = 11, .h = 72 };
+    const p = blitPlacement(.counter_clockwise_90, box, 72, 11);
+    try std.testing.expectEqual(@as(?f64, 270), p.clockwise_degrees);
+    try std.testing.expectEqual(@as(f32, -10.5), p.dst.x);
+    try std.testing.expectEqual(@as(f32, 60.5), p.dst.y);
+    try std.testing.expectEqual(@as(f32, 72), p.dst.w);
+    try std.testing.expectEqual(@as(f32, 11), p.dst.h);
+
+    // Rotating the unrotated destination around its center produces exactly the box bounds.
+    const cx = p.dst.x + p.dst.w / 2;
+    const cy = p.dst.y + p.dst.h / 2;
+    try std.testing.expectEqual(box.x, cx - p.dst.h / 2);
+    try std.testing.expectEqual(box.y, cy - p.dst.w / 2);
+    try std.testing.expectEqual(box.x + box.w, cx + p.dst.h / 2);
+    try std.testing.expectEqual(box.y + box.h, cy + p.dst.w / 2);
+}
+
+test "text feature: horizontal blit remains the existing origin-sized path" {
+    const box: ui.Rect = .{ .x = 7, .y = 9, .w = 80, .h = 20 };
+    const p = blitPlacement(.horizontal, box, 42, 14);
+    try std.testing.expectEqual(@as(?f64, null), p.clockwise_degrees);
+    try std.testing.expectEqual(ui.Rect{ .x = 7, .y = 9, .w = 42, .h = 14 }, p.dst);
 }

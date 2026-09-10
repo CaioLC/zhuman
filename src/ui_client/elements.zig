@@ -163,6 +163,30 @@ pub const El = struct {
         return self;
     }
 
+    /// Rotate a single-line text leaf 90° counter-clockwise so it reads bottom-to-top
+    /// (TEXT-06), matching the collapsed Holdings restore label. The existing TEXT-05
+    /// upright composite is rotated only at final blit; `remeasure` swaps width/height so
+    /// the content box, focus outline, and rectangular hit target are the rotated footprint.
+    ///
+    /// This is a deliberately narrow axis-aligned placement primitive, not arbitrary visual
+    /// rotation. The rail label is one line, so this clears multiline wrap and fixed-cell
+    /// overflow constraints before remeasuring. A later font/tracking style still remeasures
+    /// through the same orientation. Pass `.horizontal` to restore ordinary text.
+    pub fn with_orientation(self: El, orientation: cb.UiState.TextState.Orientation) El {
+        const st = self.node.state(self.ctx, cb.UiState.TextState);
+        st.wrap_width = 0;
+        st.overflow = .visible;
+        st.overflow_width = 0;
+        st.orientation = orientation;
+        feat.text.remeasure(self.ctx, self.node);
+        return self;
+    }
+
+    /// Collapsed-rail convenience spelling for the only transformed orientation in use.
+    pub fn vertical(self: El) El {
+        return self.with_orientation(.counter_clockwise_90);
+    }
+
     /// Take this node out of hit-testing: it is neither flagged nor does it occlude
     /// what is drawn beneath it. For a node queried *only* to read its own geometry
     /// back — `scroll_view`'s content, which needs last frame's height for the scroll

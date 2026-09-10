@@ -47,7 +47,7 @@ pub const Node  = ui.Node(RenderData);
   A state with semantic defaults declares no-argument `init() T`; states without it
   explicitly use the engine's bitwise-zero fallback. Every fresh slot and reused hole
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
-  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while an `overflow` cell clips/ellipsizes a fixed width (TEXT-03) and `tracking` sets device-px letter-spacing (TEXT-04). Since **TEXT-05** it also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
+  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while an `overflow` cell clips/ellipsizes a fixed width (TEXT-03) and `tracking` sets device-px letter-spacing (TEXT-04), and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail (TEXT-06). Since **TEXT-05** it also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
   `TabsState`, `StepState`,
   `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
   *variable-length* data — a polyline's points, since `RenderData` holds a single payload
@@ -538,8 +538,35 @@ Both modes keep `overflow` **POD** (the fit is recomputed, never stored), so the
 is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a refused string draws
 nothing and reserves the cell (or zero) box, cell or not. `.visible` + 0 is the unchanged
 fast/wrapped path. Integrated at two representative sites: `capital_row`'s name column
-(`.ellipsis` at its fixed column width) and `mock`'s heartbeat readout (`.clip` at 64px). The
-typography contract (TEXT-04) and rendered-text caching (TEXT-05) are separate slices.
+(`.ellipsis` at its fixed column width) and `mock`'s heartbeat readout (`.clip` at 64px).
+
+### Rotated collapsed-rail copy (TEXT-06)
+
+The collapsed Holdings rail carries its `HOLDINGS` label set vertically, reading
+bottom-to-top — a 90° counter-clockwise turn. `TextState.orientation` names the only two
+axis-aligned orientations the product uses: `.horizontal` (every ordinary label) and
+`.counter_clockwise_90`. `El.with_orientation(...)` sets it (clearing the incompatible
+single-line `wrap`/overflow-cell constraints first, since the rail label is one line) and
+re-measures; `El.vertical()` is the convenience spelling for the counter-clockwise mode.
+A bounded enum, not an arbitrary angle, is deliberate: 90° is an exact width/height swap, so
+its bounding box stays axis-aligned and no broader non-rectangular hit-geometry policy is
+needed.
+
+Orientation is a **final-blit transform, not a composite-pixel input**. The glyphs still
+rasterize into the TEXT-05 upright white composite exactly as horizontal text does, so
+orientation is *not* a cache-key dimension — switching a node between horizontal and vertical
+reuses the same cached texture with no glyph re-raster or re-upload. `remeasure` applies a
+pure axis transform (`orientMetrics`) to the upright metrics: horizontal keeps them, and
+counter-clockwise swaps width/height and zeroes the baseline (a vertical control label does
+not participate in horizontal row-baseline alignment). Because the engine stamps that swapped
+node box, **the layout box, the focus outline, and the rectangular hit target are the rotated
+footprint** — layout, focus, and hit geometry agree with the rendered pixels by construction,
+never rotated independently. At blit, the upright `w×h` texture is centered on the swapped
+`h×w` content box and drawn with SDL's `renderTextureRotated` at 270° clockwise (= 90°
+counter-clockwise) about its own center, landing the final pixels exactly on the oriented box.
+The placement is pure geometry (`blitPlacement`), tested SDL-free. The `mock` showcase carries
+a 36×124 collapsed-rail stand-in whose `.vertical()` `HOLDINGS` label reads bottom-to-top at
+the prototype's 9px / 0.09em collapsed-rail density.
 
 ## Frame assembly (`tree.zig`)
 

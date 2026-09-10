@@ -91,6 +91,14 @@ pub const UiState = struct {
         /// (see `tex`/`cache_key` below): TEXT-05 gave it an owned GPU texture and a `deinit`.
         /// This is the render-affecting attribute the TEXT-05 texture cache keys on.
         tracking: f32 = 0,
+        /// Final text orientation (TEXT-06). `.horizontal` is every ordinary label.
+        /// `.counter_clockwise_90` rotates the cached upright composite 90° counter-clockwise
+        /// at blit time so the collapsed-rail label reads bottom-to-top. `text.remeasure`
+        /// swaps the content-box axes for the same state, keeping layout, focus outline, and
+        /// rectangular hit geometry synchronized with the rotated pixels. Orientation is a
+        /// final-blit transform, not a composite-pixel input, so changing it reuses the
+        /// TEXT-05 texture rather than re-rasterizing glyphs.
+        orientation: Orientation = .horizontal,
 
         /// **TEXT-05 cached composite texture.** The uploaded, white-rasterized **composite**
         /// for whatever variant this node draws — single-line (tracked or not), wrapped,
@@ -119,6 +127,11 @@ pub const UiState = struct {
         /// while the layout box stays that allocated cell. Declared here (not with the
         /// feature) for the same import-cycle reason as `TextState` itself.
         pub const Overflow = enum { visible, clip, ellipsis };
+
+        /// The only axis-aligned text orientations the product uses (TEXT-06). A bounded enum
+        /// keeps measurement exact (90° is a width/height swap) instead of exposing arbitrary
+        /// angles whose non-axis-aligned hit bounds would require a broader geometry policy.
+        pub const Orientation = enum { horizontal, counter_clockwise_90 };
 
         pub fn init() TextState {
             return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };

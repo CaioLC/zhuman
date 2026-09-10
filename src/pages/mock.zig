@@ -76,6 +76,27 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     _ = (try txt(ctx, vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }}))
         .with_cell(.clip, 64);
 
+    // TEXT-06 collapsed-rail stand-in: the eventual Holdings rail collapses to a 36px-wide
+    // strip (KIT-05) whose restore affordance is a chevron above the label "HOLDINGS" set
+    // vertically, reading bottom-to-top. This fixture builds that 36×124 strip directly so
+    // the rotated single-line copy can be eyeballed in the running app: a fixed-size bordered
+    // column, a chevron glyph at the top, and the label rotated 90° counter-clockwise via
+    // `.vertical()`. The label uses the prototype's collapsed-rail typography — a 9px font
+    // with loosened 0.09em tracking — so the rotated composite matches the intended density.
+    // The rotated node's box, focus outline, and hit target are the swapped (tall) footprint,
+    // exactly the strip's inner column, because `remeasure` swaps the axes for the same state.
+    const rail = try el.div(ctx, root, "collapsed_rail");
+    _ = rail.with_layout(.top_left)
+        .with_flow(.{ .dir = .column, .cross = .center })
+        .with_gap(8)
+        .with_size(.{ .fixed = 36 }, .{ .fixed = 124 })
+        .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line }, style.pad_sym(0, 10) });
+    // Restore chevron (points right toward the expanded rail); horizontal, ordinary text.
+    _ = try txt(ctx, rail, "rail_chevron", "\u{203A}", .{Style{ .text = th.dim }});
+    // The vertical rail label, reading bottom-to-top (90° CCW), at 9px / 0.09em tracking.
+    _ = (try txt(ctx, rail, "rail_label", "HOLDINGS", .{Style{ .text = th.fg, .font = 9, .tracking = 0.09 }}))
+        .vertical();
+
     // Actions — exercises `action_button` + `actor_status` against the live player.
     const q = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     if (q.get()) |a| {
