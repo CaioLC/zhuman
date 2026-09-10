@@ -402,6 +402,17 @@ The `outline` feature snaps its box edges and bar thickness through these; the `
 snaps its stroke width. Today `View.scale` is `1`, so both are identity for integer-authored
 geometry (production is unchanged); they become load-bearing when VIEW-01 feeds a real
 fractional DPI factor. Pure and SDL-free, tested at scale ≠ 1.
+**Per-node visual opacity (RENDER-07).** A node carries an optional `render_data.opacity`
+(0..1, default 1) — *not* a paint feature but a render-walk modulation. `draw_node` carries an
+inherited opacity down the tree (alongside the clip stack), multiplies each node's own opacity
+into it, folds the product into **every** feature's paint alpha (`paint.applyOpacity` for the
+color features, `setAlphaMod` for `img`, the combined mesh alpha for `geometry`), and inherits
+the product to the children. So a whole subtree dims at once — a board tile filtered out, a
+disabled control — **without recomputing any child's color**; the caller sets one
+`El.with_opacity(x)`. Opacity is **purely visual**: hit-testing (`mark`/interaction) never
+reads it, so a dimmed node's clickability is unchanged — state logic decides that separately.
+
+
 
 ## Shadow / backdrop composition (`shadow.zig`)
 

@@ -28,10 +28,11 @@ const dash_len: f32 = 6;
 const dash_gap: f32 = 4;
 
 /// Stroke the node's box per `o` (color + width + style), inward.
-pub fn draw(u: *UiCtx, node: *Node, o: cb.Outline) void {
+pub fn draw(u: *UiCtx, node: *Node, o: cb.Outline, opacity: f32) void {
     const r = paint.full(node) orelse return;
     const rnd = u.res.platform.renderer;
-    rnd.setDrawColor(.{ .r = o.color.r, .g = o.color.g, .b = o.color.b, .a = o.color.a }) catch return;
+    const col = paint.applyOpacity(o.color, opacity); // RENDER-07 subtree dimming
+    rnd.setDrawColor(.{ .r = col.r, .g = col.g, .b = col.b, .a = col.a }) catch return;
 
     // RENDER-06: a hairline border is snapped to a whole device-px width (≥1) at the frame
     // scale and its bars are placed on whole-pixel boundaries, so a 1px logical outline / focus

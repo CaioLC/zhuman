@@ -30,10 +30,12 @@ pub fn attach_sprite(_: *UiCtx, node: *Node, sprite: Sprite, px: f32) !void {
 }
 
 /// Blit `sprite` (whole texture, or its `src` cell) into the node's content box.
-pub fn draw(u: *UiCtx, node: *Node, sprite: Sprite) void {
+pub fn draw(u: *UiCtx, node: *Node, sprite: Sprite, opacity: f32) void {
     const r = paint.content(node) orelse return;
     // RENDER-01: set the texture blend mode explicitly so a translucent sprite (a dimmed
     // or locked tile) alpha-composites rather than relying on the renderer/texture default.
     sprite.texture.setBlendMode(.blend) catch {};
+    // RENDER-07: fold the inherited subtree opacity into the texture's alpha mod.
+    if (opacity < 1) sprite.texture.setAlphaMod(@intFromFloat(@min(255, @max(0, @round(255 * opacity))))) catch {} else sprite.texture.setAlphaMod(255) catch {};
     u.res.platform.renderer.renderTexture(sprite.texture, sprite.src, paint.frect(r)) catch return;
 }

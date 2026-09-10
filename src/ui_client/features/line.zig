@@ -39,7 +39,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, pts: []const cb.Point, stroke: cb.Stroke
 }
 
 /// Stroke the stored polyline across the node's full box.
-pub fn draw(u: *UiCtx, node: *Node, stroke: cb.Stroke) void {
+pub fn draw(u: *UiCtx, node: *Node, stroke: cb.Stroke, opacity: f32) void {
     const st = node.state(u, State);
     const pts = st.points();
     if (pts.len < 2) return;
@@ -49,7 +49,7 @@ pub fn draw(u: *UiCtx, node: *Node, stroke: cb.Stroke) void {
     for (pts, 0..) |p, i| buf[i] = .{ .x = r.x + p.x * r.w, .y = r.y + p.y * r.h };
     const mapped = buf[0..pts.len];
 
-    const c = stroke.color;
+    const c = paint.applyOpacity(stroke.color, opacity); // RENDER-07 subtree dimming
     u.res.platform.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
 
     // A hairline is one call. Thickness is faked by re-stroking along the normal of the

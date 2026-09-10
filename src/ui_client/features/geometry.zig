@@ -110,14 +110,15 @@ fn storeMesh(st: *State, mesh: *const tess.Mesh) void {
 /// px through the node's full box, converts its `Color` to SDL `FColor` (u8 → 0..1) with the
 /// payload `opacity` folded into alpha, and submits one indexed draw. A missing box or an
 /// empty mesh is a no-op; a submit error is skipped silently (cosmetic, like every paint).
-pub fn draw(u: *UiCtx, node: *Node, g: cb.Geometry) void {
+pub fn draw(u: *UiCtx, node: *Node, g: cb.Geometry, opacity: f32) void {
     const st = node.state(u, State);
     const verts = st.vertices();
     const idx = st.indices();
     if (verts.len < 3 or idx.len < 3) return;
     const r = paint.full(node) orelse return;
 
-    const op = std.math.clamp(g.opacity, 0, 1);
+    // Combine the per-mesh payload opacity with the inherited subtree opacity (RENDER-07).
+    const op = std.math.clamp(g.opacity, 0, 1) * std.math.clamp(opacity, 0, 1);
     var out: [State.vcap]sdl.render.Vertex = undefined;
     for (verts, 0..) |v, i| {
         out[i] = .{

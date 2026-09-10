@@ -118,6 +118,16 @@ pub const El = struct {
         return self;
     }
 
+    /// Set this node's **visual opacity** (0..1) — RENDER-07. The render walk multiplies it
+    /// into the opacity inherited from ancestors and folds the product into every feature's
+    /// paint alpha, so this node *and its whole subtree* dim together without recomputing any
+    /// child's color (a filtered board tile, a disabled control). Purely visual: it never
+    /// changes hit eligibility — state logic decides clickability separately.
+    pub fn with_opacity(self: El, opacity: f32) El {
+        self.node.render_data.opacity = opacity;
+        return self;
+    }
+
     /// Constrain this text node to `max_w` px and wrap it onto multiple lines (TEXT-02).
     /// Word-boundary greedy wrap with a deterministic UTF-8-safe hard-break for an
     /// over-long word; the reserved box grows to the wrapped `width`×`height` and the render

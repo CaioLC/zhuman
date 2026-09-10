@@ -302,7 +302,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 ///   - `.ellipsis` — the identical `wrap.ellipsisFit` (one source of truth): the
 ///     codepoint-aligned prefix plus the deterministic ellipsis token, baked into the
 ///     composite; a too-narrow cell composites nothing rather than overflowing.
-pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
+pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
     const st = node.state(u, State);
     const fmt = st.text() orelse {
         // TEXT-01 refused/empty: nothing to draw. Release any texture still cached from a
@@ -310,6 +310,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
         if (st.tex != null) st.deinit();
         return;
     };
+    const tint = paint.applyOpacity(c, opacity); // RENDER-07 subtree dimming (tint-on-blit)
     const r = paint.content(node) orelse return;
     const f = u.res.platform.font.at(st.px) catch return;
 
@@ -321,7 +322,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color) void {
     // cached like any other variant and the clip scope is applied around the cached blit.
     // No variant re-rasterizes a glyph on a cache hit.
     const clip_cell: ?ui.Rect = if (st.wrap_width <= 0 and st.overflow == .clip) r else null;
-    drawCached(u, st, f, fmt, c, r, clip_cell);
+    drawCached(u, st, f, fmt, tint, r, clip_cell);
 }
 
 /// Build the TEXT-05 cache inputs from the current state + the live renderer generation.

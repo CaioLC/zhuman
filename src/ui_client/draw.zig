@@ -26,20 +26,26 @@ const Node = cb.Node;
 /// restores *this* baseline. Texture blits carry their own per-texture blend mode.
 pub fn draw_tree(u: *UiCtx, root: *Node) void {
     u.res.platform.renderer.setDrawBlendMode(.blend) catch {};
-    draw_node(u, root, null);
+    draw_node(u, root, null, 1);
     u.res.platform.renderer.setClipRect(null) catch {};
 }
 
 /// Recursive pre-order paint (a parent draws under its children). `clip` is the
 /// effective clip rect inherited from ancestors (`null` = unclipped); it's applied
 /// before this node paints, then narrowed for the subtree if this node is `.clip`.
-/// Per node, features paint in `list` order (fill → image → svg → text → outline — the
-/// z-order); each set aspect's optional payload is unwrapped and handed to its `draw`.
-fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect) void {
+/// `opacity` is the inherited visual opacity (RENDER-07): this node's own
+/// `render_data.opacity` multiplies it, the product is folded into every feature's paint
+/// alpha, and the same product inherits to the children — so a whole subtree dims without
+/// recomputing child colors. Opacity is purely visual; hit-testing never reads it.
+/// Per node, features paint in `list` order (fill → image → svg → geometry → line → text →
+/// outline — the z-order); each set aspect's optional payload is unwrapped and handed to its
+/// `draw` along with the effective opacity.
+fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect, opacity: f32) void {
     u.res.platform.renderer.setClipRect(paint.irect(clip)) catch {};
 
+    const eff = opacity * node.render_data.opacity;
     inline for (feat.list) |F| {
-        if (@field(node.render_data, F.name)) |payload| F.draw(u, node, payload);
+        if (@field(node.render_data, F.name)) |payload| F.draw(u, node, payload, eff);
     }
 
     // Overflow only *masks*: `scroll_x/y` already translated the children in the layout
@@ -50,5 +56,5 @@ fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect) void {
         break :blk if (clip) |c| c.intersect(box) else box;
     } else clip;
 
-    for (node.children.items) |c| draw_node(u, c, child_clip);
+    for (node.children.items) |c| draw_node(u, c, child_clip, eff);
 }

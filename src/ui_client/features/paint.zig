@@ -75,6 +75,23 @@ pub fn hairline(logical_w: f32, scale: f32) f32 {
     return @max(1, @round(logical_w * s));
 }
 
+// --- Per-node visual opacity (RENDER-07) -------------------------------------------------
+//
+// The render walk carries an inherited opacity (0..1) down the tree and multiplies it into
+// every feature's paint alpha, so a whole subtree can be dimmed (a board tile filtered out, a
+// disabled control) **without recomputing each child's color**. `applyOpacity` is the one fold
+// point: it scales a color's alpha by the effective opacity. Opacity is purely visual — it is
+// applied here at draw and never consulted by hit-testing (`mark`/interaction), so a dimmed
+// node's clickability is decided by state logic alone, as the roadmap requires.
+
+/// A `Color` with its alpha scaled by `opacity` (0..1). `opacity == 1` returns the color
+/// unchanged (the common path). Clamped so a stray value can't overflow the byte.
+pub fn applyOpacity(c: cb.Color, opacity: f32) cb.Color {
+    if (opacity >= 1) return c;
+    const a: f32 = @as(f32, @floatFromInt(c.a)) * @max(0, opacity);
+    return .{ .r = c.r, .g = c.g, .b = c.b, .a = @intFromFloat(@min(255, @max(0, @round(a)))) };
+}
+
 // ============================ Tests (deterministic, SDL-free) =========================
 
 const std = @import("std");
@@ -100,4 +117,21 @@ test "hairline: a 1px logical line is >=1 crisp device px at any scale" {
     // A non-positive scale is treated as 1 (never a 0/negative width).
     try std.testing.expectEqual(@as(f32, 1), hairline(1, 0));
     try std.testing.expectEqual(@as(f32, 1), hairline(1, -2));
+}
+
+test "applyOpacity: scales alpha only, leaves rgb; opacity>=1 is identity" {
+    const c: cb.Color = .{ .r = 10, .g = 20, .b = 30, .a = 200 };
+    // Identity fast path.
+    try std.testing.expectEqual(c, applyOpacity(c, 1));
+    try std.testing.expectEqual(c, applyOpacity(c, 2)); // clamped ≥1 → identity
+    // Half opacity halves alpha, rgb untouched.
+    const half = applyOpacity(c, 0.5);
+    try std.testing.expectEqual(@as(u8, 10), half.r);
+    try std.testing.expectEqual(@as(u8, 20), half.g);
+    try std.testing.expectEqual(@as(u8, 30), half.b);
+    try std.testing.expectEqual(@as(u8, 100), half.a);
+    // Zero opacity → fully transparent (but rgb preserved).
+    try std.testing.expectEqual(@as(u8, 0), applyOpacity(c, 0).a);
+    // Negative opacity clamps to 0 alpha.
+    try std.testing.expectEqual(@as(u8, 0), applyOpacity(c, -1).a);
 }

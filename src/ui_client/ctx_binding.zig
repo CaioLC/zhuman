@@ -471,6 +471,14 @@ pub const RenderData = struct {
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
     line: ?Stroke = null, // polyline through node.state(LineState)'s points, in this stroke
     geometry: ?Geometry = null, // indexed triangle mesh in node.state(GeometryState), per-vertex color
+
+    /// **Per-node visual opacity** (RENDER-07), 0..1, default fully opaque. *Not* a paint
+    /// feature — it is a render-walk modulation: `draw_tree` multiplies a node's opacity into
+    /// the opacity it inherits from ancestors and folds the product into every feature's paint
+    /// alpha, so a whole subtree dims (a filtered board tile, a disabled control) without
+    /// recomputing each child's color. Purely visual: hit-testing (`mark`/interaction) never
+    /// reads it, so opacity never changes clickability — state logic decides that separately.
+    opacity: f32 = 1,
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
