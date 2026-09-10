@@ -281,6 +281,28 @@ pub fn line(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, stro
     return .{ .ctx = ctx, .node = node };
 }
 
+/// A filled **convex polygon** through `pts` — node-local unit-square coordinates like
+/// `line`, so (0,0) is this node's top-left and (1,1) its bottom-right, and the shape
+/// stretches to whatever box the caller sizes the node to (`with_size`). Fan-triangulated
+/// and drawn by the `geometry` feature via `renderGeometry` (RENDER-03). Flat `color`;
+/// `opacity` fades the whole mesh. Does not size the node (points are relative).
+pub fn polygon(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, color: cb.Color, opacity: f32) !El {
+    const node = try child(ctx, parent, id);
+    feat.data_polygon(ctx, node, pts, color, opacity);
+    return .{ .ctx = ctx, .node = node };
+}
+
+/// A **thick polyline** through `pts` (node-local unit-square coords) at `half_width`
+/// (unit-square units, mapped to px at draw), with honest miter joins and `cap` ends;
+/// `closed` connects last→first for a rail loop. Drawn by the `geometry` feature via
+/// `renderGeometry`. Unlike `line`'s first-segment-normal approximation, joins/caps are
+/// correct. Does not size the node.
+pub fn polyline(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, half_width: f32, closed: bool, cap: feat.geometry.Cap, color: cb.Color, opacity: f32) !El {
+    const node = try child(ctx, parent, id);
+    feat.data_polyline(ctx, node, pts, half_width, closed, cap, color, opacity);
+    return .{ .ctx = ctx, .node = node };
+}
+
 // -- el: sugar composing a content leaf + a style spec in one call. --------------------
 
 /// What an `el` draws — the content variant it dispatches to a leaf. The image/svg/sprite

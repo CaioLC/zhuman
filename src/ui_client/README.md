@@ -49,9 +49,9 @@ pub const Node  = ui.Node(RenderData);
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
   `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while an `overflow` cell clips/ellipsizes a fixed width (TEXT-03) and `tracking` sets device-px letter-spacing (TEXT-04), and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail (TEXT-06). Since **TEXT-05** it also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
   `TabsState`, `StepState`,
-  `TextInputState`, `LineState`, `BuildViewState` and `SvgState`. `LineState` is the one that carries
-  *variable-length* data — a polyline's points, since `RenderData` holds a single payload
-  per feature and coordinates don't fit in a tint; fixed capacity keeps it POD. `SvgState` and `TextState` own a GPU texture, so they declare `deinit` and the cache's
+  `TextInputState`, `LineState`, `GeometryState`, `BuildViewState` and `SvgState`. `LineState` and `GeometryState` are the ones that carry
+  *variable-length* data — a polyline's points, and an indexed triangle mesh's vertices/indices — since `RenderData` holds a single payload
+  per feature and coordinates don't fit in a tint; fixed capacity keeps them POD (a mesh too large for the cap is refused whole, so an over-budget shape draws nothing rather than a torn mesh). `SvgState` and `TextState` own a GPU texture, so they declare `deinit` and the cache's
   eviction hook frees it when the node disappears. The pure cache-key/decision/lifecycle logic for `TextState`'s texture lives SDL-free in `features/text_cache.zig` (with a deterministic fake backend), so hit/miss/invalidation/reset/prune/reuse/growth is unit-tested without a graphics context. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
@@ -326,13 +326,32 @@ A *feature* is one kind of thing a node can be, as a module co-locating its whol
 | `attach` | no | the build-time mixin: measure, size, set payload/state |
 
 ```zig
-pub const list = .{ fill, image, svg, line, text, outline };  // back → front
+pub const list = .{ fill, image, svg, geometry, line, text, outline };  // back → front
 ```
 
 **The list's order is the z-order** — outline last, so a hover ring shows over an opaque
 tile. Adding a visual is one module + one `list` entry + one `RenderData` field, with no
 engine change; `assertFeature` turns a drifted descriptor into a build error rather than a
 silently undrawn aspect.
+
+**`geometry` — colored triangles and honest thick polylines (RENDER-03).** Backed by SDL's
+`renderGeometry`, it draws untextured per-vertex-colored triangle meshes: a convex-polygon
+fill (a hex body, a marker) and a thick polyline with correct **miter joins** (bevel fallback
+past the miter limit) and butt/square **caps** (a hex rail, a distribution curve, a slider
+diamond, a diagonal indicator). It is the second *variable-length* feature after `line`: a
+mesh's vertex/index count does not fit in a `RenderData` payload, so the vertices live in a
+pooled `GeometryState` and the payload (`?Geometry`) carries only a per-mesh `opacity`
+multiplier (the RENDER-07 dimming hook). Points are **node-local unit-square** coords like
+`line`, so a shape survives resize/zoom; `draw` maps them to device px through the node's box,
+converts each per-vertex `Color` to SDL's float `FColor` with opacity folded into alpha, and
+submits one indexed draw (the RENDER-01 `.blend` baseline makes vertex alpha composite, and
+the render walk's clip stack crops the triangles). The tessellation math —
+`fillConvex`/`fillConvexMulti` fan triangulation and `strokePolyline` — lives **SDL-free** in
+`features/geometry_tess.zig` with a bounded `Mesh` builder that **refuses an over-capacity mesh
+as a whole** (no torn triangle), so the whole fan/join/cap surface is unit-tested without a
+graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zig`'s
+first-segment-normal thick approximation is **not** yet retired — that waits until the board
+migrates onto this feature (roadmap RENDER-03).
 
 Clipping is *not* a feature. It is `Layout.overflow` in the engine, because it is geometry
 two consumers read (the render walk, and eventually hit-testing), not a paint the backend

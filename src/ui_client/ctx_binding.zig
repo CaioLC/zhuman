@@ -291,7 +291,65 @@ pub const UiState = struct {
             self.tex = null;
         }
     };
+
+    /// An indexed triangle **mesh** for the `geometry` feature (RENDER-03): the vertices and
+    /// `u16` indices produced by `features/geometry_tess.zig` (a convex-polygon fan, a thick
+    /// polyline with miter joins/caps). Like `LineState` this is the *variable-length* kind of
+    /// state — a mesh has a variable vertex/index count that does not fit in a `RenderData`
+    /// payload — and it follows the same POD, fixed-capacity contract: inline buffers owned by
+    /// value, **no allocator and no `deinit`**, so the pool's init-on-fresh/reuse and
+    /// eviction-reclaims-the-slot guarantees hold with nothing to free (the mesh is CPU-side
+    /// vertex data uploaded per frame by `renderGeometry`, not a retained GPU texture). A mesh
+    /// too large for the capacity is **refused as a whole** by the tessellator's `Mesh`
+    /// builder (it latches overflow and emits no partial triangle), so an over-budget shape
+    /// draws nothing rather than a torn mesh — the whole-refusal policy shared with
+    /// `TextState`/`LineState`. Positions are node-local unit-square coords (see `Vert`); the
+    /// feature maps them to device px at draw. Uses the zeroable fallback, so an unset mesh has
+    /// `vlen == 0` and draws nothing.
+    pub const GeometryState = struct {
+        /// Vertex/index capacities. Sized for the shapes this draws — a hex body (6),
+        /// its rails (a closed 6-edge polyline ≈ 24 verts), a distribution curve, a slider
+        /// diamond — with headroom, while staying POD. A shape needing more wants its own node.
+        pub const vcap = 256;
+        pub const icap = 512;
+        verts: [vcap]Vert = undefined,
+        vlen: usize = 0,
+        idx: [icap]u16 = undefined,
+        ilen: usize = 0,
+
+        /// Copy a tessellated mesh (from `geometry_tess.Mesh`) into this state. Positions and
+        /// colors are stored as-is (unit-square local coords + per-vertex `Color`); on
+        /// capacity overflow it stores nothing (`vlen = ilen = 0`) — whole-refusal, so `draw`
+        /// paints nothing rather than a partial mesh.
+        pub fn set(self: *GeometryState, vs: []const Vert, is: []const u16) void {
+            if (vs.len > vcap or is.len > icap) {
+                self.vlen = 0;
+                self.ilen = 0;
+                return;
+            }
+            @memcpy(self.verts[0..vs.len], vs);
+            @memcpy(self.idx[0..is.len], is);
+            self.vlen = vs.len;
+            self.ilen = is.len;
+        }
+
+        /// The stored vertices. Never hold the slice across a pool `acquire` — the slot may
+        /// move; call this again instead.
+        pub fn vertices(self: *const GeometryState) []const Vert {
+            return self.verts[0..self.vlen];
+        }
+        /// The stored indices (length is a multiple of 3).
+        pub fn indices(self: *const GeometryState) []const u16 {
+            return self.idx[0..self.ilen];
+        }
+    };
 };
+
+/// One mesh vertex for the `geometry` feature: a node-local unit-square position plus its
+/// own `Color`. Per-vertex color is what lets one mesh carry a flat fill (all equal), a
+/// gradient/mixed fill (unequal — the RENDER-04 seam), or a multi-hue rail. The device-px
+/// mapping and the `Color`→SDL `FColor` conversion happen in `features/geometry.zig` at draw.
+pub const Vert = struct { p: Point, color: Color };
 
 /// A point in a node's own box, in the unit square: (0,0) is its top-left corner and
 /// (1,1) its bottom-right. Relative rather than pixel so a polyline survives a resize
@@ -301,6 +359,13 @@ pub const Point = struct { x: f32, y: f32 };
 /// A stroke: what a polyline is drawn *with*, as against where it goes (which is
 /// variable-length, so it lives in `LineState`). Width is in px, unscaled.
 pub const Stroke = struct { color: Color, width: f32 = 1 };
+
+/// The `geometry` feature's payload (RENDER-03): the per-mesh draw parameters that are *not*
+/// the variable-length vertices (those live in `GeometryState`, like a polyline's points live
+/// in `LineState`). Today that is a single `opacity` multiplier applied to every vertex's
+/// alpha at draw — a cheap mesh-wide fade that is the natural hook for per-node dimming
+/// (RENDER-07) without recomputing each vertex color. Present ⟹ draw the node's pooled mesh.
+pub const Geometry = struct { opacity: f32 = 1 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
 /// keyed by widget key). Pointer-derived fields are transient and republished from
@@ -405,6 +470,7 @@ pub const RenderData = struct {
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
     line: ?Stroke = null, // polyline through node.state(LineState)'s points, in this stroke
+    geometry: ?Geometry = null, // indexed triangle mesh in node.state(GeometryState), per-vertex color
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent
