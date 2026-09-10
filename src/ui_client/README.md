@@ -447,6 +447,21 @@ to a text node re-measures the string at that size and stores the px on the text
 catches the mistake; `Style` stays uniform rather than typed per widget so tuple
 composition stays free.
 
+The style payload carries every *render-affecting look* an aspect has, each an optional
+field that folds last-non-null-wins (RENDER-02). For text that is `text` (glyph ink), `font`
+(logical size), `tracking` (em letter-spacing), and `transform` (case) — the TEXT-04
+typography contract. For a texture aspect it is `tint`: a set `tint` recolors a present `svg`
+raster (rasterized white, tinted at blit — the same model as the `text` composite), so a
+template styles an icon's color through the fold instead of assigning `render_data.svg`
+directly. `text` (glyph ink) and `tint` (texture ink) are separate fields on purpose, so one
+tuple can carry both and neither shadows the other; `tint` no-ops on a node with no svg, and
+because it is not typography it does not trip the inert-typography assert. **`wrap` and
+`overflow` are deliberately *not* style fields.** They set a text node's *measurement
+constraint* (its reserved box), which is placement, not look — so they stay imperative on
+`El` (`with_wrap` / `with_cell`), the same rule the whole placement layer follows. Adding
+them to `Style` would be exactly the "turn style into placement" the design forbids; a later
+`with_style(.{ font })` re-measures at whatever constraint `El` already set.
+
 **Placement is deliberately not a fold.** A `Placement` partial with `row`/`col`/`fill`
 presets was built and then removed: it was a second vocabulary shadowing the engine's own
 `Layout`/`Size`, and every value had to be restated in it. Placement is now written

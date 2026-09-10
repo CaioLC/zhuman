@@ -98,9 +98,10 @@ pub fn tile(
     _ = (try el.text(ctx, row, "cost", cost_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
 
-    const icon = try el.svg(ctx, row, "kind", info.kind_icon(kind), icon_px);
-    // `Style` has no svg-tint slot (yet) — recolor the raster's tint directly.
-    icon.get().render_data.svg = if (lit) th.dim else chrome;
+    // RENDER-02: recolor the icon raster's ink through the style fold's `tint` field rather
+    // than poking `render_data.svg` — same last-fragment-wins path as every other look.
+    _ = (try el.svg(ctx, row, "kind", info.kind_icon(kind), icon_px))
+        .with_style(.{Style{ .tint = if (lit) th.dim else chrome }});
 
     _ = (try el.text(ctx, row, "yield", yield_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.fg else chrome } });

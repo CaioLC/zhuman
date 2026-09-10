@@ -41,6 +41,15 @@ pub const Style = struct {
     /// Case transform (`.none`/`.upper`) applied to the rendered bytes at `apply` time. Unset
     /// composes as "inherit". Only the uppercase eyebrow role sets `.upper`.
     transform: ?typ.Transform = null,
+    /// **Texture-content ink** (RENDER-02): the tint a *non-text* content aspect paints with.
+    /// Today that is `svg` (an icon raster is rasterized white and tinted at blit, the
+    /// `svg.draw`/`text` composite model), so a set `tint` recolors `render_data.svg`. It is a
+    /// separate field from `text` on purpose — `text` is *glyph* ink and `tint` is *texture*
+    /// ink, so a tuple can carry both without either shadowing the other, and each folds
+    /// last-non-null-wins independently. Unset composes as "inherit whatever the content
+    /// leaf/theme defaulted" (an `svg` leaf defaults its ink to `theme.fg`). Placement
+    /// (wrap/overflow) stays imperative on `El`; this is a look, not a measurement constraint.
+    tint: ?Color = null,
     fill: ?Color = null,
     /// Border color. Its presence is what makes a border draw; `outline_width` /
     /// `outline_style` only shape a border that a set `outline_color` turned on. Kept as
@@ -169,6 +178,13 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
     if (s.padding) |p| node.size.padding = p;
     if (s.gap) |g| node.layout.gap = g;
 
+    // RENDER-02: texture-content ink. A set `tint` recolors a present `svg` aspect (an icon
+    // raster tinted at blit), routed through the same fragment fold as every other look — so
+    // a caller styles an icon's color instead of poking `render_data.svg` directly.
+    if (node.render_data.svg != null) {
+        if (s.tint) |c| node.render_data.svg = c;
+    }
+
     if (node.render_data.text != null) {
         if (s.text) |c| node.render_data.text = c;
         // The typography payload (size / tracking / transform) is applied together and then
@@ -194,7 +210,10 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
             }
         }
     } else {
-        // Inert typography style on a non-text node is a mistake — catch it in debug.
+        // Typography style (`text`/`font`/`tracking`/`transform`) is inert on a non-text node
+        // — catch that mistake in debug. `tint` is *not* typography: it legitimately targets a
+        // non-text (svg) aspect and is allowed here (it simply no-ops on a node with no svg,
+        // like any unmatched decoration). So the assert covers only the genuinely-inert set.
         std.debug.assert(s.text == null and s.font == null and s.tracking == null and s.transform == null);
     }
 }
@@ -327,4 +346,51 @@ test "applyTransformInPlace: uppercases the buffer in place, preserving length; 
     // `.none` leaves the buffer untouched.
     applyTransformInPlace(&st, .none);
     try std.testing.expectEqualStrings("IN REACH", st.text().?);
+}
+
+// ---- RENDER-02 texture-content tint ----------------------------------------------------
+
+test "style: tint folds last-non-null-wins independently of text" {
+    const red: Color = .{ .r = 200, .g = 40, .b = 40, .a = 255 };
+    const blue: Color = .{ .r = 40, .g = 40, .b = 200, .a = 255 };
+    // `tint` and `text` are separate fields — a tuple can carry both, neither shadows the
+    // other, and each folds last-non-null-wins on its own.
+    const s = resolve(undefined, undefined, .{ Style{ .tint = red, .text = blue }, Style{ .tint = blue } });
+    try std.testing.expectEqual(blue, s.tint.?); // tint overridden by the later fragment
+    try std.testing.expectEqual(blue, s.text.?); // text kept from the first fragment
+}
+
+test "apply: tint recolors a present svg aspect (RENDER-02) and is inert without one" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const accent: Color = .{ .r = 90, .g = 150, .b = 210, .a = 255 };
+
+    // A node with a present `svg` aspect (an icon leaf sets this): `tint` recolors it. No
+    // ctx is dereferenced on this path (no text node), matching the other apply tests.
+    const icon = try Node.create(arena.allocator(), "icon");
+    icon.render_data.svg = .{ .r = 220, .g = 220, .b = 220, .a = 255 }; // default fg-ish ink
+    apply(undefined, icon, .{Style{ .tint = accent }});
+    try std.testing.expectEqual(accent, icon.render_data.svg.?);
+
+    // On a node with no svg aspect, `tint` simply no-ops (like any unmatched decoration) and
+    // does not trip the inert-typography assert — it is not typography.
+    const bare = try Node.create(arena.allocator(), "bare");
+    apply(undefined, bare, .{Style{ .tint = accent }});
+    try std.testing.expectEqual(@as(?Color, null), bare.render_data.svg);
+    try std.testing.expectEqual(@as(?Color, null), bare.render_data.text);
+}
+
+test "apply: tint does not disturb text ink; text ink does not disturb svg tint" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const tint_c: Color = .{ .r = 1, .g = 2, .b = 3, .a = 255 };
+    // Tinting an svg node sets only its svg ink; the glyph-ink `text` field is left null
+    // (the two are orthogonal fields, so an icon tint never leaks into text ink).
+    const icon = try Node.create(arena.allocator(), "icon2");
+    icon.render_data.svg = .{ .r = 9, .g = 9, .b = 9, .a = 255 };
+    apply(undefined, icon, .{Style{ .tint = tint_c }});
+    try std.testing.expectEqual(tint_c, icon.render_data.svg.?);
+    try std.testing.expectEqual(@as(?Color, null), icon.render_data.text);
 }
