@@ -474,6 +474,12 @@ pub fn main() !void {
         // Update Stage
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
+        // RENDER-08: advance host-layer UI transitions by the frame delta and keep the
+        // reduced-motion policy projected onto the registry (so a transition started this
+        // frame snaps when reduced motion is on). Presentation only — always runs, even at
+        // the Act I curtain, since UI transitions are independent of the sim clock.
+        app.resources.tween.setPolicy(app.resources.motion);
+        app.resources.tween.advance(app.resources.time.dt);
         // 2. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen

@@ -313,6 +313,28 @@ policy ships a reusable **snap gate**, `Policy.snap(T, to, value)`, returning th
 RENDER-08 to route every future optional transition through one policy check. `src/ui`
 stays motion-unaware.
 
+## Transition/tween state (`tween.zig`)
+
+RENDER-08 adds a small **host-layer tween registry** for the prototype's few *functional*
+transitions — the Holdings column/gap collapse (`120ms`), a stock token's font change (`90ms`),
+and the board's opacity/stroke changes (`100–110ms`, named `holdings_s`/`stock_token_s`/`board_s`
+as seconds). It is a deliberately tiny **value provider**, not a general timeline engine and not
+a node feature: a consumer keys a scalar `Tween` by a **stable node/domain id** (a `u64`, the
+same stable-key discipline the interaction/focus/semantic registries use, so a tween survives
+reorder/filter/rebuild), `main` advances all tweens once per frame by the frame `dt`, and the
+consumer reads `registry.value(id, fallback)` to drive a size, gap, opacity, or font px.
+`retarget(id, to, duration)` **interrupts/reverses from the current value** — a half-open rail
+glides back from where it is rather than snapping and re-animating — while a brand-new id sits
+at its target (a control's first appearance is its state, not a transition). It **obeys reduced
+motion** by routing through the INPUT-10 `motion.Policy`: when reduced motion is on, a tween
+reports its end value immediately (the transition snaps, the functional end state always
+reached). Fixed-capacity and non-allocating (a full table drops a new id, so its `value` returns
+the fallback target — snap, never crash); `Resources.tween` holds it inline and `main` projects
+the motion policy onto it each frame. Pure and SDL-free (the caller supplies `dt`), so
+interpolation, interrupt/reverse, reduced-motion snap, and stable-key independence are unit-tested
+without a renderer or a clock. The named consumers (Holdings KIT-05, StockToken KIT-12, board
+BOARD-05) read this when they land.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

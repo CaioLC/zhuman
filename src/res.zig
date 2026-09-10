@@ -192,6 +192,13 @@ pub const Resources = struct {
     /// calls. Presentation policy only; no simulation system reads or writes it. Defaults to
     /// motion-allowed until `init` resolves the real preference.
     motion: @import("./ui_client/motion.zig").Policy = .{},
+    /// Host-side transition/tween registry (RENDER-08): scalar transitions keyed by stable
+    /// node/domain id for the prototype's functional animations (Holdings collapse, stock-token
+    /// font swap, board state changes). `main` advances it by the frame `dt` and projects the
+    /// reduced-motion policy onto it each frame; a consumer reads `value(id, fallback)` to
+    /// drive a size/gap/opacity. Presentation only; no simulation system reads it. Bounded and
+    /// non-allocating (POD), so it lives inline on `Resources`.
+    tween: @import("./ui_client/tween.zig").Registry = .{},
     time: Time = .{},
     sim: Sim,
     config: Config = .{},

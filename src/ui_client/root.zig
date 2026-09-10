@@ -25,6 +25,11 @@ const motion = @import("./motion.zig");
 /// (`shadow.layers`) with thin `El` emitters (`shadow.drop`, `shadow.backdropColor`).
 pub const shadow = @import("./shadow.zig");
 
+/// Host-layer transition/tween state (RENDER-08): scalar transitions keyed by stable
+/// node/domain id, interrupt/reverse from current value, obeying the INPUT-10 reduced-motion
+/// policy, with the prototype's functional durations. A value provider, not a node feature.
+pub const tween = @import("./tween.zig");
+
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
 pub const style = @import("./style.zig");
