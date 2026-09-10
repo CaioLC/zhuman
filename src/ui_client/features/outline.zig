@@ -33,16 +33,27 @@ pub fn draw(u: *UiCtx, node: *Node, o: cb.Outline) void {
     const rnd = u.res.platform.renderer;
     rnd.setDrawColor(.{ .r = o.color.r, .g = o.color.g, .b = o.color.b, .a = o.color.a }) catch return;
 
-    const w = @max(o.width, 1);
+    // RENDER-06: a hairline border is snapped to a whole device-px width (≥1) at the frame
+    // scale and its bars are placed on whole-pixel boundaries, so a 1px logical outline / focus
+    // ring stays crisp at high-DPI instead of anti-aliasing into a fractional smear, and
+    // adjacent columns don't shimmer. Today `scale` is 1 (identity); it matters under VIEW-01.
+    const w = paint.hairline(o.width, u.res.view.scale);
+    // Snap the box edges to whole device pixels so the inward bars sit on pixel boundaries.
+    const x0 = paint.snap(r.x);
+    const y0 = paint.snap(r.y);
+    const x1 = paint.snap(r.x + r.w);
+    const y1 = paint.snap(r.y + r.h);
+    const rw = x1 - x0;
+    const rh = y1 - y0;
     switch (o.style) {
         .solid => {
-            fillBar(rnd, .{ .x = r.x, .y = r.y, .w = r.w, .h = w }); // top
-            fillBar(rnd, .{ .x = r.x, .y = r.y + r.h - w, .w = r.w, .h = w }); // bottom
-            fillBar(rnd, .{ .x = r.x, .y = r.y, .w = w, .h = r.h }); // left
-            fillBar(rnd, .{ .x = r.x + r.w - w, .y = r.y, .w = w, .h = r.h }); // right
+            fillBar(rnd, .{ .x = x0, .y = y0, .w = rw, .h = w }); // top
+            fillBar(rnd, .{ .x = x0, .y = y1 - w, .w = rw, .h = w }); // bottom
+            fillBar(rnd, .{ .x = x0, .y = y0, .w = w, .h = rh }); // left
+            fillBar(rnd, .{ .x = x1 - w, .y = y0, .w = w, .h = rh }); // right
         },
-        .dashed => strokeDashed(rnd, r, w, dash_len, dash_gap),
-        .dotted => strokeDashed(rnd, r, w, w, w),
+        .dashed => strokeDashed(rnd, .{ .x = x0, .y = y0, .w = rw, .h = rh }, w, dash_len, dash_gap),
+        .dotted => strokeDashed(rnd, .{ .x = x0, .y = y0, .w = rw, .h = rh }, w, w, w),
     }
 }
 

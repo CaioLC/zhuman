@@ -393,6 +393,16 @@ translucent aspect is authored, not a separate feature. The dev `mock.zig` showc
 a "Blending" fixture — a translucent row-hover tint, a backdrop scrim over a bright block, a
 dimmed locked tile, and a stacked-band wash — that reads correctly only when blending is on.
 
+**Crisp hairlines at scale (RENDER-06).** A one-logical-pixel border, outline, focus ring, or
+rail must stay a crisp whole-device-pixel line at any DPI scale, or it anti-aliases into a
+blurry 1–2px smear and adjacent columns/rails **shimmer** as their sub-pixel coverage shifts.
+`paint.hairline(logical_w, scale)` rounds a hairline width to a whole number of device px
+(floored at 1), and `paint.snap(device_coord)` puts a hairline edge on a whole-pixel boundary.
+The `outline` feature snaps its box edges and bar thickness through these; the `line` feature
+snaps its stroke width. Today `View.scale` is `1`, so both are identity for integer-authored
+geometry (production is unchanged); they become load-bearing when VIEW-01 feeds a real
+fractional DPI factor. Pure and SDL-free, tested at scale ≠ 1.
+
 ## Shadow / backdrop composition (`shadow.zig`)
 
 SDL has no blur, so the prototype's soft drop shadows (`box-shadow: 0 16px 80px #000a` on the

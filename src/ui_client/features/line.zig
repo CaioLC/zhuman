@@ -56,7 +56,9 @@ pub fn draw(u: *UiCtx, node: *Node, stroke: cb.Stroke) void {
     // *first* segment, which is honest for the straight runs both consumers draw and
     // visibly wrong on a tight corner — a real thick stroke wants `renderGeometry` with
     // mitred quads, which is the same call the board's filled tiles will need.
-    const w = @max(1.0, stroke.width);
+    // RENDER-06: snap the width to a whole device px (≥1) at the frame scale so a 1px rail
+    // stays crisp at high-DPI. Today `scale` is 1 (identity); it matters under VIEW-01.
+    const w = paint.hairline(stroke.width, u.res.view.scale);
     if (w <= 1.0) {
         u.res.platform.renderer.renderLines(mapped) catch return;
         return;
