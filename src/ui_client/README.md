@@ -393,6 +393,23 @@ translucent aspect is authored, not a separate feature. The dev `mock.zig` showc
 a "Blending" fixture — a translucent row-hover tint, a backdrop scrim over a bright block, a
 dimmed locked tile, and a stacked-band wash — that reads correctly only when blending is on.
 
+## Shadow / backdrop composition (`shadow.zig`)
+
+SDL has no blur, so the prototype's soft drop shadows (`box-shadow: 0 16px 80px #000a` on the
+terminal, `0 18px 80px #000d` on a dialog, `0 4px 14px #0008` on a popup) are approximated by
+a small **bounded stack of translucent-black rectangles** (RENDER-05) — each a little wider
+and more offset than the last, at low alpha, building a soft penumbra without a real gaussian.
+Deliberately understated: flat black translucency, no rounded corners, no gloss. The pure,
+SDL-free `shadow.layers(Spec)` turns a prototype-style `{ offset_y, blur, base_alpha, count }`
+into ordered `Layer`s (outermost widest/faintest → inner tightest/darkest, each carrying the
+full drop offset, alpha divided across the layers so they *sum* to the intended darkness) and
+is unit-tested without a renderer. `shadow.drop(...)` is the thin `El` emitter: call it before
+building a box so the layers paint under it (siblings paint in child order); the RENDER-01
+`.blend` baseline composites them. `shadow.backdropColor(ground)` is the modal/dialog scrim —
+the near-black terminal ground at the prototype's `0xd9` alpha, for the fullscreen root a modal
+already builds. The named consumers (the centered terminal VIEW-03, the dialog/popup shadows
+KIT-08/09, the modal backdrop KIT-08) wire this in when they land.
+
 ## Five-pass profiling
 
 The desktop loop uses the engine's profiled layout variant, sums its three solve timings

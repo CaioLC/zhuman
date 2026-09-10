@@ -20,6 +20,11 @@ const semantics = @import("./semantics.zig");
 const a11y = @import("./a11y.zig");
 const motion = @import("./motion.zig");
 
+/// Reusable shadow/backdrop composition (RENDER-05): bounded translucent layers approximating
+/// the prototype's soft drop shadows, plus the modal backdrop scrim color. SDL-free layer math
+/// (`shadow.layers`) with thin `El` emitters (`shadow.drop`, `shadow.backdropColor`).
+pub const shadow = @import("./shadow.zig");
+
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
 pub const style = @import("./style.zig");
