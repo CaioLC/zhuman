@@ -47,7 +47,9 @@ const beats = [_]Beat{
 pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     const th = ctx.res.view.theme;
 
-    const root = try el.root(ctx, "act1");
+    // VIEW-03: the Act I curtain lives in the centered terminal workspace.
+    const shell = try t.terminal(ctx, "act1");
+    const root = shell.content;
     const dialog = try t.panel(ctx, root, "curtain", "ACT I");
     _ = dialog.with_layout(.center);
 
@@ -83,5 +85,5 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
             st.step = 0;
         }
     }
-    return root.get();
+    return shell.root.get();
 }

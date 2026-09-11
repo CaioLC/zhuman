@@ -16,7 +16,9 @@ const t = @import("./templates/root.zig");
 pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     const th = ctx.res.view.theme;
 
-    const root = try el.root(ctx, "over");
+    // VIEW-03: the game-over screen lives in the centered terminal workspace like the HUD.
+    const shell = try t.terminal(ctx, "over");
+    const root = shell.content;
     const center = try el.div(ctx, root, "c_div");
     _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
 
@@ -30,5 +32,5 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
         ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
         ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
     }
-    return root.get();
+    return shell.root.get();
 }

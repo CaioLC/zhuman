@@ -23,6 +23,7 @@ const holdings_mod = @import("./holdings.zig");
 const build_list_mod = @import("./build_list.zig");
 const capital_row_mod = @import("./capital_row.zig");
 const good_text_mod = @import("./good_text.zig");
+const terminal_mod = @import("./terminal.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -43,6 +44,8 @@ pub const holdings = holdings_mod.holdings;
 pub const build_list = build_list_mod.build_list;
 pub const capital_row = capital_row_mod.capital_row;
 pub const good_text = good_text_mod;
+pub const terminal = terminal_mod.terminal;
+pub const Terminal = terminal_mod.Shell;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

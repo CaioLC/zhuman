@@ -366,6 +366,15 @@ box) do. **Not** scaled: simulation values and camera percentages are not dimens
 (`scale == 1`) every conversion is identity, so production is unchanged; the scale becomes
 load-bearing on a high-DPI display.
 
+**Centered terminal workspace (VIEW-03).** The `pages/templates/terminal.zig` shell is what a
+screen builds inside: it reads `metrics` and, when **framed** (logical width > 760), fills the
+window with the near-black terminal **ground** (`#090806`) and places a `metrics.terminal`-sized
+box — capped at `900×820` and centered — with a soft drop shadow (RENDER-05 `shadow.drop`), a
+hairline border, its own `bg`, and **clipped** internals, returning the inner box for the screen
+to fill. At **≤760** the terminal is the whole window (no ground/shadow/border/cap) — the
+prototype's full-width mode. `play_game`/`gameover`/`act_one_end` build into the returned content
+box. The terminal rect is scaled to device px once here.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

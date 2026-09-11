@@ -123,6 +123,15 @@ pub const El = struct {
         return self;
     }
 
+    /// Displace this node by a **device-px** offset that must not be scaled again (VIEW-02) —
+    /// for offsets derived from stamped geometry or an already-device-px rect (the centered
+    /// terminal box). Authored logical offsets use `with_offset`.
+    pub fn with_offset_px(self: El, dx: f32, dy: f32) El {
+        self.node.layout.offset_x = dx;
+        self.node.layout.offset_y = dy;
+        return self;
+    }
+
     /// Overflow handling for this node's content (`.visible` / `.clip`).
     pub fn with_overflow(self: El, o: ui.features.Overflow) El {
         self.node.layout.overflow = o;

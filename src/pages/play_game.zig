@@ -25,20 +25,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     const th = ctx.res.view.theme;
     var buf: [64]u8 = undefined;
 
-    const root = try el.root(ctx, "play");
-    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(16);
-    // Padding is content-box (it *grows* a fixed box), so shrink the window-sized root by
-    // the page pad to keep the padded box exactly window-sized — else full-width children
-    // (header is pct 1.0) hang past the right edge by twice the pad.
+    // VIEW-03: build inside the centered terminal workspace. The shell fills the window with
+    // the ground, draws the framed/centered terminal (border + shadow + clip) at/above the
+    // reference, or the full window at ≤760, and returns the inner content box to lay out in.
+    const shell = try t.terminal(ctx, "play");
+    const root = shell.content;
     const page_pad: f32 = 16;
-    const rn = root.get();
-    // `rn.size.*.fixed` is the root's **device-px** size (VIEW-02: the layout is device px);
-    // the page pad is logical, so scale it to device before subtracting, and set the result
-    // with `with_size_px` so it is not scaled a second time.
-    const pad_px = uic.view.dp(2 * page_pad, ctx.res.view.scale);
-    const content_w = rn.size.w.fixed - pad_px;
-    const content_h = rn.size.h.fixed - pad_px;
-    _ = root.with_size_px(.{ .fixed = content_w }, .{ .fixed = content_h })
+    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(16)
         .with_style(.{style.pad(page_pad)});
 
     // --- header: a thin strip — stocks left, run context right ----------------------------
@@ -118,10 +111,10 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     // bottom edge of the content box regardless of what the body sections grow into.
     const footer = try el.div(ctx, root, "footer");
     _ = footer.with_layout(.bottom_left);
-    // log_view authors in logical px (VIEW-02); the content box in logical is the logical
-    // viewport minus the page padding.
-    const content_w_logical = ctx.res.view.metrics.logical_w - 2 * page_pad;
+    // log_view authors in logical px (VIEW-02); the content column in logical is the terminal's
+    // logical width minus the page padding.
+    const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
     try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
 
-    return root.get();
+    return shell.root.get();
 }
