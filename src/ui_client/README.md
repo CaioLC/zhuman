@@ -607,6 +607,22 @@ The function form is what lets one mechanism cover all three cases: static prese
 themed colors (they need `ctx.res.view.theme`), and interaction-aware chrome (a button's
 hover color reads `node.query(ctx)` on the node it was just handed).
 
+**The primitive fragment library (KIT-02).** `style.zig` ships the shared vocabulary of
+*look* every template composes from, so a call site names an intent, not a color: surfaces
+(`panel`, `section_heading`), the button family (`btn_primary`/`btn_secondary`/`btn_text`/
+`btn_icon`/`btn_link` — a shared `btn_ink` maps published state → color: `dim` disabled,
+`acc` on held/hover/focus-visible, else the variant's resting ink), `tab`/`chip`/`tag`,
+semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the KIT-01 roles
+including `good`), interaction chrome (`row_hover`, `focus_ring` — drawn **only** on
+`.focus_visible`, never bare hover — `disabled_chrome`, `selected_chrome`, `provisional` the
+dim-dashed placeholder box), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
+`legend_dot(.food)` keyed to the six `view.resources` hues). The **stateful** ones are the
+`fn(*UiCtx, *Node) Style` form — they read the node's published `Interaction` bits
+(`publishControlState` sets `disabled`/`focus_visible`/`selected`/…) and return the chrome for
+that state; the **static** ones are plain values. Every color is a `Theme` *role*, never a
+literal, so these live in the foundation (they encode role/interaction policy, not the game's
+values); precedence is the caller's — a later tuple fragment overrides one variant field.
+
 Presence follows the layer. **Decoration** aspects (`fill`, `outline`) are present iff set.
 **Content** aspects are present because content was given, so unset style falls back to a
 default — which is why a `text` leaf is visible with no styling at all. Applying a `font`

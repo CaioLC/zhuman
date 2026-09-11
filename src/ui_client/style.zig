@@ -19,6 +19,7 @@ const ui = @import("../ui/root.zig");
 const cb = @import("./ctx_binding.zig");
 const typ = @import("./type.zig");
 const view = @import("./view.zig");
+const theme = @import("./theme.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -127,6 +128,199 @@ pub fn stroke_w(n: f32) Style {
 pub const solid: Style = .{ .outline_style = .solid };
 pub const dashed: Style = .{ .outline_style = .dashed };
 pub const dotted: Style = .{ .outline_style = .dotted };
+
+// === KIT-02 · primitive style/state fragments ===========================================
+//
+// The shared vocabulary of *look* every template composes from — surfaces, section labels,
+// button variants, tabs/chips/tags, semantic state text, and small chrome (meter, progress,
+// legend dot). Two flavors, both fed to the same fold (`resolve`/`apply`):
+//
+//   • **static** fragments are plain `Style` values (a panel fill, a tag border) — a look
+//     with no interaction input.
+//   • **stateful** fragments are `fn(*UiCtx, *Node) Style` — resolved *with the just-built
+//     node*, so they read `node.query(ctx)` (hover / held / focus-visible / disabled /
+//     selected — the `Interaction` bits `publishControlState` sets) and return the chrome for
+//     that state. This is the KIT-02 seam KIT-03 leans on: a control publishes its state, and
+//     the box paints itself from these fragments by composing e.g. `.{ btn_primary }`.
+//
+// Every color is a `Theme` *role* (never a literal), so a game palette moves them all at once;
+// these fragments live in the foundation because they encode role/interaction policy, not the
+// game's values. Precedence is the caller's: later fragments in the tuple win per field, so a
+// site can take `btn_primary` and override just its fill.
+
+/// A raised surface — panel fill + a hairline `line` edge. The card/rail/strip background.
+pub fn panel(ctx: *UiCtx, _: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .fill = t.panel, .outline_color = t.line, .outline_width = 1 };
+}
+
+/// A section heading (the `heading` role in `acc` ink) — a titled block's lead line.
+pub fn section_heading(ctx: *UiCtx, _: *Node) Style {
+    var s = heading;
+    s.text = ctx.res.view.theme.acc;
+    return s;
+}
+
+// —— Buttons ————————————————————————————————————————————————————————————————————————————
+// The whole outer box owns interaction (KIT-03); these paint it from the published state.
+// A disabled control never brightens; otherwise held/hover/focus-visible lifts the ink to
+// `acc`. They set only *look* (ink/fill/border); placement/padding stay imperative or come
+// from a sibling `pad_*` fragment, so a variant is composable with any size.
+
+/// Interaction ink for the button family: `dim` when disabled, `acc` when held/hovered/
+/// focus-visible, else the resting color `rest`. The one place button state → color lives.
+fn btn_ink(q: UiCtx.Interaction, t: theme.Theme, rest: Color) Color {
+    if (q.disabled) return t.dim;
+    if (q.held or q.hovering or q.focus_visible) return t.acc;
+    return rest;
+}
+
+/// Primary button — a bordered box; text and border share the interaction ink (resting `fg`).
+pub fn btn_primary(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    const c = btn_ink(node.query(ctx), t, t.fg);
+    return .{ .text = c, .outline_color = c, .outline_width = 1 };
+}
+
+/// Secondary button — quieter: resting ink is `dim`, no border, brightening to `acc` on
+/// hover/hold/focus like the others.
+pub fn btn_secondary(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .text = btn_ink(node.query(ctx), t, t.dim) };
+}
+
+/// Text button — borderless, resting `fg` ink; the affordance is the hover/focus lift alone.
+pub fn btn_text(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .text = btn_ink(node.query(ctx), t, t.fg) };
+}
+
+/// Icon button — tints a (white-rasterized) icon aspect by the same interaction ink, resting
+/// `fg`. Uses `tint` (texture ink), not `text` (glyph ink), so it targets the svg cell.
+pub fn btn_icon(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .tint = btn_ink(node.query(ctx), t, t.fg) };
+}
+
+/// Link button — resting `acc` ink (a link reads as interactive at rest); dims when disabled,
+/// no lift needed since it is already the accent.
+pub fn btn_link(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .text = if (node.query(ctx).disabled) t.dim else t.acc };
+}
+
+// —— Tabs / chips / tags ————————————————————————————————————————————————————————————————
+
+/// A tab in a tablist — the *selected* tab paints `acc` ink + `acc` underline-weight border;
+/// an unselected one is `dim`, lifting to `fg` on hover. Selection comes from the published
+/// `.selected` bit (the tablist owner sets it).
+pub fn tab(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    const q = node.query(ctx);
+    if (q.selected) return .{ .text = t.acc, .outline_color = t.acc, .outline_width = 1 };
+    return .{ .text = if (q.hovering or q.focus_visible) t.fg else t.dim };
+}
+
+/// A chip — a small filled `panel` pill with `line` edge and `fg` ink; `selected` accents its
+/// border + ink. A compact toggle/filter affordance.
+pub fn chip(ctx: *UiCtx, node: *Node) Style {
+    const t = ctx.res.view.theme;
+    const q = node.query(ctx);
+    const edge = if (q.selected or q.hovering or q.focus_visible) t.acc else t.line;
+    const ink = if (q.selected) t.acc else t.fg;
+    return .{ .fill = t.panel, .outline_color = edge, .outline_width = 1, .text = ink };
+}
+
+/// A tag — a static (non-interactive) `line`-bordered label in `dim` ink: metadata, not a
+/// control. A fn fragment (not a plain value) so its colors come from the live theme.
+pub fn tag(ctx: *UiCtx, _: *Node) Style {
+    const t = ctx.res.view.theme;
+    return .{ .outline_color = t.line, .outline_width = 1, .text = t.dim };
+}
+
+// —— Semantic state text ————————————————————————————————————————————————————————————————
+// A readout whose *color* carries meaning: a good value, a caution, a failure, or muted.
+// These are the KIT-01 semantic roles projected to text ink, so a "+3 food" reads good and a
+// "−2" reads danger without each call site naming a color.
+
+pub fn state_good(ctx: *UiCtx, _: *Node) Style {
+    return .{ .text = ctx.res.view.theme.good };
+}
+pub fn state_warn(ctx: *UiCtx, _: *Node) Style {
+    return .{ .text = ctx.res.view.theme.warn };
+}
+pub fn state_danger(ctx: *UiCtx, _: *Node) Style {
+    return .{ .text = ctx.res.view.theme.danger };
+}
+pub fn state_muted(ctx: *UiCtx, _: *Node) Style {
+    return .{ .text = ctx.res.view.theme.dim };
+}
+
+// —— Interaction chrome fragments ————————————————————————————————————————————————————————
+
+/// Row hover — a hovered/focus-visible list row lifts its fill to `panel` (a subtle wash);
+/// at rest it paints nothing (transparent), so an idle row shows the surface beneath. Reads
+/// the node's own interaction, so it works on any keyed row.
+pub fn row_hover(ctx: *UiCtx, node: *Node) Style {
+    const q = node.query(ctx);
+    if (q.hovering or q.focus_visible) return .{ .fill = ctx.res.view.theme.panel };
+    return .{};
+}
+
+/// Focus-visible outline — draws an `acc` ring **only** when the node's `.focus_visible` bit is
+/// set (keyboard/AT focus), never on mere hover, so pointer users don't get a persistent ring.
+/// The shared focus cue every control composes last.
+pub fn focus_ring(ctx: *UiCtx, node: *Node) Style {
+    if (node.query(ctx).focus_visible) return .{ .outline_color = ctx.res.view.theme.acc, .outline_width = 1 };
+    return .{};
+}
+
+/// Disabled chrome — forces `dim` ink whenever the node's `.disabled` bit is set, overriding a
+/// resting color. Compose *after* a variant so a disabled control can never read as active.
+pub fn disabled_chrome(ctx: *UiCtx, node: *Node) Style {
+    if (node.query(ctx).disabled) return .{ .text = ctx.res.view.theme.dim, .tint = ctx.res.view.theme.dim };
+    return .{};
+}
+
+/// Selected chrome — an `acc` border + ink when the node's `.selected` bit is set (a chosen
+/// list item, an active offer). Idle returns nothing.
+pub fn selected_chrome(ctx: *UiCtx, node: *Node) Style {
+    if (node.query(ctx).selected) return .{ .outline_color = ctx.res.view.theme.acc, .outline_width = 1, .text = ctx.res.view.theme.acc };
+    return .{};
+}
+
+/// Dashed provisional chrome — a `dim` dashed border marking a not-yet-committed / placeholder
+/// box (a build slot in reach, a provisional offer). Static: it is a look, not a state.
+pub fn provisional(ctx: *UiCtx, _: *Node) Style {
+    return .{ .outline_color = ctx.res.view.theme.dim, .outline_width = 1, .outline_style = .dashed };
+}
+
+// —— Small chrome: meter / progress / legend dot ————————————————————————————————————————
+// These style the *track* and *fill* boxes a component lays out; the geometry (how wide the
+// fill is) stays imperative on the node. A fragment only supplies the color contract.
+
+/// A meter/track background — the inactive `line` bar behind a value fill. Pair with `meter_fill`.
+pub fn meter_track(ctx: *UiCtx, _: *Node) Style {
+    return .{ .fill = ctx.res.view.theme.line };
+}
+/// A meter fill — the filled portion, `acc`. The node's width encodes the value.
+pub fn meter_fill(ctx: *UiCtx, _: *Node) Style {
+    return .{ .fill = ctx.res.view.theme.acc };
+}
+/// A thin progress-bar fill — same `acc` fill; the "thin" is the node's height, set imperatively.
+pub const progress_fill = meter_fill;
+
+/// A resource legend dot — a filled swatch for one of the six resource hues (KIT-01,
+/// `view.resources`). `which` picks the hue by field name so a legend cites the resource,
+/// not a color: `.{ style.legend_dot(.food) }`.
+pub const Resource = enum { food, water, fuel, metal, minerals, biomass };
+pub fn legend_dot(comptime which: Resource) fn (*UiCtx, *Node) Style {
+    return struct {
+        fn frag(ctx: *UiCtx, _: *Node) Style {
+            return .{ .fill = @field(ctx.res.view.resources, @tagName(which)) };
+        }
+    }.frag;
+}
 
 /// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold.
 fn merge(out: *Style, frag: Style) void {
@@ -413,4 +607,150 @@ test "apply: tint does not disturb text ink; text ink does not disturb svg tint"
     apply(undefined, icon, .{Style{ .tint = tint_c }});
     try std.testing.expectEqual(tint_c, icon.render_data.svg.?);
     try std.testing.expectEqual(@as(?Color, null), icon.render_data.text);
+}
+
+// ---- KIT-02 primitive style/state fragments --------------------------------------------
+
+// A test harness: an arena, a real ctx, and a theme+resources installed on the view, so the
+// stateful fragments resolve against known role colors and published interaction bits.
+const KitFixture = struct {
+    arena: std.heap.ArenaAllocator,
+    resources: @import("../res.zig").Resources,
+    ctx: UiCtx,
+
+    fn init() !*KitFixture {
+        const f = try std.testing.allocator.create(KitFixture);
+        f.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        f.resources = undefined;
+        f.resources.view = .{
+            .theme = .{
+                .fg = .{ .r = 1, .g = 1, .b = 1, .a = 255 },
+                .dim = .{ .r = 2, .g = 2, .b = 2, .a = 255 },
+                .acc = .{ .r = 3, .g = 3, .b = 3, .a = 255 },
+                .line = .{ .r = 4, .g = 4, .b = 4, .a = 255 },
+                .panel = .{ .r = 5, .g = 5, .b = 5, .a = 255 },
+                .good = .{ .r = 6, .g = 6, .b = 6, .a = 255 },
+                .warn = .{ .r = 7, .g = 7, .b = 7, .a = 255 },
+                .danger = .{ .r = 8, .g = 8, .b = 8, .a = 255 },
+            },
+            .resources = .{ .food = .{ .r = 90, .g = 91, .b = 92, .a = 255 } },
+        };
+        f.ctx = UiCtx.init(&f.resources, std.testing.allocator, f.arena.allocator());
+        return f;
+    }
+    fn deinit(f: *KitFixture) void {
+        f.ctx.deinit();
+        f.arena.deinit();
+        std.testing.allocator.destroy(f);
+    }
+    fn node(f: *KitFixture, key: []const u8) !*Node {
+        return Node.create(f.arena.allocator(), key);
+    }
+};
+
+test "KIT-02 btn_primary: dim disabled, acc on hover/held/focus, else fg" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+
+    // Resting: fg ink + fg border.
+    const rest = try f.node("b_rest");
+    const s0 = resolve(&f.ctx, rest, .{btn_primary});
+    try std.testing.expectEqual(th.fg, s0.text.?);
+    try std.testing.expectEqual(th.fg, s0.outline_color.?);
+
+    // Hovered → acc.
+    const hov = try f.node("b_hov");
+    f.ctx.setFlag(hov.key, .hovering, true);
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, hov, .{btn_primary}).text.?);
+
+    // Disabled → dim, and disabled wins even if also hovered.
+    const dis = try f.node("b_dis");
+    f.ctx.setFlag(dis.key, .disabled, true);
+    f.ctx.setFlag(dis.key, .hovering, true);
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, dis, .{btn_primary}).text.?);
+}
+
+test "KIT-02 tab: selected accents ink+border; unselected is dim, fg on hover" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+
+    const unsel = try f.node("t_un");
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, unsel, .{tab}).text.?);
+
+    const sel = try f.node("t_sel");
+    f.ctx.setFlag(sel.key, .selected, true);
+    const ss = resolve(&f.ctx, sel, .{tab});
+    try std.testing.expectEqual(th.acc, ss.text.?);
+    try std.testing.expectEqual(th.acc, ss.outline_color.?);
+}
+
+test "KIT-02 semantic state text maps to the right roles" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("s");
+    try std.testing.expectEqual(th.good, resolve(&f.ctx, n, .{state_good}).text.?);
+    try std.testing.expectEqual(th.warn, resolve(&f.ctx, n, .{state_warn}).text.?);
+    try std.testing.expectEqual(th.danger, resolve(&f.ctx, n, .{state_danger}).text.?);
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, n, .{state_muted}).text.?);
+}
+
+test "KIT-02 focus_ring draws only on focus_visible, never on hover alone" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+
+    // Hover alone: no ring.
+    const hov = try f.node("f_hov");
+    f.ctx.setFlag(hov.key, .hovering, true);
+    try std.testing.expectEqual(@as(?Color, null), resolve(&f.ctx, hov, .{focus_ring}).outline_color);
+
+    // focus-visible: acc ring.
+    const fv = try f.node("f_fv");
+    f.ctx.setFlag(fv.key, .focus_visible, true);
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, fv, .{focus_ring}).outline_color.?);
+}
+
+test "KIT-02 row_hover lifts fill on hover, transparent at rest" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+
+    const rest = try f.node("r_rest");
+    try std.testing.expectEqual(@as(?Color, null), resolve(&f.ctx, rest, .{row_hover}).fill);
+
+    const hov = try f.node("r_hov");
+    f.ctx.setFlag(hov.key, .hovering, true);
+    try std.testing.expectEqual(th.panel, resolve(&f.ctx, hov, .{row_hover}).fill.?);
+}
+
+test "KIT-02 provisional is a dim dashed border" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("p");
+    const s = resolve(&f.ctx, n, .{provisional});
+    try std.testing.expectEqual(th.dim, s.outline_color.?);
+    try std.testing.expectEqual(cb.LineStyle.dashed, s.outline_style.?);
+}
+
+test "KIT-02 legend_dot fills with the named resource hue" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const n = try f.node("d");
+    const s = resolve(&f.ctx, n, .{legend_dot(.food)});
+    try std.testing.expectEqual(f.resources.view.resources.food, s.fill.?);
+}
+
+test "KIT-02 later fragment overrides a variant field (precedence)" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const red: Color = .{ .r = 200, .g = 0, .b = 0, .a = 255 };
+    // Take btn_primary but override just the ink; the border stays the variant's.
+    const n = try f.node("o");
+    const s = resolve(&f.ctx, n, .{ btn_primary, Style{ .text = red } });
+    try std.testing.expectEqual(red, s.text.?);
+    try std.testing.expectEqual(f.resources.view.theme.fg, s.outline_color.?);
 }
