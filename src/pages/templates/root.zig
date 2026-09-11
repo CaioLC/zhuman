@@ -26,6 +26,7 @@ const good_text_mod = @import("./good_text.zig");
 const terminal_mod = @import("./terminal.zig");
 const rail_mod = @import("./rail.zig");
 const view_nav_mod = @import("./view_nav.zig");
+const select_mod = @import("./select.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -58,6 +59,8 @@ pub const RailOptions = rail_mod.RailOptions;
 pub const view_nav = view_nav_mod.view_nav;
 pub const ViewNav = view_nav_mod.ViewNav;
 pub const retain_view = view_nav_mod.retain;
+pub const select = select_mod.select;
+pub const Select = select_mod.Select;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

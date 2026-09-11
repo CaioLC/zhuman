@@ -229,6 +229,51 @@ pub const UiState = struct {
     /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
     /// template overwriting this each frame, which leaves the other keys' values untouched.
     pub const RailState = struct { collapsed: bool = false };
+    /// A select/popup control's state (KIT-09), keyed by the control's own `node.key`: whether
+    /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
+    /// move while open (the pending choice Enter commits). All default to the closed, first-item
+    /// state (bitwise zero). Carries the **pure state machine** (open/toggle/cancel/move/commit)
+    /// so the pointer path and a host's keyboard routing drive one source of truth; the `select`
+    /// template is the view. Tested here (this file is covered by `test-ui`, unlike a page).
+    pub const SelectState = struct {
+        open: bool = false,
+        value: usize = 0,
+        highlight: usize = 0,
+
+        /// Open the popup, seeding the highlight at the committed value (disabled → no-op).
+        pub fn openPopup(s: *SelectState, disabled: bool) void {
+            if (disabled) return;
+            s.open = true;
+            s.highlight = s.value;
+        }
+        /// Close without committing (Escape / outside click).
+        pub fn cancel(s: *SelectState) void {
+            s.open = false;
+        }
+        /// Toggle open/closed (the control's own click). Opening seeds the highlight.
+        pub fn toggle(s: *SelectState, disabled: bool) void {
+            if (disabled) return;
+            if (s.open) s.open = false else s.openPopup(disabled);
+        }
+        /// Move the highlight while open (arrows). Clamps at the ends (no wrap — a list, not a
+        /// ring). A no-op when closed.
+        pub fn moveHighlight(s: *SelectState, delta: isize, n: usize) void {
+            if (!s.open or n == 0) return;
+            const cur: isize = @intCast(s.highlight);
+            const last: isize = @intCast(n - 1);
+            s.highlight = @intCast(std.math.clamp(cur + delta, 0, last));
+        }
+        /// Commit `index` as the value and close (Enter on the highlight, or a click on option).
+        pub fn commit(s: *SelectState, index: usize, n: usize) void {
+            if (n == 0) return;
+            s.value = @min(index, n - 1);
+            s.open = false;
+        }
+        /// Commit the current highlight (Enter).
+        pub fn commitHighlight(s: *SelectState, n: usize) void {
+            s.commit(s.highlight, n);
+        }
+    };
     /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
     /// the tab strip's container, not the list itself, which only exists while its tab is
     /// active and would have its slot pruned on every visit to the other one.
@@ -757,4 +802,55 @@ test "INPUT-07 regression: text input keeps its 128-byte whole-edit refusal" {
     try std.testing.expectEqual(LineEditor.Result.refused, ed.insert(&over));
     try std.testing.expect(ed.refused); // visible, non-silent refusal latch
     try std.testing.expectEqualStrings("iron ore", ed.text()); // unchanged, not truncated
+}
+
+// ---- KIT-09 select/popup state machine ----------------------------------------------------
+
+test "SelectState: toggle open seeds highlight at value; toggles closed; disabled is inert" {
+    var s = UiState.SelectState{ .value = 2 };
+    s.toggle(false);
+    try std.testing.expect(s.open);
+    try std.testing.expectEqual(@as(usize, 2), s.highlight); // seeded at the committed value
+    s.toggle(false);
+    try std.testing.expect(!s.open);
+
+    var d = UiState.SelectState{};
+    d.openPopup(true);
+    try std.testing.expect(!d.open); // disabled never opens
+    d.toggle(true);
+    try std.testing.expect(!d.open);
+}
+
+test "SelectState: arrows move highlight clamped (no wrap) only while open" {
+    var s = UiState.SelectState{};
+    s.moveHighlight(1, 4); // closed ⇒ no-op
+    try std.testing.expectEqual(@as(usize, 0), s.highlight);
+    s.openPopup(false);
+    s.moveHighlight(1, 4);
+    try std.testing.expectEqual(@as(usize, 1), s.highlight);
+    s.moveHighlight(-5, 4);
+    try std.testing.expectEqual(@as(usize, 0), s.highlight); // clamps at 0
+    s.moveHighlight(9, 4);
+    try std.testing.expectEqual(@as(usize, 3), s.highlight); // clamps at last
+}
+
+test "SelectState: Enter commits highlight and closes; Escape closes without committing" {
+    var s = UiState.SelectState{ .value = 0 };
+    s.openPopup(false);
+    s.moveHighlight(2, 4);
+    s.commitHighlight(4);
+    try std.testing.expectEqual(@as(usize, 2), s.value);
+    try std.testing.expect(!s.open);
+
+    s.openPopup(false);
+    s.moveHighlight(1, 4); // pending, not committed
+    s.cancel();
+    try std.testing.expect(!s.open);
+    try std.testing.expectEqual(@as(usize, 2), s.value); // unchanged by cancel
+}
+
+test "SelectState: commit clamps an out-of-range index to the last option" {
+    var s = UiState.SelectState{};
+    s.commit(99, 3);
+    try std.testing.expectEqual(@as(usize, 2), s.value);
 }
