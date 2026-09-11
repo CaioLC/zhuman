@@ -528,6 +528,10 @@ pub fn main() !void {
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
             ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
             ecs.run(&app.world, &app.resources, sys.track_reach); // ACT1-06: newly in-reach recipes → one log
+            // ACT1-12: advance the Passerby encounter on the sim clock (arrival/departure logs,
+            // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
+            // run, so it ticks directly rather than over a per-entity query.
+            _ = ha.market.tick(&app.resources.sim.encounter, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
             ha.capital.run_generators(&app.world, &app.resources); // capital that runs itself
             ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities

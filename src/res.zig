@@ -2,6 +2,7 @@ const std = @import("std");
 const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const logmod = @import("./log.zig");
+const marketmod = @import("./market.zig");
 const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
 
@@ -147,6 +148,12 @@ pub const Sim = struct {
     /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
     /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
     reach_seen: [16]bool = [_]bool{false} ** 16,
+
+    /// **The Passerby encounter (ACT1-12)** — the run's one Act I counterparty as a clock-driven
+    /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite
+    /// per-visit satchel). Ticked each frame by `market.tick` off the sim clock (never a hardcoded
+    /// day); the UI reads it. Cleared by `reset` for a fresh run.
+    encounter: marketmod.Encounter = .{},
 
     /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would
     /// make every run replay the first one's luck.
