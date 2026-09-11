@@ -37,6 +37,7 @@ const catalog_viewport_mod = @import("./catalog_viewport.zig");
 const eating_policy_mod = @import("./eating_policy.zig");
 const milestone_goal_mod = @import("./milestone_goal.zig");
 const trade_dialog_mod = @import("./trade_dialog.zig");
+const board_primitives_mod = @import("./board_primitives.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -99,6 +100,15 @@ pub const MilestoneLifecycle = milestone_goal_mod.Lifecycle;
 pub const trade_dialog = trade_dialog_mod.trade_dialog;
 pub const TradeOffer = trade_dialog_mod.Offer;
 pub const TradeResult = trade_dialog_mod.Result;
+// KIT-23 board-level primitives
+pub const tag = board_primitives_mod.tag;
+pub const cost_list = board_primitives_mod.cost_list;
+pub const Cost = board_primitives_mod.Cost;
+pub const legend = board_primitives_mod.legend;
+pub const LegendItem = board_primitives_mod.LegendItem;
+pub const zoom_controls = board_primitives_mod.zoom_controls;
+pub const Zoom = board_primitives_mod.Zoom;
+pub const empty_state = board_primitives_mod.empty_state;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
