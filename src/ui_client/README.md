@@ -121,6 +121,21 @@ the one shared `.clicked` flag, so changing the event-stage policy migrates them
 `.pressed` remains separately available for controls that need press-time behavior; text
 input uses it to distinguish an inside press from an outside focus-clear.
 
+**Consistent button semantics (KIT-03).** Every stock button (`widgets.button`,
+`icon_button`) follows one contract: the **whole outer box owns the interaction** and the
+label/icon is content; a **disabled** button cannot activate — it is not registered for focus
+(so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it while
+disabled is **consumed** at the widget, so it neither reports to its caller nor bubbles to an
+ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`); and **keyboard
+activation matches pointer activation** because Enter/Space map to `command.activate`, which
+`markKey`s the focused control's `.clicked` — the very same flag a pointer release produces.
+A **nested** cancel/close inside a row activates by consuming `.clicked` (`El.consume`), which
+clears the flag on itself *and* its ancestors so the row doesn't also act — while leaving
+`hovering` untouched, so the ancestor stays hovered. Colors are single-sourced: the button
+resolves the KIT-02 `style.btn_primary` / `btn_icon` fragment and paints its border and ink
+from that one result, so the resting/hover/held/focus/disabled mapping can never drift between
+variants.
+
 ## Ordered pointer routing and overlays
 
 Every pointer event reaches the interaction store through the engine's reverse paint-order

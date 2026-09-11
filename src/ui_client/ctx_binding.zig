@@ -557,6 +557,32 @@ test "control activation marks press immediately and click once on valid release
     try std.testing.expectEqual(@as(?u64, null), gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 }));
 }
 
+test "KIT-03: a disabled control consumes its click so it neither reports nor bubbles" {
+    var u = UiCtx.init(undefined, std.testing.allocator, undefined);
+    defer u.deinit();
+    u.beginFrame();
+
+    // A row containing a disabled button. Both are stamped; the click lands on the button.
+    const row = ui.key(0, "kit03-row");
+    const btn = ui.key(row, "kit03-btn");
+    _ = u.interactionOf(row);
+    _ = u.stampRect(row, .{ .x = 0, .y = 0, .w = 100, .h = 40 }, null, null);
+    _ = u.interactionOf(btn);
+    _ = u.stampRect(btn, .{ .x = 60, .y = 0, .w = 40, .h = 40 }, null, row);
+
+    // A pointer click routes to the button and bubbles to the row (engine mechanism).
+    _ = u.markKey(btn, .clicked);
+    try std.testing.expect(u.interactionOf(btn).clicked);
+    try std.testing.expect(u.interactionOf(row).clicked); // bubbled
+
+    // KIT-03: the disabled button consumes its own click (what `widgets.button` does when
+    // `!enabled`). Consuming clears the flag on the node AND its ancestors, so neither the
+    // button (its caller) nor the row (an ancestor control) can act on it.
+    try std.testing.expect(u.consumeFlag(btn, .clicked));
+    try std.testing.expect(!u.interactionOf(btn).clicked);
+    try std.testing.expect(!u.interactionOf(row).clicked); // ancestor no longer sees it
+}
+
 test "held dragging and captured states follow pointer owners and reset" {
     var u = UiCtx.init(undefined, std.testing.allocator, undefined);
     defer u.deinit();

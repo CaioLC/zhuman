@@ -12,6 +12,7 @@ const ui = @import("../ui/root.zig");
 const sdl = @import("sdl3");
 const cb = @import("./ctx_binding.zig");
 const drag = @import("./drag.zig");
+const style = @import("./style.zig");
 const feat = @import("./features/root.zig");
 const semantics = @import("./semantics.zig");
 
@@ -92,9 +93,14 @@ pub fn progress_bar(ctx: *UiCtx, parent: *Node, key: []const u8, frac: f32, fill
 /// box wrap `text + padding` exactly.
 ///
 /// `enabled` remains caller authority and is published as `.disabled` every build. A
-/// disabled button is dimmed; an enabled one accents while hovered or held. Callers still
-/// enforce their domain gate when acting on `.clicked`; the interaction flag is a
-/// projection, not a second source of truth.
+/// disabled button is dimmed and **cannot activate**: it is not focusable (so keyboard
+/// Enter/Space can never reach it), and a pointer `.clicked` that lands on it while disabled
+/// is *consumed* here, so it neither reports `.clicked` to the caller nor bubbles to an
+/// ancestor. An enabled button lifts to `acc` while pressed (`.held`), hovered, or
+/// focus-visible — the pressed state is visible, and Enter/Space produces the same `.clicked`
+/// as a pointer release (`command.activate`), so keyboard and pointer activation match. The
+/// whole outer box owns the interaction; the label is content. Colors come from the shared
+/// KIT-02 `style.btn_primary` fragment, so every button reads the same state→role mapping.
 pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, enabled: bool) !*Node {
     const outer = try Node.pcreate(ctx.arena, key, parent);
     _ = outer.with_layout(.relative, .{ .dir = .row })
@@ -109,6 +115,10 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     // including false so a key cannot retain stale semantics across state changes.
     ctx.registerFocus(outer.key, enabled);
     const q = outer.query(ctx);
+    // KIT-03: a disabled button cannot activate. It is not focusable (keyboard can't reach
+    // it), and any pointer `.clicked` that reached it is consumed here — so it is not
+    // reported to the caller and does not bubble to an ancestor control.
+    if (q.clicked and !enabled) _ = ctx.consumeFlag(outer.key, .clicked);
     if (q.clicked and enabled) _ = ctx.requestFocus(outer.key);
     const focused = ctx.isFocused(outer.key);
     cb.publishControlState(ctx, outer.key, .{
@@ -120,10 +130,12 @@ pub fn button(ctx: *UiCtx, parent: *Node, key: []const u8, text: []const u8, ena
     // paint order. Label is the button's own text; state matches what was just published.
     ctx.res.semantics.publish(semantics.describeButton(outer.key, text, enabled, focused));
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    const t = ctx.res.view.theme;
-    const c = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg;
-    outer.render_data.outline = .{ .color = c };
-    lbl.render_data.text = c;
+    // KIT-03: state→color comes from the shared KIT-02 fragment (one source of truth). The
+    // fragment reads the just-published interaction bits; resolve it once and paint the box
+    // border and the label ink from the same result so they can never drift.
+    const s = style.resolve(ctx, outer, .{style.btn_primary});
+    if (s.outline_color) |c| outer.render_data.outline = .{ .color = c };
+    if (s.text) |c| lbl.render_data.text = c;
 
     return outer;
 }
@@ -141,6 +153,9 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     _ = node.with_layout(.relative, null);
     ctx.registerFocus(node.key, enabled);
     const q = node.query(ctx);
+    // KIT-03: a disabled icon button cannot activate — consume a stray disabled click so it
+    // neither reports nor bubbles, matching the text button.
+    if (q.clicked and !enabled) _ = ctx.consumeFlag(node.key, .clicked);
     if (q.clicked and enabled) _ = ctx.requestFocus(node.key);
     const focused = ctx.isFocused(node.key);
     cb.publishControlState(ctx, node.key, .{
@@ -156,8 +171,10 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
     // than invented. State still matches the interaction pool.
     ctx.res.semantics.publish(semantics.describeIconButton(node.key, "", enabled, focused));
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    const t = ctx.res.view.theme;
-    node.render_data.outline = .{ .color = if (!enabled) t.dim else if (q.held or q.hovering or focused) t.acc else t.fg };
+    // KIT-03: the affordance ring's color comes from the shared KIT-02 icon fragment, which
+    // tints by the same state→role mapping every button uses (resolved on this node).
+    const s = style.resolve(ctx, node, .{style.btn_icon});
+    if (s.tint) |c| node.render_data.outline = .{ .color = c };
     return node;
 }
 
