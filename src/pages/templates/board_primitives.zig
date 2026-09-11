@@ -62,22 +62,24 @@ pub fn legend(ctx: *UiCtx, parent: El, id: []const u8, items: []const LegendItem
         const cell = try el.div(ctx, row, key);
         _ = cell.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
         const dot = try el.div(ctx, cell, "d");
-        _ = dot.with_size(.{ .fixed = 8 }, .{ .fixed = 8 }).with_style(.{legendFrag(item.resource)});
+        _ = dot.with_size(.{ .fixed = 8 }, .{ .fixed = 8 }).with_style(.{Style{ .fill = legendFill(ctx, item.resource) }});
         _ = (try el.text(ctx, cell, "t", item.label)).with_style(.{ style.small, Style{ .text = th.dim } });
     }
     return row;
 }
 
-/// Resolve a runtime `Resource` to its `legend_dot` fill fragment. `style.legend_dot` is
-/// comptime-keyed (a distinct fragment per hue), so switch the runtime value to the right one.
-fn legendFrag(r: style.Resource) fn (*UiCtx, *uic.Node) Style {
+/// Resolve a runtime `Resource` to its live hue from the frame's resource palette. Replaces the
+/// old approach of switching to a comptime `legend_dot` fragment — a runtime-selected fragment
+/// function cannot be a comptime value, so read the color directly here instead.
+fn legendFill(ctx: *UiCtx, r: style.Resource) uic.Color {
+    const res = ctx.res.view.resources;
     return switch (r) {
-        .food => style.legend_dot(.food),
-        .water => style.legend_dot(.water),
-        .fuel => style.legend_dot(.fuel),
-        .metal => style.legend_dot(.metal),
-        .minerals => style.legend_dot(.minerals),
-        .biomass => style.legend_dot(.biomass),
+        .food => res.food,
+        .water => res.water,
+        .fuel => res.fuel,
+        .metal => res.metal,
+        .minerals => res.minerals,
+        .biomass => res.biomass,
     };
 }
 

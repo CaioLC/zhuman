@@ -367,7 +367,7 @@ pub const UiState = struct {
     pub const SliderState = struct {
         dragging: bool = false,
         pointer_kind: @import("input.zig").PointerKind = .unknown,
-        pointer_id: u64 = 0,
+        pointer_id: ?u64 = null,
     };
     /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
     /// the tab strip's container, not the list itself, which only exists while its tab is

@@ -17,6 +17,7 @@ const Entity = ha.world.Entity;
 const p_playgame = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
+const p_debug = @import("./debug_page.zig").debug_page;
 const mock_page = @import("./mock.zig").mock_page;
 
 /// Returns a flattened list of *Nodes for the render stage
@@ -42,6 +43,16 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     var trees: std.ArrayList(*uic.Node) = .empty;
     // const mock = try mock_page(ui_ctx, world);
 
+    // Review phase: the **template audit harness is the default screen** — the game systems and
+    // composition are not what we are looking at right now. Set `HA_DEBUG_PAGE=0` (or `false`) to
+    // route to the game instead. The game routing is preserved below, just short-circuited here.
+    if (!gameRequested(ui_ctx.arena)) {
+        const dbg = try p_debug(ui_ctx, world);
+        try uic.collect(&trees, ui_ctx.arena, dbg.root);
+        if (dbg.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
+        return trees.items;
+    }
+
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
     // curtain, since owning a `Shelter` is the win condition; otherwise the HUD.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
@@ -59,4 +70,14 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     }
 
     return trees.items;
+}
+
+/// Whether to route to the **game** instead of the default template-audit harness. During the
+/// review phase the debug page is the default; setting `HA_DEBUG_PAGE=0` (or `false`) opts back
+/// into the game. Read into the frame arena and not retained.
+fn gameRequested(arena: std.mem.Allocator) bool {
+    const raw = std.process.getEnvVarOwned(arena, "HA_DEBUG_PAGE") catch return false;
+    if (std.mem.eql(u8, raw, "0")) return true;
+    if (std.ascii.eqlIgnoreCase(raw, "false")) return true;
+    return false;
 }
