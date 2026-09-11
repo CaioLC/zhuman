@@ -235,6 +235,19 @@ pub const UiState = struct {
     /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
     /// details nodes and nothing in them is focusable.
     pub const DisclosureState = struct { expanded: bool = false };
+    /// A catalog controls bar's persisted state (KIT-15), keyed by the surface's own node so
+    /// ACTIONS and BUILD keep **independent** query/sort/open state. `sort` is the chosen
+    /// sort-kind index, `dir` the direction (`none` disables/resets ordering), `sort_open`
+    /// whether the disclosed sort row is showing, and `last_sig` the hash of the last
+    /// (query, sort, dir) used to detect a change and signal reset-to-top. The query *text*
+    /// itself lives in the search field's own pooled `TextInputState`.
+    pub const CatalogState = struct {
+        pub const Direction = enum { none, ascending, descending };
+        sort: usize = 0,
+        dir: Direction = .none,
+        sort_open: bool = false,
+        last_sig: u64 = 0,
+    };
     /// A select/popup control's state (KIT-09), keyed by the control's own `node.key`: whether
     /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
     /// move while open (the pending choice Enter commits). All default to the closed, first-item

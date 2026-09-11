@@ -32,6 +32,7 @@ const disclosure_mod = @import("./disclosure.zig");
 const stock_token_mod = @import("./stock_token.zig");
 const runline_mod = @import("./runline.zig");
 const market_strip_mod = @import("./market_strip.zig");
+const catalog_controls_mod = @import("./catalog_controls.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -80,6 +81,10 @@ pub const marketIdentity = market_strip_mod.marketIdentity;
 pub const activity_strip = market_strip_mod.activity_strip;
 pub const ActivityState = market_strip_mod.ActivityState;
 pub const activityIdentity = market_strip_mod.activityIdentity;
+pub const catalog_controls = catalog_controls_mod.catalog_controls;
+pub const count_summary = catalog_controls_mod.count_summary;
+pub const Catalog = catalog_controls_mod.Catalog;
+pub const catalog_less_than = catalog_controls_mod.lessThan;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
