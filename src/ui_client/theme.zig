@@ -1,5 +1,5 @@
 //! The foundation's color vocabulary: the `Color` type, the blend math, and `Theme` —
-//! nine named roles every widget paints from.
+//! ten named roles every widget paints from.
 //!
 //! **The roles are foundation; the values are art direction.** A UI layer needs a
 //! default ink or an unstyled text leaf would be invisible, so `Theme` carries a plain
@@ -32,8 +32,8 @@ pub fn rgb(r: u8, g: u8, b: u8) Color {
     return .{ .r = r, .g = g, .b = b, .a = 255 };
 }
 
-/// The nine roles a widget paints from. Defaults are a deliberately plain greyscale plus
-/// three conventional semantic hues — enough to render the whole foundation legibly with
+/// The ten roles a widget paints from. Defaults are a deliberately plain greyscale plus
+/// four conventional semantic hues — enough to render the whole foundation legibly with
 /// no game attached, and obviously *not* anyone's visual identity, so a screen that
 /// forgets to install a palette looks unfinished rather than subtly wrong.
 pub const Theme = struct {
@@ -55,6 +55,10 @@ pub const Theme = struct {
     warn: Color = rgb(210, 170, 80),
     /// Failure or loss.
     danger: Color = rgb(210, 85, 70),
+    /// Success / gain — a positive readout (a surplus, a met requirement, a good log tone).
+    /// The semantic counterpart to `danger`: added in KIT-01 so a positive value reads as a
+    /// success rather than borrowing the accent. Default is a plain conventional green.
+    good: Color = rgb(120, 170, 110),
 };
 
 /// Per-channel linear blend from `a` toward `b` by `t` (0..1, clamped), alpha included.
@@ -84,4 +88,5 @@ test "mix: t=0 is a, t=1 is b, midpoint averages, out-of-range clamps" {
 test "Theme is fully defaulted — the foundation renders with no palette installed" {
     const t: Theme = .{};
     try std.testing.expectEqual(rgb(220, 220, 220), t.fg);
+    try std.testing.expectEqual(rgb(120, 170, 110), t.good);
 }

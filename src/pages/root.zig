@@ -22,6 +22,8 @@ const mock_page = @import("./mock.zig").mock_page;
 /// Returns a flattened list of *Nodes for the render stage
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     ui_ctx.res.view.theme = ha.palette.theme;
+    ui_ctx.res.view.ground = ha.palette.ground;
+    ui_ctx.res.view.resources = ha.palette.resources;
     // Project the init-resolved reduced-motion policy onto this frame's view (INPUT-10).
     // Probed once at init; here we only copy the bit so optional transitions can gate on it.
     ui_ctx.res.view.reduced_motion = ui_ctx.res.motion.reduced_motion;

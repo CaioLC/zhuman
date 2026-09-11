@@ -148,6 +148,15 @@ pub const View = struct {
     /// This frame's palette — `build_ui` installs one over the foundation's neutral
     /// defaults.
     theme: thememod.Theme = .{},
+    /// This frame's terminal **ground** — the near-black the framed terminal floats on
+    /// (art direction, not a foundation `Theme` role; installed from `palette.ground` by
+    /// `build_ui`). Defaults to the terminal `bg` so a view built before the prologue runs
+    /// still has a sane, non-clashing value.
+    ground: thememod.Color = .{ .r = 14, .g = 12, .b = 9, .a = 255 },
+    /// This frame's six resource/sector colors (Food/Water/Fuel/Metal/Minerals/Biomass) —
+    /// game content, not `Theme` roles (KIT-01). Installed from `palette.resources` by
+    /// `build_ui`; the HUD/legend samples a hue by name.
+    resources: @import("./palette.zig").ResourceColors = .{},
     /// This frame's reduced-motion policy (INPUT-10), projected from `Resources.motion`
     /// in `build_ui`'s prologue. When `true`, *optional/decorative* transitions must snap
     /// to their end state (via `ui_client.MotionPolicy.snap`/`.phase`); functional progress

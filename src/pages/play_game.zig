@@ -30,10 +30,12 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     // reference, or the full window at ≤760, and returns the inner content box to lay out in.
     const shell = try t.terminal(ctx, "play");
     const root = shell.content;
-    // VIEW-04: responsive page padding — the prototype tightens to 10px at ≤560 logical px.
+    // VIEW-04: responsive page padding — the prototype tightens at ≤560 logical px. The two
+    // insets and the section gap are KIT-01 tokens (`tokens.pad_page*`, `tokens.gap.section`),
+    // not bare literals.
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
-    const page_pad: f32 = if (compact) 10 else 16;
-    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(16)
+    const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
+    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.section)
         .with_style(.{style.pad(page_pad)});
 
     // --- header: a thin strip — stocks left, run context right ----------------------------

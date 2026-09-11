@@ -24,12 +24,6 @@ const Style = style.Style;
 const El = el.El;
 const UiCtx = uic.UiCtx;
 
-/// The prototype's terminal **ground** — the near-black `#090806` the framed terminal floats
-/// on, darker than the terminal's own `bg` (`#0e0c09`). An art-direction literal that KIT-01
-/// will fold into the palette tokens; kept here (game tier) meanwhile, not in the generic
-/// `Theme`.
-pub const ground: uic.Color = .{ .r = 9, .g = 8, .b = 6, .a = 255 };
-
 /// A built terminal shell: the fullscreen `root` (hand this to the render walk) and the
 /// `content` box the screen fills.
 pub const Shell = struct {
@@ -42,6 +36,7 @@ pub const Shell = struct {
 pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
     const m = ctx.res.view.metrics;
     const th = ctx.res.view.theme;
+    const ground = ctx.res.view.ground;
     const scale = ctx.res.view.scale;
 
     const root = try el.root(ctx, id);

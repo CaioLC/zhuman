@@ -22,6 +22,20 @@ The foundation owns the **roles** a widget paints from; the game owns the **valu
 `text` and `svg` may default a node's ink to `res.view.theme.fg` without reaching upward —
 `Theme` is this layer's own type, with its own defaults.
 
+**Design tokens are encoded once (KIT-01).** Colors split by *where a role belongs*: the ten
+foundation roles are on `Theme` (`bg`/`panel`/`line`/`line2`/`dim`/`fg`/`acc`/`warn`/`danger`
+and the KIT-01 addition **`good`** — success/gain, the semantic counterpart to `danger`), and
+the game's finalized values live in `src/palette.zig`. Colors the engine has no concept of stay
+out of `Theme`: the terminal **ground** and the six **resource/sector** hues (Food/Water/Fuel/
+Metal/Minerals/Biomass) are game content in `palette.zig`, carried on `View` (`view.ground`,
+`view.resources`) and installed each frame by `build_ui`. The non-color scalars — page padding,
+the gap ladder, the hairline width, the control-height ladder, the rail widths, and re-exports
+of the typography sizes (`ui_client/type.zig`) and functional-transition durations
+(`ui_client/tween.zig`) — are named once in `src/tokens.zig`, so a call site cites
+`tokens.pad_page` / `tokens.gap.section` / `tokens.control.h_std` rather than a bare literal.
+All token scalars are *logical* px/seconds; the one logical→device multiply stays downstream
+(`type.toDevice` / `view.dp` / `paint.hairline`).
+
 ## The four layers of a node
 
 A node's appearance is composed from concerns that stay orthogonal:
