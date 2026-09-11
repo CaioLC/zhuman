@@ -142,6 +142,15 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             self.focus.register(key, enabled);
         }
 
+        /// Open a **focus trap** at the current build position (KIT-08 modal). Every focusable
+        /// registered after this call becomes the trapped set, and Tab/Shift+Tab
+        /// (`moveFocus`) next frame cycle only within it — so a modal, built last, traps focus
+        /// to its own controls and Tab can never reach a control the scrim covers. No-op-safe;
+        /// a frame with no `beginFocusScope` has ordinary whole-frame traversal.
+        pub fn beginFocusScope(self: *Self) void {
+            self.focus.openScope();
+        }
+
         /// Register a member whose group contributes one active global Tab stop.
         pub fn registerRovingFocus(self: *Self, group: u64, key: u64, enabled: bool) void {
             self.focus.registerRoving(group, key, enabled);

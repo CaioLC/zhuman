@@ -181,9 +181,12 @@ pub fn icon_button(ctx: *UiCtx, parent: *Node, key: []const u8, sprite: Sprite, 
 /// Tooltip: a floating, filled + bordered, padded box holding a single text line.
 /// Built as its **own root** (no parent) so the host can place it as an overlay layer —
 /// position it with `node.layout.with_origin(x, y)` and render it after the main tree so
-/// it sits on top. Its opaque root is queried, so the same later order blocks pointer
-/// events from controls covered by the popup; call `setPassThrough` explicitly for a
-/// deliberately non-blocking overlay. Returns the box.
+/// it sits on top.
+///
+/// **KIT-08: a tooltip never intercepts input.** It is marked pass-through
+/// (`setPassThrough`), so despite being stamped last it takes no pointer hit and does not
+/// occlude the control it describes — hover/click pass straight through to what is under it.
+/// Position it with `clampToTerminal` so it never spills past the terminal edge.
 pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     const box = try Node.create(ctx.arena, key);
     box.render_data.fill = ctx.res.view.theme.panel;
@@ -191,7 +194,8 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     _ = box.with_layout(.top_left, .{ .dir = .column })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
     box.size.padding = ui.features.Padding.init(6); // padding is a style property now, not a Size.init arg
-    _ = box.query(ctx); // opaque popup: later paint order also blocks covered controls
+    _ = box.query(ctx); // keep the slot alive for its geometry read-back
+    ctx.setPassThrough(box.key, true); // KIT-08: informational overlay, never a hit target
 
     const lbl = try Node.pcreate(ctx.arena, "lbl", box);
     try data_text(ctx, lbl, text);
@@ -199,6 +203,23 @@ pub fn tooltip(ctx: *UiCtx, key: []const u8, text: []const u8) !*Node {
     _ = lbl.with_layout(.relative, null);
 
     return box;
+}
+
+/// Clamp a tooltip's desired top-left (`x`,`y`) so a `w`×`h` box stays inside the terminal
+/// rect (KIT-08 "clamped to the terminal"). Device px, like the layout. Returns the adjusted
+/// origin; if the box is larger than the terminal on an axis it pins to the near edge.
+pub fn clampToTerminal(ctx: *UiCtx, x: f32, y: f32, w: f32, h: f32) struct { x: f32, y: f32 } {
+    const m = ctx.res.view.metrics;
+    const scale = ctx.res.view.scale;
+    // The terminal rect is logical; scale to device px to match the overlay's layout space.
+    const view = @import("./view.zig");
+    const tx = view.dp(m.terminal.x, scale);
+    const ty = view.dp(m.terminal.y, scale);
+    const tw = view.dp(m.terminal.w, scale);
+    const th = view.dp(m.terminal.h, scale);
+    const cx = std.math.clamp(x, tx, @max(tx, tx + tw - w));
+    const cy = std.math.clamp(y, ty, @max(ty, ty + th - h));
+    return .{ .x = cx, .y = cy };
 }
 
 /// Panel: a titled, bordered, padded section that groups related content. Builds an
@@ -333,6 +354,14 @@ pub const Modal = struct {
 /// `modal.root.query(ctx).clicked` is then an outside activation. The same typed bubbling
 /// and consumption rules used by nested controls apply. The box is queried here both as
 /// a blocking target and to preserve its prior-frame geometry.
+///
+/// **Focus (KIT-08).** The shell opens a **focus trap** (`ctx.beginFocusScope`) before the
+/// caller's dialog focusables are built, so Tab/Shift+Tab cycle only within the dialog while
+/// it is open — nothing the scrim covers is Tab-reachable. **Initial focus** and
+/// **restore-to-opener** stay caller policy because only the caller knows the open/close
+/// transition in this immediate-mode model: on the frame it opens the modal, request focus on
+/// the dialog's primary control (`ctx.requestFocus(key)`); before opening, record
+/// `ctx.focusedKey()` (the opener) and `ctx.requestFocus(opener)` on the frame it closes.
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     // VIEW-02: the fullscreen scrim covers the whole drawable, in device px (the layout space).
     const m = ctx.res.view.metrics;
@@ -351,6 +380,12 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     box.render_data.fill = ctx.res.view.theme.panel;
     box.render_data.outline = .{ .color = ctx.res.view.theme.line2 };
     _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
+
+    // KIT-08: **focus trap.** Open a focus scope now, before the dialog's own focusables are
+    // built — everything registered from here on (the caller's buttons/fields) becomes the
+    // trapped set, so Tab/Shift+Tab cycle only within the dialog and can never reach a control
+    // the scrim covers. The modal is always listed last, so its content is exactly this suffix.
+    ctx.beginFocusScope();
 
     _ = try label(ctx, box, "title", title);
 

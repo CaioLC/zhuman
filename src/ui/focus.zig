@@ -11,6 +11,15 @@ pub const Focus = struct {
     building: std.ArrayList(Target) = .empty,
     groups: std.ArrayList(Group) = .empty,
     focused: ?u64 = null,
+    /// **Focus trap (KIT-08).** While a modal is open it calls `openScope()` just before it
+    /// builds its own focusable content; that records the index in `building` from which the
+    /// trapped targets begin (the modal is always built last, so everything from here on is
+    /// "inside" the modal). Carried into `current` at `endFrame`, it restricts global Tab
+    /// traversal (`move`) to that suffix, so Tab/Shift+Tab cycle only within the dialog and
+    /// can never land on a control the scrim covers. `null` = no trap (ordinary whole-frame
+    /// traversal). Reset every `beginFrame`; a frame that does not `openScope` has no trap.
+    scope_start: ?usize = null,
+    building_scope_start: ?usize = null,
 
     pub fn init(alloc: std.mem.Allocator) Focus {
         return .{ .alloc = alloc };
@@ -26,7 +35,15 @@ pub const Focus = struct {
     /// `current`; registrations now append to `building` in traversal order.
     pub fn beginFrame(self: *Focus) void {
         self.building.clearRetainingCapacity();
+        self.building_scope_start = null; // a fresh frame has no trap until a modal opens one
         for (self.groups.items) |*g| g.seen = false;
+    }
+
+    /// Open a focus trap at the current build position (KIT-08). Everything registered after
+    /// this call (the modal's own focusables) becomes the trapped set; `move` next frame cycles
+    /// only within it. Idempotent within a frame — the earliest open wins (an outer modal).
+    pub fn openScope(self: *Focus) void {
+        if (self.building_scope_start == null) self.building_scope_start = self.building.items.len;
     }
 
     pub fn register(self: *Focus, key: u64, enabled: bool) void {
@@ -64,12 +81,12 @@ pub const Focus = struct {
     /// Traverse the last completed frame's global Tab order. Every ordinary enabled
     /// target participates; each roving group contributes only its active member.
     pub fn move(self: *Focus, direction: Direction, wrap: bool) bool {
-        const count = self.globalCount(&self.current);
+        const count = self.globalCount(&self.current, true);
         if (count == 0) {
             self.focused = null;
             return false;
         }
-        const current_ord = if (self.focused) |key| self.globalOrdinal(&self.current, key) else null;
+        const current_ord = if (self.focused) |key| self.globalOrdinal(&self.current, key, true) else null;
         const dest: usize = if (current_ord) |ord| switch (direction) {
             .next => if (ord + 1 < count) ord + 1 else if (wrap) 0 else return false,
             .previous => if (ord > 0) ord - 1 else if (wrap) count - 1 else return false,
@@ -77,7 +94,7 @@ pub const Focus = struct {
             .next => 0,
             .previous => count - 1,
         };
-        self.focused = self.globalAt(&self.current, dest).?.key;
+        self.focused = self.globalAt(&self.current, dest, true).?.key;
         return true;
     }
 
@@ -124,7 +141,7 @@ pub const Focus = struct {
     /// Repair group representatives and singular focus against the completed build,
     /// then publish its order for the next event stage.
     pub fn endFrame(self: *Focus) void {
-        const old_ord = if (self.focused) |key| self.globalOrdinal(&self.current, key) else null;
+        const old_ord = if (self.focused) |key| self.globalOrdinal(&self.current, key, false) else null;
 
         for (self.groups.items) |*g| {
             if (!g.seen) continue;
@@ -135,8 +152,8 @@ pub const Focus = struct {
 
         if (self.focused) |key| {
             if (!self.enabledIn(&self.building, key, null)) {
-                const count = self.globalCount(&self.building);
-                self.focused = if (count == 0) null else self.globalAt(&self.building, @min(old_ord orelse 0, count - 1)).?.key;
+                const count = self.globalCount(&self.building, false);
+                self.focused = if (count == 0) null else self.globalAt(&self.building, @min(old_ord orelse 0, count - 1), false).?.key;
             }
         }
 
@@ -144,6 +161,9 @@ pub const Focus = struct {
         self.current = self.building;
         self.building = old;
         self.building.clearRetainingCapacity();
+        // Carry this build's trap suffix into `current` so next frame's `move` traverses only
+        // the trapped targets (or the whole order when no modal opened a scope this frame).
+        self.scope_start = self.building_scope_start;
 
         var i = self.groups.items.len;
         while (i > 0) {
@@ -184,28 +204,38 @@ pub const Focus = struct {
         return false;
     }
 
-    fn globalCount(self: *const Focus, entries: *const std.ArrayList(Target)) usize {
+    /// Whether the target at `index` participates under the active trap when `respect` is set:
+    /// with no scope every index is in; with a scope only indices at or after `scope_start`
+    /// (the modal's trapped suffix). Only `move` (traversing `current`) passes `respect=true`;
+    /// the `endFrame` repair walks `building` and must not scope-filter, so it passes `false`.
+    fn inScope(self: *const Focus, index: usize, respect: bool) bool {
+        if (!respect) return true;
+        const start = self.scope_start orelse return true;
+        return index >= start;
+    }
+
+    fn globalCount(self: *const Focus, entries: *const std.ArrayList(Target), respect: bool) usize {
         var count: usize = 0;
-        for (entries.items) |target| {
-            if (self.isGlobal(target)) count += 1;
+        for (entries.items, 0..) |target, i| {
+            if (self.inScope(i, respect) and self.isGlobal(target)) count += 1;
         }
         return count;
     }
 
-    fn globalOrdinal(self: *const Focus, entries: *const std.ArrayList(Target), key: u64) ?usize {
+    fn globalOrdinal(self: *const Focus, entries: *const std.ArrayList(Target), key: u64, respect: bool) ?usize {
         var ordinal: usize = 0;
-        for (entries.items) |target| {
-            if (!self.isGlobal(target)) continue;
+        for (entries.items, 0..) |target, i| {
+            if (!self.inScope(i, respect) or !self.isGlobal(target)) continue;
             if (target.key == key) return ordinal;
             ordinal += 1;
         }
         return null;
     }
 
-    fn globalAt(self: *const Focus, entries: *const std.ArrayList(Target), ordinal: usize) ?Target {
+    fn globalAt(self: *const Focus, entries: *const std.ArrayList(Target), ordinal: usize, respect: bool) ?Target {
         var seen: usize = 0;
-        for (entries.items) |target| {
-            if (!self.isGlobal(target)) continue;
+        for (entries.items, 0..) |target, i| {
+            if (!self.inScope(i, respect) or !self.isGlobal(target)) continue;
             if (seen == ordinal) return target;
             seen += 1;
         }
@@ -325,5 +355,57 @@ test "roving group exposes one global stop and retains directional navigation" {
     });
     try std.testing.expectEqual(@as(?u64, 11), focus.focusedKey());
     try std.testing.expect(focus.move(.next, false));
+    try std.testing.expectEqual(@as(?u64, 2), focus.focusedKey());
+}
+
+test "KIT-08 focus trap: an open scope confines Tab traversal to the modal's suffix" {
+    var focus = Focus.init(std.testing.allocator);
+    defer focus.deinit();
+
+    // A frame: two background controls (the screen), then a modal opens a scope and registers
+    // two of its own controls. The modal is built last, so its controls are the trapped suffix.
+    focus.beginFrame();
+    focus.register(1, true); // background A
+    focus.register(2, true); // background B
+    focus.openScope(); // modal opens the trap here
+    focus.register(101, true); // dialog control A
+    focus.register(102, true); // dialog control B
+    focus.endFrame();
+
+    // Tab cycles ONLY within the dialog's two controls — the background is unreachable.
+    try std.testing.expect(focus.move(.next, true));
+    try std.testing.expectEqual(@as(?u64, 101), focus.focusedKey());
+    try std.testing.expect(focus.move(.next, true));
+    try std.testing.expectEqual(@as(?u64, 102), focus.focusedKey());
+    try std.testing.expect(focus.move(.next, true)); // wraps within the scope
+    try std.testing.expectEqual(@as(?u64, 101), focus.focusedKey());
+    try std.testing.expect(focus.move(.previous, true)); // and back, still trapped
+    try std.testing.expectEqual(@as(?u64, 102), focus.focusedKey());
+}
+
+test "KIT-08 focus trap lifts when the modal closes (no scope next frame)" {
+    var focus = Focus.init(std.testing.allocator);
+    defer focus.deinit();
+
+    // Modal open: trapped to {101,102}.
+    focus.beginFrame();
+    focus.register(1, true);
+    focus.register(2, true);
+    focus.openScope();
+    focus.register(101, true);
+    focus.endFrame();
+    try std.testing.expect(focus.move(.next, true));
+    try std.testing.expectEqual(@as(?u64, 101), focus.focusedKey());
+
+    // Next frame the modal is gone — no scope opened, so traversal is whole-frame again and
+    // reaches the background controls.
+    focus.beginFrame();
+    focus.register(1, true);
+    focus.register(2, true);
+    focus.endFrame();
+    // Focused key 101 no longer exists; move falls to the whole (unscoped) order.
+    try std.testing.expect(focus.move(.next, true));
+    try std.testing.expectEqual(@as(?u64, 1), focus.focusedKey());
+    try std.testing.expect(focus.move(.next, true));
     try std.testing.expectEqual(@as(?u64, 2), focus.focusedKey());
 }

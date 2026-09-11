@@ -146,11 +146,24 @@ routes `.released` before geometric click validation; every SDL wheel event rout
 longer authorizes unrelated scroll containers. Capture, when present, wins before geometry
 for all four routed event types.
 
-Opaque independent overlays participate by querying their root. `tooltip` queries its
-popup box, and `modal` queries both the fullscreen scrim and dialog; because roots are
-stamped in the same order they draw, listing them after the screen blocks covered controls
-for hover, press, release, wheel, and click without `modal_open` guards. Geometry-only or
-intentionally transparent overlays must opt out explicitly with `pass_through`.
+Opaque independent overlays participate by querying their root. `modal` queries both the
+fullscreen scrim and dialog; because roots are stamped in the same order they draw, listing
+them after the screen blocks covered controls for hover, press, release, wheel, and click
+without `modal_open` guards. Geometry-only or intentionally transparent overlays must opt out
+explicitly with `pass_through`.
+
+**Overlay controls on `El` (KIT-08).** `modal` adds a **focus trap**: it calls
+`ctx.beginFocusScope()` before the caller builds the dialog's focusables, and because a modal
+is stamped last, everything registered after that call is the trapped suffix — `moveFocus`
+(Tab/Shift+Tab) then cycles only within the dialog and can never land on a control the scrim
+covers (the scope carries into the next frame's traversal in `focus.zig`; a frame with no
+modal has ordinary whole-frame traversal). Initial focus and restore-to-opener stay caller
+policy (only the caller knows the open/close transition in immediate mode): request focus on
+the primary control the frame it opens, and re-request the recorded opener the frame it closes.
+`tooltip` is now **pass-through** (`setPassThrough`): despite being stamped last it takes no
+pointer hit, so it never intercepts input to the control it describes; `clampToTerminal` keeps
+it inside the terminal rect. `text_input` remains backed by the authoritative `editor.zig`
+`LineEditor` model (INPUT-07).
 
 ## Visual interaction state ownership
 
