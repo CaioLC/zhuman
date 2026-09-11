@@ -375,6 +375,15 @@ to fill. At **≤760** the terminal is the whole window (no ground/shadow/border
 prototype's full-width mode. `play_game`/`gameover`/`act_one_end` build into the returned content
 box. The terminal rect is scaled to device px once here.
 
+**Responsive branches (VIEW-04).** Screens and templates read `metrics.width_class.atMost(.w560)`
+(and `.w440`, `.w760`) to branch on the prototype's stacked breakpoints. What is wired today:
+the HUD page padding tightens to `10px` at ≤560, and the optional "Act I ·" run-context label is
+dropped at ≤560 (the functional Day counter always stays — reachability preserved). The page
+grid is already a single stacked column, so ≤760 stacking is inherent. The remaining prototype
+branches — the two/one action-column counts, hiding the BUILD effect/cost columns, and stacking
+the trade-dialog actions — attach to their templates when those land (KIT-15/17/18/21, the board
+BOARD-*) using the same `width_class.atMost` test; they have no consumer to branch yet.
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

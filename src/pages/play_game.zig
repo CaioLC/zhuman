@@ -30,7 +30,9 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     // reference, or the full window at ≤760, and returns the inner content box to lay out in.
     const shell = try t.terminal(ctx, "play");
     const root = shell.content;
-    const page_pad: f32 = 16;
+    // VIEW-04: responsive page padding — the prototype tightens to 10px at ≤560 logical px.
+    const compact = ctx.res.view.metrics.width_class.atMost(.w560);
+    const page_pad: f32 = if (compact) 10 else 16;
     _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(16)
         .with_style(.{style.pad(page_pad)});
 
@@ -99,8 +101,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
 
     const run_line = try el.div(ctx, header, "run");
     _ = run_line.with_layout(.bottom_right).with_flow(.{ .dir = .row }).with_gap(6);
-    _ = (try el.text(ctx, run_line, "act", "Act I ·"))
-        .with_style(.{ style.h3, Style{ .text = th.dim } });
+    // VIEW-04: at ≤560 the optional run-context label ("Act I ·") is dropped to save width;
+    // the functional Day counter always stays. Reachability is preserved (nothing interactive
+    // is hidden — the act label is decorative context).
+    if (!compact) {
+        _ = (try el.text(ctx, run_line, "act", "Act I ·"))
+            .with_style(.{ style.h3, Style{ .text = th.dim } });
+    }
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
     const day_txt = std.fmt.bufPrint(&buf, "Day {d}", .{day}) catch "?";
     _ = (try el.text(ctx, run_line, "day", day_txt))
