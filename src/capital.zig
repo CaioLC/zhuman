@@ -150,9 +150,12 @@ fn built_msg(comptime GoodT: type) []const u8 {
 /// What a good does the moment it exists — the whole difference between the categories.
 fn grant(w: *World, e: Entity, comptime GoodT: type) void {
     switch (GoodT) {
-        // Unlockers: the good *is* the verb.
-        comp.FishRod => w.add(e, comp.ActionFish{}),
-        comp.Hatchet => w.add(e, comp.ActionChopWood{}),
+        // Unlockers: the good *is* the verb. Fishing/chopping recompute the family so a rank-2
+        // tool supersedes a rank-1 one (and vice-versa on the way out).
+        comp.FishRod => recompute_fishing(w, e),
+        comp.FishNet => recompute_fishing(w, e),
+        comp.Hatchet => recompute_chopping(w, e),
+        comp.HandAxe => recompute_chopping(w, e),
         comp.WireSnares => w.add(e, comp.ActionCheckTraps{}),
         comp.AirRifle => w.add(e, comp.ActionHunt{}),
         // Modifiers: a one-shot mutation of a margin.
@@ -187,8 +190,10 @@ pub fn grant_public(w: *World, e: Entity, comptime GoodT: type) void {
 /// back out without special cases.
 fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
     switch (GoodT) {
-        comp.FishRod => w.remove(e, comp.ActionFish),
-        comp.Hatchet => w.remove(e, comp.ActionChopWood),
+        comp.FishRod => recompute_fishing(w, e),
+        comp.FishNet => recompute_fishing(w, e),
+        comp.Hatchet => recompute_chopping(w, e),
+        comp.HandAxe => recompute_chopping(w, e),
         comp.WireSnares => w.remove(e, comp.ActionCheckTraps),
         comp.AirRifle => w.remove(e, comp.ActionHunt),
         comp.Sandals => remove_sandals(w, e),
@@ -309,8 +314,12 @@ pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) v
         held.count -= 1;
         return;
     }
-    revoke(w, e, GoodT);
+    // Remove the component **first**, then revoke — so a family recompute (ACT1-16) sees the
+    // post-removal state and restores the correct next-best rank. Every other revoke reads its
+    // *target* component (a verb, the larder, Vigor), never the good itself, so the order is
+    // safe for them too.
     w.remove(e, GoodT);
+    revoke(w, e, GoodT);
     var buf: [64]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, "Your {s} broke.", .{good_name(GoodT)}) catch "Something of yours broke.";
     res.sim.log.push(.warn, msg);
@@ -320,7 +329,9 @@ pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) v
 pub fn good_name(comptime GoodT: type) []const u8 {
     return switch (GoodT) {
         comp.FishRod => "fish rod",
+        comp.FishNet => "fishing net",
         comp.Hatchet => "hatchet",
+        comp.HandAxe => "hand axe",
         comp.WireSnares => "wire snares",
         comp.AirRifle => "air rifle",
         comp.Sandals => "sandals",
@@ -430,12 +441,84 @@ pub fn remove_chainsaw(w: *World, agent: Entity) void {
     chop.yields.materials.sd /= 2.5;
 }
 
+// --- Tool families and supersession (ACT1-16) ---------------------------------------
+// A family's verb stats come from the **highest-rank tool owned**, recomputed **from the
+// action's canonical base** each time family membership changes. Recomputing from base (rather
+// than multiply-on-equip / divide-on-remove) is what makes supersession correct *and*
+// drift-free: equipping the better tool replaces the weaker one's stats instead of stacking with
+// it, losing the better one restores the next-best exactly, and any number of build→sell→build
+// cycles leaves the base untouched (no accumulated floating-point error). Independent modifiers
+// that merely share the target verb (Work gloves, Chainsaw on chopping) are **re-applied on top**
+// after the family base is set, so they keep stacking — supersession is family-specific.
+
+/// The **fishing** family's best rank owned: FishNet (2) supersedes FishRod (1); 0 ⇒ none.
+fn fishing_rank(w: *World, e: Entity) u8 {
+    if (w.has(e, comp.FishNet)) return 2;
+    if (w.has(e, comp.FishRod)) return 1;
+    return 0;
+}
+
+/// Recompute `ActionFish` from the best fishing tool owned. No tool ⇒ the verb leaves; a tool ⇒
+/// the verb exists (added exactly once — never a duplicate `SparseSet.add`) with that rank's
+/// stats set from `comp.ActionFish{}`'s canonical base.
+fn recompute_fishing(w: *World, e: Entity) void {
+    const rank = fishing_rank(w, e);
+    if (rank == 0) {
+        if (w.has(e, comp.ActionFish)) w.remove(e, comp.ActionFish);
+        return;
+    }
+    if (!w.has(e, comp.ActionFish)) w.add(e, comp.ActionFish{}); // single add — the guard prevents a dup
+    const fish = ecs.getMany(w, e, .{comp.ActionFish});
+    fish.* = comp.ActionFish{}; // reset to the canonical base — the drift-free part
+    if (rank >= 2) {
+        // The net: less body, more catch. Set relative to the base, so it is exact every time.
+        fish.requires.energy = (comp.ActionFish{}).requires.energy * 0.7;
+        fish.yields.food.s = (comp.ActionFish{}).yields.food.s * 1.5;
+    }
+}
+
+/// The **chopping** family's best rank owned: HandAxe (2) supersedes Hatchet (1); 0 ⇒ none.
+fn chopping_rank(w: *World, e: Entity) u8 {
+    if (w.has(e, comp.HandAxe)) return 2;
+    if (w.has(e, comp.Hatchet)) return 1;
+    return 0;
+}
+
+/// Recompute `ActionChopWood` from the best chopping tool owned, then **re-stack** the
+/// independent modifiers that target it (Work gloves, Chainsaw) so a family upgrade never drops a
+/// modifier the player still owns. Base-reset makes it idempotent and drift-free.
+fn recompute_chopping(w: *World, e: Entity) void {
+    const rank = chopping_rank(w, e);
+    if (rank == 0) {
+        if (w.has(e, comp.ActionChopWood)) w.remove(e, comp.ActionChopWood);
+        return;
+    }
+    if (!w.has(e, comp.ActionChopWood)) w.add(e, comp.ActionChopWood{});
+    const chop = ecs.getMany(w, e, .{comp.ActionChopWood});
+    chop.* = comp.ActionChopWood{}; // canonical base
+    if (rank >= 2) {
+        chop.requires.energy = (comp.ActionChopWood{}).requires.energy * 0.7;
+        chop.yields.materials.s = (comp.ActionChopWood{}).yields.materials.s * 1.4;
+    }
+    // Re-stack independent modifiers on top of the (possibly upgraded) base — family-specific
+    // supersession: a bicycle-and-sandals-style independent modifier keeps its effect.
+    if (w.has(e, comp.WorkGloves)) apply_work_gloves(w, e);
+    if (w.has(e, comp.Chainsaw)) apply_chainsaw(w, e);
+}
+
 // --- Health goods: capacity capital -------------------------------------------------
 // Bed / Pantry / Medicine chest each raise the vigor *ceiling*. Apply also fills what it
 // adds (first night in a real bed, you wake refreshed), so `v/max` — the fraction the
 // status word, the vitals figure and `yield_factor` all read — never dips on an upgrade.
 // All mutations are relative (+=/−=), so a future aging system decrementing `max`
 // composes underneath without special cases.
+//
+// **ACT1-16 — the asymmetry is intentional, and now explicit.** `health_apply` raises `max` *and*
+// fills `v` by the same amount; `health_remove` lowers `max` and only *clamps* `v` down to the
+// new ceiling. So the pair does **not** round-trip: a bed that you sleep in (filling you) and then
+// lose leaves you with the vigor you gained, capped at the lower ceiling — you do not un-rest. This
+// is the designed lifecycle (a gained night's rest is real), documented and tested as such rather
+// than a bug to be forced symmetric.
 
 fn health_apply(w: *World, agent: Entity, amount: f32) void {
     const vigor = ecs.getMany(w, agent, .{comp.Vigor});
@@ -874,4 +957,156 @@ test "cancel refuses on labor, and on an idle body" {
     try std.testing.expect(!cancel_build(&w, e, &res)); // `Busy` covers labor too
     try std.testing.expect(w.has(e, comp.Busy)); // still foraging
     try std.testing.expectEqual(before, w.get(e, comp.InventoryMaterial).?.v);
+}
+
+// ============================ ACT1-16: tool supersession & reversible effects ===========
+
+/// Own a non-buildable rank-2 tool in a test (the passerby's upgrade), applying its family
+/// recompute — the same two steps `barter.resolve` runs for a bought good.
+fn equip(w: *World, e: Entity, comptime GoodT: type) void {
+    if (w.get(e, GoodT)) |held| {
+        held.count += 1;
+    } else {
+        w.add(e, GoodT{});
+        grant_public(w, e, GoodT);
+    }
+}
+
+test "a better tool supersedes the weaker one — stats replace, not stack" {
+    var w = World.init();
+    var res = test_res();
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryMaterial{ .v = (comp.FishRod{}).requires.materials },
+    });
+    // Build the rod (rank 1): ActionFish at its canonical base.
+    build_fish_rod(&w, e, &res);
+    finish_fish_rod(&w, e, &res);
+    const base_energy = (comp.ActionFish{}).requires.energy;
+    const base_food = (comp.ActionFish{}).yields.food.s;
+    try std.testing.expectApproxEqAbs(base_energy, w.get(e, comp.ActionFish).?.requires.energy, 1e-6);
+
+    // Equip the net (rank 2): the stats REPLACE the rod's — 0.7× energy, 1.5× catch — not
+    // 0.7×0.7 or any stack. And there is exactly one ActionFish (no duplicate add).
+    equip(&w, e, comp.FishNet);
+    const fish = w.get(e, comp.ActionFish).?;
+    try std.testing.expectApproxEqAbs(base_energy * 0.7, fish.requires.energy, 1e-6);
+    try std.testing.expectApproxEqAbs(base_food * 1.5, fish.yields.food.s, 1e-6);
+    try std.testing.expect(w.has(e, comp.FishRod)); // the rod is still physically owned (sellable)
+}
+
+test "losing the better tool restores the next-best rank, not the base or nothing" {
+    var w = World.init();
+    var res = test_res();
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryMaterial{ .v = (comp.FishRod{}).requires.materials },
+    });
+    build_fish_rod(&w, e, &res);
+    finish_fish_rod(&w, e, &res);
+    equip(&w, e, comp.FishNet); // rank 2 stats
+    const base_energy = (comp.ActionFish{}).requires.energy;
+
+    // Sell the net: the family recomputes to the rod (rank 1) — the verb stays, at base stats.
+    break_good(&w, e, &res, comp.FishNet);
+    try std.testing.expect(!w.has(e, comp.FishNet));
+    try std.testing.expect(w.has(e, comp.ActionFish)); // still fishing — the rod remains
+    try std.testing.expectApproxEqAbs(base_energy, w.get(e, comp.ActionFish).?.requires.energy, 1e-6);
+
+    // Sell the rod too: no fishing tool left ⇒ the verb goes.
+    break_good(&w, e, &res, comp.FishRod);
+    try std.testing.expect(!w.has(e, comp.ActionFish));
+}
+
+test "supersession is family-specific: independent modifiers still stack" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = 200;
+    // Chopping family: hatchet (rank 1) → hand axe (rank 2).
+    begin_build(&w, e, &res, comp.Hatchet);
+    finish_build(&w, e, &res, comp.Hatchet);
+    if (w.has(e, comp.Busy)) w.remove(e, comp.Busy);
+    equip(&w, e, comp.HandAxe); // rank 2 base: 2.5 × 0.7 energy, 5.0 × 1.4 yield
+
+    const rank2_energy = (comp.ActionChopWood{}).requires.energy * 0.7;
+    const rank2_yield = (comp.ActionChopWood{}).yields.materials.s * 1.4;
+    {
+        const chop = w.get(e, comp.ActionChopWood).?;
+        try std.testing.expectApproxEqAbs(rank2_energy, chop.requires.energy, 1e-5);
+        try std.testing.expectApproxEqAbs(rank2_yield, chop.yields.materials.s, 1e-5);
+    }
+
+    // Now stack independent modifiers on the SAME verb — they multiply on top of the rank-2 base
+    // (family supersession does not swallow an independent modifier). Work gloves ×0.75 energy;
+    // chainsaw ×0.3 energy, +1m, ×2.5 yield.
+    begin_build(&w, e, &res, comp.WorkGloves);
+    finish_build(&w, e, &res, comp.WorkGloves);
+    if (w.has(e, comp.Busy)) w.remove(e, comp.Busy);
+    equip(&w, e, comp.Chainsaw); // (not buildable-gated here; equip applies its modifier)
+    {
+        const chop = w.get(e, comp.ActionChopWood).?;
+        try std.testing.expectApproxEqAbs(rank2_energy * 0.75 * 0.3, chop.requires.energy, 1e-4);
+        try std.testing.expectApproxEqAbs(@as(f32, 1.0), chop.requires.materials, 1e-5); // chainsaw fuel
+        try std.testing.expectApproxEqAbs(rank2_yield * 2.5, chop.yields.materials.s, 1e-4);
+    }
+}
+
+test "repeated build → sell → build never drifts (recompute from base)" {
+    var w = World.init();
+    var res = test_res();
+    const e = w.spawn(.{
+        comp.Vigor{ .v = 10, .max = 10 },
+        comp.InventoryMaterial{ .v = 0 },
+    });
+    const base_energy = (comp.ActionFish{}).requires.energy;
+    const base_food = (comp.ActionFish{}).yields.food.s;
+
+    var i: usize = 0;
+    while (i < 50) : (i += 1) {
+        w.get(e, comp.InventoryMaterial).?.v = (comp.FishRod{}).requires.materials;
+        build_fish_rod(&w, e, &res);
+        finish_fish_rod(&w, e, &res);
+        equip(&w, e, comp.FishNet); // rank 2
+        break_good(&w, e, &res, comp.FishNet); // back to rank 1
+        break_good(&w, e, &res, comp.FishRod); // verb gone
+        if (w.has(e, comp.Busy)) w.remove(e, comp.Busy); // free the body for the next build
+    }
+    // Rebuild once more and confirm the stats are *exactly* the base — no accumulated drift.
+    w.get(e, comp.InventoryMaterial).?.v = (comp.FishRod{}).requires.materials;
+    build_fish_rod(&w, e, &res);
+    finish_fish_rod(&w, e, &res);
+    const fish = w.get(e, comp.ActionFish).?;
+    try std.testing.expectEqual(base_energy, fish.requires.energy); // exact equality, not approx
+    try std.testing.expectEqual(base_food, fish.yields.food.s);
+}
+
+test "health lifecycle is intentionally non-round-tripping (ACT1-16 explicit)" {
+    var w = World.init();
+    var res = test_res();
+    const e = spawn_test_agent(&w);
+    w.get(e, comp.InventoryMaterial).?.v = 10;
+    // Start below the ceiling so the fill on apply is observable.
+    w.get(e, comp.Vigor).?.v = 8;
+    w.get(e, comp.Vigor).?.max = 10;
+
+    begin_build(&w, e, &res, comp.LeafBed); // pays 2 energy: v 8 → 6
+    finish_build(&w, e, &res, comp.LeafBed); // +1 max (→11), fills +1 (v 6 → 7)
+    const vig = w.get(e, comp.Vigor).?;
+    try std.testing.expectEqual(@as(f32, 11), vig.max);
+    try std.testing.expectEqual(@as(f32, 7), vig.v);
+
+    // Break it: max drops back to 10, but v is only *clamped* (7 ≤ 10, so it stays) — the gained
+    // rest is real and does NOT round-trip back out. This is the designed lifecycle.
+    break_good(&w, e, &res, comp.LeafBed);
+    try std.testing.expectEqual(@as(f32, 10), vig.max);
+    try std.testing.expectEqual(@as(f32, 7), vig.v); // kept — not un-rested
+
+    // When v exceeds the new ceiling, remove clamps it down.
+    w.add(e, comp.LeafBed{});
+    grant_public(&w, e, comp.LeafBed); // max 11, v filled to min(7+1,11)=8
+    vig.v = 11; // fully rested at the raised ceiling
+    break_good(&w, e, &res, comp.LeafBed); // max → 10, v clamped 11 → 10
+    try std.testing.expectEqual(@as(f32, 10), vig.max);
+    try std.testing.expectEqual(@as(f32, 10), vig.v);
 }

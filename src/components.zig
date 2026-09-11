@@ -228,6 +228,27 @@ pub const Hatchet = struct {
     count: u32 = 1,
 };
 
+// -- Tool ranks: a *better* tool in an existing family supersedes the weaker one ----------
+// (ACT1-16). A family's action stats come from the **highest-rank tool owned**, recomputed
+// from a canonical base each time membership changes — so equipping the better tool replaces
+// the stats (never stacks with its own family), losing it restores the next-best, and repeated
+// build→sell→build never drifts. These are traded upgrades (the passerby carries them), not
+// members of `capital.buildable_bundle`, so the BUILD catalog count is unchanged.
+
+/// Fishing net → the rank-2 fishing tool. Supersedes the `FishRod`: fishing costs less body and
+/// yields more (the net works while you rest).
+pub const FishNet = struct {
+    /// How many of this good the agent holds. Only the effect (the family recompute) is shared;
+    /// spares stay sellable.
+    count: u32 = 1,
+};
+
+/// Hand axe → the rank-2 chopping tool. Supersedes the `Hatchet`: splitting costs less and
+/// yields more.
+pub const HandAxe = struct {
+    count: u32 = 1,
+};
+
 /// Wire snares → `ActionCheckTraps`.
 pub const WireSnares = struct {
     requires: Requires = .{ .energy = 2.0, .materials = 5.0, .hours = 8 },

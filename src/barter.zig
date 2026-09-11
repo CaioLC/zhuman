@@ -47,8 +47,8 @@ pub const Result = struct {
 pub fn goodOf(w: Ware) ?type {
     return switch (w) {
         .food, .materials => null,
-        .fish_hook => comp.FishRod,
-        .whetstone => comp.Hatchet,
+        .fish_hook => comp.FishNet, // the passerby carries the *upgrade* (rank-2 fishing tool)
+        .whetstone => comp.HandAxe, // the rank-2 chopping tool
     };
 }
 
@@ -195,14 +195,14 @@ test "a buy moves both bundles atomically and decrements the satchel" {
         .receive = market.Bundle.one(.fish_hook, 1),
     };
 
-    try testing.expect(!w.has(e, comp.FishRod));
+    try testing.expect(!w.has(e, comp.FishNet));
     const r = resolve(&w, e, &res, &q);
     try testing.expect(r.ok());
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
     try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12-4
-    // Receive side arrived + its effect (the verb) applied once.
-    try testing.expect(w.has(e, comp.FishRod));
+    // Receive side arrived + its effect (the fishing verb, via the family recompute) applied once.
+    try testing.expect(w.has(e, comp.FishNet));
     try testing.expect(w.has(e, comp.ActionFish));
     // The satchel decremented.
     try testing.expectEqual(@as(u16, 0), res.sim.encounter.stockOf(.fish_hook));
@@ -213,16 +213,16 @@ test "a sell breaks the good, credits materials, and passes it to the passerby" 
     var w = World.init();
     var res = test_res();
     const e = spawn_trader(&w);
-    // Own a hatchet to sell (grant its verb too).
-    w.add(e, comp.Hatchet{});
-    capital.grant_public(&w, e, comp.Hatchet);
+    // Own a hand axe to sell (grant its verb too, via the chopping-family recompute).
+    w.add(e, comp.HandAxe{});
+    capital.grant_public(&w, e, comp.HandAxe);
     try testing.expect(w.has(e, comp.ActionChopWood));
 
     var q = Quote{
         .id = 1,
         .rev = 1,
         .direction = .sell,
-        .give = market.Bundle.one(.whetstone, 1), // the hatchet family
+        .give = market.Bundle.one(.whetstone, 1), // the hand-axe family
         .receive = market.Bundle.one(.materials, 5),
     };
 
@@ -230,8 +230,8 @@ test "a sell breaks the good, credits materials, and passes it to the passerby" 
     try testing.expect(r.ok());
     try testing.expectApproxEqAbs(@as(f32, 5), r.materials_moved, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12+5
-    // The good left and its verb with it (symmetric break).
-    try testing.expect(!w.has(e, comp.Hatchet));
+    // The good left and its verb with it (symmetric break — no lower rank owned, so the verb goes).
+    try testing.expect(!w.has(e, comp.HandAxe));
     try testing.expect(!w.has(e, comp.ActionChopWood));
     // The passerby now carries a whetstone.
     try testing.expectEqual(@as(u16, 2), res.sim.encounter.stockOf(.whetstone)); // 1 + 1
