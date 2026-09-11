@@ -31,6 +31,7 @@ const slider_mod = @import("./slider.zig");
 const disclosure_mod = @import("./disclosure.zig");
 const stock_token_mod = @import("./stock_token.zig");
 const runline_mod = @import("./runline.zig");
+const market_strip_mod = @import("./market_strip.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -73,6 +74,12 @@ pub const stockline = stock_token_mod.stockline;
 pub const Stock = stock_token_mod.Stock;
 pub const runline = runline_mod.runline;
 pub const Run = runline_mod.Run;
+pub const market_strip = market_strip_mod.market_strip;
+pub const MarketKind = market_strip_mod.MarketKind;
+pub const marketIdentity = market_strip_mod.marketIdentity;
+pub const activity_strip = market_strip_mod.activity_strip;
+pub const ActivityState = market_strip_mod.ActivityState;
+pub const activityIdentity = market_strip_mod.activityIdentity;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
