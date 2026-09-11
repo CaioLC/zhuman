@@ -68,11 +68,14 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             // classic tab silhouette — instead of floating centered above it.
             const center = try el.div(ctx, body, "center");
             _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
-            const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
+            // KIT-07: the shared view navigation drives which body view builds. Exactly one
+            // tab is selected + globally focusable, arrows rove within it, Enter/Space switches;
+            // the inactive view is not built but its pooled state is retained below.
+            const tb = try t.view_nav(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
-                // BUILD owns this state on its conditional root. Retain only the existing
-                // slot while hidden; this call cannot allocate the child or its state.
-                _ = center.get().retainChildState(ctx, "buildlist", uic.UiState.BuildViewState);
+                // KIT-07: retain the inactive BUILD view's pooled sort/filter state by key so
+                // returning to it restores exactly where it was; the view's nodes are not built.
+                _ = t.retain_view(ctx, center, "buildlist", uic.UiState.BuildViewState);
 
                 // Production row, in the grammar the card taught. A tile exists iff the
                 // agent holds the action component — so an unlocked verb appears here the
