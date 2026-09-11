@@ -35,6 +35,7 @@ const market_strip_mod = @import("./market_strip.zig");
 const catalog_controls_mod = @import("./catalog_controls.zig");
 const catalog_viewport_mod = @import("./catalog_viewport.zig");
 const eating_policy_mod = @import("./eating_policy.zig");
+const milestone_goal_mod = @import("./milestone_goal.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -90,6 +91,9 @@ pub const catalog_less_than = catalog_controls_mod.lessThan;
 pub const catalog_viewport = catalog_viewport_mod.catalog_viewport;
 pub const Viewport = catalog_viewport_mod.Viewport;
 pub const eating_policy = eating_policy_mod.eating_policy;
+pub const milestone_goal = milestone_goal_mod.milestone_goal;
+pub const MilestoneGoal = milestone_goal_mod.Goal;
+pub const MilestoneLifecycle = milestone_goal_mod.Lifecycle;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
