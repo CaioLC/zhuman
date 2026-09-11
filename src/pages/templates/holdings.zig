@@ -46,14 +46,19 @@ fn line(ctx: *UiCtx, parent: El, id: []const u8, left: []const u8, right: []cons
 
 /// The margin an owned modifier has already worked into a live action: its catalog
 /// default against what the component now says. Null when nothing has touched it, so a
-/// verb the actor has but has never improved stays off the list.
+/// verb the actor has but has never improved stays off the list. **Semantic color (KIT-06):**
+/// a *lower* live cost than the catalog default is an improvement (`good`); a *higher* one is
+/// a penalty (`danger`); both are derived, never a copied tuning number.
 fn margin_line(ctx: *UiCtx, parent: El, w: *World, e: Entity, comptime ActionT: type, id: []const u8, name: []const u8) !void {
     const live = w.get(e, ActionT) orelse return; // the verb itself is locked
     const base = (ActionT{}).requires.energy;
     if (@abs(live.requires.energy - base) < 0.001) return;
+    const th = ctx.res.view.theme;
+    // Lower energy than the baseline is a good margin; higher is a bad one.
+    const color = if (live.requires.energy < base) th.good else th.danger;
     var buf: [40]u8 = undefined;
     const txt = std.fmt.bufPrint(&buf, "{d:.1}e -> {d:.1}e", .{ base, live.requires.energy }) catch return;
-    try line(ctx, parent, id, name, txt, ctx.res.view.theme.acc);
+    try line(ctx, parent, id, name, txt, color);
 }
 
 /// The holdings panel. Returns the panel `El` (shelf convention) — the caller places it.
@@ -116,6 +121,7 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     try margin_line(ctx, margins, world, e, comp.ActionHunt, "m_hnt", "Hunt");
 
     // Generators are a flow, not a margin: what they add per day is their own `yields`.
+    // A positive flow reads as a good margin (KIT-06 semantic value).
     var per_day: f32 = 0;
     inline for (.{ comp.GardenBed, comp.ChickenCoop }) |G| {
         if (world.has(e, G)) per_day += (G{}).yields.food.s;
@@ -123,7 +129,7 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     if (per_day > 0) {
         var fbuf: [24]u8 = undefined;
         const txt = std.fmt.bufPrint(&fbuf, "+{d:.1}/day", .{per_day}) catch "?";
-        try line(ctx, margins, "m_gen", "Food", txt, th.acc);
+        try line(ctx, margins, "m_gen", "Food", txt, th.good);
     }
 
     // The vigor ceiling is shown, not diffed: its baseline is a spawn literal rather than
@@ -132,6 +138,32 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     var vbuf: [24]u8 = undefined;
     const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}", .{vigor.max}) catch "?";
     try line(ctx, margins, "m_max", "Vigor ceiling", vtxt, th.dim);
+
+    // --- BODY projection: how long the larder lasts at the current ration ------------
+    // Derived from the *same* rate the metabolism loop applies (`systems.ration_mult`,
+    // made public for exactly this) times `base_rate`, and the generators' inflow — so the
+    // projection can never drift from what actually happens. Never a copied tuning number.
+    if (world.get(e, comp.Metabolism)) |met| {
+        if (world.get(e, comp.InventoryFood)) |food| {
+            const net = ha.systems.net_food_drawdown(met.base_rate, ha.systems.ration_mult(ctx.res.config, met.setting), per_day);
+            const body = try el.div(ctx, panel, "body");
+            _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+                .with_flow(.{ .dir = .column }).with_gap(1)
+                .with_style(.{ Style{ .outline_color = th.line }, style.pad_each(0, 6, 0, 0) });
+            _ = (try el.text(ctx, body, "bh", "BODY"))
+                .with_style(.{ style.body, Style{ .text = th.dim } });
+            if (net <= 0.001) {
+                // Inflow covers consumption — the larder holds (a good state).
+                try line(ctx, body, "b_days", "Larder", "holds", th.good);
+            } else {
+                const days = food.v / net;
+                var dbuf: [24]u8 = undefined;
+                const txt = std.fmt.bufPrint(&dbuf, "{d:.1} days", .{days}) catch "?";
+                // Under ~2 days is a danger readout; otherwise a plain reading.
+                try line(ctx, body, "b_days", "Food lasts", txt, if (days < 2) th.danger else th.fg);
+            }
+        }
+    }
 
     return panel;
 }

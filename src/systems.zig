@@ -39,13 +39,42 @@ pub fn update_food(
 }
 
 /// Per-day food consumption multiplier for the player-set eating policy. `.normal` is
-/// 1.0 by definition — `Metabolism.base_rate` already *is* the normal rate.
-fn ration_mult(cfg: res_mod.Config, s: comp.Metabolism.Setting) f32 {
+/// 1.0 by definition — `Metabolism.base_rate` already *is* the normal rate. Public so a
+/// projection (Holdings/BODY, KIT-06) reads the *same* rate the loop applies, never a copy.
+pub fn ration_mult(cfg: res_mod.Config, s: comp.Metabolism.Setting) f32 {
     return switch (s) {
         .ration => cfg.ration_scale,
         .normal => 1.0,
         .feast => cfg.feast_scale,
     };
+}
+
+/// Net daily food drawdown (Holdings/BODY projection, KIT-06): the metabolism's per-day
+/// consumption (`base_rate × ration_mult` — the *same* product `metabolize` applies) minus a
+/// per-day generator inflow. `≤0` means the larder holds. Lives here beside `ration_mult` so
+/// the projection provably reads the loop's rate rather than a copied tuning constant, and so
+/// it is covered by `zig build test`.
+pub fn net_food_drawdown(base_rate: f32, mult: f32, inflow_per_day: f32) f32 {
+    return base_rate * mult - inflow_per_day;
+}
+
+test "ration_mult returns the config scales; normal is unity" {
+    const cfg = res_mod.Config{}; // ration_scale 0.5, feast_scale 2.0
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), ration_mult(cfg, .ration), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0), ration_mult(cfg, .normal), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0), ration_mult(cfg, .feast), 1e-4);
+}
+
+test "net_food_drawdown: consumption minus inflow; days = food/net when positive" {
+    const cfg = res_mod.Config{};
+    const base: f32 = 1.5;
+    // Normal: net is exactly base_rate; ration halves it; a big enough inflow makes it hold.
+    try std.testing.expectApproxEqAbs(@as(f32, 1.5), net_food_drawdown(base, ration_mult(cfg, .normal), 0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.75), net_food_drawdown(base, ration_mult(cfg, .ration), 0), 1e-4);
+    try std.testing.expect(net_food_drawdown(base, ration_mult(cfg, .ration), 1.0) <= 0);
+    // Days-of-food is food / net when net is positive.
+    const net = net_food_drawdown(base, ration_mult(cfg, .normal), 0);
+    try std.testing.expectApproxEqAbs(@as(f32, 4), @as(f32, 6) / net, 1e-4); // 6 / 1.5 = 4 days
 }
 
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
