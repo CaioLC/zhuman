@@ -274,6 +274,60 @@ pub const UiState = struct {
             s.commit(s.highlight, n);
         }
     };
+
+    /// The **range slider value math** (KIT-10) — pure, stateless, no UI. The slider control
+    /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`
+    /// snapped to `step`; the caller maps that to a rate. Both the pointer drag and the
+    /// keyboard deltas resolve through these, so a drag and an arrow land on the same grid.
+    pub const SliderModel = struct {
+        min: f32,
+        max: f32,
+        step: f32,
+
+        /// Clamp `v` to `[min, max]` and snap to the nearest `step` from `min` (a
+        /// non-positive step means continuous — clamp only). The one place a value is made legal.
+        pub fn snap(self: SliderModel, v: f32) f32 {
+            const c = std.math.clamp(v, self.min, self.max);
+            if (self.step <= 0) return c;
+            const steps = @round((c - self.min) / self.step);
+            return std.math.clamp(self.min + steps * self.step, self.min, self.max);
+        }
+        /// The value for a track fraction `f` in `[0,1]` (a pointer position along the track),
+        /// snapped. `f=0` → min, `f=1` → max.
+        pub fn fromFraction(self: SliderModel, f: f32) f32 {
+            return self.snap(self.min + std.math.clamp(f, 0, 1) * (self.max - self.min));
+        }
+        /// The `[0,1]` track fraction for a value (for placing the thumb / filling the track).
+        pub fn toFraction(self: SliderModel, v: f32) f32 {
+            if (self.max <= self.min) return 0;
+            return std.math.clamp((v - self.min) / (self.max - self.min), 0, 1);
+        }
+        /// Keyboard nudge: arrows ±one step, PageUp/Down ±a coarse step (10× or a tenth of the
+        /// range, whichever is larger), Home/End jump to the ends. Returns the snapped result.
+        pub const Key = enum { left, right, up, down, page_up, page_down, home, end };
+        pub fn nudge(self: SliderModel, v: f32, key: Key) f32 {
+            const one = if (self.step > 0) self.step else (self.max - self.min) / 100.0;
+            const page = @max(one * 10, (self.max - self.min) / 10.0);
+            return switch (key) {
+                .right, .up => self.snap(v + one),
+                .left, .down => self.snap(v - one),
+                .page_up => self.snap(v + page),
+                .page_down => self.snap(v - page),
+                .home => self.min,
+                .end => self.max,
+            };
+        }
+    };
+
+    /// A range slider's pointer-drag state (KIT-10), keyed by the slider's own `node.key`:
+    /// whether the thumb currently owns capture, and the captured pointer's identity so an
+    /// unrelated pointer cannot steal the drag. The value itself is **not** stored here — the
+    /// caller owns it (the control owns no domain math); this is only the transient capture.
+    pub const SliderState = struct {
+        dragging: bool = false,
+        pointer_kind: @import("input.zig").PointerKind = .unknown,
+        pointer_id: u64 = 0,
+    };
     /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
     /// the tab strip's container, not the list itself, which only exists while its tab is
     /// active and would have its slot pruned on every visit to the other one.
@@ -853,4 +907,46 @@ test "SelectState: commit clamps an out-of-range index to the last option" {
     var s = UiState.SelectState{};
     s.commit(99, 3);
     try std.testing.expectEqual(@as(usize, 2), s.value);
+}
+
+// ---- KIT-10 range slider value math -------------------------------------------------------
+
+test "SliderModel.snap clamps to range and snaps to the nearest step" {
+    const m = UiState.SliderModel{ .min = 0, .max = 100, .step = 1 };
+    try std.testing.expectApproxEqAbs(@as(f32, 0), m.snap(-5), 1e-4); // clamp low
+    try std.testing.expectApproxEqAbs(@as(f32, 100), m.snap(150), 1e-4); // clamp high
+    try std.testing.expectApproxEqAbs(@as(f32, 3), m.snap(3.4), 1e-4); // snap down
+    try std.testing.expectApproxEqAbs(@as(f32, 4), m.snap(3.6), 1e-4); // snap up
+    // A coarser step snaps to its grid.
+    const q = UiState.SliderModel{ .min = 0, .max = 100, .step = 25 };
+    try std.testing.expectApproxEqAbs(@as(f32, 50), q.snap(60), 1e-4);
+    // Continuous (step 0) clamps only.
+    const c = UiState.SliderModel{ .min = 0, .max = 1, .step = 0 };
+    try std.testing.expectApproxEqAbs(@as(f32, 0.37), c.snap(0.37), 1e-4);
+}
+
+test "SliderModel fraction round-trips the ends and midpoint" {
+    const m = UiState.SliderModel{ .min = 10, .max = 20, .step = 1 };
+    try std.testing.expectApproxEqAbs(@as(f32, 10), m.fromFraction(0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 20), m.fromFraction(1), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 15), m.fromFraction(0.5), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), m.toFraction(10), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), m.toFraction(20), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), m.toFraction(15), 1e-4);
+}
+
+test "SliderModel.nudge: arrows one step, page coarse, Home/End jump to ends" {
+    const m = UiState.SliderModel{ .min = 0, .max = 100, .step = 1 };
+    try std.testing.expectApproxEqAbs(@as(f32, 51), m.nudge(50, .right), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 49), m.nudge(50, .left), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 51), m.nudge(50, .up), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 49), m.nudge(50, .down), 1e-4);
+    // Page = max(step*10, range/10) = max(10, 10) = 10.
+    try std.testing.expectApproxEqAbs(@as(f32, 60), m.nudge(50, .page_up), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 40), m.nudge(50, .page_down), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), m.nudge(50, .home), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 100), m.nudge(50, .end), 1e-4);
+    // Nudging past an end clamps.
+    try std.testing.expectApproxEqAbs(@as(f32, 100), m.nudge(100, .right), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), m.nudge(0, .left), 1e-4);
 }
