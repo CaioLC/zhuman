@@ -20,6 +20,7 @@ pub const baselines = @import("./baselines.zig");
 pub const body = @import("./body.zig");
 pub const catalog = @import("./catalog.zig");
 pub const market = @import("./market.zig");
+pub const barter = @import("./barter.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
@@ -42,6 +43,7 @@ test {
     _ = body;
     _ = catalog;
     _ = market;
+    _ = barter;
     _ = res;
     _ = actions;
     _ = capital;

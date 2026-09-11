@@ -175,6 +175,14 @@ fn grant(w: *World, e: Entity, comptime GoodT: type) void {
     }
 }
 
+/// A public wrapper over `grant` — the same "apply the good's effect once, on the way in from
+/// absent" the build path runs, exposed so a **bought** good (ACT1-14 barter) lands its effect
+/// through the identical path rather than duplicating the switch. Ownership (`w.add`) is the
+/// caller's; this is only the effect.
+pub fn grant_public(w: *World, e: Entity, comptime GoodT: type) void {
+    grant(w, e, GoodT);
+}
+
 /// The exact reverse of `grant` — every pair is symmetric so durability can walk a good
 /// back out without special cases.
 fn revoke(w: *World, e: Entity, comptime GoodT: type) void {
