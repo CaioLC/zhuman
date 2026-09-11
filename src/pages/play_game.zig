@@ -26,9 +26,11 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     var buf: [64]u8 = undefined;
 
     // KIT-04: build inside the one terminal shell, supplying region descriptors instead of
-    // hand-building the header/body/footer graph. Act I wants the header, the main body, and
-    // the footer log; the rail/nav/strips stay off until Act II turns them on. VIEW-04: the
-    // responsive page padding is the screen's choice (the shell does not re-derive it).
+    // hand-building the header/body/footer graph. Act I wants the header, the main body, the
+    // footer log, and — once the run is underway — the collapsible Holdings rail (KIT-05).
+    // VIEW-04: the responsive page padding is the screen's choice (the shell does not re-derive
+    // it). The rail region is always allocated; it stays zero-width until we fill it, so the
+    // pre-tutorial "one card" moment is unaffected.
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
     const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
     const regions = try t.shell(ctx, .{
@@ -36,6 +38,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         .act = .act_one,
         .page_pad = page_pad,
         .section_gap = ha.tokens.gap.section,
+        .rail = true,
         .footer = true,
     });
     const header = regions.header;
@@ -86,14 +89,19 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 // Eating is no longer an action — the metabolism loop runs regardless;
                 // the dial below sets its rate (the standing ration/feast policy).
                 _ = try t.ration_dial(ctx, center, world, e, "ration");
-                // Holdings rides under the dial rather than beside the resource bar,
-                // which is where it belongs and where it does not fit: the centre column
-                // is 640 wide inside an 868 content box, leaving 114px of margin against
-                // the ~300 this needs. It wants the reflow (docs/roadmap.md, Act I) — and
-                // meanwhile this is the tab where "why does Forage cost 1.7?" gets asked.
-                _ = try t.holdings(ctx, center, world, e, "holdings");
             } else {
                 _ = try t.build_list(ctx, center, world, e, "buildlist");
+            }
+        }
+
+        // KIT-05: Holdings now lives in the collapsible rail (the shell's left region),
+        // where the prototype puts it — a persistent, collapsible column rather than the
+        // cramped in-centre placement it had before (which did not fit the 640-wide column).
+        // Shown once the run is underway (a click has happened); the rail is a no-op before.
+        if (ctx.res.sim.tutorial_done) {
+            if (regions.rail) |rail_region| {
+                const r = try t.rail(ctx, rail_region, .{ .id = "holdings_rail", .label = "HOLDINGS" });
+                if (r.body) |rb| _ = try t.holdings(ctx, rb, world, e, "holdings");
             }
         }
     }

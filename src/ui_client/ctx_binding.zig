@@ -223,6 +223,12 @@ pub const UiState = struct {
     /// switches: the caller reads `step`, builds that step, and bumps it on a click.
     /// Step 0 is the semantic and bitwise-zero default.
     pub const StepState = struct { step: usize = 0 };
+    /// A collapsible rail's expanded/collapsed memory (KIT-05), keyed by the rail's own
+    /// `node.key`. `false` (expanded) is the semantic and bitwise-zero default. Distinct
+    /// rails carry distinct keys, so the ACTIONS and BUILD rails keep *separate* collapse
+    /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
+    /// template overwriting this each frame, which leaves the other keys' values untouched.
+    pub const RailState = struct { collapsed: bool = false };
     /// The BUILD list's sort and filter, keyed on a node that is built **every** frame —
     /// the tab strip's container, not the list itself, which only exists while its tab is
     /// active and would have its slot pruned on every visit to the other one.

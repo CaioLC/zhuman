@@ -24,6 +24,7 @@ const build_list_mod = @import("./build_list.zig");
 const capital_row_mod = @import("./capital_row.zig");
 const good_text_mod = @import("./good_text.zig");
 const terminal_mod = @import("./terminal.zig");
+const rail_mod = @import("./rail.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -50,6 +51,9 @@ pub const shell = terminal_mod.shell;
 pub const Shell = terminal_mod.Regions;
 pub const ShellOptions = terminal_mod.ShellOptions;
 pub const Act = terminal_mod.Act;
+pub const rail = rail_mod.rail;
+pub const Rail = rail_mod.Rail;
+pub const RailOptions = rail_mod.RailOptions;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

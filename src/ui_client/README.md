@@ -361,8 +361,14 @@ reached). Fixed-capacity and non-allocating (a full table drops a new id, so its
 the fallback target — snap, never crash); `Resources.tween` holds it inline and `main` projects
 the motion policy onto it each frame. Pure and SDL-free (the caller supplies `dt`), so
 interpolation, interrupt/reverse, reduced-motion snap, and stable-key independence are unit-tested
-without a renderer or a clock. The named consumers (Holdings KIT-05, StockToken KIT-12, board
-BOARD-05) read this when they land.
+without a renderer or a clock. Its **first consumer is the KIT-05 Holdings/BODY rail**
+(`pages/templates/rail.zig`): the rail keys a tween by its own node id and rides the width
+between `tokens.rail.collapsed` (36) and `tokens.rail.expanded` (252) over `tokens.dur_rail_s`
+(120ms), so a toggle animates and a mid-transition re-toggle reverses smoothly; the collapse bit
+itself lives in a keyed `RailState` pool (distinct rails → separate ACTIONS/BUILD memories; the
+STRUCTURE rail is forced collapsed on entry without touching the others), and the vertical
+restore affordance is a chevron over a `.vertical()` (TEXT-06 CCW-90) label. StockToken (KIT-12)
+and the board (BOARD-05) read this registry when they land.
 ## Frame-local view metrics (`view.zig`)
 
 VIEW-01 computes a `ViewMetrics` once per frame in `build_ui`'s prologue and stores it on

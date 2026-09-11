@@ -61,10 +61,11 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     const th = ctx.res.view.theme;
     var buf: [48]u8 = undefined;
 
-    // Fixed width because the rows inside right-align against it (`pct_of_parent`), and a
-    // `fit_children` parent over percent children has nothing to resolve against.
+    // Fills its parent's width (the KIT-05 rail body, a definite width), and the rows inside
+    // right-align against it (`pct_of_parent`). Before KIT-05 this was a fixed 300 in the
+    // cramped centre column; in the rail it takes the rail's width so the rows track it.
     const panel = try el.div(ctx, parent, id);
-    _ = panel.with_size(.{ .fixed = 300 }, .fit_children)
+    _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(3)
         .with_style(.{ Style{ .outline_color = th.line }, style.solid, style.pad_sym(10, 9) });
 
