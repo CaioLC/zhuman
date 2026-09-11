@@ -46,6 +46,7 @@ pub const stat = stat_mod.stat;
 pub const ScrollView = scroll_view_mod.ScrollView;
 pub const scroll_view = scroll_view_mod.scroll_view;
 pub const log_view = log_view_mod.log_view;
+pub const log_history = log_view_mod.log_history;
 pub const resource_bar = resource_bar_mod.resource_bar;
 pub const action_button = action_button_mod.action_button;
 pub const action_card = action_card_mod.action_card;
