@@ -34,6 +34,7 @@ const runline_mod = @import("./runline.zig");
 const market_strip_mod = @import("./market_strip.zig");
 const catalog_controls_mod = @import("./catalog_controls.zig");
 const catalog_viewport_mod = @import("./catalog_viewport.zig");
+const eating_policy_mod = @import("./eating_policy.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -88,6 +89,7 @@ pub const Catalog = catalog_controls_mod.Catalog;
 pub const catalog_less_than = catalog_controls_mod.lessThan;
 pub const catalog_viewport = catalog_viewport_mod.catalog_viewport;
 pub const Viewport = catalog_viewport_mod.Viewport;
+pub const eating_policy = eating_policy_mod.eating_policy;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;

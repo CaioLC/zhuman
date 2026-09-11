@@ -15,6 +15,7 @@ pub const dist = @import("./dist.zig");
 pub const palette = @import("./palette.zig");
 pub const tokens = @import("./tokens.zig");
 pub const query = @import("./query.zig");
+pub const eating = @import("./eating.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
@@ -32,6 +33,7 @@ test {
     _ = palette;
     _ = tokens;
     _ = query;
+    _ = eating;
     _ = res;
     _ = actions;
     _ = capital;
