@@ -248,6 +248,24 @@ pub const UiState = struct {
         sort_open: bool = false,
         last_sig: u64 = 0,
     };
+    /// A trade dialog's per-mode selection (KIT-21), keyed by the dialog node. `mode` is the
+    /// active tab (0 = buy, 1 = sell); `buy_sel`/`sell_sel` are the selected offer index **kept
+    /// separately per mode**, so switching tabs does not discard the other mode's choice. All
+    /// default to 0 (buy tab, first offer) — bitwise zero.
+    pub const TradeState = struct {
+        mode: usize = 0,
+        buy_sel: usize = 0,
+        sell_sel: usize = 0,
+
+        /// The selection for the current `mode`.
+        pub fn sel(self: *const TradeState) usize {
+            return if (self.mode == 0) self.buy_sel else self.sell_sel;
+        }
+        /// Set the selection for the current `mode` (leaving the other mode's untouched).
+        pub fn setSel(self: *TradeState, i: usize) void {
+            if (self.mode == 0) self.buy_sel = i else self.sell_sel = i;
+        }
+    };
     /// A select/popup control's state (KIT-09), keyed by the control's own `node.key`: whether
     /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
     /// move while open (the pending choice Enter commits). All default to the closed, first-item
