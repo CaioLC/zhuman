@@ -25,24 +25,21 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     const th = ctx.res.view.theme;
     var buf: [64]u8 = undefined;
 
-    // VIEW-03: build inside the centered terminal workspace. The shell fills the window with
-    // the ground, draws the framed/centered terminal (border + shadow + clip) at/above the
-    // reference, or the full window at ≤760, and returns the inner content box to lay out in.
-    const shell = try t.terminal(ctx, "play");
-    const root = shell.content;
-    // VIEW-04: responsive page padding — the prototype tightens at ≤560 logical px. The two
-    // insets and the section gap are KIT-01 tokens (`tokens.pad_page*`, `tokens.gap.section`),
-    // not bare literals.
+    // KIT-04: build inside the one terminal shell, supplying region descriptors instead of
+    // hand-building the header/body/footer graph. Act I wants the header, the main body, and
+    // the footer log; the rail/nav/strips stay off until Act II turns them on. VIEW-04: the
+    // responsive page padding is the screen's choice (the shell does not re-derive it).
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
     const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
-    _ = root.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.section)
-        .with_style(.{style.pad(page_pad)});
-
-    // --- header: a thin strip — stocks left, run context right ----------------------------
-    // Kept as an in-flow row (not a bare anchored line) so the strip reserves its height
-    // and the body sections below never slide under it.
-    const header = try el.div(ctx, root, "header");
-    _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    const regions = try t.shell(ctx, .{
+        .id = "play",
+        .act = .act_one,
+        .page_pad = page_pad,
+        .section_gap = ha.tokens.gap.section,
+        .footer = true,
+    });
+    const header = regions.header;
+    const body = regions.body;
 
     // Left: the always-on V/F/M stock summary (skipped once the actor is gone).
     const q = ecs.MaybeSingle(.{
@@ -60,13 +57,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         // pay once, own a thing that changes which flows exist). The tab switch itself
         // enacts the now-vs-later margin; selection persists in the strip's TabsState.
         if (!ctx.res.sim.tutorial_done) {
-            if (try t.action_card(ctx, root, world, e, comp.ActionForage, "gather", "Forage", actions.action_forage)) |card| {
+            if (try t.action_card(ctx, body, world, e, comp.ActionForage, "gather", "Forage", actions.action_forage)) |card| {
                 _ = card.with_layout(.center);
             }
         } else {
             // `.cross = .start`: the strip left-aligns over the content's edge — the
             // classic tab silhouette — instead of floating centered above it.
-            const center = try el.div(ctx, root, "center");
+            const center = try el.div(ctx, body, "center");
             _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
             const tb = try t.tabs(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
@@ -115,15 +112,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     _ = (try el.text(ctx, run_line, "day", day_txt))
         .with_style(.{ style.h3, Style{ .text = th.fg } });
 
-    // --- footer: the event log, full width at the bottom, 4 lines tall --------------------
-    // Anchored (out-of-flow), so the column flow above never pushes it — it owns the
-    // bottom edge of the content box regardless of what the body sections grow into.
-    const footer = try el.div(ctx, root, "footer");
-    _ = footer.with_layout(.bottom_left);
-    // log_view authors in logical px (VIEW-02); the content column in logical is the terminal's
-    // logical width minus the page padding.
-    const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
-    try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
+    // --- footer: the event log, full width at the bottom, 4 lines tall (the shell's footer
+    // region, bottom-anchored). log_view authors in logical px (VIEW-02); the content column
+    // in logical is the terminal's logical width minus the page padding.
+    if (regions.footer) |footer| {
+        const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
+        try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
+    }
 
-    return shell.root.get();
+    return regions.root.get();
 }

@@ -404,6 +404,20 @@ to fill. At **≤760** the terminal is the whole window (no ground/shadow/border
 prototype's full-width mode. `play_game`/`gameover`/`act_one_end` build into the returned content
 box. The terminal rect is scaled to device px once here.
 
+**One shell, region descriptors (KIT-04).** `terminal.zig` also exports `shell(ctx, opts)` —
+the single region skeleton every screen composes into, built on top of `terminal` (the chrome
+is unchanged). A screen passes a `ShellOptions` descriptor (its `act` identity, responsive
+`page_pad`/`section_gap`, and which optional regions it wants) and gets back a `Regions` struct
+of `El` handles to fill: always `header` (thin top strip) and `body` (the growing main
+surface), plus optional `rail`, `nav`, `market`, `activity`, and a bottom-anchored `footer` —
+each `null` unless requested. The interior is laid out in the prototype's arrangement (header ·
+optional strips · a grid row of `rail | body` · optional nav · footer), so a screen never
+hand-builds that graph again — Act I turns on `footer`, Act II will turn on `rail`/`nav`/strips
+against the same skeleton. **Overlay roots (tooltip/modal) stay the screen's own top-layer
+roots**, deliberately *not* children of the terminal box, so they float above the clip and can
+cover any control; the shell owns only the in-terminal regions. `play_game`/`gameover`/
+`act_one_end` all build through `shell` now.
+
 **Responsive branches (VIEW-04).** Screens and templates read `metrics.width_class.atMost(.w560)`
 (and `.w440`, `.w760`) to branch on the prototype's stacked breakpoints. What is wired today:
 the HUD page padding tightens to `10px` at ≤560, and the optional "Act I ·" run-context label is

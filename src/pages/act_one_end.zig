@@ -47,10 +47,14 @@ const beats = [_]Beat{
 pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     const th = ctx.res.view.theme;
 
-    // VIEW-03: the Act I curtain lives in the centered terminal workspace.
-    const shell = try t.terminal(ctx, "act1");
-    const root = shell.content;
-    const dialog = try t.panel(ctx, root, "curtain", "ACT I");
+    // KIT-04: the Act I curtain lives in the one terminal shell; it needs only the main body.
+    const regions = try t.shell(ctx, .{
+        .id = "act1",
+        .act = .act_one,
+        .page_pad = ha.tokens.pad_page,
+        .section_gap = ha.tokens.gap.section,
+    });
+    const dialog = try t.panel(ctx, regions.body, "curtain", "ACT I");
     _ = dialog.with_layout(.center);
 
     const st = dialog.get().state(ctx, StepState);
@@ -85,5 +89,5 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
             st.step = 0;
         }
     }
-    return shell.root.get();
+    return regions.root.get();
 }

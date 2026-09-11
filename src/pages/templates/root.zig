@@ -46,6 +46,10 @@ pub const capital_row = capital_row_mod.capital_row;
 pub const good_text = good_text_mod;
 pub const terminal = terminal_mod.terminal;
 pub const Terminal = terminal_mod.Shell;
+pub const shell = terminal_mod.shell;
+pub const Shell = terminal_mod.Regions;
+pub const ShellOptions = terminal_mod.ShellOptions;
+pub const Act = terminal_mod.Act;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
