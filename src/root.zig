@@ -17,6 +17,7 @@ pub const tokens = @import("./tokens.zig");
 pub const query = @import("./query.zig");
 pub const eating = @import("./eating.zig");
 pub const baselines = @import("./baselines.zig");
+pub const body = @import("./body.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
@@ -36,6 +37,7 @@ test {
     _ = query;
     _ = eating;
     _ = baselines;
+    _ = body;
     _ = res;
     _ = actions;
     _ = capital;

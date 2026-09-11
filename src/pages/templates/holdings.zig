@@ -146,28 +146,48 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
         try line(ctx, margins, "m_max", "Vigor ceiling", vtxt, if (vigor.max > base_ceiling) th.good else th.danger);
     }
 
-    // --- BODY projection: how long the larder lasts at the current ration ------------
-    // Derived from the *same* rate the metabolism loop applies — `base_rate` times the agent's
-    // bounded scalar `rate` (ACT1-02, clamped through `Config`), and the generators' inflow — so
-    // the projection can never drift from what actually happens. Never a copied tuning number.
+    // --- BODY projection: coverage (with generator inflow) + authoritative recovery -------
+    // Coverage derives from the *same* rate the metabolism loop applies — `base_rate` times the
+    // agent's bounded scalar `rate` (ACT1-02, clamped) — minus the generators' inflow, so it
+    // can never drift. The recovery line is the authoritative `body.project` (ACT1-03), which
+    // classifies at-ceiling / no-food / no-quality / partial / recovering from real state.
     if (world.get(e, comp.Metabolism)) |met| {
         if (world.get(e, comp.InventoryFood)) |food| {
-            const net = ha.systems.net_food_drawdown(met.base_rate, ctx.res.config.clampMetabolism(met.rate), per_day);
-            const body = try el.div(ctx, panel, "body");
-            _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+            const rate = ctx.res.config.clampMetabolism(met.rate);
+            const net = ha.systems.net_food_drawdown(met.base_rate, rate, per_day);
+            const body_panel = try el.div(ctx, panel, "body");
+            _ = body_panel.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
                 .with_flow(.{ .dir = .column }).with_gap(1)
                 .with_style(.{ Style{ .outline_color = th.line }, style.pad_each(0, 6, 0, 0) });
-            _ = (try el.text(ctx, body, "bh", "BODY"))
+            _ = (try el.text(ctx, body_panel, "bh", "BODY"))
                 .with_style(.{ style.body, Style{ .text = th.dim } });
             if (net <= 0.001) {
                 // Inflow covers consumption — the larder holds (a good state).
-                try line(ctx, body, "b_days", "Larder", "holds", th.good);
+                try line(ctx, body_panel, "b_days", "Larder", "holds", th.good);
             } else {
                 const days = food.v / net;
                 var dbuf: [24]u8 = undefined;
                 const txt = std.fmt.bufPrint(&dbuf, "{d:.1} days", .{days}) catch "?";
                 // Under ~2 days is a danger readout; otherwise a plain reading.
-                try line(ctx, body, "b_days", "Food lasts", txt, if (days < 2) th.danger else th.fg);
+                try line(ctx, body_panel, "b_days", "Food lasts", txt, if (days < 2) th.danger else th.fg);
+            }
+            // Authoritative recovery outcome (ACT1-03).
+            const proj = ha.body.project(.{
+                .food = food.v,
+                .quality = food.quality,
+                .vigor = vigor.v,
+                .vigor_max = vigor.max,
+                .base_rate = met.base_rate,
+                .rate = rate,
+                .vigor_per_food = ctx.res.config.vigor_per_food,
+            });
+            var rbuf: [24]u8 = undefined;
+            switch (proj.recovery) {
+                .at_ceiling => try line(ctx, body_panel, "b_rec", "Vigor", "full", th.good),
+                .no_food => try line(ctx, body_panel, "b_rec", "Recovery", "starving", th.danger),
+                .no_quality => try line(ctx, body_panel, "b_rec", "Recovery", "no vigor", th.danger),
+                .partial => |r| try line(ctx, body_panel, "b_rec", "Recovery", std.fmt.bufPrint(&rbuf, "+{d:.0} partial", .{r.restored}) catch "?", th.warn),
+                .recovering => |r| try line(ctx, body_panel, "b_rec", "Full in", std.fmt.bufPrint(&rbuf, "{d:.1} days", .{r.days}) catch "?", th.fg),
             }
         }
     }
