@@ -86,10 +86,13 @@ pub const Config = struct {
     starve_per_day: f32 = 4.0,
     /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
     vigor_per_food: f32 = 2.0,
-    /// Per-day consumption multipliers for the two off-normal ration settings. `normal`
-    /// has none by definition — `Metabolism.base_rate` already is the normal rate.
-    ration_scale: f32 = 0.5,
-    feast_scale: f32 = 2.0,
+    /// The bounded metabolism-rate range and default (ACT1-02). `Metabolism.rate` is a scalar
+    /// multiplier the player sets continuously; the *range* and *default* are config (not UI
+    /// words), and `clampMetabolism` is the one place a rate is made legal. Normal is the
+    /// default (`1.0`); ration/feast are just points inside `[min, max]`.
+    metabolism_rate_min: f32 = 0.5,
+    metabolism_rate_max: f32 = 2.0,
+    metabolism_rate_default: f32 = 1.0,
 
     // —— capital ——
     /// Share of a cancelled build's materials that comes back. Flat, not prorated by
@@ -110,6 +113,12 @@ pub const Config = struct {
     /// Labor's yield multiplier for an agent in this condition.
     pub fn yield_of(self: Config, c: Condition) f32 {
         return if (c == .alive) 1.0 else self.weary_yield;
+    }
+
+    /// Clamp a metabolism rate into the authoritative `[min, max]` band (ACT1-02) — the one
+    /// place a rate is made legal, used on migration/reset and by any UI that sets the rate.
+    pub fn clampMetabolism(self: Config, rate: f32) f32 {
+        return std.math.clamp(rate, self.metabolism_rate_min, self.metabolism_rate_max);
     }
 };
 
@@ -239,3 +248,12 @@ pub const Resources = struct {
         return self.sim.prng.random();
     }
 };
+
+test "Config.clampMetabolism bounds the rate into [min, max]" {
+    const cfg = Config{}; // min 0.5, max 2.0, default 1.0
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0), cfg.clampMetabolism(1.0), 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), cfg.clampMetabolism(0.1), 1e-6); // clamps low
+    try std.testing.expectApproxEqAbs(@as(f32, 2.0), cfg.clampMetabolism(9.0), 1e-6); // clamps high
+    try std.testing.expectApproxEqAbs(@as(f32, 1.3), cfg.clampMetabolism(1.3), 1e-6); // in-band untouched
+    try std.testing.expectEqual(cfg.metabolism_rate_default, (comp.Metabolism{}).rate); // default matches component
+}

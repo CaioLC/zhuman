@@ -147,12 +147,12 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     }
 
     // --- BODY projection: how long the larder lasts at the current ration ------------
-    // Derived from the *same* rate the metabolism loop applies (`systems.ration_mult`,
-    // made public for exactly this) times `base_rate`, and the generators' inflow — so the
-    // projection can never drift from what actually happens. Never a copied tuning number.
+    // Derived from the *same* rate the metabolism loop applies — `base_rate` times the agent's
+    // bounded scalar `rate` (ACT1-02, clamped through `Config`), and the generators' inflow — so
+    // the projection can never drift from what actually happens. Never a copied tuning number.
     if (world.get(e, comp.Metabolism)) |met| {
         if (world.get(e, comp.InventoryFood)) |food| {
-            const net = ha.systems.net_food_drawdown(met.base_rate, ha.systems.ration_mult(ctx.res.config, met.setting), per_day);
+            const net = ha.systems.net_food_drawdown(met.base_rate, ctx.res.config.clampMetabolism(met.rate), per_day);
             const body = try el.div(ctx, panel, "body");
             _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
                 .with_flow(.{ .dir = .column }).with_gap(1)

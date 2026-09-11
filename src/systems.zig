@@ -38,48 +38,30 @@ pub fn update_food(
     }
 }
 
-/// Per-day food consumption multiplier for the player-set eating policy. `.normal` is
-/// 1.0 by definition — `Metabolism.base_rate` already *is* the normal rate. Public so a
-/// projection (Holdings/BODY, KIT-06) reads the *same* rate the loop applies, never a copy.
-pub fn ration_mult(cfg: res_mod.Config, s: comp.Metabolism.Setting) f32 {
-    return switch (s) {
-        .ration => cfg.ration_scale,
-        .normal => 1.0,
-        .feast => cfg.feast_scale,
-    };
-}
-
 /// Net daily food drawdown (Holdings/BODY projection, KIT-06): the metabolism's per-day
-/// consumption (`base_rate × ration_mult` — the *same* product `metabolize` applies) minus a
-/// per-day generator inflow. `≤0` means the larder holds. Lives here beside `ration_mult` so
-/// the projection provably reads the loop's rate rather than a copied tuning constant, and so
-/// it is covered by `zig build test`.
-pub fn net_food_drawdown(base_rate: f32, mult: f32, inflow_per_day: f32) f32 {
-    return base_rate * mult - inflow_per_day;
-}
-
-test "ration_mult returns the config scales; normal is unity" {
-    const cfg = res_mod.Config{}; // ration_scale 0.5, feast_scale 2.0
-    try std.testing.expectApproxEqAbs(@as(f32, 0.5), ration_mult(cfg, .ration), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 1.0), ration_mult(cfg, .normal), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0), ration_mult(cfg, .feast), 1e-4);
+/// consumption (`base_rate × rate` — the *same* product `metabolize` applies, with `rate` the
+/// bounded scalar from ACT1-02) minus a per-day generator inflow. `≤0` means the larder holds.
+/// Lives here beside `metabolize` so the projection provably reads the loop's rate rather than
+/// a copied tuning constant, and so it is covered by `zig build test`.
+pub fn net_food_drawdown(base_rate: f32, rate: f32, inflow_per_day: f32) f32 {
+    return base_rate * rate - inflow_per_day;
 }
 
 test "net_food_drawdown: consumption minus inflow; days = food/net when positive" {
-    const cfg = res_mod.Config{};
     const base: f32 = 1.5;
-    // Normal: net is exactly base_rate; ration halves it; a big enough inflow makes it hold.
-    try std.testing.expectApproxEqAbs(@as(f32, 1.5), net_food_drawdown(base, ration_mult(cfg, .normal), 0), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.75), net_food_drawdown(base, ration_mult(cfg, .ration), 0), 1e-4);
-    try std.testing.expect(net_food_drawdown(base, ration_mult(cfg, .ration), 1.0) <= 0);
+    // The scalar rate scales the drawdown directly: normal (1.0) is base_rate; ration (0.5)
+    // halves it; a big enough generator inflow makes it hold.
+    try std.testing.expectApproxEqAbs(@as(f32, 1.5), net_food_drawdown(base, 1.0, 0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.75), net_food_drawdown(base, 0.5, 0), 1e-4);
+    try std.testing.expect(net_food_drawdown(base, 0.5, 1.0) <= 0);
     // Days-of-food is food / net when net is positive.
-    const net = net_food_drawdown(base, ration_mult(cfg, .normal), 0);
+    const net = net_food_drawdown(base, 1.0, 0);
     try std.testing.expectApproxEqAbs(@as(f32, 4), @as(f32, 6) / net, 1e-4); // 6 / 1.5 = 4 days
 }
 
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
 /// larder — no eat action, eating happens regardless; the *rate* is the agent's standing
-/// choice (`Metabolism.setting`). Food converts to vigor as it's consumed (scaled by the
+/// choice (`Metabolism.rate`, a bounded scalar — ACT1-02). Food converts to vigor as it's consumed (scaled by the
 /// larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
 /// this is the drain that finally makes `mark_dead` fire, and the clock pressure that
 /// makes every action intentional: ration and stay weak, feast and burn the stock.
@@ -100,7 +82,7 @@ pub fn metabolize(
         const frac_before = vigor.v / vigor.max;
 
         if (food.v > 0) {
-            const want = met.base_rate * ration_mult(cfg.*, met.setting) * dt_days;
+            const want = met.base_rate * cfg.clampMetabolism(met.rate) * dt_days;
             const eaten = @min(food.v, want);
             food.v -= eaten;
             vigor.v = @min(vigor.v + eaten * cfg.vigor_per_food * @as(f32, @floatFromInt(food.quality)), vigor.max);
@@ -270,7 +252,7 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 2, .quality = 1, .spoils = 0 },
-        comp.Metabolism{ .setting = .feast }, // wants 3/day, finds only 2
+        comp.Metabolism{ .rate = 2.0 }, // wants 3/day, finds only 2
     });
 
     ecs.run(&w, &res, metabolize);
@@ -286,7 +268,7 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
     const e = w.spawn(.{
         comp.Vigor{ .v = 5, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.Metabolism{ .setting = .ration }, // setting is irrelevant when starving
+        comp.Metabolism{ .rate = 0.5 }, // rate is irrelevant when starving
     });
 
     ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day): crosses weak (3.5) and starving (1.2)

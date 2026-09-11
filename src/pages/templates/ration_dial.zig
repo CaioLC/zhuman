@@ -1,10 +1,12 @@
 //! `ration_dial` template — the eating-policy control: `eating  Ration Normal Feast`
-//! chips writing straight to the agent's `comp.Metabolism.setting`. Unlike `tabs` (whose
-//! selection is UI state in a pooled slot), this is **sim state on the agent** — eating
-//! happens on the metabolism loop whether or not the player ever touches the dial; the
-//! dial only sets the rate. Chip chrome mirrors `tabs`: active fg + outline, hover
-//! accent, dim idle, with a dim lead-in label. Returns the row `El` (null if the agent
-//! has no metabolism).
+//! `ration_dial` template — the eating-policy control: `eating  Ration Normal Feast`
+//! chips writing straight to the agent's `comp.Metabolism.rate` — the bounded scalar
+//! (ACT1-02); the three chips are named points (0.5 / 1.0 / 2.0) inside the config's
+//! `[0.5, 2.0]` band. Unlike `tabs` (whose selection is UI state in a pooled slot), this is
+//! **sim state on the agent** — eating happens on the metabolism loop whether or not the
+//! player ever touches the dial; the dial only sets the rate. Chip chrome mirrors `tabs`:
+//! active fg + outline, hover accent, dim idle, with a dim lead-in label. Returns the row
+//! `El` (null if the agent has no metabolism).
 
 const std = @import("std");
 const ha = @import("ha");
@@ -19,11 +21,11 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-const Option = struct { s: comp.Metabolism.Setting, name: []const u8 };
+const Option = struct { rate: f32, name: []const u8 };
 const options = [_]Option{
-    .{ .s = .ration, .name = "Ration" },
-    .{ .s = .normal, .name = "Normal" },
-    .{ .s = .feast, .name = "Feast" },
+    .{ .rate = 0.5, .name = "Ration" },
+    .{ .rate = 1.0, .name = "Normal" },
+    .{ .rate = 2.0, .name = "Feast" },
 };
 
 pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !?El {
@@ -49,15 +51,17 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
         if (q.clicked) _ = ctx.requestFocus(chip_key);
         const focused = ctx.isFocused(chip_key);
         if (q.hovering) ctx.res.cursor.request(.pointer);
-        if (q.clicked) met.setting = opt.s;
-        const is_active = met.setting == opt.s;
+        if (q.clicked) met.rate = opt.rate;
+        // Active iff the agent's scalar rate matches this chip's rate (ACT1-02). The three
+        // chips are named points inside the bounded `[0.5, 2.0]` band the config owns.
+        const is_active = @abs(met.rate - opt.rate) < 0.001;
         uic.publishControlState(ctx, chip_key, .{
             .focused = focused,
             .focus_visible = focused,
             .selected = is_active,
         });
         // INPUT-08: a ration choice is a single-selection member; the authoritative
-        // `selected` fact is `met.setting == opt.s` (sim state on the agent). Linked to
+        // `selected` fact is `met.rate == opt.rate` (sim state on the agent). Linked to
         // the eating group by key.
         ctx.res.semantics.publish(uic.semantic.describeRadio(chip_key, opt.name, is_active, focused, bar_key));
         if (member_len < member_keys.len) {
