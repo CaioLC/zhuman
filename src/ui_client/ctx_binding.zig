@@ -256,6 +256,10 @@ pub const UiState = struct {
         mode: usize = 0,
         buy_sel: usize = 0,
         sell_sel: usize = 0,
+        /// Whether the trade dialog is open (ACT1-17). Kept on a **stable** node (the market
+        /// strip, built every frame) so the open/close lifecycle survives the frame-arena rebuild;
+        /// the dialog's `mode`/selection ride here too, so a reopened dialog can restore them.
+        open: bool = false,
 
         /// The selection for the current `mode`.
         pub fn sel(self: *const TradeState) usize {

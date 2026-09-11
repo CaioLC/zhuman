@@ -446,6 +446,15 @@ branches — the two/one action-column counts, hiding the BUILD effect/cost colu
 the trade-dialog actions — attach to their templates when those land (KIT-15/17/18/21, the board
 BOARD-*) using the same `width_class.atMost` test; they have no consumer to branch yet.
 
+**Trade dialog wired (ACT1-17).** The KIT-21 `trade_dialog` now has a live consumer: the Act I HUD
+opens it as its own overlay root (drawn last, over the shell) when the Passerby strip's Hail is
+clicked and the `market.Encounter` is `present`. Its `TradeState` (mode + per-mode selection +
+an `open` lifecycle flag) rides on the *stable* market-strip node so it survives the frame-arena
+rebuild; the dialog takes that state by pointer rather than owning it on the transient modal box.
+Offers are built in the page from live `market.Quote`s (buys from the passerby's satchel, sells
+from the diminishing schedule), and a confirmed offer routes to `barter.resolve` — so the header,
+Holdings rail, and log refresh the same frame because they read live world state after the resolve.
+
 **Resize without state loss (VIEW-05).** Because the UI is immediate-mode — `build_ui`'s
 prologue recomputes `ViewMetrics` every frame and the tree is rebuilt from the arena — a
 resize needs no relayout hook: layout, clip, and scroll limits recompute for free, and all

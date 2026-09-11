@@ -87,6 +87,7 @@ pub fn trade_dialog(
     buy_offers: []const Offer,
     sell_offers: []const Offer,
     holdings: []const u8,
+    st: *TradeState,
     out_root: **uic.Node,
 ) !Result {
     const th = ctx.res.view.theme;
@@ -94,7 +95,6 @@ pub fn trade_dialog(
 
     const m = try uic.modal(ctx, id, idn.title);
     out_root.* = m.root;
-    const st = m.box.state(ctx, TradeState);
 
     // Kicker under the modal's title. `modal` already built the box; wrap it as an El to append.
     const box = El{ .node = m.box, .ctx = ctx };

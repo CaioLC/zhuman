@@ -21,7 +21,9 @@ const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
 
-pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
+pub const PlayTrees = struct { root: *Node, overlay: ?*Node = null };
+
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
     // ACT1-07: the Act I HUD is composed entirely from the shared terminal shell (KIT-04) —
     // header, the optional Passerby (market) and activity strips, the persistent Holdings rail,
     // the main body (ACTIONS/BUILD), and the four-line footer log. The **same** shell chrome is
@@ -44,6 +46,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     const body = regions.body;
 
     // Left: the always-on V/F/M stock summary (skipped once the actor is gone).
+    var overlay: ?*Node = null; // ACT1-17: the trade dialog's own overlay root, when open
+    var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
     const q = ecs.MaybeSingle(.{
         Entity, comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
     }){ .world = world };
@@ -69,14 +73,18 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         const bar = try t.stockline(ctx, header, "stocks", &stocks);
         _ = bar.with_layout(.bottom_left);
 
-        // ACT1-07: the Passerby (market) strip and the activity strip fill the shell's optional
-        // strip regions, present in both the pre-tutorial and the underway states so the chrome
-        // never shifts. The Passerby is a placeholder venue here — the live merchant encounter
-        // state is ACT1-12 and the trade wiring is ACT1-17; the activity strip reads the agent's
-        // `Busy` (idle vs the verb in progress). The live state-change announcement is ACT1-16,
-        // so `last` is passed as the current state for now (renders, does not yet announce).
-        if (regions.market) |market| {
-            _ = try t.market_strip(ctx, market, "passerby", .passerby);
+        // ACT1-07/17: the Passerby (market) strip fills the shell's market region in both the
+        // pre-tutorial and underway states. The strip's Hail button opens the TradeDialog when a
+        // passerby is actually present (ACT1-12 `dealable`); the dialog is built last, below, as
+        // its own overlay root. The open flag rides on a `TradeState` keyed to the (stable) market
+        // strip node, so it survives the frame-arena rebuild.
+        if (regions.market) |market_region| {
+            const kind: t.MarketKind = .passerby;
+            const strip = try t.market_strip(ctx, market_region, "passerby", kind);
+            trade_ts = strip.get().state(ctx, uic.UiState.TradeState);
+            if (strip.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
+                trade_ts.?.open = true;
+            }
         }
         if (regions.activity) |activity| {
             const busy = world.get(e, comp.Busy);
@@ -153,6 +161,14 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             const r = try t.rail(ctx, rail_region, .{ .id = "holdings_rail", .label = "HOLDINGS" });
             if (r.body) |rb| _ = try t.holdings(ctx, rb, world, e, "holdings");
         }
+
+        // ACT1-17: the TradeDialog. Built last, as its own overlay root (drawn on top), only while
+        // open. Offers are built from live `market.Quote`s — buys from the passerby's satchel
+        // wares, sells from the diminishing schedule for the player's surplus/goods — so BUY/SELL
+        // tabs, stock, preview, and both `YOU GIVE` directions are authoritative, and a confirmed
+        // offer routes straight to `ha.barter.resolve`. Header/Holdings/log refresh the same frame
+        // because they read live world state after the resolve.
+        overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
     // KIT-12: the runline — energy rate (0 in Act I → omitted), act label, and day. VIEW-04
@@ -173,5 +189,156 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
     }
 
-    return regions.root.get();
+    return .{ .root = regions.root.get(), .overlay = overlay };
+}
+
+const market = ha.market;
+const barter = ha.barter;
+const Ware = market.Ware;
+
+/// A buy/sell offer paired with the authoritative `market.Quote` that backs it — the dialog shows
+/// the strings, `resolve` runs the quote. Built into the frame arena.
+const BackedOffer = struct { offer: t.TradeOffer, quote: market.Quote };
+
+/// Format a bundle side into a short `NfF`, `NmM`, or tool-name string for the dialog.
+fn wareLabel(w: Ware) []const u8 {
+    return switch (w) {
+        .food => "food",
+        .materials => "materials",
+        .fish_hook => "a fishing net",
+        .whetstone => "a hand axe",
+    };
+}
+
+fn bundleLabel(buf: []u8, b: *const market.Bundle) []const u8 {
+    // A single-line summary of the bundle's lines: "2 food, 4m", or "a hand axe".
+    var w: usize = 0;
+    for (b.slice(), 0..) |line, i| {
+        const sep = if (i == 0) "" else ", ";
+        const piece = switch (line.item) {
+            .food => std.fmt.bufPrint(buf[w..], "{s}{d:.0} food", .{ sep, line.qty }) catch "",
+            .materials => std.fmt.bufPrint(buf[w..], "{s}{d:.0}m", .{ sep, line.qty }) catch "",
+            else => std.fmt.bufPrint(buf[w..], "{s}{s}", .{ sep, wareLabel(line.item) }) catch "",
+        };
+        w += piece.len;
+    }
+    return buf[0..w];
+}
+
+/// Build the trade dialog overlay when open, wiring confirm → `barter.resolve`. Returns the
+/// dialog's overlay root (or null when closed). The offers are the passerby's satchel wares (buy)
+/// and the player's sellable goods + surplus (sell), each backed by a live `market.Quote`.
+fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
+    const ts = ts_opt orelse return null;
+    if (!ts.open) return null;
+
+    const enc = &ctx.res.sim.encounter;
+    const food = world.get(e, comp.InventoryFood).?;
+    const stock = world.get(e, comp.InventoryMaterial).?;
+
+    // --- buy offers: what the passerby will hand over from the satchel --------------------
+    var buys = std.ArrayList(BackedOffer).empty;
+    var gbuf = try ctx.arena.alloc(u8, 512);
+    var gw: usize = 0;
+    inline for (.{ Ware.food, Ware.materials, Ware.fish_hook, Ware.whetstone }) |ware| {
+        const have = enc.stockOf(ware);
+        if (have > 0) {
+            // A simple posted buy price: the passerby wants Materials (bulk) or Food+Materials
+            // (tools) for what it carries. Kept modest; the sell side is where diminishing value
+            // is taught (ACT1-15).
+            var q = market.Quote{ .id = @as(u32, @intFromEnum(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
+            switch (ware) {
+                .food => {
+                    q.give = market.Bundle.one(.materials, 2);
+                    q.receive = market.Bundle.one(.food, 1);
+                },
+                .materials => {
+                    q.give = market.Bundle.one(.food, 1);
+                    q.receive = market.Bundle.one(.materials, 3);
+                },
+                .fish_hook => {
+                    var g = market.Bundle{};
+                    g.add(.food, 2);
+                    g.add(.materials, 8);
+                    q.give = g;
+                    q.receive = market.Bundle.one(.fish_hook, 1);
+                },
+                .whetstone => {
+                    var g = market.Bundle{};
+                    g.add(.food, 2);
+                    g.add(.materials, 6);
+                    q.give = g;
+                    q.receive = market.Bundle.one(.whetstone, 1);
+                },
+            }
+            const give_s = bundleLabel(gbuf[gw..], &q.give);
+            gw += give_s.len;
+            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            gw += recv_s.len;
+            const refusal = q.refusal(enc, food.v, stock.v);
+            try buys.append(ctx.arena, .{
+                .offer = .{ .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
+                .quote = q,
+            });
+        }
+    }
+
+    // --- sell offers: the player's surplus + owned goods, at the diminishing schedule -----
+    var sells = std.ArrayList(BackedOffer).empty;
+    // Surplus resources (a token "sell 1 unit" at the first-unit value; the schedule teaches the
+    // decline via `next_unit`, shown in the effect line).
+    inline for (.{ Ware.food, Ware.materials }) |ware| {
+        const held: f32 = if (ware == .food) food.v else stock.v;
+        if (held >= 1) {
+            const q = market.sell_quote(ware, 0, 100 + @as(u32, @intFromEnum(ware)), enc.id);
+            const give_s = bundleLabel(gbuf[gw..], &q.give);
+            gw += give_s.len;
+            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            gw += recv_s.len;
+            const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}m", .{q.next_unit orelse 0});
+            try sells.append(ctx.arena, .{
+                .offer = .{ .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
+                .quote = q,
+            });
+        }
+    }
+    // Owned tradeable goods (map to a ware the passerby recognizes).
+    inline for (.{ .{ comp.FishNet, Ware.fish_hook }, .{ comp.HandAxe, Ware.whetstone } }) |pair| {
+        const G = pair[0];
+        const ware = pair[1];
+        if (world.has(e, G)) {
+            const q = market.sell_quote(ware, 0, 200 + @as(u32, @intFromEnum(ware)), enc.id);
+            const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(ware)});
+            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            gw += recv_s.len;
+            try sells.append(ctx.arena, .{
+                .offer = .{ .give = give_s, .receive = recv_s, .stock = 1 },
+                .quote = q,
+            });
+        }
+    }
+
+    // Flatten the offer views for the dialog.
+    var buy_views = try ctx.arena.alloc(t.TradeOffer, buys.items.len);
+    for (buys.items, 0..) |b, i| buy_views[i] = b.offer;
+    var sell_views = try ctx.arena.alloc(t.TradeOffer, sells.items.len);
+    for (sells.items, 0..) |s, i| sell_views[i] = s.offer;
+
+    // Live holdings line.
+    var hbuf: [48]u8 = undefined;
+    const holdings = std.fmt.bufPrint(&hbuf, "{d:.0} food · {d:.0}m", .{ food.v, stock.v }) catch "";
+
+    var root: *Node = undefined;
+    const res = try t.trade_dialog(ctx, "trade", .passerby, buy_views, sell_views, holdings, ts, &root);
+
+    // Confirm → resolve the backing quote atomically. Header/Holdings/log read live world state,
+    // so they refresh this same frame.
+    if (res.confirmed) |i| {
+        const backing = if (res.mode == 0) buys.items else sells.items;
+        if (i < backing.len) _ = barter.resolve(world, e, ctx.res, &backing[i].quote);
+    }
+    // Escape / outside-click closes; also close if the passerby has left.
+    if (res.dismissed or !enc.dealable()) ts.open = false;
+
+    return if (ts.open) root else null;
 }

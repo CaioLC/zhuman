@@ -46,13 +46,17 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // curtain, since owning a `Shelter` is the win condition; otherwise the HUD.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const settled = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = world };
-    const screen = if (player.get() == null)
-        try p_gameover(ui_ctx, world)
-    else if (settled.get() != null)
-        try p_act_one_end(ui_ctx, world)
-    else
-        try p_playgame(ui_ctx, world);
+    if (player.get() == null) {
+        try uic.collect(&trees, ui_ctx.arena, try p_gameover(ui_ctx, world));
+    } else if (settled.get() != null) {
+        try uic.collect(&trees, ui_ctx.arena, try p_act_one_end(ui_ctx, world));
+    } else {
+        // ACT1-17: the HUD returns its shell root plus an optional trade-dialog overlay root —
+        // collected after the shell so the modal draws on top (later trees paint last).
+        const play = try p_playgame(ui_ctx, world);
+        try uic.collect(&trees, ui_ctx.arena, play.root);
+        if (play.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
+    }
 
-    try uic.collect(&trees, ui_ctx.arena, screen);
     return trees.items;
 }
