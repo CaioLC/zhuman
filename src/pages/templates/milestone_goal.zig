@@ -93,7 +93,7 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
     _ = bar.with_size(.{ .fixed = 4 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = tone }});
 
     const bodywrap = try el.div(ctx, outer, "body");
-    _ = bodywrap.with_size(.grow, .fit_children).with_flow(.{ .dir = .column })
+    _ = bodywrap.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(6)
         .with_style(.{style.pad_sym(10, 8)});
 
     // The disclosure: summary row (title · readiness · compact summary · primary action),
@@ -115,7 +115,7 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
         uic.publishControlState(ctx, act.get().key, .{ .disabled = !ready, .focused = afocused, .focus_visible = afocused });
         const s = style.resolve(ctx, act.get(), .{style.btn_primary});
         if (s.outline_color) |c| act.get().render_data.outline = .{ .color = c };
-        _ = act.with_layout(.top_left).with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
+        _ = act.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
         _ = (try el.text(ctx, act, "l", goal.action)).with_style(.{style.btn_primary});
         clicked = ready and aq.clicked;
     }

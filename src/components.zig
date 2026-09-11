@@ -357,10 +357,13 @@ pub const ChickenCoop = struct {
 
 /// Shelter.
 pub const Shelter = struct {
-    requires: Requires = .{ .energy = 6.0, .materials = 80.0, .hours = 48 },
+    // ACT1-11: the finalized Act I ending price — 60 materials, 6 energy, 144 hours (6.0 days).
+    requires: Requires = .{ .energy = 6.0, .materials = 60.0, .hours = 144 },
     /// How many of this good the agent holds. Only the first carries the effect.
     count: u32 = 1,
-    unlock: Unlock = .{ .vigor_abs = 15.0, .food = 20.0, .goods = 4 },
+    // ACT1-11: the finalized standing conditions — current Vigor 15, Food 12, and 5 owned
+    // good kinds ("you have made a life here"). Materials are the build cost, not an unlock.
+    unlock: Unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
     /// How many humans live under it. Act II's population fills this; Act I only asks
     /// whether it is more than one.
     capacity: u32 = 4,

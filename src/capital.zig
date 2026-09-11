@@ -740,12 +740,13 @@ test "a generator pays its upkeep and deposits its flow, per day" {
 fn spawn_settler(w: *World) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15 (ACT1-04), max is irrelevant
-        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= 20
-        comp.InventoryMaterial{ .v = 100 }, // >= the 80 price
+        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the finalized 12
+        comp.InventoryMaterial{ .v = 100 }, // >= the finalized 60 price
         comp.Sandals{},
         comp.LeafBed{},
         comp.Cookpot{},
-        comp.WireSnares{}, // four goods owned >= 4
+        comp.RootCellar{},
+        comp.WireSnares{}, // five goods owned >= the finalized 5
     });
 }
 
@@ -754,14 +755,14 @@ test "the shelter is offered only once its standing conditions are met" {
     var res = test_res();
     const e = spawn_settler(&w);
 
-    try std.testing.expectEqual(@as(u32, 4), goods_owned(&w, e));
+    try std.testing.expectEqual(@as(u32, 5), goods_owned(&w, e));
     try std.testing.expect(unlock_met(&w, e, comp.Shelter));
 
     begin_build(&w, e, &res, comp.Shelter);
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.build_shelter, b.doing);
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // 16 - 6 energy
-    try std.testing.expectEqual(@as(f32, 20), w.get(e, comp.InventoryMaterial).?.v); // 100 - 80
+    try std.testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryMaterial).?.v); // 100 - 60
 
     // Vigor fell below the absolute 15 mid-build (16→10) — the work is already paid for, so it
     // stands even though the standing condition would now refuse a fresh start.
@@ -798,11 +799,11 @@ test "each standing condition refuses the shelter on its own" {
             try std.testing.expect(unlock_met(&w, e, comp.Shelter)); // exactly at ⇒ passes
         }
     }
-    // Larder too thin.
+    // Larder too thin (below the finalized 12).
     {
         var w = World.init();
         const e = spawn_settler(&w);
-        w.get(e, comp.InventoryFood).?.v = 19;
+        w.get(e, comp.InventoryFood).?.v = 11;
         try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
         begin_build(&w, e, &res, comp.Shelter);
         try std.testing.expect(!w.has(e, comp.Busy));
@@ -812,7 +813,7 @@ test "each standing condition refuses the shelter on its own" {
         var w = World.init();
         const e = spawn_settler(&w);
         w.remove(e, comp.Sandals);
-        try std.testing.expectEqual(@as(u32, 3), goods_owned(&w, e));
+        try std.testing.expectEqual(@as(u32, 4), goods_owned(&w, e)); // one short of the finalized 5
         try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
         begin_build(&w, e, &res, comp.Shelter);
         try std.testing.expect(!w.has(e, comp.Busy));
