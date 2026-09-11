@@ -170,12 +170,18 @@ pub fn action_tile(
     const can = busy == null and vigor.v > act.requires.energy;
 
     // Price segment (KIT-17): `−{energy}e` then any additional input costs (e.g. Check traps'
-    // `−1m`), all *before* the middot; the duration is the trailing segment after it.
+    // `−1m`), all *before* the middot; the duration is the trailing segment after it. Energy
+    // and materials use `fmt_amount` (one decimal only when fractional), so Forage reads `−1.7e`
+    // while Scavenge reads `−2e` (ACT1-08 metric style).
+    const fmt = @import("../fmt.zig");
+    var ebuf: [8]u8 = undefined;
+    var mbuf: [8]u8 = undefined;
     var cbuf: [24]u8 = undefined;
+    const etxt = fmt.fmt_amount(&ebuf, act.requires.energy);
     const cost_txt = if (act.requires.materials > 0)
-        std.fmt.bufPrint(&cbuf, "-{d:.0}e -{d:.0}m", .{ act.requires.energy, act.requires.materials }) catch "?"
+        std.fmt.bufPrint(&cbuf, "-{s}e -{s}m", .{ etxt, fmt.fmt_amount(&mbuf, act.requires.materials) }) catch "?"
     else
-        std.fmt.bufPrint(&cbuf, "-{d:.0}e", .{act.requires.energy}) catch "?";
+        std.fmt.bufPrint(&cbuf, "-{s}e", .{etxt}) catch "?";
     var dbuf: [12]u8 = undefined;
     const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{act.requires.hours}) catch "?";
 

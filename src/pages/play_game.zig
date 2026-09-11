@@ -91,21 +91,25 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
                 // returning to it restores exactly where it was; the view's nodes are not built.
                 _ = t.retain_view(ctx, center, "buildlist", uic.UiState.BuildViewState);
 
-                // Production row, in the grammar the card taught. A tile exists iff the
-                // agent holds the action component — so an unlocked verb appears here the
-                // frame its tool is finished, and not before. Innate: Forage, Scavenge.
+                // ACT1-08: the finalized ACTIONS surface is exactly the five verbs of the
+                // catalog's Act I surface — Forage, Scavenge, Split wood, Fish, Check traps —
+                // in authored order, plus the Eating Policy, laid out as a two-column grid (one
+                // column at ≤440). Hunt exists as a component but is off the Act I surface
+                // (`catalog`), so it is deliberately not rendered here. Tile metrics/bands derive
+                // from the live records (KIT-17), so this is presentation, not duplicated numbers.
+                const one_col = ctx.res.view.metrics.width_class.atMost(.w440);
+                const grid_w: f32 = if (one_col) 300 else 620; // 1 vs 2 columns of ~300px tiles
                 const acts = try el.div(ctx, center, "acts");
-                _ = acts.with_size(.{ .fixed = 640 }, .fit_children)
-                    .with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(12);
+                _ = acts.with_size(.{ .fixed = grid_w }, .fit_children)
+                    .with_flow(.{ .dir = .row, .wrap = true, .cross = .start }).with_gap(12);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "forage_t", "Forage", actions.action_forage);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionScavenge, "scav_t", "Scavenge", actions.action_scavenge);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Split wood", actions.action_chop_wood);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionCheckTraps, "traps_t", "Check traps", actions.action_check_traps);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionHunt, "hunt_t", "Hunt", actions.action_hunt);
-                // Eating is no longer an action — the metabolism loop runs regardless;
-                // the dial below sets its rate (the standing ration/feast policy).
-                _ = try t.ration_dial(ctx, center, world, e, "ration");
+                // Eating Policy sits in the grid alongside the action tiles — the metabolism
+                // loop runs regardless; the dial sets its standing rate.
+                _ = try t.ration_dial(ctx, acts, world, e, "ration");
             } else {
                 _ = try t.build_list(ctx, center, world, e, "buildlist");
             }

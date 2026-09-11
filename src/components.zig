@@ -69,7 +69,7 @@ pub const InventoryMaterial = struct {
 
 /// Forage: glean the greenbelt. The safe calorie baseline — normal, steady.
 pub const ActionForage = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 0.0, .hours = 4 },
+    requires: Requires = .{ .energy = 1.7, .materials = 0.0, .hours = 4 },
     yields: Yields = .{
         .food = .{ .kind = .normal, .s = 2.0 },
         .materials = .{ .kind = .fixed, .s = 0 },
@@ -94,7 +94,7 @@ pub const ActionScavenge = struct {
 /// Fish: unlocked by the Fishing rod. Better mean than Forage but poisson-lumpy —
 /// feast or famine; wants a larder buffer under the metabolism.
 pub const ActionFish = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 0.0, .hours = 5 },
+    requires: Requires = .{ .energy = 2.0, .materials = 0.0, .hours = 6 },
     yields: Yields = .{
         .food = .{ .kind = .poisson, .s = 3.0 },
         .materials = .{ .kind = .fixed, .s = 0 },
@@ -102,22 +102,24 @@ pub const ActionFish = struct {
 };
 
 /// Split wood: unlocked by the Hatchet — you cannot split logs bare-handed. Steady
-/// materials: beats Scavenge's mean but never jackpots.
+/// materials. Uniform (ACT1-08 finalized kind): an even spread rather than a bell — a
+/// day's splitting is a flat range of output, not a most-likely-mean.
 pub const ActionChopWood = struct {
-    requires: Requires = .{ .energy = 2.0, .materials = 0.0, .hours = 6 },
+    requires: Requires = .{ .energy = 2.5, .materials = 0.0, .hours = 5 },
     yields: Yields = .{
         .food = .{ .kind = .fixed, .s = 0 },
-        .materials = .{ .kind = .normal, .s = 5.0 },
+        .materials = .{ .kind = .uniform, .s = 5.0 },
     },
 };
 
 /// Check traps: unlocked by Wire snares. The first stock-consuming verb — the bait is
 /// materials — converting m→f cheaply in both energy and hours; a bad draw eats the
-/// bait anyway.
+/// bait anyway. Poisson (ACT1-08 finalized kind): trap luck is lumpy — count-like, feast
+/// or nothing, not an even spread.
 pub const ActionCheckTraps = struct {
     requires: Requires = .{ .energy = 1.0, .materials = 1.0, .hours = 2 },
     yields: Yields = .{
-        .food = .{ .kind = .uniform, .s = 3.0 },
+        .food = .{ .kind = .poisson, .s = 3.0 },
         .materials = .{ .kind = .fixed, .s = 0 },
     },
 };

@@ -651,12 +651,12 @@ test "modifier pairs are symmetric — apply then remove restores the margin" {
     // Two goods on one verb stack rather than supersede: crude footwear and a bicycle are
     // both in use at once. A *better tool replacing a weaker one* is the other rule, and
     // it has no subject yet (docs/roadmap.md, Act I).
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.85 * 0.6), forage.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.7 * 0.85 * 0.6), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0 * 0.6), scav.requires.energy, 1e-5);
 
     remove_bicycle(&w, e);
     remove_sandals(&w, e);
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0), forage.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.7), forage.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2.0), scav.requires.energy, 1e-5);
 }
 
@@ -670,12 +670,12 @@ test "chainsaw trades muscle for fuel on the hatchet's verb" {
 
     apply_chainsaw(&w, e);
     const chop = w.get(e, comp.ActionChopWood).?;
-    try std.testing.expectApproxEqAbs(@as(f32, 0.6), chop.requires.energy, 1e-5); // 2 × 0.3
+    try std.testing.expectApproxEqAbs(@as(f32, 0.75), chop.requires.energy, 1e-5); // 2.5 × 0.3
     try std.testing.expectEqual(@as(f32, 1.0), chop.requires.materials); // fuel per use
     try std.testing.expectApproxEqAbs(@as(f32, 12.5), chop.yields.materials.s, 1e-4); // 5 × 2.5
 
     remove_chainsaw(&w, e);
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0), chop.requires.energy, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 2.5), chop.requires.energy, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0.0), chop.requires.materials, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 5.0), chop.yields.materials.s, 1e-4);
 }

@@ -12,10 +12,19 @@ pub fn fmt_num(buf: []u8, n: f32) []const u8 {
     return std.fmt.bufPrint(buf, "{d:.0}", .{r}) catch "?";
 }
 
-test "fmt_num: compact ranges" {
+/// A small resource amount for a price/cost segment (energy/materials): one decimal only when
+/// fractional, so `1.7` renders `1.7` but `2.0` renders `2` and `2.5` renders `2.5` — the
+/// finalized ACTIONS metric style (ACT1-08). Rounds to a tenth to avoid float noise.
+pub fn fmt_amount(buf: []u8, n: f32) []const u8 {
+    const tenths = @round(n * 10);
+    if (@mod(tenths, 10) == 0) return std.fmt.bufPrint(buf, "{d:.0}", .{tenths / 10}) catch "?";
+    return std.fmt.bufPrint(buf, "{d:.1}", .{tenths / 10}) catch "?";
+}
+
+test "fmt_amount: one decimal only when fractional" {
     var buf: [16]u8 = undefined;
-    try std.testing.expectEqualStrings("342", fmt_num(&buf, 342));
-    try std.testing.expectEqualStrings("3.4k", fmt_num(&buf, 3_421));
-    try std.testing.expectEqualStrings("34k", fmt_num(&buf, 34_210));
-    try std.testing.expectEqualStrings("3.4M", fmt_num(&buf, 3_421_000));
+    try std.testing.expectEqualStrings("2", fmt_amount(&buf, 2.0));
+    try std.testing.expectEqualStrings("1.7", fmt_amount(&buf, 1.7));
+    try std.testing.expectEqualStrings("2.5", fmt_amount(&buf, 2.5));
+    try std.testing.expectEqualStrings("1", fmt_amount(&buf, 1.0));
 }

@@ -88,6 +88,17 @@ fn begin_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: type) vo
         res.config.condition(vigor.v / vigor.max) != .alive)
         res.sim.log.push(.warn, "You feel weak. Work will yield less.");
 
+    // ACT1-08: log the upfront payment — the price is paid now, the yield resolves at
+    // completion, so the feed shows the debit the moment the work begins.
+    {
+        var buf: [48]u8 = undefined;
+        const msg = if (act.requires.materials > 0)
+            std.fmt.bufPrint(&buf, "You spend {d:.1}e {d:.0}m to begin.", .{ act.requires.energy, act.requires.materials }) catch "You begin."
+        else
+            std.fmt.bufPrint(&buf, "You spend {d:.1}e to begin.", .{act.requires.energy}) catch "You begin.";
+        res.sim.log.push(.dim, msg);
+    }
+
     const total = res_mod.hours_to_secs(act.requires.hours, res.config.secs_per_day);
     w.add(e, comp.Busy{ .doing = doing_of(ActionT), .total = total, .remaining = total, .quality = quality });
 
@@ -196,22 +207,22 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     action_forage(&w, e, &res);
 
     // Paid and busy — but nothing delivered yet.
-    try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // 10 − 2 energy
+    try std.testing.expectApproxEqAbs(@as(f32, 8.3), w.get(e, comp.Vigor).?.v, 1e-5); // 10 − 1.7 energy
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.forage, b.doing);
     try std.testing.expectEqual(res_mod.hours_to_secs(4, res.config.secs_per_day), b.total); // Forage's 4h
     try std.testing.expectEqual(@as(f32, 1.0), b.quality); // locked at full strength
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v); // no deposit
-    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // no receipt yet
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the upfront-payment line (ACT1-08)
     try std.testing.expect(res.sim.tutorial_done); // the first begun action condenses
 
     // A second begin while busy must refuse, leaving no trace.
     action_forage(&w, e, &res);
-    try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // unpaid
+    try std.testing.expectApproxEqAbs(@as(f32, 8.3), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
 
     finish_labor(&w, e, &res, comp.ActionForage, b.quality);
     try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0); // yield deposited (≥ 0 draw)
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the receipt line
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // payment + the receipt line
 }
 
 test "yield_factor: two stable levels split at the WEARY threshold" {
@@ -228,15 +239,15 @@ test "begin warns once when its own toll crosses into weakness, and locks pre-pa
     var w = World.init();
     var res = test_res();
     const e = w.spawn(.{
-        comp.Vigor{ .v = 4, .max = 10 }, // 40% — paying 2 lands at 20%, across the line
+        comp.Vigor{ .v = 4, .max = 10 }, // 40% — paying 1.7 lands at 23%, across the WEARY line
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryMaterial{ .v = 0 },
         comp.ActionForage{},
     });
 
     action_forage(&w, e, &res);
-    try std.testing.expectEqual(@as(f32, 2), w.get(e, comp.Vigor).?.v);
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the weakness warning
+    try std.testing.expectApproxEqAbs(@as(f32, 2.3), w.get(e, comp.Vigor).?.v, 1e-5); // 4 − 1.7
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // the weakness warning + payment
     // Quality was judged before paying: 40% was not weak, so the locked factor is 1.0.
     try std.testing.expectEqual(@as(f32, 1.0), w.get(e, comp.Busy).?.quality);
 }
@@ -245,7 +256,7 @@ test "begin refuses when energy would hit zero, leaving no trace" {
     var w = World.init();
     var res = test_res();
     const e = w.spawn(.{
-        comp.Vigor{ .v = 2, .max = 10 }, // exactly the price — strict gate must refuse
+        comp.Vigor{ .v = 1.7, .max = 10 }, // exactly the price — strict gate must refuse
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryMaterial{ .v = 0 },
         comp.ActionForage{},
@@ -253,7 +264,7 @@ test "begin refuses when energy would hit zero, leaving no trace" {
 
     action_forage(&w, e, &res);
 
-    try std.testing.expectEqual(@as(f32, 2), w.get(e, comp.Vigor).?.v); // unpaid
+    try std.testing.expectApproxEqAbs(@as(f32, 1.7), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
     try std.testing.expect(!w.has(e, comp.Busy)); // no work started
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // no lines
     try std.testing.expect(!res.sim.tutorial_done); // a refused action teaches nothing
