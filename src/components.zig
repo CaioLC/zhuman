@@ -42,20 +42,23 @@ const Unlock = struct {
 // NOTE: These are components
 pub const Label = struct { v: []const u8 };
 
-/// Vigor: human energy source
+/// Vigor: human energy source. Field defaults are the **authoritative starting baseline**
+/// (ACT1-01): a rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults
+/// (and the `baselines` module names them) rather than repeating literals, so Holdings can
+/// derive a current-vs-base margin against the same numbers.
 pub const Vigor = struct {
-    v: f32,
-    max: f32,
+    v: f32 = 10,
+    max: f32 = 10,
 };
 
 pub const InventoryFood = struct {
-    v: f32,
-    quality: u8,
-    spoils: f32,
+    v: f32 = 4,
+    quality: u8 = 1,
+    spoils: f32 = 0.05,
 };
 
 pub const InventoryMaterial = struct {
-    v: f32,
+    v: f32 = 0,
 };
 
 // -- Innate actions: the bare-handed verbs every agent spawns with -----------------------

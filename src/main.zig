@@ -598,11 +598,15 @@ pub fn main() !void {
 }
 
 fn spawn_agent(world: *ha.world.World) ha.world.Entity {
+    // ACT1-01: spawn from the components' authoritative default baselines (see `baselines.zig`)
+    // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
+    // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
+    // starting state has exactly one source and Holdings can derive current-vs-base against it.
     return world.spawn(.{
-        comp.Vigor{ .v = 10, .max = 10 }, // rested
-        comp.InventoryFood{ .v = 4, .quality = 1, .spoils = 0.05 }, // a thin, perishable larder
+        comp.Vigor{}, // rested at the ceiling (10/10)
+        comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
         comp.InventoryMaterial{ .v = 0 }, // nothing stockpiled yet
-        comp.Metabolism{}, // eats continuously from the first breath (normal ration)
+        comp.Metabolism{}, // eats continuously from the first breath (normal rate)
     } ++ actions.actions_bundle);
 }
 

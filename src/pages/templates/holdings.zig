@@ -132,12 +132,19 @@ pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
         try line(ctx, margins, "m_gen", "Food", txt, th.good);
     }
 
-    // The vigor ceiling is shown, not diffed: its baseline is a spawn literal rather than
-    // a catalog default, so a delta here would mean restating a number capital.zig owns.
+    // The vigor ceiling as a **current-vs-base margin** (ACT1-01): capacity capital raises
+    // `max` above the authoritative starting baseline (`baselines.vigor_ceiling`), so a raised
+    // ceiling reads as a `10 -> 12` gain (good), and an unchanged ceiling shows the plain value.
     const vigor = world.get(e, comp.Vigor) orelse return panel;
-    var vbuf: [24]u8 = undefined;
-    const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}", .{vigor.max}) catch "?";
-    try line(ctx, margins, "m_max", "Vigor ceiling", vtxt, th.dim);
+    const base_ceiling = ha.baselines.vigor_ceiling;
+    var vbuf: [32]u8 = undefined;
+    if (@abs(vigor.max - base_ceiling) < 0.001) {
+        const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}", .{vigor.max}) catch "?";
+        try line(ctx, margins, "m_max", "Vigor ceiling", vtxt, th.dim);
+    } else {
+        const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0} -> {d:.0}", .{ base_ceiling, vigor.max }) catch "?";
+        try line(ctx, margins, "m_max", "Vigor ceiling", vtxt, if (vigor.max > base_ceiling) th.good else th.danger);
+    }
 
     // --- BODY projection: how long the larder lasts at the current ration ------------
     // Derived from the *same* rate the metabolism loop applies (`systems.ration_mult`,
