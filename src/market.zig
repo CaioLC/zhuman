@@ -260,6 +260,50 @@ pub const Quote = struct {
     }
 };
 
+// ============================ Diminishing sell prices (ACT1-15) ==========================
+//
+// The first explicit exchange numbers Act I teaches, and the largest unset numbers in it — so
+// they are a product-design choice, not fixture tuning. A passerby values the *first* unit of a
+// surplus most and each further unit less: `sell_value(n)` is the Materials the passerby pays for
+// the **n-th** unit sold this visit (n = 0 for the first). The decline is geometric toward a
+// **floor**, never to zero — so selling always beats throwing surplus away, yet a long sell-off
+// earns less per unit than the first trade. Finite stock and the passerby's short window (ACT1-12)
+// do the rest: you cannot dump an unbounded surplus at the top price, but neither is production
+// for sale strictly dominated by scavenging — the first few units pay well.
+
+/// The Materials the passerby pays for the **`n`-th** unit of `ware` sold this visit (0-based).
+/// Geometric decline (`base · ratio^n`) clamped to a `floor`, so it is **monotonically
+/// non-increasing** and always positive. Authored per ware: bulk Food/Materials start modest and
+/// decay; the two tool wares are one-off (a second identical tool is worth little).
+pub fn sell_value(ware: Ware, n: u32) f32 {
+    const base: f32, const ratio: f32, const floor: f32 = switch (ware) {
+        // Surplus food: the passerby is glad of the first, indifferent to the tenth.
+        .food => .{ 2.5, 0.75, 0.5 },
+        // Surplus materials are common; they decay faster to a low floor.
+        .materials => .{ 1.5, 0.6, 0.25 },
+        // A tool: the first fetches real value, a duplicate almost nothing.
+        .fish_hook => .{ 8.0, 0.3, 1.0 },
+        .whetstone => .{ 6.0, 0.3, 1.0 },
+    };
+    const raw = base * std.math.pow(f32, ratio, @floatFromInt(n));
+    return @max(floor, raw);
+}
+
+/// Build a **sell `Quote`** for the next unit of `ware`, given how many were `already_sold` this
+/// visit — with `next_unit` already filled from the *following* unit's value, so the diminishing
+/// return is visible before the player confirms. `rev` binds it to the current encounter visit.
+pub fn sell_quote(ware: Ware, already_sold: u32, id: u32, rev: u32) Quote {
+    const this_unit = sell_value(ware, already_sold);
+    return .{
+        .id = id,
+        .rev = rev,
+        .direction = .sell,
+        .give = Bundle.one(ware, 1),
+        .receive = Bundle.one(.materials, this_unit),
+        .next_unit = sell_value(ware, already_sold + 1),
+    };
+}
+
 // ============================ Tests =====================================================
 
 const testing = std.testing;
@@ -389,4 +433,32 @@ test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and t
     // Every refusal has player-readable copy.
     try testing.expect(Refusal.unaffordable.reason().len > 0);
     try testing.expectEqualStrings("", Refusal.none.reason());
+}
+
+test "sell value declines monotonically to a positive floor" {
+    inline for ([_]Ware{ .food, .materials, .fish_hook, .whetstone }) |ware| {
+        var prev = sell_value(ware, 0);
+        try testing.expect(prev > 0); // the first unit always pays something
+        var n: u32 = 1;
+        while (n < 20) : (n += 1) {
+            const v = sell_value(ware, n);
+            try testing.expect(v <= prev); // monotonically non-increasing
+            try testing.expect(v > 0); // never zero — selling is never strictly dominated
+            prev = v;
+        }
+    }
+    // The first food unit pays clearly more than the floor — production for sale is not
+    // strictly dominated (the early units are worth trading).
+    try testing.expect(sell_value(.food, 0) > sell_value(.food, 10));
+    try testing.expectApproxEqAbs(@as(f32, 0.5), sell_value(.food, 50), 1e-4); // bottomed at the floor
+}
+
+test "sell_quote exposes the next unit's diminished value before confirmation" {
+    const q = sell_quote(.food, 0, 7, 3);
+    try testing.expectEqual(Direction.sell, q.direction);
+    try testing.expectEqual(@as(u32, 3), q.rev);
+    // This unit is the 0-th value; next_unit is the 1st — strictly lower.
+    try testing.expectApproxEqAbs(sell_value(.food, 0), q.receive.qtyOf(.materials), 1e-5);
+    try testing.expect(q.next_unit.? < q.receive.qtyOf(.materials));
+    try testing.expectApproxEqAbs(sell_value(.food, 1), q.next_unit.?, 1e-5);
 }
