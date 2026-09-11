@@ -9,6 +9,27 @@ const std = @import("std");
 
 pub const Kind = enum { normal, poisson, uniform, exponential, fixed };
 
+/// The shared human-readable label for a distribution `Kind` — the accessible name a tile or
+/// row speaks alongside its curve glyph (KIT-17), so the risk profile is not glyph-only. One
+/// definition, used by every presentation, so the spoken word never drifts from the drawn icon.
+pub fn kindLabel(kind: Kind) []const u8 {
+    return switch (kind) {
+        .normal => "normal",
+        .poisson => "Poisson",
+        .uniform => "uniform",
+        .exponential => "exponential",
+        .fixed => "fixed",
+    };
+}
+
+test "kindLabel names every distribution kind" {
+    try std.testing.expectEqualStrings("normal", kindLabel(.normal));
+    try std.testing.expectEqualStrings("Poisson", kindLabel(.poisson));
+    try std.testing.expectEqualStrings("uniform", kindLabel(.uniform));
+    try std.testing.expectEqualStrings("exponential", kindLabel(.exponential));
+    try std.testing.expectEqualStrings("fixed", kindLabel(.fixed));
+}
+
 /// A yield distribution. `s` is the scale — the mean for `normal`/`poisson`, and the knob
 /// that sets the range for `uniform`/`exponential`. `sd` is the standard deviation for
 /// `normal` only (0 ⇒ derive `0.3·s`); ignored by the other kinds.

@@ -30,17 +30,22 @@ const icon_px: f32 = 14;
 
 pub const Tile = struct { el: El, clicked: bool };
 
-/// The bare tile — box, name, `price · risk icon · payoff` row — from pre-formatted
-/// strings. Reports the (affordability-gated) click; the caller acts on it. A non-null
-/// `progress` marks the tile as *running*: fg chrome, inert, and a bottom underbar
-/// filling left-to-right (0..1) — a discrete task completing once, vs the ration dial's
-/// repeating full-chip pulse.
+/// The bare tile — box, name, optional **state line**, `price · risk icon · payoff` row —
+/// from pre-formatted strings (KIT-17). Reports the (affordability-gated) click; the caller
+/// acts on it. A non-null `progress` marks the tile as *running*: fg chrome, inert, and a
+/// bottom underbar filling left-to-right (0..1) — a discrete task completing once, vs the
+/// ration dial's repeating full-chip pulse. `state` is an optional short status word ("short",
+/// "working") rendered **only when nonempty**; `cost_txt` is the normalized price segment
+/// (`−{energy}e {optional input costs}`) and `duration_txt` the trailing duration, joined by a
+/// middot. `kind` selects the curve glyph and its shared accessible label.
 pub fn tile(
     ctx: *UiCtx,
     parent: El,
     id: []const u8,
     name: []const u8,
+    state: []const u8,
     cost_txt: []const u8,
+    duration_txt: []const u8,
     kind: ha.dist.Kind,
     yield_txt: []const u8,
     can: bool,
@@ -72,6 +77,10 @@ pub fn tile(
         var pbuf: [8]u8 = undefined;
         const readout = std.fmt.bufPrint(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?";
         _ = tile_node.setValue(readout);
+    } else {
+        // KIT-17: the risk profile's shared accessible label rides as the tile's spoken value
+        // (the curve glyph is not a string), so "Forage" reads with its "normal" distribution.
+        _ = tile_node.setValue(ha.dist.kindLabel(kind));
     }
     ctx.res.semantics.publish(tile_node);
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
@@ -90,12 +99,26 @@ pub fn tile(
 
     _ = (try el.text(ctx, inner, "name", name)).with_style(.{ style.h3, Style{ .text = chrome } });
 
-    // Info row: price · risk shape · payoff. Center-aligned across (the icon box has no
-    // baseline). Disabled ⟹ everything takes the dim chrome, one flat scan-off signal.
+    // KIT-17: an optional state line, rendered **only when nonempty** (e.g. "short",
+    // "working"). Dim, small — it qualifies the tile without competing with the name.
+    if (state.len > 0) {
+        _ = (try el.text(ctx, inner, "state", state))
+            .with_style(.{ style.small, Style{ .text = if (running) th.acc else if (!enabled) th.dim else th.dim } });
+    }
+
+    // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and
+    // the expected payoff. Center-aligned across (the icon box has no baseline). Disabled ⟹
+    // everything takes the dim chrome, one flat scan-off signal.
     const row = try el.div(ctx, inner, "info");
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
     _ = (try el.text(ctx, row, "cost", cost_txt))
+        .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
+    // The middot joins the price segment and the duration (KIT-17), so additional input costs
+    // stay in the price segment *before* the middot.
+    _ = (try el.text(ctx, row, "mid", "\u{00B7}"))
+        .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
+    _ = (try el.text(ctx, row, "dur", duration_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
 
     // RENDER-02: recolor the icon raster's ink through the style fold's `tint` field rather
@@ -146,13 +169,19 @@ pub fn action_tile(
     // Same strict energy gate as `begin_labor`: spending vigor to exactly 0 would be death.
     const can = busy == null and vigor.v > act.requires.energy;
 
-    // Price row: energy (unitless — the universal price) then hours. Time is a price too:
-    // under the metabolism, hours are food.
+    // Price segment (KIT-17): `−{energy}e` then any additional input costs (e.g. Check traps'
+    // `−1m`), all *before* the middot; the duration is the trailing segment after it.
     var cbuf: [24]u8 = undefined;
     const cost_txt = if (act.requires.materials > 0)
-        std.fmt.bufPrint(&cbuf, "-{d:.0} -{d:.0}m {d:.0}h", .{ act.requires.energy, act.requires.materials, act.requires.hours }) catch "?"
+        std.fmt.bufPrint(&cbuf, "-{d:.0}e -{d:.0}m", .{ act.requires.energy, act.requires.materials }) catch "?"
     else
-        std.fmt.bufPrint(&cbuf, "-{d:.0} {d:.0}h", .{ act.requires.energy, act.requires.hours }) catch "?";
+        std.fmt.bufPrint(&cbuf, "-{d:.0}e", .{act.requires.energy}) catch "?";
+    var dbuf: [12]u8 = undefined;
+    const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{act.requires.hours}) catch "?";
+
+    // Optional state line (KIT-17), rendered only when nonempty: "working" while this action
+    // runs, "short" when it is unaffordable (not enough vigor), else empty (ready).
+    const state_txt: []const u8 = if (running) "working" else if (!can) "short" else "";
 
     // Band scaled by the same two-level factor `begin_labor` locks in (weak = ×0.7 below
     // the WEARY threshold) — the promise is exactly what a click right now would pay.
@@ -166,7 +195,7 @@ pub fn action_tile(
     else
         std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{c}", .{ lo, hi, dom.letter }) catch "?";
 
-    const t = try tile(ctx, parent, id, name, cost_txt, dom.kind, yield_txt, can, progress);
+    const t = try tile(ctx, parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
     if (t.clicked) act_fn(world, e, ctx.res);
     return t.el;
 }
