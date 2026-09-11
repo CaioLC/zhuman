@@ -384,6 +384,20 @@ branches — the two/one action-column counts, hiding the BUILD effect/cost colu
 the trade-dialog actions — attach to their templates when those land (KIT-15/17/18/21, the board
 BOARD-*) using the same `width_class.atMost` test; they have no consumer to branch yet.
 
+**Resize without state loss (VIEW-05).** Because the UI is immediate-mode — `build_ui`'s
+prologue recomputes `ViewMetrics` every frame and the tree is rebuilt from the arena — a
+resize needs no relayout hook: layout, clip, and scroll limits recompute for free, and all
+per-view state (focus, tab selection, query/sort/collapse, scroll offset) survives because it
+lives in keyed pools addressed by stable `node.key`, not in the discarded tree. The one real
+hazard is the **one-frame clickable ghost**: the event stage routes pointer hits against the
+*previous* frame's stamped rects, so right after a resize a click could land where a control
+*was*. `main` guards it — a `window_resized`/`window_pixel_size_changed` event sets a
+`geometry_stale` flag and cancels any in-flight gesture; while set, pointer **activation**
+(press → click) is suppressed, and the flag is cleared right after the frame re-stamps at the
+new size. So a click during the stale frame is dropped rather than routed to a ghost, and
+normal interaction resumes the moment geometry is fresh. Camera clamping is deferred with its
+consumer (the board is not built).
+
 ## Paint features (`features/`)
 
 A *feature* is one kind of thing a node can be, as a module co-locating its whole surface:

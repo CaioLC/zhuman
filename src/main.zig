@@ -77,6 +77,9 @@ fn pointerAt(app: *App, x: f32, y: f32) ui_client.InputPoint {
 }
 
 fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    // VIEW-05: right after a resize the stamped rects are the previous size's, so do not
+    // begin an activation against them — a press this frame would target stale geometry.
+    if (app.geometry_stale) return;
     const target = app.ui.markTarget(.pressed, position.x, position.y);
     app.pointer_activation.press(target, kind, id, position);
 }
@@ -89,6 +92,12 @@ fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position
 }
 
 fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
+    // VIEW-05: while geometry is stale from a resize, cancel any in-flight gesture rather than
+    // routing a release/click to the previous frame's rects (the one-frame clickable ghost).
+    if (app.geometry_stale) {
+        cancelPointerGesture(app);
+        return;
+    }
     routePointerMotion(app, kind, id, position);
     _ = app.ui.markTarget(.released, position.x, position.y);
     const target = app.ui.targetAt(position.x, position.y);
@@ -285,6 +294,10 @@ const App = struct {
     pointer_activation: ui_client.PointerActivation = .{},
     platform_cursors: ui_client.PlatformCursors,
     ui_profiler: ui_client.FrameProfiler = .{},
+    /// VIEW-05: set when the window resizes, cleared after the frame re-stamps geometry.
+    /// While set, pointer activation is suppressed so a click cannot land on the previous
+    /// frame's now-stale stamped rects (the "one-frame clickable ghost").
+    geometry_stale: bool = false,
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -469,6 +482,15 @@ pub fn main() !void {
                 .render_targets_reset, .render_device_reset, .render_device_lost => {
                     app.resources.platform.bumpGeneration();
                 },
+                // VIEW-05: the window resized. This frame's stamped rects are still the
+                // previous size's, so mark geometry stale — pointer activation is suppressed
+                // (a click can't land on the ghost of a moved control) until the frame
+                // rebuilds and re-stamps at the new size, when the flag is cleared. Any
+                // in-flight gesture is cancelled so it can't complete against stale geometry.
+                .window_resized, .window_pixel_size_changed => {
+                    app.geometry_stale = true;
+                    cancelPointerGesture(&app);
+                },
                 else => {},
             }
         }
@@ -530,6 +552,9 @@ pub fn main() !void {
             ui_client.stamp_rects(&app.ui, t); // geometry + paint order for next event stage
         }
         ui_sample.stamping = ui_timer.read();
+        // VIEW-05: geometry has now been re-stamped at the current window size, so the next
+        // event stage can safely route pointer activation again — clear the resize guard.
+        app.geometry_stale = false;
 
         // Render Stage
         // window — cleared to the theme's own background, not a fixed color
