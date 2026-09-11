@@ -192,6 +192,42 @@ pub fn despawn_dead(
     for (dead[0..n]) |e| w.despawn(e);
 }
 
+/// **Eligibility transition tracking (ACT1-06).** For each prerequisite-gated good, when its
+/// prerequisite becomes satisfied for the first time this run, log one "A new recipe is within
+/// reach: {name}." Only goods with a `prereq_of` participate — a good with no prerequisite is
+/// reachable from the first breath, so it is not a *transition* and never logs. The seen-set is
+/// sim state (`Sim.reach_seen`, indexed by `capital.buildable_bundle` order), so it survives
+/// frames untouched by the UI — tab switches, filter/sort changes, and rebuilds cannot re-emit
+/// the line; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a
+/// fresh run re-announces. Runs once per frame over the player.
+pub fn track_reach(
+    res: *Resources,
+    w: *World,
+    q: Query(.{ Entity, comp.Vigor, With(tag.Player) }),
+) void {
+    var it = q.iter();
+    while (it.next()) |entry| {
+        const e: Entity = entry[0];
+        inline for (capital.buildable_bundle, 0..) |G, i| {
+            // Only prerequisite-gated goods transition; a null prereq is reachable from the
+            // start and would false-fire on the first tick, so it is skipped entirely.
+            if (comptime capital.prereq_of(G) != null) {
+                const met = capital.prereq_met(w, e, G);
+                if (met and !res.sim.reach_seen[i]) {
+                    res.sim.reach_seen[i] = true;
+                    var buf: [64]u8 = undefined;
+                    const msg = std.fmt.bufPrint(&buf, "A new recipe is within reach: {s}.", .{capital.good_name(G)}) catch "A new recipe is within reach.";
+                    res.sim.log.push(.good, msg);
+                } else if (!met) {
+                    // The prerequisite went away (tool broke) — allow a fresh announcement if it
+                    // returns, so the transition tracking is symmetric.
+                    res.sim.reach_seen[i] = false;
+                }
+            }
+        }
+    }
+}
+
 // ============================ Tests ==========================================
 
 /// A Resources with only the groups `metabolize` touches (`time`, `sim`, `config`)
@@ -278,4 +314,35 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
     ecs.run(&w, &res, metabolize); // 1 → 0 (clamped), no re-logging — mark_dead's turn
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
+}
+
+test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms if the prereq goes away" {
+    var w = World.init();
+    var res = test_res(0);
+    // A player with no ActionChopWood: Work gloves / Chainsaw (both prereq'd on it) are not
+    // in reach yet, and no-prereq goods never announce.
+    const e = w.spawn(.{ comp.Vigor{}, tag.Player{} });
+    ecs.run(&w, &res, track_reach);
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing became reachable
+
+    // Grant the prerequisite verb (as finishing a Hatchet build would): both prereq'd goods
+    // transition false→true this tick — two announcements, once each.
+    w.add(e, comp.ActionChopWood{});
+    ecs.run(&w, &res, track_reach);
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
+    try std.testing.expectEqual(@import("./log.zig").Tone.good, res.sim.log.get(0).tone);
+    // The message names the good and uses the exact ACT1-06 copy.
+    try std.testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "within reach") != null);
+
+    // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.
+    ecs.run(&w, &res, track_reach);
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // no repeat
+
+    // The prerequisite going away (tool broke) re-arms the announcement; regaining it logs again.
+    w.remove(e, comp.ActionChopWood);
+    ecs.run(&w, &res, track_reach);
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // losing it does not log
+    w.add(e, comp.ActionChopWood{});
+    ecs.run(&w, &res, track_reach);
+    try std.testing.expectEqual(@as(usize, 4), res.sim.log.count); // re-armed: two more
 }

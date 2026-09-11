@@ -527,6 +527,7 @@ pub fn main() !void {
             ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
             ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
+            ecs.run(&app.world, &app.resources, sys.track_reach); // ACT1-06: newly in-reach recipes → one log
             ha.capital.run_generators(&app.world, &app.resources); // capital that runs itself
             ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities

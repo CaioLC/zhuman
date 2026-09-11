@@ -140,6 +140,13 @@ pub const Sim = struct {
     /// against this. Held here so the player today and the AI deciders later draw
     /// uncertainty from the same stream. Reached through `Resources.random()`.
     prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0),
+    /// **Eligibility transition memory (ACT1-06)** — one bit per buildable good (indexed by
+    /// `capital.buildable_bundle` order; the fixed `16` is that bundle's length), recording
+    /// whether the good's prerequisite has *already* been seen satisfied this run. The
+    /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
+    /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
+    /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
+    reach_seen: [16]bool = [_]bool{false} ** 16,
 
     /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would
     /// make every run replay the first one's luck.
