@@ -72,6 +72,10 @@ pub fn market_strip(ctx: *UiCtx, parent: El, id: []const u8, kind: MarketKind) !
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     _ = (try el.text(ctx, row, "glyph", idn.glyph)).with_style(.{Style{ .text = color }});
     _ = (try el.text(ctx, row, "copy", idn.copy)).with_style(.{ style.body, Style{ .text = ctx.res.view.theme.fg } });
+    // A grow spacer pushes the action to the right edge *within* the row's own box, so the
+    // button can never overflow the strip / terminal clip.
+    const spacer = try el.div(ctx, row, "sp");
+    _ = spacer.with_size(.grow, .{ .fixed = 1 });
     // The action: a bordered button box (KIT-03 contract) styled from the KIT-02 button
     // fragment; the caller reads `.query().clicked` to open the deal.
     const act = try el.div(ctx, row, "act");
@@ -81,7 +85,12 @@ pub fn market_strip(ctx: *UiCtx, parent: El, id: []const u8, kind: MarketKind) !
     const afocused = ctx.isFocused(act.get().key);
     if (aq.hovering) ctx.res.cursor.request(.pointer);
     uic.publishControlState(ctx, act.get().key, .{ .focused = afocused, .focus_visible = afocused });
-    _ = act.with_layout(.center_right).with_flow(.{ .dir = .row }).with_style(.{ style.btn_primary, style.pad_sym(8, 2) });
+    // The box is a non-text node, so apply only the resolved border (KIT-02 `btn_primary`'s
+    // outline) here — putting the fragment's `.text` on a div would trip the inert-typography
+    // assert. The label (a text node) carries the ink from the same fragment.
+    const s = style.resolve(ctx, act.get(), .{style.btn_primary});
+    if (s.outline_color) |c| act.get().render_data.outline = .{ .color = c };
+    _ = act.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
     _ = (try el.text(ctx, act, "l", idn.action)).with_style(.{style.btn_primary});
     return act;
 }

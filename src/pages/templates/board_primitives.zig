@@ -93,7 +93,9 @@ fn zoom_button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8) !bool
     const focused = ctx.isFocused(box.get().key);
     if (q.hovering) ctx.res.cursor.request(.pointer);
     uic.publishControlState(ctx, box.get().key, .{ .focused = focused, .focus_visible = focused });
-    _ = box.with_flow(.{ .dir = .row }).with_style(.{ style.btn_primary, style.pad_sym(8, 2) });
+    const s = style.resolve(ctx, box.get(), .{style.btn_primary});
+    if (s.outline_color) |c| box.get().render_data.outline = .{ .color = c };
+    _ = box.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
     _ = (try el.text(ctx, box, "l", label)).with_style(.{style.btn_primary});
     return q.clicked;
 }

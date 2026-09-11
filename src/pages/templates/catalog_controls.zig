@@ -97,7 +97,7 @@ pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []c
     if (tq.hovering) ctx.res.cursor.request(.pointer);
     const tfocused = ctx.isFocused(toggle_key);
     uic.publishControlState(ctx, toggle_key, .{ .focused = tfocused, .focus_visible = tfocused });
-    _ = toggle.with_layout(.center_right).with_flow(.{ .dir = .row }).with_style(.{ style.btn_secondary, style.pad_sym(8, 2) });
+    _ = toggle.with_layout(.center_right).with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
     _ = (try el.text(ctx, toggle, "t", if (st.sort_open) "sort \u{2191}" else "sort \u{2193}"))
         .with_style(.{ style.small, style.btn_secondary });
 

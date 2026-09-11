@@ -113,7 +113,9 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
         const afocused = ctx.isFocused(act.get().key);
         if (aq.hovering) ctx.res.cursor.request(if (ready) .pointer else .not_allowed);
         uic.publishControlState(ctx, act.get().key, .{ .disabled = !ready, .focused = afocused, .focus_visible = afocused });
-        _ = act.with_layout(.top_left).with_flow(.{ .dir = .row }).with_style(.{ style.btn_primary, style.pad_sym(8, 2) });
+        const s = style.resolve(ctx, act.get(), .{style.btn_primary});
+        if (s.outline_color) |c| act.get().render_data.outline = .{ .color = c };
+        _ = act.with_layout(.top_left).with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
         _ = (try el.text(ctx, act, "l", goal.action)).with_style(.{style.btn_primary});
         clicked = ready and aq.clicked;
     }

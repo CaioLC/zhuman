@@ -191,7 +191,9 @@ pub fn trade_dialog(
     const cfocused = ctx.isFocused(cta.get().key);
     if (cq.hovering) ctx.res.cursor.request(if (can_confirm) .pointer else .not_allowed);
     uic.publishControlState(ctx, cta.get().key, .{ .disabled = !can_confirm, .focused = cfocused, .focus_visible = cfocused });
-    _ = cta.with_flow(.{ .dir = .row }).with_style(.{ style.btn_primary, style.pad_sym(10, 3) });
+    const cta_s = style.resolve(ctx, cta.get(), .{style.btn_primary});
+    if (cta_s.outline_color) |c| cta.get().render_data.outline = .{ .color = c };
+    _ = cta.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(10, 3)});
     _ = (try el.text(ctx, cta, "l", idn.cta)).with_style(.{style.btn_primary});
 
     // Outside-click / Escape dismissal: consume the box's click, then a root click is outside.

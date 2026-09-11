@@ -22,12 +22,12 @@ const Node = uic.Node;
 const t = @import("./templates/root.zig");
 
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
-    // KIT-04: build inside the one terminal shell, supplying region descriptors instead of
-    // hand-building the header/body/footer graph. Act I wants the header, the main body, the
-    // footer log, and — once the run is underway — the collapsible Holdings rail (KIT-05).
-    // VIEW-04: the responsive page padding is the screen's choice (the shell does not re-derive
-    // it). The rail region is always allocated; it stays zero-width until we fill it, so the
-    // pre-tutorial "one card" moment is unaffected.
+    // ACT1-07: the Act I HUD is composed entirely from the shared terminal shell (KIT-04) —
+    // header, the optional Passerby (market) and activity strips, the persistent Holdings rail,
+    // the main body (ACTIONS/BUILD), and the four-line footer log. The **same** shell chrome is
+    // built whether or not the run is underway; only the body's centre content differs (the
+    // pre-first-action teaching card vs the tabbed surfaces), so the first click cannot drift the
+    // layout — the terminal box, header, strips, rail region, and footer stay put.
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
     const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
     const regions = try t.shell(ctx, .{
@@ -36,6 +36,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         .page_pad = page_pad,
         .section_gap = ha.tokens.gap.section,
         .rail = true,
+        .market = true,
+        .activity = true,
         .footer = true,
     });
     const header = regions.header;
@@ -66,6 +68,25 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         };
         const bar = try t.stockline(ctx, header, "stocks", &stocks);
         _ = bar.with_layout(.bottom_left);
+
+        // ACT1-07: the Passerby (market) strip and the activity strip fill the shell's optional
+        // strip regions, present in both the pre-tutorial and the underway states so the chrome
+        // never shifts. The Passerby is a placeholder venue here — the live merchant encounter
+        // state is ACT1-12 and the trade wiring is ACT1-17; the activity strip reads the agent's
+        // `Busy` (idle vs the verb in progress). The live state-change announcement is ACT1-16,
+        // so `last` is passed as the current state for now (renders, does not yet announce).
+        if (regions.market) |market| {
+            _ = try t.market_strip(ctx, market, "passerby", .passerby);
+        }
+        if (regions.activity) |activity| {
+            const busy = world.get(e, comp.Busy);
+            const act_state: t.ActivityState = if (busy) |b|
+                (if (actions.is_build(b.doing)) .building else .working)
+            else
+                .idle;
+            const subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "resting";
+            _ = try t.activity_strip(ctx, activity, "activity", act_state, subject, "", act_state);
+        }
 
         // --- center. Before the very first resolved action (GameState.tutorial_done),
         // the teaching card stands alone — no tabs, no Eat, no Build: one thing to
@@ -115,15 +136,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             }
         }
 
-        // KIT-05: Holdings now lives in the collapsible rail (the shell's left region),
-        // where the prototype puts it — a persistent, collapsible column rather than the
-        // cramped in-centre placement it had before (which did not fit the 640-wide column).
-        // Shown once the run is underway (a click has happened); the rail is a no-op before.
-        if (ctx.res.sim.tutorial_done) {
-            if (regions.rail) |rail_region| {
-                const r = try t.rail(ctx, rail_region, .{ .id = "holdings_rail", .label = "HOLDINGS" });
-                if (r.body) |rb| _ = try t.holdings(ctx, rb, world, e, "holdings");
-            }
+        // KIT-05 / ACT1-07: Holdings lives in the collapsible rail (the shell's left region),
+        // present in **both** states so the chrome never shifts — before the first action it
+        // reads "nothing built yet", after it lists what's owned. The first click swaps only the
+        // body's centre (card → tabs), not the surrounding shell.
+        if (regions.rail) |rail_region| {
+            const r = try t.rail(ctx, rail_region, .{ .id = "holdings_rail", .label = "HOLDINGS" });
+            if (r.body) |rb| _ = try t.holdings(ctx, rb, world, e, "holdings");
         }
     }
 

@@ -63,6 +63,30 @@ pub fn doing_of(comptime ActionT: type) comp.Busy.Doing {
     };
 }
 
+/// Whether a `Busy.Doing` is a capital build (vs a labor verb) — the activity strip picks the
+/// `.building` glyph for a build, `.working` for labor (ACT1-07).
+pub fn is_build(d: comp.Busy.Doing) bool {
+    return switch (d) {
+        .forage, .scavenge, .fish, .chop_wood, .check_traps, .hunt => false,
+        else => true,
+    };
+}
+
+/// A display word for what the body is doing (ACT1-07 activity strip). A runtime map over the
+/// `Busy.Doing` enum — labor verbs read as their gerund, capital builds as "building". Used by
+/// the activity strip's subject; presentation-adjacent but sim-tier because `Busy.Doing` is.
+pub fn doing_label(d: comp.Busy.Doing) []const u8 {
+    return switch (d) {
+        .forage => "foraging",
+        .scavenge => "scavenging",
+        .fish => "fishing",
+        .chop_wood => "splitting wood",
+        .check_traps => "checking traps",
+        .hunt => "hunting",
+        else => "building", // every capital build
+    };
+}
+
 /// The **begin** half of a labor action: gate → pay → start the work. The yield resolves
 /// only at completion (`finish_labor`, via `systems.resolve_busy`) — you don't get food
 /// before the work is done, and dying mid-task loses it. Quality is locked here: the band
