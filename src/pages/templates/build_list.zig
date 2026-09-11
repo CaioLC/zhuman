@@ -277,8 +277,8 @@ fn goal_card(
     var b1: [40]u8 = undefined;
     var b2: [40]u8 = undefined;
     var b3: [40]u8 = undefined;
-    const frac = vigor.v / vigor.max;
-    try check(ctx, checks, "c1", frac >= u.vigor_frac, std.fmt.bufPrint(&b1, "rested {d:.0}%/{d:.0}%", .{ frac * 100, u.vigor_frac * 100 }) catch "?");
+    // ACT1-04: the vigor requirement is an absolute amount of current Vigor, shown as `v/req`.
+    try check(ctx, checks, "c1", vigor.v >= u.vigor_abs, std.fmt.bufPrint(&b1, "vigor {d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?");
     try check(ctx, checks, "c2", food.v >= u.food, std.fmt.bufPrint(&b2, "food {d:.0}/{d:.0}", .{ food.v, u.food }) catch "?");
     try check(ctx, checks, "c3", kinds >= u.goods, std.fmt.bufPrint(&b3, "goods {d}/{d}", .{ kinds, u.goods }) catch "?");
 

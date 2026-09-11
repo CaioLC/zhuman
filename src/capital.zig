@@ -43,11 +43,10 @@ const Resources = res_mod.Resources;
 /// Every buildable good, in BUILD-shelf order. `inline for`-able by any caller that
 /// needs to sweep the catalog.
 pub const buildable_bundle = .{
-    comp.FishRod,     comp.Hatchet,    comp.WireSnares,    comp.AirRifle,
-    comp.Sandals,     comp.WorkGloves, comp.Bicycle,       comp.Cookpot,
-    comp.RootCellar,  comp.Chainsaw,   comp.LeafBed,       comp.Pantry,
-    comp.MedicineChest, comp.GardenBed, comp.ChickenCoop,
-    comp.Shelter,
+    comp.FishRod,       comp.Hatchet,    comp.WireSnares,  comp.AirRifle,
+    comp.Sandals,       comp.WorkGloves, comp.Bicycle,     comp.Cookpot,
+    comp.RootCellar,    comp.Chainsaw,   comp.LeafBed,     comp.Pantry,
+    comp.MedicineChest, comp.GardenBed,  comp.ChickenCoop, comp.Shelter,
 };
 
 /// The `Busy.Doing` name for a good's build — what `resolve_busy` dispatches on.
@@ -120,7 +119,7 @@ pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
     if (!@hasField(GoodT, "unlock")) return true;
     const u = (GoodT{}).unlock;
     const vigor, const food = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryFood });
-    if (vigor.v / vigor.max < u.vigor_frac) return false;
+    if (vigor.v < u.vigor_abs) return false; // ACT1-04: absolute current Vigor, not a fraction
     if (food.v < u.food) return false;
     return goods_owned(w, e) >= u.goods;
 }
@@ -740,7 +739,7 @@ test "a generator pays its upkeep and deposits its flow, per day" {
 /// materials for the price. Individual conditions are then knocked out one at a time.
 fn spawn_settler(w: *World) Entity {
     return w.spawn(.{
-        comp.Vigor{ .v = 10, .max = 10 }, // 1.0 >= 0.8
+        comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15 (ACT1-04), max is irrelevant
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= 20
         comp.InventoryMaterial{ .v = 100 }, // >= the 80 price
         comp.Sandals{},
@@ -761,10 +760,11 @@ test "the shelter is offered only once its standing conditions are met" {
     begin_build(&w, e, &res, comp.Shelter);
     const b = w.get(e, comp.Busy).?;
     try std.testing.expectEqual(comp.Busy.Doing.build_shelter, b.doing);
-    try std.testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 10 - 6 energy
+    try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // 16 - 6 energy
     try std.testing.expectEqual(@as(f32, 20), w.get(e, comp.InventoryMaterial).?.v); // 100 - 80
 
-    // Vigor fell below the fraction mid-build - the work is already paid for, so it stands.
+    // Vigor fell below the absolute 15 mid-build (16→10) — the work is already paid for, so it
+    // stands even though the standing condition would now refuse a fresh start.
     try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
 
     finish_build(&w, e, &res, comp.Shelter);
@@ -775,7 +775,7 @@ test "the shelter is offered only once its standing conditions are met" {
 test "each standing condition refuses the shelter on its own" {
     var res = test_res();
 
-    // Too tired: 7/10 is under the 0.8 fraction, though the absolute is plentiful.
+    // Too tired: below the absolute 15 current Vigor refuses, regardless of the ceiling.
     {
         var w = World.init();
         const e = spawn_settler(&w);
@@ -783,6 +783,20 @@ test "each standing condition refuses the shelter on its own" {
         try std.testing.expect(!unlock_met(&w, e, comp.Shelter));
         begin_build(&w, e, &res, comp.Shelter);
         try std.testing.expect(!w.has(e, comp.Busy));
+    }
+    // ACT1-04 boundary: the requirement is an *absolute* 15, independent of `max`. 14.99 fails
+    // and 15 passes whether the ceiling is 15, 20, or 100.
+    {
+        var w = World.init();
+        const e = spawn_settler(&w);
+        const v = w.get(e, comp.Vigor).?;
+        inline for ([_]f32{ 15, 20, 100 }) |ceiling| {
+            v.max = ceiling;
+            v.v = 14.99;
+            try std.testing.expect(!unlock_met(&w, e, comp.Shelter)); // just under ⇒ fails
+            v.v = 15;
+            try std.testing.expect(unlock_met(&w, e, comp.Shelter)); // exactly at ⇒ passes
+        }
     }
     // Larder too thin.
     {

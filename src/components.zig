@@ -30,9 +30,11 @@ const Yields = struct {
 /// conditions, as against `Requires`, which is what the build spends. Read once, in
 /// `capital.begin_build`: a dip afterwards doesn't stop work already paid for.
 const Unlock = struct {
-    /// A vigor *fraction*, not an absolute: capacity capital raises `max`, and `v/max`
-    /// is the reading every other part of the game keys off.
-    vigor_frac: f32,
+    /// The **absolute current Vigor** the builder must have (ACT1-04) — not a fraction of an
+    /// upgradeable ceiling. The finalized Shelter requirement is `15` current Vigor: capacity
+    /// capital raises `max` but the bar is a fixed amount of body, so the same `15` gates the
+    /// checklist, action enablement, and `begin_build` regardless of the ceiling.
+    vigor_abs: f32,
     /// Units in the larder.
     food: f32,
     /// How many goods from the catalog the builder must already own.
@@ -356,7 +358,7 @@ pub const Shelter = struct {
     requires: Requires = .{ .energy = 6.0, .materials = 80.0, .hours = 48 },
     /// How many of this good the agent holds. Only the first carries the effect.
     count: u32 = 1,
-    unlock: Unlock = .{ .vigor_frac = 0.8, .food = 20.0, .goods = 4 },
+    unlock: Unlock = .{ .vigor_abs = 15.0, .food = 20.0, .goods = 4 },
     /// How many humans live under it. Act II's population fills this; Act I only asks
     /// whether it is more than one.
     capacity: u32 = 4,
