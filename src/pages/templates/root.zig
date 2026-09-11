@@ -33,6 +33,7 @@ const stock_token_mod = @import("./stock_token.zig");
 const runline_mod = @import("./runline.zig");
 const market_strip_mod = @import("./market_strip.zig");
 const catalog_controls_mod = @import("./catalog_controls.zig");
+const catalog_viewport_mod = @import("./catalog_viewport.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -85,6 +86,8 @@ pub const catalog_controls = catalog_controls_mod.catalog_controls;
 pub const count_summary = catalog_controls_mod.count_summary;
 pub const Catalog = catalog_controls_mod.Catalog;
 pub const catalog_less_than = catalog_controls_mod.lessThan;
+pub const catalog_viewport = catalog_viewport_mod.catalog_viewport;
+pub const Viewport = catalog_viewport_mod.Viewport;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
