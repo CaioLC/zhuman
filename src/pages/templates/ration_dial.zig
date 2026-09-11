@@ -78,8 +78,10 @@ pub fn ration_dial(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []cons
                     if (chip.get().rect(ctx)) |r| {
                         const fill = std.math.ceil(f.v) - f.v;
                         const pulse = try el.div(ctx, chip, "pulse");
+                        // `r` is the stamped (device-px) chip rect; the pulse fills a fraction
+                        // of it, so both dims are device px — `with_size_px` (VIEW-02).
                         _ = pulse.with_layout(.top_left)
-                            .with_size(.{ .fixed = r.w * fill }, .{ .fixed = r.h })
+                            .with_size_px(.{ .fixed = r.w * fill }, .{ .fixed = r.h })
                             .with_style(.{Style{ .fill = th.line }});
                     }
                 }

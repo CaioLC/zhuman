@@ -317,10 +317,11 @@ pub const Modal = struct {
 /// and consumption rules used by nested controls apply. The box is queried here both as
 /// a blocking target and to preserve its prior-frame geometry.
 pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
-    const ww, const wh = try ctx.res.platform.window.getSize();
+    // VIEW-02: the fullscreen scrim covers the whole drawable, in device px (the layout space).
+    const m = ctx.res.view.metrics;
     const root = try Node.create(ctx.arena, key);
     _ = root.with_layout(.top_left, null)
-        .with_size(ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh)));
+        .with_size(ui.features.Size.initFixed(m.px_w, m.px_h));
     root.render_data.fill = ctx.res.view.theme.bg;
     _ = root.query(ctx); // fullscreen scrim: queried root structurally blocks lower trees
     ctx.res.commands.registerEscape(root.key);

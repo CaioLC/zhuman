@@ -111,8 +111,10 @@ pub fn tile(
     if (progress) |p| {
         if (box.get().rect(ctx)) |r| {
             const bar = try el.div(ctx, box, "bar");
+            // `r.w` is the stamped (device-px) box width; the underbar width tracks it, so use
+            // `with_size_px` (VIEW-02) — the 3px logical height is scaled through `view.dp`.
             _ = bar.with_layout(.bottom_left)
-                .with_size(.{ .fixed = r.w * std.math.clamp(p, 0, 1) }, .{ .fixed = 3 })
+                .with_size_px(.{ .fixed = r.w * std.math.clamp(p, 0, 1) }, .{ .fixed = uic.view.dp(3, ctx.res.view.scale) })
                 .with_style(.{Style{ .fill = th.acc }});
         }
     }

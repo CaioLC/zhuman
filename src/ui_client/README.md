@@ -351,8 +351,20 @@ rect in logical px — capped at the `900×820` reference and centered when fram
 760), else the full window; `width_class.atMost(.w560)` is the natural stacked-breakpoint test,
 and `metrics.framed()` gates the outer terminal chrome.
 
-## Paint features (`features/`)
-
+**One logical→device scaling helper (VIEW-02).** The layout is solved in **device pixels** (the
+space the renderer draws), so every authored dimension is a *logical* px value multiplied by the
+frame scale exactly once, through `view.dp(logical, scale)` — the single conversion point. The
+El/style seams call it: `El.with_size` (`.fixed` extents), `with_gap`, `with_offset`,
+`with_wrap`/`with_cell` (text measurement widths), and `style.apply` (padding/gap). Fonts route
+through the sibling `type.toDevice`, and hairlines through `paint.hairline` — the same scale.
+The fullscreen root and modal scrim size to the drawable px (`metrics.px_w/px_h`), and pointer
+coordinates are multiplied by `dpi_scale` at one seam in `main` (`pointerAt`) so hit geometry
+(device px) matches. **Values read back from stamped geometry** (`.rect`, a parent's resolved
+`size.*.fixed`) are already device px and must use `El.with_size_px` (no re-scaling) — the few
+prior-frame-geometry sites (the action-tile underbar, the ration-dial pulse, the page content
+box) do. **Not** scaled: simulation values and camera percentages are not dimensions. At DPI 1
+(`scale == 1`) every conversion is identity, so production is unchanged; the scale becomes
+load-bearing on a high-DPI display.
 
 ## Paint features (`features/`)
 

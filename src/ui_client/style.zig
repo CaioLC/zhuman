@@ -18,6 +18,7 @@ const std = @import("std");
 const ui = @import("../ui/root.zig");
 const cb = @import("./ctx_binding.zig");
 const typ = @import("./type.zig");
+const view = @import("./view.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -175,8 +176,20 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         .width = s.outline_width orelse 1,
         .style = s.outline_style orelse .solid,
     };
-    if (s.padding) |p| node.size.padding = p;
-    if (s.gap) |g| node.layout.gap = g;
+    // VIEW-02: padding and gap are authored in *logical* px; scale to device by the frame
+    // scale (`view.dp`) to match the device-px layout and text boxes. `outline_width` is NOT
+    // scaled here — it is scaled at draw by `paint.hairline` (RENDER-06), so scaling it here
+    // too would double-apply.
+    if (s.padding) |p| {
+        const sc = ctx.res.view.scale;
+        node.size.padding = .{
+            .up = view.dp(p.up, sc),
+            .right = view.dp(p.right, sc),
+            .down = view.dp(p.down, sc),
+            .left = view.dp(p.left, sc),
+        };
+    }
+    if (s.gap) |g| node.layout.gap = view.dp(g, ctx.res.view.scale);
 
     // RENDER-02: texture-content ink. A set `tint` recolors a present `svg` aspect (an icon
     // raster tinted at blit), routed through the same fragment fold as every other look — so
@@ -263,8 +276,15 @@ test "apply: decorations + padding write; inert text style on a non-text node is
     defer arena.deinit();
     const node = try Node.create(arena.allocator(), "n");
 
+    // VIEW-02: `apply` scales padding/gap by `ctx.res.view.scale`, so give it a real ctx with
+    // the default view (scale 1) rather than `undefined`.
+    var resources: @import("../res.zig").Resources = undefined;
+    resources.view = .{};
+    var ctx = cb.UiCtx.init(&resources, std.testing.allocator, arena.allocator());
+    defer ctx.deinit();
+
     const line: Color = .{ .r = 10, .g = 20, .b = 30, .a = 255 };
-    apply(undefined, node, .{ Style{ .outline_color = line }, pad(4) });
+    apply(&ctx, node, .{ Style{ .outline_color = line }, pad(4) });
     try std.testing.expectEqual(line, node.render_data.outline.?.color);
     try std.testing.expectEqual(@as(f32, 1), node.render_data.outline.?.width); // default thickness
     try std.testing.expectEqual(cb.LineStyle.solid, node.render_data.outline.?.style); // default pattern

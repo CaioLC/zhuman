@@ -28,6 +28,7 @@ const ui = @import("../ui/root.zig");
 const cb = @import("./ctx_binding.zig");
 const feat = @import("./features/root.zig");
 const style = @import("./style.zig");
+const view = @import("./view.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -82,27 +83,43 @@ pub const El = struct {
         return self;
     }
 
-    /// Spacing between this node's in-flow children, in px. A `fit_children` parent grows
-    /// to include the gaps.
+    /// Spacing between this node's in-flow children, in **logical** px (VIEW-02 scales it to
+    /// device px by the frame scale). A `fit_children` parent grows to include the gaps.
     pub fn with_gap(self: El, g: f32) El {
-        self.node.layout.gap = g;
+        self.node.layout.gap = view.dp(g, self.ctx.res.view.scale);
         return self;
     }
 
     /// Per-axis size rule — `.fit_children`, `.grow`, `.{ .fixed = 240 }`,
-    /// `.{ .pct_of_parent = 1 }`, …
+    /// `.{ .pct_of_parent = 1 }`, …. A **fixed** extent is a *logical* px value scaled to
+    /// device px by the frame scale (VIEW-02); `content`/`pct`/`grow`/`fit_children` are
+    /// derived (content is the already-device-scaled measured box; the others are relative),
+    /// so only `.fixed` scales. Extents computed from **stamped geometry** (already device px)
+    /// use `with_size_px` to avoid double-scaling.
     pub fn with_size(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
+        self.node.size.w = scaleRule(w, self.ctx.res.view.scale);
+        self.node.size.h = scaleRule(h, self.ctx.res.view.scale);
+        return self;
+    }
+
+    /// Per-axis size rule from **device-px** values that must **not** be scaled again
+    /// (VIEW-02): extents derived from stamped geometry (`.rect`/`.prior_geometry`) or a
+    /// parent's resolved `size.*.fixed`, which are already device px. Authored logical
+    /// literals use `with_size`.
+    pub fn with_size_px(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
         self.node.size.w = w;
         self.node.size.h = h;
         return self;
     }
 
-    /// Displace this node in px from wherever its anchor or its parent's flow put it.
-    /// `.center` plus a computed delta is polar placement — the way anything positioned
-    /// by its own arithmetic (a radial board, a graph) reaches the screen.
+    /// Displace this node in **logical** px (VIEW-02 scales to device px) from wherever its
+    /// anchor or its parent's flow put it. `.center` plus a computed delta is polar placement
+    /// — the way anything positioned by its own arithmetic (a radial board, a graph) reaches
+    /// the screen.
     pub fn with_offset(self: El, dx: f32, dy: f32) El {
-        self.node.layout.offset_x = dx;
-        self.node.layout.offset_y = dy;
+        const s = self.ctx.res.view.scale;
+        self.node.layout.offset_x = view.dp(dx, s);
+        self.node.layout.offset_y = view.dp(dy, s);
         return self;
     }
 
@@ -140,7 +157,9 @@ pub const El = struct {
     /// template passes a column/dialog width it already knows.
     pub fn with_wrap(self: El, max_w: f32) El {
         const st = self.node.state(self.ctx, cb.UiState.TextState);
-        st.wrap_width = max_w;
+        // VIEW-02: the wrap width is authored in logical px but compared against device-px font
+        // measurements, so scale it to device by the frame scale (the one `view.dp` seam).
+        st.wrap_width = view.dp(max_w, self.ctx.res.view.scale);
         feat.text.remeasure(self.ctx, self.node);
         return self;
     }
@@ -167,7 +186,9 @@ pub const El = struct {
         const st = self.node.state(self.ctx, cb.UiState.TextState);
         st.wrap_width = 0; // single-line cell; wrapping and overflow are mutually exclusive
         st.overflow = mode;
-        st.overflow_width = cell_w;
+        // VIEW-02: the cell width is authored logical but is the node's device-px layout box,
+        // so scale it to device by the frame scale.
+        st.overflow_width = view.dp(cell_w, self.ctx.res.view.scale);
         // A `.clip` cell also routes through the engine's generic `Layout.overflow=.clip` so
         // the node's *subtree* (any decoration children) is cropped to its box for free and
         // hit-testing already rejects outside the viewport; the leaf's own glyphs are cropped
@@ -228,19 +249,32 @@ fn child(ctx: *UiCtx, parent: El, id: []const u8) !*Node {
     return node;
 }
 
+/// Scale a `SizeRule`'s **fixed** extent from logical to device px (VIEW-02); leave
+/// `content`/`grow`/`fit_children`/`pct_of_parent` untouched.
+fn scaleRule(rule: ui.SizeRule, scale: f32) ui.SizeRule {
+    return switch (rule) {
+        .fixed => |px| .{ .fixed = view.dp(px, scale) },
+        else => rule,
+    };
+}
+
 // -- Roots & content leaves ------------------------------------------------------------
 
 /// A fullscreen root sized to the live window — the anchor box a screen positions against.
 /// A root has no parent and stays non-relative (`.top_left`). Replaces the old `ui_root`.
 pub fn root(ctx: *UiCtx, id: []const u8) !El {
-    const ww, const wh = try ctx.res.platform.window.getSize();
     const node = try Node.create(ctx.arena, id);
     // A root must place *itself*: `Node.init` defaults `.relative`, which errors the
     // placement pass on a parentless node (`NoInfoForChildren`) — the gameover screen
     // crashed the first time death ever fired, because unlike the play screen it never
     // overrode the anchor. Set here so the doc's promise ("stays non-relative") is true.
     node.layout.anchor = .top_left;
-    node.size = ui.features.Size.initFixed(@floatFromInt(ww), @floatFromInt(wh));
+    // VIEW-02: the layout is solved in **device pixels** (the space the renderer draws and
+    // that text boxes already live in via `type.toDevice`), so the root is the drawable pixel
+    // size (`metrics.px_w/px_h` = logical × DPI). At DPI 1 this equals the window coordinate
+    // size (today's behavior); at high-DPI it fills the whole drawable crisply.
+    const m = ctx.res.view.metrics;
+    node.size = ui.features.Size.initFixed(m.px_w, m.px_h);
     return .{ .ctx = ctx, .node = node };
 }
 

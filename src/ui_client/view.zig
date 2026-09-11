@@ -127,6 +127,23 @@ pub fn compute(logical_w: f32, logical_h: f32, pixel_density: f32) ViewMetrics {
     };
 }
 
+// --- The one logical→device scaling helper (VIEW-02) ------------------------------------
+//
+// Every **authored dimension** — padding, gaps, fixed sizes, stroke widths, the drag
+// threshold, scrollbar widths, icon sizes — is a *logical* px value multiplied by the frame
+// `scale` exactly once, here, before it reaches the node's `Size`/`Layout`. So the whole UI
+// scales together to device pixels (the space the renderer draws and the layout is solved in)
+// and stays consistent with text, which already routes through `type.toDevice`. Simulation
+// values and camera percentages are **not** dimensions and never pass through this. Unlike the
+// font `toDevice` there is **no ≥1px floor**: a 0 gap/padding stays 0, a scaled dimension is
+// exactly `logical * scale` (crisp snapping of *hairlines* is `paint.hairline`'s job, RENDER-06).
+
+/// A logical px dimension in device px at `scale`. The single conversion point VIEW-02 routes
+/// every authored dimension through. `scale ≤ 0` is treated as 1 (never a negative size).
+pub fn dp(logical: f32, scale: f32) f32 {
+    return logical * (if (scale > 0) scale else 1);
+}
+
 // ============================ Tests (deterministic, SDL-free) =========================
 
 const testing = std.testing;

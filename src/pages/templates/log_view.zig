@@ -36,24 +36,27 @@ fn log_tone_color(t: Theme, tone: Tone) Color {
 
 /// One row's height at the body font, measured live (falls back to the px itself if the
 /// font backend errors — roughly right, and only cosmetic). The logical body size is routed
-/// through the one logical→device seam (`type.toDevice` with the frame scale) so the row
-/// height tracks the same device px the body text is measured/drawn at.
+/// One log row's height, in **logical** px (VIEW-02): `log_view` works in logical units and
+/// the El/style seams scale the whole viewport to device px, so this measures the font at its
+/// *logical* size — the reserved height then scales with everything else.
 fn line_height(ctx: *UiCtx) f32 {
-    const px = uic.typography.toDevice(style.body.font.?, ctx.res.view.scale);
+    const px = style.body.font.?; // logical px
     _, const h = ctx.res.platform.font.measure("Ag", px) catch return px;
     return @floatFromInt(h);
 }
 
+/// `width` is a **logical** px column width (VIEW-02): the caller authors it in logical units
+/// and the `scroll_view`/`with_wrap` seams scale to device.
 pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
     const th = ctx.res.view.theme;
 
     const flines: f32 = @floatFromInt(lines);
-    const height = flines * line_height(ctx) + (flines - 1) * sv.content_gap;
-    const view = try sv.scroll_view(ctx, parent, id, width - sv.scrollbar_w, height);
+    const height = flines * line_height(ctx) + (flines - 1) * sv.content_gap; // logical
+    const col_w = width - sv.scrollbar_w; // logical column, gutter reserved
+    const view = try sv.scroll_view(ctx, parent, id, col_w, height);
     // The viewport's content column is exactly this wide (fixed, gutter already reserved),
     // so a long entry wraps to the column instead of being clipped by the scroll viewport.
-    // An explicit, template-known width — the seam VIEW-01's ViewMetrics will later supply.
-    const wrap_w = width - sv.scrollbar_w;
+    const wrap_w = col_w;
 
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {

@@ -65,6 +65,17 @@ fn syncMouseButtons(input: *ui_client.Input, state: sdl.mouse.ButtonFlags) void 
     input.syncButtonHeld(.aux2, state.side2);
 }
 
+/// Scale an incoming SDL pointer coordinate (window/logical space) into the UI's **device-px**
+/// layout space (VIEW-02): the layout, hit geometry, and drag math live in device pixels
+/// (logical × DPI), while SDL delivers mouse/finger coordinates in window coordinates, so every
+/// coordinate is multiplied by the frame's `dpi_scale` at this one seam before it reaches the
+/// input model or hit-testing. At DPI 1 this is identity (today's behavior).
+fn pointerAt(app: *App, x: f32, y: f32) ui_client.InputPoint {
+    const s = app.resources.view.metrics.dpi_scale;
+    const k = if (s > 0) s else 1;
+    return .{ .x = x * k, .y = y * k };
+}
+
 fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
     const target = app.ui.markTarget(.pressed, position.x, position.y);
     app.pointer_activation.press(target, kind, id, position);
@@ -370,20 +381,22 @@ pub fn main() !void {
                 .text_input => |text| input.appendText(text.text),
                 .mouse_motion => |motion| {
                     const pointer = mouseIdentity(motion.id);
+                    const mpos = pointerAt(&app, motion.x, motion.y);
+                    const mdelta = pointerAt(&app, motion.x_rel, motion.y_rel);
                     input.recordMotion(
                         pointer.kind,
                         pointer.id,
-                        .{ .x = motion.x, .y = motion.y },
-                        .{ .x = motion.x_rel, .y = motion.y_rel },
+                        mpos,
+                        mdelta,
                     );
                     syncMouseButtons(input, motion.state);
                     if (pointer.kind != .touch) {
-                        routePointerMotion(&app, pointer.kind, pointer.id, .{ .x = motion.x, .y = motion.y });
+                        routePointerMotion(&app, pointer.kind, pointer.id, mpos);
                     }
                 },
                 .mouse_button_down, .mouse_button_up => |button| if (pointerButton(button.button)) |mapped| {
                     const pointer = mouseIdentity(button.id);
-                    const position = ui_client.InputPoint{ .x = button.x, .y = button.y };
+                    const position = pointerAt(&app, button.x, button.y);
                     input.recordButton(
                         pointer.kind,
                         pointer.id,
@@ -401,18 +414,20 @@ pub fn main() !void {
                 },
                 .mouse_wheel => |wheel| {
                     const pointer = mouseIdentity(wheel.id);
+                    const wpos = pointerAt(&app, wheel.x, wheel.y);
                     input.recordWheel(
                         pointer.kind,
                         pointer.id,
-                        .{ .x = wheel.x, .y = wheel.y },
-                        .{ .x = wheel.scroll_x, .y = wheel.scroll_y },
+                        wpos,
+                        .{ .x = wheel.scroll_x, .y = wheel.scroll_y }, // scroll amount, not a coordinate
                     );
-                    app.ui.mark(.wheel, wheel.x, wheel.y);
+                    app.ui.mark(.wheel, wpos.x, wpos.y);
                 },
                 .finger_down, .finger_up, .finger_motion => |finger| {
-                    const ww, const wh = try app.window.getSize();
-                    const width: f32 = @floatFromInt(ww);
-                    const height: f32 = @floatFromInt(wh);
+                    // Finger coordinates are normalized 0..1; map to the **device-px** viewport
+                    // (VIEW-02) so touch lands in the same space as the layout/hit geometry.
+                    const width: f32 = app.resources.view.metrics.px_w;
+                    const height: f32 = app.resources.view.metrics.px_h;
                     const id: u64 = @intCast(finger.finger_id.value);
                     const position = ui_client.InputPoint{ .x = finger.x * width, .y = finger.y * height };
                     switch (event) {
