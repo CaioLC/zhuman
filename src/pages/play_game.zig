@@ -22,9 +22,6 @@ const Node = uic.Node;
 const t = @import("./templates/root.zig");
 
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
-    const th = ctx.res.view.theme;
-    var buf: [64]u8 = undefined;
-
     // KIT-04: build inside the one terminal shell, supplying region descriptors instead of
     // hand-building the header/body/footer graph. Act I wants the header, the main body, the
     // footer log, and — once the run is underway — the collapsible Holdings rail (KIT-05).
@@ -50,7 +47,24 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
     }){ .world = world };
     if (q.get()) |a| {
         const e, const vigor, const food, const materials = a;
-        const bar = try t.resource_bar(ctx, header, "stocks", vigor, food, materials);
+        // KIT-12: the stockline is a row of StockTokens whose order/membership is this act's
+        // descriptor. Act I lists Vigor/Food/Materials; each token shows a two-letter abbrev
+        // (full label on hover/focus), tints danger on a low/zero value, and keeps a stable
+        // footprint (fixed cell) so a swap never shifts its neighbors. The values are formatted
+        // here (the token owns no domain math).
+        var vbuf: [24]u8 = undefined;
+        var fbuf: [24]u8 = undefined;
+        var mnum: [16]u8 = undefined;
+        const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}/{d:.0}", .{ vigor.v, vigor.max }) catch "?";
+        const ftxt = std.fmt.bufPrint(&fbuf, "{d:.0}", .{food.v}) catch "?";
+        const mtxt = @import("./fmt.zig").fmt_num(&mnum, materials.v);
+        const vcond = ctx.res.config.condition(vigor.v / vigor.max);
+        const stocks = [_]t.Stock{
+            .{ .abbrev = "Vi", .full = "Vigor", .value = vtxt, .danger = vcond == .spent },
+            .{ .abbrev = "Fo", .full = "Food", .value = ftxt, .danger = food.v <= 0 },
+            .{ .abbrev = "Ma", .full = "Materials", .value = mtxt, .danger = false },
+        };
+        const bar = try t.stockline(ctx, header, "stocks", &stocks);
         _ = bar.with_layout(.bottom_left);
 
         // --- center. Before the very first resolved action (GameState.tutorial_done),
@@ -109,19 +123,15 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
         }
     }
 
-    const run_line = try el.div(ctx, header, "run");
-    _ = run_line.with_layout(.bottom_right).with_flow(.{ .dir = .row }).with_gap(6);
-    // VIEW-04: at ≤560 the optional run-context label ("Act I ·") is dropped to save width;
-    // the functional Day counter always stays. Reachability is preserved (nothing interactive
-    // is hidden — the act label is decorative context).
-    if (!compact) {
-        _ = (try el.text(ctx, run_line, "act", "Act I ·"))
-            .with_style(.{ style.h3, Style{ .text = th.dim } });
-    }
+    // KIT-12: the runline — energy rate (0 in Act I → omitted), act label, and day. VIEW-04
+    // drops the optional act label at ≤560; the functional Day counter always stays.
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
-    const day_txt = std.fmt.bufPrint(&buf, "Day {d}", .{day}) catch "?";
-    _ = (try el.text(ctx, run_line, "day", day_txt))
-        .with_style(.{ style.h3, Style{ .text = th.fg } });
+    const run_line = try t.runline(ctx, header, "run", .{
+        .act_label = "Act I",
+        .day = day,
+        .compact = compact,
+    });
+    _ = run_line.with_layout(.bottom_right);
 
     // --- footer: the event log, full width at the bottom, 4 lines tall (the shell's footer
     // region, bottom-anchored). log_view authors in logical px (VIEW-02); the content column

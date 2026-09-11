@@ -29,6 +29,8 @@ const view_nav_mod = @import("./view_nav.zig");
 const select_mod = @import("./select.zig");
 const slider_mod = @import("./slider.zig");
 const disclosure_mod = @import("./disclosure.zig");
+const stock_token_mod = @import("./stock_token.zig");
+const runline_mod = @import("./runline.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -66,6 +68,11 @@ pub const Select = select_mod.Select;
 pub const slider = slider_mod.slider;
 pub const disclosure = disclosure_mod.disclosure;
 pub const Disclosure = disclosure_mod.Disclosure;
+pub const stock_token = stock_token_mod.stock_token;
+pub const stockline = stock_token_mod.stockline;
+pub const Stock = stock_token_mod.Stock;
+pub const runline = runline_mod.runline;
+pub const Run = runline_mod.Run;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
