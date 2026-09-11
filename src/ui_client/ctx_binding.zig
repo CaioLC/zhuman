@@ -229,6 +229,12 @@ pub const UiState = struct {
     /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
     /// template overwriting this each frame, which leaves the other keys' values untouched.
     pub const RailState = struct { collapsed: bool = false };
+    /// A disclosure control's expanded/collapsed memory (KIT-11), keyed by the control's own
+    /// `node.key`. `false` (collapsed — details hidden, summary showing) is the semantic and
+    /// bitwise-zero default. The whole summary row owns the toggle (the KIT-03 button contract);
+    /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
+    /// details nodes and nothing in them is focusable.
+    pub const DisclosureState = struct { expanded: bool = false };
     /// A select/popup control's state (KIT-09), keyed by the control's own `node.key`: whether
     /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
     /// move while open (the pending choice Enter commits). All default to the closed, first-item

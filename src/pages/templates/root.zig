@@ -28,6 +28,7 @@ const rail_mod = @import("./rail.zig");
 const view_nav_mod = @import("./view_nav.zig");
 const select_mod = @import("./select.zig");
 const slider_mod = @import("./slider.zig");
+const disclosure_mod = @import("./disclosure.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -63,6 +64,8 @@ pub const retain_view = view_nav_mod.retain;
 pub const select = select_mod.select;
 pub const Select = select_mod.Select;
 pub const slider = slider_mod.slider;
+pub const disclosure = disclosure_mod.disclosure;
+pub const Disclosure = disclosure_mod.Disclosure;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
