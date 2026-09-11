@@ -1,27 +1,38 @@
-//! `build_list` — the BUILD tab: a sorted, filtered list of what you can act on now.
+//! `build_list` — the BUILD tab: a searched, sorted list of recipes over the **live catalog**.
 //!
-//! The pane it replaces put all sixteen goods on screen the frame you opened it, ordered
-//! by how `capital.zig` implements them, with four different reasons for unavailability
-//! collapsed into one flat grey. This asks one question — *what can I act on now* — and
-//! answers it in rows, sorted so the top of the list is always the next thing.
+//! ACT1-09 replaced the hand-rolled SORT/SHOW/TIER/built chips (a second fixed taxonomy) with
+//! the shared catalog surface: a `catalog_controls` bar (KIT-15 — one search field + a disclosed
+//! Sort-by/Direction, a count-only summary) driving `capital_row`s (KIT-18) filtered by the one
+//! `query` parser (KIT-14). The axis belongs to the player: type to search, or sort by reach,
+//! inputs, or time.
 //!
-//! **Sort and filter rather than authored groups.** Grouping the roster by hand would only
-//! be a second fixed taxonomy, so the axis belongs to the player: sort by reach, materials
-//! or time; show what is ready, what is in reach, or everything. That last control is
-//! where the "within reach" cutoff lives — a state you can see and change, not a constant
-//! buried in a predicate. The old shelf captions survive demoted to an optional chip, and
-//! crude/manufactured gets its own, because that split *cuts across* the behavioral
-//! variants rather than restating them.
+//! **What the blank list shows vs a search.** With no query the list answers *what can I act on
+//! now* — ready recipes plus everything with reach ≥ `0.5`, excluding what you already own, sorted
+//! by reach descending so the top is always the next thing. The moment you type, the question
+//! widens to *what does the catalog hold* — the search runs over **every non-locked** record,
+//! including owned and far-off ones, so the field is a way to find a specific recipe, not just to
+//! narrow the ready set. **Prerequisite-locked recipes stay absent** in both modes (a row you
+//! cannot even attempt is noise); a **build in progress is always visible and pinned to the top**
+//! (you need the way out). The summary always reads `{visible} of {authored total} recipes shown`,
+//! where the total is the **full authored catalog** count (every buildable good but the Shelter),
+//! even though locked recipes contribute no row.
 //!
-//! Two rows are never filtered away: a build in progress (you need the way out) and the
-//! Shelter, which sits below the list as a goal card because it is the act's ending rather
-//! than an item in it.
+//! **ACT1-10 (build lifecycle):** starting a ready/owned row pays through `capital.begin_build`;
+//! the live `Busy` row renders its own progress/time and a cancel corner that calls
+//! `capital.cancel_build` (the refund path); completion is the simulation's — no UI-local timers.
+//!
+//! **ACT1-11 (Shelter milestone):** the Shelter is not a row. It is a `milestone_goal` (KIT-20)
+//! pinned below the list, **outside** the filter/sort, because it is how the act ends rather than
+//! an item in it. Its lifecycle (locked/unfunded/ready) and every requirement recompute from
+//! authoritative state each frame.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
 const capital = ha.capital;
+const catalog = ha.catalog;
+const query = ha.query;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
@@ -30,111 +41,90 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
-const BuildViewState = uic.UiState.BuildViewState;
 
 const gt = @import("./good_text.zig");
 const row_mod = @import("./capital_row.zig");
 const capital_row = row_mod.capital_row;
 const Kind = row_mod.Kind;
+const cc = @import("./catalog_controls.zig");
+const milestone_mod = @import("./milestone_goal.zig");
 
-/// Everything but the Shelter, which the goal card owns.
-const listed = capital.buildable_bundle.len - 1;
+const Direction = uic.UiState.CatalogState.Direction;
 
-const Entry = struct { i: usize, kind: Kind, reach: f32, mats: f32, hours: f32 };
+/// The buildable goods, minus the Shelter (which is the milestone, not a row). This is the
+/// **authored total** the summary reports against — a locked recipe still counts even when it
+/// contributes no row.
+const authored_total = capital.buildable_bundle.len - 1;
 
-/// One clickable word in the control strip. State remains in `BuildViewState`; this
-/// projects either selected-choice or checked-toggle semantics for visuals/accessibility.
-fn chip(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, on: bool, is_check: bool) !bool {
-    const th = ctx.res.view.theme;
-    const box = try el.div(ctx, parent, id);
-    const box_key = box.get().key;
-    if (is_check)
-        ctx.registerFocus(box_key, true)
-    else
-        ctx.registerRovingFocus(parent.get().key, box_key, true);
-    const q = box.query();
-    if (q.clicked) _ = ctx.requestFocus(box_key);
-    const focused = ctx.isFocused(box_key);
-    uic.publishControlState(ctx, box_key, .{
-        .focused = focused,
-        .focus_visible = focused,
-        .selected = on and !is_check,
-        .checked = on and is_check,
-    });
-    // INPUT-08: the "built" toggle is a checkbox (its `on` is a checked fact); the sort/
-    // show/tier chips are single-selection radios linked to their group (the parent). The
-    // authoritative `on`/`is_check` values match what was just published to the pool.
-    if (is_check)
-        ctx.res.semantics.publish(uic.semantic.describeCheckbox(box_key, label, on, focused))
-    else
-        ctx.res.semantics.publish(uic.semantic.describeRadio(box_key, label, on, focused, parent.get().key));
-    if (q.hovering) ctx.res.cursor.request(.pointer);
-    const c = if (on) th.acc else if (q.held or q.hovering or focused) th.fg else th.dim;
-    _ = (try el.text(ctx, box, "t", label)).with_style(.{ style.body, Style{ .text = c } });
-    return q.clicked;
+/// The Sort-by option labels the controls disclose. Reach is the default (index 0), so the blank
+/// list opens sorted by how close each recipe is to affordable, descending.
+const sort_kinds = [_][]const u8{ "reach", "inputs", "time", "name" };
+const Sort = enum(usize) { reach = 0, inputs = 1, time = 2, name = 3 };
+
+/// One classified recipe for this frame: the comptime index into `buildable_bundle`, its display
+/// `kind`, reach fraction, materials/hours cost, and the `name`/`type_word`/`state_word` used to
+/// answer `query` fields. Everything is a comptime-known string or a live number — no allocation.
+const Entry = struct {
+    i: usize,
+    kind: Kind,
+    reach: f32,
+    mats: f32,
+    hours: f32,
+    name: []const u8,
+    type_word: []const u8,
+    state_word: []const u8,
+};
+
+/// The row-facing `query` contract (KIT-14): answers a `Field` with this recipe's text, a free-
+/// text `haystack` (the name), and the `state:in-reach` fact. Recipes expose `type`/`state`
+/// (and `is:` folds over both); `in`/`out`/`tech` are always-miss here (BUILD costs are uniform
+/// energy+materials, and Act I recipes carry no research links).
+const RecipeRow = struct {
+    e: *const Entry,
+    pub fn text(self: RecipeRow, f: query.Field) []const u8 {
+        return switch (f) {
+            .type => self.e.type_word,
+            .state => self.e.state_word,
+            else => "",
+        };
+    }
+    pub fn haystack(self: RecipeRow) []const u8 {
+        return self.e.name;
+    }
+    pub fn inReach(self: RecipeRow) bool {
+        return self.e.kind == .ready or self.e.reach >= 0.5;
+    }
+};
+
+/// The state word a recipe answers `state:` / `is:` with — the same word the row's colour says.
+fn stateWord(kind: Kind) []const u8 {
+    return switch (kind) {
+        .ready => "ready",
+        .reach => "reach",
+        .building => "building",
+        .blocked => "blocked",
+        .locked => "locked",
+        .owned => "owned",
+    };
 }
 
-fn group_label(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8) !El {
-    const th = ctx.res.view.theme;
-    const g = try el.div(ctx, parent, id);
-    _ = g.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
-    _ = (try el.text(ctx, g, "l", label)).with_style(.{ style.body, Style{ .text = th.line2 } });
-    return g;
-}
-
-/// The BUILD tab owns its view state on its outer node. An always-built shell may retain
-/// that existing slot while this conditional subtree is hidden; building the list itself
-/// is still the only operation that can allocate the slot.
 pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !El {
     const th = ctx.res.view.theme;
 
     const outer = try el.div(ctx, parent, id);
     _ = outer.with_flow(.{ .dir = .column }).with_gap(6);
-    const st = outer.get().state(ctx, BuildViewState);
 
-    // --- the control strip ---------------------------------------------------------
-    const strip = try el.div(ctx, outer, "strip");
-    _ = strip.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(22)
-        .with_style(.{style.pad_each(0, 0, 6, 0)});
+    // --- the controls bar (KIT-15): search + disclosed sort, its own state keyed by id ------
+    const controls = try cc.catalog_controls(ctx, outer, "build_ctl", &sort_kinds);
+    const q = query.parse(controls.query_text);
+    const blank = controls.query_text.len == 0;
 
-    const g_sort = try group_label(ctx, strip, "gs", "SORT");
-    if (try chip(ctx, g_sort, "s0", "reach", st.sort == .reach, false)) st.sort = .reach;
-    if (try chip(ctx, g_sort, "s1", "materials", st.sort == .materials, false)) st.sort = .materials;
-    if (try chip(ctx, g_sort, "s2", "time", st.sort == .time, false)) st.sort = .time;
-
-    const g_show = try group_label(ctx, strip, "gh", "SHOW");
-    if (try chip(ctx, g_show, "h0", "ready", st.show == .ready, false)) st.show = .ready;
-    if (try chip(ctx, g_show, "h1", "in reach", st.show == .in_reach, false)) st.show = .in_reach;
-    if (try chip(ctx, g_show, "h2", "all", st.show == .all, false)) st.show = .all;
-
-    const g_tier = try group_label(ctx, strip, "gt", "TIER");
-    if (try chip(ctx, g_tier, "t0", "any", st.tier == .any, false)) st.tier = .any;
-    if (try chip(ctx, g_tier, "t1", "crude", st.tier == .crude, false)) st.tier = .crude;
-    if (try chip(ctx, g_tier, "t2", "made", st.tier == .manufactured, false)) st.tier = .manufactured;
-
-    const g_own = try el.div(ctx, strip, "go");
-    if (try chip(ctx, g_own, "b", if (st.built) "\u{25a0} built" else "\u{25a1} built", st.built, true)) st.built = !st.built;
-
-    // --- the body: one line for a busy body, then the rows --------------------------
-    const busy = world.get(e, comp.Busy);
-    const building_good = busy != null and busy.?.doing != .forage and busy.?.doing != .scavenge and
-        busy.?.doing != .fish and busy.?.doing != .chop_wood and busy.?.doing != .check_traps and
-        busy.?.doing != .hunt;
-    if (busy != null and !building_good) {
-        // Labor, not a build: say so, so the rows below read as *waiting* rather than
-        // unaffordable — the distinction the flat grey never made.
-        var lbuf: [64]u8 = undefined;
-        const left = busy.?.remaining / ctx.res.config.secs_per_day;
-        const msg = std.fmt.bufPrint(&lbuf, "Your hands are busy \u{2014} {d:.1}d left.", .{left}) catch "Your hands are busy.";
-        _ = (try el.text(ctx, outer, "busy", msg))
-            .with_style(.{ style.body, Style{ .text = th.warn } });
-    }
-
-    // --- classify, filter, sort ------------------------------------------------------
-    var buf: [listed]Entry = undefined;
+    // --- classify every non-Shelter good, then filter by mode + query ----------------------
+    var buf: [authored_total]Entry = undefined;
     var n: usize = 0;
     const stock = world.get(e, comp.InventoryMaterial).?;
     const vigor = world.get(e, comp.Vigor).?;
+    const busy = world.get(e, comp.Busy);
 
     inline for (capital.buildable_bundle, 0..) |G, i| {
         if (G != comp.Shelter) {
@@ -152,48 +142,82 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
                 .locked
             else if (affordable and busy == null) .ready else .reach;
 
-            const tier_ok = switch (st.tier) {
-                .any => true,
-                .crude => capital.is_crude(G),
-                .manufactured => !capital.is_crude(G),
+            const ent = Entry{
+                .i = i,
+                .kind = kind,
+                .reach = reach,
+                .mats = cost.materials,
+                .hours = cost.hours,
+                .name = gt.display_name(G),
+                .type_word = if (capital.is_crude(G)) "crude" else "made",
+                .state_word = stateWord(kind),
             };
-            const show_ok = switch (st.show) {
-                .all => true,
-                // Blocked stays visible under every filter but `ready`: hiding it is
-                // strictly worse than the grey tile it replaces, which at least told you
-                // the thing existed.
-                .in_reach => kind == .ready or kind == .blocked or reach >= 0.5,
-                .ready => kind == .ready,
-            };
-            const owned_ok = st.built or !owned;
+
             // A build in progress is never filtered away — the corner is the way out.
-            if (kind == .building or (tier_ok and show_ok and owned_ok)) {
-                buf[n] = .{ .i = i, .kind = kind, .reach = reach, .mats = cost.materials, .hours = cost.hours };
+            const pinned = kind == .building;
+            // Prerequisite-locked recipes stay absent under every mode: a row you cannot even
+            // attempt is noise, not information.
+            const attemptable = kind != .blocked;
+
+            const keep = pinned or (attemptable and if (blank)
+                // Blank: ready plus reach ≥ 0.5, excluding what you already own.
+                ((kind == .ready or reach >= 0.5) and kind != .owned)
+            else
+                // A search runs over every non-locked record — owned and far-off included.
+                query.matches(&q, RecipeRow{ .e = &ent }));
+
+            if (keep) {
+                buf[n] = ent;
                 n += 1;
             }
         }
     }
 
     const entries = buf[0..n];
+
+    // --- sort: the disclosed key + direction, building pinned to the top -------------------
+    const SortCtx = struct { sort: Sort, dir: Direction };
     const Cmp = struct {
-        fn less(s: BuildViewState.Sort, a: Entry, b: Entry) bool {
-            // A build in progress pins to the top under every sort: it is the one row
-            // whose state is changing while you look at it.
+        fn less(ctxt: SortCtx, a: Entry, b: Entry) bool {
+            // The build in progress pins above everything, under every sort/direction.
             if ((a.kind == .building) != (b.kind == .building)) return a.kind == .building;
-            return switch (s) {
-                .reach => a.reach > b.reach,
-                .materials => a.mats < b.mats,
-                .time => a.hours < b.hours,
-            };
+            var pl = false; // primary-less (ascending semantics; direction is applied by lessThan)
+            var pe = true; // primary-equal
+            switch (ctxt.sort) {
+                .reach => {
+                    pl = a.reach < b.reach;
+                    pe = a.reach == b.reach;
+                },
+                .inputs => {
+                    pl = a.mats < b.mats;
+                    pe = a.mats == b.mats;
+                },
+                .time => {
+                    pl = a.hours < b.hours;
+                    pe = a.hours == b.hours;
+                },
+                .name => {}, // name is the tie-break itself → defer to it (pl=false, pe=true)
+            }
+            return cc.lessThan(ctxt.dir, pl, pe, a.name, b.name);
         }
     };
-    std.sort.insertion(Entry, entries, st.sort, Cmp.less);
+    // Default sort is reach descending. `CatalogState` opens with dir `none`; we read `none` as
+    // "the sort's natural direction" — reach descending (nearest first), the others ascending
+    // (cheapest/quickest/alphabetical first) — so the blank list opens usefully without a pool
+    // default that the state pool would not honour anyway.
+    const eff_sort: Sort = @enumFromInt(controls.sort);
+    const eff_dir: Direction = if (controls.dir != .none)
+        controls.dir
+    else if (eff_sort == .reach) .descending else .ascending;
+    std.sort.insertion(Entry, entries, SortCtx{ .sort = eff_sort, .dir = eff_dir }, Cmp.less);
 
+    // --- the rows --------------------------------------------------------------------------
     const rows = try el.div(ctx, outer, "rows");
     _ = rows.with_flow(.{ .dir = .column });
 
     if (n == 0) {
-        _ = (try el.text(ctx, rows, "empty", "Nothing matches. Widen the filter."))
+        const msg = if (blank) "Nothing is within reach yet. Gather materials." else "No recipe matches your search.";
+        _ = (try el.text(ctx, rows, "empty", msg))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     }
 
@@ -203,119 +227,71 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
         inline for (capital.buildable_bundle, 0..) |G, i| {
             if (G != comp.Shelter and i == ent.i) {
                 const r = try capital_row(ctx, rows, world, e, G, rid, ent.kind, ent.reach);
+                // ACT1-10: the lifecycle is the simulation's. A ready/owned click pays through
+                // begin_build; the cancel corner runs the existing refund path. No UI timers.
                 if (r.clicked_build) capital.begin_build(world, e, ctx.res, G);
                 if (r.clicked_cancel) _ = capital.cancel_build(world, e, ctx.res);
             }
         }
     }
 
-    // --- what the list does not hold: everything priced past one pair of hands -------
-    var hidden: u32 = 0;
-    inline for (capital.buildable_bundle) |G| {
-        if (G != comp.Shelter and !capital.is_crude(G) and !world.has(e, G)) {
-            const cost = (G{}).requires;
-            if (cost.materials > stock.v) hidden += 1;
-        }
-    }
-    if (hidden > 0 and st.show != .all) {
-        // Two nodes, not one sentence: a text node's cached string is bounded
-        // (`TextState.cap`) and now *refuses* a source past it as a whole rather than
-        // rendering a cut tail, so a single long line would vanish rather than wrap.
-        // Splitting keeps each line well inside the cap; TEXT-02 adds real wrapping.
-        var hbuf: [64]u8 = undefined;
-        const msg = std.fmt.bufPrint(&hbuf, "{d} more are priced past one pair of hands.", .{hidden}) catch "";
-        const foot = try el.div(ctx, outer, "hint");
-        _ = foot.with_flow(.{ .dir = .column });
-        _ = (try el.text(ctx, foot, "a", msg))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
-        _ = (try el.text(ctx, foot, "b", "A trader might carry them."))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
-    }
+    // --- the count-only summary: {visible} of {authored total} recipes shown ---------------
+    var sbuf: [40]u8 = undefined;
+    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authored_total }) catch "?";
+    _ = (try el.text(ctx, outer, "summary", summary))
+        .with_style(.{ style.small, Style{ .text = th.dim } });
 
-    try goal_card(ctx, outer, world, e, "goal", stock, vigor);
+    // --- the Shelter milestone (ACT1-11), pinned below and outside the filter --------------
+    try shelter_goal(ctx, outer, world, e, "goal");
     return outer;
 }
 
-/// The Shelter, pinned below the list and outside the sort: it is how the act ends, not an
-/// item in it. Its three standing conditions are shown live, because a good whose gate is
-/// invisible is exactly the grey tile this pane was built to stop being.
-fn goal_card(
-    ctx: *UiCtx,
-    parent: El,
-    world: *World,
-    e: Entity,
-    id: []const u8,
-    stock: *const comp.InventoryMaterial,
-    vigor: *const comp.Vigor,
-) !void {
-    const th = ctx.res.view.theme;
+/// The Shelter as a `milestone_goal` (KIT-20) — outside the recipe filtering/sorting because it
+/// is the act's ending, not an item in it. Its lifecycle and requirements recompute live.
+fn shelter_goal(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !void {
     const G = comp.Shelter;
-    if (world.has(e, G)) return; // owning it ends the act; the curtain is already up
+    if (world.has(e, G)) return; // owning it raises the curtain — the act is over
 
     const cost = (G{}).requires;
     const u = (G{}).unlock;
+    const stock = world.get(e, comp.InventoryMaterial).?;
+    const vigor = world.get(e, comp.Vigor).?;
     const food = world.get(e, comp.InventoryFood).?;
     const kinds = capital.goods_owned(world, e);
+    const busy = world.get(e, comp.Busy);
 
-    const card = try el.div(ctx, parent, id);
-    _ = card.with_flow(.{ .dir = .column }).with_gap(5)
-        .with_style(.{ Style{ .outline_color = th.acc }, style.solid, style.pad_sym(10, 8) });
+    // Lifecycle from authoritative state: locked until the standing conditions hold, then
+    // unfunded until materials/energy are on hand and hands are free, then ready.
+    const unlocked = capital.unlock_met(world, e, G);
+    const funded = cost.materials <= stock.v and cost.energy < vigor.v and busy == null;
+    const state: milestone_mod.Lifecycle = if (!unlocked) .locked else if (!funded) .unfunded else .ready;
 
-    const head = try el.div(ctx, card, "h");
-    _ = head.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    _ = (try el.text(ctx, head, "n", gt.display_name(G)))
-        .with_style(.{ style.h3, Style{ .text = th.acc } });
+    // Cost/copy: `60m 6e · 6.0d` — materials, energy, days.
     var cbuf: [40]u8 = undefined;
-    const ct = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e  {d:.1}d", .{ cost.materials, cost.energy, cost.hours / 24.0 }) catch "?";
-    _ = (try el.text(ctx, head, "c", ct)).with_style(.{ style.body, Style{ .text = th.dim } });
-    _ = (try el.text(ctx, head, "s", "\u{2014} a roof with room for four, and how Act I ends"))
-        .with_style(.{ style.body, Style{ .text = th.fg } });
+    const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e \u{00B7} {d:.1}d", .{ cost.materials, cost.energy, cost.hours / 24.0 }) catch "?";
 
-    const checks = try el.div(ctx, card, "k");
-    _ = checks.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(20);
+    // The requirement row shows every live check as `label current/req`, so an unmet condition
+    // is a fact the player can read, not a hidden predicate.
+    var rbuf: [96]u8 = undefined;
+    const req = std.fmt.bufPrint(&rbuf, "vigor {d:.0}/{d:.0} \u{00B7} food {d:.0}/{d:.0} \u{00B7} goods {d}/{d} \u{00B7} materials {d:.0}/{d:.0}", .{
+        vigor.v, u.vigor_abs,
+        food.v,  u.food,
+        kinds,   u.goods,
+        stock.v, cost.materials,
+    }) catch "?";
 
-    var b1: [40]u8 = undefined;
-    var b2: [40]u8 = undefined;
-    var b3: [40]u8 = undefined;
-    // ACT1-04: the vigor requirement is an absolute amount of current Vigor, shown as `v/req`.
-    try check(ctx, checks, "c1", vigor.v >= u.vigor_abs, std.fmt.bufPrint(&b1, "vigor {d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?");
-    try check(ctx, checks, "c2", food.v >= u.food, std.fmt.bufPrint(&b2, "food {d:.0}/{d:.0}", .{ food.v, u.food }) catch "?");
-    try check(ctx, checks, "c3", kinds >= u.goods, std.fmt.bufPrint(&b3, "goods {d}/{d}", .{ kinds, u.goods }) catch "?");
-
-    const ready = capital.unlock_met(world, e, G) and cost.materials <= stock.v and
-        cost.energy < vigor.v and !world.has(e, comp.Busy);
-    const go = try el.div(ctx, card, "go");
-    const go_key = go.get().key;
-    ctx.registerFocus(go_key, ready);
-    const q = go.query();
-    if (q.clicked and ready) _ = ctx.requestFocus(go_key);
-    const focused = ctx.isFocused(go_key);
-    uic.publishControlState(ctx, go_key, .{
-        .disabled = !ready,
-        .focused = focused,
-        .focus_visible = focused,
+    const m = try milestone_mod.milestone_goal(ctx, parent, id, .{
+        .state = state,
+        .title = gt.display_name(G),
+        .summary = "a roof with room for four",
+        .kicker = "THE END OF ACT I",
+        .cost = cost_txt,
+        .copy = "A shelter is how Act I ends \u{2014} it houses others, and opens what comes next.",
+        .requirement = req,
+        .explanation = gt.effect(G),
+        .action = "Raise the shelter",
     });
-    if (q.hovering) ctx.res.cursor.request(if (ready) .pointer else .not_allowed);
-    const c = if (!ready) th.line2 else if (q.held or q.hovering or focused) th.acc else th.fg;
-    var mbuf: [48]u8 = undefined;
-    const label = if (ready)
-        "Raise the shelter \u{2192}"
-    else
-        std.fmt.bufPrint(&mbuf, "{d:.0}/{d:.0} materials", .{ stock.v, cost.materials }) catch "";
-    _ = (try el.text(ctx, go, "t", label)).with_style(.{ style.body, Style{ .text = c } });
-    // INPUT-08: the goal action is a button whose accessible name is the same authoritative
-    // label the player sees (either the go text or the materials shortfall), and whose
-    // enabled fact is `ready`. Published after its own text node, in paint order.
-    ctx.res.semantics.publish(uic.semantic.describeButton(go_key, label, ready, focused));
-    if (ready and q.clicked) capital.begin_build(world, e, ctx.res, G);
-}
-
-fn check(ctx: *UiCtx, parent: El, id: []const u8, ok: bool, label: []const u8) !void {
-    const th = ctx.res.view.theme;
-    const box = try el.div(ctx, parent, id);
-    _ = box.with_flow(.{ .dir = .row, .cross = .center }).with_gap(5);
-    _ = (try el.text(ctx, box, "m", if (ok) "\u{2713}" else "\u{00b7}"))
-        .with_style(.{ style.body, Style{ .text = if (ok) th.acc else th.danger } });
-    _ = (try el.text(ctx, box, "t", label))
-        .with_style(.{ style.body, Style{ .text = if (ok) th.dim else th.danger } });
+    // ACT1-10/11: raising the shelter is the same begin_build lifecycle; the transition itself
+    // happens when the build completes in the simulation (no UI-local shortcut).
+    if (m.clicked) capital.begin_build(world, e, ctx.res, G);
 }

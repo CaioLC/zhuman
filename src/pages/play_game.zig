@@ -108,9 +108,18 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !*Node {
             // the inactive view is not built but its pooled state is retained below.
             const tb = try t.view_nav(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
             if (tb.active == 0) {
-                // KIT-07: retain the inactive BUILD view's pooled sort/filter state by key so
-                // returning to it restores exactly where it was; the view's nodes are not built.
-                _ = t.retain_view(ctx, center, "buildlist", uic.UiState.BuildViewState);
+                // KIT-07 / ACT1-09: retain the inactive BUILD view's search/sort state so
+                // returning to it restores exactly where it was. The BUILD tab's state now lives
+                // in a `CatalogState` on its controls node (`build_list` → "buildlist" → the KIT-15
+                // controls "build_ctl"), so retain that nested key — the view's nodes are not
+                // built while ACTIONS is active, and pool retention ends the moment we stop asking.
+                const build_key = ha.ui.key(center.get().key, "buildlist");
+                const ctl_key = ha.ui.key(build_key, "build_ctl");
+                _ = ctx.retainState(ctl_key, uic.UiState.CatalogState);
+                // The search text lives in the field's own editor state, nested under the
+                // controls' first row ("build_ctl" → "row" → "search").
+                const row_key = ha.ui.key(ctl_key, "row");
+                _ = ctx.retainState(ha.ui.key(row_key, "search"), uic.UiState.TextInputState);
 
                 // ACT1-08: the finalized ACTIONS surface is exactly the five verbs of the
                 // catalog's Act I surface — Forage, Scavenge, Split wood, Fish, Check traps —

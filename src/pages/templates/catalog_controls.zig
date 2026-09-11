@@ -55,7 +55,7 @@ fn signature(query_text: []const u8, sort: usize, dir: Direction) u64 {
         h *%= 1099511628211;
     }
     h ^= sort *% 1099511628211;
-    h ^= @intFromEnum(dir) *% 14695981039346656;
+    h ^= @as(u64, @intFromEnum(dir)) *% 14695981039346656;
     return h;
 }
 
