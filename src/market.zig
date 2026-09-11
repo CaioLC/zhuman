@@ -141,6 +141,125 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Lo
     };
 }
 
+// ============================ Typed bundles & quotes (ACT1-13) ===========================
+//
+// One **transfer representation** for everything a trade moves — Food, generic Materials, and
+// owned goods — so barter resolution (ACT1-14) has a single shape to validate and apply, and Act
+// II can extend it by adding `Item` variants (typed resources, Coin) without a new grammar.
+
+/// A thing a bundle can carry. Today: Food, generic Materials, and the two small tools the
+/// passerby deals in (which map to owned-good components on the player side). Act II adds its
+/// typed resources and Coin here — the `Ware` slots are the extension point, so `Item = Ware`.
+pub const Item = Ware;
+
+/// One line of a transfer: a quantity of an `Item`. `qty` is `f32` because Food is fractional and
+/// Act II resources will be too; whole-unit tools simply use integral values.
+pub const Line = struct { item: Item, qty: f32 };
+
+/// The maximum lines a bundle holds — a single Act I trade never moves more than a couple of
+/// item kinds, so this is generous and keeps the bundle allocation-free.
+pub const bundle_cap = 4;
+
+/// A **typed bundle**: a fixed-capacity set of `Line`s. Both sides of a quote are bundles, so
+/// "give Food+Materials, receive a fish hook" and "give a whetstone, receive Materials" are the
+/// same shape. Allocation-free and copyable.
+pub const Bundle = struct {
+    lines: [bundle_cap]Line = undefined,
+    len: usize = 0,
+
+    pub fn add(self: *Bundle, item: Item, qty: f32) void {
+        if (self.len < bundle_cap) {
+            self.lines[self.len] = .{ .item = item, .qty = qty };
+            self.len += 1;
+        }
+    }
+
+    pub fn slice(self: *const Bundle) []const Line {
+        return self.lines[0..self.len];
+    }
+
+    /// The quantity of `item` in this bundle (0 if absent) — used by affordability/apply.
+    pub fn qtyOf(self: *const Bundle, item: Item) f32 {
+        var total: f32 = 0;
+        for (self.slice()) |l| if (l.item == item) {
+            total += l.qty;
+        };
+        return total;
+    }
+
+    /// A one-item bundle — the common case (a whole tool, or a lump of one resource).
+    pub fn one(item: Item, qty: f32) Bundle {
+        var b = Bundle{};
+        b.add(item, qty);
+        return b;
+    }
+};
+
+/// Which way a quote runs, from the player's point of view. `buy` — the player **gives** Food/
+/// Materials and **receives** a ware; `sell` — the player **gives** an owned good and **receives**
+/// Materials. One enum both the dialog tabs and the resolver read.
+pub const Direction = enum { buy, sell };
+
+/// Why a quote cannot be taken right now — a player-readable reason, not a silent disable. `none`
+/// means it is takeable. `stale`/`departed` are the encounter-revision failures ACT1-14 revalidates;
+/// `sold_out`/`unaffordable` are the stock/holdings failures.
+pub const Refusal = enum {
+    none,
+    unaffordable,
+    sold_out,
+    stale,
+    departed,
+
+    pub fn reason(self: Refusal) []const u8 {
+        return switch (self) {
+            .none => "",
+            .unaffordable => "You can't cover that.",
+            .sold_out => "Sold out.",
+            .stale => "That offer has changed.",
+            .departed => "The passerby has gone.",
+        };
+    }
+};
+
+/// A **quote**: one concrete offer the player can weigh, with everything barter needs to revalidate
+/// and everything the dialog needs to render. Captured against a specific encounter visit (`rev` =
+/// the encounter `id` at capture) so ACT1-14 can tell a live quote from one whose passerby has left
+/// or been replaced. `id` is a stable per-catalog offer identity (which line of the passerby's
+/// board this is). `next` is the **next marginal sell quote** — for a sell, what the *following*
+/// unit would fetch (filled by ACT1-15's diminishing schedule); null when not applicable.
+pub const Quote = struct {
+    id: u32,
+    rev: u32,
+    direction: Direction,
+    give: Bundle,
+    receive: Bundle,
+    effect: []const u8 = "",
+    /// Units of this offer still available this visit (buy: the passerby's stock; sell: how many
+    /// the player may sell before the schedule bottoms out). 0 ⇒ sold out.
+    stock: u16 = 1,
+    /// The Materials the *next* unit of a sell would fetch, if this is a sell with more to sell —
+    /// exposed before confirmation so diminishing returns are visible, not a surprise (ACT1-15).
+    next_unit: ?f32 = null,
+
+    /// Whether this quote is takeable against a live encounter and the player's holdings.
+    /// `enc_id` is the current encounter identity; `food`/`materials` the player's holdings; a
+    /// sell also needs the player to own the good, which the caller checks (component ownership is
+    /// outside this leaf module). Returns the specific `Refusal`.
+    pub fn refusal(self: *const Quote, enc: *const Encounter, food: f32, materials: f32) Refusal {
+        if (!enc.dealable()) return .departed;
+        if (self.rev != enc.id) return .stale;
+        if (self.stock == 0) return .sold_out;
+        // Affordability: the player must hold every Food/Materials line on the give side.
+        if (self.give.qtyOf(.food) > food) return .unaffordable;
+        if (self.give.qtyOf(.materials) > materials) return .unaffordable;
+        return .none;
+    }
+
+    pub fn takeable(self: *const Quote, enc: *const Encounter, food: f32, materials: f32) bool {
+        return self.refusal(enc, food, materials) == .none;
+    }
+};
+
 // ============================ Tests =====================================================
 
 const testing = std.testing;
@@ -217,4 +336,57 @@ test "take saturates at zero and give adds to the satchel" {
     try testing.expectEqual(@as(u16, 0), enc.stockOf(.food));
     enc.give(.food, 4);
     try testing.expectEqual(@as(u16, 4), enc.stockOf(.food));
+}
+
+test "bundle carries typed lines and reports quantities" {
+    var b = Bundle{};
+    b.add(.food, 2.5);
+    b.add(.materials, 6);
+    try testing.expectEqual(@as(usize, 2), b.len);
+    try testing.expectApproxEqAbs(@as(f32, 2.5), b.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 6), b.qtyOf(.materials), 1e-6);
+    try testing.expectEqual(@as(f32, 0), b.qtyOf(.fish_hook)); // absent ⇒ 0
+    // The one-item convenience form.
+    const w = Bundle.one(.whetstone, 1);
+    try testing.expectEqual(@as(f32, 1), w.qtyOf(.whetstone));
+}
+
+test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and takeable" {
+    var enc = Encounter{ .phase = .present, .id = 3 };
+    enc.stock[@intFromEnum(Ware.materials)] = 10;
+
+    // A buy: give 2 food + 4 materials, receive a fish hook, captured at the live revision.
+    var q = Quote{
+        .id = 1,
+        .rev = 3,
+        .direction = .buy,
+        .give = blk: {
+            var g = Bundle{};
+            g.add(.food, 2);
+            g.add(.materials, 4);
+            break :blk g;
+        },
+        .receive = Bundle.one(.fish_hook, 1),
+        .stock = 1,
+    };
+
+    // Enough holdings, live encounter, in stock ⇒ takeable.
+    try testing.expect(q.takeable(&enc, 5, 10));
+    // Short on materials ⇒ unaffordable.
+    try testing.expectEqual(Refusal.unaffordable, q.refusal(&enc, 5, 3));
+    // Short on food ⇒ unaffordable.
+    try testing.expectEqual(Refusal.unaffordable, q.refusal(&enc, 1, 10));
+    // Sold out ⇒ sold_out (checked before affordability passes).
+    q.stock = 0;
+    try testing.expectEqual(Refusal.sold_out, q.refusal(&enc, 5, 10));
+    q.stock = 1;
+    // A different passerby now (id moved) ⇒ stale.
+    enc.id = 4;
+    try testing.expectEqual(Refusal.stale, q.refusal(&enc, 5, 10));
+    // Not present at all ⇒ departed (takes precedence over everything).
+    enc.phase = .departed;
+    try testing.expectEqual(Refusal.departed, q.refusal(&enc, 5, 10));
+    // Every refusal has player-readable copy.
+    try testing.expect(Refusal.unaffordable.reason().len > 0);
+    try testing.expectEqualStrings("", Refusal.none.reason());
 }
