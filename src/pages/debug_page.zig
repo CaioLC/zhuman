@@ -159,11 +159,11 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             _ = try el.text(ctx, stage, "na", "(needs a live player)");
         }
     } else if (eq(name, "stock_token")) {
-        try t.stock_token(ctx, stage, "tok", .{ .abbrev = "Vi", .full = "Vigor", .value = "3/10", .danger = false });
+        try t.stock_token(ctx, stage, "tok", .{ .abbrev = "Vi", .full = "Vigor", .value = "3/10", .tone = .warn });
     } else if (eq(name, "stockline")) {
         const stocks = [_]t.Stock{
             .{ .abbrev = "Vi", .full = "Vigor", .value = "10/10" },
-            .{ .abbrev = "Fo", .full = "Food", .value = "4", .danger = true },
+            .{ .abbrev = "Fo", .full = "Food", .value = "4", .tone = .danger },
             .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
         };
         _ = try t.stockline(ctx, stage, "sl", &stocks);
@@ -174,7 +174,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
         const stocks = [_]t.Stock{
             .{ .abbrev = "Vi", .full = "Vigor", .value = "10/10" },
-            .{ .abbrev = "Fo", .full = "Food", .value = "4", .danger = true },
+            .{ .abbrev = "Fo", .full = "Food", .value = "4", .tone = .danger },
             .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
         };
         _ = try t.header(ctx, demo, "hud", .{
@@ -360,7 +360,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
                 .stocks = &stocks,
                 .run = .{ .act_label = "Act I", .day = 19 },
             });
-            _ = try t.act_one_workspace(ctx, regions.body, world, a[0], "workspace", .{
+            const workspace = try t.act_one_workspace(ctx, regions.body, world, a[0], "workspace", .{
                 .activity = .{
                     .state = .idle,
                     .subject = "no work in progress",
@@ -368,6 +368,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
                     .last = .idle,
                 },
             });
+            if (workspace.surface.market_action.consume(.clicked)) audit_trade.open = true;
 
             var feed: ha.log.Log = .{};
             feed.push(.normal, "You return with 4 materials.");
@@ -377,6 +378,10 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             if (regions.footer) |footer| {
                 try t.log_view(ctx, footer, "feed", &feed, 900 - 2 * ha.tokens.pad_page, 4);
             }
+
+            // Match production's overlay lifecycle: the workspace owns placement of the TRADE
+            // action, while this page owns stable open state and renders the dialog last.
+            return auditTradeOverlay(ctx, audit_trade);
         } else {
             _ = try el.text(ctx, stage, "na", "(needs a live player)");
         }
@@ -422,31 +427,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
         _ = try t.activity_strip(ctx, demo, "as", .idle, "no work in progress", "ready", .idle);
     } else if (eq(name, "trade_dialog")) {
-        if (!audit_trade.open) return null;
-        const buys = [_]t.TradeOffer{
-            .{ .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
-            .{ .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
-            .{ .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
-        };
-        const sells = [_]t.TradeOffer{
-            .{ .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
-            .{ .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
-        };
-        const holdings = [_]t.TradeHolding{
-            .{ .label = "Food", .value = "11.6" },
-            .{ .label = "Materials", .value = "31" },
-            .{ .label = "Sandals", .value = "\u{00d7}2" },
-            .{ .label = "Hatchet", .value = "\u{00d7}2" },
-            .{ .label = "Root cellar", .value = "\u{00d7}1" },
-            .{ .label = "Leaf bed", .value = "\u{00d7}1" },
-        };
-        var overlay_root: *Node = undefined;
-        const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade, &overlay_root);
-        if (result.dismissed) {
-            audit_trade.open = false;
-            return null;
-        }
-        return overlay_root;
+        return auditTradeOverlay(ctx, audit_trade);
     } else if (eq(name, "tag")) {
         _ = try t.tag(ctx, stage, "tg", "crude");
     } else if (eq(name, "cost_list")) {
@@ -467,6 +448,38 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         _ = try el.text(ctx, stage, "unknown", "(unknown template)");
     }
     return null;
+}
+
+/// Build the sample trade dialog used by both its standalone audit entry and the complete Act-I
+/// page. `audit_trade` lives on the debug root, so dismissal persists after the overlay disappears.
+fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node {
+    if (!audit_trade.open) return null;
+
+    const buys = [_]t.TradeOffer{
+        .{ .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
+        .{ .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
+        .{ .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
+    };
+    const sells = [_]t.TradeOffer{
+        .{ .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
+        .{ .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
+    };
+    const holdings = [_]t.TradeHolding{
+        .{ .label = "Food", .value = "11.6" },
+        .{ .label = "Materials", .value = "31" },
+        .{ .label = "Sandals", .value = "\u{00d7}2" },
+        .{ .label = "Hatchet", .value = "\u{00d7}2" },
+        .{ .label = "Root cellar", .value = "\u{00d7}1" },
+        .{ .label = "Leaf bed", .value = "\u{00d7}1" },
+    };
+
+    var overlay_root: *Node = undefined;
+    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade, &overlay_root);
+    if (result.dismissed) {
+        audit_trade.open = false;
+        return null;
+    }
+    return overlay_root;
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

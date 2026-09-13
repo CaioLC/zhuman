@@ -132,10 +132,9 @@ pub const Sim = struct {
     elapsed: f32 = 0,
     /// Newest-first event feed shown in the HUD log panel; one feed for the run.
     log: logmod.Log = .{},
-    /// The player has resolved at least one action this run — flips in
-    /// `actions.begin_labor` and condenses the teaching card (`action_card`) into the
-    /// compact tile (`action_tile`). A future settings menu lets an experienced player
-    /// pre-set it.
+    /// The player has successfully begun at least one action this run. Set by
+    /// `actions.begin_labor`; retained as run-progression memory even though the full Act-I
+    /// workspace is now visible from the first frame.
     tutorial_done: bool = false,
     /// The simulation's one source of chance — every uncertain outcome is rolled
     /// against this. Held here so the player today and the AI deciders later draw

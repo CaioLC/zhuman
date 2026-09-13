@@ -89,6 +89,7 @@ pub const Disclosure = disclosure_mod.Disclosure;
 pub const stock_token = stock_token_mod.stock_token;
 pub const stockline = stock_token_mod.stockline;
 pub const Stock = stock_token_mod.Stock;
+pub const StockTone = stock_token_mod.Tone;
 pub const runline = runline_mod.runline;
 pub const Run = runline_mod.Run;
 pub const header = header_mod.header;

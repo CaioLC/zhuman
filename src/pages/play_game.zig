@@ -1,8 +1,5 @@
-/// The live HUD while the actor is alive. The header is a thin strip: run context
-/// ("Act I · Day N") pinned right — the game's name belongs to a future title screen,
-/// and actor condition reads from the vitals/theme, not a header badge. The event log
-/// rides as a bottom-anchored footer; the body sections (resources, actions) return one
-/// at a time as the shelf grows.
+/// The live Act-I page while the actor is alive: header and run context, the complete
+/// HOLDINGS/ACTIONS/BUILD workspace, the event log, and an optional trade overlay.
 const std = @import("std");
 // general lib ECS
 const ha = @import("ha");
@@ -14,7 +11,6 @@ const World = ha.world.World;
 const Entity = ha.world.Entity;
 // Ui Interface
 const uic = ha.ui_client;
-const el = uic.elements;
 const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
@@ -22,12 +18,9 @@ const t = @import("./templates/root.zig");
 pub const PlayTrees = struct { root: *Node, overlay: ?*Node = null };
 
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
-    // ACT1-07: the Act I HUD is composed entirely from the shared terminal shell (KIT-04) —
-    // header, the optional Passerby (market) and activity strips, the persistent Holdings rail,
-    // the main body (ACTIONS/BUILD), and the four-line footer log. The **same** shell chrome is
-    // built whether or not the run is underway; only the body's centre content differs (the
-    // pre-first-action teaching card vs the tabbed surfaces), so the first click cannot drift the
-    // layout — the terminal box, header, strips, rail region, and footer stay put.
+    // The reviewed Act-I composition is the normal live page from the first frame. `shell`
+    // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
+    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
     const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
     const regions = try t.shell(ctx, .{
@@ -35,12 +28,6 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         .act = .act_one,
         .page_pad = page_pad,
         .section_gap = ha.tokens.gap.section,
-        .rail = !ctx.res.sim.tutorial_done,
-        // Before the first action the teaching card still uses shell-wide context strips. Once
-        // the full right-hand surface appears, that composition owns the same strips beside the
-        // Holdings rail, matching the authored page grid.
-        .market = !ctx.res.sim.tutorial_done,
-        .activity = !ctx.res.sim.tutorial_done,
         .footer = true,
     });
     const header = regions.header;
@@ -68,16 +55,19 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}/{d:.0}", .{ vigor.v, vigor.max }) catch "?";
         const ftxt = std.fmt.bufPrint(&fbuf, "{d:.0}", .{food.v}) catch "?";
         const mtxt = @import("./fmt.zig").fmt_num(&mnum, materials.v);
-        const vcond = ctx.res.config.condition(vigor.v / vigor.max);
+        const vigor_tone: t.StockTone = switch (ctx.res.config.condition(vigor.v / vigor.max)) {
+            .alive => .normal,
+            .weary => .warn,
+            .spent => .danger,
+        };
         header_stocks = .{
-            .{ .abbrev = "Vi", .full = "Vigor", .value = vtxt, .danger = vcond == .spent },
-            .{ .abbrev = "Fo", .full = "Food", .value = ftxt, .danger = food.v <= 0 },
-            .{ .abbrev = "Ma", .full = "Materials", .value = mtxt, .danger = false },
+            .{ .abbrev = "Vi", .full = "Vigor", .value = vtxt, .tone = vigor_tone },
+            .{ .abbrev = "Fo", .full = "Food", .value = ftxt, .tone = if (food.v <= 0) .danger else .normal },
+            .{ .abbrev = "Ma", .full = "Materials", .value = mtxt },
         };
         header_stock_count = header_stocks.len;
 
-        // The live activity projection is shared by the teaching layout and the complete
-        // right-hand surface. Only placement changes after the first resolved action.
+        // Project live work state into the workspace's activity strip.
         const busy = world.get(e, comp.Busy);
         const act_state: t.ActivityState = if (busy) |b|
             (if (actions.is_build(b.doing)) .building else .working)
@@ -94,52 +84,20 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
             break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
         } else "ready";
 
-        // Before the tutorial unfolds, the context strips remain in their shell regions above
-        // the teaching card. The reusable tabbed surface owns them in the underway layout.
-        if (regions.market) |market_region| {
-            const strip = try t.market_strip(ctx, market_region, "passerby", .passerby);
-            trade_ts = strip.get().state(ctx, uic.UiState.TradeState);
-            if (strip.consume(.clicked) and ctx.res.sim.encounter.dealable()) trade_ts.?.open = true;
-        }
-        if (regions.activity) |activity| {
-            _ = try t.activity_strip(ctx, activity, "activity", act_state, activity_subject, activity_metadata, act_state);
-        }
+        const workspace = try t.act_one_workspace(ctx, body, world, e, "act_one_workspace", .{
+            .activity = .{
+                .state = act_state,
+                .subject = activity_subject,
+                .metadata = activity_metadata,
+                .last = act_state,
+            },
+        });
 
-        // --- center. Before the very first resolved action (GameState.tutorial_done),
-        // the teaching card stands alone — no tabs, no Eat, no Build: one thing to
-        // learn, one thing to click. The first click unfolds the full center: tabbed
-        // action families — ACTIONS (production: flows you repeat) and BUILD (capital:
-        // pay once, own a thing that changes which flows exist). The tab switch itself
-        // enacts the now-vs-later margin; selection persists in the strip's TabsState.
-        if (!ctx.res.sim.tutorial_done) {
-            if (try t.action_card(ctx, body, world, e, comp.ActionForage, "gather", "Forage", actions.action_forage)) |card| {
-                _ = card.with_layout(.center);
-            }
-        } else {
-            const workspace = try t.act_one_workspace(ctx, body, world, e, "act_one_workspace", .{
-                .activity = .{
-                    .state = act_state,
-                    .subject = activity_subject,
-                    .metadata = activity_metadata,
-                    .last = act_state,
-                },
-            });
-
-            // The nested surface returns its borderless TRADE link; encounter eligibility and
-            // modal state remain production responsibilities rather than presentation concerns.
-            trade_ts = workspace.surface.market_action.get().state(ctx, uic.UiState.TradeState);
-            if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
-                trade_ts.?.open = true;
-            }
-        }
-
-        // KIT-05 / ACT1-07: Holdings lives in the collapsible rail (the shell's left region),
-        // present in **both** states so the chrome never shifts — before the first action it
-        // reads "nothing built yet", after it lists what's owned. The first click swaps only the
-        // body's centre (card → tabs), not the surrounding shell.
-        if (regions.rail) |rail_region| {
-            const r = try t.rail(ctx, rail_region, .{ .id = "holdings_rail", .label = "HOLDINGS" });
-            if (r.body) |rb| _ = try t.holdings(ctx, rb, world, e, "holdings");
+        // The nested surface returns its borderless TRADE link; encounter eligibility and modal
+        // state remain page responsibilities rather than presentation concerns.
+        trade_ts = workspace.surface.market_action.get().state(ctx, uic.UiState.TradeState);
+        if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
+            trade_ts.?.open = true;
         }
 
         // ACT1-17: the TradeDialog. Built last, as its own overlay root (drawn on top), only while

@@ -140,7 +140,7 @@ fn begin_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: type) vo
     const total = res_mod.hours_to_secs(act.requires.hours, res.config.secs_per_day);
     w.add(e, comp.Busy{ .doing = doing_of(ActionT), .total = total, .remaining = total, .quality = quality });
 
-    res.sim.tutorial_done = true; // the first begun action ends the teaching presentation
+    res.sim.tutorial_done = true; // remember that this run has successfully begun an action
 }
 
 /// The **finish** half: draw the yield from `dist.sample` at the quality locked at begin
@@ -252,7 +252,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     try std.testing.expectEqual(@as(f32, 1.0), b.quality); // locked at full strength
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v); // no deposit
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the upfront-payment line (ACT1-08)
-    try std.testing.expect(res.sim.tutorial_done); // the first begun action condenses
+    try std.testing.expect(res.sim.tutorial_done); // a successful begin sets run-progression memory
 
     // A second begin while busy must refuse, leaving no trace.
     action_forage(&w, e, &res);
@@ -305,5 +305,5 @@ test "begin refuses when energy would hit zero, leaving no trace" {
     try std.testing.expectApproxEqAbs(@as(f32, 1.7), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
     try std.testing.expect(!w.has(e, comp.Busy)); // no work started
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // no lines
-    try std.testing.expect(!res.sim.tutorial_done); // a refused action teaches nothing
+    try std.testing.expect(!res.sim.tutorial_done); // a refused action records no progress
 }

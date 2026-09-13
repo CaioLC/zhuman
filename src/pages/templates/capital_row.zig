@@ -27,11 +27,12 @@ const Color = uic.Color;
 
 const gt = @import("./good_text.zig");
 
-/// Column widths — 600px of content plus five 8px gaps is the 640 the tab already uses.
+/// Column widths fit the canonical 594px expanded Act-I content lane: 542px of cells,
+/// five 8px gaps, and 12px of horizontal row padding.
 const w_name = 118;
 const w_cost = 74;
 const w_days = 42;
-const w_says = 236;
+const w_says = 178;
 const w_state = 76;
 const w_action = 54;
 const row_gap: f32 = 8;
@@ -97,7 +98,9 @@ fn cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, c
     _ = box.with_size(.{ .fixed = width }, .fit_children);
     const inner = try el.div(ctx, box, "i");
     _ = inner.with_layout(if (right) .center_right else .center_left);
-    _ = (try el.text(ctx, inner, "t", text)).with_style(.{ style.body, Style{ .text = color } });
+    _ = (try el.text(ctx, inner, "t", text))
+        .with_style(.{ style.body, Style{ .text = color } })
+        .with_cell(.ellipsis, width);
 }
 
 /// A catalog **name** cell (TEXT-03): the label is an ellipsis cell of exactly the column
@@ -347,4 +350,11 @@ test "reachSegments quantizes reach into thirds" {
     try std.testing.expectEqual(@as(usize, 2), reachSegments(0.67));
     try std.testing.expectEqual(@as(usize, 3), reachSegments(1.0));
     try std.testing.expectEqual(@as(usize, 3), reachSegments(1.5));
+}
+
+test "wide BUILD table fits the expanded Act I content lane" {
+    const cells = w_name + w_cost + w_days + w_says + w_state + w_action;
+    const content = cells + 5 * row_gap;
+    try std.testing.expectEqual(@as(f32, 582), content);
+    try std.testing.expectEqual(@as(f32, 594), content + 2 * row_pad_x);
 }

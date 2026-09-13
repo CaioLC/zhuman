@@ -14,7 +14,7 @@ const World = ha.world.World;
 const Entity = ha.world.Entity;
 
 // Pages
-const p_playgame = @import("./play_game.zig").ui_playgame;
+const p_act_one = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
@@ -43,10 +43,9 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     var trees: std.ArrayList(*uic.Node) = .empty;
     // const mock = try mock_page(ui_ctx, world);
 
-    // Review phase: the **template audit harness is the default screen** — the game systems and
-    // composition are not what we are looking at right now. Set `HA_DEBUG_PAGE=0` (or `false`) to
-    // route to the game instead. The game routing is preserved below, just short-circuited here.
-    if (!gameRequested(ui_ctx.arena)) {
+    // The game is the normal route. The template audit harness remains available as an explicit
+    // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
+    if (debugRequested(ui_ctx.arena)) {
         const dbg = try p_debug(ui_ctx, world);
         try uic.collect(&trees, ui_ctx.arena, dbg.root);
         if (dbg.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
@@ -54,7 +53,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     }
 
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
-    // curtain, since owning a `Shelter` is the win condition; otherwise the HUD.
+    // curtain, since owning a `Shelter` is the win condition; otherwise the live Act-I page.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const settled = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = world };
     if (player.get() == null) {
@@ -62,9 +61,9 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     } else if (settled.get() != null) {
         try uic.collect(&trees, ui_ctx.arena, try p_act_one_end(ui_ctx, world));
     } else {
-        // ACT1-17: the HUD returns its shell root plus an optional trade-dialog overlay root —
+        // ACT1-17: the page returns its shell root plus an optional trade-dialog overlay root —
         // collected after the shell so the modal draws on top (later trees paint last).
-        const play = try p_playgame(ui_ctx, world);
+        const play = try p_act_one(ui_ctx, world);
         try uic.collect(&trees, ui_ctx.arena, play.root);
         if (play.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
     }
@@ -72,12 +71,13 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     return trees.items;
 }
 
-/// Whether to route to the **game** instead of the default template-audit harness. During the
-/// review phase the debug page is the default; setting `HA_DEBUG_PAGE=0` (or `false`) opts back
-/// into the game. Read into the frame arena and not retained.
-fn gameRequested(arena: std.mem.Allocator) bool {
+/// Whether to route to the template-audit harness instead of the game. Debug mode is off by
+/// default; any non-empty value other than `0` or `false` explicitly enables it. The value is
+/// read into the frame arena and not retained.
+fn debugRequested(arena: std.mem.Allocator) bool {
     const raw = std.process.getEnvVarOwned(arena, "HA_DEBUG_PAGE") catch return false;
-    if (std.mem.eql(u8, raw, "0")) return true;
-    if (std.ascii.eqlIgnoreCase(raw, "false")) return true;
-    return false;
+    if (raw.len == 0) return false;
+    if (std.mem.eql(u8, raw, "0")) return false;
+    if (std.ascii.eqlIgnoreCase(raw, "false")) return false;
+    return true;
 }

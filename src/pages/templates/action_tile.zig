@@ -30,6 +30,13 @@ const icon_px: f32 = 14;
 
 pub const Tile = struct { el: El, clicked: bool };
 
+/// An enabled action is an ordinary focus target. Once activation turns it into a running
+/// progress readout, retain it only while it already owns focus; moving away removes the inert
+/// tile from traversal on the next frame.
+fn focusRegistrationEnabled(enabled: bool, running: bool, focused: bool) bool {
+    return enabled or (running and focused);
+}
+
 /// The bare tile — box, name, optional **state line**, `price · risk icon · payoff` row —
 /// from pre-formatted strings (KIT-17). Reports the (affordability-gated) click; the caller
 /// acts on it. A non-null `progress` marks the tile as *running*: fg chrome, inert, and a
@@ -58,7 +65,8 @@ pub fn tile(
     // projection and explicitly clears stale disabled state when the facts change.
     const box_key = box.get().key;
     const enabled = !running and can;
-    ctx.registerFocus(box_key, enabled);
+    const was_focused = ctx.isFocused(box_key);
+    ctx.registerFocus(box_key, focusRegistrationEnabled(enabled, running, was_focused));
     const q = box.query();
     if (q.clicked and enabled) _ = ctx.requestFocus(box_key);
     const focused = ctx.isFocused(box_key);
@@ -205,4 +213,11 @@ pub fn action_tile(
     const t = try tile(ctx, parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
     if (t.clicked) act_fn(world, e, ctx.res);
     return t.el;
+}
+
+test "running action retains existing focus without becoming a new tab stop" {
+    try std.testing.expect(focusRegistrationEnabled(true, false, false));
+    try std.testing.expect(focusRegistrationEnabled(false, true, true));
+    try std.testing.expect(!focusRegistrationEnabled(false, true, false));
+    try std.testing.expect(!focusRegistrationEnabled(false, false, true));
 }
