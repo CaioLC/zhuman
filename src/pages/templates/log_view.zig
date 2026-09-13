@@ -26,6 +26,9 @@ const Tone = ha.log.Tone;
 
 const sv = @import("./scroll_view.zig");
 
+const footer_row_pad_x: f32 = 5;
+const footer_content_gap: f32 = 0;
+
 /// Map a log entry's tone to the current theme's matching color role (host policy). KIT-22:
 /// `good` maps to the dedicated `good` role (KIT-01), not the accent, so a gain reads as a gain.
 fn log_tone_color(t: Theme, tone: Tone) Color {
@@ -50,9 +53,9 @@ fn ageStamp(buf: []u8, i: usize) []const u8 {
 /// back to the font px on a backend error). Used to give the footer a *definite* height so the
 /// bottom-anchored footer region resolves (an anchored `fit_children` box would collapse).
 fn line_height(ctx: *UiCtx) f32 {
-    const px = style.body.font.?;
-    _, const h = ctx.res.platform.font.measure("Ag", px) catch return px;
-    return @floatFromInt(h);
+    const px = style.small.font.?;
+    _, const h = ctx.res.platform.font.measure("Ag", px) catch return 17;
+    return @max(17, @as(f32, @floatFromInt(h)));
 }
 
 /// The normalized footer EventLog (KIT-22): the newest `lines` entries (typically 4), newest
@@ -62,9 +65,9 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
     const th = ctx.res.view.theme;
 
     const flines: f32 = @floatFromInt(lines);
-    const band = flines * line_height(ctx) + (flines - 1) * sv.content_gap; // definite height
+    const band = flines * line_height(ctx) + (flines - 1) * footer_content_gap; // definite height
     const col = try el.div(ctx, parent, id);
-    _ = col.with_flow(.{ .dir = .column }).with_gap(sv.content_gap)
+    _ = col.with_flow(.{ .dir = .column }).with_gap(footer_content_gap)
         .with_size(.{ .fixed = width }, .{ .fixed = band });
 
     // Publish a polite announcement of the newest line so a reader hears the latest event once
@@ -81,7 +84,8 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
         const key = try std.fmt.allocPrint(ctx.arena, "log{d}", .{i});
         const row = try el.div(ctx, col, key);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-            .with_size(.{ .fixed = width }, .fit_children);
+            .with_size(.{ .fixed = @max(0, width - footer_row_pad_x * 2) }, .fit_children)
+            .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
         // The age/NOW stamp — a fixed narrow cell so message text lines up down the feed.
         var sbuf: [8]u8 = undefined;
         _ = (try el.text(ctx, row, "at", ageStamp(&sbuf, i)))
@@ -92,7 +96,7 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
         const tone_color = log_tone_color(th, entry.tone);
         const ink = if (newest) tone_color else if (entry.tone == .normal) th.dim else tone_color;
         _ = (try el.text(ctx, row, "m", entry.text()))
-            .with_style(.{ style.body, Style{ .text = ink } });
+            .with_style(.{ style.small, Style{ .text = ink } });
     }
 }
 

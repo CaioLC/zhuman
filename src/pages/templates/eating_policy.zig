@@ -15,35 +15,41 @@ const eating = ha.eating;
 
 const slider_mod = @import("./slider.zig");
 
-const tile_w: f32 = 300;
 const tile_h: f32 = 82;
 const pad_x: f32 = 10;
 const pad_top: f32 = 9;
 const pad_bottom: f32 = 8;
 
-/// Build the Act I policy tile at the same 300px grid-cell width as the action cards. The
-/// returned policy value is live; callers map it to their persisted metabolism rate.
+/// Build the Act I policy tile at the full width of its action-grid column. The returned
+/// policy value is live; callers map it to their persisted metabolism rate.
 pub fn eating_policy(ctx: *UiCtx, parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
     const th = ctx.res.view.theme;
 
+    // Keep the percentage width border-box safe: horizontal padding is represented by two
+    // in-flow lanes, so the outlined panel remains exactly 100% of its fluid grid column.
     const panel = try el.div(ctx, parent, id);
-    _ = panel.with_size(.{ .fixed = tile_w - pad_x * 2 }, .{ .fixed = tile_h - pad_top - pad_bottom })
+    _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_h })
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{Style{ .outline_color = th.line2, .outline_style = .dashed }});
+    const lead = try el.div(ctx, panel, "lead");
+    _ = lead.with_size(.{ .fixed = pad_x }, .{ .fixed = 1 }).pass_through();
+    const content = try el.div(ctx, panel, "content");
+    _ = content.with_size(.grow, .{ .fixed = tile_h - pad_top - pad_bottom })
         .with_flow(.{ .dir = .column }).with_gap(5)
-        .with_style(.{
-        Style{ .outline_color = th.line2, .outline_style = .dashed },
-        style.pad_each(pad_top, pad_x, pad_bottom, pad_x),
-    });
+        .with_style(.{style.pad_each(pad_top, 0, pad_bottom, 0)});
+    const tail = try el.div(ctx, panel, "tail");
+    _ = tail.with_size(.{ .fixed = pad_x }, .{ .fixed = 1 }).pass_through();
 
     // Create the three prototype rows in visual order first. Their contents can be attached
     // after the slider resolves this frame's live value without changing sibling order.
-    const head = try el.div(ctx, panel, "head");
+    const head = try el.div(ctx, content, "head");
     _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
 
-    const range_slot = try el.div(ctx, panel, "range");
+    const range_slot = try el.div(ctx, content, "range");
     _ = range_slot.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 18 });
 
-    const scale_row = try el.div(ctx, panel, "scale");
+    const scale_row = try el.div(ctx, content, "scale");
     _ = scale_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
 

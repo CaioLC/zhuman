@@ -152,50 +152,90 @@ pub const Regions = struct {
     market: ?El = null,
     /// The optional activity strip, present iff `opts.activity`.
     activity: ?El = null,
-    /// The footer event-log region (bottom-anchored, full width), present iff `opts.footer`.
+    /// The framed footer event-log content lane, reserved in normal flow iff `opts.footer`.
     footer: ?El = null,
 };
 
-/// Build the terminal shell **and** its region skeleton, returning the region handles the
-/// screen fills. Composes on top of `terminal`, so the framed/full-window chrome and clip are
-/// unchanged; this only lays out the interior. A screen requests its regions via `opts` and
-/// never hand-builds the header/grid/footer arrangement again.
-pub fn shell(ctx: *UiCtx, opts: ShellOptions) !Regions {
-    const sh = try terminal(ctx, opts.id);
-    const content = sh.content;
+const header_content_height: f32 = 23;
+const header_pad_top: f32 = 15;
+const header_pad_bottom: f32 = 10;
+const grid_pad_top: f32 = 12;
+const grid_pad_bottom: f32 = 10;
+const footer_height: f32 = 86;
+const footer_pad_top: f32 = 4;
+const footer_pad_bottom: f32 = 2;
 
-    // The interior column: page padding + section gap, top-aligned so the header sits at the
-    // top edge and the footer (bottom-anchored) owns the bottom regardless of body growth.
-    _ = content.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(opts.section_gap)
-        .with_style(.{style.pad(opts.page_pad)});
+fn spacer(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: f32) !void {
+    const s = try el.div(ctx, parent, id);
+    _ = s.with_size(.{ .fixed = width }, .{ .fixed = height }).pass_through();
+}
 
-    // Header: a thin full-width strip. The screen fills it (stocks left, run context right).
-    const header = try el.div(ctx, content, "shell_header");
-    _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+fn insetRegion(ctx: *UiCtx, parent: El, id: []const u8, inset: f32) !El {
+    const row = try el.div(ctx, parent, id);
+    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .start });
+    try spacer(ctx, row, "lead", inset, 1);
+    const region = try el.div(ctx, row, "content");
+    _ = region.with_size(.grow, .fit_children);
+    try spacer(ctx, row, "tail", inset, 1);
+    return region;
+}
 
-    // Optional market / activity strips ride directly under the header (full width).
-    const market = if (opts.market) blk: {
-        const s = try el.div(ctx, content, "shell_market");
-        _ = s.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-        break :blk s;
-    } else null;
-    const activity = if (opts.activity) blk: {
-        const s = try el.div(ctx, content, "shell_activity");
-        _ = s.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-        break :blk s;
-    } else null;
+fn footerBandHeight(page_pad: f32) f32 {
+    return footer_height + page_pad;
+}
 
-    // The page grid: a row that grows to fill the remaining height, holding the optional rail
-    // beside the main surface. When there is no rail, the body is the whole grid row.
-    const grid = try el.div(ctx, content, "shell_grid");
-    _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .grow)
-        .with_flow(.{ .dir = .row });
-    _ = grid.with_gap(opts.section_gap);
+/// Compose the prototype's interior rows into an existing definite-size box. Production
+/// `shell` uses the terminal content box; the debug shelf uses this seam to audit one complete
+/// 900×820 page without creating a second root or duplicating the region geometry.
+pub fn shell_content(ctx: *UiCtx, root: El, content: El, opts: ShellOptions) !Regions {
+    const th = ctx.res.view.theme;
+    _ = content.with_layout(.top_left)
+        .with_flow(.{ .dir = .column });
+
+    // Header: 48px total at the reference (15px top + 23px content + 10px bottom), with
+    // horizontal page insets represented as flow lanes so percentage sizing remains border-box
+    // safe in this layout engine.
+    const header_band = try el.div(ctx, content, "shell_header_band");
+    _ = header_band.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .start });
+    try spacer(ctx, header_band, "lead", opts.page_pad, 1);
+    const header = try el.div(ctx, header_band, "shell_header");
+    _ = header.with_size(.grow, .{ .fixed = header_content_height })
+        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
+    try spacer(ctx, header_band, "tail", opts.page_pad, 1);
+
+    // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.
+    // The underway Act I surface owns its own market/activity strips, so these regions are absent
+    // there and the page grid receives the full middle row.
+    const market = if (opts.market)
+        try insetRegion(ctx, content, "shell_market_band", opts.page_pad)
+    else
+        null;
+    const activity = if (opts.activity)
+        try insetRegion(ctx, content, "shell_activity_band", opts.page_pad)
+    else
+        null;
+
+    // The page-grid row owns all remaining height after the header and optional reserved footer.
+    // Its authored 12px/10px vertical and page-width horizontal insets are real flow lanes; the
+    // body therefore has a definite height and cannot extend underneath the logger.
+    const grid_band = try el.div(ctx, content, "shell_grid_band");
+    _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+        .with_flow(.{ .dir = .column });
+    try spacer(ctx, grid_band, "top", 1, grid_pad_top);
+    const grid_row = try el.div(ctx, grid_band, "row");
+    _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+        .with_flow(.{ .dir = .row, .cross = .start });
+    try spacer(ctx, grid_row, "lead", opts.page_pad, 1);
+    const grid = try el.div(ctx, grid_row, "shell_grid");
+    _ = grid.with_size(.grow, .{ .pct_of_parent = 1.0 })
+        .with_flow(.{ .dir = .row }).with_gap(opts.section_gap);
+    try spacer(ctx, grid_row, "tail", opts.page_pad, 1);
+    try spacer(ctx, grid_band, "bottom", 1, grid_pad_bottom);
 
     const rail = if (opts.rail) blk: {
         const r = try el.div(ctx, grid, "shell_rail");
-        // Width is the screen's to set (KIT-05 animates it between rail.expanded/collapsed);
-        // height fills the grid row.
         _ = r.with_size(.fit_children, .{ .pct_of_parent = 1.0 });
         break :blk r;
     } else null;
@@ -203,23 +243,41 @@ pub fn shell(ctx: *UiCtx, opts: ShellOptions) !Regions {
     const body = try el.div(ctx, grid, "shell_body");
     _ = body.with_size(.grow, .{ .pct_of_parent = 1.0 });
 
-    // Optional navigation region under the grid (a tablist selecting the body view).
     const nav = if (opts.nav) blk: {
-        const n = try el.div(ctx, content, "shell_nav");
+        const n = try el.div(ctx, grid_band, "shell_nav");
         _ = n.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
         break :blk n;
     } else null;
 
-    // Footer: the event log, bottom-anchored (out of flow) so body growth never pushes it —
-    // it owns the bottom edge of the content box.
+    // Footer: reserve its complete 86px frame plus bottom page margin in normal flow. The
+    // previous absolute child did not subtract itself from the growing grid, allowing workspace
+    // content to run underneath the log. The returned handle is the frame's 80px content lane;
+    // callers continue to render the authoritative live Log through `log_view`.
     const footer = if (opts.footer) blk: {
-        const f = try el.div(ctx, content, "shell_footer");
-        _ = f.with_layout(.bottom_left);
+        const band = try el.div(ctx, content, "shell_footer_band");
+        _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(opts.page_pad) })
+            .with_flow(.{ .dir = .column });
+        const row = try el.div(ctx, band, "row");
+        _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
+            .with_flow(.{ .dir = .row, .cross = .start });
+        try spacer(ctx, row, "lead", opts.page_pad, 1);
+        const frame = try el.div(ctx, row, "frame");
+        _ = frame.with_size(.grow, .{ .fixed = footer_height })
+            .with_flow(.{ .dir = .column })
+            .with_overflow(.clip)
+            .with_style(.{Style{ .outline_color = th.line2 }});
+        try spacer(ctx, frame, "top", 1, footer_pad_top);
+        const f = try el.div(ctx, frame, "shell_footer");
+        _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+            .with_overflow(.clip);
+        try spacer(ctx, frame, "bottom", 1, footer_pad_bottom);
+        try spacer(ctx, row, "tail", opts.page_pad, 1);
+        try spacer(ctx, band, "margin", 1, opts.page_pad);
         break :blk f;
     } else null;
 
     return .{
-        .root = sh.root,
+        .root = root,
         .header = header,
         .body = body,
         .rail = rail,
@@ -228,4 +286,18 @@ pub fn shell(ctx: *UiCtx, opts: ShellOptions) !Regions {
         .activity = activity,
         .footer = footer,
     };
+}
+
+/// Build the terminal shell **and** its region skeleton, returning the region handles the
+/// screen fills. The interior is the same composer used by the full-page debug fixture.
+pub fn shell(ctx: *UiCtx, opts: ShellOptions) !Regions {
+    const sh = try terminal(ctx, opts.id);
+    return shell_content(ctx, sh.root, sh.content, opts);
+}
+
+test "shell reference rows reserve header and framed footer geometry" {
+    try std.testing.expectEqual(@as(f32, 48), header_pad_top + header_content_height + header_pad_bottom);
+    try std.testing.expectEqual(@as(f32, 102), footerBandHeight(16));
+    try std.testing.expectEqual(@as(f32, 86), footer_height);
+    try std.testing.expectEqual(@as(f32, 22), grid_pad_top + grid_pad_bottom);
 }

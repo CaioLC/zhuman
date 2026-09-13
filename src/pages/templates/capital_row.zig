@@ -32,8 +32,60 @@ const w_name = 118;
 const w_cost = 74;
 const w_days = 42;
 const w_says = 236;
-const w_act = 110;
-const w_corner = 20;
+const w_state = 76;
+const w_action = 54;
+const row_gap: f32 = 8;
+const row_pad_x: f32 = 6;
+
+fn visibleColumns(ctx: *UiCtx) struct { days: bool, effect: bool } {
+    return .{
+        .days = !ctx.res.view.metrics.width_class.atMost(.w560),
+        .effect = !ctx.res.view.metrics.width_class.atMost(.w440),
+    };
+}
+
+fn contentWidth(ctx: *UiCtx) f32 {
+    const visible = visibleColumns(ctx);
+    var width: f32 = w_name + w_cost + w_state + w_action;
+    var gaps: f32 = 3;
+    if (visible.days) {
+        width += w_days;
+        gaps += 1;
+    }
+    if (visible.effect) {
+        width += w_says;
+        gaps += 1;
+    }
+    return width + gaps * row_gap;
+}
+
+pub fn tableWidth(ctx: *UiCtx) f32 {
+    return contentWidth(ctx) + row_pad_x * 2;
+}
+
+fn header_cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, label: []const u8) !void {
+    const box = try el.div(ctx, parent, id);
+    _ = box.with_size(.{ .fixed = width }, .fit_children);
+    _ = (try el.text(ctx, box, "t", label)).with_style(.{
+        Style{ .font = 9, .tracking = 0.07, .text = ctx.res.view.theme.line2 },
+    });
+}
+
+/// Column labels aligned to the exact same responsive lanes as every capital row.
+pub fn capital_header(ctx: *UiCtx, parent: El, id: []const u8) !El {
+    const visible = visibleColumns(ctx);
+    const header = try el.div(ctx, parent, id);
+    _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
+        .with_style(.{style.pad_sym(row_pad_x, 4)});
+    try header_cell(ctx, header, "recipe", w_name, "RECIPE");
+    try header_cell(ctx, header, "cost", w_cost, "COST");
+    if (visible.days) try header_cell(ctx, header, "time", w_days, "TIME");
+    if (visible.effect) try header_cell(ctx, header, "effect", w_says, "WHAT CHANGES");
+    try header_cell(ctx, header, "state", w_state, "STATE");
+    try header_cell(ctx, header, "corner", w_action, "");
+    return header;
+}
 
 /// What a row is showing, which is the one thing the flat grey never said.
 pub const Kind = enum { ready, reach, building, blocked, locked, owned };
@@ -109,7 +161,7 @@ pub fn capital_row(
     const show_days = !compact;
     const show_effect = !ctx.res.view.metrics.width_class.atMost(.w440);
     // The row's fixed width sums only the columns actually shown, so the lanes stay synced.
-    var row_w: f32 = w_name + w_cost + w_act + w_corner;
+    var row_w: f32 = w_name + w_cost + w_state + w_action;
     var gaps: f32 = 3;
     if (show_days) {
         row_w += w_days;
@@ -142,25 +194,59 @@ pub fn capital_row(
         try cell(ctx, row, "sa", w_says, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
     }
 
-    // --- the state column ---------------------------------------------------------
-    var build_more = false; // KIT-18: an owned good's "Build +1" click
-    const act = try el.div(ctx, row, "ac");
-    _ = act.with_size(.{ .fixed = w_act }, .fit_children);
-    const act_in = try el.div(ctx, act, "i");
-    _ = act_in.with_layout(.center_right).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
+    // --- state column: readiness, reach/materials, ownership, or live progress ------------
+    const state = try el.div(ctx, row, "st");
+    _ = state.with_size(.{ .fixed = w_state }, .fit_children);
+    const state_in = try el.div(ctx, state, "i");
+    _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
     switch (kind) {
-        .ready => _ = (try el.text(ctx, act_in, "go", "Build \u{2192}"))
+        .ready => _ = (try el.text(ctx, state_in, "ready", "ready"))
+            .with_style(.{ style.body, Style{ .text = th.acc } }),
+        .owned => _ = (try el.text(ctx, state_in, "owned", "owned"))
+            .with_style(.{ style.body, Style{ .text = th.line2 } }),
+        .blocked => {
+            var nbuf: [32]u8 = undefined;
+            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{gt.prereq_name(GoodT) orelse "a tool"}) catch "needs a tool";
+            _ = (try el.text(ctx, state_in, "blocked", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
+        },
+        .locked => _ = (try el.text(ctx, state_in, "locked", "conditions"))
+            .with_style(.{ style.body, Style{ .text = th.danger } }),
+        .building => {
+            const busy = world.get(e, comp.Busy).?;
+            var bbuf: [20]u8 = undefined;
+            const left = busy.remaining / ctx.res.config.secs_per_day;
+            const txt = std.fmt.bufPrint(&bbuf, "{d:.1}d left", .{left}) catch "?";
+            try meter(ctx, state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
+            _ = (try el.text(ctx, state_in, "time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
+        },
+        .reach => {
+            const stock = world.get(e, comp.InventoryMaterial).?;
+            var rbuf: [24]u8 = undefined;
+            const txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}m", .{ stock.v, cost.materials }) catch "?";
+            try reach_meter(ctx, state_in, "meter", reach, th.line2);
+            _ = (try el.text(ctx, state_in, "materials", txt)).with_style(.{ style.body, Style{ .text = faint } });
+        },
+    }
+
+    // --- right-side action column: Build → / Build +1 / cancel -----------------------------
+    const action = try el.div(ctx, row, "ac");
+    _ = action.with_size(.{ .fixed = w_action }, .fit_children);
+    const action_in = try el.div(ctx, action, "i");
+    _ = action_in.with_layout(.center_right);
+
+    var build_more = false;
+    var cancelled = false;
+    var cancel_key: ?u64 = null;
+    switch (kind) {
+        .ready => _ = (try el.text(ctx, action_in, "build", "Build \u{2192}"))
             .with_style(.{ style.body, Style{ .text = lit } }),
         .owned => {
-            // KIT-18: an owned good that is still affordable (materials on hand, not busy)
-            // offers `Build +1` — another unit — reusing the same build action; otherwise it
-            // reads "built". The +1 is a nested control, so it consumes its own click.
             const stock = world.get(e, comp.InventoryMaterial).?;
             const busy = world.get(e, comp.Busy);
             const affordable = busy == null and stock.v >= cost.materials;
             if (affordable) {
-                const more = try el.div(ctx, act_in, "more");
+                const more = try el.div(ctx, action_in, "more");
                 const more_key = more.get().key;
                 ctx.registerFocus(more_key, true);
                 const mq = more.query();
@@ -171,59 +257,24 @@ pub fn capital_row(
                 _ = (try el.text(ctx, more, "t", "Build +1"))
                     .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mfocused) th.acc else th.dim } });
                 build_more = more.consume(.clicked);
-            } else {
-                _ = (try el.text(ctx, act_in, "ow", "built"))
-                    .with_style(.{ style.body, Style{ .text = th.line2 } });
             }
         },
-        .blocked => {
-            var nbuf: [32]u8 = undefined;
-            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{gt.prereq_name(GoodT) orelse "a tool"}) catch "needs a tool";
-            _ = (try el.text(ctx, act_in, "nd", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
-        },
-        .locked => _ = (try el.text(ctx, act_in, "lk", "conditions"))
-            .with_style(.{ style.body, Style{ .text = th.danger } }),
         .building => {
-            const busy = world.get(e, comp.Busy).?;
-            var bbuf: [20]u8 = undefined;
-            const left = busy.remaining / ctx.res.config.secs_per_day;
-            const txt = std.fmt.bufPrint(&bbuf, "{d:.1}d left", .{left}) catch "?";
-            try meter(ctx, act_in, "bm", 1.0 - busy.remaining / busy.total, th.acc);
-            _ = (try el.text(ctx, act_in, "bt", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
+            const x = try el.div(ctx, action_in, "cancel");
+            const x_key = x.get().key;
+            ctx.registerFocus(x_key, true);
+            const xq = x.query();
+            if (xq.clicked) _ = ctx.requestFocus(x_key);
+            const x_focused = ctx.isFocused(x_key);
+            uic.publishControlState(ctx, x_key, .{ .focused = x_focused, .focus_visible = x_focused });
+            if (xq.hovering) ctx.res.cursor.request(.pointer);
+            _ = (try el.text(ctx, x, "t", "\u{00d7}"))
+                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or x_focused) th.danger else th.line2 } });
+            cancelled = x.consume(.clicked);
+            cancel_key = x_key;
+            ctx.res.semantics.publish(uic.semantic.describeIconButton(x_key, "Cancel build", true, x_focused));
         },
-        .reach => {
-            const stock = world.get(e, comp.InventoryMaterial).?;
-            var rbuf: [24]u8 = undefined;
-            const txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}m", .{ stock.v, cost.materials }) catch "?";
-            try reach_meter(ctx, act_in, "rm", reach, th.line2); // KIT-18: 3-segment reach meter
-            _ = (try el.text(ctx, act_in, "rt", txt)).with_style(.{ style.body, Style{ .text = faint } });
-        },
-    }
-
-    // --- the corner: the way out of a long build ----------------------------------
-    const corner = try el.div(ctx, row, "cn");
-    _ = corner.with_size(.{ .fixed = w_corner }, .fit_children);
-    var cancelled = false;
-    var cancel_key: ?u64 = null;
-    if (kind == .building) {
-        const x = try el.div(ctx, corner, "x");
-        _ = x.with_layout(.center_right);
-        const x_key = x.get().key;
-        ctx.registerFocus(x_key, true);
-        const xq = x.query();
-        if (xq.clicked) _ = ctx.requestFocus(x_key);
-        const x_focused = ctx.isFocused(x_key);
-        uic.publishControlState(ctx, x_key, .{
-            .focused = x_focused,
-            .focus_visible = x_focused,
-        });
-        if (xq.hovering) ctx.res.cursor.request(.pointer);
-        _ = (try el.text(ctx, x, "t", "\u{00d7}"))
-            .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or x_focused) th.danger else th.line2 } });
-        cancelled = x.consume(.clicked);
-        cancel_key = x_key;
-        // INPUT-08: the cancel corner is a button named for what it does to the build.
-        ctx.res.semantics.publish(uic.semantic.describeIconButton(x_key, "Cancel build", true, x_focused));
+        .reach, .blocked, .locked => {},
     }
 
     // INPUT-08: the row is a composite tile. Its accessible name is the good's display

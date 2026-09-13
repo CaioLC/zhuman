@@ -42,6 +42,7 @@ const entries = [_][]const u8{
     "stock_token",
     "stockline",
     "runline",
+    "header",
     "log_view",
     "tabs",
     "view_nav",
@@ -49,7 +50,13 @@ const entries = [_][]const u8{
     "slider",
     "disclosure",
     "rail",
+    "holdings",
     "action_tile",
+    "actions_section",
+    "build_section",
+    "act_one_surface",
+    "act_one_workspace",
+    "act_one_page",
     "eating_policy",
     "capital_row",
     "catalog_controls",
@@ -108,7 +115,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
         if (iq.clicked) {
             _ = ctx.requestFocus(item.get().key);
             sel.active = i;
-            audit_trade.open = i == 23; // `trade_dialog` in the stable entries table above
+            audit_trade.open = eq(name, "trade_dialog");
         }
         const focused = ctx.isFocused(item.get().key);
         if (iq.hovering) ctx.res.cursor.request(.pointer);
@@ -162,6 +169,18 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         _ = try t.stockline(ctx, stage, "sl", &stocks);
     } else if (eq(name, "runline")) {
         _ = try t.runline(ctx, stage, "run", .{ .act_label = "Act I", .day = 3 });
+    } else if (eq(name, "header")) {
+        const demo = try el.div(ctx, stage, "header_demo");
+        _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
+        const stocks = [_]t.Stock{
+            .{ .abbrev = "Vi", .full = "Vigor", .value = "10/10" },
+            .{ .abbrev = "Fo", .full = "Food", .value = "4", .danger = true },
+            .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
+        };
+        _ = try t.header(ctx, demo, "hud", .{
+            .stocks = &stocks,
+            .run = .{ .act_label = "Act I", .day = 3 },
+        });
     } else if (eq(name, "log_view")) {
         try t.log_view(ctx, stage, "feed", &ctx.res.sim.log, 400, 4);
     } else if (eq(name, "tabs")) {
@@ -190,21 +209,181 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         const d = try t.disclosure(ctx, demo, "disc", "Disclosure summary", true);
         if (d.details) |det| _ = try el.text(ctx, det, "dt", "hidden detail, now shown");
     } else if (eq(name, "rail")) {
-        // Production supplies a definite page-grid rail region. Mirror it here so the rail's
-        // percentage height and right-anchored 24x26 collapse control resolve against the
-        // same 252px column instead of the audit stage's intrinsic dimensions.
+        // Production supplies a definite page-grid rail region. Mirror it here so one
+        // interactive instance can be inspected in both states via its own toggle.
         const demo = try el.div(ctx, stage, "rail_demo");
         _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 300 });
         const r = try t.rail(ctx, demo, .{ .id = "rail", .label = "HOLDINGS" });
         if (r.body) |rb| _ = try el.text(ctx, rb, "rb", "rail body");
+    } else if (eq(name, "holdings")) {
+        if (player.get()) |a| {
+            // A coherent debug-only four-kind/six-unit fixture matching the reference anatomy.
+            // Values remain ordinary live ECS data; the component performs all projections.
+            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
+            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
+            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
+            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
+            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = (comp.ActionForage{}).requires.energy * 0.85;
+            if (world.get(a[0], comp.InventoryFood)) |food| {
+                food.v = 7.8;
+                food.quality = 1;
+                food.spoils = ha.baselines.food_spoils;
+            }
+            if (world.get(a[0], comp.Vigor)) |vigor| {
+                vigor.max = 15;
+                vigor.v = 14.4;
+            }
+            if (world.get(a[0], comp.Metabolism)) |met| met.rate = 0.5;
+
+            const demo = try el.div(ctx, stage, "holdings_demo");
+            _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
+            const r = try t.rail(ctx, demo, .{ .id = "holdings_rail", .label = "HOLDINGS" });
+            if (r.body) |body| _ = try t.holdings(ctx, body, world, a[0], "content");
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
             _ = try t.action_tile(ctx, stage, world, a[0], comp.ActionForage, "at", "Forage", actions.action_forage);
         } else {
             _ = try el.text(ctx, stage, "na", "(needs a live player)");
         }
+    } else if (eq(name, "actions_section")) {
+        if (player.get()) |a| {
+            // The live debug player starts with only the two innate verbs. Grant canonical
+            // unlocked components in this debug-only world so the assembly audit represents
+            // the complete five-verb reference; production still follows capital unlocks.
+            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
+            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
+            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            const demo = try el.div(ctx, stage, "actions_demo");
+            _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
+            _ = try t.actions_section(ctx, demo, world, a[0], "actions");
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
+    } else if (eq(name, "build_section")) {
+        if (player.get()) |a| {
+            // Give the debug-only catalog a representative stock level so ready and reach rows
+            // appear together, matching the reference anatomy without changing production.
+            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            _ = try t.build_section(ctx, stage, world, a[0], "build");
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
+    } else if (eq(name, "act_one_surface")) {
+        if (player.get()) |a| {
+            // One interactive composition only: both authored sections switch beneath the same
+            // nav and context strips. Debug grants the canonical unlocks/materials without
+            // changing production progression.
+            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
+            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
+            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            const demo = try el.div(ctx, stage, "surface_demo");
+            _ = demo.with_size(.{ .fixed = 652 }, .fit_children);
+            _ = try t.act_one_surface(ctx, demo, world, a[0], "surface", .{
+                .activity = .{
+                    .state = .working,
+                    .subject = "Forage",
+                    .metadata = "2h left",
+                    .last = .working,
+                },
+            });
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
+    } else if (eq(name, "act_one_workspace")) {
+        if (player.get()) |a| {
+            // Populate the debug-only actor with the reference's representative holdings and
+            // unlocked verbs; production remains entirely progression-driven.
+            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
+            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
+            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = 1.7;
+            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
+            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
+            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
+            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
+
+            const demo = try el.div(ctx, stage, "workspace_demo");
+            _ = demo.with_size(.{ .fixed = 926 }, .{ .fixed = 700 });
+            _ = try t.act_one_workspace(ctx, demo, world, a[0], "workspace", .{
+                .activity = .{
+                    .state = .working,
+                    .subject = "Forage",
+                    .metadata = "2h left",
+                    .last = .working,
+                },
+            });
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
+    } else if (eq(name, "act_one_page")) {
+        if (player.get()) |a| {
+            // One large reference composition: shared shell rows around one live workspace.
+            // Debug-only grants make the authored five-verb/holdings state visible; production
+            // continues to derive every stock, unlock, activity, and log line from live state.
+            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
+            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
+            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = 1.7;
+            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.InventoryFood)) |food| food.v = 11.6;
+            if (world.get(a[0], comp.Vigor)) |vigor| {
+                vigor.max = 15;
+                vigor.v = 14;
+            }
+            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
+            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
+            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
+            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
+
+            const demo = try el.div(ctx, stage, "act_one_page_demo");
+            _ = demo.with_size(.{ .fixed = 900 }, .{ .fixed = 820 })
+                .with_overflow(.clip)
+                .with_style(.{Style{ .fill = th.bg }});
+            const regions = try t.shell_content(ctx, demo, demo, .{
+                .id = "act_one_page",
+                .act = .act_one,
+                .page_pad = ha.tokens.pad_page,
+                .section_gap = ha.tokens.gap.section,
+                .footer = true,
+            });
+            const stocks = [_]t.Stock{
+                .{ .abbrev = "Vi", .full = "Vigor", .value = "14/15" },
+                .{ .abbrev = "Fo", .full = "Food", .value = "11.6" },
+                .{ .abbrev = "Ma", .full = "Materials", .value = "31" },
+            };
+            _ = try t.header(ctx, regions.header, "hud", .{
+                .stocks = &stocks,
+                .run = .{ .act_label = "Act I", .day = 19 },
+            });
+            _ = try t.act_one_workspace(ctx, regions.body, world, a[0], "workspace", .{
+                .activity = .{
+                    .state = .idle,
+                    .subject = "no work in progress",
+                    .metadata = "ready",
+                    .last = .idle,
+                },
+            });
+
+            var feed: ha.log.Log = .{};
+            feed.push(.normal, "You return with 4 materials.");
+            feed.push(.good, "The Root cellar slows what the larder loses.");
+            feed.push(.normal, "You finish a second Hatchet. One is effect; one is stock.");
+            feed.push(.normal, "Someone is walking the shoreline. Their pack carries made goods.");
+            if (regions.footer) |footer| {
+                try t.log_view(ctx, footer, "feed", &feed, 900 - 2 * ha.tokens.pad_page, 4);
+            }
+        } else {
+            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+        }
     } else if (eq(name, "eating_policy")) {
-        _ = try t.eating_policy(ctx, stage, "ep", 50, true);
+        const demo = try el.div(ctx, stage, "eating_policy_demo");
+        _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
+        _ = try t.eating_policy(ctx, demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
             _ = try t.capital_row(ctx, stage, world, a[0], comp.Sandals, "cr", .ready, 1.0);

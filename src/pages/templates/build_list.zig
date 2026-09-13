@@ -45,6 +45,7 @@ const Entity = ha.world.Entity;
 const gt = @import("./good_text.zig");
 const row_mod = @import("./capital_row.zig");
 const capital_row = row_mod.capital_row;
+const capital_header = row_mod.capital_header;
 const Kind = row_mod.Kind;
 const cc = @import("./catalog_controls.zig");
 const milestone_mod = @import("./milestone_goal.zig");
@@ -54,7 +55,7 @@ const Direction = uic.UiState.CatalogState.Direction;
 /// The buildable goods, minus the Shelter (which is the milestone, not a row). This is the
 /// **authored total** the summary reports against — a locked recipe still counts even when it
 /// contributes no row.
-const authored_total = capital.buildable_bundle.len - 1;
+pub const authored_total = capital.buildable_bundle.len - 1;
 
 /// The Sort-by option labels the controls disclose. Reach is the default (index 0), so the blank
 /// list opens sorted by how close each recipe is to affordable, descending.
@@ -112,7 +113,8 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
     const th = ctx.res.view.theme;
 
     const outer = try el.div(ctx, parent, id);
-    _ = outer.with_flow(.{ .dir = .column }).with_gap(6);
+    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .column }).with_gap(6);
 
     // --- the controls bar (KIT-15): search + disclosed sort, its own state keyed by id ------
     const controls = try cc.catalog_controls(ctx, outer, "build_ctl", &sort_kinds);
@@ -211,9 +213,16 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
     else if (eff_sort == .reach) .descending else .ascending;
     std.sort.insertion(Entry, entries, SortCtx{ .sort = eff_sort, .dir = eff_dir }, Cmp.less);
 
+    // --- summary + aligned table header ----------------------------------------------------
+    var sbuf: [40]u8 = undefined;
+    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authored_total }) catch "?";
+    _ = (try el.text(ctx, outer, "summary", summary))
+        .with_style(.{ style.small, Style{ .text = th.dim } });
+
     // --- the rows --------------------------------------------------------------------------
     const rows = try el.div(ctx, outer, "rows");
     _ = rows.with_flow(.{ .dir = .column });
+    _ = try capital_header(ctx, rows, "header");
 
     if (n == 0) {
         const msg = if (blank) "Nothing is within reach yet. Gather materials." else "No recipe matches your search.";
@@ -234,12 +243,6 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
             }
         }
     }
-
-    // --- the count-only summary: {visible} of {authored total} recipes shown ---------------
-    var sbuf: [40]u8 = undefined;
-    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authored_total }) catch "?";
-    _ = (try el.text(ctx, outer, "summary", summary))
-        .with_style(.{ style.small, Style{ .text = th.dim } });
 
     // --- the Shelter milestone (ACT1-11), pinned below and outside the filter --------------
     try shelter_goal(ctx, outer, world, e, "goal");

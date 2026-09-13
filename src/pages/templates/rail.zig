@@ -84,15 +84,14 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
         .focused = focused,
         .focus_visible = focused,
     });
-    // `btn_primary` also carries glyph ink, which must not be applied to this non-text div.
-    // Resolve the stateful fragments once, then project only their decoration fields onto the
-    // toggle box; the chevron/label text leaves receive their ink separately below.
-    const resolved_toggle = style.resolve(ctx, toggle.get(), .{ style.btn_primary, style.focus_ring });
+    // Match the active-tab resting edge directly: foreground at rest, accent only during the
+    // pointer interaction. A click retains keyboard focus across collapse/expand, but that
+    // persistent focus must not latch the rail in its hover color after the pointer leaves.
+    const toggle_color = if (q.held or q.hovering) th.acc else th.fg;
     const toggle_chrome = Style{
         .fill = th.bg,
-        .outline_color = resolved_toggle.outline_color,
-        .outline_width = resolved_toggle.outline_width,
-        .outline_style = resolved_toggle.outline_style,
+        .outline_color = toggle_color,
+        .outline_width = 1,
     };
 
     // Width animates between the shared rail tokens. Clipping belongs to this width-bearing
@@ -102,8 +101,11 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
     const w = ctx.res.tween.value(box.get().key, target);
 
     if (st.collapsed) {
+        // The 36×124 restore control exactly fills this box. Keep overflow visible in the
+        // collapsed branch so its 1px fg/acc outline is painted; clipping is only needed while
+        // expanded content exists and would otherwise leak across the animated rail width.
         _ = box.with_size(.{ .fixed = w }, .{ .fixed = restore_outer_height })
-            .with_overflow(.clip);
+            .with_overflow(.visible);
 
         // CSS counterpart: `.holdings-restore` — 36x124 border-box, 7px/9px vertical
         // padding, 8px gap, and centered children. Each glyph sits in a full-width row below:
@@ -121,13 +123,13 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
         _ = chevron_lane.with_size(.{ .fixed = restore_width }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
         _ = (try el.text(ctx, chevron_lane, "chevron", "\u{203A}"))
-            .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 16 }});
+            .with_style(.{Style{ .text = toggle_color, .font = 16 }});
 
         const label_lane = try el.div(ctx, toggle, "label_lane");
         _ = label_lane.with_size(.{ .fixed = restore_width }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
         _ = (try el.text(ctx, label_lane, "label", opts.label))
-            .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 9, .tracking = 0.09 }})
+            .with_style(.{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }})
             .vertical();
         return .{ .collapsed = true, .body = null };
     }
@@ -146,7 +148,7 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
         .with_style(.{toggle_chrome});
     _ = (try el.text(ctx, toggle, "chevron", "\u{2039}"))
         .with_layout(.center)
-        .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 16 }});
+        .with_style(.{Style{ .text = toggle_color, .font = 16 }});
 
     return .{ .collapsed = false, .body = body };
 }

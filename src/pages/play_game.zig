@@ -15,8 +15,6 @@ const Entity = ha.world.Entity;
 // Ui Interface
 const uic = ha.ui_client;
 const el = uic.elements;
-const style = uic.style;
-const Style = style.Style;
 const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
@@ -37,17 +35,26 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         .act = .act_one,
         .page_pad = page_pad,
         .section_gap = ha.tokens.gap.section,
-        .rail = true,
-        .market = true,
-        .activity = true,
+        .rail = !ctx.res.sim.tutorial_done,
+        // Before the first action the teaching card still uses shell-wide context strips. Once
+        // the full right-hand surface appears, that composition owns the same strips beside the
+        // Holdings rail, matching the authored page grid.
+        .market = !ctx.res.sim.tutorial_done,
+        .activity = !ctx.res.sim.tutorial_done,
         .footer = true,
     });
     const header = regions.header;
     const body = regions.body;
 
-    // Left: the always-on V/F/M stock summary (skipped once the actor is gone).
+    // Header data is formatted by the screen, then assembled with the run context by `header`.
+    // An empty stock slice keeps only the right-pinned runline when no live actor remains.
     var overlay: ?*Node = null; // ACT1-17: the trade dialog's own overlay root, when open
     var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
+    var vbuf: [24]u8 = undefined;
+    var fbuf: [24]u8 = undefined;
+    var mnum: [16]u8 = undefined;
+    var header_stocks: [3]t.Stock = undefined;
+    var header_stock_count: usize = 0;
     const q = ecs.MaybeSingle(.{
         Entity, comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
     }){ .world = world };
@@ -58,51 +65,44 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         // (full label on hover/focus), tints danger on a low/zero value, and keeps a stable
         // footprint (fixed cell) so a swap never shifts its neighbors. The values are formatted
         // here (the token owns no domain math).
-        var vbuf: [24]u8 = undefined;
-        var fbuf: [24]u8 = undefined;
-        var mnum: [16]u8 = undefined;
         const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}/{d:.0}", .{ vigor.v, vigor.max }) catch "?";
         const ftxt = std.fmt.bufPrint(&fbuf, "{d:.0}", .{food.v}) catch "?";
         const mtxt = @import("./fmt.zig").fmt_num(&mnum, materials.v);
         const vcond = ctx.res.config.condition(vigor.v / vigor.max);
-        const stocks = [_]t.Stock{
+        header_stocks = .{
             .{ .abbrev = "Vi", .full = "Vigor", .value = vtxt, .danger = vcond == .spent },
             .{ .abbrev = "Fo", .full = "Food", .value = ftxt, .danger = food.v <= 0 },
             .{ .abbrev = "Ma", .full = "Materials", .value = mtxt, .danger = false },
         };
-        const bar = try t.stockline(ctx, header, "stocks", &stocks);
-        _ = bar.with_layout(.bottom_left);
+        header_stock_count = header_stocks.len;
 
-        // ACT1-07/17: the Passerby (market) strip fills the shell's market region in both the
-        // pre-tutorial and underway states. The strip's TRADE link opens the TradeDialog when a
-        // passerby is actually present (ACT1-12 `dealable`); the dialog is built last, below, as
-        // its own overlay root. The open flag rides on a `TradeState` keyed to the (stable) market
-        // strip node, so it survives the frame-arena rebuild.
-        if (regions.market) |market_region| {
-            const kind: t.MarketKind = .passerby;
-            const strip = try t.market_strip(ctx, market_region, "passerby", kind);
-            trade_ts = strip.get().state(ctx, uic.UiState.TradeState);
-            if (strip.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
-                trade_ts.?.open = true;
+        // The live activity projection is shared by the teaching layout and the complete
+        // right-hand surface. Only placement changes after the first resolved action.
+        const busy = world.get(e, comp.Busy);
+        const act_state: t.ActivityState = if (busy) |b|
+            (if (actions.is_build(b.doing)) .building else .working)
+        else
+            .idle;
+        var activity_meta_buf: [24]u8 = undefined;
+        const activity_subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "no work in progress";
+        const activity_metadata: []const u8 = if (busy) |b| blk: {
+            if (actions.is_build(b.doing)) {
+                const days_left = b.remaining / ctx.res.config.secs_per_day;
+                break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.1}d left", .{days_left}) catch "?";
             }
+            const hours_left = b.remaining * 24.0 / ctx.res.config.secs_per_day;
+            break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
+        } else "ready";
+
+        // Before the tutorial unfolds, the context strips remain in their shell regions above
+        // the teaching card. The reusable tabbed surface owns them in the underway layout.
+        if (regions.market) |market_region| {
+            const strip = try t.market_strip(ctx, market_region, "passerby", .passerby);
+            trade_ts = strip.get().state(ctx, uic.UiState.TradeState);
+            if (strip.consume(.clicked) and ctx.res.sim.encounter.dealable()) trade_ts.?.open = true;
         }
         if (regions.activity) |activity| {
-            const busy = world.get(e, comp.Busy);
-            const act_state: t.ActivityState = if (busy) |b|
-                (if (actions.is_build(b.doing)) .building else .working)
-            else
-                .idle;
-            var activity_meta_buf: [24]u8 = undefined;
-            const subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "no work in progress";
-            const metadata: []const u8 = if (busy) |b| blk: {
-                if (actions.is_build(b.doing)) {
-                    const days_left = b.remaining / ctx.res.config.secs_per_day;
-                    break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.1}d left", .{days_left}) catch "?";
-                }
-                const hours_left = b.remaining * 24.0 / ctx.res.config.secs_per_day;
-                break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
-            } else "ready";
-            _ = try t.activity_strip(ctx, activity, "activity", act_state, subject, metadata, act_state);
+            _ = try t.activity_strip(ctx, activity, "activity", act_state, activity_subject, activity_metadata, act_state);
         }
 
         // --- center. Before the very first resolved action (GameState.tutorial_done),
@@ -116,54 +116,20 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
                 _ = card.with_layout(.center);
             }
         } else {
-            // `.cross = .start`: the strip left-aligns over the content's edge — the
-            // classic tab silhouette — instead of floating centered above it.
-            const center = try el.div(ctx, body, "center");
-            _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
-            // KIT-07: the shared view navigation drives which body view builds. Exactly one
-            // tab is selected + globally focusable, arrows rove within it, Enter/Space switches;
-            // the inactive view is not built but its pooled state is retained below.
-            const tb = try t.view_nav(ctx, center, "tabs", &.{ "ACTIONS", "BUILD" });
-            if (tb.active == 0) {
-                // KIT-07 / ACT1-09: retain the inactive BUILD view's search/sort state so
-                // returning to it restores exactly where it was. The BUILD tab's state now lives
-                // in a `CatalogState` on its controls node (`build_list` → "buildlist" → the KIT-15
-                // controls "build_ctl"), so retain that nested key — the view's nodes are not
-                // built while ACTIONS is active, and pool retention ends the moment we stop asking.
-                const build_key = ha.ui.key(center.get().key, "buildlist");
-                const ctl_key = ha.ui.key(build_key, "build_ctl");
-                _ = ctx.retainState(ctl_key, uic.UiState.CatalogState);
-                // The search text lives in the field's own editor state, nested under the
-                // controls' first row ("build_ctl" → "row" → "search").
-                const row_key = ha.ui.key(ctl_key, "row");
-                _ = ctx.retainState(ha.ui.key(row_key, "search"), uic.UiState.TextInputState);
+            const workspace = try t.act_one_workspace(ctx, body, world, e, "act_one_workspace", .{
+                .activity = .{
+                    .state = act_state,
+                    .subject = activity_subject,
+                    .metadata = activity_metadata,
+                    .last = act_state,
+                },
+            });
 
-                // ACT1-08: the finalized ACTIONS surface is exactly the five verbs of the
-                // catalog's Act I surface — Forage, Scavenge, Split wood, Fish, Check traps —
-                // in authored order, plus the Eating Policy, laid out as a two-column grid (one
-                // column at ≤440). Hunt exists as a component but is off the Act I surface
-                // (`catalog`), so it is deliberately not rendered here. Tile metrics/bands derive
-                // from the live records (KIT-17), so this is presentation, not duplicated numbers.
-                const one_col = ctx.res.view.metrics.width_class.atMost(.w440);
-                const grid_w: f32 = if (one_col) 300 else 620; // 1 vs 2 columns of ~300px tiles
-                const acts = try el.div(ctx, center, "acts");
-                _ = acts.with_size(.{ .fixed = grid_w }, .fit_children)
-                    .with_flow(.{ .dir = .row, .wrap = true, .cross = .start }).with_gap(12);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionForage, "forage_t", "Forage", actions.action_forage);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionScavenge, "scav_t", "Scavenge", actions.action_scavenge);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Split wood", actions.action_chop_wood);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
-                _ = try t.action_tile(ctx, acts, world, e, comp.ActionCheckTraps, "traps_t", "Check traps", actions.action_check_traps);
-                // Eating Policy occupies the sixth grid cell exactly like the prototype. The
-                // simulation persists a metabolism multiplier; project it to the 0..100 policy
-                // domain for the control, then map the live result back through shared math.
-                if (world.get(e, comp.Metabolism)) |met| {
-                    const policy_value = ha.eating.valueFromRate(met.rate);
-                    const new_policy = try t.eating_policy(ctx, acts, "eating_policy", policy_value, true);
-                    met.rate = ha.eating.rate(new_policy);
-                }
-            } else {
-                _ = try t.build_list(ctx, center, world, e, "buildlist");
+            // The nested surface returns its borderless TRADE link; encounter eligibility and
+            // modal state remain production responsibilities rather than presentation concerns.
+            trade_ts = workspace.surface.market_action.get().state(ctx, uic.UiState.TradeState);
+            if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
+                trade_ts.?.open = true;
             }
         }
 
@@ -185,19 +151,21 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
-    // KIT-12: the runline — energy rate (0 in Act I → omitted), act label, and day. VIEW-04
-    // drops the optional act label at ≤560; the functional Day counter always stays.
+    // KIT-12: assemble the complete HUD header — stocks left, run context right. Energy rate
+    // is omitted in Act I, and VIEW-04 drops the optional act label at ≤560.
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
-    const run_line = try t.runline(ctx, header, "run", .{
-        .act_label = "Act I",
-        .day = day,
-        .compact = compact,
+    _ = try t.header(ctx, header, "hud", .{
+        .stocks = header_stocks[0..header_stock_count],
+        .run = .{
+            .act_label = "Act I",
+            .day = day,
+            .compact = compact,
+        },
     });
-    _ = run_line.with_layout(.bottom_right);
 
-    // --- footer: the event log, full width at the bottom, 4 lines tall (the shell's footer
-    // region, bottom-anchored). log_view authors in logical px (VIEW-02); the content column
-    // in logical is the terminal's logical width minus the page padding.
+    // --- footer: the event log, full width inside the shell's reserved 86px framed logger row.
+    // log_view authors in logical px (VIEW-02); the content column in logical is the terminal's
+    // logical width minus the page padding.
     if (regions.footer) |footer| {
         const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
         try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);

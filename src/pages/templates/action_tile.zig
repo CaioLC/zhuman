@@ -91,7 +91,7 @@ pub fn tile(
         .with_style(.{ Style{ .outline_color = chrome }, style.pad_each(0, 0, 1, 0) });
 
     const inner = try el.div(ctx, box, "inner");
-    _ = inner.with_flow(.{ .dir = .column, .cross = .center }).with_gap(2)
+    _ = inner.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2)
         .with_style(.{style.pad_sym(12, 6)});
 
     const lit = can or running; // dimmed tiles flatten everything onto the chrome
