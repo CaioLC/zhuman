@@ -529,6 +529,16 @@ pub const Interaction = packed struct {
     captured: bool = false,
     dismissed: bool = false,
 
+    // Keyboard range-control commands routed by the host to the focused registered slider.
+    // Transient like pointer edges: a template consumes them during this frame's build, then
+    // `beginFrame` clears them before the next event stage.
+    decrement: bool = false,
+    increment: bool = false,
+    page_decrement: bool = false,
+    page_increment: bool = false,
+    minimum: bool = false,
+    maximum: bool = false,
+
     disabled: bool = false,
     focused: bool = false,
     focus_visible: bool = false,
@@ -545,6 +555,12 @@ pub const Interaction = packed struct {
         "dragging",
         "captured",
         "dismissed",
+        "decrement",
+        "increment",
+        "page_decrement",
+        "page_increment",
+        "minimum",
+        "maximum",
     };
 };
 

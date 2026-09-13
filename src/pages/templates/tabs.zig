@@ -1,5 +1,6 @@
 //! `tabs` template — a row of text chips switching which content the caller builds:
-//! the active label wears fg + its outline, inactive ones sit dim (accent on hover).
+//! the active label wears fg + its outline, inactive ones sit dim; any chip lifts to accent
+//! on hover/held/focus (the active tab included, mirroring `button`).
 //! Body-sized on purpose — tabs are navigation chrome, not content; they should read as
 //! the top edge of the panel they switch, not compete with it (the caller left-aligns
 //! the strip over the content for the classic tab silhouette). Returns the active index;
@@ -60,7 +61,10 @@ pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8)
             member_keys[member_len] = chip_key;
             member_len += 1;
         }
-        const c = if (is_active) th.fg else if (q.held or q.hovering or focused) th.acc else th.dim;
+        // Interaction wins over the resting state (as `button` does): hover/held/focus lifts to
+        // accent even for the **active** tab, so hovering the active tab changes its color too;
+        // a resting active tab is fg, a resting inactive tab is dim.
+        const c = if (q.held or q.hovering or focused) th.acc else if (is_active) th.fg else th.dim;
         const lbl = (try el.text(ctx, chip, "l", label))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});

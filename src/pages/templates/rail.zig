@@ -5,9 +5,9 @@
 //! rail's label set 90° counter-clockwise (TEXT-06 `.vertical()`), reading bottom-to-top.
 //!
 //! **One toggle, synchronized everything.** The rail's collapsed/expanded bit lives in a keyed
-//! `RailState` pool (survives the frame-arena rebuild by `node.key`), and the *whole strip*
-//! owns the toggle (the KIT-03 button contract): a click flips the bit, the width animates, the
-//! affordance/label/focus/hit-target follow because they are rebuilt from the one bit each
+//! `RailState` pool (survives the frame-arena rebuild by `node.key`). One stable toggle control
+//! owns interaction in both states: the expanded 24×26 collapse button becomes the collapsed
+//! 36×124 restore button, while its label, focus, and hit target follow the same state each
 //! frame. Distinct rails carry distinct ids, so the **ACTIONS and BUILD rails keep separate
 //! collapse memories** for free; the **STRUCTURE rail** passes `force_collapsed`, which
 //! overwrites *its own* state to collapsed every entry while leaving the other keys untouched.
@@ -45,65 +45,109 @@ pub const Rail = struct {
     body: ?El,
 };
 
+// Prototype border-box dimensions. Engine fixed sizes describe the content box, so the
+// restore control's 124px outer height is 108px of content plus 7px/9px vertical padding.
+const restore_width: f32 = 36;
+const restore_outer_height: f32 = 124;
+const restore_pad_top: f32 = 7;
+const restore_pad_bottom: f32 = 9;
+const restore_content_height: f32 = restore_outer_height - restore_pad_top - restore_pad_bottom;
+const collapse_width: f32 = 24;
+const collapse_height: f32 = 26;
+
 /// Build the collapsible rail into `parent` (the shell's `regions.rail`). Manages its own
 /// collapse memory, toggle, and width tween; returns the fill target when expanded.
 pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
     const th = ctx.res.view.theme;
 
-    // The rail's outer box owns the collapse memory and the toggle interaction.
+    // The rail is the width-bearing container, not the bordered button. In the prototype the
+    // expanded rail itself is 252px wide and visually transparent; only its 24x26 collapse
+    // control is boxed. When collapsed, that control becomes the separate 36x124 restore box.
     const box = try el.div(ctx, parent, opts.id);
     const st = box.get().state(ctx, RailState);
-
-    // STRUCTURE forces collapsed on entry — overwrite *this* rail's bit each frame. Other
-    // rails (distinct keys) are untouched, so ACTIONS/BUILD keep their remembered state.
     if (opts.force_collapsed) st.collapsed = true;
 
-    // The whole strip is the toggle (KIT-03: outer box owns interaction). A completed click
-    // flips the bit; querying keeps the slot alive for next frame's hit-test.
-    const q = box.query();
-    if (q.clicked) st.collapsed = !st.collapsed;
+    // Build the body before the toggle so the control remains the top-painted sibling after
+    // callers populate the body. One stable toggle key owns focus and interaction in both
+    // states, keeping the visual box and hit box synchronized through the transition.
+    const body = try el.div(ctx, box, "rail_body");
+    const toggle = try el.div(ctx, box, "toggle");
+    ctx.registerFocus(toggle.get().key, true);
+    const q = toggle.query();
+    if (q.clicked) {
+        _ = ctx.requestFocus(toggle.get().key);
+        st.collapsed = !st.collapsed;
+    }
     if (q.hovering) ctx.res.cursor.request(.pointer);
+    const focused = ctx.isFocused(toggle.get().key);
+    uic.publishControlState(ctx, toggle.get().key, .{
+        .focused = focused,
+        .focus_visible = focused,
+    });
+    // `btn_primary` also carries glyph ink, which must not be applied to this non-text div.
+    // Resolve the stateful fragments once, then project only their decoration fields onto the
+    // toggle box; the chevron/label text leaves receive their ink separately below.
+    const resolved_toggle = style.resolve(ctx, toggle.get(), .{ style.btn_primary, style.focus_ring });
+    const toggle_chrome = Style{
+        .fill = th.bg,
+        .outline_color = resolved_toggle.outline_color,
+        .outline_width = resolved_toggle.outline_width,
+        .outline_style = resolved_toggle.outline_style,
+    };
 
-    // Width animates between the two token widths (RENDER-08 tween, keyed by the rail node).
+    // Width animates between the shared rail tokens. Clipping belongs to this width-bearing
+    // container, so expanded content cannot leak across the shrinking rail during the tween.
     const target: f32 = if (st.collapsed) ha.tokens.rail.collapsed else ha.tokens.rail.expanded;
     ctx.res.tween.retarget(box.get().key, target, ha.tokens.dur_rail_s);
     const w = ctx.res.tween.value(box.get().key, target);
 
-    _ = box.with_size(.{ .fixed = w }, .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .column, .cross = .center })
-        .with_overflow(.clip) // during the width tween, content is clipped to the animating box
-        .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line }, style.pad_sym(0, 10) });
-
     if (st.collapsed) {
-        // Collapsed: the vertical restore affordance — a chevron pointing toward the expanded
-        // rail, above the label rotated 90° CCW (TEXT-06), reading bottom-to-top. Both are
-        // content of the same clickable strip, so the label/affordance/hit-target stay in sync.
-        _ = box.with_gap(8);
-        _ = (try el.text(ctx, box, "chevron", "\u{203A}"))
-            .with_style(.{Style{ .text = th.dim }});
-        _ = (try el.text(ctx, box, "label", opts.label))
-            .with_style(.{Style{ .text = th.fg, .font = 9, .tracking = 0.09 }})
+        _ = box.with_size(.{ .fixed = w }, .{ .fixed = restore_outer_height })
+            .with_overflow(.clip);
+
+        // CSS counterpart: `.holdings-restore` — 36x124 border-box, 7px/9px vertical
+        // padding, 8px gap, and centered children. Each glyph sits in a full-width row below:
+        // the engine's column cross-line is intrinsically child-sized, while row main-axis
+        // centering resolves against the definite 36px lane just like CSS `align-items:center`.
+        _ = toggle.with_layout(.top_left)
+            .with_size(.{ .fixed = restore_width }, .{ .fixed = restore_content_height })
+            .with_flow(.{ .dir = .column, .main = .start, .cross = .center })
+            .with_gap(8)
+            .with_style(.{
+            toggle_chrome,
+            style.pad_each(restore_pad_top, 0, restore_pad_bottom, 0),
+        });
+        const chevron_lane = try el.div(ctx, toggle, "chevron_lane");
+        _ = chevron_lane.with_size(.{ .fixed = restore_width }, .fit_children)
+            .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+        _ = (try el.text(ctx, chevron_lane, "chevron", "\u{203A}"))
+            .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 16 }});
+
+        const label_lane = try el.div(ctx, toggle, "label_lane");
+        _ = label_lane.with_size(.{ .fixed = restore_width }, .fit_children)
+            .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+        _ = (try el.text(ctx, label_lane, "label", opts.label))
+            .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 9, .tracking = 0.09 }})
             .vertical();
         return .{ .collapsed = true, .body = null };
     }
 
-    // Expanded: a header row (label + a collapse chevron) over the content body the caller
-    // fills. The header is content of the same clickable box, so clicking anywhere collapses.
-    _ = box.with_gap(6);
-    const header = try el.div(ctx, box, "rail_head");
-    _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_sym(6, 4)});
-    _ = (try el.text(ctx, header, "label", opts.label))
-        .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
-    const tail = try el.div(ctx, header, "collapse");
-    _ = tail.with_layout(.center_right);
-    _ = (try el.text(ctx, tail, "chev", "\u{2039}")) // ‹ points left, toward collapse
-        .with_style(.{Style{ .text = th.dim }});
-
-    const body = try el.div(ctx, box, "rail_body");
+    _ = box.with_size(.{ .fixed = w }, .{ .pct_of_parent = 1.0 })
+        .with_overflow(.clip);
     _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.stack);
+
+    // CSS counterpart: `.holdings-toggle` — a 24x26 box at the expanded panel's upper-right.
+    // Its chevron is independently centered in both axes; the old right-anchored bare text
+    // had neither the correct box nor a definite height against which to center.
+    _ = toggle.with_layout(.top_right)
+        .with_offset(-2, 0)
+        .with_size(.{ .fixed = collapse_width }, .{ .fixed = collapse_height })
+        .with_style(.{toggle_chrome});
+    _ = (try el.text(ctx, toggle, "chevron", "\u{2039}"))
+        .with_layout(.center)
+        .with_style(.{Style{ .text = if (q.hovering or focused) th.acc else th.fg, .font = 16 }});
+
     return .{ .collapsed = false, .body = body };
 }
 
@@ -125,6 +169,13 @@ test "rail target width is the collapsed/expanded token, never a bare literal" {
     try testing.expectEqual(@as(f32, 252), targetWidth(false));
     try testing.expectEqual(ha.tokens.rail.collapsed, targetWidth(true));
     try testing.expectEqual(ha.tokens.rail.expanded, targetWidth(false));
+}
+
+test "rail toggle boxes mirror the prototype dimensions" {
+    try testing.expectEqual(ha.tokens.rail.collapsed, restore_width);
+    try testing.expectEqual(@as(f32, 124), restore_content_height + restore_pad_top + restore_pad_bottom);
+    try testing.expectEqual(@as(f32, 24), collapse_width);
+    try testing.expectEqual(@as(f32, 26), collapse_height);
 }
 
 test "rail width rides the tween between the token widths and lands on target" {

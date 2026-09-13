@@ -48,7 +48,7 @@ pub const Encounter = struct {
     stock: [ware_count]u16 = [_]u16{0} ** ware_count,
 
     /// Whether a deal can be opened right now — only while the passerby is actually present.
-    /// The UI gates the Hail button on this; tab visibility never enters into it.
+    /// The UI gates the TRADE action on this; tab visibility never enters into it.
     pub fn dealable(self: *const Encounter) bool {
         return self.phase == .present;
     }

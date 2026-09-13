@@ -54,6 +54,11 @@ pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, option
     if (st.highlight >= n) st.highlight = 0;
 
     // The closed control: label + value + caret, at the compact control height (KIT-01 token).
+    // The prototype gives the native choice field a 112px minimum; this template combines its
+    // lead-in, value, and caret into one box, so reserve enough width for all three. A definite
+    // width also gives the out-of-flow popup a real containing width instead of asking a
+    // percentage to resolve under an intrinsic (`fit_children`) parent.
+    const control_w: f32 = 144;
     ctx.registerFocus(box.get().key, enabled);
     const q = box.query();
     if (q.clicked and !enabled) _ = ctx.consumeFlag(box.get().key, .clicked); // disabled can't open
@@ -65,13 +70,19 @@ pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, option
     if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
     uic.publishControlState(ctx, box.get().key, .{ .disabled = !enabled, .focused = focused, .focus_visible = focused });
 
-    _ = box.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
-        .with_size(.fit_children, .{ .fixed = ha.tokens.control.h_compact })
-        .with_style(.{ Style{ .outline_color = if (!enabled) th.line else if (focused or q.hovering) th.acc else th.line2 }, style.pad_sym(8, 0) });
-    _ = (try el.text(ctx, box, "lbl", label)).with_style(.{ style.small, Style{ .text = th.dim } });
+    _ = box.with_size(.{ .fixed = control_w }, .{ .fixed = ha.tokens.control.h_compact })
+        .with_style(.{Style{ .outline_color = if (!enabled) th.line else if (focused or q.hovering) th.acc else th.line2 }});
+
+    // Center the mixed-size label/value/caret as one baseline-aligned group. Horizontal text
+    // origins are snapped once at the shared text-blit boundary, so this composition can use
+    // ordinary layout without carrying renderer-specific measurement compensation.
+    const trigger = try el.div(ctx, box, "trigger");
+    _ = trigger.with_layout(.center).with_flow(.{ .dir = .row })
+        .with_gap(ha.tokens.gap.inline_).with_size(.fit_children, .fit_children);
+    _ = (try el.text(ctx, trigger, "lbl", label)).with_style(.{ style.small, Style{ .text = th.dim } });
     const value_txt = if (n > 0) options[st.value] else "";
-    _ = (try el.text(ctx, box, "val", value_txt)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
-    _ = (try el.text(ctx, box, "caret", if (st.open) "\u{25B4}" else "\u{25BE}")) // ▴ open / ▾ closed
+    _ = (try el.text(ctx, trigger, "val", value_txt)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
+    _ = (try el.text(ctx, trigger, "caret", if (st.open) "\u{25B4}" else "\u{25BE}")) // ▴ open / ▾ closed
         .with_style(.{Style{ .text = th.dim }});
 
     // The popup: an absolutely-placed overlay under the control, clipped to itself, drawn after
@@ -80,6 +91,7 @@ pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, option
         const pop = try el.div(ctx, box, "popup");
         _ = pop.with_layout(.top_left).with_offset(0, ha.tokens.control.h_compact)
             .with_flow(.{ .dir = .column })
+            .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_overflow(.clip)
             .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line2 }, style.pad_sym(0, 4) });
         for (options, 0..) |opt, i| {

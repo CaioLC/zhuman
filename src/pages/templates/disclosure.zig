@@ -58,11 +58,19 @@ pub fn disclosure(ctx: *UiCtx, parent: El, id: []const u8, summary: []const u8, 
     _ = (try el.text(ctx, row, "sum", summary))
         .with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
     const tail = try el.div(ctx, row, "aff");
-    _ = tail.with_layout(.center_right);
-    // Affordance: "details ↓" collapsed, "close ↑" expanded — reads as the current action.
-    const aff = if (st.expanded) "close \u{2191}" else "details \u{2193}";
-    _ = (try el.text(ctx, tail, "t", aff))
-        .with_style(.{ style.small, Style{ .text = if (focused or q.hovering) th.acc else th.dim } });
+    _ = tail.with_layout(.center_right)
+        .with_flow(.{ .dir = .row }).with_gap(ha.tokens.gap.inline_)
+        .with_size(.fit_children, .fit_children);
+    // Keep the prototype wording, but give the directional glyph its own measured box. This
+    // avoids font-side-bearing ambiguity from a single `"details ↓"` leaf and makes the visual
+    // arrow sit predictably inside the whole-row click target.
+    const action = if (st.expanded) "close" else "details";
+    const arrow = if (st.expanded) "\u{2191}" else "\u{2193}";
+    const affordance_color = if (focused or q.hovering) th.acc else th.dim;
+    _ = (try el.text(ctx, tail, "word", action))
+        .with_style(.{ style.small, Style{ .text = affordance_color } });
+    _ = (try el.text(ctx, tail, "arrow", arrow))
+        .with_style(.{ style.small, Style{ .text = affordance_color } });
 
     // The details subtree exists only while expanded (nothing in it is focusable when closed).
     const details = if (st.expanded and enabled) blk: {

@@ -72,18 +72,32 @@ pub fn is_build(d: comp.Busy.Doing) bool {
     };
 }
 
-/// A display word for what the body is doing (ACT1-07 activity strip). A runtime map over the
-/// `Busy.Doing` enum — labor verbs read as their gerund, capital builds as "building". Used by
-/// the activity strip's subject; presentation-adjacent but sim-tier because `Busy.Doing` is.
+/// Prototype-facing subject for the activity strip. Labor uses the authored action name;
+/// capital work uses the recipe name rather than the generic word "building".
 pub fn doing_label(d: comp.Busy.Doing) []const u8 {
     return switch (d) {
-        .forage => "foraging",
-        .scavenge => "scavenging",
-        .fish => "fishing",
-        .chop_wood => "splitting wood",
-        .check_traps => "checking traps",
-        .hunt => "hunting",
-        else => "building", // every capital build
+        .forage => "Forage",
+        .scavenge => "Scavenge",
+        .fish => "Fish",
+        .chop_wood => "Split wood",
+        .check_traps => "Check traps",
+        .hunt => "Hunt",
+        .build_fish_rod => "Fishing rod",
+        .build_hatchet => "Hatchet",
+        .build_wire_snares => "Wire snares",
+        .build_air_rifle => "Air rifle",
+        .build_sandals => "Sandals",
+        .build_work_gloves => "Work gloves",
+        .build_bicycle => "Bicycle",
+        .build_cookpot => "Cookpot",
+        .build_root_cellar => "Root cellar",
+        .build_chainsaw => "Chainsaw",
+        .build_leaf_bed => "Leaf bed",
+        .build_pantry => "Pantry",
+        .build_medicine_chest => "Medicine chest",
+        .build_garden_bed => "Garden bed",
+        .build_chicken_coop => "Chicken coop",
+        .build_shelter => "Shelter",
     };
 }
 

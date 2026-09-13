@@ -74,7 +74,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         _ = bar.with_layout(.bottom_left);
 
         // ACT1-07/17: the Passerby (market) strip fills the shell's market region in both the
-        // pre-tutorial and underway states. The strip's Hail button opens the TradeDialog when a
+        // pre-tutorial and underway states. The strip's TRADE link opens the TradeDialog when a
         // passerby is actually present (ACT1-12 `dealable`); the dialog is built last, below, as
         // its own overlay root. The open flag rides on a `TradeState` keyed to the (stable) market
         // strip node, so it survives the frame-arena rebuild.
@@ -92,8 +92,17 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
                 (if (actions.is_build(b.doing)) .building else .working)
             else
                 .idle;
-            const subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "resting";
-            _ = try t.activity_strip(ctx, activity, "activity", act_state, subject, "", act_state);
+            var activity_meta_buf: [24]u8 = undefined;
+            const subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "no work in progress";
+            const metadata: []const u8 = if (busy) |b| blk: {
+                if (actions.is_build(b.doing)) {
+                    const days_left = b.remaining / ctx.res.config.secs_per_day;
+                    break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.1}d left", .{days_left}) catch "?";
+                }
+                const hours_left = b.remaining * 24.0 / ctx.res.config.secs_per_day;
+                break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
+            } else "ready";
+            _ = try t.activity_strip(ctx, activity, "activity", act_state, subject, metadata, act_state);
         }
 
         // --- center. Before the very first resolved action (GameState.tutorial_done),
@@ -145,9 +154,14 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionChopWood, "chop_t", "Split wood", actions.action_chop_wood);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionFish, "fish_t", "Fish", actions.action_fish);
                 _ = try t.action_tile(ctx, acts, world, e, comp.ActionCheckTraps, "traps_t", "Check traps", actions.action_check_traps);
-                // Eating Policy sits in the grid alongside the action tiles — the metabolism
-                // loop runs regardless; the dial sets its standing rate.
-                _ = try t.ration_dial(ctx, acts, world, e, "ration");
+                // Eating Policy occupies the sixth grid cell exactly like the prototype. The
+                // simulation persists a metabolism multiplier; project it to the 0..100 policy
+                // domain for the control, then map the live result back through shared math.
+                if (world.get(e, comp.Metabolism)) |met| {
+                    const policy_value = ha.eating.valueFromRate(met.rate);
+                    const new_policy = try t.eating_policy(ctx, acts, "eating_policy", policy_value, true);
+                    met.rate = ha.eating.rate(new_policy);
+                }
             } else {
                 _ = try t.build_list(ctx, center, world, e, "buildlist");
             }
@@ -225,6 +239,24 @@ fn bundleLabel(buf: []u8, b: *const market.Bundle) []const u8 {
     return buf[0..w];
 }
 
+fn wareTradeName(w: Ware) []const u8 {
+    return switch (w) {
+        .food => "Preserved food",
+        .materials => "Materials",
+        .fish_hook => "Fishing net",
+        .whetstone => "Hand axe",
+    };
+}
+
+fn wareTradeDetail(w: Ware) []const u8 {
+    return switch (w) {
+        .food => "provisions \u{00b7} keeps well",
+        .materials => "useful stock",
+        .fish_hook => "better Fish tool",
+        .whetstone => "better wood tool",
+    };
+}
+
 /// Build the trade dialog overlay when open, wiring confirm → `barter.resolve`. Returns the
 /// dialog's overlay root (or null when closed). The offers are the passerby's satchel wares (buy)
 /// and the player's sellable goods + surplus (sell), each backed by a live `market.Quote`.
@@ -277,7 +309,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const refusal = q.refusal(enc, food.v, stock.v);
             try buys.append(ctx.arena, .{
-                .offer = .{ .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
+                .offer = .{ .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
                 .quote = q,
             });
         }
@@ -297,7 +329,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}m", .{q.next_unit orelse 0});
             try sells.append(ctx.arena, .{
-                .offer = .{ .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
+                .offer = .{ .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
                 .quote = q,
             });
         }
@@ -311,8 +343,9 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(ware)});
             const recv_s = bundleLabel(gbuf[gw..], &q.receive);
             gw += recv_s.len;
+            const owned = world.get(e, G).?;
             try sells.append(ctx.arena, .{
-                .offer = .{ .give = give_s, .receive = recv_s, .stock = 1 },
+                .offer = .{ .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
                 .quote = q,
             });
         }
@@ -325,11 +358,28 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     for (sells.items, 0..) |s, i| sell_views[i] = s.offer;
 
     // Live holdings line.
-    var hbuf: [48]u8 = undefined;
-    const holdings = std.fmt.bufPrint(&hbuf, "{d:.0} food · {d:.0}m", .{ food.v, stock.v }) catch "";
+    // Live header metadata and structured YOU HOLD rows.
+    var meta_buf: [32]u8 = undefined;
+    const days_left = enc.remaining / ctx.res.config.secs_per_day;
+    const meta = std.fmt.bufPrint(&meta_buf, "{d:.1} DAYS LEFT", .{days_left}) catch "DAYS LEFT";
+    var food_buf: [24]u8 = undefined;
+    var material_buf: [24]u8 = undefined;
+    var holding_views = std.ArrayList(t.TradeHolding).empty;
+    try holding_views.append(ctx.arena, .{ .label = "Food", .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
+    try holding_views.append(ctx.arena, .{ .label = "Materials", .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
+    inline for (.{
+        .{ comp.Sandals, "Sandals" },
+        .{ comp.Hatchet, "Hatchet" },
+        .{ comp.FishNet, "Fishing net" },
+        .{ comp.HandAxe, "Hand axe" },
+    }) |entry| {
+        if (world.get(e, entry[0])) |owned| {
+            try holding_views.append(ctx.arena, .{ .label = entry[1], .value = try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{owned.count}) });
+        }
+    }
 
     var root: *Node = undefined;
-    const res = try t.trade_dialog(ctx, "trade", .passerby, buy_views, sell_views, holdings, ts, &root);
+    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts, &root);
 
     // Confirm → resolve the backing quote atomically. Header/Holdings/log read live world state,
     // so they refresh this same frame.

@@ -281,7 +281,7 @@ Lifecycle is wired like the command registry: `Resources` holds `semantics` and
 `semantics.endBuild()` after `endFrame()`. Representative `describe*` helpers turn
 authoritative widget/domain facts into a `SemanticNode`; controls call them right where
 they already call `publishControlState` (stock `button`/`icon_button`/`progress_bar`
-/`text_input`/`modal`, and game `tabs`/`ration_dial`/`build_list`/`capital_row`
+/`text_input`/`modal`, and game `tabs`/`slider`/`build_list`/`capital_row`
 /`action_tile`). Honest limitations: an icon button and a bare progress bar have no widget
 string for a name (they publish an empty label; a named variant/domain helper supplies
 one), `expanded` is owned only by the dialog shell, and no production board/search/modal
@@ -345,7 +345,7 @@ non-Windows target the probe deterministically reports `null`→`false` rather t
 a preference was read.
 
 **Inventory and the functional/decorative split:** the action-tile underbar and the
-ration-dial fill are *functional determinate progress/simulation readouts* — they remain
+eating-policy slider position are *functional determinate progress/simulation readouts* — they remain
 visible under reduced motion, unchanged. The one genuinely decorative clock-driven
 oscillation is `status.heartbeat_color` (used only on the dev `mock.zig` showcase); under
 reduced motion it freezes its sine phase to the `0.5` midpoint via `Policy.phase`. No
@@ -409,8 +409,7 @@ The fullscreen root and modal scrim size to the drawable px (`metrics.px_w/px_h`
 coordinates are multiplied by `dpi_scale` at one seam in `main` (`pointerAt`) so hit geometry
 (device px) matches. **Values read back from stamped geometry** (`.rect`, a parent's resolved
 `size.*.fixed`) are already device px and must use `El.with_size_px` (no re-scaling) — the few
-prior-frame-geometry sites (the action-tile underbar, the ration-dial pulse, the page content
-box) do. **Not** scaled: simulation values and camera percentages are not dimensions. At DPI 1
+prior-frame-geometry sites (the action-tile underbar and the page content box) do. **Not** scaled: simulation values and camera percentages are not dimensions. At DPI 1
 (`scale == 1`) every conversion is identity, so production is unchanged; the scale becomes
 load-bearing on a high-DPI display.
 

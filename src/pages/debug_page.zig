@@ -50,7 +50,6 @@ const entries = [_][]const u8{
     "disclosure",
     "rail",
     "action_tile",
-    "ration_dial",
     "eating_policy",
     "capital_row",
     "catalog_controls",
@@ -77,19 +76,22 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
     // Selection lives on a stable node's TabsState (`active` = the entry index).
     const sel = root.get().state(ctx, uic.UiState.TabsState);
     if (sel.active >= entries.len) sel.active = 0;
+    // Unlike ordinary in-stage templates, the modal needs a persistent lifecycle so dismissing
+    // it reveals the audit index instead of rebuilding an always-open local state next frame.
+    const audit_trade = root.get().state(ctx, uic.UiState.TradeState);
 
     // --- the inspection stage: top-left, small, the selected template only ------------------
+    // The whole page root is already `top_left`, so the padded wrap sits at the top-left; the
+    // stage flows normally inside it (no extra absolute anchor, which would overlap siblings).
+    // The selected template's name is shown highlighted in the right index, so no label here.
     const stage_wrap = try el.div(ctx, root, "stage_wrap");
     _ = stage_wrap.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column }).with_gap(8)
         .with_style(.{style.pad(16)});
-    // A dim label so the audit always knows which template is on screen.
-    _ = (try el.text(ctx, stage_wrap, "label", entries[sel.active]))
-        .with_style(.{ style.eyebrow, Style{ .text = th.acc } });
     const stage = try el.div(ctx, stage_wrap, "stage");
-    _ = stage.with_layout(.top_left).with_flow(.{ .dir = .column }).with_gap(6);
+    _ = stage.with_flow(.{ .dir = .column }).with_gap(6);
 
     var overlay: ?*Node = null;
-    overlay = try render_one(ctx, world, stage, entries[sel.active]);
+    overlay = try render_one(ctx, world, stage, entries[sel.active], audit_trade);
 
     // --- the clickable index: a thin column anchored on the RIGHT --------------------------
     const index = try el.div(ctx, root, "index");
@@ -106,6 +108,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
         if (iq.clicked) {
             _ = ctx.requestFocus(item.get().key);
             sel.active = i;
+            audit_trade.open = i == 23; // `trade_dialog` in the stable entries table above
         }
         const focused = ctx.isFocused(item.get().key);
         if (iq.hovering) ctx.res.cursor.request(.pointer);
@@ -120,7 +123,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
 
 /// Build exactly one template into `stage` with sample data. Returns an optional overlay root
 /// (only the trade dialog uses it). Everything else returns null.
-fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8) !?*Node {
+fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
     const th = ctx.res.view.theme;
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
 
@@ -168,12 +171,31 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8) !?*Node {
     } else if (eq(name, "select")) {
         _ = try t.select(ctx, stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true);
     } else if (eq(name, "slider")) {
-        _ = try t.slider(ctx, stage, "sld", "Rate", 1.0, 0.5, 2.0, 0.1, true);
+        const demo = try el.div(ctx, stage, "slider_demo");
+        _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
+        _ = try t.slider(ctx, demo, .{
+            .id = "sld",
+            .label = "Eating policy",
+            .value = 50,
+            .min = 0,
+            .max = 100,
+            .step = 1,
+        });
     } else if (eq(name, "disclosure")) {
-        const d = try t.disclosure(ctx, stage, "disc", "Disclosure summary", true);
+        // The production disclosure lives in a definite milestone column. Mirror that here;
+        // percentage width under the audit stage's intrinsic width would collapse its stamped
+        // hit rect even though the right-anchored affordance still paints outside it.
+        const demo = try el.div(ctx, stage, "disclosure_demo");
+        _ = demo.with_size(.{ .fixed = 420 }, .fit_children);
+        const d = try t.disclosure(ctx, demo, "disc", "Disclosure summary", true);
         if (d.details) |det| _ = try el.text(ctx, det, "dt", "hidden detail, now shown");
     } else if (eq(name, "rail")) {
-        const r = try t.rail(ctx, stage, .{ .id = "rail", .label = "HOLDINGS" });
+        // Production supplies a definite page-grid rail region. Mirror it here so the rail's
+        // percentage height and right-anchored 24x26 collapse control resolve against the
+        // same 252px column instead of the audit stage's intrinsic dimensions.
+        const demo = try el.div(ctx, stage, "rail_demo");
+        _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 300 });
+        const r = try t.rail(ctx, demo, .{ .id = "rail", .label = "HOLDINGS" });
         if (r.body) |rb| _ = try el.text(ctx, rb, "rb", "rail body");
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
@@ -181,14 +203,8 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8) !?*Node {
         } else {
             _ = try el.text(ctx, stage, "na", "(needs a live player)");
         }
-    } else if (eq(name, "ration_dial")) {
-        if (player.get()) |a| {
-            _ = try t.ration_dial(ctx, stage, world, a[0], "rd");
-        } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
-        }
     } else if (eq(name, "eating_policy")) {
-        _ = try t.eating_policy(ctx, stage, "ep", 1.0, ha.eating.Config.act_one, true);
+        _ = try t.eating_policy(ctx, stage, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
             _ = try t.capital_row(ctx, stage, world, a[0], comp.Sandals, "cr", .ready, 1.0);
@@ -198,31 +214,59 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8) !?*Node {
     } else if (eq(name, "catalog_controls")) {
         _ = try t.catalog_controls(ctx, stage, "cc", &.{ "reach", "inputs", "time", "name" });
     } else if (eq(name, "milestone_goal")) {
-        _ = try t.milestone_goal(ctx, stage, "mg", .{
-            .state = .ready,
+        const demo = try el.div(ctx, stage, "milestone_demo");
+        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const requirements = [_]t.MilestoneRequirement{
+            .{ .label = "VIGOR", .value = "14/15" },
+            .{ .label = "FOOD", .value = "11.6/12" },
+            .{ .label = "RECIPES", .value = "4/5" },
+            .{ .label = "MATERIALS", .value = "31/60" },
+        };
+        _ = try t.milestone_goal(ctx, demo, "mg", .{
+            .state = .locked,
             .title = "Shelter",
-            .summary = "a roof with room for four",
-            .kicker = "THE END OF ACT I",
+            .summary = "materials 31/60",
+            .readiness = "not ready \u{00B7} 1 condition",
+            .kicker = "A PLACE FOR OTHERS",
             .cost = "60m 6e \u{00B7} 6.0d",
-            .copy = "A shelter is how Act I ends.",
-            .requirement = "vigor 15/15 \u{00B7} food 12/12",
-            .action = "Raise the shelter",
+            .copy = "a roof with room for four. you're not alone anymore.",
+            .requirements = &requirements,
+            .explanation = "Hold 60 materials with a settled body and four kinds of goods.",
+            .action = "NOT READY",
         });
     } else if (eq(name, "market_strip")) {
-        _ = try t.market_strip(ctx, stage, "ms", .passerby);
+        const demo = try el.div(ctx, stage, "market_demo");
+        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        _ = try t.market_strip(ctx, demo, "ms", .passerby);
     } else if (eq(name, "activity_strip")) {
-        _ = try t.activity_strip(ctx, stage, "as", .working, "foraging", "", .working);
+        const demo = try el.div(ctx, stage, "activity_demo");
+        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        _ = try t.activity_strip(ctx, demo, "as", .idle, "no work in progress", "ready", .idle);
     } else if (eq(name, "trade_dialog")) {
+        if (!audit_trade.open) return null;
         const buys = [_]t.TradeOffer{
-            .{ .give = "2m", .receive = "1 food" },
-            .{ .give = "2 food, 8m", .receive = "a fishing net" },
+            .{ .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
+            .{ .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
+            .{ .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
         };
         const sells = [_]t.TradeOffer{
-            .{ .give = "1 food", .receive = "2m", .effect = "next unit: 1.9m" },
+            .{ .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
+            .{ .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
         };
-        var st = uic.UiState.TradeState{ .open = true };
+        const holdings = [_]t.TradeHolding{
+            .{ .label = "Food", .value = "11.6" },
+            .{ .label = "Materials", .value = "31" },
+            .{ .label = "Sandals", .value = "\u{00d7}2" },
+            .{ .label = "Hatchet", .value = "\u{00d7}2" },
+            .{ .label = "Root cellar", .value = "\u{00d7}1" },
+            .{ .label = "Leaf bed", .value = "\u{00d7}1" },
+        };
         var overlay_root: *Node = undefined;
-        _ = try t.trade_dialog(ctx, "trade", .passerby, &buys, &sells, "4 food \u{00B7} 24m", &st, &overlay_root);
+        const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade, &overlay_root);
+        if (result.dismissed) {
+            audit_trade.open = false;
+            return null;
+        }
         return overlay_root;
     } else if (eq(name, "tag")) {
         _ = try t.tag(ctx, stage, "tg", "crude");

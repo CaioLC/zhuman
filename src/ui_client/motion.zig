@@ -8,7 +8,7 @@
 //! and then projected onto `View.reduced_motion` each build/frame. It is host-side only:
 //! `src/ui/` stays generic and motion-unaware, and no simulation system reads or writes it.
 //! It deliberately does **not** touch determinate progress indicators (the action-tile
-//! underbar, the ration-dial fill), the day/clock readouts, or any state/focus cue — those
+//! underbar, the eating-policy slider position), the day/clock readouts, or any state/focus cue — those
 //! are *functional* and remain visible regardless of the policy. It only gates genuinely
 //! *decorative* time-varying visuals (today: the mock screen's heartbeat oscillation), and
 //! leaves a reusable `snap` gate for the future tween engine (RENDER-08).

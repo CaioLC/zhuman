@@ -270,26 +270,43 @@ fn shelter_goal(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     var cbuf: [40]u8 = undefined;
     const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e \u{00B7} {d:.1}d", .{ cost.materials, cost.energy, cost.hours / 24.0 }) catch "?";
 
-    // The requirement row shows every live check as `label current/req`, so an unmet condition
-    // is a fact the player can read, not a hidden predicate.
-    var rbuf: [96]u8 = undefined;
-    const req = std.fmt.bufPrint(&rbuf, "vigor {d:.0}/{d:.0} \u{00B7} food {d:.0}/{d:.0} \u{00B7} goods {d}/{d} \u{00B7} materials {d:.0}/{d:.0}", .{
-        vigor.v, u.vigor_abs,
-        food.v,  u.food,
-        kinds,   u.goods,
-        stock.v, cost.materials,
-    }) catch "?";
+    // The compact bar and expanded requirement row read the same authoritative checks. Values
+    // are separate strings so the shared card can color each met/unmet output like the HTML.
+    const vigor_met = vigor.v >= u.vigor_abs;
+    const food_met = food.v >= u.food;
+    const recipes_met = kinds >= u.goods;
+    const materials_met = stock.v >= cost.materials;
+    var compact_buf: [32]u8 = undefined;
+    var vigor_buf: [24]u8 = undefined;
+    var food_buf: [24]u8 = undefined;
+    var recipes_buf: [16]u8 = undefined;
+    var materials_buf: [24]u8 = undefined;
+    const compact = std.fmt.bufPrint(&compact_buf, "materials {d:.0}/{d:.0}", .{ stock.v, cost.materials }) catch "materials";
+    const requirements = [_]milestone_mod.Requirement{
+        .{ .label = "VIGOR", .value = std.fmt.bufPrint(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met },
+        .{ .label = "FOOD", .value = std.fmt.bufPrint(&food_buf, "{d:.1}/{d:.0}", .{ food.v, u.food }) catch "?", .met = food_met },
+        .{ .label = "RECIPES", .value = std.fmt.bufPrint(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met },
+        .{ .label = "MATERIALS", .value = std.fmt.bufPrint(&materials_buf, "{d:.0}/{d:.0}", .{ stock.v, cost.materials }) catch "?", .met = materials_met },
+    };
+    const readiness = switch (state) {
+        .locked => "not ready",
+        .unfunded => "inputs short",
+        .ready => "ready to raise",
+        .done => unreachable,
+    };
+    const action = if (state == .ready) "RAISE SHELTER" else "NOT READY";
 
     const m = try milestone_mod.milestone_goal(ctx, parent, id, .{
         .state = state,
         .title = gt.display_name(G),
-        .summary = "a roof with room for four",
-        .kicker = "THE END OF ACT I",
+        .summary = compact,
+        .readiness = readiness,
+        .kicker = "A PLACE FOR OTHERS",
         .cost = cost_txt,
-        .copy = "A shelter is how Act I ends \u{2014} it houses others, and opens what comes next.",
-        .requirement = req,
-        .explanation = gt.effect(G),
-        .action = "Raise the shelter",
+        .copy = "a roof with room for four. you're not alone anymore.",
+        .requirements = &requirements,
+        .explanation = "Hold 60 materials with a settled body and four kinds of goods.",
+        .action = action,
     });
     // ACT1-10/11: raising the shelter is the same begin_build lifecycle; the transition itself
     // happens when the build completes in the simulation (no UI-local shortcut).

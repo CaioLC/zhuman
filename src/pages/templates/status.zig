@@ -17,7 +17,7 @@ const Color = uic.Color;
 /// oscillation with no functional readout — it lives only on the mock showcase screen). Under
 /// reduced motion (INPUT-10) it snaps: the sine phase is frozen to a constant `0.5`
 /// mid-blend, so the color holds still at the midpoint between `dim` and `acc` instead of
-/// oscillating. Functional readouts (the action-tile underbar, the ration-dial fill) and all
+/// oscillating. Functional readouts (the action-tile underbar and eating-policy slider) and all
 /// state/focus cues are *not* gated by this — they remain fully visible regardless.
 pub fn heartbeat_color(t: Theme, elapsed: f32, motion: uic.MotionPolicy) Color {
     const live = 0.5 + 0.5 * std.math.sin(elapsed * (2.0 * std.math.pi / 1.1));

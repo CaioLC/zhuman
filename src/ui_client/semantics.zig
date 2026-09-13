@@ -48,6 +48,8 @@ pub const Role = enum {
     checkbox,
     /// A single-line editable field (search/text input).
     text_input,
+    /// An adjustable one-dimensional numeric range.
+    slider,
     /// A determinate value indicator (an action's progress/countdown bar).
     progress_bar,
     /// A composite actionable card (an action tile / build row) that owns sub-actions.
@@ -496,6 +498,16 @@ pub fn describeProgressBar(key: u64, name: []const u8, value: []const u8) Semant
     return node;
 }
 
+/// An adjustable range slider. `name` is its purpose and `value` is the caller-formatted
+/// authoritative readout (raw numeric for a generic slider, domain wording when available).
+pub fn describeSlider(key: u64, name: []const u8, value: []const u8, enabled: bool, focused: bool) SemanticNode {
+    var node = SemanticNode{ .key = key, .role = .slider };
+    _ = node.setLabel(name);
+    _ = node.setValue(value);
+    node.state = .{ .disabled = !enabled, .focused = focused };
+    return node;
+}
+
 /// A composite actionable card — an action tile or a build row. `controls` links it to the
 /// stable keys of its own sub-actions (build / cancel / goal), which the bridge exposes as
 /// children rather than flattening.
@@ -682,6 +694,14 @@ test "progress bar carries a name and a formatted value readout" {
     try testing.expectEqualStrings("Building shelter", p.labelText());
     try testing.expectEqualStrings("62%", p.valueText().?);
     try testing.expectEqual(Role.progress_bar, p.role);
+}
+
+test "slider carries its purpose, domain value text, and control state" {
+    const s = describeSlider(7, "Eating policy", "normal, 1.00 times normal", false, true);
+    try testing.expectEqual(Role.slider, s.role);
+    try testing.expectEqualStrings("Eating policy", s.labelText());
+    try testing.expectEqualStrings("normal, 1.00 times normal", s.valueText().?);
+    try testing.expect(s.state.disabled and s.state.focused);
 }
 
 test "announcement channel dedups consecutive, generations monotonic" {

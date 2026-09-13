@@ -373,11 +373,10 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     ctx.res.commands.registerEscape(root.key);
 
     const box = try Node.pcreate(ctx.arena, "box", root);
-    _ = box.with_layout(.center, .{ .dir = .column })
+    _ = box.with_layout(.center, .{ .dir = .column, .cross = .start })
         .with_size(ui.features.Size.init(.fit_children, .fit_children));
-    box.layout.gap = 10;
-    box.size.padding = ui.features.Padding.init(16); // padding is a style property now, not a Size.init arg
-    box.render_data.fill = ctx.res.view.theme.panel;
+    box.layout.gap = 0;
+    box.render_data.fill = ctx.res.view.theme.bg;
     box.render_data.outline = .{ .color = ctx.res.view.theme.line2 };
     _ = box.query(ctx); // keep the slot alive so `box.rect` resolves next frame
 
@@ -387,12 +386,8 @@ pub fn modal(ctx: *UiCtx, key: []const u8, title: []const u8) !Modal {
     // the scrim covers. The modal is always listed last, so its content is exactly this suffix.
     ctx.beginFocusScope();
 
-    _ = try label(ctx, box, "title", title);
-
-    // INPUT-08: the dialog shell. `expanded` is genuinely owned here — a modal is either
-    // built (open) or absent — and the scrim/dialog is a polite live region so opening it
-    // can be announced. Title is the authoritative name. Published in paint order after
-    // its title label so the bridge sees the container after its name node.
+    // The caller authors its visible header. The shell owns only modal mechanics and publishes
+    // the supplied title as the dialog's accessible name.
     ctx.res.semantics.publish(semantics.describeDialog(root.key, title, ctx.isFocused(root.key)));
 
     return .{ .root = root, .box = box };

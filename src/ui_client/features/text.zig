@@ -634,7 +634,11 @@ fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb
         const reported_prior = renderer.getClipRect() catch return;
         const prior = effectiveClip(prior_enabled, reported_prior);
         defer renderer.setClipRect(prior) catch {};
-        const cell_clip = paint.irect(cell) orelse return;
+        // Horizontal glyph textures snap their final origin to device pixels below. Derive the
+        // clip cell from that same origin so clipping and the shifted pixels cannot disagree by
+        // one pixel at a fractional layout coordinate. Rotated text retains its exact center.
+        const aligned_cell = if (st.orientation == .horizontal) snapHorizontalOrigin(cell) else cell;
+        const cell_clip = paint.irect(aligned_cell) orelse return;
         const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
         renderer.setClipRect(narrowed) catch return;
         blitCached(u, st.tex.?, c, box, st.orientation);
@@ -648,14 +652,29 @@ const BlitPlacement = struct {
     clockwise_degrees: ?f64,
 };
 
+/// Snap a horizontal text destination's origin to the nearest whole device pixel without
+/// changing its extent. Cached glyph textures are already rasterized at an integer device
+/// size; fractional destination origins make SDL resample those pixels and visibly soften
+/// otherwise-identical text. Width/height remain untouched so the texture is still blitted 1:1.
+fn snapHorizontalOrigin(rect: ui.Rect) ui.Rect {
+    return .{
+        .x = paint.snap(rect.x),
+        .y = paint.snap(rect.y),
+        .w = rect.w,
+        .h = rect.h,
+    };
+}
+
 /// Place an upright cached texture inside its already-oriented content box. Horizontal text
-/// starts at the box origin. For 90° CCW, center the unrotated `w×h` destination on the
-/// swapped `h×w` box; rotating that destination 270° clockwise around its own center lands
-/// the final pixels exactly on the oriented box. Pure geometry keeps this testable without SDL.
+/// starts at the box origin snapped to whole device pixels, preventing centered/baseline/grow
+/// layout from resampling the glyph texture. For 90° CCW, center the unrotated `w×h`
+/// destination on the swapped `h×w` box; rotating that destination 270° clockwise around its
+/// own center lands the final pixels exactly on the oriented box. The rotated path deliberately
+/// remains unsnapped because its half-pixel center can be required for that exact identity.
 fn blitPlacement(orientation: State.Orientation, box: ui.Rect, texture_w: f32, texture_h: f32) BlitPlacement {
     return switch (orientation) {
         .horizontal => .{
-            .dst = .{ .x = box.x, .y = box.y, .w = texture_w, .h = texture_h },
+            .dst = snapHorizontalOrigin(.{ .x = box.x, .y = box.y, .w = texture_w, .h = texture_h }),
             .clockwise_degrees = null,
         },
         .counter_clockwise_90 => .{
@@ -935,9 +954,22 @@ test "text feature: rotated blit is centered on the swapped content box" {
     try std.testing.expectEqual(box.y + box.h, cy + p.dst.w / 2);
 }
 
-test "text feature: horizontal blit remains the existing origin-sized path" {
+test "text feature: horizontal blit preserves an integer origin and texture extent" {
     const box: ui.Rect = .{ .x = 7, .y = 9, .w = 80, .h = 20 };
     const p = blitPlacement(.horizontal, box, 42, 14);
     try std.testing.expectEqual(@as(?f64, null), p.clockwise_degrees);
     try std.testing.expectEqual(ui.Rect{ .x = 7, .y = 9, .w = 42, .h = 14 }, p.dst);
+}
+
+test "text feature: horizontal blit snaps only its fractional device-pixel origin" {
+    const box: ui.Rect = .{ .x = 7.6, .y = 9.4, .w = 80.5, .h = 20.25 };
+    const p = blitPlacement(.horizontal, box, 42, 14);
+    try std.testing.expectEqual(@as(?f64, null), p.clockwise_degrees);
+    try std.testing.expectEqual(ui.Rect{ .x = 8, .y = 9, .w = 42, .h = 14 }, p.dst);
+
+    // The same helper aligns a clipped cell's origin but never rounds its allocated extent.
+    try std.testing.expectEqual(
+        ui.Rect{ .x = 8, .y = 9, .w = 80.5, .h = 20.25 },
+        snapHorizontalOrigin(box),
+    );
 }

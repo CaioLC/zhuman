@@ -8,6 +8,8 @@ pub const Command = enum {
     move_right,
     move_up,
     move_down,
+    page_up,
+    page_down,
     activate,
     dismiss,
     focus_search,
@@ -42,6 +44,8 @@ pub fn fromKeyEvent(event: input.KeyEvent) ?Command {
         .right => if (event.modifiers.shift) .select_right else .move_right,
         .up => .move_up,
         .down => .move_down,
+        .page_up => .page_up,
+        .page_down => .page_down,
         .return_key, .return_key2, .kp_enter, .space => if (one_shot) .activate else null,
         .escape => if (one_shot) .dismiss else null,
         .slash => if (one_shot and !event.modifiers.control and !event.modifiers.alt and !event.modifiers.gui) .focus_search else null,
@@ -70,11 +74,16 @@ fn accel(mods: input.Modifiers) bool {
 /// routing allocator-free; overflow is explicit and preserves already registered owners.
 pub const Registry = struct {
     pub const max_text_owners = 32;
+    pub const max_range_owners = 16;
 
     current_text: [max_text_owners]u64 = undefined,
     current_text_len: usize = 0,
     building_text: [max_text_owners]u64 = undefined,
     building_text_len: usize = 0,
+    current_range: [max_range_owners]u64 = undefined,
+    current_range_len: usize = 0,
+    building_range: [max_range_owners]u64 = undefined,
+    building_range_len: usize = 0,
     current_search: ?u64 = null,
     building_search: ?u64 = null,
     current_escape: ?u64 = null,
@@ -83,6 +92,7 @@ pub const Registry = struct {
 
     pub fn beginBuild(self: *Registry) void {
         self.building_text_len = 0;
+        self.building_range_len = 0;
         self.building_search = null;
         self.building_escape = null;
         self.overflow = false;
@@ -104,6 +114,18 @@ pub const Registry = struct {
         if (search_shortcut) self.building_search = key;
     }
 
+    pub fn registerRange(self: *Registry, key: u64) void {
+        for (self.building_range[0..self.building_range_len]) |existing| {
+            if (existing == key) return;
+        }
+        if (self.building_range_len == self.building_range.len) {
+            self.overflow = true;
+            return;
+        }
+        self.building_range[self.building_range_len] = key;
+        self.building_range_len += 1;
+    }
+
     /// Later overlays/views win, matching independent-root paint order.
     pub fn registerEscape(self: *Registry, key: u64) void {
         self.building_escape = key;
@@ -114,15 +136,25 @@ pub const Registry = struct {
         self.current_text = self.building_text;
         self.building_text = old;
         self.current_text_len = self.building_text_len;
+        const old_range = self.current_range;
+        self.current_range = self.building_range;
+        self.building_range = old_range;
+        self.current_range_len = self.building_range_len;
         self.current_search = self.building_search;
         self.current_escape = self.building_escape;
         self.building_text_len = 0;
+        self.building_range_len = 0;
         self.building_search = null;
         self.building_escape = null;
     }
 
     pub fn isTextOwner(self: *const Registry, key: u64) bool {
         for (self.current_text[0..self.current_text_len]) |owner| if (owner == key) return true;
+        return false;
+    }
+
+    pub fn isRangeOwner(self: *const Registry, key: u64) bool {
+        for (self.current_range[0..self.current_range_len]) |owner| if (owner == key) return true;
         return false;
     }
 
@@ -144,6 +176,8 @@ test "key events map to complete command vocabulary with repeat policy" {
     try std.testing.expectEqual(Command.move_right, fromKeyEvent(.{ .key = .right, .action = press, .modifiers = .{} }).?);
     try std.testing.expectEqual(Command.move_up, fromKeyEvent(.{ .key = .up, .action = press, .modifiers = .{} }).?);
     try std.testing.expectEqual(Command.move_down, fromKeyEvent(.{ .key = .down, .action = press, .modifiers = .{} }).?);
+    try std.testing.expectEqual(Command.page_up, fromKeyEvent(.{ .key = .page_up, .action = repeat, .modifiers = .{} }).?);
+    try std.testing.expectEqual(Command.page_down, fromKeyEvent(.{ .key = .page_down, .action = press, .modifiers = .{} }).?);
     try std.testing.expectEqual(Command.activate, fromKeyEvent(.{ .key = .return_key, .action = press, .modifiers = .{} }).?);
     try std.testing.expectEqual(Command.activate, fromKeyEvent(.{ .key = .space, .action = press, .modifiers = .{} }).?);
     try std.testing.expectEqual(Command.dismiss, fromKeyEvent(.{ .key = .escape, .action = press, .modifiers = .{} }).?);
@@ -189,12 +223,14 @@ test "shift and accelerator chords map to INPUT-07 selection, clipboard, and sel
     try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .c, .action = press, .modifiers = .{ .control = true, .alt = true } }));
 }
 
-test "registry publishes prior-build text search and topmost escape owners" {
+test "registry publishes prior-build text, range, search, and topmost escape owners" {
     var registry: Registry = .{};
     registry.beginBuild();
     registry.registerText(10, false);
     registry.registerText(20, true);
     registry.registerText(20, true);
+    registry.registerRange(50);
+    registry.registerRange(50);
     registry.registerEscape(30);
     registry.registerEscape(40);
     registry.endBuild();
@@ -202,6 +238,8 @@ test "registry publishes prior-build text search and topmost escape owners" {
     try std.testing.expect(registry.isTextOwner(10));
     try std.testing.expect(registry.isTextOwner(20));
     try std.testing.expect(!registry.isTextOwner(99));
+    try std.testing.expect(registry.isRangeOwner(50));
+    try std.testing.expect(!registry.isRangeOwner(99));
     try std.testing.expectEqual(@as(?u64, 20), registry.searchTarget());
     try std.testing.expectEqual(@as(?u64, 40), registry.escapeTarget());
 
@@ -210,4 +248,5 @@ test "registry publishes prior-build text search and topmost escape owners" {
     try std.testing.expectEqual(@as(?u64, null), registry.searchTarget());
     try std.testing.expectEqual(@as(?u64, null), registry.escapeTarget());
     try std.testing.expect(!registry.isTextOwner(10));
+    try std.testing.expect(!registry.isRangeOwner(50));
 }

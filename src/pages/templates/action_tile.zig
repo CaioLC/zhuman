@@ -33,9 +33,8 @@ pub const Tile = struct { el: El, clicked: bool };
 /// The bare tile — box, name, optional **state line**, `price · risk icon · payoff` row —
 /// from pre-formatted strings (KIT-17). Reports the (affordability-gated) click; the caller
 /// acts on it. A non-null `progress` marks the tile as *running*: fg chrome, inert, and a
-/// bottom underbar filling left-to-right (0..1) — a discrete task completing once, vs the
-/// ration dial's repeating full-chip pulse. `state` is an optional short status word ("short",
-/// "working") rendered **only when nonempty**; `cost_txt` is the normalized price segment
+/// bottom underbar filling left-to-right (0..1) — a discrete task completing once. `state` is
+/// an optional short status word ("short", "working") rendered **only when nonempty**; `cost_txt` is the normalized price segment
 /// (`−{energy}e {optional input costs}`) and `duration_txt` the trailing duration, joined by a
 /// middot. `kind` selects the curve glyph and its shared accessible label.
 pub fn tile(
@@ -185,9 +184,11 @@ pub fn action_tile(
     var dbuf: [12]u8 = undefined;
     const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{act.requires.hours}) catch "?";
 
-    // Optional state line (KIT-17), rendered only when nonempty: "working" while this action
-    // runs, "short" when it is unaffordable (not enough vigor), else empty (ready).
-    const state_txt: []const u8 = if (running) "working" else if (!can) "short" else "";
+    // The prototype action tile always keeps the same two-line anatomy: name, then metrics.
+    // Running state is already communicated by the ActivityStrip and the tile's progress
+    // underbar; affordability is communicated by disabled chrome. Do not insert a transient
+    // status row here, because it changes the tile height when an action starts.
+    const state_txt: []const u8 = "";
 
     // Band scaled by the same two-level factor `begin_labor` locks in (weak = ×0.7 below
     // the WEARY threshold) — the promise is exactly what a click right now would pay.

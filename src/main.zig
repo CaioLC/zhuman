@@ -142,6 +142,15 @@ fn focusedEditor(app: *App) ?*ui_client.UiState.TextInputState {
     return app.ui.pool(ui_client.UiState.TextInputState).get(idx);
 }
 
+/// Mark one transient range command on the focused slider. The command registry is built from
+/// the prior UI frame, matching focus/text routing: a key is eligible only while its slider is
+/// still live and registered, so arrows cannot accidentally mutate an arbitrary focused node.
+fn markFocusedRange(app: *App, comptime flag: std.meta.FieldEnum(ui_client.UiCtx.Interaction)) bool {
+    const key = app.ui.focusedKey() orelse return false;
+    if (!app.resources.commands.isRangeOwner(key)) return false;
+    return app.ui.markKey(key, flag);
+}
+
 /// Copy the current selection to the SDL clipboard when both a selection and clipboard
 /// support exist. Returns whether the platform accepted the text. The editor slice is
 /// only valid until the next mutation, so it is NUL-terminated into a stack buffer first.
@@ -160,20 +169,36 @@ fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
     switch (command) {
         .focus_next => return .{ .handled = app.ui.moveFocus(.next, true) },
         .focus_previous => return .{ .handled = app.ui.moveFocus(.previous, true) },
-        .move_left, .move_up => {
+        .move_left => {
             const moved = app.ui.moveFocusedRoving(.previous, true);
             if (moved) {
                 if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
             }
-            return .{ .handled = moved };
+            return .{ .handled = moved or markFocusedRange(app, .decrement) };
         },
-        .move_right, .move_down => {
+        .move_right => {
             const moved = app.ui.moveFocusedRoving(.next, true);
             if (moved) {
                 if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
             }
-            return .{ .handled = moved };
+            return .{ .handled = moved or markFocusedRange(app, .increment) };
         },
+        .move_up => {
+            const moved = app.ui.moveFocusedRoving(.previous, true);
+            if (moved) {
+                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
+            }
+            return .{ .handled = moved or markFocusedRange(app, .increment) };
+        },
+        .move_down => {
+            const moved = app.ui.moveFocusedRoving(.next, true);
+            if (moved) {
+                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
+            }
+            return .{ .handled = moved or markFocusedRange(app, .decrement) };
+        },
+        .page_up => return .{ .handled = markFocusedRange(app, .page_increment) },
+        .page_down => return .{ .handled = markFocusedRange(app, .page_decrement) },
         .activate => {
             const key = app.ui.focusedKey() orelse return .{};
             return .{ .handled = app.ui.markKey(key, .clicked) };
@@ -205,14 +230,18 @@ fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
             return .{ .handled = true };
         },
         .line_start => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.home(false);
-            return .{ .handled = true };
+            if (focusedEditor(app)) |ed| {
+                ed.home(false);
+                return .{ .handled = true };
+            }
+            return .{ .handled = markFocusedRange(app, .minimum) };
         },
         .line_end => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.end(false);
-            return .{ .handled = true };
+            if (focusedEditor(app)) |ed| {
+                ed.end(false);
+                return .{ .handled = true };
+            }
+            return .{ .handled = markFocusedRange(app, .maximum) };
         },
         .select_left => {
             const ed = focusedEditor(app) orelse return .{};

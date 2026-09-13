@@ -22,6 +22,13 @@ pub fn rate(value: f32) f32 {
     return 0.5 * std.math.pow(f32, 4.0, v / 100.0);
 }
 
+/// Map a persisted metabolism multiplier back onto the prototype's `0..100` slider domain.
+/// This is the exact inverse of `rate`: `100 × log₄(rate / 0.5)`, clamped to `0.5×..2.0×`.
+pub fn valueFromRate(r: f32) f32 {
+    const clamped = std.math.clamp(r, 0.5, 2.0);
+    return 100.0 * @log(clamped / 0.5) / @log(4.0);
+}
+
 /// The policy word for a slider value — the label the control shows and speaks.
 pub fn word(value: f32) []const u8 {
     if (value <= 12) return "meager";
@@ -76,6 +83,15 @@ test "word thresholds partition the 0..100 range exactly" {
     try std.testing.expectEqualStrings("generous", word(88));
     try std.testing.expectEqualStrings("lavish", word(89));
     try std.testing.expectEqualStrings("lavish", word(100));
+}
+
+test "valueFromRate is the clamped inverse of rate" {
+    try std.testing.expectApproxEqAbs(@as(f32, 0), valueFromRate(0.5), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 50), valueFromRate(1.0), 1e-3);
+    try std.testing.expectApproxEqAbs(@as(f32, 100), valueFromRate(2.0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), valueFromRate(0.1), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 100), valueFromRate(5.0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 72), valueFromRate(rate(72)), 1e-3);
 }
 
 test "coverage and recovery divide the base by rate; recovery floors at 0.1" {
