@@ -19,8 +19,9 @@
 //!     a stray `.clicked` is consumed).
 //!   - **focus restoration** — closing returns focus to the control (the opener), so keyboard
 //!     flow continues from the select, not from the vanished popup.
-//!   - **top-layer clipping** — the popup is an absolutely-placed overlay with `.clip` hung
-//!     under the control, so its own contents are clipped to it.
+//!   - **clipping** — the popup is an absolutely-placed overlay with `.clip` hung under the
+//!     control, so its own contents are clipped to it. It is not a top layer: nodes later in
+//!     the tree paint over it and take its hits (roadmap UIE-11).
 //!   - **compact height** — the control stands at `tokens.control.h_compact` (30 logical px).
 
 const std = @import("std");
