@@ -27,37 +27,52 @@ const Color = uic.Color;
 
 const gt = @import("./good_text.zig");
 
-/// Column widths fit the canonical 594px expanded Act-I content lane: 542px of cells,
-/// five 8px gaps, and 12px of horizontal row padding.
-const w_name = 118;
-const w_cost = 74;
-const w_days = 42;
-const w_says = 178;
-const w_state = 76;
-const w_action = 54;
+/// The table's lanes, in order. The header and every row iterate this one array, so their
+/// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
+/// width class at which the lane is dropped — the lower-priority lanes go first as the
+/// terminal narrows (KIT-18, the VIEW-04 pattern). The widths fit the canonical 594px
+/// expanded Act-I content lane: 542px of cells, five 8px gaps, and 12px of row padding.
+const Column = struct {
+    id: []const u8,
+    label: []const u8,
+    w: f32,
+    hidden_at: ?uic.view.WidthClass = null,
+
+    fn visible(self: Column, ctx: *UiCtx) bool {
+        const at = self.hidden_at orelse return true;
+        return !ctx.res.view.metrics.width_class.atMost(at);
+    }
+};
+
+const Lane = enum(usize) { recipe, cost, time, effect, state, corner };
+
+const columns = [_]Column{
+    .{ .id = "recipe", .label = "RECIPE", .w = 118 },
+    .{ .id = "cost", .label = "COST", .w = 74 },
+    .{ .id = "time", .label = "TIME", .w = 42, .hidden_at = .w560 },
+    .{ .id = "effect", .label = "WHAT CHANGES", .w = 178, .hidden_at = .w440 },
+    .{ .id = "state", .label = "STATE", .w = 76 },
+    .{ .id = "corner", .label = "", .w = 54 },
+};
+
+fn col(lane: Lane) Column {
+    return columns[@intFromEnum(lane)];
+}
+
 const row_gap: f32 = 8;
 const row_pad_x: f32 = 6;
 
-fn visibleColumns(ctx: *UiCtx) struct { days: bool, effect: bool } {
-    return .{
-        .days = !ctx.res.view.metrics.width_class.atMost(.w560),
-        .effect = !ctx.res.view.metrics.width_class.atMost(.w440),
-    };
-}
-
+/// The visible lanes plus the gaps between them, logical px.
 fn contentWidth(ctx: *UiCtx) f32 {
-    const visible = visibleColumns(ctx);
-    var width: f32 = w_name + w_cost + w_state + w_action;
-    var gaps: f32 = 3;
-    if (visible.days) {
-        width += w_days;
-        gaps += 1;
+    var width: f32 = 0;
+    var shown: f32 = 0;
+    for (columns) |c| {
+        if (c.visible(ctx)) {
+            width += c.w;
+            shown += 1;
+        }
     }
-    if (visible.effect) {
-        width += w_says;
-        gaps += 1;
-    }
-    return width + gaps * row_gap;
+    return width + (shown - 1) * row_gap;
 }
 
 pub fn tableWidth(ctx: *UiCtx) f32 {
@@ -76,17 +91,13 @@ fn header_cell(parent: El, id: []const u8, width: f32, label: []const u8) !void 
 /// Column labels aligned to the exact same responsive lanes as every capital row.
 pub fn capital_header(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
-    const visible = visibleColumns(ctx);
     const header = try parent.div(id);
     _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
         .with_style(.{style.pad_sym(row_pad_x, 4)});
-    try header_cell(header, "recipe", w_name, "RECIPE");
-    try header_cell(header, "cost", w_cost, "COST");
-    if (visible.days) try header_cell(header, "time", w_days, "TIME");
-    if (visible.effect) try header_cell(header, "effect", w_says, "WHAT CHANGES");
-    try header_cell(header, "state", w_state, "STATE");
-    try header_cell(header, "corner", w_action, "");
+    for (columns) |c| {
+        if (c.visible(ctx)) try header_cell(header, c.id, c.w, c.label);
+    }
     return header;
 }
 
@@ -152,48 +163,32 @@ pub fn capital_row(
     };
     const faint: Color = if (kind == .ready or kind == .building) th.dim else th.line2;
 
-    // KIT-18: hide the lower-priority columns (days, effect) at narrow width classes, so the
-    // row keeps its name/cost/state lanes when the terminal is tight (VIEW-04 pattern).
-    const compact = ctx.res.view.metrics.width_class.atMost(.w560);
-    const show_days = !compact;
-    const show_effect = !ctx.res.view.metrics.width_class.atMost(.w440);
-    // The row's fixed width sums only the columns actually shown, so the lanes stay synced.
-    var row_w: f32 = w_name + w_cost + w_state + w_action;
-    var gaps: f32 = 3;
-    if (show_days) {
-        row_w += w_days;
-        gaps += 1;
-    }
-    if (show_effect) {
-        row_w += w_says;
-        gaps += 1;
-    }
-
-    _ = row.with_size(.{ .fixed = row_w + gaps * 8 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
+    // The row's lanes are the header's: the same columns, widths and visibility.
+    _ = row.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
+        .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's KIT-18 type sub-label).
     const type_word = if (capital.is_crude(GoodT)) "crude" else "made";
-    try name_cell(row, "nm", w_name, gt.display_name(GoodT), type_word, lit);
+    try name_cell(row, "nm", col(.recipe).w, gt.display_name(GoodT), type_word, lit);
 
     var cbuf: [24]u8 = undefined;
     const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e", .{ cost.materials, cost.energy }) catch "?";
-    try cell(row, "co", w_cost, cost_txt, faint, false);
+    try cell(row, "co", col(.cost).w, cost_txt, faint, false);
 
-    if (show_days) {
+    if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
         const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{cost.hours / 24.0}) catch "?";
-        try cell(row, "dy", w_days, days_txt, faint, false);
+        try cell(row, "dy", col(.time).w, days_txt, faint, false);
     }
 
-    if (show_effect) {
-        try cell(row, "sa", w_says, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
+    if (col(.effect).visible(ctx)) {
+        try cell(row, "sa", col(.effect).w, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
     const state = try row.div("st");
-    _ = state.with_size(.{ .fixed = w_state }, .fit_children);
+    _ = state.with_size(.{ .fixed = col(.state).w }, .fit_children);
     const state_in = try state.div("i");
     _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
@@ -228,7 +223,7 @@ pub fn capital_row(
 
     // --- right-side action column: Build → / Build +1 / cancel -----------------------------
     const action = try row.div("ac");
-    _ = action.with_size(.{ .fixed = w_action }, .fit_children);
+    _ = action.with_size(.{ .fixed = col(.corner).w }, .fit_children);
     const action_in = try action.div("i");
     _ = action_in.with_layout(.center_right);
 
@@ -331,8 +326,9 @@ test "reachSegments quantizes reach into thirds" {
 }
 
 test "wide BUILD table fits the expanded Act I content lane" {
-    const cells = w_name + w_cost + w_days + w_says + w_state + w_action;
-    const content = cells + 5 * row_gap;
+    var cells: f32 = 0;
+    for (columns) |c| cells += c.w;
+    const content = cells + (columns.len - 1) * row_gap;
     try std.testing.expectEqual(@as(f32, 582), content);
     try std.testing.expectEqual(@as(f32, 594), content + 2 * row_pad_x);
 }
