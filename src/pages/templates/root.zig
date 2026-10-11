@@ -78,7 +78,6 @@ pub const Rail = rail_mod.Rail;
 pub const RailOptions = rail_mod.RailOptions;
 pub const view_nav = view_nav_mod.view_nav;
 pub const ViewNav = view_nav_mod.ViewNav;
-pub const retain_view = view_nav_mod.retain;
 pub const select = select_mod.select;
 pub const Select = select_mod.Select;
 pub const slider = slider_mod.slider;

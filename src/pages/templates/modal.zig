@@ -41,13 +41,16 @@ pub fn rule(parent: El, id: []const u8, width: f32) !void {
 /// the fullscreen root: `owned` combines explicit controls such as × and LEAVE with the
 /// outside click and Escape into one caller result. Focus policy lives here too: on the frame
 /// the dialog opens, focus goes to `primary` (the confirmation control; the first control in
-/// the trap when it is disabled or absent), and on the frame it closes, back to the opener.
+/// the trap when it is disabled or absent), and on the frame it closes, back to the opener. The
+/// closing frame also forgets the shell's open edge, so a dialog that reopens next frame is a
+/// fresh open (initial focus, a new opener), not a continuation of this one.
 pub fn dismissed(ctx: *UiCtx, m: Modal, owned: bool, primary: ?u64) bool {
     _ = ctx.consumeFlag(m.box.get().key, .clicked);
     const root_q = (El{ .node = m.root, .ctx = ctx }).query();
     const closing = owned or root_q.clicked or root_q.dismissed;
     if (closing) {
         if (m.opener) |opener| _ = ctx.requestFocus(opener);
+        (El{ .node = m.root, .ctx = ctx }).state(uic.UiState.ModalState).* = .{};
     } else if (m.first_open) {
         const on_primary = if (primary) |key| ctx.requestFocus(key) else false;
         if (!on_primary) _ = ctx.focusFirstInScope();

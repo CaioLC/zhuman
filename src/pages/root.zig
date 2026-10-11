@@ -18,7 +18,6 @@ const p_act_one = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
-const mock_page = @import("./mock.zig").mock_page;
 
 /// Returns a flattened list of *Nodes for the render stage
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {

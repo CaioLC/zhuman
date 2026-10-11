@@ -686,10 +686,12 @@ rail, likewise), `slider` (the lane rect, capture, press-time focus, the drag cu
 `terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
 sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
 cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
-consumption), the foundation's `modal`, `tooltip` and `text_input`, and the pages that place
-overlay roots. `tools/boundary_check.sh` lists every such site and fails on one anywhere else,
-and fails outright on lifecycle wiring, a formatted loop id or key arithmetic in any page or
-template.
+consumption), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
+tooltip fixture (placed and clamped by its prior-frame size, as a production tooltip is).
+`tools/boundary_check.sh` greps the known spellings of these reads — its `inventory` pattern —
+and fails when one appears in a file outside that list; it also fails outright on lifecycle
+wiring, a formatted loop id or key arithmetic in any page or template. It checks spellings,
+not types, so a new way to read geometry is added to its pattern rather than assumed caught.
 
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that

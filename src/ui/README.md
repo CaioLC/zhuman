@@ -315,7 +315,11 @@ input-agnostic.
 key, enabled)` registers directional members while exposing only the group's active
 member as a global Tab stop. The generic engine knows no keyboard vocabulary: the host
 maps commands onto `moveFocus`, `moveRovingFocus`, `requestFocus`, and `clearFocus`, then
-queries `focusedKey` / `isFocused` to route text and paint state.
+queries `focusedKey` / `isFocused` to route text and paint state. `beginFocusScope` opens a
+focus trap at the current build position: the targets registered after it are the only ones
+`moveFocus` visits next frame (a modal, built last, traps Tab to its own controls), and
+`focusFirstInScope` focuses the first enabled target inside the trap — a dialog's initial
+focus when its caller names no primary control.
 
 The registry is double-buffered to match the frame pipeline. The event stage traverses
 the last completed frame, `beginFrame` clears the build buffer, and `endFrame` repairs

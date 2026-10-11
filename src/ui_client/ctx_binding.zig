@@ -230,7 +230,8 @@ pub const UiState = struct {
     /// template overwriting this each frame, which leaves the other keys' values untouched.
     pub const RailState = struct { collapsed: bool = false };
     /// A modal shell's open-edge memory, pooled on its root: `seen` marks frames after the first,
-    /// `opener` the key focused when it opened (restored on close). Pruned with the dialog.
+    /// `opener` the key focused when it opened (restored on close). Pruned with the dialog, and
+    /// reset by the closing frame so an immediate reopen is a fresh open.
     pub const ModalState = struct { seen: bool = false, opener: ?u64 = null };
     /// A disclosure control's expanded/collapsed memory (KIT-11), keyed by the control's own
     /// `node.key`. `false` (collapsed — details hidden, summary showing) is the semantic and

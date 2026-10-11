@@ -81,12 +81,16 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     _ = root.with_layout(.top_left).with_flow(.{ .dir = .row })
         .with_style(.{Style{ .fill = th.bg }});
 
-    // Selection lives on a stable node's TabsState (`active` = the entry index).
-    const sel = root.state(uic.UiState.TabsState);
-    if (sel.active >= entries.len) sel.active = 0;
-    // Unlike ordinary in-stage templates, the modal needs a persistent lifecycle so dismissing
-    // it reveals the audit index instead of rebuilding an always-open local state next frame.
-    const audit_trade = root.state(uic.UiState.TradeState);
+    // Selection lives on a stable node's TabsState (`active` = the entry index); the modal's
+    // open/closed lifecycle on a TradeState, so dismissing it reveals the audit index instead of
+    // rebuilding an always-open local state next frame. A pool pointer is valid only until a
+    // same-type acquire, and the template under audit may acquire either type (a tabs strip's
+    // TabsState), so neither pointer is held across `render_one`: read before, re-acquired after.
+    const active = blk: {
+        const sel = root.state(uic.UiState.TabsState);
+        if (sel.active >= entries.len) sel.active = 0;
+        break :blk sel.active;
+    };
 
     // --- the inspection stage: top-left, small, the selected template only ------------------
     // The whole page root is already `top_left`, so the padded wrap sits at the top-left; the
@@ -98,8 +102,9 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     const stage = try stage_wrap.div("stage");
     _ = stage.with_flow(.{ .dir = .column }).with_gap(6);
 
-    var overlay: ?*Node = null;
-    overlay = try render_one(stage, world, entries[sel.active], audit_trade);
+    const overlay = try render_one(stage, world, entries[active], root.state(uic.UiState.TradeState));
+    const sel = root.state(uic.UiState.TabsState);
+    const audit_trade = root.state(uic.UiState.TradeState);
 
     // --- the clickable index: a thin column anchored on the RIGHT --------------------------
     const index = try root.div("index");
@@ -434,11 +439,14 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "tooltip")) {
         // An overlay root: the tooltip is its own tree, returned as the frame's second root so
         // it floats above the stage and the index. Placed just under its anchor label, in device
-        // px; a production caller also runs `clampToTerminal` on the prior-frame size.
+        // px, and kept inside the terminal by its prior-frame size, as a production caller does
+        // (null until it has been laid out once, when a zero size pins nothing).
         _ = try stage.text("anchor", "a control the tooltip describes");
         const tip = try uic.tooltip(ctx, "tip", "Vigor \u{00b7} 7 / 10");
         const s = ctx.res.view.scale;
-        _ = tip.with_offset_px(uic.view.dp(40, s), uic.view.dp(44, s));
+        const prior = tip.prior_geometry();
+        const at = uic.clampToTerminal(ctx, uic.view.dp(40, s), uic.view.dp(44, s), if (prior) |g| g.rect.w else 0, if (prior) |g| g.rect.h else 0);
+        _ = tip.with_offset_px(at.x, at.y);
         return tip.get();
     } else if (eq(name, "tag")) {
         _ = try t.tag(stage, "tg", "crude");
