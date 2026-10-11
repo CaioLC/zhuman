@@ -30,34 +30,35 @@ pub const Disclosure = struct {
 
 /// Build a disclosure into `parent`. `summary` is the always-visible compact label; the
 /// affordance reads `details ↓` when collapsed, `close ↑` when expanded. `enabled` gates the
-/// toggle (KIT-03). Returns the details box to fill when open.
-pub fn disclosure(ctx: *UiCtx, parent: El, id: []const u8, summary: []const u8, enabled: bool) !Disclosure {
+/// toggle (KIT-03). Returns the details box to fill when open. When the caller passes
+/// `expanded`, that bit is the state (read on entry, written on exit); null means the
+/// control owns it.
+pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool, expanded: ?*bool) !Disclosure {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const box = try el.div(ctx, parent, id);
+    const box = try parent.div(id);
     _ = box.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    const st = box.get().state(ctx, DisclosureState);
+    const st = box.state(DisclosureState);
+    if (expanded) |x| st.expanded = x.*;
+    defer if (expanded) |x| {
+        x.* = st.expanded;
+    };
 
     // The summary row is the toggle: the whole row owns the interaction (KIT-03).
-    const row = try el.div(ctx, box, "summary");
-    ctx.registerFocus(row.get().key, enabled);
-    const q = row.query();
-    if (q.clicked and !enabled) _ = ctx.consumeFlag(row.get().key, .clicked); // disabled can't toggle
-    if (q.clicked and enabled) {
-        _ = ctx.requestFocus(row.get().key);
-        st.expanded = !st.expanded;
-    }
-    const focused = ctx.isFocused(row.get().key);
-    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    uic.publishControlState(ctx, row.get().key, .{ .disabled = !enabled, .focused = focused, .focus_visible = focused });
+    const row = try box.div("summary");
+    // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
+    if (enabled and row.query().clicked) st.expanded = !st.expanded;
+    const q = row.control(.{ .enabled = enabled, .name = summary, .role = .button, .expanded = st.expanded });
+    const focused = q.focused;
 
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    _ = (try el.text(ctx, row, "sum", summary))
+    _ = (try row.text("sum", summary))
         .with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
-    const tail = try el.div(ctx, row, "aff");
+    const tail = try row.div("aff");
     _ = tail.with_layout(.center_right)
         .with_flow(.{ .dir = .row }).with_gap(ha.tokens.gap.inline_)
         .with_size(.fit_children, .fit_children);
@@ -67,14 +68,14 @@ pub fn disclosure(ctx: *UiCtx, parent: El, id: []const u8, summary: []const u8, 
     const action = if (st.expanded) "close" else "details";
     const arrow = if (st.expanded) "\u{2191}" else "\u{2193}";
     const affordance_color = if (focused or q.hovering) th.acc else th.dim;
-    _ = (try el.text(ctx, tail, "word", action))
+    _ = (try tail.text("word", action))
         .with_style(.{ style.small, Style{ .text = affordance_color } });
-    _ = (try el.text(ctx, tail, "arrow", arrow))
+    _ = (try tail.text("arrow", arrow))
         .with_style(.{ style.small, Style{ .text = affordance_color } });
 
     // The details subtree exists only while expanded (nothing in it is focusable when closed).
     const details = if (st.expanded and enabled) blk: {
-        const d = try el.div(ctx, box, "details");
+        const d = try box.div("details");
         _ = d.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
             .with_style(.{style.pad_each(4, 0, 0, 0)});

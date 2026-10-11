@@ -15,9 +15,9 @@ const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
 
-pub const PlayTrees = struct { root: *Node, overlay: ?*Node = null };
-
-pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
+/// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
+/// while the dialog is open, so the dialog covers the screen by construction.
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // The reviewed Act-I composition is the normal live page from the first frame. `shell`
     // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
     // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
@@ -84,7 +84,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
             break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
         } else "ready";
 
-        const workspace = try t.act_one_workspace(ctx, body, world, e, "act_one_workspace", .{
+        const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
             .activity = .{
                 .state = act_state,
                 .subject = activity_subject,
@@ -95,7 +95,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
 
         // The nested surface returns its borderless TRADE link; encounter eligibility and modal
         // state remain page responsibilities rather than presentation concerns.
-        trade_ts = workspace.surface.market_action.get().state(ctx, uic.UiState.TradeState);
+        trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
         if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }
@@ -112,7 +112,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
     // KIT-12: assemble the complete HUD header — stocks left, run context right. Energy rate
     // is omitted in Act I, and VIEW-04 drops the optional act label at ≤560.
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
-    _ = try t.header(ctx, header, "hud", .{
+    _ = try t.header(header, "hud", .{
         .stocks = header_stocks[0..header_stock_count],
         .run = .{
             .act_label = "Act I",
@@ -126,10 +126,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
     // logical width minus the page padding.
     if (regions.footer) |footer| {
         const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
-        try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
+        try t.log_view(footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
     }
 
-    return .{ .root = regions.root.get(), .overlay = overlay };
+    var roots: std.ArrayList(*Node) = .empty;
+    try roots.append(ctx.arena, regions.root.get());
+    if (overlay) |dialog| try roots.append(ctx.arena, dialog);
+    return roots.items;
 }
 
 const market = ha.market;
@@ -235,7 +238,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const refusal = q.refusal(enc, food.v, stock.v);
             try buys.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
                 .quote = q,
             });
         }
@@ -255,7 +258,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}m", .{q.next_unit orelse 0});
             try sells.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
                 .quote = q,
             });
         }
@@ -271,7 +274,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const owned = world.get(e, G).?;
             try sells.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
                 .quote = q,
             });
         }
@@ -304,8 +307,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         }
     }
 
-    var root: *Node = undefined;
-    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts, &root);
+    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts);
 
     // Confirm → resolve the backing quote atomically. Header/Holdings/log read live world state,
     // so they refresh this same frame.
@@ -316,5 +318,5 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     // Escape / outside-click closes; also close if the passerby has left.
     if (res.dismissed or !enc.dealable()) ts.open = false;
 
-    return if (ts.open) root else null;
+    return if (ts.open) res.root else null;
 }

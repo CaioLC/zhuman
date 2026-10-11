@@ -4,11 +4,13 @@
 //! `ui.stamp_rects`). Imports only leaf engine modules — no host binding.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 const features = @import("./features/root.zig");
 const geometry = @import("./geometry.zig");
 const key = @import("./cache.zig").key;
+const key_i = @import("./cache.zig").key_i;
 
 const Rect = geometry.Rect;
 const Anchor = features.Anchor;
@@ -41,6 +43,9 @@ pub fn Node(comptime RenderData: type) type {
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
         /// re-derives identically and re-finds the node's slots.
         key: u64,
+        /// A repeated child's loop index, folded into `key` through `key_i` so identity never
+        /// depends on an id formatted per iteration; it survives `rekey`. Null for a named child.
+        index: ?usize = null,
         /// Host-defined render descriptor (policy). Core only carries it; the host's
         /// render walk reads it to decide what/how to draw — which aspects, in which
         /// color. Frame-local (rebuilt each frame). Defaults to all-clear (`.{}`).
@@ -112,6 +117,16 @@ pub fn Node(comptime RenderData: type) type {
             return node;
         }
 
+        /// `pcreate` for the `i`-th repeated child: the index folds into the key (`key_i`), so a
+        /// loop needs no per-iteration id string and the node keeps its index through `rekey`.
+        pub fn pcreate_i(allocator: Allocator, id: []const u8, i: usize, parent: *Self) !*Self {
+            const node = try allocator.create(Self);
+            node.* = Self.init(id);
+            node.index = i;
+            try parent.add_child(allocator, node);
+            return node;
+        }
+
         pub fn with_size(self: *Self, size: features.Size) *Self {
             self.size = size;
             return self;
@@ -131,7 +146,52 @@ pub fn Node(comptime RenderData: type) type {
         pub fn add_child(self: *Self, allocator: Allocator, child: *Self) !void {
             child.parent = self;
             child.rekey(self.key); // re-derive child + its whole subtree off our key
+            // Two siblings with one key would share every pooled slot (text, interaction,
+            // state) and silently alias. In safe modes that is a visible failure with the path.
+            if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+                if (self.duplicateSibling(child)) |twin| {
+                    var buf: [512]u8 = undefined;
+                    std.debug.panic(
+                        "ui: duplicate child id \"{s}\" under {s}: an earlier sibling \"{s}\" has the same key, so pooled state would alias",
+                        .{ child.id, self.pathInto(&buf), twin.id },
+                    );
+                }
+            }
             try self.children.append(allocator, child);
+        }
+
+        /// The earlier sibling whose key `child` would duplicate, or null. Keys are structural
+        /// — the parent's key folded with the id, and the index for an indexed child — so a
+        /// match is the same path, and the same pooled slots.
+        pub fn duplicateSibling(self: *const Self, child: *const Self) ?*Self {
+            for (self.children.items) |sib| if (sib.key == child.key) return sib;
+            return null;
+        }
+
+        /// This node's structural path for diagnostics, `root/panel/row[3]`, written into
+        /// `buf` (cut short when it does not fit; the ancestry walk stops at 64 levels).
+        pub fn pathInto(self: *const Self, buf: []u8) []const u8 {
+            var chain: [64]*const Self = undefined;
+            var depth: usize = 0;
+            var cursor: ?*const Self = self;
+            while (cursor) |c| : (cursor = c.parent) {
+                if (depth == chain.len) break;
+                chain[depth] = c;
+                depth += 1;
+            }
+            var written: usize = 0;
+            var i = depth;
+            while (i > 0) {
+                i -= 1;
+                const c = chain[i];
+                const sep: []const u8 = if (written > 0) "/" else "";
+                const seg = if (c.index) |idx|
+                    std.fmt.bufPrint(buf[written..], "{s}{s}[{d}]", .{ sep, c.id, idx }) catch break
+                else
+                    std.fmt.bufPrint(buf[written..], "{s}{s}", .{ sep, c.id }) catch break;
+                written += seg.len;
+            }
+            return buf[0..written];
         }
 
         pub fn add_children(self: *Self, allocator: Allocator, children: []const *Self) !void {
@@ -143,7 +203,7 @@ pub fn Node(comptime RenderData: type) type {
         /// subtree re-keys all of it, not just the top node. Trees are small and
         /// rebuilt per frame, so the walk is free.
         fn rekey(self: *Self, seed: u64) void {
-            self.key = key(seed, self.id);
+            self.key = if (self.index) |i| key_i(seed, self.id, i) else key(seed, self.id);
             for (self.children.items) |child| child.rekey(self.key);
         }
 
@@ -1067,4 +1127,57 @@ test "offset displaces a placement without replacing it" {
     try std.testing.expectEqual(@as(f32, 80 + 63), tile.layout._global_x.?);
     try std.testing.expectEqual(@as(f32, 80 - 36), tile.layout._global_y.?);
     try std.testing.expectEqual(@as(f32, 5), flowed.layout._global_y.?);
+}
+
+test "an indexed child keeps its key across sibling order and re-keying" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    const seven = try TestNode.pcreate_i(a, "row", 7, root);
+    const two = try TestNode.pcreate_i(a, "row", 2, root);
+    try std.testing.expect(seven.key != two.key);
+
+    // The key comes from (id, index), never from the position among siblings: the same
+    // index under an identically keyed parent, created first instead of second, matches.
+    const again = try TestNode.create(a, "root");
+    const two_first = try TestNode.pcreate_i(a, "row", 2, again);
+    try std.testing.expectEqual(two.key, two_first.key);
+
+    // Re-keying on attach folds the index again, so an assembled subtree keeps its identity.
+    const holder = try TestNode.create(a, "holder");
+    const item = try TestNode.create(a, "row");
+    item.index = 5;
+    try holder.add_child(a, item);
+    try std.testing.expectEqual(key_i(holder.key, "row", 5), item.key);
+    try std.testing.expectEqual(@as(?*TestNode, null), holder.duplicateSibling(seven));
+}
+
+test "a duplicate sibling key is detected and the structural path names it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    const panel = try TestNode.pcreate(a, "panel", root);
+    const first = try TestNode.pcreate(a, "label", panel);
+    const row = try TestNode.pcreate_i(a, "row", 3, panel);
+
+    // A second "label" under the same parent keys identically; the detector finds the first.
+    const twin = try TestNode.create(a, "label");
+    twin.rekey(panel.key);
+    try std.testing.expectEqual(@as(?*TestNode, first), panel.duplicateSibling(twin));
+    // A different id, or the same id under another parent, is no duplicate.
+    const other = try TestNode.create(a, "other");
+    other.rekey(panel.key);
+    try std.testing.expectEqual(@as(?*TestNode, null), panel.duplicateSibling(other));
+    try std.testing.expectEqual(@as(?*TestNode, null), root.duplicateSibling(twin));
+
+    var buf: [128]u8 = undefined;
+    try std.testing.expectEqualStrings("root/panel", panel.pathInto(&buf));
+    try std.testing.expectEqualStrings("root/panel/row[3]", row.pathInto(&buf));
+    // A buffer too small for the path yields the longest prefix of whole segments.
+    var tiny: [6]u8 = undefined;
+    try std.testing.expectEqualStrings("root", row.pathInto(&tiny));
 }

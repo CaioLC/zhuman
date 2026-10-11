@@ -27,64 +27,77 @@ const Color = uic.Color;
 
 const gt = @import("./good_text.zig");
 
-/// Column widths fit the canonical 594px expanded Act-I content lane: 542px of cells,
-/// five 8px gaps, and 12px of horizontal row padding.
-const w_name = 118;
-const w_cost = 74;
-const w_days = 42;
-const w_says = 178;
-const w_state = 76;
-const w_action = 54;
+/// The table's lanes, in order. The header and every row iterate this one array, so their
+/// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
+/// width class at which the lane is dropped — the lower-priority lanes go first as the
+/// terminal narrows (KIT-18, the VIEW-04 pattern). The widths fit the canonical 594px
+/// expanded Act-I content lane: 542px of cells, five 8px gaps, and 12px of row padding.
+const Column = struct {
+    id: []const u8,
+    label: []const u8,
+    w: f32,
+    hidden_at: ?uic.view.WidthClass = null,
+
+    fn visible(self: Column, ctx: *UiCtx) bool {
+        const at = self.hidden_at orelse return true;
+        return !ctx.res.view.metrics.width_class.atMost(at);
+    }
+};
+
+const Lane = enum(usize) { recipe, cost, time, effect, state, corner };
+
+const columns = [_]Column{
+    .{ .id = "recipe", .label = "RECIPE", .w = 118 },
+    .{ .id = "cost", .label = "COST", .w = 74 },
+    .{ .id = "time", .label = "TIME", .w = 42, .hidden_at = .w560 },
+    .{ .id = "effect", .label = "WHAT CHANGES", .w = 178, .hidden_at = .w440 },
+    .{ .id = "state", .label = "STATE", .w = 76 },
+    .{ .id = "corner", .label = "", .w = 54 },
+};
+
+fn col(lane: Lane) Column {
+    return columns[@intFromEnum(lane)];
+}
+
 const row_gap: f32 = 8;
 const row_pad_x: f32 = 6;
 
-fn visibleColumns(ctx: *UiCtx) struct { days: bool, effect: bool } {
-    return .{
-        .days = !ctx.res.view.metrics.width_class.atMost(.w560),
-        .effect = !ctx.res.view.metrics.width_class.atMost(.w440),
-    };
-}
-
+/// The visible lanes plus the gaps between them, logical px.
 fn contentWidth(ctx: *UiCtx) f32 {
-    const visible = visibleColumns(ctx);
-    var width: f32 = w_name + w_cost + w_state + w_action;
-    var gaps: f32 = 3;
-    if (visible.days) {
-        width += w_days;
-        gaps += 1;
+    var width: f32 = 0;
+    var shown: f32 = 0;
+    for (columns) |c| {
+        if (c.visible(ctx)) {
+            width += c.w;
+            shown += 1;
+        }
     }
-    if (visible.effect) {
-        width += w_says;
-        gaps += 1;
-    }
-    return width + gaps * row_gap;
+    return width + (shown - 1) * row_gap;
 }
 
 pub fn tableWidth(ctx: *UiCtx) f32 {
     return contentWidth(ctx) + row_pad_x * 2;
 }
 
-fn header_cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, label: []const u8) !void {
-    const box = try el.div(ctx, parent, id);
+fn header_cell(parent: El, id: []const u8, width: f32, label: []const u8) !void {
+    const ctx = parent.ctx;
+    const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children);
-    _ = (try el.text(ctx, box, "t", label)).with_style(.{
+    _ = (try box.text("t", label)).with_style(.{
         Style{ .font = 9, .tracking = 0.07, .text = ctx.res.view.theme.line2 },
     });
 }
 
 /// Column labels aligned to the exact same responsive lanes as every capital row.
-pub fn capital_header(ctx: *UiCtx, parent: El, id: []const u8) !El {
-    const visible = visibleColumns(ctx);
-    const header = try el.div(ctx, parent, id);
+pub fn capital_header(parent: El, id: []const u8) !El {
+    const ctx = parent.ctx;
+    const header = try parent.div(id);
     _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
         .with_style(.{style.pad_sym(row_pad_x, 4)});
-    try header_cell(ctx, header, "recipe", w_name, "RECIPE");
-    try header_cell(ctx, header, "cost", w_cost, "COST");
-    if (visible.days) try header_cell(ctx, header, "time", w_days, "TIME");
-    if (visible.effect) try header_cell(ctx, header, "effect", w_says, "WHAT CHANGES");
-    try header_cell(ctx, header, "state", w_state, "STATE");
-    try header_cell(ctx, header, "corner", w_action, "");
+    for (columns) |c| {
+        if (c.visible(ctx)) try header_cell(header, c.id, c.w, c.label);
+    }
     return header;
 }
 
@@ -93,14 +106,13 @@ pub const Kind = enum { ready, reach, building, blocked, locked, owned };
 
 pub const Row = struct { kind: Kind, reach: f32, clicked_build: bool, clicked_cancel: bool };
 
-fn cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, color: Color, right: bool) !void {
-    const box = try el.div(ctx, parent, id);
+fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Color, right: bool) !void {
+    const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children);
-    const inner = try el.div(ctx, box, "i");
+    const inner = try box.div("i");
     _ = inner.with_layout(if (right) .center_right else .center_left);
-    _ = (try el.text(ctx, inner, "t", text))
-        .with_style(.{ style.body, Style{ .text = color } })
-        .with_cell(.ellipsis, width);
+    _ = (try inner.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        .with_style(.{ style.body, Style{ .text = color } });
 }
 
 /// A catalog **name** cell (TEXT-03): the label is an ellipsis cell of exactly the column
@@ -108,189 +120,148 @@ fn cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, c
 /// row and knocking every downstream column out of its lane. The box and hit geometry stay
 /// the allocated `width`; only the visible glyphs are bounded. A **secondary type** sub-label
 /// (KIT-18) rides under the name in dim/small — the crude/manufactured tier word.
-fn name_cell(ctx: *UiCtx, parent: El, id: []const u8, width: f32, text: []const u8, secondary: []const u8, color: Color) !void {
+fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary: []const u8, color: Color) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const box = try el.div(ctx, parent, id);
+    const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try el.text(ctx, box, "t", text))
-        .with_style(.{ style.body, Style{ .text = color } })
-        .with_cell(.ellipsis, width);
+    _ = (try box.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        .with_style(.{ style.body, Style{ .text = color } });
     if (secondary.len > 0) {
-        _ = (try el.text(ctx, box, "ty", secondary))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.ellipsis, width);
+        _ = (try box.text_fit("ty", secondary, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
     }
 }
 
 /// One row. `state` decides the colors and what the last two columns say; the caller has
 /// already decided the row belongs on screen at all (see `build_list`).
 pub fn capital_row(
-    ctx: *UiCtx,
     parent: El,
     world: *World,
     e: Entity,
     comptime GoodT: type,
-    id: []const u8,
+    index: usize,
     kind: Kind,
     reach: f32,
 ) !Row {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const cost = (GoodT{}).requires;
 
-    const row = try el.div(ctx, parent, id);
+    // `index` is the recipe's catalog index: the row's identity across re-sorts and filters.
+    const row = try parent.item("r", index);
     const hot = kind == .ready;
     const row_key = row.get().key;
-    ctx.registerFocus(row_key, hot);
-    const q = row.query();
-    if (q.clicked and hot) _ = ctx.requestFocus(row_key);
-    const focused = ctx.isFocused(row_key);
-    uic.publishControlState(ctx, row_key, .{
-        .disabled = !hot,
-        .focused = focused,
-        .focus_visible = focused,
-    });
-    if (q.hovering) ctx.res.cursor.request(if (hot) .pointer else .not_allowed);
+    // The row is a composite tile: the good's display name is its accessible name and `hot`
+    // is the same enabled fact the build click gates on.
+    const q = row.control(.{ .enabled = hot, .name = gt.display_name(GoodT), .role = .tile });
     const lit: Color = switch (kind) {
-        .ready => if (q.held or q.hovering or focused) th.acc else th.fg,
+        .ready => if (q.held or q.hovering or q.focused) th.acc else th.fg,
         .building => th.fg,
         .owned => th.dim,
         .reach, .blocked, .locked => th.dim,
     };
     const faint: Color = if (kind == .ready or kind == .building) th.dim else th.line2;
 
-    // KIT-18: hide the lower-priority columns (days, effect) at narrow width classes, so the
-    // row keeps its name/cost/state lanes when the terminal is tight (VIEW-04 pattern).
-    const compact = ctx.res.view.metrics.width_class.atMost(.w560);
-    const show_days = !compact;
-    const show_effect = !ctx.res.view.metrics.width_class.atMost(.w440);
-    // The row's fixed width sums only the columns actually shown, so the lanes stay synced.
-    var row_w: f32 = w_name + w_cost + w_state + w_action;
-    var gaps: f32 = 3;
-    if (show_days) {
-        row_w += w_days;
-        gaps += 1;
-    }
-    if (show_effect) {
-        row_w += w_says;
-        gaps += 1;
-    }
-
-    _ = row.with_size(.{ .fixed = row_w + gaps * 8 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or focused)) th.panel else null } });
+    // The row's lanes are the header's: the same columns, widths and visibility.
+    _ = row.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
+        .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's KIT-18 type sub-label).
     const type_word = if (capital.is_crude(GoodT)) "crude" else "made";
-    try name_cell(ctx, row, "nm", w_name, gt.display_name(GoodT), type_word, lit);
+    try name_cell(row, "nm", col(.recipe).w, gt.display_name(GoodT), type_word, lit);
 
     var cbuf: [24]u8 = undefined;
     const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e", .{ cost.materials, cost.energy }) catch "?";
-    try cell(ctx, row, "co", w_cost, cost_txt, faint, false);
+    try cell(row, "co", col(.cost).w, cost_txt, faint, false);
 
-    if (show_days) {
+    if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
         const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{cost.hours / 24.0}) catch "?";
-        try cell(ctx, row, "dy", w_days, days_txt, faint, false);
+        try cell(row, "dy", col(.time).w, days_txt, faint, false);
     }
 
-    if (show_effect) {
-        try cell(ctx, row, "sa", w_says, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
+    if (col(.effect).visible(ctx)) {
+        try cell(row, "sa", col(.effect).w, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
-    const state = try el.div(ctx, row, "st");
-    _ = state.with_size(.{ .fixed = w_state }, .fit_children);
-    const state_in = try el.div(ctx, state, "i");
+    const state = try row.div("st");
+    _ = state.with_size(.{ .fixed = col(.state).w }, .fit_children);
+    const state_in = try state.div("i");
     _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
     switch (kind) {
-        .ready => _ = (try el.text(ctx, state_in, "ready", "ready"))
+        .ready => _ = (try state_in.text("ready", "ready"))
             .with_style(.{ style.body, Style{ .text = th.acc } }),
-        .owned => _ = (try el.text(ctx, state_in, "owned", "owned"))
+        .owned => _ = (try state_in.text("owned", "owned"))
             .with_style(.{ style.body, Style{ .text = th.line2 } }),
         .blocked => {
             var nbuf: [32]u8 = undefined;
             const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{gt.prereq_name(GoodT) orelse "a tool"}) catch "needs a tool";
-            _ = (try el.text(ctx, state_in, "blocked", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
+            _ = (try state_in.text("blocked", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
         },
-        .locked => _ = (try el.text(ctx, state_in, "locked", "conditions"))
+        .locked => _ = (try state_in.text("locked", "conditions"))
             .with_style(.{ style.body, Style{ .text = th.danger } }),
         .building => {
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
             const left = busy.remaining / ctx.res.config.secs_per_day;
             const txt = std.fmt.bufPrint(&bbuf, "{d:.1}d left", .{left}) catch "?";
-            try meter(ctx, state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
-            _ = (try el.text(ctx, state_in, "time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
+            try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
+            _ = (try state_in.text("time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
         },
         .reach => {
             const stock = world.get(e, comp.InventoryMaterial).?;
             var rbuf: [24]u8 = undefined;
             const txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}m", .{ stock.v, cost.materials }) catch "?";
-            try reach_meter(ctx, state_in, "meter", reach, th.line2);
-            _ = (try el.text(ctx, state_in, "materials", txt)).with_style(.{ style.body, Style{ .text = faint } });
+            try reach_meter(state_in, "meter", reach, th.line2);
+            _ = (try state_in.text("materials", txt)).with_style(.{ style.body, Style{ .text = faint } });
         },
     }
 
     // --- right-side action column: Build → / Build +1 / cancel -----------------------------
-    const action = try el.div(ctx, row, "ac");
-    _ = action.with_size(.{ .fixed = w_action }, .fit_children);
-    const action_in = try el.div(ctx, action, "i");
+    const action = try row.div("ac");
+    _ = action.with_size(.{ .fixed = col(.corner).w }, .fit_children);
+    const action_in = try action.div("i");
     _ = action_in.with_layout(.center_right);
 
     var build_more = false;
     var cancelled = false;
     var cancel_key: ?u64 = null;
     switch (kind) {
-        .ready => _ = (try el.text(ctx, action_in, "build", "Build \u{2192}"))
+        .ready => _ = (try action_in.text("build", "Build \u{2192}"))
             .with_style(.{ style.body, Style{ .text = lit } }),
         .owned => {
             const stock = world.get(e, comp.InventoryMaterial).?;
             const busy = world.get(e, comp.Busy);
             const affordable = busy == null and stock.v >= cost.materials;
             if (affordable) {
-                const more = try el.div(ctx, action_in, "more");
-                const more_key = more.get().key;
-                ctx.registerFocus(more_key, true);
-                const mq = more.query();
-                if (mq.clicked) _ = ctx.requestFocus(more_key);
-                const mfocused = ctx.isFocused(more_key);
-                uic.publishControlState(ctx, more_key, .{ .focused = mfocused, .focus_visible = mfocused });
-                if (mq.hovering) ctx.res.cursor.request(.pointer);
-                _ = (try el.text(ctx, more, "t", "Build +1"))
-                    .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mfocused) th.acc else th.dim } });
+                const more = try action_in.div("more");
+                const mq = more.control(.{ .name = "Build +1", .role = .button });
+                _ = (try more.text("t", "Build +1"))
+                    .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
                 build_more = more.consume(.clicked);
             }
         },
         .building => {
-            const x = try el.div(ctx, action_in, "cancel");
-            const x_key = x.get().key;
-            ctx.registerFocus(x_key, true);
-            const xq = x.query();
-            if (xq.clicked) _ = ctx.requestFocus(x_key);
-            const x_focused = ctx.isFocused(x_key);
-            uic.publishControlState(ctx, x_key, .{ .focused = x_focused, .focus_visible = x_focused });
-            if (xq.hovering) ctx.res.cursor.request(.pointer);
-            _ = (try el.text(ctx, x, "t", "\u{00d7}"))
-                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or x_focused) th.danger else th.line2 } });
+            const x = try action_in.div("cancel");
+            const xq = x.control(.{ .name = "Cancel build", .role = .icon_button });
+            _ = (try x.text("t", "\u{00d7}"))
+                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or xq.focused) th.danger else th.line2 } });
             cancelled = x.consume(.clicked);
-            cancel_key = x_key;
-            ctx.res.semantics.publish(uic.semantic.describeIconButton(x_key, "Cancel build", true, x_focused));
+            cancel_key = x.get().key;
         },
         .reach, .blocked, .locked => {},
     }
 
-    // INPUT-08: the row is a composite tile. Its accessible name is the good's display
-    // name (authoritative widget fact); `hot` is the same enabled fact the build click
-    // gates on; it controls its cancel sub-action when one exists. Published after its own
-    // descendants so children precede the container in paint order.
-    var subs: [1]u64 = undefined;
-    var subs_len: usize = 0;
+    // INPUT-08: the row controls its cancel sub-action when one exists. The sub-action's key is
+    // known only once it is built, so the row's published node is updated in place with the
+    // relation (same key, first-seen paint order preserved).
     if (cancel_key) |ck| {
-        subs[0] = ck;
-        subs_len = 1;
+        ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, q.focused, &[_]u64{ck}));
     }
-    ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, focused, subs[0..subs_len]));
 
     return .{
         .kind = kind,
@@ -305,12 +276,13 @@ pub fn capital_row(
 
 /// A thin progress bar (a build in progress) — continuous fill. Fixed width so the numbers
 /// beside it stay in a column.
-fn meter(ctx: *UiCtx, parent: El, id: []const u8, frac: f32, color: Color) !void {
+fn meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const track = try el.div(ctx, parent, id);
+    const track = try parent.div(id);
     _ = track.with_size(.{ .fixed = 34 }, .{ .fixed = 3 })
         .with_style(.{Style{ .fill = th.line }});
-    const fill = try el.div(ctx, track, "f");
+    const fill = try track.div("f");
     _ = fill.with_layout(.top_left)
         .with_size(.{ .fixed = 34 * std.math.clamp(frac, 0, 1) }, .{ .fixed = 3 })
         .with_style(.{Style{ .fill = color }});
@@ -320,14 +292,15 @@ fn meter(ctx: *UiCtx, parent: El, id: []const u8, frac: f32, color: Color) !void
 /// crosses 1/3, 2/3, 3/3 — a coarse "how close to affordable" read that quantizes the reach
 /// into thirds rather than a smooth bar, matching the prototype's segmented treatment. A lit
 /// segment takes `color`; an unlit one the inactive `line`.
-fn reach_meter(ctx: *UiCtx, parent: El, id: []const u8, frac: f32, color: Color) !void {
+fn reach_meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const track = try el.div(ctx, parent, id);
+    const track = try parent.div(id);
     _ = track.with_size(.{ .fixed = 34 }, .{ .fixed = 4 }).with_flow(.{ .dir = .row }).with_gap(2);
     const lit_segments = reachSegments(frac);
     var s: usize = 0;
     while (s < 3) : (s += 1) {
-        const seg = try el.div(ctx, track, &[_]u8{ 's', '0' + @as(u8, @intCast(s)) });
+        const seg = try track.item("s", s);
         _ = seg.with_size(.{ .fixed = 10 }, .{ .fixed = 4 })
             .with_style(.{Style{ .fill = if (s < lit_segments) color else th.line }});
     }
@@ -353,8 +326,9 @@ test "reachSegments quantizes reach into thirds" {
 }
 
 test "wide BUILD table fits the expanded Act I content lane" {
-    const cells = w_name + w_cost + w_days + w_says + w_state + w_action;
-    const content = cells + 5 * row_gap;
+    var cells: f32 = 0;
+    for (columns) |c| cells += c.w;
+    const content = cells + (columns.len - 1) * row_gap;
     try std.testing.expectEqual(@as(f32, 582), content);
     try std.testing.expectEqual(@as(f32, 594), content + 2 * row_pad_x);
 }

@@ -33,20 +33,21 @@ fn targetGap(collapsed: bool) f32 {
 }
 
 /// Compose the left HOLDINGS rail and right tabbed content as one responsive workspace.
-pub fn act_one_workspace(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
-    const workspace = try el.div(ctx, parent, id);
+pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
+    const ctx = parent.ctx;
+    const workspace = try parent.div(id);
     _ = workspace.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .row, .cross = .start })
         .with_overflow(.clip);
 
-    const rail_lane = try el.div(ctx, workspace, "rail");
+    const rail_lane = try workspace.div("rail");
     _ = rail_lane.with_size(.fit_children, .{ .pct_of_parent = 1.0 });
-    const built_rail = try rail_mod.rail(ctx, rail_lane, .{
+    const built_rail = try rail_mod.rail(rail_lane, .{
         .id = "holdings_rail",
         .label = "HOLDINGS",
     });
     if (built_rail.body) |body| {
-        _ = try holdings_mod.holdings(ctx, body, world, e, "holdings");
+        _ = try holdings_mod.holdings(body, world, e, "holdings");
     }
 
     // The width and gap move together, matching `.page-grid.is-holdings-collapsed` rather than
@@ -55,10 +56,10 @@ pub fn act_one_workspace(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: 
     ctx.res.tween.retarget(workspace.get().key, gap_target, ha.tokens.dur_rail_s);
     _ = workspace.with_gap(ctx.res.tween.value(workspace.get().key, gap_target));
 
-    const content = try el.div(ctx, workspace, "content");
+    const content = try workspace.div("content");
     _ = content.with_size(.grow, .{ .pct_of_parent = 1.0 })
         .with_overflow(.clip);
-    const surface = try surface_mod.act_one_surface(ctx, content, world, e, "surface", opts);
+    const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts);
 
     return .{ .el = workspace, .rail = built_rail, .surface = surface };
 }

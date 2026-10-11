@@ -22,38 +22,37 @@ const pad_bottom: f32 = 8;
 
 /// Build the Act I policy tile at the full width of its action-grid column. The returned
 /// policy value is live; callers map it to their persisted metabolism rate.
-pub fn eating_policy(ctx: *UiCtx, parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
+pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
     // Keep the percentage width border-box safe: horizontal padding is represented by two
     // in-flow lanes, so the outlined panel remains exactly 100% of its fluid grid column.
-    const panel = try el.div(ctx, parent, id);
+    const panel = try parent.div(id);
     _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_h })
         .with_flow(.{ .dir = .row, .cross = .start })
         .with_style(.{Style{ .outline_color = th.line2, .outline_style = .dashed }});
-    const lead = try el.div(ctx, panel, "lead");
-    _ = lead.with_size(.{ .fixed = pad_x }, .{ .fixed = 1 }).pass_through();
-    const content = try el.div(ctx, panel, "content");
+    _ = try panel.spacer("lead", pad_x, 1);
+    const content = try panel.div("content");
     _ = content.with_size(.grow, .{ .fixed = tile_h - pad_top - pad_bottom })
         .with_flow(.{ .dir = .column }).with_gap(5)
         .with_style(.{style.pad_each(pad_top, 0, pad_bottom, 0)});
-    const tail = try el.div(ctx, panel, "tail");
-    _ = tail.with_size(.{ .fixed = pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try panel.spacer("tail", pad_x, 1);
 
     // Create the three prototype rows in visual order first. Their contents can be attached
     // after the slider resolves this frame's live value without changing sibling order.
-    const head = try el.div(ctx, content, "head");
+    const head = try content.div("head");
     _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
 
-    const range_slot = try el.div(ctx, content, "range");
+    const range_slot = try content.div("range");
     _ = range_slot.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 18 });
 
-    const scale_row = try el.div(ctx, content, "scale");
+    const scale_row = try content.div("scale");
     _ = scale_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
 
-    const range = try slider_mod.slider(ctx, range_slot, .{
+    const range = try slider_mod.slider(range_slot, .{
         .id = "control",
         .label = "Eating policy",
         .value = value,
@@ -66,20 +65,20 @@ pub fn eating_policy(ctx: *UiCtx, parent: El, id: []const u8, value: f32, enable
     const rate = eating.rate(new_value);
     const word = eating.word(new_value);
 
-    _ = (try el.text(ctx, head, "title", "EATING POLICY")).with_style(.{
+    _ = (try head.text("title", "EATING POLICY")).with_style(.{
         Style{ .font = 10, .tracking = 0.06, .text = th.dim },
     });
 
     var output_buf: [48]u8 = undefined;
     const output = std.fmt.bufPrint(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
-    _ = (try el.text(ctx, head, "value", output)).with_style(.{
+    _ = (try head.text("value", output)).with_style(.{
         Style{ .font = 10, .text = if (enabled) th.acc else th.dim },
     });
 
-    _ = (try el.text(ctx, scale_row, "min", "meager")).with_style(.{
+    _ = (try scale_row.text("min", "meager")).with_style(.{
         Style{ .font = 9, .text = th.line2 },
     });
-    _ = (try el.text(ctx, scale_row, "max", "lavish")).with_style(.{
+    _ = (try scale_row.text("max", "lavish")).with_style(.{
         Style{ .font = 9, .text = th.line2 },
     });
 

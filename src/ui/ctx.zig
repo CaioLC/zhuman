@@ -164,6 +164,12 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             self.focus.clear();
         }
 
+        /// Focus the first enabled target registered inside this frame's focus trap — a dialog's
+        /// initial focus when its caller names no primary control. False with no trap or no target.
+        pub fn focusFirstInScope(self: *Self) bool {
+            return self.focus.firstInScope();
+        }
+
         pub fn focusedKey(self: *const Self) ?u64 {
             return self.focus.focusedKey();
         }

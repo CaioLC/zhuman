@@ -51,7 +51,7 @@ pub const UiState = struct {
         /// exactly as before, so dense rows pay nothing for the wrap machinery. A positive
         /// value makes `attach`/`draw` run the pure `features/wrap.zig` routine — the same
         /// routine for both, so the measured box and the rendered lines always agree. Set by
-        /// `El.with_wrap` (imperative placement, before style re-measures); `style.apply`
+        /// `El.text_fit` (a creation parameter of the leaf; style re-measures at it); `style.apply`
         /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
         /// so the pool contract is unchanged (line spans are recomputed, never stored).
         wrap_width: f32 = 0,
@@ -229,24 +229,27 @@ pub const UiState = struct {
     /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
     /// template overwriting this each frame, which leaves the other keys' values untouched.
     pub const RailState = struct { collapsed: bool = false };
+    /// A modal shell's open-edge memory, pooled on its root: `seen` marks frames after the first,
+    /// `opener` the key focused when it opened (restored on close). Pruned with the dialog, and
+    /// reset by the closing frame so an immediate reopen is a fresh open.
+    pub const ModalState = struct { seen: bool = false, opener: ?u64 = null };
     /// A disclosure control's expanded/collapsed memory (KIT-11), keyed by the control's own
     /// `node.key`. `false` (collapsed — details hidden, summary showing) is the semantic and
     /// bitwise-zero default. The whole summary row owns the toggle (the KIT-03 button contract);
     /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
     /// details nodes and nothing in them is focusable.
     pub const DisclosureState = struct { expanded: bool = false };
-    /// A catalog controls bar's persisted state (KIT-15), keyed by the surface's own node so
-    /// ACTIONS and BUILD keep **independent** query/sort/open state. `sort` is the chosen
-    /// sort-kind index, `dir` the direction (`none` disables/resets ordering), `sort_open`
-    /// whether the disclosed sort row is showing, and `last_sig` the hash of the last
-    /// (query, sort, dir) used to detect a change and signal reset-to-top. The query *text*
-    /// itself lives in the search field's own pooled `TextInputState`.
+    /// A catalog controls bar's persisted state (KIT-15): `sort` is the chosen sort-kind index,
+    /// `dir` the direction (`none` disables/resets ordering), `sort_open` whether the disclosed
+    /// sort row is showing. It lives where the caller keeps it — on an always-built owner (BUILD's
+    /// is on the Act I surface) or the bar's own node — and distinct ids keep ACTIONS and BUILD
+    /// **independent**. The query *text* is the search field's `TextInputState`, likewise on the
+    /// owner the caller names or the field's own node.
     pub const CatalogState = struct {
         pub const Direction = enum { none, ascending, descending };
         sort: usize = 0,
         dir: Direction = .none,
         sort_open: bool = false,
-        last_sig: u64 = 0,
     };
     /// A trade dialog's per-mode selection (KIT-21), keyed by the dialog node. `mode` is the
     /// active tab (0 = buy, 1 = sell); `buy_sel`/`sell_sel` are the selected offer index **kept
@@ -303,6 +306,13 @@ pub const UiState = struct {
             const cur: isize = @intCast(s.highlight);
             const last: isize = @intCast(n - 1);
             s.highlight = @intCast(std.math.clamp(cur + delta, 0, last));
+        }
+        /// The pointer path's one transition per frame. A click on option `row` commits it and
+        /// closes; that same click bubbles to the control, which must not also toggle, so the
+        /// control's own `clicked` only counts when no row was clicked. Disabled controls never
+        /// reach here (the template gates on `enabled`).
+        pub fn pointer(s: *SelectState, row: ?usize, control_clicked: bool, n: usize) void {
+            if (row) |i| s.commit(i, n) else if (control_clicked) s.toggle(false);
         }
         /// Commit `index` as the value and close (Enter on the highlight, or a click on option).
         pub fn commit(s: *SelectState, index: usize, n: usize) void {
@@ -375,19 +385,6 @@ pub const UiState = struct {
     ///
     /// `init` returns the declared semantic defaults, so enum declaration order can
     /// change without silently changing what the player sees on a fresh run.
-    pub const BuildViewState = struct {
-        pub const Sort = enum { reach, materials, time };
-        pub const Show = enum { in_reach, ready, all };
-        pub const Tier = enum { any, crude, manufactured };
-        sort: Sort = .reach,
-        show: Show = .in_reach,
-        tier: Tier = .any,
-        built: bool = false,
-
-        pub fn init() BuildViewState {
-            return .{};
-        }
-    };
     /// A `text_input`'s persisted, authoritative editing model (INPUT-07). This is the
     /// full host editor — buffer plus caret/anchor selection, UTF-8 and single-line
     /// validation, an explicit `max_query_bytes`, and non-silent refusal — defined in
@@ -737,7 +734,7 @@ test "KIT-03: a disabled control consumes its click so it neither reports nor bu
     try std.testing.expect(u.interactionOf(btn).clicked);
     try std.testing.expect(u.interactionOf(row).clicked); // bubbled
 
-    // KIT-03: the disabled button consumes its own click (what `widgets.button` does when
+    // KIT-03: the disabled button consumes its own click (what the button contract does when
     // `!enabled`). Consuming clears the flag on the node AND its ancestors, so neither the
     // button (its caller) nor the row (an ancestor control) can act on it.
     try std.testing.expect(u.consumeFlag(btn, .clicked));
@@ -1006,4 +1003,14 @@ test "SliderModel.nudge: arrows one step, page coarse, Home/End jump to ends" {
     // Nudging past an end clamps.
     try std.testing.expectApproxEqAbs(@as(f32, 100), m.nudge(100, .right), 1e-4);
     try std.testing.expectApproxEqAbs(@as(f32, 0), m.nudge(0, .left), 1e-4);
+}
+
+test "SelectState: a click on an option commits it; the click that bubbles to the control does not toggle" {
+    var s = UiState.SelectState{};
+    s.openPopup(false);
+    s.pointer(2, true, 3); // the row's click bubbles to the control too
+    try std.testing.expectEqual(@as(usize, 2), s.value);
+    try std.testing.expect(!s.open);
+    s.pointer(null, true, 3); // the control's own click: toggle open
+    try std.testing.expect(s.open);
 }

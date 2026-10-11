@@ -85,7 +85,8 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
 
 /// Build the market strip for `kind`. Returns the borderless action-link `El` so the caller
 /// reads `.query().clicked` to open the deal (the strip owns presentation, the caller owns it).
-pub fn market_strip(ctx: *UiCtx, parent: El, id: []const u8, kind: MarketKind) !El {
+pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const idn = marketIdentity(kind);
     const signal_color = toneColor(ctx, idn.tone);
@@ -93,7 +94,7 @@ pub fn market_strip(ctx: *UiCtx, parent: El, id: []const u8, kind: MarketKind) !
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
     // line-2 edge. Padding is represented by in-flow lanes so percentage width remains the
     // border-box width instead of acquiring content-box overflow.
-    const strip = try el.div(ctx, parent, id);
+    const strip = try parent.div(id);
     _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
         .with_overflow(.clip)
         .with_style(.{Style{
@@ -105,46 +106,35 @@ pub fn market_strip(ctx: *UiCtx, parent: El, id: []const u8, kind: MarketKind) !
     // Anchor one full-width, fit-height row at the strip center. Signal, copy, and action all
     // use the same 12px font, but copy/action live in wrapper lanes; box centering avoids mixing
     // a direct text baseline with wrapper references and gives all three columns one center line.
-    const content = try el.div(ctx, strip, "content");
+    const content = try strip.div("content");
     _ = content.with_layout(.center)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center });
 
-    const lead = try el.div(ctx, content, "lead");
-    _ = lead.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("lead", market_pad_x, 1);
 
-    _ = (try el.text(ctx, content, "signal", idn.signal))
+    _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = signal_color }});
 
-    const gap_one = try el.div(ctx, content, "gap_one");
-    _ = gap_one.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_one", market_gap, 1);
 
-    const copy_lane = try el.div(ctx, content, "copy_lane");
+    const copy_lane = try content.div("copy_lane");
     _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip);
-    _ = (try el.text(ctx, copy_lane, "copy", idn.copy))
+    _ = (try copy_lane.text("copy", idn.copy))
         .with_style(.{Style{ .font = market_font, .text = th.fg }});
 
-    const gap_two = try el.div(ctx, content, "gap_two");
-    _ = gap_two.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_two", market_gap, 1);
 
     // The prototype action is a zero-padding link, not a primary button. The text itself is
     // the hit target; it rests dim and lifts to accent on hover/hold/focus.
-    const act = try el.div(ctx, content, "act");
+    const act = try content.div("act");
     _ = act.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
-    const action_key = act.get().key;
-    ctx.registerFocus(action_key, true);
-    const aq = act.query();
-    if (aq.clicked) _ = ctx.requestFocus(action_key);
-    const afocused = ctx.isFocused(action_key);
-    if (aq.hovering) ctx.res.cursor.request(.pointer);
-    uic.publishControlState(ctx, action_key, .{ .focused = afocused, .focus_visible = afocused });
-    ctx.res.semantics.publish(uic.semantic.describeButton(action_key, idn.action, true, afocused));
-    const action_color = if (aq.hovering or aq.held or afocused) th.acc else th.dim;
-    _ = (try el.text(ctx, act, "label", idn.action))
+    const aq = act.control(.{ .name = idn.action, .role = .button });
+    const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
+    _ = (try act.text("label", idn.action))
         .with_style(.{Style{ .font = market_font, .text = action_color }});
 
-    const tail = try el.div(ctx, content, "tail");
-    _ = tail.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("tail", market_pad_x, 1);
     return act;
 }
 
@@ -171,12 +161,13 @@ pub fn activityIdentity(state: ActivityState) ActivityIdentity {
 /// Build the activity strip: state signal + fg subject + state-toned metadata. The strip shares
 /// the market's exact 32px dashed border-box and three-column geometry. When `state` differs
 /// from `last`, emit a live announcement ("Building shelter") and return the state to remember.
-pub fn activity_strip(ctx: *UiCtx, parent: El, id: []const u8, state: ActivityState, subject: []const u8, metadata: []const u8, last: ActivityState) !ActivityState {
+pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject: []const u8, metadata: []const u8, last: ActivityState) !ActivityState {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const idn = activityIdentity(state);
     const state_color = toneColor(ctx, idn.tone);
 
-    const strip = try el.div(ctx, parent, id);
+    const strip = try parent.div(id);
     _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
         .with_overflow(.clip)
         .with_style(.{Style{
@@ -187,35 +178,31 @@ pub fn activity_strip(ctx: *UiCtx, parent: El, id: []const u8, state: ActivitySt
 
     // Every visible field is 12px. Center their boxes rather than mixing direct-text and
     // wrapper baselines, the same correction used by market_strip.
-    const content = try el.div(ctx, strip, "content");
+    const content = try strip.div("content");
     _ = content.with_layout(.center)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center });
 
-    const lead = try el.div(ctx, content, "lead");
-    _ = lead.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("lead", market_pad_x, 1);
 
-    _ = (try el.text(ctx, content, "signal", idn.signal))
+    _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = state_color }});
 
-    const gap_one = try el.div(ctx, content, "gap_one");
-    _ = gap_one.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_one", market_gap, 1);
 
-    const subject_lane = try el.div(ctx, content, "subject_lane");
+    const subject_lane = try content.div("subject_lane");
     _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip);
-    _ = (try el.text(ctx, subject_lane, "subject", subject))
+    _ = (try subject_lane.text("subject", subject))
         .with_style(.{Style{ .font = market_font, .text = th.fg }});
 
-    const gap_two = try el.div(ctx, content, "gap_two");
-    _ = gap_two.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_two", market_gap, 1);
 
     if (metadata.len > 0) {
-        _ = (try el.text(ctx, content, "metadata", metadata))
+        _ = (try content.text("metadata", metadata))
             .with_style(.{Style{ .font = market_font, .text = state_color }});
     }
 
-    const tail = try el.div(ctx, content, "tail");
-    _ = tail.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("tail", market_pad_x, 1);
 
     // Live announcement on a state change (idle→working→building). Composed from the same
     // subject the strip shows, so what is spoken matches what is drawn.

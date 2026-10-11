@@ -61,12 +61,13 @@ fn line_height(ctx: *UiCtx) f32 {
 /// The normalized footer EventLog (KIT-22): the newest `lines` entries (typically 4), newest
 /// first and emphasized, tone-colored, each with its `NOW`/age stamp — **no scrolling**. `width`
 /// is a logical px column. The full history stays in `feed`; `log_history` is the way to it.
-pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
+pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
     const flines: f32 = @floatFromInt(lines);
     const band = flines * line_height(ctx) + (flines - 1) * footer_content_gap; // definite height
-    const col = try el.div(ctx, parent, id);
+    const col = try parent.div(id);
     _ = col.with_flow(.{ .dir = .column }).with_gap(footer_content_gap)
         .with_size(.{ .fixed = width }, .{ .fixed = band });
 
@@ -81,21 +82,19 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
     while (i < shown) : (i += 1) {
         const entry = feed.get(i);
         const newest = i == 0;
-        const key = try std.fmt.allocPrint(ctx.arena, "log{d}", .{i});
-        const row = try el.div(ctx, col, key);
+        const row = try col.item("log", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
             .with_size(.{ .fixed = @max(0, width - footer_row_pad_x * 2) }, .fit_children)
             .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
         // The age/NOW stamp — a fixed narrow cell so message text lines up down the feed.
         var sbuf: [8]u8 = undefined;
-        _ = (try el.text(ctx, row, "at", ageStamp(&sbuf, i)))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.clip, 30);
+        _ = (try row.text_fit("at", ageStamp(&sbuf, i), .{ .cell = .{ .mode = .clip, .width = 30 } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
         // toward `dim` unless their tone already carries meaning.
         const tone_color = log_tone_color(th, entry.tone);
         const ink = if (newest) tone_color else if (entry.tone == .normal) th.dim else tone_color;
-        _ = (try el.text(ctx, row, "m", entry.text()))
+        _ = (try row.text("m", entry.text()))
             .with_style(.{ style.small, Style{ .text = ink } });
     }
 }
@@ -104,23 +103,21 @@ pub fn log_view(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width
 /// tone-colored. This is the *only* place the feed scrolls — opened deliberately (a modal or a
 /// dedicated panel), never the footer. `width` is a logical px total footprint; `height` the
 /// logical viewport height.
-pub fn log_history(ctx: *UiCtx, parent: El, id: []const u8, feed: *const Log, width: f32, height: f32) !void {
+pub fn log_history(parent: El, id: []const u8, feed: *const Log, width: f32, height: f32) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const col_w = width - sv.scrollbar_w;
-    const view = try sv.scroll_view(ctx, parent, id, col_w, height);
+    const view = try sv.scroll_view(parent, id, .{ .width = col_w, .height = height }, null);
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
-        const key = try std.fmt.allocPrint(ctx.arena, "h{d}", .{i});
-        const row = try el.div(ctx, view.content, key);
+        const row = try view.content.item("h", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
             .with_size(.{ .fixed = col_w }, .fit_children);
         var sbuf: [8]u8 = undefined;
-        _ = (try el.text(ctx, row, "at", ageStamp(&sbuf, i)))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.clip, 30);
-        _ = (try el.text(ctx, row, "m", entry.text()))
-            .with_wrap(col_w - 38)
+        _ = (try row.text_fit("at", ageStamp(&sbuf, i), .{ .cell = .{ .mode = .clip, .width = 30 } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
+        _ = (try row.text_fit("m", entry.text(), .{ .wrap = col_w - 38 }))
             .with_style(.{ style.body, Style{ .text = log_tone_color(th, entry.tone) } });
     }
 }

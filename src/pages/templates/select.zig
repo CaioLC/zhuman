@@ -19,9 +19,9 @@
 //!     a stray `.clicked` is consumed).
 //!   - **focus restoration** — closing returns focus to the control (the opener), so keyboard
 //!     flow continues from the select, not from the vanished popup.
-//!   - **top-layer clipping** — the popup is an absolutely-placed overlay with `.clip`, drawn
-//!     after its siblings, so it floats over following content and its own contents are clipped
-//!     to it.
+//!   - **clipping** — the popup is an absolutely-placed overlay with `.clip` hung under the
+//!     control, so its own contents are clipped to it. It is not a top layer: nodes later in
+//!     the tree paint over it and take its hits (roadmap UIE-11).
 //!   - **compact height** — the control stands at `tokens.control.h_compact` (30 logical px).
 
 const std = @import("std");
@@ -43,15 +43,55 @@ pub const Select = struct { value: usize, el: El };
 
 /// Build a select control into `parent`. `label` is the static lead-in, `options` the choices;
 /// returns the committed value index. `enabled` gates open/commit (KIT-03). The popup is an
-/// overlay child clipped to itself, drawn after the closed control.
-pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, options: []const []const u8, enabled: bool) !Select {
+/// overlay child clipped to itself, placed under the closed control. When the caller passes
+/// `value`, that is the committed choice (read on entry, written on exit) and the control's
+/// own slot keeps only its open/highlight state; null means the control owns the value.
+pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []const u8, enabled: bool, value: ?*usize) !Select {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const n = options.len;
 
-    const box = try el.div(ctx, parent, id);
-    const st = box.get().state(ctx, SelectState);
+    const box = try parent.div(id);
+    const st = box.state(SelectState);
+    if (value) |v| st.value = v.*; // the caller's value is authoritative
     if (st.value >= n) st.value = 0; // options shrank across frames — stay valid
     if (st.highlight >= n) st.highlight = 0;
+    defer if (value) |v| {
+        v.* = st.value;
+    };
+
+    // The popup: an absolutely-placed overlay under the control, clipped to itself, built from
+    // last frame's open state — the popup the pointer was over. Its rows are read before the
+    // box's own click because a click on an option row bubbles up to the box: the row's click
+    // is consumed here and `SelectState.pointer` commits it instead of toggling. The popup
+    // starts at the box's bottom edge, so it and the trigger never overlap and their paint
+    // order is moot.
+    var row_clicked: ?usize = null;
+    if (st.open and enabled) {
+        const pop = try box.div("popup");
+        _ = pop.with_layout(.top_left).with_offset(0, ha.tokens.control.h_compact)
+            .with_flow(.{ .dir = .column })
+            .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+            .with_overflow(.clip)
+            .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line2 }, style.pad_sym(0, 4) });
+        for (options, 0..) |opt, i| {
+            const row = try pop.item("o", i);
+            const rq = row.query();
+            if (rq.hovering) {
+                ctx.res.cursor.request(.pointer);
+                st.highlight = i; // pointer hover moves the highlight, like the arrows
+            }
+            if (rq.clicked) {
+                row_clicked = i;
+                _ = row.consume(.clicked); // the row's, not the box's nor any ancestor's
+            }
+            const highlighted = st.highlight == i;
+            _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+                .with_style(.{ Style{ .fill = if (highlighted) th.line else th.panel }, style.pad_sym(8, 4) });
+            _ = (try row.text("t", opt))
+                .with_style(.{ style.body, Style{ .text = if (i == st.value) th.acc else th.fg } });
+        }
+    }
 
     // The closed control: label + value + caret, at the compact control height (KIT-01 token).
     // The prototype gives the native choice field a 112px minimum; this template combines its
@@ -59,16 +99,13 @@ pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, option
     // width also gives the out-of-flow popup a real containing width instead of asking a
     // percentage to resolve under an intrinsic (`fit_children`) parent.
     const control_w: f32 = 144;
-    ctx.registerFocus(box.get().key, enabled);
-    const q = box.query();
-    if (q.clicked and !enabled) _ = ctx.consumeFlag(box.get().key, .clicked); // disabled can't open
-    if (q.clicked and enabled) {
-        _ = ctx.requestFocus(box.get().key); // focus restoration: the control owns focus
-        st.toggle(!enabled);
-    }
-    const focused = ctx.isFocused(box.get().key);
-    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    uic.publishControlState(ctx, box.get().key, .{ .disabled = !enabled, .focused = focused, .focus_visible = focused });
+    // Commit or toggle on the click before the lifecycle publishes `expanded`, so it is
+    // current. A disabled control cannot open (the lifecycle consumes its click). The control
+    // owns focus, so closing restores it to the opener.
+    if (enabled) st.pointer(row_clicked, box.query().clicked, n);
+    const value_txt = if (n > 0) options[st.value] else "";
+    const q = box.control(.{ .enabled = enabled, .name = label, .role = .button, .value = value_txt, .expanded = st.open });
+    const focused = q.focused;
 
     _ = box.with_size(.{ .fixed = control_w }, .{ .fixed = ha.tokens.control.h_compact })
         .with_style(.{Style{ .outline_color = if (!enabled) th.line else if (focused or q.hovering) th.acc else th.line2 }});
@@ -76,40 +113,13 @@ pub fn select(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, option
     // Center the mixed-size label/value/caret as one baseline-aligned group. Horizontal text
     // origins are snapped once at the shared text-blit boundary, so this composition can use
     // ordinary layout without carrying renderer-specific measurement compensation.
-    const trigger = try el.div(ctx, box, "trigger");
+    const trigger = try box.div("trigger");
     _ = trigger.with_layout(.center).with_flow(.{ .dir = .row })
         .with_gap(ha.tokens.gap.inline_).with_size(.fit_children, .fit_children);
-    _ = (try el.text(ctx, trigger, "lbl", label)).with_style(.{ style.small, Style{ .text = th.dim } });
-    const value_txt = if (n > 0) options[st.value] else "";
-    _ = (try el.text(ctx, trigger, "val", value_txt)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
-    _ = (try el.text(ctx, trigger, "caret", if (st.open) "\u{25B4}" else "\u{25BE}")) // ▴ open / ▾ closed
+    _ = (try trigger.text("lbl", label)).with_style(.{ style.small, Style{ .text = th.dim } });
+    _ = (try trigger.text("val", value_txt)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
+    _ = (try trigger.text("caret", if (st.open) "\u{25B4}" else "\u{25BE}")) // ▴ open / ▾ closed
         .with_style(.{Style{ .text = th.dim }});
-
-    // The popup: an absolutely-placed overlay under the control, clipped to itself, drawn after
-    // the closed control so it floats over following siblings (top-layer within this subtree).
-    if (st.open and enabled) {
-        const pop = try el.div(ctx, box, "popup");
-        _ = pop.with_layout(.top_left).with_offset(0, ha.tokens.control.h_compact)
-            .with_flow(.{ .dir = .column })
-            .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_overflow(.clip)
-            .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line2 }, style.pad_sym(0, 4) });
-        for (options, 0..) |opt, i| {
-            const okey = try std.fmt.allocPrint(ctx.arena, "o{d}", .{i});
-            const row = try el.div(ctx, pop, okey);
-            const rq = row.query();
-            if (rq.hovering) {
-                ctx.res.cursor.request(.pointer);
-                st.highlight = i; // pointer hover moves the highlight, like the arrows
-            }
-            if (rq.clicked) st.commit(i, n); // choose + close
-            const highlighted = st.highlight == i;
-            _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-                .with_style(.{ Style{ .fill = if (highlighted) th.line else th.panel }, style.pad_sym(8, 4) });
-            _ = (try el.text(ctx, row, "t", opt))
-                .with_style(.{ style.body, Style{ .text = if (i == st.value) th.acc else th.fg } });
-        }
-    }
 
     return .{ .value = st.value, .el = box };
 }

@@ -4,6 +4,7 @@
 //! mechanism (`src/ui/root.zig`); this file only names the wrapper type. Host-side (not on
 //! the `ha` library surface) so `src/pages/` can build against it directly.
 
+const std = @import("std");
 const cb = @import("./ctx_binding.zig");
 const Node = cb.Node;
 
@@ -12,3 +13,10 @@ const Node = cb.Node;
 /// frame return type reads as `Trees` at the `main.zig` call site. Formerly a one-field
 /// struct wrapper; formerly named `Ui`.
 pub const Trees = []const *Node;
+
+/// A page with one root, as `Trees`: the arena-allocated one-element list.
+pub fn oneRoot(allocator: std.mem.Allocator, root: *Node) !Trees {
+    const roots = try allocator.alloc(*Node, 1);
+    roots[0] = root;
+    return roots;
+}

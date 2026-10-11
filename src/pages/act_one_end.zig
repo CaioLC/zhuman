@@ -44,7 +44,7 @@ const beats = [_]Beat{
     },
 };
 
-pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
+pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     // KIT-04: the Act I curtain lives in the one terminal shell; it needs only the main body.
@@ -54,26 +54,25 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
     });
-    const dialog = try t.panel(ctx, regions.body, "curtain", "ACT I");
+    const dialog = try t.panel(regions.body, "curtain", "ACT I");
     _ = dialog.with_layout(.center);
 
-    const st = dialog.get().state(ctx, StepState);
+    const st = dialog.state(StepState);
     if (st.step >= beats.len) st.step = 0; // the script shrank across frames — stay valid
     const beat = beats[st.step];
 
     // Stable keys across beats: the text nodes persist and re-source their content, the
     // way every other rebuilt leaf does.
-    _ = (try el.text(ctx, dialog, "line", beat.line))
+    _ = (try dialog.text("line", beat.line))
         .with_style(.{ style.h2, Style{ .text = th.fg } });
     // The note is genuine prose, longer than a heading and worth reading as a paragraph —
     // constrain it to an explicit dialog column so it wraps on word boundaries instead of
     // stretching the panel to a single long line. The width is a template constant (the
     // dialog's prose measure); VIEW-01's ViewMetrics will later feed the same parameter.
-    _ = (try el.text(ctx, dialog, "note", beat.note))
-        .with_wrap(dialog_prose_w)
+    _ = (try dialog.text_fit("note", beat.note, .{ .wrap = dialog_prose_w }))
         .with_style(.{ style.body, Style{ .text = th.dim } });
 
-    const go = try t.button(ctx, dialog, "go", beat.button, true);
+    const go = try t.button(dialog, "go", beat.button, true);
     if (go.query().clicked) {
         if (st.step + 1 < beats.len) {
             st.step += 1;
@@ -89,5 +88,5 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
             st.step = 0;
         }
     }
-    return regions.root.get();
+    return try uic.oneRoot(ctx.arena, regions.root.get());
 }

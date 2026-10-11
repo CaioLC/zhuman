@@ -63,17 +63,17 @@ pub const Node  = ui.Node(RenderData);
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
   `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while an `overflow` cell clips/ellipsizes a fixed width (TEXT-03) and `tracking` sets device-px letter-spacing (TEXT-04), and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail (TEXT-06). Since **TEXT-05** it also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
   `TabsState`, `StepState`,
-  `TextInputState`, `LineState`, `GeometryState`, `BuildViewState` and `SvgState`. `LineState` and `GeometryState` are the ones that carry
+  `TextInputState`, `LineState`, `GeometryState` and `SvgState`, plus the templates' logical states (`TabsState`, `SelectState`, `DisclosureState`, `SliderState`, `RailState`, `CatalogState`, `TradeState`, `ModalState`). `LineState` and `GeometryState` are the ones that carry
   *variable-length* data — a polyline's points, and an indexed triangle mesh's vertices/indices — since `RenderData` holds a single payload
   per feature and coordinates don't fit in a tint; fixed capacity keeps them POD (a mesh too large for the cap is refused whole, so an over-budget shape draws nothing rather than a torn mesh). `SvgState` and `TextState` own a GPU texture, so they declare `deinit` and the cache's
   eviction hook frees it when the node disappears. The pure cache-key/decision/lifecycle logic for `TextState`'s texture lives SDL-free in `features/text_cache.zig` (with a deterministic fake backend), so hit/miss/invalidation/reset/prune/reuse/growth is unit-tested without a graphics context. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
   feature re-exports it as `pub const State` to keep the contract readable.
-  Per-view state normally lives in one aggregate on an always-built shell. When a
-  conditional child is the clearer owner, the shell may call `retainChildState` each
-  hidden frame; this keeps only an existing typed slot and stops automatically with
-  the shell. `BuildViewState` uses that path while ACTIONS hides the BUILD root.
+  Per-view state lives on the node that is always built and is handed down by pointer — the
+  Act I surface holds BUILD's catalog state and search editor, so hiding the tab prunes
+  nothing (see *Who owns a template's state* under the `El` handle). `retain_child` remains
+  for an owner that keeps a hidden direct child's slot alive without hoisting it.
 - **`Interaction`** — pointer-derived hover/press/held/release/wheel/click/drag/capture,
   transient command dismissal, plus semantic disabled/focus/focus-visible/selected/checked
   projections. Pointer/command fields
@@ -121,20 +121,20 @@ the one shared `.clicked` flag, so changing the event-stage policy migrates them
 `.pressed` remains separately available for controls that need press-time behavior; text
 input uses it to distinguish an inside press from an outside focus-clear.
 
-**Consistent button semantics (KIT-03).** Every stock button (`widgets.button`,
-`icon_button`) follows one contract: the **whole outer box owns the interaction** and the
-label/icon is content; a **disabled** button cannot activate — it is not registered for focus
-(so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it while
-disabled is **consumed** at the widget, so it neither reports to its caller nor bubbles to an
-ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`); and **keyboard
-activation matches pointer activation** because Enter/Space map to `command.activate`, which
-`markKey`s the focused control's `.clicked` — the very same flag a pointer release produces.
-A **nested** cancel/close inside a row activates by consuming `.clicked` (`El.consume`), which
-clears the flag on itself *and* its ancestors so the row doesn't also act — while leaving
-`hovering` untouched, so the ancestor stays hovered. Colors are single-sourced: the button
-resolves the KIT-02 `style.btn_primary` / `btn_icon` fragment and paints its border and ink
-from that one result, so the resting/hover/held/focus/disabled mapping can never drift between
-variants.
+**Consistent button semantics (KIT-03).** Every button (the `button` template and the icon
+controls built on `El`) follows one contract: the **whole outer box owns the interaction** and
+the label/icon is content; a **disabled** button cannot activate — it is not registered for
+focus (so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it
+while disabled is **consumed** at the control, so it neither reports to its caller nor bubbles
+to an ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`); and
+**keyboard activation matches pointer activation** because Enter/Space map to
+`command.activate`, which `markKey`s the focused control's `.clicked` — the very same flag a
+pointer release produces. A **nested** cancel/close inside a row activates by consuming
+`.clicked` (`El.consume`), which clears the flag on itself *and* its ancestors so the row
+doesn't also act — while leaving `hovering` untouched, so the ancestor stays hovered. Colors
+follow the KIT-02 state→role mapping — `dim` when disabled, `acc` on held/hover/focus-visible,
+else the resting ink — which the `style.btn_*` fragments encode for any control that composes
+them.
 
 ## Ordered pointer routing and overlays
 
@@ -157,9 +157,12 @@ explicitly with `pass_through`.
 is stamped last, everything registered after that call is the trapped suffix — `moveFocus`
 (Tab/Shift+Tab) then cycles only within the dialog and can never land on a control the scrim
 covers (the scope carries into the next frame's traversal in `focus.zig`; a frame with no
-modal has ordinary whole-frame traversal). Initial focus and restore-to-opener stay caller
-policy (only the caller knows the open/close transition in immediate mode): request focus on
-the primary control the frame it opens, and re-request the recorded opener the frame it closes.
+modal has ordinary whole-frame traversal). The shell also owns the open edge: a pooled
+`ModalState` on its root records the key focused on the frame the dialog first builds and
+reports `first_open`; the game's `modal.dismissed`, the dialog's end-of-build step, focuses
+the primary control on that frame (else the first control in the trap, `focusFirstInScope`)
+and re-requests the opener on the closing frame. The slot is pruned with the dialog, so every
+open starts clean.
 `tooltip` is now **pass-through** (`setPassThrough`): despite being stamped last it takes no
 pointer hit, so it never intercepts input to the control it describes; `clampToTerminal` keeps
 it inside the terminal rect. `text_input` remains backed by the authoritative `editor.zig`
@@ -172,10 +175,10 @@ on the stable press key while primary input remains down, `dragging` once
 `PointerActivation` crosses 4px (including release-position movement), and `captured` on
 the exact `Ctx` capture owner. These are transient like hover/press/release/click; button,
 action, build-row, tab, ration, filter, and cancel chrome can react to held immediately.
-The two production scroll views capture their thumb on primary press, preserve the exact
-press origin even when motion shares the same SDL event batch, map pointer travel to the
-clamped offset, apply the release position, and owner-release. Capture-first routing keeps
-them dragging beyond the six-pixel track; focus loss/cancellation, lost ownership,
+The scroll view captures its thumb on primary press, preserves the exact
+press origin even when motion shares the same SDL event batch, maps pointer travel to the
+clamped offset, applies the release position, and owner-releases. Capture-first routing keeps
+it dragging beyond its narrow track; focus loss/cancellation, lost ownership,
 disappearing overflow, and prune repair all terminate safely. `ThresholdDrag` exposes the
 same strict `>4` logical-pixel boundary as `PointerActivation`: future board/slider
 consumers can capture immediately while emitting no movement before threshold, and the
@@ -193,8 +196,8 @@ also includes horizontal-resize for the future slider.
 `ControlState` carries `disabled`, `focused`, `focus_visible`, `selected`, and `checked`.
 `publishControlState(ctx, key, state)` writes all five—including false—on every build.
 Authority stays elsewhere: enabled/affordability/readiness and row classification decide
-disabled; the focus registry decides text-input focus; `TabsState` and `BuildViewState`
-decide tab/filter/check state; simulation `Metabolism.setting` decides ration selection.
+disabled; the focus registry decides text-input focus; `TabsState` and `CatalogState`
+decide tab/filter state; simulation `Metabolism.setting` decides ration selection.
 The interaction slot is their cross-widget visual/semantic projection, never an
 independent toggle. Current desktop policy visibly outlines every focused text field, so
 its `focused` and `focus_visible` are both true; INPUT-06 may refine origin policy when
@@ -280,12 +283,12 @@ Lifecycle is wired like the command registry: `Resources` holds `semantics` and
 `announcements`; `main` calls `semantics.beginBuild()` before `build_ui` and
 `semantics.endBuild()` after `endFrame()`. Representative `describe*` helpers turn
 authoritative widget/domain facts into a `SemanticNode`; controls call them right where
-they already call `publishControlState` (stock `button`/`icon_button`/`progress_bar`
-/`text_input`/`modal`, and game `tabs`/`slider`/`build_list`/`capital_row`
-/`action_tile`). Honest limitations: an icon button and a bare progress bar have no widget
-string for a name (they publish an empty label; a named variant/domain helper supplies
-one), `expanded` is owned only by the dialog shell, and no production board/search/modal
-*consumer* exists yet — the model describes the controls that do exist.
+they already call `publishControlState` (`text_input`/`modal`, and game `tabs`/`slider`
+/`build_list`/`capital_row`/`action_tile`/the modal header and offer rows). Honest
+limitations: `describeIconButton` and `describeProgressBar` take a caller-supplied name
+because a glyph or a bar has no string of its own, `expanded` is owned only by the dialog
+shell, and no production board *consumer* exists yet — the model describes the controls that
+do exist.
 
 ## Accessibility bridge (`a11y.zig`)
 
@@ -380,7 +383,7 @@ between `tokens.rail.collapsed` (36) and `tokens.rail.expanded` (252) over `toke
 (120ms), so a toggle animates and a mid-transition re-toggle reverses smoothly; the collapse bit
 itself lives in a keyed `RailState` pool (distinct rails → separate ACTIONS/BUILD memories; the
 STRUCTURE rail is forced collapsed on entry without touching the others), and the vertical
-restore affordance is a chevron over a `.vertical()` (TEXT-06 CCW-90) label. StockToken (KIT-12)
+restore affordance is a chevron over a `.vertical`-fit (TEXT-06 CCW-90) label. StockToken (KIT-12)
 and the board (BOARD-05) read this registry when they land.
 ## Frame-local view metrics (`view.zig`)
 
@@ -403,7 +406,7 @@ and `metrics.framed()` gates the outer terminal chrome.
 space the renderer draws), so every authored dimension is a *logical* px value multiplied by the
 frame scale exactly once, through `view.dp(logical, scale)` — the single conversion point. The
 El/style seams call it: `El.with_size` (`.fixed` extents), `with_gap`, `with_offset`,
-`with_wrap`/`with_cell` (text measurement widths), and `style.apply` (padding/gap). Fonts route
+`text_fit` (text measurement widths), and `style.apply` (padding/gap). Fonts route
 through the sibling `type.toDevice`, and hairlines through `paint.hairline` — the same scale.
 The fullscreen root and modal scrim size to the drawable px (`metrics.px_w/px_h`), and pointer
 coordinates are multiplied by `dpi_scale` at one seam in `main` (`pointerAt`) so hit geometry
@@ -604,21 +607,29 @@ This is evidence against a speculative rewrite, not a QA-17 worst-case result.
 
 An element creates a node and sets *what is in it* — nothing else. Every constructor
 returns an **`El`**: `{ ctx, node }`, a handle that carries the ctx so style and placement
-chain onto it.
+chain onto it, and so a child names only its id and its content:
 
 ```zig
-const header = try el.div(ctx, root, "header");
+const header = try root.div("header");
 _ = header.with_layout(.top_left)                        // its own anchor in the parent
           .with_flow(.{ .dir = .row, .cross = .center }) // how its children arrange
-          .with_gap(6)
-          .with_style(.{ h1, red });                     // style — a fragment fold
+          .with_gap(6);
+_ = try header.text("title", "BUILD").with_style(.{ h1, red }); // style — a fragment fold
 ```
 
-Leaves are `root` (fullscreen, sized to the live window, the only non-`.relative` one),
-`div`, `text`, `image`, `sprite`, `svg`, plus `el(…, content, spec)` sugar pairing a leaf
-with a style spec in one call. Content leaves default to `.relative`, so flowed layout is
-the zero-config case. `.get()` drops to the raw `*Node` for geometry reads, or for handing
-a root to the render walk. `El.prior_geometry()` explicitly reads the last stamped global
+**A method on `El` describes this one node; a function describes a composition.** The
+content leaves are methods on the parent handle — `div`, `text`, `image`, `sprite`, `svg`,
+`line`, `polygon`, `polyline`, `gradient` — with `item(id, i)` for a repeated child keyed by
+its index (no id formatted per iteration) and `spacer(id, w, h)` for an empty fixed box that
+is never queried and so never hittable — plus the placement, look, behaviour and state
+methods below. `root(ctx, id)` is the one free constructor, because a root has no parent
+handle to hang off (fullscreen, sized to the live window, the only non-`.relative` one).
+Anything that creates more than one node or returns holes for a caller to fill — every
+template in `pages/templates/`, and `text_input`/`modal`/`tooltip` here — is a function
+taking its parent `El` first and no `ctx`; it reads `parent.ctx` when it needs the host.
+Content leaves default to `.relative`, so flowed layout is the zero-config case. `.get()`
+drops to the raw `*Node` for geometry reads, or for handing a root to the render walk.
+`El.prior_geometry()` explicitly reads the last stamped global
 rect plus inherited clip (null before a slot is stamped). Its `Geometry` value converts
 points/rects between global and node-local pixel space and exposes effective global/local
 clips; use it for overlays, board math, zoom anchors, and drag thresholds instead of
@@ -637,6 +648,50 @@ child and its stamped ancestors while preserving hover and unrelated flags. Desc
 consume before ancestor action decisions; ancestors re-query afterward. `capital_row`
 uses this for its nested cancel control, so cancel no longer needs a manual `!cancelled`
 guard to keep the containing build action from firing.
+
+**`control(opts)` is the one control lifecycle** (`control.zig`): focus registration (global
+or under a roving group), activation, consumption of a disabled click, focus acquisition on
+click, `ControlState` and semantic publication, the cursor request — once, for the node it is
+called on, returning the node's interaction read after publication. The caller keeps its
+enabled gate, its accessible name and role, and the chrome it paints from the result. Every
+control in the templates goes through it, so the KIT-03 contract holds by construction rather
+than by each template remembering it. A composition that changes selection or expansion on the
+click reads `query()` first and passes the new fact in, so the published bit is current on the
+click frame.
+
+Three more hooks name things the raw node left implicit. `track()` is the keep-alive read:
+query a node only so it owns a slot and its rect is stamped — a scroll view's content probe,
+the modal scrim and box, the tooltip. `state(T)` is the node's pooled slot, the home of a
+template's logical state unless the caller passes a pointer. `retain_child(id, T)` keeps a
+hidden direct child's slot alive from its always-built owner, without building the child.
+
+**Who owns a template's state.** Every stateful template takes an optional pointer: null and
+it owns the slot on its own node; a pointer and the caller owns it — the tab strip's `active`,
+a select's `value`, a disclosure's `expanded`, the rail's `collapsed`, a scroll view's
+`ScrollState`, the catalog's `CatalogState`. A view that is sometimes not built keeps its state
+on the node that is always built and passes pointers down: the Act I surface holds BUILD's
+catalog state and search editor, so hiding the tab prunes nothing. A pointer from `state(T)`
+is valid for the frame as long as no slot of the same type is acquired after it (the pool may
+grow); handing it to children that acquire other types is safe. The text field is the one
+template that takes an owner handle rather than a pointer, because the host routes keys and
+text into its editor by key: the field registers itself and the owner's key with the command
+registry, and `main` looks the model up through `editorKeyOf`.
+
+**Where geometry is read.** Prior-frame rects, pass-through probes, device-pixel sizing,
+pointer capture and direct focus or cursor requests live only inside a component that owns
+geometry or a host service, never in an ordinary page or template: `scroll_view` (its content
+probe and thumb), `action_tile` (the progress underbar from the prior tile rect — a percent
+rule cannot size it, because the tile is content-sized), `milestone_goal` (the wash and state
+rail, likewise), `slider` (the lane rect, capture, press-time focus, the drag cursor),
+`terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
+sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
+cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
+consumption), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
+tooltip fixture (placed and clamped by its prior-frame size, as a production tooltip is).
+`tools/boundary_check.sh` greps the known spellings of these reads — its `inventory` pattern —
+and fails when one appears in a file outside that list; it also fails outright on lifecycle
+wiring, a formatted loop id or key arithmetic in any page or template. It checks spellings,
+not types, so a new way to read geometry is added to its pattern rather than assumed caught.
 
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that
@@ -697,10 +752,12 @@ directly. `text` (glyph ink) and `tint` (texture ink) are separate fields on pur
 tuple can carry both and neither shadows the other; `tint` no-ops on a node with no svg, and
 because it is not typography it does not trip the inert-typography assert. **`wrap` and
 `overflow` are deliberately *not* style fields.** They set a text node's *measurement
-constraint* (its reserved box), which is placement, not look — so they stay imperative on
-`El` (`with_wrap` / `with_cell`), the same rule the whole placement layer follows. Adding
-them to `Style` would be exactly the "turn style into placement" the design forbids; a later
-`with_style(.{ font })` re-measures at whatever constraint `El` already set.
+constraint* (its reserved box), which is placement, not look — so they are a creation
+parameter of the leaf: `text_fit(id, str, fit)` takes a `TextFit` union (`.free`, `.wrap`,
+`.cell`, `.vertical`), exactly one per leaf by construction, the same rule the whole
+placement layer follows. Adding them to `Style` would be exactly the "turn style into
+placement" the design forbids; a later `with_style(.{ font })` re-measures at whatever fit
+the leaf was created with.
 
 **Placement is deliberately not a fold.** A `Placement` partial with `row`/`col`/`fill`
 presets was built and then removed: it was a second vocabulary shadowing the engine's own
@@ -744,8 +801,7 @@ at `font.default_px`; a resolved `font` fragment re-measures at its size.
 ### Constrained multiline text (TEXT-02)
 
 A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
-over the content box, the fast path dense rows pay nothing for. `El.with_wrap(max_w)` (or
-the `el.textWrapped` sugar) opts a node into **constrained multiline**: it stores an explicit
+over the content box, the fast path dense rows pay nothing for. `text_fit(id, str, .{ .wrap = max_w })` opts a node into **constrained multiline**: it stores an explicit
 maximum content width and re-measures, so the node reports the wrapped `width`×`height` and
 renders exactly those lines.
 
@@ -775,12 +831,12 @@ column width and `act_one_end` passes an explicit dialog prose width.
 ### Single-line overflow cells (TEXT-03)
 
 Where a label must live in a slot of an **explicitly allocated width** — a catalog name
-column, a status readout in a narrow tile — `El.with_cell(mode, cell_w)` opts the node into a
+column, a status readout in a narrow tile — `text_fit(id, str, .{ .cell = .{ .mode, .width } })` opts the node into a
 single-line *cell* with an explicit overflow discipline. It sets `TextState.overflow`
 (`.visible` / `.clip` / `.ellipsis`) and `overflow_width` (a **required nonnegative** cell
 width; `0` is a legal zero-width cell), clears `wrap_width` (a cell is single-line; wrapping
 and overflow are mutually exclusive, and wrapping wins if both are somehow set), and
-re-measures — placement, not style, exactly like `with_wrap`.
+re-measures — placement, not style, exactly like a wrap fit.
 
 The point is **geometry**: `remeasure` writes `data_width = overflow_width`, so the node's
 layout box *and* hit box are the allocated cell, **never** the unbounded glyph width — a
@@ -816,9 +872,8 @@ fast/wrapped path. Integrated at two representative sites: `capital_row`'s name 
 The collapsed Holdings rail carries its `HOLDINGS` label set vertically, reading
 bottom-to-top — a 90° counter-clockwise turn. `TextState.orientation` names the only two
 axis-aligned orientations the product uses: `.horizontal` (every ordinary label) and
-`.counter_clockwise_90`. `El.with_orientation(...)` sets it (clearing the incompatible
-single-line `wrap`/overflow-cell constraints first, since the rail label is one line) and
-re-measures; `El.vertical()` is the convenience spelling for the counter-clockwise mode.
+`.counter_clockwise_90`. The `.vertical` text fit selects it — a fit is one of wrap, cell or
+vertical by construction, so there is no competing constraint to clear — and re-measures.
 A bounded enum, not an arbitrary angle, is deliberate: 90° is an exact width/height swap, so
 its bounding box stays axis-aligned and no broader non-rectangular hit-geometry policy is
 needed.
@@ -836,19 +891,23 @@ never rotated independently. At blit, the upright `w×h` texture is centered on 
 `h×w` content box and drawn with SDL's `renderTextureRotated` at 270° clockwise (= 90°
 counter-clockwise) about its own center, landing the final pixels exactly on the oriented box.
 The placement is pure geometry (`blitPlacement`), tested SDL-free. The `mock` showcase carries
-a 36×124 collapsed-rail stand-in whose `.vertical()` `HOLDINGS` label reads bottom-to-top at
+a 36×124 collapsed-rail stand-in whose `.vertical`-fit `HOLDINGS` label reads bottom-to-top at
 the prototype's 9px / 0.09em collapsed-rail density.
 
 ## Frame assembly (`tree.zig`)
 
 `build_ui` returns `Trees` — a flat `[]const *Node` of independent root trees, laid out and
-drawn in order. The flattening of a builder's return shape (a `*Node`, an `?*Node`, or a
-tuple of them) into that list is `Node.collect`, an engine mechanism; this file only names
-the wrapper so `pages/` can build against it.
+drawn in order, and so is what every page returns: its roots in draw order, a dialog's root
+listed after the shell it covers (the trade dialog hands its root back in its result).
+`oneRoot` wraps a single-root page. `Node.collect`, the engine's flattening of a tuple-shaped
+return, remains available but no page needs it.
 
-## `widgets.zig`
+## Foundation compositions (`text_input.zig`, `modal.zig`, `tooltip.zig`)
 
-The palette that predates `elements` — `label`, `button`, `panel`, `scroll_view`, `modal`,
-`tooltip`, `text_input`. Nothing outside this folder calls it: the screens moved onto
-`pages/templates/`, so it stays reachable only through `root.zig`'s re-exports. Retiring it is
-in [`../../docs/roadmap.md`](../../docs/roadmap.md).
+The three compositions the foundation owns because they bind host services no template should
+reach for: `text_input` (the `editor.zig` model, SDL text input, the command registry's
+text/search owner), `modal` (a scrim root, the Escape owner, the focus trap, the dialog
+semantics) and `tooltip` (a pass-through root plus `clampToTerminal`). Each is a free function
+over `El` — taking its parent handle, or building its own root — and returns `El` handles, so
+its output feeds the next call like any template's. The game's `pages/templates/modal.zig`
+wraps the shell with its chrome and dismissal result; the debug page proves the tooltip.

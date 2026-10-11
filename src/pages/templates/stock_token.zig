@@ -50,13 +50,17 @@ fn valueColor(th: uic.Theme, tone: Tone) Color {
 /// Build one stock token into `parent`. The token sizes to its content (abbrev + value),
 /// swapping to the full label while hovered/focused so only it grows. Its tone applies only to
 /// the value, leaving the label dim. The token is a focusable readout rather than a control.
-pub fn stock_token(ctx: *UiCtx, parent: El, id: []const u8, s: Stock) !void {
-    const th = ctx.res.view.theme;
-    const box = try el.div(ctx, parent, id);
-    ctx.registerFocus(box.get().key, true);
-    const q = box.query();
-    const focused = ctx.isFocused(box.get().key);
-    const reveal = q.hovering or focused;
+pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
+    try stock_token_in(try parent.div(id), s);
+}
+
+/// Fill `box` as a stock token. `stockline` hands it an `item`, so a loop needs no ids.
+fn stock_token_in(box: El, s: Stock) !void {
+    const th = box.ctx.res.view.theme;
+    // A focusable readout, not a control: the full label is its accessible name and the
+    // formatted value its spoken value; hovering it is not an affordance, so no pointer cursor.
+    const q = box.control(.{ .name = s.full, .role = .text, .value = s.value, .cursor = .default });
+    const reveal = q.hovering or q.focused;
 
     // The token sizes to its own content, so the stockline is **compact** by default: each
     // token is only as wide as `abbrev + value`. On hover/focus the label swaps to the full
@@ -68,32 +72,29 @@ pub fn stock_token(ctx: *UiCtx, parent: El, id: []const u8, s: Stock) !void {
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
     const label_txt = std.fmt.bufPrint(&buf, "{s}:", .{label}) catch label;
-    const lbl = (try el.text(ctx, box, "l", label_txt))
+    const lbl = (try box.text("l", label_txt))
         .with_style(.{ style.heading, Style{ .text = th.dim } });
-    const val = (try el.text(ctx, box, "v", s.value))
+    const val = (try box.text("v", s.value))
         .with_style(.{ style.heading, Style{ .text = valueColor(th, s.tone) } });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like resource_bar
     _ = lbl;
 }
 
-/// A dim `|` divider between tokens (heading size, matching the token baseline).
-fn sep(ctx: *UiCtx, parent: El, id: []const u8) !void {
-    _ = (try el.text(ctx, parent, id, "|"))
-        .with_style(.{ style.heading, Style{ .text = ctx.res.view.theme.dim } });
+/// The `i`-th dim `|` divider between tokens (heading size, matching the token baseline).
+fn sep(parent: El, i: usize) !void {
+    const slot = try parent.item("sep", i);
+    _ = (try slot.text("t", "|"))
+        .with_style(.{ style.heading, Style{ .text = parent.ctx.res.view.theme.dim } });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
 /// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice.
-pub fn stockline(ctx: *UiCtx, parent: El, id: []const u8, stocks: []const Stock) !El {
-    const bar = try el.div(ctx, parent, id);
+pub fn stockline(parent: El, id: []const u8, stocks: []const Stock) !El {
+    const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.stack);
     for (stocks, 0..) |s, i| {
-        if (i > 0) {
-            const skey = try std.fmt.allocPrint(ctx.arena, "sep{d}", .{i});
-            try sep(ctx, bar, skey);
-        }
-        const tkey = try std.fmt.allocPrint(ctx.arena, "tok{d}", .{i});
-        try stock_token(ctx, bar, tkey, s);
+        if (i > 0) try sep(bar, i);
+        try stock_token_in(try bar.item("tok", i), s);
     }
     return bar;
 }

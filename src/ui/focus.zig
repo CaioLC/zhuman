@@ -78,6 +78,16 @@ pub const Focus = struct {
         self.focused = null;
     }
 
+    /// Focus the first enabled target registered after this frame's `openScope` — a dialog's
+    /// initial focus. False when no trap is open this frame or nothing enabled is in it.
+    pub fn firstInScope(self: *Focus) bool {
+        const start = self.building_scope_start orelse return false;
+        for (self.building.items[start..]) |target| {
+            if (target.enabled) return self.request(target.key);
+        }
+        return false;
+    }
+
     /// Traverse the last completed frame's global Tab order. Every ordinary enabled
     /// target participates; each roving group contributes only its active member.
     pub fn move(self: *Focus, direction: Direction, wrap: bool) bool {

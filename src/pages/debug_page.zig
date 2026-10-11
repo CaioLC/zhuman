@@ -64,6 +64,7 @@ const entries = [_][]const u8{
     "market_strip",
     "activity_strip",
     "trade_dialog",
+    "tooltip",
     "tag",
     "cost_list",
     "legend",
@@ -71,128 +72,133 @@ const entries = [_][]const u8{
     "empty_state",
 };
 
-pub const DebugTrees = struct { root: *Node, overlay: ?*Node = null };
-
-pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
+/// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
+/// root while that entry is open.
+pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     const root = try el.root(ctx, "debug");
     _ = root.with_layout(.top_left).with_flow(.{ .dir = .row })
         .with_style(.{Style{ .fill = th.bg }});
 
-    // Selection lives on a stable node's TabsState (`active` = the entry index).
-    const sel = root.get().state(ctx, uic.UiState.TabsState);
-    if (sel.active >= entries.len) sel.active = 0;
-    // Unlike ordinary in-stage templates, the modal needs a persistent lifecycle so dismissing
-    // it reveals the audit index instead of rebuilding an always-open local state next frame.
-    const audit_trade = root.get().state(ctx, uic.UiState.TradeState);
+    // Selection lives on a stable node's TabsState (`active` = the entry index); the modal's
+    // open/closed lifecycle on a TradeState, so dismissing it reveals the audit index instead of
+    // rebuilding an always-open local state next frame. A pool pointer is valid only until a
+    // same-type acquire, and the template under audit may acquire either type (a tabs strip's
+    // TabsState), so neither pointer is held across `render_one`: read before, re-acquired after.
+    const active = blk: {
+        const sel = root.state(uic.UiState.TabsState);
+        if (sel.active >= entries.len) sel.active = 0;
+        break :blk sel.active;
+    };
 
     // --- the inspection stage: top-left, small, the selected template only ------------------
     // The whole page root is already `top_left`, so the padded wrap sits at the top-left; the
     // stage flows normally inside it (no extra absolute anchor, which would overlap siblings).
     // The selected template's name is shown highlighted in the right index, so no label here.
-    const stage_wrap = try el.div(ctx, root, "stage_wrap");
+    const stage_wrap = try root.div("stage_wrap");
     _ = stage_wrap.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column }).with_gap(8)
         .with_style(.{style.pad(16)});
-    const stage = try el.div(ctx, stage_wrap, "stage");
+    const stage = try stage_wrap.div("stage");
     _ = stage.with_flow(.{ .dir = .column }).with_gap(6);
 
-    var overlay: ?*Node = null;
-    overlay = try render_one(ctx, world, stage, entries[sel.active], audit_trade);
+    const overlay = try render_one(stage, world, entries[active], root.state(uic.UiState.TradeState));
+    const sel = root.state(uic.UiState.TabsState);
+    const audit_trade = root.state(uic.UiState.TradeState);
 
     // --- the clickable index: a thin column anchored on the RIGHT --------------------------
-    const index = try el.div(ctx, root, "index");
+    const index = try root.div("index");
     _ = index.with_size(.{ .fixed = 150 }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column }).with_gap(2)
         .with_style(.{ Style{ .fill = th.panel }, style.pad_sym(10, 10) });
-    _ = (try el.text(ctx, index, "ihdr", "TEMPLATES"))
+    _ = (try index.text("ihdr", "TEMPLATES"))
         .with_style(.{ style.small, Style{ .text = th.dim } });
     for (entries, 0..) |name, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "e{d}", .{i});
-        const item = try el.div(ctx, index, key);
-        ctx.registerFocus(item.get().key, true);
-        const iq = item.query();
-        if (iq.clicked) {
-            _ = ctx.requestFocus(item.get().key);
+        const item = try index.item("e", i);
+        // Selection changes on the click before the lifecycle publishes it, so the published
+        // `selected` is current on the click frame.
+        if (item.query().clicked) {
             sel.active = i;
             audit_trade.open = eq(name, "trade_dialog");
         }
-        const focused = ctx.isFocused(item.get().key);
-        if (iq.hovering) ctx.res.cursor.request(.pointer);
-        uic.publishControlState(ctx, item.get().key, .{ .selected = i == sel.active, .focused = focused, .focus_visible = focused });
         const on = i == sel.active;
-        const c = if (on) th.acc else if (iq.hovering or focused) th.fg else th.dim;
-        _ = (try el.text(ctx, item, "t", name)).with_style(.{ style.small, Style{ .text = c } });
+        const iq = item.control(.{ .name = name, .role = .button, .selected = on });
+        const c = if (on) th.acc else if (iq.hovering or iq.focused) th.fg else th.dim;
+        _ = (try item.text("t", name)).with_style(.{ style.small, Style{ .text = c } });
     }
 
-    return .{ .root = root.get(), .overlay = overlay };
+    var roots: std.ArrayList(*Node) = .empty;
+    try roots.append(ctx.arena, root.get());
+    if (overlay) |dialog| try roots.append(ctx.arena, dialog);
+    return roots.items;
 }
 
 /// Build exactly one template into `stage` with sample data. Returns an optional overlay root
 /// (only the trade dialog uses it). Everything else returns null.
-fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
+fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
+    const ctx = stage.ctx;
     const th = ctx.res.view.theme;
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
 
     if (eq(name, "button")) {
-        _ = try t.button(ctx, stage, "b_on", "Enabled", true);
-        _ = try t.button(ctx, stage, "b_off", "Disabled", false);
+        _ = try t.button(stage, "b_on", "Enabled", true);
+        _ = try t.button(stage, "b_off", "Disabled", false);
     } else if (eq(name, "panel")) {
-        const p = try t.panel(ctx, stage, "p", "Panel Title");
-        _ = try el.text(ctx, p, "body", "panel body content");
+        const p = try t.panel(stage, "p", "Panel Title");
+        _ = try p.text("body", "panel body content");
     } else if (eq(name, "row")) {
-        const r = try t.row(ctx, stage, "r");
-        _ = try el.text(ctx, r, "a", "one");
-        _ = try el.text(ctx, r, "b", "two");
-        _ = try el.text(ctx, r, "c", "three");
+        const r = try t.row(stage, "r");
+        _ = try r.text("a", "one");
+        _ = try r.text("b", "two");
+        _ = try r.text("c", "three");
     } else if (eq(name, "stat")) {
-        _ = try t.stat(ctx, stage, "s1", "Materials", "24");
-        _ = try t.stat(ctx, stage, "s2", "Food", "4");
+        _ = try t.stat(stage, "s1", "Materials", "24");
+        _ = try t.stat(stage, "s2", "Food", "4");
     } else if (eq(name, "figure")) {
-        try t.figure(ctx, stage, t.fig_robust, th.acc);
-        try t.figure(ctx, stage, t.fig_weary, th.warn);
+        try t.figure(stage, t.fig_robust, th.acc);
+        try t.figure(stage, t.fig_weary, th.warn);
     } else if (eq(name, "actor_status")) {
         if (player.get()) |a| {
             const s = t.actor_status(th, a[1], ctx.res.config);
-            _ = (try el.text(ctx, stage, "st", s.word)).with_style(.{Style{ .text = s.color }});
+            _ = (try stage.text("st", s.word)).with_style(.{Style{ .text = s.color }});
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "stock_token")) {
-        try t.stock_token(ctx, stage, "tok", .{ .abbrev = "Vi", .full = "Vigor", .value = "3/10", .tone = .warn });
+        try t.stock_token(stage, "tok", .{ .abbrev = "Vi", .full = "Vigor", .value = "3/10", .tone = .warn });
     } else if (eq(name, "stockline")) {
         const stocks = [_]t.Stock{
             .{ .abbrev = "Vi", .full = "Vigor", .value = "10/10" },
             .{ .abbrev = "Fo", .full = "Food", .value = "4", .tone = .danger },
             .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
         };
-        _ = try t.stockline(ctx, stage, "sl", &stocks);
+        _ = try t.stockline(stage, "sl", &stocks);
     } else if (eq(name, "runline")) {
-        _ = try t.runline(ctx, stage, "run", .{ .act_label = "Act I", .day = 3 });
+        _ = try t.runline(stage, "run", .{ .act_label = "Act I", .day = 3 });
     } else if (eq(name, "header")) {
-        const demo = try el.div(ctx, stage, "header_demo");
+        const demo = try stage.div("header_demo");
         _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
         const stocks = [_]t.Stock{
             .{ .abbrev = "Vi", .full = "Vigor", .value = "10/10" },
             .{ .abbrev = "Fo", .full = "Food", .value = "4", .tone = .danger },
             .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
         };
-        _ = try t.header(ctx, demo, "hud", .{
+        _ = try t.header(demo, "hud", .{
             .stocks = &stocks,
             .run = .{ .act_label = "Act I", .day = 3 },
         });
     } else if (eq(name, "log_view")) {
-        try t.log_view(ctx, stage, "feed", &ctx.res.sim.log, 400, 4);
+        try t.log_view(stage, "feed", &ctx.res.sim.log, 400, 4);
     } else if (eq(name, "tabs")) {
-        _ = try t.tabs(ctx, stage, "tabs", &.{ "ACTIONS", "BUILD" });
+        _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "view_nav")) {
-        _ = try t.view_nav(ctx, stage, "vn", &.{ "ACTIONS", "BUILD" });
+        _ = try t.view_nav(stage, "vn", &.{ "ACTIONS", "BUILD" });
     } else if (eq(name, "select")) {
-        _ = try t.select(ctx, stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true);
+        _ = try t.select(stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true, null);
     } else if (eq(name, "slider")) {
-        const demo = try el.div(ctx, stage, "slider_demo");
+        const demo = try stage.div("slider_demo");
         _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
-        _ = try t.slider(ctx, demo, .{
+        _ = try t.slider(demo, .{
             .id = "sld",
             .label = "Eating policy",
             .value = 50,
@@ -204,17 +210,17 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         // The production disclosure lives in a definite milestone column. Mirror that here;
         // percentage width under the audit stage's intrinsic width would collapse its stamped
         // hit rect even though the right-anchored affordance still paints outside it.
-        const demo = try el.div(ctx, stage, "disclosure_demo");
+        const demo = try stage.div("disclosure_demo");
         _ = demo.with_size(.{ .fixed = 420 }, .fit_children);
-        const d = try t.disclosure(ctx, demo, "disc", "Disclosure summary", true);
-        if (d.details) |det| _ = try el.text(ctx, det, "dt", "hidden detail, now shown");
+        const d = try t.disclosure(demo, "disc", "Disclosure summary", true, null);
+        if (d.details) |det| _ = try det.text("dt", "hidden detail, now shown");
     } else if (eq(name, "rail")) {
         // Production supplies a definite page-grid rail region. Mirror it here so one
         // interactive instance can be inspected in both states via its own toggle.
-        const demo = try el.div(ctx, stage, "rail_demo");
+        const demo = try stage.div("rail_demo");
         _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 300 });
-        const r = try t.rail(ctx, demo, .{ .id = "rail", .label = "HOLDINGS" });
-        if (r.body) |rb| _ = try el.text(ctx, rb, "rb", "rail body");
+        const r = try t.rail(demo, .{ .id = "rail", .label = "HOLDINGS" });
+        if (r.body) |rb| _ = try rb.text("rb", "rail body");
     } else if (eq(name, "holdings")) {
         if (player.get()) |a| {
             // A coherent debug-only four-kind/six-unit fixture matching the reference anatomy.
@@ -235,18 +241,20 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             }
             if (world.get(a[0], comp.Metabolism)) |met| met.rate = 0.5;
 
-            const demo = try el.div(ctx, stage, "holdings_demo");
+            const demo = try stage.div("holdings_demo");
             _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
-            const r = try t.rail(ctx, demo, .{ .id = "holdings_rail", .label = "HOLDINGS" });
-            if (r.body) |body| _ = try t.holdings(ctx, body, world, a[0], "content");
+            const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOLDINGS" });
+            if (r.body) |body| _ = try t.holdings(body, world, a[0], "content");
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
-            _ = try t.action_tile(ctx, stage, world, a[0], comp.ActionForage, "at", "Forage", actions.action_forage);
+            if (try t.action_tile(stage, world, a[0], comp.ActionForage, "at", "Forage")) |tl| {
+                if (tl.clicked) actions.action_forage(world, a[0], ctx.res);
+            }
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
@@ -256,20 +264,20 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
             if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
             if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
-            const demo = try el.div(ctx, stage, "actions_demo");
+            const demo = try stage.div("actions_demo");
             _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
-            _ = try t.actions_section(ctx, demo, world, a[0], "actions");
+            _ = try t.actions_section(demo, world, a[0], "actions");
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "build_section")) {
         if (player.get()) |a| {
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
-            _ = try t.build_section(ctx, stage, world, a[0], "build");
+            _ = try t.build_section(stage, world, a[0], "build", null, null);
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "act_one_surface")) {
         if (player.get()) |a| {
@@ -280,9 +288,9 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
             if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
-            const demo = try el.div(ctx, stage, "surface_demo");
+            const demo = try stage.div("surface_demo");
             _ = demo.with_size(.{ .fixed = 652 }, .fit_children);
-            _ = try t.act_one_surface(ctx, demo, world, a[0], "surface", .{
+            _ = try t.act_one_surface(demo, world, a[0], "surface", .{
                 .activity = .{
                     .state = .working,
                     .subject = "Forage",
@@ -291,7 +299,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
                 },
             });
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "act_one_workspace")) {
         if (player.get()) |a| {
@@ -307,9 +315,9 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
             if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
 
-            const demo = try el.div(ctx, stage, "workspace_demo");
+            const demo = try stage.div("workspace_demo");
             _ = demo.with_size(.{ .fixed = 926 }, .{ .fixed = 700 });
-            _ = try t.act_one_workspace(ctx, demo, world, a[0], "workspace", .{
+            _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
                 .activity = .{
                     .state = .working,
                     .subject = "Forage",
@@ -318,7 +326,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
                 },
             });
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "act_one_page")) {
         if (player.get()) |a| {
@@ -340,11 +348,11 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
             if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
 
-            const demo = try el.div(ctx, stage, "act_one_page_demo");
+            const demo = try stage.div("act_one_page_demo");
             _ = demo.with_size(.{ .fixed = 900 }, .{ .fixed = 820 })
                 .with_overflow(.clip)
                 .with_style(.{Style{ .fill = th.bg }});
-            const regions = try t.shell_content(ctx, demo, demo, .{
+            const regions = try t.shell_content(demo, demo, .{
                 .id = "act_one_page",
                 .act = .act_one,
                 .page_pad = ha.tokens.pad_page,
@@ -356,11 +364,11 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
                 .{ .abbrev = "Fo", .full = "Food", .value = "11.6" },
                 .{ .abbrev = "Ma", .full = "Materials", .value = "31" },
             };
-            _ = try t.header(ctx, regions.header, "hud", .{
+            _ = try t.header(regions.header, "hud", .{
                 .stocks = &stocks,
                 .run = .{ .act_label = "Act I", .day = 19 },
             });
-            const workspace = try t.act_one_workspace(ctx, regions.body, world, a[0], "workspace", .{
+            const workspace = try t.act_one_workspace(regions.body, world, a[0], "workspace", .{
                 .activity = .{
                     .state = .idle,
                     .subject = "no work in progress",
@@ -376,29 +384,29 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             feed.push(.normal, "You finish a second Hatchet. One is effect; one is stock.");
             feed.push(.normal, "Someone is walking the shoreline. Their pack carries made goods.");
             if (regions.footer) |footer| {
-                try t.log_view(ctx, footer, "feed", &feed, 900 - 2 * ha.tokens.pad_page, 4);
+                try t.log_view(footer, "feed", &feed, 900 - 2 * ha.tokens.pad_page, 4);
             }
 
             // Match production's overlay lifecycle: the workspace owns placement of the TRADE
             // action, while this page owns stable open state and renders the dialog last.
             return auditTradeOverlay(ctx, audit_trade);
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "eating_policy")) {
-        const demo = try el.div(ctx, stage, "eating_policy_demo");
+        const demo = try stage.div("eating_policy_demo");
         _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
-        _ = try t.eating_policy(ctx, demo, "ep", 50, true);
+        _ = try t.eating_policy(demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
-            _ = try t.capital_row(ctx, stage, world, a[0], comp.Sandals, "cr", .ready, 1.0);
+            _ = try t.capital_row(stage, world, a[0], comp.Sandals, 0, .ready, 1.0);
         } else {
-            _ = try el.text(ctx, stage, "na", "(needs a live player)");
+            _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "catalog_controls")) {
-        _ = try t.catalog_controls(ctx, stage, "cc", &.{ "reach", "inputs", "time", "name" });
+        _ = try t.catalog_controls(stage, "cc", &.{ "reach", "inputs", "time", "name" }, null, null);
     } else if (eq(name, "milestone_goal")) {
-        const demo = try el.div(ctx, stage, "milestone_demo");
+        const demo = try stage.div("milestone_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
         const requirements = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "14/15" },
@@ -406,7 +414,7 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             .{ .label = "RECIPES", .value = "4/5" },
             .{ .label = "MATERIALS", .value = "31/60" },
         };
-        _ = try t.milestone_goal(ctx, demo, "mg", .{
+        _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
             .title = "Shelter",
             .summary = "materials 31/60",
@@ -419,33 +427,45 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
             .action = "NOT READY",
         });
     } else if (eq(name, "market_strip")) {
-        const demo = try el.div(ctx, stage, "market_demo");
+        const demo = try stage.div("market_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
-        _ = try t.market_strip(ctx, demo, "ms", .passerby);
+        _ = try t.market_strip(demo, "ms", .passerby);
     } else if (eq(name, "activity_strip")) {
-        const demo = try el.div(ctx, stage, "activity_demo");
+        const demo = try stage.div("activity_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
-        _ = try t.activity_strip(ctx, demo, "as", .idle, "no work in progress", "ready", .idle);
+        _ = try t.activity_strip(demo, "as", .idle, "no work in progress", "ready", .idle);
     } else if (eq(name, "trade_dialog")) {
         return auditTradeOverlay(ctx, audit_trade);
+    } else if (eq(name, "tooltip")) {
+        // An overlay root: the tooltip is its own tree, returned as the frame's second root so
+        // it floats above the stage and the index. Placed just under its anchor label, in device
+        // px, and kept inside the terminal by its prior-frame size, as a production caller does
+        // (null until it has been laid out once, when a zero size pins nothing).
+        _ = try stage.text("anchor", "a control the tooltip describes");
+        const tip = try uic.tooltip(ctx, "tip", "Vigor \u{00b7} 7 / 10");
+        const s = ctx.res.view.scale;
+        const prior = tip.prior_geometry();
+        const at = uic.clampToTerminal(ctx, uic.view.dp(40, s), uic.view.dp(44, s), if (prior) |g| g.rect.w else 0, if (prior) |g| g.rect.h else 0);
+        _ = tip.with_offset_px(at.x, at.y);
+        return tip.get();
     } else if (eq(name, "tag")) {
-        _ = try t.tag(ctx, stage, "tg", "crude");
+        _ = try t.tag(stage, "tg", "crude");
     } else if (eq(name, "cost_list")) {
         const costs = [_]t.Cost{ .{ .label = "Biomass", .amount = "80" }, .{ .label = "Minerals", .amount = "40" } };
-        _ = try t.cost_list(ctx, stage, "cl", &costs);
+        _ = try t.cost_list(stage, "cl", &costs);
     } else if (eq(name, "legend")) {
         const items = [_]t.LegendItem{
             .{ .resource = .food, .label = "Food" },
             .{ .resource = .metal, .label = "Metal" },
             .{ .resource = .biomass, .label = "Biomass" },
         };
-        _ = try t.legend(ctx, stage, "lg", &items);
+        _ = try t.legend(stage, "lg", &items);
     } else if (eq(name, "zoom_controls")) {
-        _ = try t.zoom_controls(ctx, stage, "zc");
+        _ = try t.zoom_controls(stage, "zc");
     } else if (eq(name, "empty_state")) {
-        _ = try t.empty_state(ctx, stage, "es", "Nothing here yet.", "Try widening the filter.");
+        _ = try t.empty_state(stage, "es", "Nothing here yet.", "Try widening the filter.");
     } else {
-        _ = try el.text(ctx, stage, "unknown", "(unknown template)");
+        _ = try stage.text("unknown", "(unknown template)");
     }
     return null;
 }
@@ -456,13 +476,13 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     if (!audit_trade.open) return null;
 
     const buys = [_]t.TradeOffer{
-        .{ .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
-        .{ .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
-        .{ .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
+        .{ .id = 1, .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
+        .{ .id = 2, .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
+        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
     };
     const sells = [_]t.TradeOffer{
-        .{ .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
-        .{ .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
+        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
+        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
     };
     const holdings = [_]t.TradeHolding{
         .{ .label = "Food", .value = "11.6" },
@@ -473,13 +493,12 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
         .{ .label = "Leaf bed", .value = "\u{00d7}1" },
     };
 
-    var overlay_root: *Node = undefined;
-    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade, &overlay_root);
+    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade);
     if (result.dismissed) {
         audit_trade.open = false;
         return null;
     }
-    return overlay_root;
+    return result.root;
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

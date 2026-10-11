@@ -27,74 +27,82 @@ fn gridColumns(compact: bool) u8 {
     return if (compact) 1 else 2;
 }
 
-fn placeTile(tile: ?El) void {
-    if (tile) |t| {
-        _ = t.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
-            .with_flow(.{ .dir = .column, .main = .center });
-    }
+fn placeTile(tile: El) void {
+    _ = tile.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
+        .with_flow(.{ .dir = .column, .main = .center });
 }
 
-fn placePolicy(ctx: *UiCtx, parent: El, world: *World, e: Entity) !void {
+fn placePolicy(parent: El, world: *World, e: Entity) !void {
     if (world.get(e, comp.Metabolism)) |met| {
         const policy_value = ha.eating.valueFromRate(met.rate);
-        const new_policy = try eating_policy_mod.eating_policy(ctx, parent, "eating_policy", policy_value, true);
+        const new_policy = try eating_policy_mod.eating_policy(parent, "eating_policy", policy_value, true);
         met.rate = ha.eating.rate(new_policy);
     } else {
-        _ = try eating_policy_mod.eating_policy(ctx, parent, "eating_policy", 50, false);
+        _ = try eating_policy_mod.eating_policy(parent, "eating_policy", 50, false);
     }
 }
 
-/// Build the complete actions section. Action execution remains delegated to `action_tile`;
-/// every card fills its equal column and the policy value remains live simulation state.
-pub fn actions_section(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !El {
+/// The five Act I verbs in reading order: the action component, the tile id and label, and
+/// the simulation operation the section calls when the tile reports its activation. The
+/// section is the game adapter; the tile is presentation and takes no domain function.
+const verbs = .{
+    .{ comp.ActionForage, "forage", "Forage", actions.action_forage },
+    .{ comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge },
+    .{ comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood },
+    .{ comp.ActionFish, "fish", "Fish", actions.action_fish },
+    .{ comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps },
+};
+
+/// Build the complete actions section. Every card fills its equal column and the policy
+/// value remains live simulation state.
+pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
 
-    const section = try el.div(ctx, parent, id);
+    const section = try parent.div(id);
     _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
-    const heading = try el.div(ctx, section, "heading");
+    const heading = try section.div("heading");
     _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(12);
-    const heading_copy = try el.div(ctx, heading, "copy");
+    const heading_copy = try heading.div("copy");
     _ = heading_copy.with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try el.text(ctx, heading_copy, "title", "ACTIONS"))
+    _ = (try heading_copy.text("title", "ACTIONS"))
         .with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try el.text(ctx, heading_copy, "subtitle", "What will this body do now?"))
+    _ = (try heading_copy.text("subtitle", "What will this body do now?"))
         .with_style(.{Style{ .font = 11, .text = th.dim }});
-    _ = (try el.text(ctx, heading, "count", "5 VERBS"))
+    _ = (try heading.text("count", "5 VERBS"))
         .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 
-    const grid = try el.div(ctx, section, "grid");
+    const grid = try section.div("grid");
     _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    if (gridColumns(compact) == 1) {
+    // One column at the compact breakpoint; otherwise two equal grow columns that preserve
+    // row-major reading order visually: Forage/Scavenge, Split wood/Fish, Check traps/Eating
+    // Policy. `lanes` is the column each verb lands in by its index parity.
+    const lanes: [2]El = if (gridColumns(compact) == 1) blk: {
         _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        placeTile(try action_tile_mod.action_tile(ctx, grid, world, e, comp.ActionForage, "forage", "Forage", actions.action_forage));
-        placeTile(try action_tile_mod.action_tile(ctx, grid, world, e, comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge));
-        placeTile(try action_tile_mod.action_tile(ctx, grid, world, e, comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood));
-        placeTile(try action_tile_mod.action_tile(ctx, grid, world, e, comp.ActionFish, "fish", "Fish", actions.action_fish));
-        placeTile(try action_tile_mod.action_tile(ctx, grid, world, e, comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps));
-        try placePolicy(ctx, grid, world, e);
-    } else {
-        // Two equal grow columns preserve row-major reading order visually:
-        // Forage/Scavenge, Split wood/Fish, Check traps/Eating Policy.
+        break :blk .{ grid, grid };
+    } else blk: {
         _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(grid_gap);
-        const left = try el.div(ctx, grid, "left");
+        const left = try grid.div("left");
         _ = left.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        const right = try el.div(ctx, grid, "right");
+        const right = try grid.div("right");
         _ = right.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
+        break :blk .{ left, right };
+    };
 
-        placeTile(try action_tile_mod.action_tile(ctx, left, world, e, comp.ActionForage, "forage", "Forage", actions.action_forage));
-        placeTile(try action_tile_mod.action_tile(ctx, right, world, e, comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge));
-        placeTile(try action_tile_mod.action_tile(ctx, left, world, e, comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood));
-        placeTile(try action_tile_mod.action_tile(ctx, right, world, e, comp.ActionFish, "fish", "Fish", actions.action_fish));
-        placeTile(try action_tile_mod.action_tile(ctx, left, world, e, comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps));
-        try placePolicy(ctx, right, world, e);
+    inline for (verbs, 0..) |verb, i| {
+        if (try action_tile_mod.action_tile(lanes[i % 2], world, e, verb[0], verb[1], verb[2])) |t| {
+            placeTile(t.el);
+            if (t.clicked) verb[3](world, e, ctx.res);
+        }
     }
+    try placePolicy(lanes[1], world, e);
 
     return section;
 }

@@ -155,11 +155,15 @@ aspect needs via `node.state`.
 slot-map:
 
 - **Keys are a rolling hash.** `key(seed, id) = Wyhash(seed, id)`; `key_i` folds a
-  loop index. A node's key is `key(parent.key, id)`, threaded automatically by
+  loop index, and a node made with `pcreate_i` carries that index so `rekey` keeps it. A node's key is `key(parent.key, id)`, threaded automatically by
   `add_child`, which re-keys the child's whole subtree on attach (`rekey`) — so
   identity is structural, deterministic across runs, and **independent of wiring
   order** (assemble a subtree first, attach it later, the keys resolve the same).
   (Chosen over path-strings, which allocate per node per frame.)
+- **A duplicate key is a visible failure.** Two siblings with one key would share every
+  pooled slot and silently alias, so in Debug and ReleaseSafe `add_child` panics on one,
+  naming the structural path (`root/panel/row[3]`); `duplicateSibling` and `pathInto` are the
+  pure pieces behind it.
 - **Handles, not pointers.** `acquire(k)` returns a `u32` index; dereference
   through the live pool at point of use. A pool growing/reallocating never
   dangles anyone — store the index, never a `*T` across another `acquire`.
@@ -311,7 +315,11 @@ input-agnostic.
 key, enabled)` registers directional members while exposing only the group's active
 member as a global Tab stop. The generic engine knows no keyboard vocabulary: the host
 maps commands onto `moveFocus`, `moveRovingFocus`, `requestFocus`, and `clearFocus`, then
-queries `focusedKey` / `isFocused` to route text and paint state.
+queries `focusedKey` / `isFocused` to route text and paint state. `beginFocusScope` opens a
+focus trap at the current build position: the targets registered after it are the only ones
+`moveFocus` visits next frame (a modal, built last, traps Tab to its own controls), and
+`focusFirstInScope` focuses the first enabled target inside the trap — a dialog's initial
+focus when its caller names no primary control.
 
 The registry is double-buffered to match the frame pipeline. The event stage traverses
 the last completed frame, `beginFrame` clears the build buffer, and `endFrame` repairs

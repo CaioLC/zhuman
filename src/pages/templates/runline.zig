@@ -28,32 +28,33 @@ pub const Run = struct {
 };
 
 /// Build the runline into `parent`, right-anchored by the caller. Returns the row `El`.
-pub fn runline(ctx: *UiCtx, parent: El, id: []const u8, run: Run) !El {
+pub fn runline(parent: El, id: []const u8, run: Run) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     var buf: [48]u8 = undefined;
 
-    const row = try el.div(ctx, parent, id);
+    const row = try parent.div(id);
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
 
     // Energy rate segment — only when there is a flow (Act II). `+gen −consumed` in dim.
     if (run.gen != 0 or run.consumed != 0) {
         const etxt = std.fmt.bufPrint(&buf, "+{d:.1} \u{2212}{d:.1} energy", .{ run.gen, run.consumed }) catch "";
-        _ = (try el.text(ctx, row, "energy", etxt))
+        _ = (try row.text("energy", etxt))
             .with_style(.{ style.heading, Style{ .text = th.dim } });
-        _ = (try el.text(ctx, row, "e_sep", "\u{00B7}"))
+        _ = (try row.text("e_sep", "\u{00B7}"))
             .with_style(.{ style.heading, Style{ .text = th.dim } });
     }
 
     // Act label — optional context, dropped when compact (VIEW-04); the middot follows it.
     if (!run.compact) {
         const atxt = std.fmt.bufPrint(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
-        _ = (try el.text(ctx, row, "act", atxt))
+        _ = (try row.text("act", atxt))
             .with_style(.{ style.heading, Style{ .text = th.dim } });
     }
 
     // Day — the functional counter, always shown, in fg.
     const dtxt = std.fmt.bufPrint(&buf, "Day {d}", .{run.day}) catch "?";
-    _ = (try el.text(ctx, row, "day", dtxt))
+    _ = (try row.text("day", dtxt))
         .with_style(.{ style.heading, Style{ .text = th.fg } });
 
     return row;

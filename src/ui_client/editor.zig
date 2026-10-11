@@ -10,7 +10,7 @@
 //!   * `ui_client` (this file) owns the model and every editing rule.
 //!   * `command.zig` maps SDL keys to a semantic `Command`; it never touches a buffer.
 //!   * `main.zig` only routes platform events and the SDL clipboard into these methods.
-//!   * `widgets.text_input` reads the model to render text, caret, selection, placeholder,
+//!   * `text_input` reads the model to render text, caret, selection, placeholder,
 //!     focus-visible chrome, and the clear affordance.
 //!
 //! Text model:

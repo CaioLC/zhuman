@@ -1,5 +1,5 @@
 //! Compile + test entry for the **reusable UI layer in isolation** — the generic engine
-//! (`src/ui/`) plus the host binding (`ctx_binding`/`features`/`draw`/`widgets`), but
+//! (`src/ui/`) plus the host binding (`ctx_binding`/`features`/`draw`/the compositions), but
 //! *not* `pages.zig`. `pages.zig` is game-content screen building and imports `main.zig`;
 //! the focused target deliberately validates the reusable UI boundary separately from the
 //! complete project `test` step. See `build.zig`'s `test-ui` step.
@@ -7,15 +7,18 @@
 //! Lives in `src/` (not `src/ui_client/`) so its module path covers `ui/`, `ui_client/`,
 //! and `res.zig` — Zig forbids `@import`ing files above a module's root. Referencing
 //! `features/root.zig` runs the `comptime` conformance check over the feature `list`;
-//! `refAllDecls` then forces the concrete widget/feature/draw bodies to compile
-//! (`svg.attach` is referenced explicitly since no widget calls it yet).
+//! `refAllDecls` then forces the concrete composition/feature/draw bodies to compile
+//! (`svg.attach` is referenced explicitly since no composition calls it yet).
 
 const std = @import("std");
 
 const cb = @import("./ui_client/ctx_binding.zig");
 const features = @import("./ui_client/features/root.zig");
 const draw = @import("./ui_client/draw.zig");
-const widgets = @import("./ui_client/widgets.zig");
+const text_input = @import("./ui_client/text_input.zig");
+const modal = @import("./ui_client/modal.zig");
+const tooltip = @import("./ui_client/tooltip.zig");
+const control = @import("./ui_client/control.zig");
 const style = @import("./ui_client/style.zig");
 const elements = @import("./ui_client/elements.zig");
 const input = @import("./ui_client/input.zig");
@@ -54,7 +57,10 @@ test {
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);
-    std.testing.refAllDecls(widgets);
+    std.testing.refAllDecls(text_input); // the foundation compositions — force the bodies to compile
+    std.testing.refAllDecls(modal);
+    std.testing.refAllDecls(tooltip);
+    std.testing.refAllDecls(control); // the one control lifecycle
     std.testing.refAllDecls(style); // style/placement fold + its unit tests
     std.testing.refAllDecls(elements); // content leaves + `el` — force the bodies to compile
     _ = &features.data_svg; // svg.attach — compile it even though no widget calls it yet

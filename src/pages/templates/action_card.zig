@@ -3,8 +3,9 @@
 //! shares — **cost** (the energy price), **yield** (what lands, on average), **odds**
 //! (the p10–p90 band read as "N-M in 8 of 10", plus the distribution's name). The
 //! no-tutorial teacher: the player's first action *is* the reference card. Mechanics
-//! mirror `action_button` (gate on vigor, click funnels through `act_fn`); returns the
-//! card `El` (or null if the agent doesn't hold the action) — the caller places it.
+//! mirror `action_button` (gate on vigor, report the click); returns the card and its
+//! activation (or null if the agent doesn't hold the action) — the caller places it and
+//! calls the simulation.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -23,35 +24,37 @@ const button = @import("./button.zig").button;
 const info_mod = @import("./action_info.zig");
 
 /// One dim-label / fg-value info line at body size.
-fn info(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, value: []const u8) !void {
+fn info(parent: El, id: []const u8, label: []const u8, value: []const u8) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const line = try el.div(ctx, parent, id);
+    const line = try parent.div(id);
     _ = line.with_flow(.{ .dir = .row }).with_gap(8);
-    _ = (try el.text(ctx, line, "l", label)).with_style(.{ style.body, Style{ .text = th.dim } });
-    _ = (try el.text(ctx, line, "v", value)).with_style(.{ style.body, Style{ .text = th.fg } });
+    _ = (try line.text("l", label)).with_style(.{ style.body, Style{ .text = th.dim } });
+    _ = (try line.text("v", value)).with_style(.{ style.body, Style{ .text = th.fg } });
 }
 
+pub const Card = struct { el: El, clicked: bool };
+
 pub fn action_card(
-    ctx: *UiCtx,
     parent: El,
     world: *World,
     e: Entity,
     comptime ActionT: type,
     id: []const u8,
     name: []const u8,
-    comptime act_fn: anytype,
-) !?El {
+) !?Card {
+    const ctx = parent.ctx;
     if (!world.has(e, ActionT)) return null;
     const act = world.get(e, ActionT).?;
     const vigor = world.get(e, comp.Vigor).?;
     // Same gates as `begin_labor`: strict energy (vigor 0 is death), one act at a time.
     const can = !world.has(e, comp.Busy) and vigor.v > act.requires.energy;
 
-    const card = try el.div(ctx, parent, id);
+    const card = try parent.div(id);
     _ = card.with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
 
-    const btn = try button(ctx, card, "btn", name, can);
-    if (btn.query().clicked and can) act_fn(world, e, ctx.res);
+    const btn = try button(card, "btn", name, can);
+    const clicked = btn.query().clicked and can;
 
     // Dominant yield (food or materials, by mean) — the shared pick (`action_info`),
     // scaled by the same two-level quality factor `gather` draws with.
@@ -63,16 +66,16 @@ pub fn action_card(
         std.fmt.bufPrint(&buf, "{d:.0} energy + {d:.0} materials", .{ act.requires.energy, act.requires.materials }) catch "?"
     else
         std.fmt.bufPrint(&buf, "{d:.0} energy", .{act.requires.energy}) catch "?";
-    try info(ctx, card, "cost", "cost", cost_txt);
+    try info(card, "cost", "cost", cost_txt);
 
     // Time spelled out — the fourth price the compact tile will abbreviate to "4h".
     // Under the metabolism, working hours are eaten hours.
-    try info(ctx, card, "time", "time", std.fmt.bufPrint(&buf, "{d:.0} hours", .{act.requires.hours}) catch "?");
+    try info(card, "time", "time", std.fmt.bufPrint(&buf, "{d:.0} hours", .{act.requires.hours}) catch "?");
 
-    try info(ctx, card, "yield", "yield", std.fmt.bufPrint(&buf, "{s}, {d:.0} on average", .{ dom.word, dom.band.mean * quality }) catch "?");
+    try info(card, "yield", "yield", std.fmt.bufPrint(&buf, "{s}, {d:.0} on average", .{ dom.word, dom.band.mean * quality }) catch "?");
 
     // p10–p90 spelled out: 8 of 10 draws land inside the band. The spread IS the risk.
-    try info(ctx, card, "odds", "odds", std.fmt.bufPrint(&buf, "{d:.0}-{d:.0} in 8 of 10 ({s})", .{ @round(dom.band.p10 * quality), @round(dom.band.p90 * quality), @tagName(dom.kind) }) catch "?");
+    try info(card, "odds", "odds", std.fmt.bufPrint(&buf, "{d:.0}-{d:.0} in 8 of 10 ({s})", .{ @round(dom.band.p10 * quality), @round(dom.band.p90 * quality), @tagName(dom.kind) }) catch "?");
 
-    return card;
+    return .{ .el = card, .clicked = clicked };
 }

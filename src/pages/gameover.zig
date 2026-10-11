@@ -13,7 +13,7 @@ const World = ha.world.World;
 
 const t = @import("./templates/root.zig");
 
-pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
+pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     // KIT-04: the game-over screen lives in the one terminal shell; it needs only the main
@@ -24,18 +24,18 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
     });
-    const center = try el.div(ctx, regions.body, "c_div");
+    const center = try regions.body.div("c_div");
     _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
 
-    try t.figure(ctx, center, t.fig_dead, th.danger);
-    _ = (try el.text(ctx, center, "dead_text", "You perished, cold and starved."))
+    try t.figure(center, t.fig_dead, th.danger);
+    _ = (try center.text("dead_text", "You perished, cold and starved."))
         .with_style(.{ style.h2, Style{ .text = th.fg } }); // the only line on the screen
 
-    const restart = try t.button(ctx, center, "restart", "Start over", true);
+    const restart = try t.button(center, "restart", "Start over", true);
     if (restart.query().clicked) {
         _ = app.spawn_player(world);
         ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
         ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
     }
-    return regions.root.get();
+    return try uic.oneRoot(ctx.arena, regions.root.get());
 }

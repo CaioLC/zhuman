@@ -38,22 +38,24 @@ pub const Result = struct {
     selected: ?usize,
     confirmed: ?usize = null,
     dismissed: bool = false,
+    /// The dialog's own root, for the page to list after its shell.
+    root: *uic.Node,
 };
 
-pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: []const u8, buy_offers: []const Offer, sell_offers: []const Offer, holdings: []const Holding, st: *TradeState, out_root: **uic.Node) !Result {
+pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: []const u8, buy_offers: []const Offer, sell_offers: []const Offer, holdings: []const Holding, st: *TradeState) !Result {
     const identity = venueIdentity(kind);
     const m = try modal_mod.modal(ctx, id, identity.title, modal_mod.default_width);
-    out_root.* = m.root;
 
-    const close_clicked = try header_mod.modal_header(ctx, m.box, m.width, identity.kicker, meta, identity.title);
-    const body = try body_mod.modal_body(ctx, m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
-    const footer = try footer_mod.modal_footer(ctx, m.box, m.width, identity.footer, identity.cta, body.can_confirm);
+    const close_clicked = try header_mod.modal_header(m.box, m.width, identity.kicker, meta, identity.title);
+    const body = try body_mod.modal_body(m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
+    const footer = try footer_mod.modal_footer(m.box, m.width, identity.footer, identity.cta, body.can_confirm);
 
     return .{
         .mode = body.mode,
         .selected = body.selected,
         .confirmed = if (footer.confirm) body.selected else null,
-        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or footer.leave),
+        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or footer.leave, footer.primary_key),
+        .root = m.root,
     };
 }
 
@@ -76,7 +78,7 @@ test "TradeState keeps per-mode selection separate" {
 }
 
 test "Offer availability requires stock and no refusal" {
-    try std.testing.expect((Offer{ .give = "a", .receive = "b" }).valid());
-    try std.testing.expect(!(Offer{ .give = "a", .receive = "b", .stock = 0 }).valid());
-    try std.testing.expect(!(Offer{ .give = "a", .receive = "b", .refusal = "no" }).valid());
+    try std.testing.expect((Offer{ .id = 1, .give = "a", .receive = "b" }).valid());
+    try std.testing.expect(!(Offer{ .id = 1, .give = "a", .receive = "b", .stock = 0 }).valid());
+    try std.testing.expect(!(Offer{ .id = 1, .give = "a", .receive = "b", .refusal = "no" }).valid());
 }
