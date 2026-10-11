@@ -56,12 +56,11 @@ pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
 
 /// Fill `box` as a stock token. `stockline` hands it an `item`, so a loop needs no ids.
 fn stock_token_in(box: El, s: Stock) !void {
-    const ctx = box.ctx;
-    const th = ctx.res.view.theme;
-    ctx.registerFocus(box.get().key, true);
-    const q = box.query();
-    const focused = ctx.isFocused(box.get().key);
-    const reveal = q.hovering or focused;
+    const th = box.ctx.res.view.theme;
+    // A focusable readout, not a control: the full label is its accessible name and the
+    // formatted value its spoken value; hovering it is not an affordance, so no pointer cursor.
+    const q = box.control(.{ .name = s.full, .role = .text, .value = s.value, .cursor = .default });
+    const reveal = q.hovering or q.focused;
 
     // The token sizes to its own content, so the stockline is **compact** by default: each
     // token is only as wide as `abbrev + value`. On hover/focus the label swaps to the full

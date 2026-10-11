@@ -362,12 +362,23 @@ call sites, not by new wrappers.
 
 ### Step 3 — controls
 
-- [ ] **ZUI-10 — `El.control`.** One host-side lifecycle helper returning the published
+- [x] **ZUI-10 — `El.control`.** One host-side lifecycle helper returning the published
   interaction. No callbacks into `src/ui/`.
-- [ ] **ZUI-11 — Migrate every control site.** Button, tabs, disclosure, select, slider, text
+  - Done: `ui_client/control.zig`. Options carry the enabled gate, accessible name, role,
+    selected/checked/expanded, a spoken value, owned sub-controls, a roving group, a focus
+    override and the hover cursor.
+- [x] **ZUI-11 — Migrate every control site.** Button, tabs, disclosure, select, slider, text
   input, the three controls in `capital_row`, the action tile, the modal header, footer and
   offer rows, the catalog sort toggle, the rail toggle, the market strip link, the milestone
   action and the debug index. The behaviour table holds for all of them.
+  - Done, plus the stock token readout, the zoom buttons and the milestone disclosure. Sites
+    that change selection or expansion on the click read `query()` first so the published
+    bit is current on the click frame. What stays manual, by design: the slider's press-time
+    focus and captured-drag cursor, the text field's outside-press focus clear, the tab
+    strip's group node, a build row's sub-action relation (published after its cancel exists),
+    the catalog's Escape focus restore, the select popup's hover cursor, the text field's
+    pointer-only clear glyph, and the eating policy's richer slider value (an in-place update
+    of the slider's published node, since the wording depends on the value the slider lands on).
 - [ ] **ZUI-12 — No domain functions in template signatures.** `action_tile` and
   `action_button` return the activation; `actions_section` calls the simulation.
 

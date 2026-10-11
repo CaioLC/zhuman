@@ -141,23 +141,11 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     _ = disclosure.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_h })
         .with_offset(0, bar_control_offset_y)
         .with_style(.{Style{ .fill = th.bg }});
-    const disclosure_key = disclosure.get().key;
     const disclosure_state = disclosure.state(DisclosureState);
-    ctx.registerFocus(disclosure_key, true);
-    const dq = disclosure.query();
-    if (dq.clicked) {
-        _ = ctx.requestFocus(disclosure_key);
-        disclosure_state.expanded = !disclosure_state.expanded;
-    }
-    if (dq.hovering) ctx.res.cursor.request(.pointer);
-    const disclosure_focused = ctx.isFocused(disclosure_key);
-    uic.publishControlState(ctx, disclosure_key, .{
-        .focused = disclosure_focused,
-        .focus_visible = disclosure_focused,
-    });
-    var disclosure_semantics = uic.semantic.describeButton(disclosure_key, goal.title, true, disclosure_focused);
-    disclosure_semantics.state.expanded = disclosure_state.expanded;
-    ctx.res.semantics.publish(disclosure_semantics);
+    // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
+    if (disclosure.query().clicked) disclosure_state.expanded = !disclosure_state.expanded;
+    const dq = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded });
+    const disclosure_focused = dq.focused;
 
     const title_color = if (dq.hovering or disclosure_focused) th.acc else th.fg;
     // Center the complete disclosure composition against the definite 28px control box. If the
@@ -201,20 +189,8 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         const action = try action_lane.div("action");
         _ = action.with_size(.{ .fixed = action_w }, .{ .fixed = action_h })
             .with_offset(0, bar_control_offset_y);
-        const action_key = action.get().key;
-        ctx.registerFocus(action_key, ready);
-        const aq = action.query();
-        if (aq.clicked and !ready) _ = ctx.consumeFlag(action_key, .clicked);
-        if (aq.clicked and ready) _ = ctx.requestFocus(action_key);
-        if (aq.hovering) ctx.res.cursor.request(if (ready) .pointer else .not_allowed);
-        const action_focused = ctx.isFocused(action_key);
-        uic.publishControlState(ctx, action_key, .{
-            .disabled = !ready,
-            .focused = action_focused,
-            .focus_visible = action_focused,
-        });
-        ctx.res.semantics.publish(uic.semantic.describeButton(action_key, goal.action, ready, action_focused));
-        const action_color = if (!ready) th.dim else if (aq.hovering or action_focused) th.acc else th.fg;
+        const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button });
+        const action_color = if (!ready) th.dim else if (aq.hovering or aq.focused) th.acc else th.fg;
         _ = action.with_style(.{Style{ .outline_color = action_color }});
         _ = (try action.text("label", goal.action))
             .with_layout(.center)

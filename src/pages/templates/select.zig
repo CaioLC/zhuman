@@ -60,16 +60,13 @@ pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []
     // width also gives the out-of-flow popup a real containing width instead of asking a
     // percentage to resolve under an intrinsic (`fit_children`) parent.
     const control_w: f32 = 144;
-    ctx.registerFocus(box.get().key, enabled);
-    const q = box.query();
-    if (q.clicked and !enabled) _ = ctx.consumeFlag(box.get().key, .clicked); // disabled can't open
-    if (q.clicked and enabled) {
-        _ = ctx.requestFocus(box.get().key); // focus restoration: the control owns focus
-        st.toggle(!enabled);
-    }
-    const focused = ctx.isFocused(box.get().key);
-    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    uic.publishControlState(ctx, box.get().key, .{ .disabled = !enabled, .focused = focused, .focus_visible = focused });
+    // Toggle on the click before the lifecycle publishes `expanded`, so it is current. A
+    // disabled control cannot open (the lifecycle consumes its click). The control owns focus,
+    // so closing restores it to the opener.
+    if (enabled and box.query().clicked) st.toggle(!enabled);
+    const value_txt = if (n > 0) options[st.value] else "";
+    const q = box.control(.{ .enabled = enabled, .name = label, .role = .button, .value = value_txt, .expanded = st.open });
+    const focused = q.focused;
 
     _ = box.with_size(.{ .fixed = control_w }, .{ .fixed = ha.tokens.control.h_compact })
         .with_style(.{Style{ .outline_color = if (!enabled) th.line else if (focused or q.hovering) th.acc else th.line2 }});
@@ -81,7 +78,6 @@ pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []
     _ = trigger.with_layout(.center).with_flow(.{ .dir = .row })
         .with_gap(ha.tokens.gap.inline_).with_size(.fit_children, .fit_children);
     _ = (try trigger.text("lbl", label)).with_style(.{ style.small, Style{ .text = th.dim } });
-    const value_txt = if (n > 0) options[st.value] else "";
     _ = (try trigger.text("val", value_txt)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
     _ = (try trigger.text("caret", if (st.open) "\u{25B4}" else "\u{25BE}")) // ▴ open / ▾ closed
         .with_style(.{Style{ .text = th.dim }});

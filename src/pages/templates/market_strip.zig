@@ -129,15 +129,8 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
     // the hit target; it rests dim and lifts to accent on hover/hold/focus.
     const act = try content.div("act");
     _ = act.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
-    const action_key = act.get().key;
-    ctx.registerFocus(action_key, true);
-    const aq = act.query();
-    if (aq.clicked) _ = ctx.requestFocus(action_key);
-    const afocused = ctx.isFocused(action_key);
-    if (aq.hovering) ctx.res.cursor.request(.pointer);
-    uic.publishControlState(ctx, action_key, .{ .focused = afocused, .focus_visible = afocused });
-    ctx.res.semantics.publish(uic.semantic.describeButton(action_key, idn.action, true, afocused));
-    const action_color = if (aq.hovering or aq.held or afocused) th.acc else th.dim;
+    const aq = act.control(.{ .name = idn.action, .role = .button });
+    const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
     _ = (try act.text("label", idn.action))
         .with_style(.{Style{ .font = market_font, .text = action_color }});
 

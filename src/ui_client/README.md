@@ -646,6 +646,16 @@ consume before ancestor action decisions; ancestors re-query afterward. `capital
 uses this for its nested cancel control, so cancel no longer needs a manual `!cancelled`
 guard to keep the containing build action from firing.
 
+**`control(opts)` is the one control lifecycle** (`control.zig`): focus registration (global
+or under a roving group), activation, consumption of a disabled click, focus acquisition on
+click, `ControlState` and semantic publication, the cursor request — once, for the node it is
+called on, returning the node's interaction read after publication. The caller keeps its
+enabled gate, its accessible name and role, and the chrome it paints from the result. Every
+control in the templates goes through it, so the KIT-03 contract holds by construction rather
+than by each template remembering it. A composition that changes selection or expansion on the
+click reads `query()` first and passes the new fact in, so the published bit is current on the
+click frame.
+
 Three more hooks name things the raw node left implicit. `track()` is the keep-alive read:
 query a node only so it owns a slot and its rect is stamped — a scroll view's content probe,
 the modal scrim and box, the tooltip. `state(T)` is the node's pooled slot, the home of a

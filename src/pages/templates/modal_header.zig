@@ -27,15 +27,9 @@ pub fn modal_header(parent: El, width: f32, kicker_text: []const u8, meta: []con
     const close = try header.div("close");
     _ = close.with_size(.{ .fixed = 28 }, .{ .fixed = 28 })
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-    ctx.registerFocus(close.get().key, true);
-    const q = close.query();
-    if (q.clicked) _ = ctx.requestFocus(close.get().key);
-    const focused = ctx.isFocused(close.get().key);
-    uic.publishControlState(ctx, close.get().key, .{ .focused = focused, .focus_visible = focused });
-    if (q.hovering) ctx.res.cursor.request(.pointer);
+    const q = close.control(.{ .name = "Close trade dialog", .role = .icon_button });
     _ = (try close.text("glyph", "\u{00d7}"))
-        .with_style(.{Style{ .font = 18, .text = if (q.held or q.hovering or focused) th.acc else th.dim }});
-    ctx.res.semantics.publish(uic.semantic.describeIconButton(close.get().key, "Close trade dialog", true, focused));
+        .with_style(.{Style{ .font = 18, .text = if (q.held or q.hovering or q.focused) th.acc else th.dim }});
     const clicked = close.consume(.clicked);
     try modal_mod.rule(parent, "header_rule", width);
     return clicked;

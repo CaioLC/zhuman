@@ -90,12 +90,7 @@ pub const Zoom = enum { none, out, reset, in };
 fn zoom_button(parent: El, id: []const u8, label: []const u8) !bool {
     const ctx = parent.ctx;
     const box = try parent.div(id);
-    ctx.registerFocus(box.get().key, true);
-    const q = box.query();
-    if (q.clicked) _ = ctx.requestFocus(box.get().key);
-    const focused = ctx.isFocused(box.get().key);
-    if (q.hovering) ctx.res.cursor.request(.pointer);
-    uic.publishControlState(ctx, box.get().key, .{ .focused = focused, .focus_visible = focused });
+    const q = box.control(.{ .name = label, .role = .button });
     const s = style.resolve(ctx, box.get(), .{style.btn_primary});
     if (s.outline_color) |c| box.get().render_data.outline = .{ .color = c };
     _ = box.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});

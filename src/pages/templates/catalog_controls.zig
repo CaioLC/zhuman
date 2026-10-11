@@ -89,16 +89,9 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
 
     // Adjacent sort toggle: opens/closes the disclosed sort row.
     const toggle = try row.div("sort_toggle");
-    ctx.registerFocus(toggle.get().key, true);
     const toggle_key = toggle.get().key;
-    const tq = toggle.query();
-    if (tq.clicked) {
-        _ = ctx.requestFocus(toggle_key);
-        st.sort_open = !st.sort_open;
-    }
-    if (tq.hovering) ctx.res.cursor.request(.pointer);
-    const tfocused = ctx.isFocused(toggle_key);
-    uic.publishControlState(ctx, toggle_key, .{ .focused = tfocused, .focus_visible = tfocused });
+    if (toggle.query().clicked) st.sort_open = !st.sort_open;
+    _ = toggle.control(.{ .name = "sort", .role = .button, .expanded = st.sort_open });
     _ = toggle.with_layout(.center_right).with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
     _ = (try toggle.text("t", if (st.sort_open) "sort \u{2191}" else "sort \u{2193}"))
         .with_style(.{ style.small, style.btn_secondary });

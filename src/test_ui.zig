@@ -18,6 +18,7 @@ const draw = @import("./ui_client/draw.zig");
 const text_input = @import("./ui_client/text_input.zig");
 const modal = @import("./ui_client/modal.zig");
 const tooltip = @import("./ui_client/tooltip.zig");
+const control = @import("./ui_client/control.zig");
 const style = @import("./ui_client/style.zig");
 const elements = @import("./ui_client/elements.zig");
 const input = @import("./ui_client/input.zig");
@@ -59,6 +60,7 @@ test {
     std.testing.refAllDecls(text_input); // the foundation compositions — force the bodies to compile
     std.testing.refAllDecls(modal);
     std.testing.refAllDecls(tooltip);
+    std.testing.refAllDecls(control); // the one control lifecycle
     std.testing.refAllDecls(style); // style/placement fold + its unit tests
     std.testing.refAllDecls(elements); // content leaves + `el` — force the bodies to compile
     _ = &features.data_svg; // svg.attach — compile it even though no widget calls it yet

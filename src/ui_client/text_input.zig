@@ -39,30 +39,25 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
     const field = try parent.div(id);
     const key = field.get().key;
     const state = field.state(UiState.TextInputState);
-    ctx.registerFocus(key, true);
     ctx.res.commands.registerText(key, true);
 
-    const q = field.query();
-    if (q.hovering) ctx.res.cursor.request(.text);
-    if (q.clicked) {
-        _ = ctx.requestFocus(key);
-    } else if (ctx.isFocused(key) and ctx.res.input.pointer.buttons.primary.pressed and !q.pressed) {
-        ctx.clearFocus(); // primary press landed outside this field
+    // A primary press that lands outside a focused field clears focus; read it before the
+    // lifecycle so the published focus is this frame's truth.
+    const pre = field.query();
+    if (!pre.clicked and ctx.isFocused(key) and ctx.res.input.pointer.buttons.primary.pressed and !pre.pressed) {
+        ctx.clearFocus();
     }
-    const focused = ctx.isFocused(key);
-    // Current desktop policy keeps every focused text field visibly outlined; INPUT-06
-    // can later distinguish keyboard-origin focus without changing the vocabulary.
-    cb.publishControlState(ctx, key, .{ .focused = focused, .focus_visible = focused });
     // INPUT-08: the accessible name is the placeholder/purpose; the value is the model's
-    // authoritative text (never the caret/selection display string). A refused edit is
-    // surfaced as an assertive live region, matching the `danger` outline.
-    ctx.res.semantics.publish(semantics.describeTextInput(
-        key,
-        placeholder,
-        state.text(),
-        focused,
-        state.refused,
-    ));
+    // authoritative text (never the caret/selection display string). A refused edit is an
+    // assertive live region, matching the `danger` outline.
+    const q = field.control(.{
+        .name = placeholder,
+        .role = .text_input,
+        .value = state.text(),
+        .cursor = .text,
+        .live = if (state.refused) .assertive else .off,
+    });
+    const focused = q.focused;
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {
         sdl.keyboard.startTextInput(ctx.res.platform.window) catch {};
     } else if (ctx.focusedKey() == null and sdl.keyboard.textInputActive(ctx.res.platform.window)) {

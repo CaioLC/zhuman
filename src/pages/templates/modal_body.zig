@@ -66,27 +66,19 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
             .with_flow(.{ .dir = .row, .main = .space_between, .cross = .start })
             .with_style(.{style.pad_sym(8, 7)});
         const enabled = offer.valid();
-        ctx.registerFocus(row.get().key, enabled);
-        const q = row.query();
-        if (q.clicked and enabled) {
-            _ = ctx.requestFocus(row.get().key);
-            st.setSel(i);
-        }
-        if (q.clicked and !enabled) _ = ctx.consumeFlag(row.get().key, .clicked);
-        const chosen = st.sel() == i;
-        const focused = ctx.isFocused(row.get().key);
-        if (q.hovering and enabled) ctx.res.cursor.request(.pointer);
-        uic.publishControlState(ctx, row.get().key, .{ .disabled = !enabled, .selected = chosen, .focused = focused, .focus_visible = focused });
-        _ = row.with_style(.{Style{ .outline_color = if (chosen) th.warn else if (q.hovering or focused) th.dim else th.line }});
-        const copy = try row.div("copy");
-        _ = copy.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
         const name = if (offer.name.len > 0) offer.name else if (st.mode == 0) offer.receive else offer.give;
         const detail = if (offer.detail.len > 0) offer.detail else if (offer.refusal.len > 0) offer.refusal else if (st.mode == 0) "available stock" else "your spare stock";
+        // Select on the click before the lifecycle publishes `selected`, so it is current.
+        if (enabled and row.query().clicked) st.setSel(i);
+        const chosen = st.sel() == i;
+        const q = row.control(.{ .enabled = enabled, .name = name, .role = .button, .selected = chosen });
+        _ = row.with_style(.{Style{ .outline_color = if (chosen) th.warn else if (q.hovering or q.focused) th.dim else th.line }});
+        const copy = try row.div("copy");
+        _ = copy.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
         _ = (try copy.text("name", name)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
         _ = (try copy.text("detail", detail)).with_style(.{Style{ .font = 9, .text = if (enabled) th.line2 else th.danger }});
         _ = (try row.text("count", try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{offer.stock})))
             .with_style(.{Style{ .font = 10, .text = th.dim }});
-        ctx.res.semantics.publish(uic.semantic.describeButton(row.get().key, name, enabled, focused));
     }
 
     const selected: ?usize = if (offers.len == 0) null else @min(st.sel(), offers.len - 1);

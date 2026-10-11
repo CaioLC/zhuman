@@ -61,37 +61,26 @@ pub fn tile(
     const running = progress != null;
 
     const box = try parent.div(id);
-    // Affordability/running remains authoritative here; publication is a visual/semantic
-    // projection and explicitly clears stale disabled state when the facts change.
-    const box_key = box.get().key;
+    // Affordability/running remains authoritative here; the lifecycle publishes it. The tile's
+    // accessible name is the action's own; its spoken value is the determinate progress
+    // readout while running (from the same fraction the underbar fills to, so the bridge can
+    // speak "62%"), else the risk profile's shared label (KIT-17: the curve glyph is not a
+    // string, so "Forage" reads with its "normal" distribution).
     const enabled = !running and can;
-    const was_focused = ctx.isFocused(box_key);
-    ctx.registerFocus(box_key, focusRegistrationEnabled(enabled, running, was_focused));
-    const q = box.query();
-    if (q.clicked and enabled) _ = ctx.requestFocus(box_key);
-    const focused = ctx.isFocused(box_key);
-    uic.publishControlState(ctx, box_key, .{
-        .disabled = !enabled,
-        .focused = focused,
-        .focus_visible = focused,
+    const was_focused = ctx.isFocused(box.get().key);
+    var pbuf: [8]u8 = undefined;
+    const value: []const u8 = if (progress) |p|
+        std.fmt.bufPrint(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?"
+    else
+        ha.dist.kindLabel(kind);
+    const q = box.control(.{
+        .enabled = enabled,
+        .name = name,
+        .role = .tile,
+        .focusable = focusRegistrationEnabled(enabled, running, was_focused),
+        .value = value,
     });
-    // INPUT-08: an action tile is a composite actionable node. Its accessible name is the
-    // action's own name (authoritative); `enabled` is the same affordability/running gate.
-    // When running it carries a determinate progress readout as its value, from the same
-    // `progress` fraction the underbar fills to — so the bridge can speak "62%".
-    var tile_node = uic.semantic.describeTile(box_key, name, enabled, focused, &[_]u64{});
-    if (progress) |p| {
-        var pbuf: [8]u8 = undefined;
-        const readout = std.fmt.bufPrint(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?";
-        _ = tile_node.setValue(readout);
-    } else {
-        // KIT-17: the risk profile's shared accessible label rides as the tile's spoken value
-        // (the curve glyph is not a string), so "Forage" reads with its "normal" distribution.
-        _ = tile_node.setValue(ha.dist.kindLabel(kind));
-    }
-    ctx.res.semantics.publish(tile_node);
-    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.held or q.hovering or focused) th.acc else th.fg;
+    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.held or q.hovering or q.focused) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.

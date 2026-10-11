@@ -29,6 +29,7 @@ const cb = @import("./ctx_binding.zig");
 const feat = @import("./features/root.zig");
 const style = @import("./style.zig");
 const view = @import("./view.zig");
+const control_mod = @import("./control.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -111,6 +112,14 @@ pub const El = struct {
     /// unrelated flags remain available.
     pub fn consume(self: El, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
         return self.ctx.consumeFlag(self.node.key, flag);
+    }
+
+    /// Make this node a control: run the one host lifecycle (focus registration, activation,
+    /// disabled consumption, focus acquisition, `ControlState` and semantic publication, the
+    /// cursor) and return the published interaction. See `control.zig`. The caller keeps the
+    /// enabled gate, the accessible name and role, and paints its chrome from the result.
+    pub fn control(self: El, opts: control_mod.Options) UiCtx.Interaction {
+        return control_mod.control(self.ctx, self.node, opts);
     }
 
     /// Set this node's own anchor — how *it* sits within its parent. How this node arranges

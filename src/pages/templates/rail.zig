@@ -73,18 +73,9 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // states, keeping the visual box and hit box synchronized through the transition.
     const body = try box.div("rail_body");
     const toggle = try box.div("toggle");
-    ctx.registerFocus(toggle.get().key, true);
-    const q = toggle.query();
-    if (q.clicked) {
-        _ = ctx.requestFocus(toggle.get().key);
-        st.collapsed = !st.collapsed;
-    }
-    if (q.hovering) ctx.res.cursor.request(.pointer);
-    const focused = ctx.isFocused(toggle.get().key);
-    uic.publishControlState(ctx, toggle.get().key, .{
-        .focused = focused,
-        .focus_visible = focused,
-    });
+    // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
+    if (toggle.query().clicked) st.collapsed = !st.collapsed;
+    const q = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed });
     // Match the active-tab resting edge directly: foreground at rest, accent only during the
     // pointer interaction. A click retains keyboard focus across collapse/expand, but that
     // persistent focus must not latch the rail in its hover color after the pointer leaves.

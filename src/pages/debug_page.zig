@@ -110,18 +110,15 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
         .with_style(.{ style.small, Style{ .text = th.dim } });
     for (entries, 0..) |name, i| {
         const item = try index.item("e", i);
-        ctx.registerFocus(item.get().key, true);
-        const iq = item.query();
-        if (iq.clicked) {
-            _ = ctx.requestFocus(item.get().key);
+        // Selection changes on the click before the lifecycle publishes it, so the published
+        // `selected` is current on the click frame.
+        if (item.query().clicked) {
             sel.active = i;
             audit_trade.open = eq(name, "trade_dialog");
         }
-        const focused = ctx.isFocused(item.get().key);
-        if (iq.hovering) ctx.res.cursor.request(.pointer);
-        uic.publishControlState(ctx, item.get().key, .{ .selected = i == sel.active, .focused = focused, .focus_visible = focused });
         const on = i == sel.active;
-        const c = if (on) th.acc else if (iq.hovering or focused) th.fg else th.dim;
+        const iq = item.control(.{ .name = name, .role = .button, .selected = on });
+        const c = if (on) th.acc else if (iq.hovering or iq.focused) th.fg else th.dim;
         _ = (try item.text("t", name)).with_style(.{ style.small, Style{ .text = c } });
     }
 

@@ -59,9 +59,11 @@ pub fn slider(parent: El, opts: Options) !Slider {
     const control = try parent.div(opts.id);
     _ = control.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = control_h });
     const key = control.get().key;
-    ctx.registerFocus(key, opts.enabled);
     ctx.res.commands.registerRange(key);
 
+    // A pre-read: the keyboard commands and the press drive the value, and the value is what
+    // the lifecycle publishes, so the read comes first and the lifecycle runs once the value
+    // is known.
     const q = control.query();
     const state = control.state(SliderState);
 
@@ -104,20 +106,20 @@ pub fn slider(parent: El, opts: Options) !Slider {
         }
     }
 
-    if (q.hovering or state.dragging) {
-        ctx.res.cursor.request(if (opts.enabled) .horizontal_resize else .not_allowed);
-    }
-
-    const focused = ctx.isFocused(key);
-    uic.publishControlState(ctx, key, .{
-        .disabled = !opts.enabled,
-        .focused = focused,
-        .focus_visible = focused,
-    });
-
     var value_buf: [32]u8 = undefined;
     const value_text = std.fmt.bufPrint(&value_buf, "{d:.2}", .{value}) catch "?";
-    ctx.res.semantics.publish(uic.semantic.describeSlider(key, opts.label, value_text, opts.enabled, focused));
+    const published = control.control(.{
+        .enabled = opts.enabled,
+        .name = opts.label,
+        .role = .slider,
+        .value = value_text,
+        .cursor = .horizontal_resize,
+    });
+    const focused = published.focused;
+    // A captured drag keeps the resize cursor even once the pointer leaves the lane.
+    if (state.dragging and !q.hovering) {
+        ctx.res.cursor.request(if (opts.enabled) .horizontal_resize else .not_allowed);
+    }
 
     const fraction = model.toFraction(value);
     const scale = ctx.res.view.scale;

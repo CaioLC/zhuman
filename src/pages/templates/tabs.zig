@@ -41,22 +41,13 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
     for (labels, 0..) |label, i| {
         const chip = try bar.item("tab", i);
         const chip_key = chip.get().key;
-        const q = chip.query();
-        ctx.registerRovingFocus(bar_key, chip_key, true);
-        if (q.clicked) _ = ctx.requestFocus(chip_key);
-        const focused = ctx.isFocused(chip_key);
-        if (q.hovering) ctx.res.cursor.request(.pointer);
-        if (q.clicked) st.active = i;
-
+        // Switch on the click before the lifecycle publishes `selected`, so it is current.
+        if (chip.query().clicked) st.active = i;
         const is_active = st.active == i;
-        uic.publishControlState(ctx, chip_key, .{
-            .focused = focused,
-            .focus_visible = focused,
-            .selected = is_active,
-        });
-        // A tab is a single-selection member; its label is the authoritative chip text and
-        // `selected` mirrors the active index. Linked back to the strip group by key.
-        ctx.res.semantics.publish(uic.semantic.describeRadio(chip_key, label, is_active, focused, bar_key));
+        // A tab is a single-selection member registered under the strip's roving group: its
+        // label is the authoritative chip text, `selected` mirrors the active index, and the
+        // group key links it back to the strip.
+        const q = chip.control(.{ .name = label, .role = .radio, .selected = is_active, .roving_group = bar_key });
         if (member_len < member_keys.len) {
             member_keys[member_len] = chip_key;
             member_len += 1;
@@ -64,7 +55,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
         // Interaction wins over the resting state (as `button` does): hover/held/focus lifts to
         // accent even for the **active** tab, so hovering the active tab changes its color too;
         // a resting active tab is fg, a resting inactive tab is dim.
-        const c = if (q.held or q.hovering or focused) th.acc else if (is_active) th.fg else th.dim;
+        const c = if (q.held or q.hovering or q.focused) th.acc else if (is_active) th.fg else th.dim;
         const lbl = (try chip.text("l", label))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});

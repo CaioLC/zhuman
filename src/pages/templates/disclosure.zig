@@ -43,16 +43,10 @@ pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool
 
     // The summary row is the toggle: the whole row owns the interaction (KIT-03).
     const row = try box.div("summary");
-    ctx.registerFocus(row.get().key, enabled);
-    const q = row.query();
-    if (q.clicked and !enabled) _ = ctx.consumeFlag(row.get().key, .clicked); // disabled can't toggle
-    if (q.clicked and enabled) {
-        _ = ctx.requestFocus(row.get().key);
-        st.expanded = !st.expanded;
-    }
-    const focused = ctx.isFocused(row.get().key);
-    if (q.hovering) ctx.res.cursor.request(if (enabled) .pointer else .not_allowed);
-    uic.publishControlState(ctx, row.get().key, .{ .disabled = !enabled, .focused = focused, .focus_visible = focused });
+    // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
+    if (enabled and row.query().clicked) st.expanded = !st.expanded;
+    const q = row.control(.{ .enabled = enabled, .name = summary, .role = .button, .expanded = st.expanded });
+    const focused = q.focused;
 
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);

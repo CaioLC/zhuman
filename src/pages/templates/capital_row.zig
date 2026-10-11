@@ -141,18 +141,11 @@ pub fn capital_row(
     const row = try parent.item("r", index);
     const hot = kind == .ready;
     const row_key = row.get().key;
-    ctx.registerFocus(row_key, hot);
-    const q = row.query();
-    if (q.clicked and hot) _ = ctx.requestFocus(row_key);
-    const focused = ctx.isFocused(row_key);
-    uic.publishControlState(ctx, row_key, .{
-        .disabled = !hot,
-        .focused = focused,
-        .focus_visible = focused,
-    });
-    if (q.hovering) ctx.res.cursor.request(if (hot) .pointer else .not_allowed);
+    // The row is a composite tile: the good's display name is its accessible name and `hot`
+    // is the same enabled fact the build click gates on.
+    const q = row.control(.{ .enabled = hot, .name = gt.display_name(GoodT), .role = .tile });
     const lit: Color = switch (kind) {
-        .ready => if (q.held or q.hovering or focused) th.acc else th.fg,
+        .ready => if (q.held or q.hovering or q.focused) th.acc else th.fg,
         .building => th.fg,
         .owned => th.dim,
         .reach, .blocked, .locked => th.dim,
@@ -178,7 +171,7 @@ pub fn capital_row(
 
     _ = row.with_size(.{ .fixed = row_w + gaps * 8 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or focused)) th.panel else null } });
+        .with_style(.{ style.pad_sym(6, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's KIT-18 type sub-label).
     const type_word = if (capital.is_crude(GoodT)) "crude" else "made";
@@ -251,47 +244,29 @@ pub fn capital_row(
             const affordable = busy == null and stock.v >= cost.materials;
             if (affordable) {
                 const more = try action_in.div("more");
-                const more_key = more.get().key;
-                ctx.registerFocus(more_key, true);
-                const mq = more.query();
-                if (mq.clicked) _ = ctx.requestFocus(more_key);
-                const mfocused = ctx.isFocused(more_key);
-                uic.publishControlState(ctx, more_key, .{ .focused = mfocused, .focus_visible = mfocused });
-                if (mq.hovering) ctx.res.cursor.request(.pointer);
+                const mq = more.control(.{ .name = "Build +1", .role = .button });
                 _ = (try more.text("t", "Build +1"))
-                    .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mfocused) th.acc else th.dim } });
+                    .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
                 build_more = more.consume(.clicked);
             }
         },
         .building => {
             const x = try action_in.div("cancel");
-            const x_key = x.get().key;
-            ctx.registerFocus(x_key, true);
-            const xq = x.query();
-            if (xq.clicked) _ = ctx.requestFocus(x_key);
-            const x_focused = ctx.isFocused(x_key);
-            uic.publishControlState(ctx, x_key, .{ .focused = x_focused, .focus_visible = x_focused });
-            if (xq.hovering) ctx.res.cursor.request(.pointer);
+            const xq = x.control(.{ .name = "Cancel build", .role = .icon_button });
             _ = (try x.text("t", "\u{00d7}"))
-                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or x_focused) th.danger else th.line2 } });
+                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or xq.focused) th.danger else th.line2 } });
             cancelled = x.consume(.clicked);
-            cancel_key = x_key;
-            ctx.res.semantics.publish(uic.semantic.describeIconButton(x_key, "Cancel build", true, x_focused));
+            cancel_key = x.get().key;
         },
         .reach, .blocked, .locked => {},
     }
 
-    // INPUT-08: the row is a composite tile. Its accessible name is the good's display
-    // name (authoritative widget fact); `hot` is the same enabled fact the build click
-    // gates on; it controls its cancel sub-action when one exists. Published after its own
-    // descendants so children precede the container in paint order.
-    var subs: [1]u64 = undefined;
-    var subs_len: usize = 0;
+    // INPUT-08: the row controls its cancel sub-action when one exists. The sub-action's key is
+    // known only once it is built, so the row's published node is updated in place with the
+    // relation (same key, first-seen paint order preserved).
     if (cancel_key) |ck| {
-        subs[0] = ck;
-        subs_len = 1;
+        ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, q.focused, &[_]u64{ck}));
     }
-    ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, focused, subs[0..subs_len]));
 
     return .{
         .kind = kind,

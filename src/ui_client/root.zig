@@ -15,6 +15,7 @@ const tree = @import("./tree.zig");
 const text_input_mod = @import("./text_input.zig");
 const modal_mod = @import("./modal.zig");
 const tooltip_mod = @import("./tooltip.zig");
+const control_mod = @import("./control.zig");
 const cursor = @import("./cursor.zig");
 const drag = @import("./drag.zig");
 const command = @import("./command.zig");
@@ -156,6 +157,8 @@ pub const Modal = modal_mod.Modal;
 pub const modal = modal_mod.modal;
 pub const tooltip = tooltip_mod.tooltip;
 pub const clampToTerminal = tooltip_mod.clampToTerminal;
+/// The one control lifecycle `El.control` runs; its options type, for callers that build one.
+pub const ControlOptions = control_mod.Options;
 
 test {
     _ = input;
@@ -168,6 +171,7 @@ test {
     _ = text_input_mod;
     _ = modal_mod;
     _ = tooltip_mod;
+    _ = control_mod;
     _ = cursor;
     _ = drag;
     _ = command;
