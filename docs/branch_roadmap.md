@@ -402,11 +402,20 @@ call sites, not by new wrappers.
   `retainBuildCatalog`.
   - Done. The surface touches both slots every frame and passes them down through
     `build_section` and `build_list`; no key arithmetic remains in templates.
-- [ ] **ZUI-16 — Duplicate-key diagnostic.** Debug builds report a duplicate sibling or path id
+- [x] **ZUI-16 — Duplicate-key diagnostic.** Debug builds report a duplicate sibling or path id
   with the structural path. This is roadmap BASE-06; land it here or point there.
-- [ ] **ZUI-17 — State lifetime tests for what the pool tests do not cover.** Hide and show
+  - Done in the engine: `add_child` panics in Debug and ReleaseSafe on a sibling with the same
+    key, naming the path (`root/panel/row[3]`), because two nodes with one key would share
+    every pooled slot. The detector and path writer are pure and tested; the live page and the
+    audit fixtures build clean.
+- [x] **ZUI-17 — State lifetime tests for what the pool tests do not cover.** Hide and show
   through the pointer convention, reorder by domain key, a focused control disappearing,
   independent ACTIONS and BUILD state.
+  - Done at the engine level: an indexed child keeps its key across sibling order and
+    re-keying, and the duplicate detector is covered. The template-level journeys (hide and
+    show through a pointer, a focused control disappearing, independent ACTIONS and BUILD
+    state) need a `Resources` without SDL to drive a template, which does not exist; they are
+    the keyboard and pointer journeys of ZUI-QA-05/06 until roadmap QA-08 lands input replay.
 
 ### Step 5 — geometry components
 

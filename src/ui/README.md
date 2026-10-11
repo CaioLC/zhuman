@@ -160,6 +160,10 @@ slot-map:
   identity is structural, deterministic across runs, and **independent of wiring
   order** (assemble a subtree first, attach it later, the keys resolve the same).
   (Chosen over path-strings, which allocate per node per frame.)
+- **A duplicate key is a visible failure.** Two siblings with one key would share every
+  pooled slot and silently alias, so in Debug and ReleaseSafe `add_child` panics on one,
+  naming the structural path (`root/panel/row[3]`); `duplicateSibling` and `pathInto` are the
+  pure pieces behind it.
 - **Handles, not pointers.** `acquire(k)` returns a `u32` index; dereference
   through the live pool at point of use. A pool growing/reallocating never
   dangles anyone — store the index, never a `*T` across another `acquire`.

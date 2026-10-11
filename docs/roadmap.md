@@ -54,7 +54,8 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 - [ ] **BASE-03 — Preserve the green baseline after every implementation slice.** Required commands are `zig build test-ui`, `zig build test`, and `zig build`. Add a new focused build step only when it shortens a real loop; do not weaken an existing target to make it pass.
 - [ ] **BASE-04 — Update present-tense documentation with each landed capability.** A finished engine/client change updates the matching README in the same slice and removes its future entry here. Do not leave stale “not built” comments in code.
 - [ ] **BASE-05 — Give every repeated row/tile a stable domain ID.** Node keys must derive from stable action/recipe/technology/offer IDs, not current sort position, translated display text, pointer address, or filtered index. Selection, focus, scroll anchors, animation, and cached textures must survive reorder/filter operations.
-- [ ] **BASE-06 — Add debug duplicate-key diagnostics.** In debug builds, detect duplicate sibling/path keys during frame construction and report the full structural path before pooled state aliases silently. Cover loops and conditionally inserted children.
+- [x] **BASE-06 — Add debug duplicate-key diagnostics.** In debug builds, detect duplicate sibling/path keys during frame construction and report the full structural path before pooled state aliases silently. Cover loops and conditionally inserted children.
+  - COMMENT: In the engine, `Node.add_child` panics in Debug and ReleaseSafe when a sibling already has the new child's key, naming the structural path (`root/panel/row[3]`); the detector (`duplicateSibling`) and path writer (`pathInto`) are pure and unit-tested. Keys are structural, so a sibling collision is the path collision that would alias pooled state. The live page and the audit fixtures build clean under it.
 
 ## 1. Current baseline to retain
 
