@@ -238,18 +238,17 @@ pub const UiState = struct {
     /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
     /// details nodes and nothing in them is focusable.
     pub const DisclosureState = struct { expanded: bool = false };
-    /// A catalog controls bar's persisted state (KIT-15), keyed by the surface's own node so
-    /// ACTIONS and BUILD keep **independent** query/sort/open state. `sort` is the chosen
-    /// sort-kind index, `dir` the direction (`none` disables/resets ordering), `sort_open`
-    /// whether the disclosed sort row is showing, and `last_sig` the hash of the last
-    /// (query, sort, dir) used to detect a change and signal reset-to-top. The query *text*
-    /// itself lives in the search field's own pooled `TextInputState`.
+    /// A catalog controls bar's persisted state (KIT-15): `sort` is the chosen sort-kind index,
+    /// `dir` the direction (`none` disables/resets ordering), `sort_open` whether the disclosed
+    /// sort row is showing. It lives where the caller keeps it — on an always-built owner (BUILD's
+    /// is on the Act I surface) or the bar's own node — and distinct ids keep ACTIONS and BUILD
+    /// **independent**. The query *text* is the search field's `TextInputState`, likewise on the
+    /// owner the caller names or the field's own node.
     pub const CatalogState = struct {
         pub const Direction = enum { none, ascending, descending };
         sort: usize = 0,
         dir: Direction = .none,
         sort_open: bool = false,
-        last_sig: u64 = 0,
     };
     /// A trade dialog's per-mode selection (KIT-21), keyed by the dialog node. `mode` is the
     /// active tab (0 = buy, 1 = sell); `buy_sel`/`sell_sel` are the selected offer index **kept

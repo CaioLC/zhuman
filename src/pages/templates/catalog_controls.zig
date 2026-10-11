@@ -14,12 +14,10 @@
 //!   - **Sort-by** and **Direction** are `select`s; a **`none` direction disables** ordering
 //!     (the caller leaves rows in their natural order) and is the reset value.
 //!   - **count-only live summary** ("{n} shown") — never the row contents.
-//!   - **reset-to-top on query/sort change** — a `changed` flag flips when the (query, sort,
-//!     dir) signature differs from last frame, so the viewport (KIT-16) resets its scroll.
 //!   - **deterministic name tie-break** — `lessThan` breaks equal sort keys by name, so the
 //!     order is stable frame to frame.
 //!   - **independent per surface** — all state is a `CatalogState` keyed by the surface node,
-//!     so ACTIONS and BUILD keep separate query/sort/open (and their own scroll, KIT-16).
+//!     so ACTIONS and BUILD keep separate query/sort/open.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -36,28 +34,13 @@ const Direction = CatalogState.Direction;
 const select_mod = @import("./select.zig");
 
 /// The controls' resolved output for this frame: the live `query_text` (a slice into the
-/// field's editor buffer — valid until the next edit), the chosen `sort` index and `dir`, and
-/// `changed` — true on the frame the query/sort/dir differs from the last, so the caller resets
-/// its result scroll to the top. The caller filters/sorts its own rows from these.
+/// field's editor buffer — valid until the next edit) and the chosen `sort` index and `dir`.
+/// The caller filters/sorts its own rows from these.
 pub const Catalog = struct {
     query_text: []const u8,
     sort: usize,
     dir: Direction,
-    changed: bool,
 };
-
-/// FNV-1a over the (query, sort, dir) tuple — the signature used to detect a change for
-/// reset-to-top. Cheap and allocation-free.
-fn signature(query_text: []const u8, sort: usize, dir: Direction) u64 {
-    var h: u64 = 1469598103934665603;
-    for (query_text) |c| {
-        h ^= c;
-        h *%= 1099511628211;
-    }
-    h ^= sort *% 1099511628211;
-    h ^= @as(u64, @intFromEnum(dir)) *% 14695981039346656;
-    return h;
-}
 
 /// Build the catalog controls into `parent`. `sort_kinds` are the Sort-by option labels; the
 /// surface owns `enabled`. Returns the resolved `Catalog`. The query/sort/open state is
@@ -126,12 +109,7 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
     // `none` direction resets ordering — normalized here so the caller's sort simply no-ops.
     // (The selects already carry `none` as index 0.)
 
-    // Change detection for reset-to-top: compare this frame's (query, sort, dir) signature.
-    const sig = signature(query_text, st.sort, st.dir);
-    const changed = sig != st.last_sig;
-    st.last_sig = sig;
-
-    return .{ .query_text = query_text, .sort = st.sort, .dir = st.dir, .changed = changed };
+    return .{ .query_text = query_text, .sort = st.sort, .dir = st.dir };
 }
 
 /// The **count-only live summary** — render "{n} shown" (never the row contents). Call after
@@ -172,14 +150,6 @@ fn lowerAscii(c: u8) u8 {
 }
 
 // ============================ Tests (pure helpers) ======================================
-
-test "catalog signature changes on query, sort, or direction change" {
-    const a = signature("wood", 0, .none);
-    try std.testing.expectEqual(a, signature("wood", 0, .none)); // stable
-    try std.testing.expect(a != signature("fish", 0, .none)); // query
-    try std.testing.expect(a != signature("wood", 1, .none)); // sort
-    try std.testing.expect(a != signature("wood", 0, .ascending)); // dir
-}
 
 test "catalog lessThan: none preserves order; name breaks ties; descending inverts" {
     // No direction ⇒ never reorders (stable sort keeps natural order).
