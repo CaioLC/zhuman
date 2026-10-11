@@ -89,9 +89,8 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
             .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
         // The age/NOW stamp — a fixed narrow cell so message text lines up down the feed.
         var sbuf: [8]u8 = undefined;
-        _ = (try row.text("at", ageStamp(&sbuf, i)))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.clip, 30);
+        _ = (try row.text_fit("at", ageStamp(&sbuf, i), .{ .cell = .{ .mode = .clip, .width = 30 } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
         // toward `dim` unless their tone already carries meaning.
         const tone_color = log_tone_color(th, entry.tone);
@@ -118,11 +117,9 @@ pub fn log_history(parent: El, id: []const u8, feed: *const Log, width: f32, hei
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
             .with_size(.{ .fixed = col_w }, .fit_children);
         var sbuf: [8]u8 = undefined;
-        _ = (try row.text("at", ageStamp(&sbuf, i)))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.clip, 30);
-        _ = (try row.text("m", entry.text()))
-            .with_wrap(col_w - 38)
+        _ = (try row.text_fit("at", ageStamp(&sbuf, i), .{ .cell = .{ .mode = .clip, .width = 30 } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
+        _ = (try row.text_fit("m", entry.text(), .{ .wrap = col_w - 38 }))
             .with_style(.{ style.body, Style{ .text = log_tone_color(th, entry.tone) } });
     }
 }

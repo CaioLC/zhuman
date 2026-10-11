@@ -105,7 +105,7 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
         _ = (try preview.text("receive", offer.receive)).with_style(.{ style.body, Style{ .text = th.fg } });
         if (offer.effect.len > 0) {
             try modal_mod.rule(preview, "effect_rule", 168);
-            _ = (try preview.text("effect", offer.effect)).with_wrap(168).with_style(.{Style{ .font = 10, .text = th.warn }});
+            _ = (try preview.text_fit("effect", offer.effect, .{ .wrap = 168 })).with_style(.{Style{ .font = 10, .text = th.warn }});
         }
     }
 
@@ -122,8 +122,8 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
         _ = (try row.text("value", holding.value)).with_style(.{ style.small, Style{ .text = th.fg } });
         try modal_mod.rule(hold, try std.fmt.allocPrint(ctx.arena, "hr{d}", .{i}), hold_width);
     }
-    _ = (try hold.text("side_note", "The preview is final: payment, replacement, and remaining stock are visible before exchange."))
-        .with_wrap(hold_width - 20).with_style(.{ style.small, Style{ .text = th.dim }, style.pad_each(9, 10, 0, 10) });
+    _ = (try hold.text_fit("side_note", "The preview is final: payment, replacement, and remaining stock are visible before exchange.", .{ .wrap = hold_width - 20 }))
+        .with_style(.{ style.small, Style{ .text = th.dim }, style.pad_each(9, 10, 0, 10) });
 
     return .{ .mode = st.mode, .selected = selected, .can_confirm = selected != null and offers[selected.?].valid() };
 }

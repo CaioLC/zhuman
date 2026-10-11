@@ -264,7 +264,7 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
 /// that must actually be longer than `State.cap`.
 ///
 /// Wrapping is off here (`wrap_width` stays 0, the single-line fast path) — a caller opts a
-/// node into constrained multiline with `El.with_wrap`, which sets the width and re-measures.
+/// node into constrained multiline with `El.text_fit(.{ .wrap = w })`, which sets the width and re-measures.
 pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
     _ = st.update(text); // copies in full or refuses the whole string (sets `refused`)

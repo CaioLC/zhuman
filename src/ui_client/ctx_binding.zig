@@ -51,7 +51,7 @@ pub const UiState = struct {
         /// exactly as before, so dense rows pay nothing for the wrap machinery. A positive
         /// value makes `attach`/`draw` run the pure `features/wrap.zig` routine — the same
         /// routine for both, so the measured box and the rendered lines always agree. Set by
-        /// `El.with_wrap` (imperative placement, before style re-measures); `style.apply`
+        /// `El.text_fit` (a creation parameter of the leaf; style re-measures at it); `style.apply`
         /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
         /// so the pool contract is unchanged (line spans are recomputed, never stored).
         wrap_width: f32 = 0,

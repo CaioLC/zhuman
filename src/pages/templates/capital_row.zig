@@ -100,9 +100,8 @@ fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Color, 
     _ = box.with_size(.{ .fixed = width }, .fit_children);
     const inner = try box.div("i");
     _ = inner.with_layout(if (right) .center_right else .center_left);
-    _ = (try inner.text("t", text))
-        .with_style(.{ style.body, Style{ .text = color } })
-        .with_cell(.ellipsis, width);
+    _ = (try inner.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        .with_style(.{ style.body, Style{ .text = color } });
 }
 
 /// A catalog **name** cell (TEXT-03): the label is an ellipsis cell of exactly the column
@@ -115,13 +114,11 @@ fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary
     const th = ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try box.text("t", text))
-        .with_style(.{ style.body, Style{ .text = color } })
-        .with_cell(.ellipsis, width);
+    _ = (try box.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        .with_style(.{ style.body, Style{ .text = color } });
     if (secondary.len > 0) {
-        _ = (try box.text("ty", secondary))
-            .with_style(.{ style.small, Style{ .text = th.dim } })
-            .with_cell(.ellipsis, width);
+        _ = (try box.text_fit("ty", secondary, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
     }
 }
 

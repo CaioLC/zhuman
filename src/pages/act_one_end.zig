@@ -69,8 +69,7 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     // constrain it to an explicit dialog column so it wraps on word boundaries instead of
     // stretching the panel to a single long line. The width is a template constant (the
     // dialog's prose measure); VIEW-01's ViewMetrics will later feed the same parameter.
-    _ = (try dialog.text("note", beat.note))
-        .with_wrap(dialog_prose_w)
+    _ = (try dialog.text_fit("note", beat.note, .{ .wrap = dialog_prose_w }))
         .with_style(.{ style.body, Style{ .text = th.dim } });
 
     const go = try t.button(dialog, "go", beat.button, true);

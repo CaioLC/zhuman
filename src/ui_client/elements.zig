@@ -38,6 +38,29 @@ const Sprite = cb.Sprite;
 pub const GradientStop = feat.geometry.GradientStop;
 pub const GradientDir = feat.geometry.Dir;
 
+/// A text leaf's measurement constraint, chosen when the leaf is created (`El.text_fit`) —
+/// exactly one of the four, by construction. `.free` is what a plain `text` leaf gets.
+pub const TextFit = union(enum) {
+    /// The measured glyph box, single line.
+    free,
+    /// Constrained multiline (TEXT-02): greedy word wrap at this many logical px, with a
+    /// deterministic UTF-8-safe hard break for an over-long word; the box is the wrapped
+    /// width × height and the render draws exactly the measured lines.
+    wrap: f32,
+    /// A single-line cell of an allocated logical width (TEXT-03): the layout box and the hit
+    /// box are exactly `width`, never the glyph width, so a widening label cannot shove its
+    /// neighbours and a shorter one still reserves its column. `.clip` crops the glyphs to the
+    /// cell; `.ellipsis` draws the longest codepoint-aligned prefix plus an ellipsis. `width`
+    /// must be nonnegative; `0` is a legal zero-width cell that draws nothing.
+    cell: Cell,
+    /// One line rotated 90° counter-clockwise, reading bottom-to-top (TEXT-06, the collapsed
+    /// rail label); the box is the swapped footprint. A bounded orientation, not an angle.
+    vertical,
+
+    pub const Cell = struct { mode: CellMode, width: f32 };
+    pub const CellMode = enum { clip, ellipsis };
+};
+
 /// A fluent handle over a built node: the node plus the `ctx` needed to style it. Returned
 /// by every element constructor. Placement methods write the engine `Layout`/`Size` fields
 /// directly; `with_style` folds a style spec. `.get()` drops to the raw `*Node`.
@@ -154,83 +177,6 @@ pub const El = struct {
         return self;
     }
 
-    /// Constrain this text node to `max_w` px and wrap it onto multiple lines (TEXT-02).
-    /// Word-boundary greedy wrap with a deterministic UTF-8-safe hard-break for an
-    /// over-long word; the reserved box grows to the wrapped `width`×`height` and the render
-    /// draws exactly those lines. `max_w <= 0` restores the single-line fast path. This is
-    /// *placement* (it sets a measurement constraint), so it is imperative like `with_size`,
-    /// not a style fragment; apply it after the content leaf and before/independent of
-    /// `with_style` — a later `with_style(.{ font })` re-measures at the same constraint.
-    ///
-    /// The explicit width is the seam `ViewMetrics` (VIEW-01) will later feed; today a
-    /// template passes a column/dialog width it already knows.
-    pub fn with_wrap(self: El, max_w: f32) El {
-        const st = self.node.state(self.ctx, cb.UiState.TextState);
-        // VIEW-02: the wrap width is authored in logical px but compared against device-px font
-        // measurements, so scale it to device by the frame scale (the one `view.dp` seam).
-        st.wrap_width = view.dp(max_w, self.ctx.res.view.scale);
-        feat.text.remeasure(self.ctx, self.node);
-        return self;
-    }
-
-    /// Constrain this text node to a single-line **cell** of `cell_w` px with an explicit
-    /// overflow discipline (TEXT-03): `.clip` renders the whole string but scopes the
-    /// renderer's clip to the cell, `.ellipsis` renders the longest codepoint-aligned prefix
-    /// that fits `cell_w − ellipsis_width` plus a deterministic ellipsis token. `.visible`
-    /// clears the constraint (back to the measured-glyph fast path).
-    ///
-    /// The point of a cell is geometry: the node's layout box and hit box become exactly
-    /// `cell_w`, *never* the unbounded glyph width — so a widening label (a longer stock
-    /// token, a long recipe name) can never shove its neighbors, and the cell reserves its
-    /// full width for stable column alignment even when the text is shorter. Like `with_wrap`
-    /// this is *placement* (a measurement constraint), so it is imperative, applied after the
-    /// content leaf; a later `with_style(.{ font })` re-measures at the same cell.
-    ///
-    /// `cell_w` must be **nonnegative** (a required allocated width; `0` is a legal
-    /// zero-width cell that draws nothing). Mutually exclusive with `with_wrap` — a cell is
-    /// single-line — so this clears `wrap_width`; the explicit width is the seam
-    /// `ViewMetrics` (VIEW-01) will feed, exactly like `with_wrap`'s width today.
-    pub fn with_cell(self: El, mode: cb.UiState.TextState.Overflow, cell_w: f32) El {
-        std.debug.assert(cell_w >= 0);
-        const st = self.node.state(self.ctx, cb.UiState.TextState);
-        st.wrap_width = 0; // single-line cell; wrapping and overflow are mutually exclusive
-        st.overflow = mode;
-        // VIEW-02: the cell width is authored logical but is the node's device-px layout box,
-        // so scale it to device by the frame scale.
-        st.overflow_width = view.dp(cell_w, self.ctx.res.view.scale);
-        // A `.clip` cell also routes through the engine's generic `Layout.overflow=.clip` so
-        // the node's *subtree* (any decoration children) is cropped to its box for free and
-        // hit-testing already rejects outside the viewport; the leaf's own glyphs are cropped
-        // renderer-scoped in `text.draw`. `.ellipsis`/`.visible` leave layout overflow alone.
-        self.node.layout.overflow = if (mode == .clip) .clip else self.node.layout.overflow;
-        feat.text.remeasure(self.ctx, self.node);
-        return self;
-    }
-
-    /// Rotate a single-line text leaf 90° counter-clockwise so it reads bottom-to-top
-    /// (TEXT-06), matching the collapsed Holdings restore label. The existing TEXT-05
-    /// upright composite is rotated only at final blit; `remeasure` swaps width/height so
-    /// the content box, focus outline, and rectangular hit target are the rotated footprint.
-    ///
-    /// This is a deliberately narrow axis-aligned placement primitive, not arbitrary visual
-    /// rotation. The rail label is one line, so this clears multiline wrap and fixed-cell
-    /// overflow constraints before remeasuring. A later font/tracking style still remeasures
-    /// through the same orientation. Pass `.horizontal` to restore ordinary text.
-    pub fn with_orientation(self: El, orientation: cb.UiState.TextState.Orientation) El {
-        const st = self.node.state(self.ctx, cb.UiState.TextState);
-        st.wrap_width = 0;
-        st.overflow = .visible;
-        st.overflow_width = 0;
-        st.orientation = orientation;
-        feat.text.remeasure(self.ctx, self.node);
-        return self;
-    }
-
-    /// Collapsed-rail convenience spelling for the only transformed orientation in use.
-    pub fn vertical(self: El) El {
-        return self.with_orientation(.counter_clockwise_90);
-    }
-
     /// Take this node out of hit-testing: it is neither flagged nor does it occlude
     /// what is drawn beneath it. For a node queried *only* to read its own geometry
     /// back — `scroll_view`'s content, which needs last frame's height for the scroll
@@ -265,6 +211,54 @@ pub const El = struct {
         const node = try child(self, id);
         try feat.data_text(self.ctx, node, str);
         return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A text leaf with a measurement constraint — see `TextFit`. The fit is *placement* (it
+    /// sets the reserved box), so it is a creation parameter of the leaf rather than a style
+    /// field; a later `with_style(.{ font })` re-measures at the same fit. Widths are logical
+    /// px, scaled once here against the device-px font metrics (VIEW-02). The rotated footprint,
+    /// the cell box and the wrapped box are what the engine stamps, so layout, focus outline and
+    /// hit target agree with the drawn glyphs by construction.
+    pub fn text_fit(self: El, id: []const u8, str: []const u8, fit: TextFit) !El {
+        const leaf = try self.text(id, str);
+        const st = leaf.node.state(self.ctx, cb.UiState.TextState);
+        const scale = self.ctx.res.view.scale;
+        switch (fit) {
+            .free => {
+                st.wrap_width = 0;
+                st.overflow = .visible;
+                st.overflow_width = 0;
+                st.orientation = .horizontal;
+            },
+            .wrap => |max_w| {
+                st.wrap_width = view.dp(max_w, scale);
+                st.overflow = .visible;
+                st.overflow_width = 0;
+                st.orientation = .horizontal;
+            },
+            .cell => |c| {
+                std.debug.assert(c.width >= 0);
+                st.wrap_width = 0;
+                st.overflow = switch (c.mode) {
+                    .clip => .clip,
+                    .ellipsis => .ellipsis,
+                };
+                st.overflow_width = view.dp(c.width, scale);
+                st.orientation = .horizontal;
+                // A `.clip` cell also routes through the engine's `Layout.overflow = .clip`, so any
+                // decoration subtree is cropped to the cell and hit-testing rejects outside it; the
+                // leaf's own glyphs are cropped renderer-scoped in `text.draw`.
+                if (c.mode == .clip) leaf.node.layout.overflow = .clip;
+            },
+            .vertical => {
+                st.wrap_width = 0;
+                st.overflow = .visible;
+                st.overflow_width = 0;
+                st.orientation = .counter_clockwise_90;
+            },
+        }
+        feat.text.remeasure(self.ctx, leaf.node);
+        return leaf;
     }
 
     /// A whole-texture image node, sized to the texture.

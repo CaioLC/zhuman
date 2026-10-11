@@ -380,7 +380,7 @@ between `tokens.rail.collapsed` (36) and `tokens.rail.expanded` (252) over `toke
 (120ms), so a toggle animates and a mid-transition re-toggle reverses smoothly; the collapse bit
 itself lives in a keyed `RailState` pool (distinct rails → separate ACTIONS/BUILD memories; the
 STRUCTURE rail is forced collapsed on entry without touching the others), and the vertical
-restore affordance is a chevron over a `.vertical()` (TEXT-06 CCW-90) label. StockToken (KIT-12)
+restore affordance is a chevron over a `.vertical`-fit (TEXT-06 CCW-90) label. StockToken (KIT-12)
 and the board (BOARD-05) read this registry when they land.
 ## Frame-local view metrics (`view.zig`)
 
@@ -403,7 +403,7 @@ and `metrics.framed()` gates the outer terminal chrome.
 space the renderer draws), so every authored dimension is a *logical* px value multiplied by the
 frame scale exactly once, through `view.dp(logical, scale)` — the single conversion point. The
 El/style seams call it: `El.with_size` (`.fixed` extents), `with_gap`, `with_offset`,
-`with_wrap`/`with_cell` (text measurement widths), and `style.apply` (padding/gap). Fonts route
+`text_fit` (text measurement widths), and `style.apply` (padding/gap). Fonts route
 through the sibling `type.toDevice`, and hairlines through `paint.hairline` — the same scale.
 The fullscreen root and modal scrim size to the drawable px (`metrics.px_w/px_h`), and pointer
 coordinates are multiplied by `dpi_scale` at one seam in `main` (`pointerAt`) so hit geometry
@@ -703,10 +703,12 @@ directly. `text` (glyph ink) and `tint` (texture ink) are separate fields on pur
 tuple can carry both and neither shadows the other; `tint` no-ops on a node with no svg, and
 because it is not typography it does not trip the inert-typography assert. **`wrap` and
 `overflow` are deliberately *not* style fields.** They set a text node's *measurement
-constraint* (its reserved box), which is placement, not look — so they stay imperative on
-`El` (`with_wrap` / `with_cell`), the same rule the whole placement layer follows. Adding
-them to `Style` would be exactly the "turn style into placement" the design forbids; a later
-`with_style(.{ font })` re-measures at whatever constraint `El` already set.
+constraint* (its reserved box), which is placement, not look — so they are a creation
+parameter of the leaf: `text_fit(id, str, fit)` takes a `TextFit` union (`.free`, `.wrap`,
+`.cell`, `.vertical`), exactly one per leaf by construction, the same rule the whole
+placement layer follows. Adding them to `Style` would be exactly the "turn style into
+placement" the design forbids; a later `with_style(.{ font })` re-measures at whatever fit
+the leaf was created with.
 
 **Placement is deliberately not a fold.** A `Placement` partial with `row`/`col`/`fill`
 presets was built and then removed: it was a second vocabulary shadowing the engine's own
@@ -750,7 +752,7 @@ at `font.default_px`; a resolved `font` fragment re-measures at its size.
 ### Constrained multiline text (TEXT-02)
 
 A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
-over the content box, the fast path dense rows pay nothing for. `El.with_wrap(max_w)` opts a node into **constrained multiline**: it stores an explicit
+over the content box, the fast path dense rows pay nothing for. `text_fit(id, str, .{ .wrap = max_w })` opts a node into **constrained multiline**: it stores an explicit
 maximum content width and re-measures, so the node reports the wrapped `width`×`height` and
 renders exactly those lines.
 
@@ -780,12 +782,12 @@ column width and `act_one_end` passes an explicit dialog prose width.
 ### Single-line overflow cells (TEXT-03)
 
 Where a label must live in a slot of an **explicitly allocated width** — a catalog name
-column, a status readout in a narrow tile — `El.with_cell(mode, cell_w)` opts the node into a
+column, a status readout in a narrow tile — `text_fit(id, str, .{ .cell = .{ .mode, .width } })` opts the node into a
 single-line *cell* with an explicit overflow discipline. It sets `TextState.overflow`
 (`.visible` / `.clip` / `.ellipsis`) and `overflow_width` (a **required nonnegative** cell
 width; `0` is a legal zero-width cell), clears `wrap_width` (a cell is single-line; wrapping
 and overflow are mutually exclusive, and wrapping wins if both are somehow set), and
-re-measures — placement, not style, exactly like `with_wrap`.
+re-measures — placement, not style, exactly like a wrap fit.
 
 The point is **geometry**: `remeasure` writes `data_width = overflow_width`, so the node's
 layout box *and* hit box are the allocated cell, **never** the unbounded glyph width — a
@@ -821,9 +823,8 @@ fast/wrapped path. Integrated at two representative sites: `capital_row`'s name 
 The collapsed Holdings rail carries its `HOLDINGS` label set vertically, reading
 bottom-to-top — a 90° counter-clockwise turn. `TextState.orientation` names the only two
 axis-aligned orientations the product uses: `.horizontal` (every ordinary label) and
-`.counter_clockwise_90`. `El.with_orientation(...)` sets it (clearing the incompatible
-single-line `wrap`/overflow-cell constraints first, since the rail label is one line) and
-re-measures; `El.vertical()` is the convenience spelling for the counter-clockwise mode.
+`.counter_clockwise_90`. The `.vertical` text fit selects it — a fit is one of wrap, cell or
+vertical by construction, so there is no competing constraint to clear — and re-measures.
 A bounded enum, not an arbitrary angle, is deliberate: 90° is an exact width/height swap, so
 its bounding box stays axis-aligned and no broader non-rectangular hit-geometry policy is
 needed.
@@ -841,7 +842,7 @@ never rotated independently. At blit, the upright `w×h` texture is centered on 
 `h×w` content box and drawn with SDL's `renderTextureRotated` at 270° clockwise (= 90°
 counter-clockwise) about its own center, landing the final pixels exactly on the oriented box.
 The placement is pure geometry (`blitPlacement`), tested SDL-free. The `mock` showcase carries
-a 36×124 collapsed-rail stand-in whose `.vertical()` `HOLDINGS` label reads bottom-to-top at
+a 36×124 collapsed-rail stand-in whose `.vertical`-fit `HOLDINGS` label reads bottom-to-top at
 the prototype's 9px / 0.09em collapsed-rail density.
 
 ## Frame assembly (`tree.zig`)

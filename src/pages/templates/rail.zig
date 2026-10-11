@@ -2,7 +2,7 @@
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
 //! content (Holdings in Act I, BODY in Act II), or a narrow collapsed strip (width
 //! `tokens.rail.collapsed`, 36) showing a **vertical restore affordance** — a chevron above the
-//! rail's label set 90° counter-clockwise (TEXT-06 `.vertical()`), reading bottom-to-top.
+//! rail's label set 90° counter-clockwise (TEXT-06, the `.vertical` text fit), reading bottom-to-top.
 //!
 //! **One toggle, synchronized everything.** The rail's collapsed/expanded bit lives in a keyed
 //! `RailState` pool (survives the frame-arena rebuild by `node.key`). One stable toggle control
@@ -129,9 +129,8 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
         const label_lane = try toggle.div("label_lane");
         _ = label_lane.with_size(.{ .fixed = restore_width }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-        _ = (try label_lane.text("label", opts.label))
-            .with_style(.{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }})
-            .vertical();
+        _ = (try label_lane.text_fit("label", opts.label, .vertical))
+            .with_style(.{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }});
         return .{ .collapsed = true, .body = null };
     }
 

@@ -340,9 +340,12 @@ call sites, not by new wrappers.
   - Done: about 350 leaf calls and 90 composition signatures and their call sites, across
     every template, page and foundation composition. Root builders (`root`, `terminal`,
     `shell`, `modal`, `tooltip`, `trade_dialog`) keep `ctx` because they have no parent.
-- [ ] **ZUI-06 — `text_fit` and the `TextFit` union.** Remove `with_wrap`, `with_cell`,
+- [x] **ZUI-06 — `text_fit` and the `TextFit` union.** Remove `with_wrap`, `with_cell`,
   `with_orientation` and `vertical`; migrate the fourteen constrained-text sites. Optionally
   store the union on `TextState`.
+  - Done on the `El` surface: `TextFit` with a `clip`/`ellipsis`-only cell mode, fourteen
+    sites migrated, README sections for TEXT-02/03/06 updated. `TextState` still holds the
+    three fields; folding them into the union is a `text.zig` refactor left for a later pass.
 - [ ] **ZUI-07 — `item` and `spacer`.** Replace the fourteen formatted loop ids and the six local
   spacer functions. A spacer is non-interactive by construction.
 - [ ] **ZUI-08 — `state`, `retain_child` and `track`.** Thin wrappers over what `Node` and `Ctx`

@@ -20,7 +20,7 @@ pub fn modal_footer(parent: El, width: f32, note: []const u8, primary_label: []c
     _ = footer.with_size(.{ .fixed = inner_width }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center })
         .with_style(.{style.pad_sym(15, 9)});
-    _ = (try footer.text("note", note)).with_wrap(420)
+    _ = (try footer.text_fit("note", note, .{ .wrap = 420 }))
         .with_style(.{Style{ .font = 9, .text = th.dim }});
     const actions = try footer.div("actions");
     _ = actions.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);

@@ -264,8 +264,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         }
 
         if (goal.copy.len > 0) {
-            _ = (try content.text("copy", goal.copy))
-                .with_wrap(detail_wrap_w)
+            _ = (try content.text_fit("copy", goal.copy, .{ .wrap = detail_wrap_w }))
                 .with_style(.{Style{ .font = 10, .text = th.fg }});
         }
 

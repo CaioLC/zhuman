@@ -92,8 +92,8 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     // 64px cell, and the glyphs are cropped to it (renderer-scoped, prior clip restored)
     // rather than letting a longer readout widen the vitals row. The short `<3 <3 <3` draws
     // in full; the cell only bites if the copy grows.
-    _ = (try txt(vrow, "heart", "<3 <3 <3", .{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }}))
-        .with_cell(.clip, 64);
+    _ = (try vrow.text_fit("heart", "<3 <3 <3", .{ .cell = .{ .mode = .clip, .width = 64 } }))
+        .with_style(.{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }});
 
     // RENDER-01 blending fixture: translucent fills only look right if the renderer's draw
     // blend mode is `.blend` (SDL defaults to `.none`, which would render every layer opaque).
