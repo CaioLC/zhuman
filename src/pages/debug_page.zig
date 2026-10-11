@@ -468,13 +468,13 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     if (!audit_trade.open) return null;
 
     const buys = [_]t.TradeOffer{
-        .{ .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
-        .{ .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
-        .{ .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
+        .{ .id = 1, .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
+        .{ .id = 2, .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
+        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
     };
     const sells = [_]t.TradeOffer{
-        .{ .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
-        .{ .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
+        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
+        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
     };
     const holdings = [_]t.TradeHolding{
         .{ .label = "Food", .value = "11.6" },

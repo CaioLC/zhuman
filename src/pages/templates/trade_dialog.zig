@@ -78,7 +78,7 @@ test "TradeState keeps per-mode selection separate" {
 }
 
 test "Offer availability requires stock and no refusal" {
-    try std.testing.expect((Offer{ .give = "a", .receive = "b" }).valid());
-    try std.testing.expect(!(Offer{ .give = "a", .receive = "b", .stock = 0 }).valid());
-    try std.testing.expect(!(Offer{ .give = "a", .receive = "b", .refusal = "no" }).valid());
+    try std.testing.expect((Offer{ .id = 1, .give = "a", .receive = "b" }).valid());
+    try std.testing.expect(!(Offer{ .id = 1, .give = "a", .receive = "b", .stock = 0 }).valid());
+    try std.testing.expect(!(Offer{ .id = 1, .give = "a", .receive = "b", .refusal = "no" }).valid());
 }

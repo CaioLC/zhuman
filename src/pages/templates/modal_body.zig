@@ -12,6 +12,9 @@ const TradeState = uic.UiState.TradeState;
 const modal_mod = @import("./modal.zig");
 
 pub const Offer = struct {
+    /// The quote's own id. It keys the offer's row, so the row keeps its identity (hover, focus,
+    /// the selection outline) when the list changes around it; a position would not.
+    id: usize,
     name: []const u8 = "",
     detail: []const u8 = "",
     give: []const u8,
@@ -62,7 +65,7 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
     _ = stock.with_size(.{ .fixed = 220 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
     _ = (try stock.text("heading", "THEIR STOCK")).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
     for (offers, 0..) |offer, i| {
-        const row = try stock.item("of", i);
+        const row = try stock.item("of", offer.id);
         _ = row.with_size(.{ .fixed = 204 }, .fit_children) // 220px border-box minus 8px side padding
             .with_flow(.{ .dir = .row, .main = .space_between, .cross = .start })
             .with_style(.{style.pad_sym(8, 7)});
@@ -123,9 +126,9 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
 
 test "firstValidOffer skips unavailable offers" {
     const offers = [_]Offer{
-        .{ .give = "a", .receive = "x", .stock = 0 },
-        .{ .give = "b", .receive = "y", .refusal = "no" },
-        .{ .give = "c", .receive = "z", .stock = 3 },
+        .{ .id = 1, .give = "a", .receive = "x", .stock = 0 },
+        .{ .id = 2, .give = "b", .receive = "y", .refusal = "no" },
+        .{ .id = 3, .give = "c", .receive = "z", .stock = 3 },
     };
     try std.testing.expectEqual(@as(usize, 2), firstValidOffer(&offers));
 }

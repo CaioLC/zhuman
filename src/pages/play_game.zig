@@ -238,7 +238,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const refusal = q.refusal(enc, food.v, stock.v);
             try buys.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
                 .quote = q,
             });
         }
@@ -258,7 +258,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}m", .{q.next_unit orelse 0});
             try sells.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
                 .quote = q,
             });
         }
@@ -274,7 +274,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             gw += recv_s.len;
             const owned = world.get(e, G).?;
             try sells.append(ctx.arena, .{
-                .offer = .{ .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
                 .quote = q,
             });
         }
