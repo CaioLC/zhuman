@@ -70,10 +70,10 @@ pub const Node  = ui.Node(RenderData);
   in their feature module, because `UiState` is scanned to generate the pools and a feature
   already imports this file — declaring state in the feature would be an import cycle; each
   feature re-exports it as `pub const State` to keep the contract readable.
-  Per-view state normally lives in one aggregate on an always-built shell. When a
-  conditional child is the clearer owner, the shell may call `retainChildState` each
-  hidden frame; this keeps only an existing typed slot and stops automatically with
-  the shell. `BuildViewState` uses that path while ACTIONS hides the BUILD root.
+  Per-view state lives on the node that is always built and is handed down by pointer — the
+  Act I surface holds BUILD's catalog state and search editor, so hiding the tab prunes
+  nothing (see *Who owns a template's state* under the `El` handle). `retain_child` remains
+  for an owner that keeps a hidden direct child's slot alive without hoisting it.
 - **`Interaction`** — pointer-derived hover/press/held/release/wheel/click/drag/capture,
   transient command dismissal, plus semantic disabled/focus/focus-visible/selected/checked
   projections. Pointer/command fields
@@ -661,6 +661,18 @@ query a node only so it owns a slot and its rect is stamped — a scroll view's 
 the modal scrim and box, the tooltip. `state(T)` is the node's pooled slot, the home of a
 template's logical state unless the caller passes a pointer. `retain_child(id, T)` keeps a
 hidden direct child's slot alive from its always-built owner, without building the child.
+
+**Who owns a template's state.** Every stateful template takes an optional pointer: null and
+it owns the slot on its own node; a pointer and the caller owns it — the tab strip's `active`,
+a select's `value`, a disclosure's `expanded`, the rail's `collapsed`, a scroll view's
+`ScrollState`, the catalog's `CatalogState`. A view that is sometimes not built keeps its state
+on the node that is always built and passes pointers down: the Act I surface holds BUILD's
+catalog state and search editor, so hiding the tab prunes nothing. A pointer from `state(T)`
+is valid for the frame as long as no slot of the same type is acquired after it (the pool may
+grow); handing it to children that acquire other types is safe. The text field is the one
+template that takes an owner handle rather than a pointer, because the host routes keys and
+text into its editor by key: the field registers itself and the owner's key with the command
+registry, and `main` looks the model up through `editorKeyOf`.
 
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that

@@ -76,9 +76,14 @@ pub const Registry = struct {
     pub const max_text_owners = 32;
     pub const max_range_owners = 16;
 
-    current_text: [max_text_owners]u64 = undefined,
+    /// A text owner: the focusable field `key`, and `editor`, the key whose
+    /// `TextInputState` slot holds its model — the field itself, or an always-built owner
+    /// that keeps the text alive while the field is not built.
+    pub const TextOwner = struct { key: u64, editor: u64 };
+
+    current_text: [max_text_owners]TextOwner = undefined,
     current_text_len: usize = 0,
-    building_text: [max_text_owners]u64 = undefined,
+    building_text: [max_text_owners]TextOwner = undefined,
     building_text_len: usize = 0,
     current_range: [max_range_owners]u64 = undefined,
     current_range_len: usize = 0,
@@ -98,9 +103,11 @@ pub const Registry = struct {
         self.overflow = false;
     }
 
-    pub fn registerText(self: *Registry, key: u64, search_shortcut: bool) void {
+    /// Register a text field: `key` is the focusable field, `editor` the key whose
+    /// `TextInputState` slot holds its model (usually the same key).
+    pub fn registerText(self: *Registry, key: u64, editor: u64, search_shortcut: bool) void {
         for (self.building_text[0..self.building_text_len]) |existing| {
-            if (existing == key) {
+            if (existing.key == key) {
                 if (search_shortcut) self.building_search = key;
                 return;
             }
@@ -109,7 +116,7 @@ pub const Registry = struct {
             self.overflow = true;
             return;
         }
-        self.building_text[self.building_text_len] = key;
+        self.building_text[self.building_text_len] = .{ .key = key, .editor = editor };
         self.building_text_len += 1;
         if (search_shortcut) self.building_search = key;
     }
@@ -149,8 +156,14 @@ pub const Registry = struct {
     }
 
     pub fn isTextOwner(self: *const Registry, key: u64) bool {
-        for (self.current_text[0..self.current_text_len]) |owner| if (owner == key) return true;
-        return false;
+        return self.editorKeyOf(key) != null;
+    }
+
+    /// The key whose `TextInputState` slot holds the model of the registered field `key`,
+    /// or null when `key` is not a text owner — what the host routes keys and text into.
+    pub fn editorKeyOf(self: *const Registry, key: u64) ?u64 {
+        for (self.current_text[0..self.current_text_len]) |owner| if (owner.key == key) return owner.editor;
+        return null;
     }
 
     pub fn isRangeOwner(self: *const Registry, key: u64) bool {
@@ -226,9 +239,10 @@ test "shift and accelerator chords map to INPUT-07 selection, clipboard, and sel
 test "registry publishes prior-build text, range, search, and topmost escape owners" {
     var registry: Registry = .{};
     registry.beginBuild();
-    registry.registerText(10, false);
-    registry.registerText(20, true);
-    registry.registerText(20, true);
+    registry.registerText(10, 10, false);
+    registry.registerText(20, 20, true);
+    registry.registerText(20, 20, true);
+    registry.registerText(11, 99, false); // a field whose editor lives on an owner node
     registry.registerRange(50);
     registry.registerRange(50);
     registry.registerEscape(30);
@@ -238,6 +252,9 @@ test "registry publishes prior-build text, range, search, and topmost escape own
     try std.testing.expect(registry.isTextOwner(10));
     try std.testing.expect(registry.isTextOwner(20));
     try std.testing.expect(!registry.isTextOwner(99));
+    try std.testing.expectEqual(@as(?u64, 20), registry.editorKeyOf(20));
+    try std.testing.expectEqual(@as(?u64, 99), registry.editorKeyOf(11));
+    try std.testing.expectEqual(@as(?u64, null), registry.editorKeyOf(99));
     try std.testing.expect(registry.isRangeOwner(50));
     try std.testing.expect(!registry.isRangeOwner(99));
     try std.testing.expectEqual(@as(?u64, 20), registry.searchTarget());

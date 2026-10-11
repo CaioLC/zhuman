@@ -390,11 +390,18 @@ call sites, not by new wrappers.
   filtering.
   - Done with ZUI-07: `capital_row` takes the recipe's catalog index and builds into
     `parent.item("r", index)`.
-- [ ] **ZUI-14 — Optional state pointer on every stateful template.** Tabs, disclosure, select,
+- [x] **ZUI-14 — Optional state pointer on every stateful template.** Tabs, disclosure, select,
   slider, text input, scroll, catalog controls, rail. `modal_body` passes the trade state's
   mode to `tabs` and stops copying.
-- [ ] **ZUI-15 — Hoist BUILD's catalog state and search editor onto the surface node.** Delete
+  - Done. The slider was already value-controlled. The text field takes an owner handle rather
+    than a pointer, because the host routes keys and text into the editor by key: the command
+    registry now records each field's editor key and `main` looks the model up through it.
+    The catalog's selects are controlled by its state, which also fixes the sort resetting
+    whenever the sort row was reopened.
+- [x] **ZUI-15 — Hoist BUILD's catalog state and search editor onto the surface node.** Delete
   `retainBuildCatalog`.
+  - Done. The surface touches both slots every frame and passes them down through
+    `build_section` and `build_list`; no key arithmetic remains in templates.
 - [ ] **ZUI-16 — Duplicate-key diagnostic.** Debug builds report a duplicate sibling or path id
   with the structural path. This is roadmap BASE-06; land it here or point there.
 - [ ] **ZUI-17 — State lifetime tests for what the pool tests do not cover.** Hide and show

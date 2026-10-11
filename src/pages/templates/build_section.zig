@@ -16,7 +16,9 @@ const El = el.El;
 const build_list_mod = @import("./build_list.zig");
 const row_mod = @import("./capital_row.zig");
 
-pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8) !El {
+/// Build the section. `catalog` and `search_owner` pass through to `build_list`: the catalog
+/// state and the node holding the search editor when an always-built owner keeps them.
+pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, catalog: ?*uic.UiState.CatalogState, search_owner: ?El) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const width = row_mod.tableWidth(ctx);
@@ -40,6 +42,6 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8) !El {
     _ = (try heading.text("count", count))
         .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 
-    _ = try build_list_mod.build_list(section, world, e, "buildlist");
+    _ = try build_list_mod.build_list(section, world, e, "buildlist", catalog, search_owner);
     return section;
 }

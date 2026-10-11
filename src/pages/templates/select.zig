@@ -43,16 +43,22 @@ pub const Select = struct { value: usize, el: El };
 
 /// Build a select control into `parent`. `label` is the static lead-in, `options` the choices;
 /// returns the committed value index. `enabled` gates open/commit (KIT-03). The popup is an
-/// overlay child clipped to itself, drawn after the closed control.
-pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []const u8, enabled: bool) !Select {
+/// overlay child clipped to itself, drawn after the closed control. When the caller passes
+/// `value`, that is the committed choice (read on entry, written on exit) and the control's
+/// own slot keeps only its open/highlight state; null means the control owns the value.
+pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []const u8, enabled: bool, value: ?*usize) !Select {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const n = options.len;
 
     const box = try parent.div(id);
     const st = box.state(SelectState);
+    if (value) |v| st.value = v.*; // the caller's value is authoritative
     if (st.value >= n) st.value = 0; // options shrank across frames — stay valid
     if (st.highlight >= n) st.highlight = 0;
+    defer if (value) |v| {
+        v.* = st.value;
+    };
 
     // The closed control: label + value + caret, at the compact control height (KIT-01 token).
     // The prototype gives the native choice field a 112px minimum; this template combines its

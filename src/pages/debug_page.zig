@@ -182,11 +182,11 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "log_view")) {
         try t.log_view(stage, "feed", &ctx.res.sim.log, 400, 4);
     } else if (eq(name, "tabs")) {
-        _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" });
+        _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "view_nav")) {
         _ = try t.view_nav(stage, "vn", &.{ "ACTIONS", "BUILD" });
     } else if (eq(name, "select")) {
-        _ = try t.select(stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true);
+        _ = try t.select(stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true, null);
     } else if (eq(name, "slider")) {
         const demo = try stage.div("slider_demo");
         _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
@@ -204,7 +204,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         // hit rect even though the right-anchored affordance still paints outside it.
         const demo = try stage.div("disclosure_demo");
         _ = demo.with_size(.{ .fixed = 420 }, .fit_children);
-        const d = try t.disclosure(demo, "disc", "Disclosure summary", true);
+        const d = try t.disclosure(demo, "disc", "Disclosure summary", true, null);
         if (d.details) |det| _ = try det.text("dt", "hidden detail, now shown");
     } else if (eq(name, "rail")) {
         // Production supplies a definite page-grid rail region. Mirror it here so one
@@ -267,7 +267,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
-            _ = try t.build_section(stage, world, a[0], "build");
+            _ = try t.build_section(stage, world, a[0], "build", null, null);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -396,7 +396,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "catalog_controls")) {
-        _ = try t.catalog_controls(stage, "cc", &.{ "reach", "inputs", "time", "name" });
+        _ = try t.catalog_controls(stage, "cc", &.{ "reach", "inputs", "time", "name" }, null, null);
     } else if (eq(name, "milestone_goal")) {
         const demo = try stage.div("milestone_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);

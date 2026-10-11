@@ -44,7 +44,8 @@ pub const Viewport = struct {
 /// Build a results viewport into `parent`. `height` is the desktop viewport height (logical
 /// px); `reset` (the KIT-15 `changed` flag) snaps the offset to the top this frame. At `≤760`
 /// no nested scroll is created — `parent` is returned as the content box (one page scroll).
-pub fn catalog_viewport(parent: El, id: []const u8, height: f32, reset: bool) !Viewport {
+/// `state` is the scroll state when the caller owns it; null means the viewport keeps its own.
+pub fn catalog_viewport(parent: El, id: []const u8, height: f32, reset: bool, state: ?*uic.UiState.ScrollState) !Viewport {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const scale = ctx.res.view.scale;
@@ -72,8 +73,8 @@ pub fn catalog_viewport(parent: El, id: []const u8, height: f32, reset: bool) !V
     ctx.setPassThrough(content.get().key, true); // geometry probe only — never the hit
     _ = content.track(); // keep the slot alive so `content.rect` resolves next frame
 
-    const state = outer.state(uic.UiState.ScrollState);
-    if (reset) state.offset = 0; // KIT-16: reset-to-top on a requested data change.
+    const scroll = state orelse outer.state(uic.UiState.ScrollState);
+    if (reset) scroll.offset = 0; // KIT-16: reset-to-top on a requested data change.
 
     // height is logical; the stamped content height is device px — clamp in device px.
     const view_h_dev = uic.view.dp(height, scale);

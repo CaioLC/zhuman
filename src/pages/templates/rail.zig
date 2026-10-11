@@ -35,6 +35,9 @@ pub const RailOptions = struct {
     id: []const u8,
     label: []const u8,
     force_collapsed: bool = false,
+    /// The collapse bit when the caller owns it (read on entry, written after the toggle);
+    /// null means the rail keeps its own memory keyed by `id`.
+    collapsed: ?*bool = null,
 };
 
 /// The built rail: `collapsed` is this frame's resolved state (a caller may skip building
@@ -66,6 +69,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // control is boxed. When collapsed, that control becomes the separate 36x124 restore box.
     const box = try parent.div(opts.id);
     const st = box.state(RailState);
+    if (opts.collapsed) |c| st.collapsed = c.*;
     if (opts.force_collapsed) st.collapsed = true;
 
     // Build the body before the toggle so the control remains the top-painted sibling after
@@ -75,6 +79,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     const toggle = try box.div("toggle");
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (toggle.query().clicked) st.collapsed = !st.collapsed;
+    if (opts.collapsed) |c| c.* = st.collapsed;
     const q = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed });
     // Match the active-tab resting edge directly: foreground at rest, accent only during the
     // pointer interaction. A click retains keyboard focus across collapse/expand, but that

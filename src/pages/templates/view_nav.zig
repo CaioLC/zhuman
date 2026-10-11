@@ -33,7 +33,7 @@ pub const ViewNav = struct { active: usize, el: El };
 /// Render the shared view-switching tablist into `nav_parent` (typically the shell's
 /// `regions.nav`). Returns the active index; the caller builds that view into the body.
 pub fn view_nav(nav_parent: El, id: []const u8, labels: []const []const u8) !ViewNav {
-    const t = try tabs.tabs(nav_parent, id, labels);
+    const t = try tabs.tabs(nav_parent, id, labels, null);
     return .{ .active = t.active, .el = t.el };
 }
 

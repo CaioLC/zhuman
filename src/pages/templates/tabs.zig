@@ -23,7 +23,9 @@ const TabsState = uic.UiState.TabsState;
 
 pub const Tabs = struct { el: El, active: usize };
 
-pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
+/// Build the strip. When the caller passes `active`, that is the selection (read on entry,
+/// written on exit) and the strip's own slot is only a mirror; null means the strip owns it.
+pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -32,7 +34,11 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
     const bar_key = bar.get().key;
 
     const st = bar.state(TabsState);
+    if (active) |a| st.active = a.*; // the caller's selection is authoritative
     if (st.active >= labels.len) st.active = 0; // labels shrank across frames — stay valid
+    defer if (active) |a| {
+        a.* = st.active;
+    };
 
     // INPUT-08: collect the member keys in paint order for the group's `controls` links.
     var member_keys: [uic.semantic.max_relations]u64 = undefined;

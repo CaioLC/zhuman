@@ -137,8 +137,9 @@ const CommandRoute = struct {
 /// all editing rules live in `ui_client/editor.zig` (INPUT-07).
 fn focusedEditor(app: *App) ?*ui_client.UiState.TextInputState {
     const key = app.ui.focusedKey() orelse return null;
-    if (!app.resources.commands.isTextOwner(key)) return null;
-    const idx = app.ui.cache(key, ui_client.UiState.TextInputState);
+    // The field registers which key holds its model: itself, or an always-built owner.
+    const editor_key = app.resources.commands.editorKeyOf(key) orelse return null;
+    const idx = app.ui.cache(editor_key, ui_client.UiState.TextInputState);
     return app.ui.pool(ui_client.UiState.TextInputState).get(idx);
 }
 

@@ -30,8 +30,10 @@ pub const Disclosure = struct {
 
 /// Build a disclosure into `parent`. `summary` is the always-visible compact label; the
 /// affordance reads `details ↓` when collapsed, `close ↑` when expanded. `enabled` gates the
-/// toggle (KIT-03). Returns the details box to fill when open.
-pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool) !Disclosure {
+/// toggle (KIT-03). Returns the details box to fill when open. When the caller passes
+/// `expanded`, that bit is the state (read on entry, written on exit); null means the
+/// control owns it.
+pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool, expanded: ?*bool) !Disclosure {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -40,6 +42,10 @@ pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
     const st = box.state(DisclosureState);
+    if (expanded) |x| st.expanded = x.*;
+    defer if (expanded) |x| {
+        x.* = st.expanded;
+    };
 
     // The summary row is the toggle: the whole row owns the interaction (KIT-03).
     const row = try box.div("summary");

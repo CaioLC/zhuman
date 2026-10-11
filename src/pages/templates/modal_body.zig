@@ -44,9 +44,10 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
     const inner_width = width - 30; // body/tab bands have 15px horizontal padding
     const tab_band = try parent.div("tab_band");
     _ = tab_band.with_size(.{ .fixed = inner_width }, .fit_children).with_style(.{style.pad_each(9, 15, 0, 15)});
-    const tabs = try (@import("./tabs.zig")).tabs(tab_band, "modes", &.{ "BUY", "SELL" });
-    if (tabs.active != st.mode) {
-        st.mode = tabs.active;
+    // The trade state owns the mode; the strip is controlled by it, so there is one value.
+    const previous_mode = st.mode;
+    _ = try (@import("./tabs.zig")).tabs(tab_band, "modes", &.{ "BUY", "SELL" }, &st.mode);
+    if (st.mode != previous_mode) {
         const switched = if (st.mode == 0) buy_offers else sell_offers;
         if (st.sel() >= switched.len or !switched[st.sel()].valid()) st.setSel(firstValidOffer(switched));
     }

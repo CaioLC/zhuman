@@ -60,14 +60,16 @@ fn signature(query_text: []const u8, sort: usize, dir: Direction) u64 {
 }
 
 /// Build the catalog controls into `parent`. `sort_kinds` are the Sort-by option labels; the
-/// surface owns `enabled`. Returns the resolved `Catalog`. `id` keys the surface's independent
-/// state — pass distinct ids for ACTIONS vs BUILD so their query/sort/open stay separate.
-pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const u8) !Catalog {
+/// surface owns `enabled`. Returns the resolved `Catalog`. The query/sort/open state is
+/// `state` when the caller passes one (an always-built owner's slot, so a hidden catalog keeps
+/// it), else the bar's own slot keyed by `id`; likewise the search editor lives on
+/// `search_owner` when given. Distinct ids keep ACTIONS and BUILD separate either way.
+pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const u8, state: ?*CatalogState, search_owner: ?El) !Catalog {
     const ctx = parent.ctx;
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    const st = bar.state(CatalogState);
+    const st = state orelse bar.state(CatalogState);
     if (st.sort >= sort_kinds.len) st.sort = 0;
 
     // Row 1: the search field + the adjacent sort toggle.
@@ -76,9 +78,9 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
     // Search field (`uic.text_input`): owns the query text, registers the `/` shortcut.
-    const field = try uic.text_input(row, "search", "Search…", 200);
+    const field = try uic.text_input(row, "search", "Search…", 200, search_owner);
     const field_key = field.get().key;
-    const editor = field.state(uic.UiState.TextInputState);
+    const editor = (search_owner orelse field).state(uic.UiState.TextInputState);
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty). `main`'s dismiss routes `.dismissed` to the focused/escape target; here we
     // clear the buffer when the field is focused and holds text and Escape was routed to it.
@@ -104,12 +106,14 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
             .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_style(.{style.pad_each(2, 0, 0, 0)});
 
-        const by = try select_mod.select(sort_row, "sort_by", "Sort", sort_kinds, true);
-        st.sort = by.value;
+        // The selects are controlled by the catalog state, so reopening the row (which rebuilds
+        // them with fresh pooled state) shows the sort that is actually in force.
+        const by = try select_mod.select(sort_row, "sort_by", "Sort", sort_kinds, true, &st.sort);
 
         const dir_labels = [_][]const u8{ "None", "Asc", "Desc" };
-        const dir_sel = try select_mod.select(sort_row, "sort_dir", "Dir", &dir_labels, true);
-        st.dir = @enumFromInt(dir_sel.value);
+        var dir_index: usize = @intFromEnum(st.dir);
+        const dir_sel = try select_mod.select(sort_row, "sort_dir", "Dir", &dir_labels, true, &dir_index);
+        st.dir = @enumFromInt(dir_index);
 
         // Escape inside the sort row closes it and restores focus to the toggle. The row's own
         // dismiss (routed to the focused select) is inspected here.

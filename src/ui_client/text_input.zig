@@ -1,6 +1,6 @@
 //! `text_input` — the single-line search/text field, an `El` composition over the
 //! authoritative host editor model (`UiState.TextInputState` = `editor.LineEditor`, pooled by
-//! the field's node key). The field registers its stable key in global traversal order and as
+//! the field's node key or by an owner the caller names). The field registers its stable key in global traversal order and as
 //! the `/` search target, requests singular engine focus when clicked, and clears focus on a
 //! primary press that lands outside it. SDL delivers text and key events as raw events, so
 //! `main.zig` routes them into this same model — text through `insert`, caret/selection/
@@ -29,17 +29,21 @@ const UiState = cb.UiState;
 const El = el.El;
 const Style = style.Style;
 
-/// Build a text field of `width` logical px into `parent`. Returns the field box; the caller
-/// reads the model through `.state(UiState.TextInputState)`.
-pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f32) !El {
+/// Build a text field of `width` logical px into `parent`. The editor model lives on `owner`
+/// when given — an always-built node, so the text survives the field not being built — else
+/// on the field itself; the command registry maps the field to that key so the host routes
+/// keys and text into the right slot. Returns the field box; the caller reads the model
+/// through `owner.state(UiState.TextInputState)` (or the field's).
+pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f32, owner: ?El) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    // The box is created first so its key is final before the model is acquired on it.
+    // The box is created first so its key is final before the model is acquired.
     const field = try parent.div(id);
     const key = field.get().key;
-    const state = field.state(UiState.TextInputState);
-    ctx.res.commands.registerText(key, true);
+    const holder = owner orelse field;
+    const state = holder.state(UiState.TextInputState);
+    ctx.res.commands.registerText(key, holder.get().key, true);
 
     // A primary press that lands outside a focused field clears focus; read it before the
     // lifecycle so the published focus is this frame's truth.

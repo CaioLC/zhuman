@@ -40,17 +40,6 @@ pub const Result = struct {
     market_action: El,
 };
 
-fn retainBuildCatalog(surface: El) void {
-    const ctx = surface.ctx;
-    const section_key = ha.ui.key(surface.get().key, "buildsection");
-    const build_key = ha.ui.key(section_key, "buildlist");
-    const controls_key = ha.ui.key(build_key, "build_ctl");
-    _ = ctx.retainState(controls_key, uic.UiState.CatalogState);
-
-    const row_key = ha.ui.key(controls_key, "row");
-    _ = ctx.retainState(ha.ui.key(row_key, "search"), uic.UiState.TextInputState);
-}
-
 /// Compose the tabbed Act I work surface. The returned market action is the strip's TRADE link;
 /// callers own encounter eligibility and modal lifecycle, while this template owns placement.
 pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
@@ -60,6 +49,12 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     const surface = try parent.div(id);
     _ = surface.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start });
+
+    // BUILD's logical state — its query/sort and the search editor — lives on this surface,
+    // which is built every frame, so hiding the tab prunes nothing and nothing needs
+    // retaining. Both slots are touched here each frame for exactly that reason.
+    const catalog = surface.state(uic.UiState.CatalogState);
+    _ = surface.state(uic.UiState.TextInputState);
 
     const nav = try surface.div("nav");
     _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
@@ -80,10 +75,9 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     _ = try surface.spacer("activity_gap", 1, activity_to_section);
 
     if (tabs.active == 0) {
-        retainBuildCatalog(surface);
         _ = try actions_section_mod.actions_section(surface, world, e, "actions_section");
     } else {
-        _ = try build_section_mod.build_section(surface, world, e, "buildsection");
+        _ = try build_section_mod.build_section(surface, world, e, "buildsection", catalog, surface);
     }
 
     return .{ .el = surface, .active = tabs.active, .market_action = market_action };

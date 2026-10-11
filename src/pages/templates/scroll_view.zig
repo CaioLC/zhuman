@@ -32,7 +32,9 @@ pub const ScrollView = struct {
     content: El, // fit_children column — the caller's rows attach here
 };
 
-pub fn scroll_view(parent: El, id: []const u8, width: f32, height: f32) !ScrollView {
+/// Build the view. `state` is the scroll state when the caller owns it (an always-built
+/// owner's slot keeps the offset while the view is hidden); null means the view keeps its own.
+pub fn scroll_view(parent: El, id: []const u8, width: f32, height: f32, state: ?*ScrollState) !ScrollView {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -56,7 +58,7 @@ pub fn scroll_view(parent: El, id: []const u8, width: f32, height: f32) !ScrollV
     _ = content.pass_through().track();
 
     const max_offset = @max(0.0, content_h - height);
-    const st = outer.state(ScrollState);
+    const st = state orelse outer.state(ScrollState);
     if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0) {
         st.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ toward the top
     }

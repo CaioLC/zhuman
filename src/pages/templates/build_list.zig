@@ -109,7 +109,10 @@ fn stateWord(kind: Kind) []const u8 {
     };
 }
 
-pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8) !El {
+/// Build the list. `catalog_state` and `search_owner` are the catalog state and the node holding the
+/// search editor when the caller owns them (the always-built surface, so a hidden BUILD tab
+/// keeps its query and sort); null lets the controls keep their own.
+pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -117,8 +120,8 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8) !El {
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(6);
 
-    // --- the controls bar (KIT-15): search + disclosed sort, its own state keyed by id ------
-    const controls = try cc.catalog_controls(outer, "build_ctl", &sort_kinds);
+    // --- the controls bar (KIT-15): search + disclosed sort ------------------------------
+    const controls = try cc.catalog_controls(outer, "build_ctl", &sort_kinds, catalog_state, search_owner);
     const q = query.parse(controls.query_text);
     const blank = controls.query_text.len == 0;
 
