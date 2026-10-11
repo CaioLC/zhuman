@@ -40,35 +40,18 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
         ui_ctx.res.view.metrics = m;
         ui_ctx.res.view.scale = m.dpi_scale;
     }
-    var trees: std.ArrayList(*uic.Node) = .empty;
-    // const mock = try mock_page(ui_ctx, world);
-
+    // Every page returns its roots in draw order (a dialog's root after the shell it covers).
     // The game is the normal route. The template audit harness remains available as an explicit
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
-    if (debugRequested(ui_ctx.arena)) {
-        const dbg = try p_debug(ui_ctx, world);
-        try uic.collect(&trees, ui_ctx.arena, dbg.root);
-        if (dbg.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
-        return trees.items;
-    }
+    if (debugRequested(ui_ctx.arena)) return try p_debug(ui_ctx, world);
 
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
     // curtain, since owning a `Shelter` is the win condition; otherwise the live Act-I page.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const settled = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = world };
-    if (player.get() == null) {
-        try uic.collect(&trees, ui_ctx.arena, try p_gameover(ui_ctx, world));
-    } else if (settled.get() != null) {
-        try uic.collect(&trees, ui_ctx.arena, try p_act_one_end(ui_ctx, world));
-    } else {
-        // ACT1-17: the page returns its shell root plus an optional trade-dialog overlay root —
-        // collected after the shell so the modal draws on top (later trees paint last).
-        const play = try p_act_one(ui_ctx, world);
-        try uic.collect(&trees, ui_ctx.arena, play.root);
-        if (play.overlay) |ov| try uic.collect(&trees, ui_ctx.arena, ov);
-    }
-
-    return trees.items;
+    if (player.get() == null) return try p_gameover(ui_ctx, world);
+    if (settled.get() != null) return try p_act_one_end(ui_ctx, world);
+    return try p_act_one(ui_ctx, world);
 }
 
 /// Whether to route to the template-audit harness instead of the game. Debug mode is off by

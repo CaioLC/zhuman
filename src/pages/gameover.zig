@@ -13,7 +13,7 @@ const World = ha.world.World;
 
 const t = @import("./templates/root.zig");
 
-pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
+pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     // KIT-04: the game-over screen lives in the one terminal shell; it needs only the main
@@ -37,5 +37,5 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !*uic.Node {
         ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
         ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
     }
-    return regions.root.get();
+    return try uic.oneRoot(ctx.arena, regions.root.get());
 }

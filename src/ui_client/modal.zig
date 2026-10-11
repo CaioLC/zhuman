@@ -13,10 +13,11 @@
 //!
 //! **Focus (KIT-08).** The shell opens a focus trap (`ctx.beginFocusScope`) before the
 //! caller's dialog focusables are built, so Tab/Shift+Tab cycle only within the dialog while
-//! it is open; nothing the scrim covers is Tab-reachable. Initial focus and restore-to-opener
-//! stay caller policy because only the caller knows the open/close transition in immediate
-//! mode: request focus on the primary control the frame it opens, and re-request the recorded
-//! opener the frame it closes.
+//! it is open; nothing the scrim covers is Tab-reachable. The shell also sees the open edge:
+//! a pooled `ModalState` on its root, pruned once the dialog stops building, records the key
+//! focused when the dialog first builds (`opener`) and reports `first_open`. The caller's
+//! end-of-dialog step uses both — initial focus to its primary control on the open frame,
+//! focus back to the opener on the closing frame (the game's `modal.dismissed`).
 
 const cb = @import("./ctx_binding.zig");
 const el = @import("./elements.zig");
@@ -32,6 +33,10 @@ pub const Modal = struct {
     root: El,
     /// The centered dialog box the caller fills with content.
     box: El,
+    /// True on the frame the dialog first builds: the frame for initial focus.
+    first_open: bool,
+    /// The key focused when the dialog opened, to restore on close; null when nothing was.
+    opener: ?u64,
 };
 
 /// Build the shell. `title` is published as the dialog's accessible name; the caller authors
@@ -56,7 +61,16 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
     // trapped set. The modal is listed last, so its content is exactly this suffix.
     ctx.beginFocusScope();
 
+    // Open-edge memory, pooled on the root: the slot exists only while the dialog builds, so
+    // every open starts clean and the opener is whatever held focus on the opening frame.
+    const st = root.state(cb.UiState.ModalState);
+    const first_open = !st.seen;
+    if (first_open) {
+        st.seen = true;
+        st.opener = ctx.focusedKey();
+    }
+
     ctx.res.semantics.publish(semantics.describeDialog(root.get().key, title, ctx.isFocused(root.get().key)));
 
-    return .{ .root = root, .box = box };
+    return .{ .root = root, .box = box, .first_open = first_open, .opener = st.opener };
 }

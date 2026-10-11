@@ -9,7 +9,8 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 const modal_mod = @import("./modal.zig");
 
-pub const Result = struct { leave: bool, confirm: bool };
+/// `primary_key` is the confirmation button's stable key — the dialog's initial focus target.
+pub const Result = struct { leave: bool, confirm: bool, primary_key: u64 };
 
 pub fn modal_footer(parent: El, width: f32, note: []const u8, primary_label: []const u8, primary_enabled: bool) !Result {
     const ctx = parent.ctx;
@@ -29,5 +30,6 @@ pub fn modal_footer(parent: El, width: f32, note: []const u8, primary_label: []c
     return .{
         .leave = leave.consume(.clicked),
         .confirm = primary.query().clicked and primary_enabled,
+        .primary_key = primary.get().key,
     };
 }

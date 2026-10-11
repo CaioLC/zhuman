@@ -142,6 +142,7 @@ pub const FrameProfiler = @import("../ui/root.zig").FrameProfiler;
 // frame assembly
 pub const Trees = tree.Trees; // the return-type wrapper (host)
 pub const collect = Node.collect; // the flatten mechanism (engine)
+pub const oneRoot = tree.oneRoot; // a single-root page as `Trees`
 
 // features (attach mixins — the old `data_*` names)
 pub const data_text = features.data_text;

@@ -15,9 +15,9 @@ const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
 
-pub const PlayTrees = struct { root: *Node, overlay: ?*Node = null };
-
-pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
+/// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
+/// while the dialog is open, so the dialog covers the screen by construction.
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // The reviewed Act-I composition is the normal live page from the first frame. `shell`
     // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
     // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
@@ -129,7 +129,10 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
         try t.log_view(footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
     }
 
-    return .{ .root = regions.root.get(), .overlay = overlay };
+    var roots: std.ArrayList(*Node) = .empty;
+    try roots.append(ctx.arena, regions.root.get());
+    if (overlay) |dialog| try roots.append(ctx.arena, dialog);
+    return roots.items;
 }
 
 const market = ha.market;
@@ -304,8 +307,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         }
     }
 
-    var root: *Node = undefined;
-    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts, &root);
+    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts);
 
     // Confirm → resolve the backing quote atomically. Header/Holdings/log read live world state,
     // so they refresh this same frame.
@@ -316,5 +318,5 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     // Escape / outside-click closes; also close if the passerby has left.
     if (res.dismissed or !enc.dealable()) ts.open = false;
 
-    return if (ts.open) root else null;
+    return if (ts.open) res.root else null;
 }

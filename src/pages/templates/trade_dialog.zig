@@ -38,12 +38,13 @@ pub const Result = struct {
     selected: ?usize,
     confirmed: ?usize = null,
     dismissed: bool = false,
+    /// The dialog's own root, for the page to list after its shell.
+    root: *uic.Node,
 };
 
-pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: []const u8, buy_offers: []const Offer, sell_offers: []const Offer, holdings: []const Holding, st: *TradeState, out_root: **uic.Node) !Result {
+pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: []const u8, buy_offers: []const Offer, sell_offers: []const Offer, holdings: []const Holding, st: *TradeState) !Result {
     const identity = venueIdentity(kind);
     const m = try modal_mod.modal(ctx, id, identity.title, modal_mod.default_width);
-    out_root.* = m.root;
 
     const close_clicked = try header_mod.modal_header(m.box, m.width, identity.kicker, meta, identity.title);
     const body = try body_mod.modal_body(m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
@@ -53,7 +54,8 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         .mode = body.mode,
         .selected = body.selected,
         .confirmed = if (footer.confirm) body.selected else null,
-        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or footer.leave),
+        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or footer.leave, footer.primary_key),
+        .root = m.root,
     };
 }
 

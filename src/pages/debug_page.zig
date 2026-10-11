@@ -72,9 +72,9 @@ const entries = [_][]const u8{
     "empty_state",
 };
 
-pub const DebugTrees = struct { root: *Node, overlay: ?*Node = null };
-
-pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
+/// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
+/// root while that entry is open.
+pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     const root = try el.root(ctx, "debug");
@@ -122,7 +122,10 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
         _ = (try item.text("t", name)).with_style(.{ style.small, Style{ .text = c } });
     }
 
-    return .{ .root = root.get(), .overlay = overlay };
+    var roots: std.ArrayList(*Node) = .empty;
+    try roots.append(ctx.arena, root.get());
+    if (overlay) |dialog| try roots.append(ctx.arena, dialog);
+    return roots.items;
 }
 
 /// Build exactly one template into `stage` with sample data. Returns an optional overlay root
@@ -482,13 +485,12 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
         .{ .label = "Leaf bed", .value = "\u{00d7}1" },
     };
 
-    var overlay_root: *Node = undefined;
-    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade, &overlay_root);
+    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade);
     if (result.dismissed) {
         audit_trade.open = false;
         return null;
     }
-    return overlay_root;
+    return result.root;
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

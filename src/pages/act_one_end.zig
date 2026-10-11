@@ -44,7 +44,7 @@ const beats = [_]Beat{
     },
 };
 
-pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
+pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     // KIT-04: the Act I curtain lives in the one terminal shell; it needs only the main body.
@@ -88,5 +88,5 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
             st.step = 0;
         }
     }
-    return regions.root.get();
+    return try uic.oneRoot(ctx.arena, regions.root.get());
 }

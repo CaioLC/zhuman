@@ -157,9 +157,12 @@ explicitly with `pass_through`.
 is stamped last, everything registered after that call is the trapped suffix — `moveFocus`
 (Tab/Shift+Tab) then cycles only within the dialog and can never land on a control the scrim
 covers (the scope carries into the next frame's traversal in `focus.zig`; a frame with no
-modal has ordinary whole-frame traversal). Initial focus and restore-to-opener stay caller
-policy (only the caller knows the open/close transition in immediate mode): request focus on
-the primary control the frame it opens, and re-request the recorded opener the frame it closes.
+modal has ordinary whole-frame traversal). The shell also owns the open edge: a pooled
+`ModalState` on its root records the key focused on the frame the dialog first builds and
+reports `first_open`; the game's `modal.dismissed`, the dialog's end-of-build step, focuses
+the primary control on that frame (else the first control in the trap, `focusFirstInScope`)
+and re-requests the opener on the closing frame. The slot is pruned with the dialog, so every
+open starts clean.
 `tooltip` is now **pass-through** (`setPassThrough`): despite being stamped last it takes no
 pointer hit, so it never intercepts input to the control it describes; `clampToTerminal` keeps
 it inside the terminal rect. `text_input` remains backed by the authoritative `editor.zig`
@@ -878,9 +881,10 @@ the prototype's 9px / 0.09em collapsed-rail density.
 ## Frame assembly (`tree.zig`)
 
 `build_ui` returns `Trees` — a flat `[]const *Node` of independent root trees, laid out and
-drawn in order. The flattening of a builder's return shape (a `*Node`, an `?*Node`, or a
-tuple of them) into that list is `Node.collect`, an engine mechanism; this file only names
-the wrapper so `pages/` can build against it.
+drawn in order, and so is what every page returns: its roots in draw order, a dialog's root
+listed after the shell it covers (the trade dialog hands its root back in its result).
+`oneRoot` wraps a single-root page. `Node.collect`, the engine's flattening of a tuple-shaped
+return, remains available but no page needs it.
 
 ## Foundation compositions (`text_input.zig`, `modal.zig`, `tooltip.zig`)
 

@@ -229,6 +229,9 @@ pub const UiState = struct {
     /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
     /// template overwriting this each frame, which leaves the other keys' values untouched.
     pub const RailState = struct { collapsed: bool = false };
+    /// A modal shell's open-edge memory, pooled on its root: `seen` marks frames after the first,
+    /// `opener` the key focused when it opened (restored on close). Pruned with the dialog.
+    pub const ModalState = struct { seen: bool = false, opener: ?u64 = null };
     /// A disclosure control's expanded/collapsed memory (KIT-11), keyed by the control's own
     /// `node.key`. `false` (collapsed — details hidden, summary showing) is the semantic and
     /// bitwise-zero default. The whole summary row owns the toggle (the KIT-03 button contract);

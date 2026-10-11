@@ -443,16 +443,28 @@ call sites, not by new wrappers.
     - `play_game`, `debug_page`: overlay root placement.
     Three pass-through declarations on never-queried decorative nodes (the holdings divider,
     the milestone wash and state rail) were redundant and are gone.
-- [ ] **ZUI-20 — BUILD column schema.** One column array in `capital_row.zig` read by header and
+- [x] **ZUI-20 — BUILD column schema.** One column array in `capital_row.zig` read by header and
   rows; delete the inline duplicate. Verify header and body alignment at the `900`, `760`,
   `560` and `440` widths.
+  - Done: `columns` carries id, label, width and the width class at which a lane drops; the
+    header iterates it and each row cell reads its lane from it, so the two cannot drift. The
+    width test sums the array. Alignment was verified at the reference width by screenshot;
+    the narrower classes follow from the same array and remain the ZUI-QA-05 journey.
 
 ### Step 6 — roots and dialogs
 
-- [ ] **ZUI-21 — Pages return a list of roots.** `trade_dialog` returns its root in `Result`;
+- [x] **ZUI-21 — Pages return a list of roots.** `trade_dialog` returns its root in `Result`;
   delete the out-parameter and the page tree structs.
-- [ ] **ZUI-22 — Modal owns initial focus and opener restore.** Pooled state on the modal root;
+  - Done. Every page returns `Trees` in draw order; `oneRoot` wraps the single-root pages; the
+    page router returns what the page returns. `Node.collect` stays as engine mechanism with
+    no page needing it.
+- [x] **ZUI-22 — Modal owns initial focus and opener restore.** Pooled state on the modal root;
   restore in `dismissed`.
+  - Done. `ModalState` on the shell's root records the opener on the open frame and reports
+    `first_open`; the game's `modal.dismissed` focuses the footer's primary control on that
+    frame (else the first control in the trap, via the new engine `focusFirstInScope`) and
+    re-requests the opener on the closing frame. Verified by screenshot: the trade dialog
+    opens with TRADE focused.
 
 ### Step 7 — migrations and reconciliation
 
