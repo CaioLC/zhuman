@@ -151,7 +151,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
 
     // Scroll view over more rows than fit — wheel to scroll.
     const spanel = try t.panel(root, "spanel", "Scroll");
-    const sv = try t.scroll_view(spanel, "sv", 260, 120, null);
+    const sv = try t.scroll_view(spanel, "sv", .{ .width = 260, .height = 120 }, null);
     var i: usize = 0;
     while (i < 16) : (i += 1) {
         var b: [32]u8 = undefined;

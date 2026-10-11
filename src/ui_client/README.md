@@ -172,10 +172,10 @@ on the stable press key while primary input remains down, `dragging` once
 `PointerActivation` crosses 4px (including release-position movement), and `captured` on
 the exact `Ctx` capture owner. These are transient like hover/press/release/click; button,
 action, build-row, tab, ration, filter, and cancel chrome can react to held immediately.
-The two production scroll views capture their thumb on primary press, preserve the exact
-press origin even when motion shares the same SDL event batch, map pointer travel to the
-clamped offset, apply the release position, and owner-release. Capture-first routing keeps
-them dragging beyond the six-pixel track; focus loss/cancellation, lost ownership,
+The scroll view captures its thumb on primary press, preserves the exact
+press origin even when motion shares the same SDL event batch, maps pointer travel to the
+clamped offset, applies the release position, and owner-releases. Capture-first routing keeps
+it dragging beyond its narrow track; focus loss/cancellation, lost ownership,
 disappearing overflow, and prune repair all terminate safely. `ThresholdDrag` exposes the
 same strict `>4` logical-pixel boundary as `PointerActivation`: future board/slider
 consumers can capture immediately while emitting no movement before threshold, and the

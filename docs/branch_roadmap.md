@@ -419,8 +419,11 @@ call sites, not by new wrappers.
 
 ### Step 5 — geometry components
 
-- [ ] **ZUI-18 — One scroll component.** Gutter, reset and the narrow-width release as options;
+- [x] **ZUI-18 — One scroll component.** Gutter, reset and the narrow-width release as options;
   the generic view and the catalog viewport become one function.
+  - Done: `scroll_view(parent, id, Options, state)`. The merge also put the generic view's
+    clamp in device px; it had compared a device-px content height against a logical
+    viewport height, identity only at DPI 1. The catalog viewport had no caller left.
 - [ ] **ZUI-19 — Approved prior-frame sites.** The underbar, the milestone wash, the slider
   thumb, the scroll probe and the terminal box are listed as the component-internal geometry
   readers; nothing else reads a rect.

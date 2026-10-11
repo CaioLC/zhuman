@@ -107,7 +107,7 @@ pub fn log_history(parent: El, id: []const u8, feed: *const Log, width: f32, hei
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const col_w = width - sv.scrollbar_w;
-    const view = try sv.scroll_view(parent, id, col_w, height, null);
+    const view = try sv.scroll_view(parent, id, .{ .width = col_w, .height = height }, null);
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
