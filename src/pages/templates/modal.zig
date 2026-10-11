@@ -27,8 +27,9 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8, width: f32) !Modal 
     return .{ .root = shell.root.get(), .box = box, .width = width };
 }
 
-pub fn rule(ctx: *UiCtx, parent: El, id: []const u8, width: f32) !void {
-    _ = (try el.div(ctx, parent, id)).with_size(.{ .fixed = width }, .{ .fixed = 1 })
+pub fn rule(parent: El, id: []const u8, width: f32) !void {
+    const ctx = parent.ctx;
+    _ = (try parent.div(id)).with_size(.{ .fixed = width }, .{ .fixed = 1 })
         .with_style(.{Style{ .fill = ctx.res.view.theme.line }});
 }
 

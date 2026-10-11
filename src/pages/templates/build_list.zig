@@ -109,15 +109,16 @@ fn stateWord(kind: Kind) []const u8 {
     };
 }
 
-pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !El {
+pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(6);
 
     // --- the controls bar (KIT-15): search + disclosed sort, its own state keyed by id ------
-    const controls = try cc.catalog_controls(ctx, outer, "build_ctl", &sort_kinds);
+    const controls = try cc.catalog_controls(outer, "build_ctl", &sort_kinds);
     const q = query.parse(controls.query_text);
     const blank = controls.query_text.len == 0;
 
@@ -216,17 +217,17 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
     // --- summary + aligned table header ----------------------------------------------------
     var sbuf: [40]u8 = undefined;
     const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authored_total }) catch "?";
-    _ = (try el.text(ctx, outer, "summary", summary))
+    _ = (try outer.text("summary", summary))
         .with_style(.{ style.small, Style{ .text = th.dim } });
 
     // --- the rows --------------------------------------------------------------------------
-    const rows = try el.div(ctx, outer, "rows");
+    const rows = try outer.div("rows");
     _ = rows.with_flow(.{ .dir = .column });
-    _ = try capital_header(ctx, rows, "header");
+    _ = try capital_header(rows, "header");
 
     if (n == 0) {
         const msg = if (blank) "Nothing is within reach yet. Gather materials." else "No recipe matches your search.";
-        _ = (try el.text(ctx, rows, "empty", msg))
+        _ = (try rows.text("empty", msg))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     }
 
@@ -235,7 +236,7 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
         const rid = std.fmt.bufPrint(&idbuf, "r{d}", .{slot}) catch "r";
         inline for (capital.buildable_bundle, 0..) |G, i| {
             if (G != comp.Shelter and i == ent.i) {
-                const r = try capital_row(ctx, rows, world, e, G, rid, ent.kind, ent.reach);
+                const r = try capital_row(rows, world, e, G, rid, ent.kind, ent.reach);
                 // ACT1-10: the lifecycle is the simulation's. A ready/owned click pays through
                 // begin_build; the cancel corner runs the existing refund path. No UI timers.
                 if (r.clicked_build) capital.begin_build(world, e, ctx.res, G);
@@ -245,13 +246,14 @@ pub fn build_list(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const
     }
 
     // --- the Shelter milestone (ACT1-11), pinned below and outside the filter --------------
-    try shelter_goal(ctx, outer, world, e, "goal");
+    try shelter_goal(outer, world, e, "goal");
     return outer;
 }
 
 /// The Shelter as a `milestone_goal` (KIT-20) — outside the recipe filtering/sorting because it
 /// is the act's ending, not an item in it. Its lifecycle and requirements recompute live.
-fn shelter_goal(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !void {
+fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
+    const ctx = parent.ctx;
     const G = comp.Shelter;
     if (world.has(e, G)) return; // owning it raises the curtain — the act is over
 
@@ -299,7 +301,7 @@ fn shelter_goal(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u
     };
     const action = if (state == .ready) "RAISE SHELTER" else "NOT READY";
 
-    const m = try milestone_mod.milestone_goal(ctx, parent, id, .{
+    const m = try milestone_mod.milestone_goal(parent, id, .{
         .state = state,
         .title = gt.display_name(G),
         .summary = compact,

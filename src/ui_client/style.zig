@@ -2,7 +2,7 @@
 //! A `Style` is a *partial* (every field optional); presets compose from a tuple by a
 //! last-non-null-wins fold, CSS-like:
 //!
-//!   el.text(ctx, p, "t", "Hi")).with_style(.{ h1, red });  // → font 42, text red
+//!   (try p.text("t", "Hi")).with_style(.{ h1, red });  // → font 42, text red
 //!
 //! A fragment is a `Style` value **or** a `fn(*UiCtx, *Node) Style` — the function form is
 //! resolved with the just-built node, so interaction-aware chrome (a button's hover color)

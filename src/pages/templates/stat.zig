@@ -12,15 +12,16 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-pub fn stat(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, value: []const u8) !El {
+pub fn stat(parent: El, id: []const u8, label: []const u8, value: []const u8) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const line = try el.div(ctx, parent, id);
+    const line = try parent.div(id);
     _ = line.with_flow(.{ .dir = .row }).with_gap(8);
 
-    const lbl = try el.text(ctx, line, "lbl", label);
+    const lbl = try line.text("lbl", label);
     _ = lbl.with_style(.{ style.body, Style{ .text = th.dim } });
-    const val = try el.text(ctx, line, "val", value);
+    const val = try line.text("val", value);
     _ = val.with_style(.{ style.h3, Style{ .text = th.fg } }); // the number you glance at
 
     return line;

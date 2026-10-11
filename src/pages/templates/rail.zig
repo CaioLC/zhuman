@@ -39,7 +39,7 @@ pub const RailOptions = struct {
 
 /// The built rail: `collapsed` is this frame's resolved state (a caller may skip building
 /// content when collapsed), and `body` is the fill target — non-null only while expanded, so
-/// the caller does `if (r.body) |b| try holdings(ctx, b, …)`.
+/// the caller does `if (r.body) |b| try holdings(b, …)`.
 pub const Rail = struct {
     collapsed: bool,
     body: ?El,
@@ -57,21 +57,22 @@ const collapse_height: f32 = 26;
 
 /// Build the collapsible rail into `parent` (the shell's `regions.rail`). Manages its own
 /// collapse memory, toggle, and width tween; returns the fill target when expanded.
-pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
+pub fn rail(parent: El, opts: RailOptions) !Rail {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
     // The rail is the width-bearing container, not the bordered button. In the prototype the
     // expanded rail itself is 252px wide and visually transparent; only its 24x26 collapse
     // control is boxed. When collapsed, that control becomes the separate 36x124 restore box.
-    const box = try el.div(ctx, parent, opts.id);
+    const box = try parent.div(opts.id);
     const st = box.get().state(ctx, RailState);
     if (opts.force_collapsed) st.collapsed = true;
 
     // Build the body before the toggle so the control remains the top-painted sibling after
     // callers populate the body. One stable toggle key owns focus and interaction in both
     // states, keeping the visual box and hit box synchronized through the transition.
-    const body = try el.div(ctx, box, "rail_body");
-    const toggle = try el.div(ctx, box, "toggle");
+    const body = try box.div("rail_body");
+    const toggle = try box.div("toggle");
     ctx.registerFocus(toggle.get().key, true);
     const q = toggle.query();
     if (q.clicked) {
@@ -119,16 +120,16 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
             toggle_chrome,
             style.pad_each(restore_pad_top, 0, restore_pad_bottom, 0),
         });
-        const chevron_lane = try el.div(ctx, toggle, "chevron_lane");
+        const chevron_lane = try toggle.div("chevron_lane");
         _ = chevron_lane.with_size(.{ .fixed = restore_width }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-        _ = (try el.text(ctx, chevron_lane, "chevron", "\u{203A}"))
+        _ = (try chevron_lane.text("chevron", "\u{203A}"))
             .with_style(.{Style{ .text = toggle_color, .font = 16 }});
 
-        const label_lane = try el.div(ctx, toggle, "label_lane");
+        const label_lane = try toggle.div("label_lane");
         _ = label_lane.with_size(.{ .fixed = restore_width }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-        _ = (try el.text(ctx, label_lane, "label", opts.label))
+        _ = (try label_lane.text("label", opts.label))
             .with_style(.{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }})
             .vertical();
         return .{ .collapsed = true, .body = null };
@@ -146,7 +147,7 @@ pub fn rail(ctx: *UiCtx, parent: El, opts: RailOptions) !Rail {
         .with_offset(-2, 0)
         .with_size(.{ .fixed = collapse_width }, .{ .fixed = collapse_height })
         .with_style(.{toggle_chrome});
-    _ = (try el.text(ctx, toggle, "chevron", "\u{2039}"))
+    _ = (try toggle.text("chevron", "\u{2039}"))
         .with_layout(.center)
         .with_style(.{Style{ .text = toggle_color, .font = 16 }});
 

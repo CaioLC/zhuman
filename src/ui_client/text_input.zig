@@ -31,11 +31,12 @@ const Style = style.Style;
 
 /// Build a text field of `width` logical px into `parent`. Returns the field box; the caller
 /// reads the model through `.get().state(ctx, UiState.TextInputState)`.
-pub fn text_input(ctx: *UiCtx, parent: El, id: []const u8, placeholder: []const u8, width: f32) !El {
+pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f32) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
     // The box is created first so its key is final before the model is acquired on it.
-    const field = try el.div(ctx, parent, id);
+    const field = try parent.div(id);
     const key = field.get().key;
     const state = field.get().state(ctx, UiState.TextInputState);
     ctx.registerFocus(key, true);
@@ -96,12 +97,12 @@ pub fn text_input(ctx: *UiCtx, parent: El, id: []const u8, placeholder: []const 
         .with_size(.{ .fixed = width }, .fit_children)
         .with_style(.{ style.pad_sym(8, 4), Style{ .outline_color = outline } });
     const ink = if (state.len == 0 and !focused) th.dim else th.fg;
-    _ = (try el.text(ctx, field, "shown", shown)).with_style(.{Style{ .text = ink }});
+    _ = (try field.text("shown", shown)).with_style(.{Style{ .text = ink }});
 
     // Pointer clear affordance: a trailing "✕" hit region that empties the field on click.
     // Only shown while there is text to clear.
     if (!state.isEmpty()) {
-        const clear = try el.text(ctx, field, "clear", "\u{2715}");
+        const clear = try field.text("clear", "\u{2715}");
         const cq = clear.query();
         if (cq.hovering) ctx.res.cursor.request(.pointer);
         _ = clear.with_layout(.center_right)

@@ -84,7 +84,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
             break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
         } else "ready";
 
-        const workspace = try t.act_one_workspace(ctx, body, world, e, "act_one_workspace", .{
+        const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
             .activity = .{
                 .state = act_state,
                 .subject = activity_subject,
@@ -112,7 +112,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
     // KIT-12: assemble the complete HUD header — stocks left, run context right. Energy rate
     // is omitted in Act I, and VIEW-04 drops the optional act label at ≤560.
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
-    _ = try t.header(ctx, header, "hud", .{
+    _ = try t.header(header, "hud", .{
         .stocks = header_stocks[0..header_stock_count],
         .run = .{
             .act_label = "Act I",
@@ -126,7 +126,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
     // logical width minus the page padding.
     if (regions.footer) |footer| {
         const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
-        try t.log_view(ctx, footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
+        try t.log_view(footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
     }
 
     return .{ .root = regions.root.get(), .overlay = overlay };

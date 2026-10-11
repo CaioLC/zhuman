@@ -47,27 +47,29 @@ const holding_bundle = .{
     comp.Shelter,
 };
 
-fn spacer(ctx: *UiCtx, parent: El, id: []const u8, height: f32) !void {
-    const gap = try el.div(ctx, parent, id);
+fn spacer(parent: El, id: []const u8, height: f32) !void {
+    const gap = try parent.div(id);
     _ = gap.with_size(.{ .fixed = 1 }, .{ .fixed = height }).pass_through();
 }
 
 /// A roster/margin line: body-size primary copy and the reference's 11px right readout.
-fn line(ctx: *UiCtx, parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
+fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const row = try el.div(ctx, parent, id);
+    const row = try parent.div(id);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try el.text(ctx, row, "label", left))
+    _ = (try row.text("label", left))
         .with_style(.{ style.body, Style{ .text = th.fg } });
-    const tail = try el.div(ctx, row, "tail");
+    const tail = try row.div("tail");
     _ = tail.with_layout(.center_right);
-    _ = (try el.text(ctx, tail, "value", right))
+    _ = (try tail.text("value", right))
         .with_style(.{Style{ .font = 11, .text = right_color }});
 }
 
-fn sectionLabel(ctx: *UiCtx, parent: El, id: []const u8, text: []const u8) !void {
-    _ = (try el.text(ctx, parent, id, text)).with_style(.{
+fn sectionLabel(parent: El, id: []const u8, text: []const u8) !void {
+    const ctx = parent.ctx;
+    _ = (try parent.text(id, text)).with_style(.{
         Style{ .font = 11, .tracking = 0.07, .text = ctx.res.view.theme.dim },
     });
 }
@@ -95,14 +97,15 @@ fn compactEffect(comptime GoodT: type) []const u8 {
     };
 }
 
-fn actionMargin(ctx: *UiCtx, parent: El, world: *World, e: Entity, comptime ActionT: type, id: []const u8, name: []const u8) !void {
+fn actionMargin(parent: El, world: *World, e: Entity, comptime ActionT: type, id: []const u8, name: []const u8) !void {
+    const ctx = parent.ctx;
     const live = world.get(e, ActionT) orelse return;
     const base = (ActionT{}).requires.energy;
     if (@abs(live.requires.energy - base) < 0.001) return;
     const th = ctx.res.view.theme;
     var buf: [40]u8 = undefined;
     const value = std.fmt.bufPrint(&buf, "{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }) catch return;
-    try line(ctx, parent, id, name, value, if (live.requires.energy < base) th.good else th.danger);
+    try line(parent, id, name, value, if (live.requires.energy < base) th.good else th.danger);
 }
 
 fn spareUnits(world: *World, e: Entity) u32 {
@@ -122,18 +125,20 @@ fn generatorFoodPerDay(world: *World, e: Entity) f32 {
 }
 
 /// One BODY sentence with dim prose and a foreground/semantic live value.
-fn bodySentence(ctx: *UiCtx, parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: uic.Color) !void {
+fn bodySentence(parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: uic.Color) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const row = try el.div(ctx, parent, id);
+    const row = try parent.div(id);
     _ = row.with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try el.text(ctx, row, "prefix", prefix)).with_style(.{Style{ .font = 11, .text = th.dim }});
-    _ = (try el.text(ctx, row, "value", value)).with_style(.{Style{ .font = 11, .text = value_color }});
-    _ = (try el.text(ctx, row, "suffix", suffix)).with_style(.{Style{ .font = 11, .text = th.dim }});
+    _ = (try row.text("prefix", prefix)).with_style(.{Style{ .font = 11, .text = th.dim }});
+    _ = (try row.text("value", value)).with_style(.{Style{ .font = 11, .text = value_color }});
+    _ = (try row.text("suffix", suffix)).with_style(.{Style{ .font = 11, .text = th.dim }});
 }
 
-fn buildMainPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
+fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const panel = try el.div(ctx, parent, "panel");
+    const panel = try parent.div("panel");
     _ = panel.with_size(.{ .fixed = main_content_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{
@@ -148,20 +153,20 @@ fn buildMainPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
     }
     const kinds = capital.goods_owned(world, e);
 
-    const heading = try el.div(ctx, panel, "heading");
+    const heading = try panel.div("heading");
     _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
-    try sectionLabel(ctx, heading, "title", "HOLDINGS");
+    try sectionLabel(heading, "title", "HOLDINGS");
     var count_buf: [32]u8 = undefined;
     const count = std.fmt.bufPrint(&count_buf, "{d} KINDS, {d}", .{ kinds, units }) catch "HOLDINGS";
-    try sectionLabel(ctx, heading, "count", count);
-    try spacer(ctx, panel, "heading_gap", 8);
+    try sectionLabel(heading, "count", count);
+    try spacer(panel, "heading_gap", 8);
 
-    const roster = try el.div(ctx, panel, "roster");
+    const roster = try panel.div("roster");
     _ = roster.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(3);
     if (kinds == 0) {
-        _ = (try el.text(ctx, roster, "none", "nothing built yet"))
+        _ = (try roster.text("none", "nothing built yet"))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     } else {
         inline for (holding_bundle, 0..) |GoodT, i| {
@@ -171,58 +176,59 @@ fn buildMainPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
                     std.fmt.bufPrint(&label_buf, "{s} \u{00d7}{d}", .{ gt.display_name(GoodT), held.count }) catch gt.display_name(GoodT)
                 else
                     gt.display_name(GoodT);
-                try line(ctx, roster, std.fmt.comptimePrint("good{d}", .{i}), label, compactEffect(GoodT), th.dim);
+                try line(roster, std.fmt.comptimePrint("good{d}", .{i}), label, compactEffect(GoodT), th.dim);
             }
         }
     }
 
-    try spacer(ctx, panel, "divider_top", 9);
-    const divider = try el.div(ctx, panel, "divider");
+    try spacer(panel, "divider_top", 9);
+    const divider = try panel.div("divider");
     _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
         .with_style(.{Style{ .fill = th.line }}).pass_through();
-    try spacer(ctx, panel, "divider_bottom", 7);
-    try sectionLabel(ctx, panel, "margins_title", "MARGINS");
-    try spacer(ctx, panel, "margins_gap", 8);
+    try spacer(panel, "divider_bottom", 7);
+    try sectionLabel(panel, "margins_title", "MARGINS");
+    try spacer(panel, "margins_gap", 8);
 
-    const margins = try el.div(ctx, panel, "margins");
+    const margins = try panel.div("margins");
     _ = margins.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(4);
-    try actionMargin(ctx, margins, world, e, comp.ActionForage, "forage", "Forage");
-    try actionMargin(ctx, margins, world, e, comp.ActionScavenge, "scavenge", "Scavenge");
-    try actionMargin(ctx, margins, world, e, comp.ActionChopWood, "wood", "Split wood");
-    try actionMargin(ctx, margins, world, e, comp.ActionFish, "fish", "Fish");
-    try actionMargin(ctx, margins, world, e, comp.ActionCheckTraps, "traps", "Traps");
-    try actionMargin(ctx, margins, world, e, comp.ActionHunt, "hunt", "Hunt");
+    try actionMargin(margins, world, e, comp.ActionForage, "forage", "Forage");
+    try actionMargin(margins, world, e, comp.ActionScavenge, "scavenge", "Scavenge");
+    try actionMargin(margins, world, e, comp.ActionChopWood, "wood", "Split wood");
+    try actionMargin(margins, world, e, comp.ActionFish, "fish", "Fish");
+    try actionMargin(margins, world, e, comp.ActionCheckTraps, "traps", "Traps");
+    try actionMargin(margins, world, e, comp.ActionHunt, "hunt", "Hunt");
 
     if (world.get(e, comp.InventoryFood)) |food| {
         if (food.quality != ha.baselines.food_quality) {
             var quality_buf: [32]u8 = undefined;
             const quality = std.fmt.bufPrint(&quality_buf, "{d} \u{2192} {d}", .{ ha.baselines.food_quality, food.quality }) catch "?";
-            try line(ctx, margins, "quality", "Food quality", quality, if (food.quality > ha.baselines.food_quality) th.good else th.danger);
+            try line(margins, "quality", "Food quality", quality, if (food.quality > ha.baselines.food_quality) th.good else th.danger);
         }
         var spoil_buf: [40]u8 = undefined;
         const spoilage = std.fmt.bufPrint(&spoil_buf, "{d:.2} \u{2192} {d:.2}/day", .{ ha.baselines.food_spoils, food.spoils }) catch "?";
         const spoil_color = if (food.spoils < ha.baselines.food_spoils) th.good else if (food.spoils > ha.baselines.food_spoils) th.danger else th.dim;
-        try line(ctx, margins, "spoilage", "Food spoilage", spoilage, spoil_color);
+        try line(margins, "spoilage", "Food spoilage", spoilage, spoil_color);
     }
 
     if (world.get(e, comp.Vigor)) |vigor| {
         var vigor_buf: [24]u8 = undefined;
         const ceiling = std.fmt.bufPrint(&vigor_buf, "{d:.0}", .{vigor.max}) catch "?";
-        try line(ctx, margins, "vigor", "Vigor ceiling", ceiling, th.dim);
+        try line(margins, "vigor", "Vigor ceiling", ceiling, th.dim);
     }
 
     var spare_buf: [32]u8 = undefined;
     const spares = spareUnits(world, e);
     const spare_text = std.fmt.bufPrint(&spare_buf, "{d} spare {s}", .{ spares, if (spares == 1) "unit" else "units" }) catch "?";
-    try line(ctx, margins, "trade", "Trade stock", spare_text, th.dim);
+    try line(margins, "trade", "Trade stock", spare_text, th.dim);
 
     return panel;
 }
 
-fn buildBodyPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
+fn buildBodyPanel(parent: El, world: *World, e: Entity) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const panel = try el.div(ctx, parent, "body");
+    const panel = try parent.div("body");
     _ = panel.with_size(.{ .fixed = body_content_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{
@@ -230,10 +236,10 @@ fn buildBodyPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
         style.solid,
         style.pad_each(9, 10, 9, 10),
     });
-    try sectionLabel(ctx, panel, "title", "BODY");
+    try sectionLabel(panel, "title", "BODY");
 
     const met = world.get(e, comp.Metabolism) orelse {
-        _ = (try el.text(ctx, panel, "missing", "no body projection"))
+        _ = (try panel.text("missing", "no body projection"))
             .with_style(.{Style{ .font = 11, .text = th.dim }});
         return panel;
     };
@@ -241,15 +247,15 @@ fn buildBodyPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
     const vigor = world.get(e, comp.Vigor) orelse return panel;
     const rate = ctx.res.config.clampMetabolism(met.rate);
     const policy = ha.eating.word(ha.eating.valueFromRate(rate));
-    try bodySentence(ctx, panel, "policy", "Eating ", policy, ".", th.fg);
+    try bodySentence(panel, "policy", "Eating ", policy, ".", th.fg);
 
     const net = ha.systems.net_food_drawdown(met.base_rate, rate, generatorFoodPerDay(world, e));
     if (net <= 0.001) {
-        try bodySentence(ctx, panel, "coverage", "Larder ", "holds", ".", th.good);
+        try bodySentence(panel, "coverage", "Larder ", "holds", ".", th.good);
     } else {
         var coverage_buf: [24]u8 = undefined;
         const coverage = std.fmt.bufPrint(&coverage_buf, "{d:.1}d", .{food.v / net}) catch "?";
-        try bodySentence(ctx, panel, "coverage", "Food lasts ", coverage, ".", if (food.v / net < 2) th.danger else th.fg);
+        try bodySentence(panel, "coverage", "Food lasts ", coverage, ".", if (food.v / net < 2) th.danger else th.fg);
     }
 
     const projection = ha.body.project(.{
@@ -263,28 +269,28 @@ fn buildBodyPanel(ctx: *UiCtx, parent: El, world: *World, e: Entity) !El {
     });
     var recovery_buf: [32]u8 = undefined;
     switch (projection.recovery) {
-        .at_ceiling => try bodySentence(ctx, panel, "recovery", "Vigor is ", "full", ".", th.good),
-        .no_food => try bodySentence(ctx, panel, "recovery", "Recovery: ", "starving", ".", th.danger),
-        .no_quality => try bodySentence(ctx, panel, "recovery", "Recovery: ", "no vigor", ".", th.danger),
+        .at_ceiling => try bodySentence(panel, "recovery", "Vigor is ", "full", ".", th.good),
+        .no_food => try bodySentence(panel, "recovery", "Recovery: ", "starving", ".", th.danger),
+        .no_quality => try bodySentence(panel, "recovery", "Recovery: ", "no vigor", ".", th.danger),
         .partial => |partial| {
             const restored = std.fmt.bufPrint(&recovery_buf, "+{d:.0} vigor", .{partial.restored}) catch "?";
-            try bodySentence(ctx, panel, "recovery", "Can recover ", restored, ".", th.warn);
+            try bodySentence(panel, "recovery", "Can recover ", restored, ".", th.warn);
         },
         .recovering => |recovering| {
             const days = std.fmt.bufPrint(&recovery_buf, "{d:.1}d", .{recovering.days}) catch "?";
-            try bodySentence(ctx, panel, "recovery", "Full vigor in ", days, ".", th.fg);
+            try bodySentence(panel, "recovery", "Full vigor in ", days, ".", th.fg);
         },
     }
     return panel;
 }
 
 /// Build the complete standalone HOLDINGS + BODY content column.
-pub fn holdings(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8) !El {
-    const column = try el.div(ctx, parent, id);
+pub fn holdings(parent: El, world: *World, e: Entity, id: []const u8) !El {
+    const column = try parent.div(id);
     _ = column.with_size(.{ .fixed = column_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
-    _ = try buildMainPanel(ctx, column, world, e);
-    _ = try buildBodyPanel(ctx, column, world, e);
+    _ = try buildMainPanel(column, world, e);
+    _ = try buildBodyPanel(column, world, e);
     return column;
 }
 

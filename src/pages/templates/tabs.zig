@@ -23,10 +23,11 @@ const TabsState = uic.UiState.TabsState;
 
 pub const Tabs = struct { el: El, active: usize };
 
-pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8) !Tabs {
+pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const bar = try el.div(ctx, parent, id);
+    const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(10);
     const bar_key = bar.get().key;
 
@@ -39,7 +40,7 @@ pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8)
 
     for (labels, 0..) |label, i| {
         const key = try std.fmt.allocPrint(ctx.arena, "tab{d}", .{i});
-        const chip = try el.div(ctx, bar, key);
+        const chip = try bar.div(key);
         const chip_key = chip.get().key;
         const q = chip.query();
         ctx.registerRovingFocus(bar_key, chip_key, true);
@@ -65,7 +66,7 @@ pub fn tabs(ctx: *UiCtx, parent: El, id: []const u8, labels: []const []const u8)
         // accent even for the **active** tab, so hovering the active tab changes its color too;
         // a resting active tab is fg, a resting inactive tab is dim.
         const c = if (q.held or q.hovering or focused) th.acc else if (is_active) th.fg else th.dim;
-        const lbl = (try el.text(ctx, chip, "l", label))
+        const lbl = (try chip.text("l", label))
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the

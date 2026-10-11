@@ -30,7 +30,7 @@ pub fn tooltip(ctx: *UiCtx, id: []const u8, text: []const u8) !El {
     _ = box.query(); // keep the slot alive for its geometry read-back
     _ = box.pass_through(); // informational overlay, never a hit target
 
-    _ = (try el.text(ctx, box, "lbl", text)).with_style(.{Style{ .text = th.fg }});
+    _ = (try box.text("lbl", text)).with_style(.{Style{ .text = th.fg }});
 
     return box;
 }

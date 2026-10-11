@@ -18,7 +18,6 @@ const button = @import("./button.zig").button;
 const info = @import("./action_info.zig");
 
 pub fn action_button(
-    ctx: *UiCtx,
     parent: El,
     world: *World,
     e: Entity,
@@ -27,6 +26,7 @@ pub fn action_button(
     name: []const u8,
     comptime act_fn: anytype,
 ) !void {
+    const ctx = parent.ctx;
     if (!world.has(e, ActionT)) return;
     const act = world.get(e, ActionT).?;
     const vigor = world.get(e, comp.Vigor).?;
@@ -48,6 +48,6 @@ pub fn action_button(
 
     var buf: [64]u8 = undefined;
     const txt = std.fmt.bufPrint(&buf, "{s}  (-{d:.0} e, +{s}{c})", .{ name, act.requires.energy, range, dom.letter }) catch name;
-    const btn = try button(ctx, parent, id, txt, can);
+    const btn = try button(parent, id, txt, can);
     if (btn.query().clicked and can) act_fn(world, e, ctx.res);
 }

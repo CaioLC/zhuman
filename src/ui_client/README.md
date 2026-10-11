@@ -604,21 +604,27 @@ This is evidence against a speculative rewrite, not a QA-17 worst-case result.
 
 An element creates a node and sets *what is in it* — nothing else. Every constructor
 returns an **`El`**: `{ ctx, node }`, a handle that carries the ctx so style and placement
-chain onto it.
+chain onto it, and so a child names only its id and its content:
 
 ```zig
-const header = try el.div(ctx, root, "header");
+const header = try root.div("header");
 _ = header.with_layout(.top_left)                        // its own anchor in the parent
           .with_flow(.{ .dir = .row, .cross = .center }) // how its children arrange
-          .with_gap(6)
-          .with_style(.{ h1, red });                     // style — a fragment fold
+          .with_gap(6);
+_ = try header.text("title", "BUILD").with_style(.{ h1, red }); // style — a fragment fold
 ```
 
-Leaves are `root` (fullscreen, sized to the live window, the only non-`.relative` one),
-`div`, `text`, `image`, `sprite`, `svg`, plus `el(…, content, spec)` sugar pairing a leaf
-with a style spec in one call. Content leaves default to `.relative`, so flowed layout is
-the zero-config case. `.get()` drops to the raw `*Node` for geometry reads, or for handing
-a root to the render walk. `El.prior_geometry()` explicitly reads the last stamped global
+**A method on `El` describes this one node; a function describes a composition.** The
+content leaves are methods on the parent handle — `div`, `text`, `image`, `sprite`, `svg`,
+`line`, `polygon`, `polyline`, `gradient` — plus the placement, look, behaviour and state
+methods below. `root(ctx, id)` is the one free constructor, because a root has no parent
+handle to hang off (fullscreen, sized to the live window, the only non-`.relative` one).
+Anything that creates more than one node or returns holes for a caller to fill — every
+template in `pages/templates/`, and `text_input`/`modal`/`tooltip` here — is a function
+taking its parent `El` first and no `ctx`; it reads `parent.ctx` when it needs the host.
+Content leaves default to `.relative`, so flowed layout is the zero-config case. `.get()`
+drops to the raw `*Node` for geometry reads, or for handing a root to the render walk.
+`El.prior_geometry()` explicitly reads the last stamped global
 rect plus inherited clip (null before a slot is stamped). Its `Geometry` value converts
 points/rects between global and node-local pixel space and exposes effective global/local
 clips; use it for overlays, board math, zoom anchors, and drag thresholds instead of
@@ -744,8 +750,7 @@ at `font.default_px`; a resolved `font` fragment re-measures at its size.
 ### Constrained multiline text (TEXT-02)
 
 A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
-over the content box, the fast path dense rows pay nothing for. `El.with_wrap(max_w)` (or
-the `el.textWrapped` sugar) opts a node into **constrained multiline**: it stores an explicit
+over the content box, the fast path dense rows pay nothing for. `El.with_wrap(max_w)` opts a node into **constrained multiline**: it stores an explicit
 maximum content width and re-measures, so the node reports the wrapped `width`×`height` and
 renders exactly those lines.
 

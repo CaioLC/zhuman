@@ -25,12 +25,12 @@ pub fn figure_glyphs(vigor_frac: f32) Figure {
 }
 
 /// Build the figure's 3 lines as a stacked column of tinted text leaves under `parent`.
-pub fn figure(ctx: *UiCtx, parent: El, fig: Figure, color: Color) !void {
-    const col = try el.div(ctx, parent, "fig");
+pub fn figure(parent: El, fig: Figure, color: Color) !void {
+    const col = try parent.div("fig");
     _ = col.with_flow(.{ .dir = .column });
 
     inline for (.{ "l1", "l2", "l3" }, .{ fig.l1, fig.l2, fig.l3 }) |lid, line| {
-        const n = try el.text(ctx, col, lid, line);
+        const n = try col.text(lid, line);
         // h3 keeps the 3-line figure legible; at body size the ASCII reads as noise.
         _ = n.with_style(.{ style.h3, Style{ .text = color } });
     }

@@ -40,12 +40,13 @@ pub const Result = struct {
     market_action: El,
 };
 
-fn spacer(ctx: *UiCtx, parent: El, id: []const u8, height: f32) !void {
-    const gap = try el.div(ctx, parent, id);
+fn spacer(parent: El, id: []const u8, height: f32) !void {
+    const gap = try parent.div(id);
     _ = gap.with_size(.{ .fixed = 1 }, .{ .fixed = height }).pass_through();
 }
 
-fn retainBuildCatalog(ctx: *UiCtx, surface: El) void {
+fn retainBuildCatalog(surface: El) void {
+    const ctx = surface.ctx;
     const section_key = ha.ui.key(surface.get().key, "buildsection");
     const build_key = ha.ui.key(section_key, "buildlist");
     const controls_key = ha.ui.key(build_key, "build_ctl");
@@ -57,24 +58,23 @@ fn retainBuildCatalog(ctx: *UiCtx, surface: El) void {
 
 /// Compose the tabbed Act I work surface. The returned market action is the strip's TRADE link;
 /// callers own encounter eligibility and modal lifecycle, while this template owns placement.
-pub fn act_one_surface(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
+pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
     // The workspace owns the constant total width. This surface takes the entire growing
     // content lane, so collapsing HOLDINGS transfers every released pixel to the strips and
     // active view instead of leaving a fixed-width island.
-    const surface = try el.div(ctx, parent, id);
+    const surface = try parent.div(id);
     _ = surface.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start });
 
-    const nav = try el.div(ctx, surface, "nav");
+    const nav = try surface.div("nav");
     _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
-    const tabs = try view_nav_mod.view_nav(ctx, nav, "tabs", &.{ "ACTIONS", "BUILD" });
+    const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD" });
     _ = tabs.el.with_layout(.bottom_left);
 
-    try spacer(ctx, surface, "nav_gap", nav_to_market);
-    const market_action = try market_strip_mod.market_strip(ctx, surface, "market", opts.market);
-    try spacer(ctx, surface, "market_gap", market_to_activity);
+    try spacer(surface, "nav_gap", nav_to_market);
+    const market_action = try market_strip_mod.market_strip(surface, "market", opts.market);
+    try spacer(surface, "market_gap", market_to_activity);
     _ = try market_strip_mod.activity_strip(
-        ctx,
         surface,
         "activity",
         opts.activity.state,
@@ -82,13 +82,13 @@ pub fn act_one_surface(ctx: *UiCtx, parent: El, world: *World, e: Entity, id: []
         opts.activity.metadata,
         opts.activity.last,
     );
-    try spacer(ctx, surface, "activity_gap", activity_to_section);
+    try spacer(surface, "activity_gap", activity_to_section);
 
     if (tabs.active == 0) {
-        retainBuildCatalog(ctx, surface);
-        _ = try actions_section_mod.actions_section(ctx, surface, world, e, "actions_section");
+        retainBuildCatalog(surface);
+        _ = try actions_section_mod.actions_section(surface, world, e, "actions_section");
     } else {
-        _ = try build_section_mod.build_section(ctx, surface, world, e, "buildsection");
+        _ = try build_section_mod.build_section(surface, world, e, "buildsection");
     }
 
     return .{ .el = surface, .active = tabs.active, .market_action = market_action };

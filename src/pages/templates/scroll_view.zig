@@ -32,19 +32,20 @@ pub const ScrollView = struct {
     content: El, // fit_children column — the caller's rows attach here
 };
 
-pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: f32) !ScrollView {
+pub fn scroll_view(parent: El, id: []const u8, width: f32, height: f32) !ScrollView {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);
 
-    const viewport = try el.div(ctx, outer, "viewport");
+    const viewport = try outer.div("viewport");
     _ = viewport.with_layout(.relative)
         .with_size(.{ .fixed = width }, .{ .fixed = height })
         .with_overflow(.clip)
         .with_style(.{Style{ .outline_color = th.line2 }}); // dim frame around the scroll area
 
-    const content = try el.div(ctx, viewport, "content");
+    const content = try viewport.div("content");
     _ = content.with_flow(.{ .dir = .column }).with_gap(content_gap);
     const content_node = content.get();
     // Clamp needs content height, but this frame's rows aren't laid out yet — read last
@@ -62,7 +63,7 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
     st.offset = std.math.clamp(st.offset, 0, max_offset);
 
     if (max_offset > 0) {
-        const track = try el.div(ctx, outer, "track");
+        const track = try outer.div("track");
         _ = track.with_flow(.{ .dir = .column })
             .with_size(.{ .fixed = scrollbar_w }, .{ .fixed = height })
             .with_style(.{Style{ .fill = th.line }});
@@ -70,8 +71,8 @@ pub fn scroll_view(ctx: *UiCtx, parent: El, id: []const u8, width: f32, height: 
         const thumb_h = @min(height, @max(16.0, height * height / content_h));
         const thumb_travel = height - thumb_h;
 
-        const spacer = try el.div(ctx, track, "above");
-        const thumb = try el.div(ctx, track, "thumb");
+        const spacer = try track.div("above");
+        const thumb = try track.div("thumb");
         _ = thumb.with_size(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_h });
         const thumb_q = thumb.query();
         uic.updateScrollThumb(ctx, st, thumb.get().key, thumb_q.pressed, max_offset, thumb_travel);

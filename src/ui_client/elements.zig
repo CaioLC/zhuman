@@ -3,7 +3,7 @@
 //! an svg). It returns an `El` (`{ ctx, node }`), a tiny host handle carrying `ctx` so
 //! style + placement chain right onto it:
 //!
-//!   const header = try el.div(ctx, root, "header");
+//!   const header = try root.div("header");
 //!   _ = header.with_layout(.top_left)                     // own anchor within the parent
 //!             .with_flow(.{ .dir = .row, .cross = .center }) // arrange children
 //!             .with_gap(6)
@@ -249,11 +249,89 @@ pub const El = struct {
         self.ctx.setHitTest(self.node.key, predicate);
         return self;
     }
+
+    // -- Content leaves: a child of this node, returned as its own handle. ----------------
+    // The parent handle carries `ctx`, so a leaf names only its id and its content. Anything
+    // that builds more than one node is a function taking a parent `El`, not a method.
+
+    /// A box holding no content — a row/column container, or a bare hit box.
+    pub fn div(self: El, id: []const u8) !El {
+        return .{ .ctx = self.ctx, .node = try child(self, id) };
+    }
+
+    /// A content-sized text node holding `str` (measured at the default font; recolor/resize
+    /// with `with_style`).
+    pub fn text(self: El, id: []const u8, str: []const u8) !El {
+        const node = try child(self, id);
+        try feat.data_text(self.ctx, node, str);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A whole-texture image node, sized to the texture.
+    pub fn image(self: El, id: []const u8, texture: sdl.render.Texture) !El {
+        const node = try child(self, id);
+        try feat.data_img(self.ctx, node, texture);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// One `src` cell of a sprite sheet, drawn at `px`×`px`.
+    pub fn sprite(self: El, id: []const u8, spr: Sprite, px: f32) !El {
+        const node = try child(self, id);
+        try feat.data_sprite(self.ctx, node, spr, px);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A cached SVG raster from `path`, drawn at `px`×`px` (recolor the tint with `with_style`).
+    pub fn svg(self: El, id: []const u8, path: [:0]const u8, px: f32) !El {
+        const node = try child(self, id);
+        try feat.data_svg(self.ctx, node, path, px);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A polyline through `pts` — node-local coordinates in the unit square, so (0,0) is this
+    /// node's top-left and (1,1) its bottom-right. Unlike the other content leaves this one
+    /// does **not** size itself: points are relative, so the caller gives the node a box
+    /// (`with_size`) and the line stretches to fill it.
+    pub fn line(self: El, id: []const u8, pts: []const cb.Point, stroke: cb.Stroke) !El {
+        const node = try child(self, id);
+        feat.data_line(self.ctx, node, pts, stroke);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A filled **convex polygon** through `pts` — node-local unit-square coordinates like
+    /// `line`, stretching to whatever box the caller sizes the node to. Fan-triangulated and
+    /// drawn by the `geometry` feature (RENDER-03). Flat `color`; `opacity` fades the whole
+    /// mesh. Does not size the node.
+    pub fn polygon(self: El, id: []const u8, pts: []const cb.Point, color: cb.Color, opacity: f32) !El {
+        const node = try child(self, id);
+        feat.data_polygon(self.ctx, node, pts, color, opacity);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A **thick polyline** through `pts` (node-local unit-square coords) at `half_width`
+    /// (unit-square units, mapped to px at draw), with honest miter joins and `cap` ends;
+    /// `closed` connects last→first for a rail loop. Drawn by the `geometry` feature. Does
+    /// not size the node.
+    pub fn polyline(self: El, id: []const u8, pts: []const cb.Point, half_width: f32, closed: bool, cap: feat.geometry.Cap, color: cb.Color, opacity: f32) !El {
+        const node = try child(self, id);
+        feat.data_polyline(self.ctx, node, pts, half_width, closed, cap, color, opacity);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A **linear gradient** fill (RENDER-04) along `dir` through ordered `stops` (positions
+    /// 0..1 on the axis), drawn by the `geometry` feature via per-vertex colors. Two stops at
+    /// the same position give a hard split; a `tint → transparent` pair gives a wash.
+    /// `opacity` fades the whole mesh. Does not size the node.
+    pub fn gradient(self: El, id: []const u8, dir: feat.geometry.Dir, stops: []const feat.geometry.GradientStop, opacity: f32) !El {
+        const node = try child(self, id);
+        feat.data_gradient(self.ctx, node, dir, stops, opacity);
+        return .{ .ctx = self.ctx, .node = node };
+    }
 };
 
 /// A fresh child node, anchored `.relative` — the default for content leaves.
-fn child(ctx: *UiCtx, parent: El, id: []const u8) !*Node {
-    const node = try Node.pcreate(ctx.arena, id, parent.node);
+fn child(parent: El, id: []const u8) !*Node {
+    const node = try Node.pcreate(parent.ctx.arena, id, parent.node);
     node.layout.anchor = .relative; // children flow by default; override with `with_layout`
     return node;
 }
@@ -267,10 +345,10 @@ fn scaleRule(rule: ui.SizeRule, scale: f32) ui.SizeRule {
     };
 }
 
-// -- Roots & content leaves ------------------------------------------------------------
+// -- The root: the one constructor with no parent handle to hang off. ------------------
 
 /// A fullscreen root sized to the live window — the anchor box a screen positions against.
-/// A root has no parent and stays non-relative (`.top_left`). Replaces the old `ui_root`.
+/// A root has no parent and stays non-relative (`.top_left`). Children are `El` methods.
 pub fn root(ctx: *UiCtx, id: []const u8) !El {
     const node = try Node.create(ctx.arena, id);
     // A root must place *itself*: `Node.init` defaults `.relative`, which errors the
@@ -285,113 +363,6 @@ pub fn root(ctx: *UiCtx, id: []const u8) !El {
     const m = ctx.res.view.metrics;
     node.size = ui.features.Size.initFixed(m.px_w, m.px_h);
     return .{ .ctx = ctx, .node = node };
-}
-
-/// A box holding no content — use it to manage placement (a row/column container).
-pub fn div(ctx: *UiCtx, parent: El, id: []const u8) !El {
-    return .{ .ctx = ctx, .node = try child(ctx, parent, id) };
-}
-
-/// A content-sized text node holding `str` (measured at the default font; recolor/resize
-/// with `with_style`).
-pub fn text(ctx: *UiCtx, parent: El, id: []const u8, str: []const u8) !El {
-    const node = try child(ctx, parent, id);
-    try feat.data_text(ctx, node, str);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A content-sized text node holding `str`, constrained to `max_w` px and wrapped onto
-/// multiple lines (TEXT-02). Sugar for `text(...).with_wrap(max_w)`. Recolor/resize with
-/// `with_style` afterward — a `font` fragment re-wraps at the same width.
-pub fn textWrapped(ctx: *UiCtx, parent: El, id: []const u8, str: []const u8, max_w: f32) !El {
-    return (try text(ctx, parent, id, str)).with_wrap(max_w);
-}
-
-/// A whole-texture image node, sized to the texture.
-pub fn image(ctx: *UiCtx, parent: El, id: []const u8, texture: sdl.render.Texture) !El {
-    const node = try child(ctx, parent, id);
-    try feat.data_img(ctx, node, texture);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// One `src` cell of a sprite sheet, drawn at `px`×`px`.
-pub fn sprite(ctx: *UiCtx, parent: El, id: []const u8, spr: Sprite, px: f32) !El {
-    const node = try child(ctx, parent, id);
-    try feat.data_sprite(ctx, node, spr, px);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A cached SVG raster from `path`, drawn at `px`×`px` (recolor the tint with `with_style`).
-pub fn svg(ctx: *UiCtx, parent: El, id: []const u8, path: [:0]const u8, px: f32) !El {
-    const node = try child(ctx, parent, id);
-    try feat.data_svg(ctx, node, path, px);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A polyline through `pts` — node-local coordinates in the unit square, so (0,0) is this
-/// node's top-left and (1,1) its bottom-right. Unlike the other content leaves this one
-/// does **not** size itself: points are relative, so the caller gives the node a box
-/// (`with_size`) and the line stretches to fill it.
-pub fn line(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, stroke: cb.Stroke) !El {
-    const node = try child(ctx, parent, id);
-    feat.data_line(ctx, node, pts, stroke);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A filled **convex polygon** through `pts` — node-local unit-square coordinates like
-/// `line`, so (0,0) is this node's top-left and (1,1) its bottom-right, and the shape
-/// stretches to whatever box the caller sizes the node to (`with_size`). Fan-triangulated
-/// and drawn by the `geometry` feature via `renderGeometry` (RENDER-03). Flat `color`;
-/// `opacity` fades the whole mesh. Does not size the node (points are relative).
-pub fn polygon(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, color: cb.Color, opacity: f32) !El {
-    const node = try child(ctx, parent, id);
-    feat.data_polygon(ctx, node, pts, color, opacity);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A **thick polyline** through `pts` (node-local unit-square coords) at `half_width`
-/// (unit-square units, mapped to px at draw), with honest miter joins and `cap` ends;
-/// `closed` connects last→first for a rail loop. Drawn by the `geometry` feature via
-/// `renderGeometry`. Unlike `line`'s first-segment-normal approximation, joins/caps are
-/// correct. Does not size the node.
-pub fn polyline(ctx: *UiCtx, parent: El, id: []const u8, pts: []const cb.Point, half_width: f32, closed: bool, cap: feat.geometry.Cap, color: cb.Color, opacity: f32) !El {
-    const node = try child(ctx, parent, id);
-    feat.data_polyline(ctx, node, pts, half_width, closed, cap, color, opacity);
-    return .{ .ctx = ctx, .node = node };
-}
-
-/// A **linear gradient** fill (RENDER-04) along `dir` through ordered `stops` (positions
-/// 0..1 on the axis), drawn by the `geometry` feature via per-vertex colors. Two stops at the
-/// same position give a hard split (the eating-slider `acc`|`line2` track); a `tint →
-/// transparent` pair gives a wash (a milestone/state fade). `opacity` fades the whole mesh.
-/// Does not size the node — the gradient stretches to whatever box the caller gives it.
-pub fn gradient(ctx: *UiCtx, parent: El, id: []const u8, dir: feat.geometry.Dir, stops: []const feat.geometry.GradientStop, opacity: f32) !El {
-    const node = try child(ctx, parent, id);
-    feat.data_gradient(ctx, node, dir, stops, opacity);
-    return .{ .ctx = ctx, .node = node };
-}
-
-// -- el: sugar composing a content leaf + a style spec in one call. --------------------
-
-/// What an `el` draws — the content variant it dispatches to a leaf. The image/svg/sprite
-/// variants carry their per-call data; reusable *style* rides in the separate `spec` arg.
-pub const Content = union(enum) {
-    text: []const u8,
-    image: sdl.render.Texture,
-    sprite: struct { spr: Sprite, px: f32 },
-    svg: struct { path: [:0]const u8, px: f32 },
-};
-
-/// One-call sugar over `leaf + with_style` (style only; chain placement after). `spec` is
-/// the usual style fragment tuple (`.{}` for none).
-pub fn el(ctx: *UiCtx, parent: El, id: []const u8, content: Content, spec: anytype) !El {
-    const e: El = switch (content) {
-        .text => |s| try text(ctx, parent, id, s),
-        .image => |t| try image(ctx, parent, id, t),
-        .sprite => |s| try sprite(ctx, parent, id, s.spr, s.px),
-        .svg => |s| try svg(ctx, parent, id, s.path, s.px),
-    };
-    return e.with_style(spec);
 }
 
 test {

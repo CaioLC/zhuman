@@ -25,13 +25,13 @@ pub const Header = struct {
 /// Assemble the full-width HUD header as one intrinsic-height row. Keeping both children in flow
 /// gives the wrapper a real height; `space_between` pins the run context right even when stocks
 /// is an empty, zero-width line after actor death.
-pub fn header(ctx: *UiCtx, parent: El, id: []const u8, options: Options) !Header {
-    const root = try el.div(ctx, parent, id);
+pub fn header(parent: El, id: []const u8, options: Options) !Header {
+    const root = try parent.div(id);
     _ = root.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
 
-    const stocks = try stock_mod.stockline(ctx, root, "stocks", options.stocks);
-    const run = try run_mod.runline(ctx, root, "run", options.run);
+    const stocks = try stock_mod.stockline(root, "stocks", options.stocks);
+    const run = try run_mod.runline(root, "run", options.run);
 
     return .{ .el = root, .stocks = stocks, .run = run };
 }

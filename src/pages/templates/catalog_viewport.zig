@@ -44,26 +44,27 @@ pub const Viewport = struct {
 /// Build a results viewport into `parent`. `height` is the desktop viewport height (logical
 /// px); `reset` (the KIT-15 `changed` flag) snaps the offset to the top this frame. At `≤760`
 /// no nested scroll is created — `parent` is returned as the content box (one page scroll).
-pub fn catalog_viewport(ctx: *UiCtx, parent: El, id: []const u8, height: f32, reset: bool) !Viewport {
+pub fn catalog_viewport(parent: El, id: []const u8, height: f32, reset: bool) !Viewport {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const scale = ctx.res.view.scale;
 
     // ≤760: no nested result scroll — rows flow into the shell/page scroll region (KIT-16).
     if (ctx.res.view.metrics.width_class.atMost(.w760)) {
-        const flow = try el.div(ctx, parent, id);
+        const flow = try parent.div(id);
         _ = flow.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight);
         return .{ .content = flow, .scrolled = false };
     }
 
     // Desktop: a fixed-height clipped viewport beside an 8px gutter track.
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .row }).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = height });
 
-    const viewport = try el.div(ctx, outer, "viewport");
+    const viewport = try outer.div("viewport");
     _ = viewport.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_overflow(.clip);
 
-    const content = try el.div(ctx, viewport, "content");
+    const content = try viewport.div("content");
     _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight);
     // Read last frame's content height for clamping (prior-frame rect, the scroll_view pattern).
@@ -84,7 +85,7 @@ pub fn catalog_viewport(ctx: *UiCtx, parent: El, id: []const u8, height: f32, re
 
     // The 8px gutter with an inset thumb, only while the results overflow.
     if (max_offset > 0) {
-        const track = try el.div(ctx, outer, "track");
+        const track = try outer.div("track");
         _ = track.with_size(.{ .fixed = uic.view.dp(gutter, scale) }, .{ .pct_of_parent = 1.0 })
             .with_flow(.{ .dir = .column })
             .with_style(.{Style{ .fill = th.line }});
@@ -92,11 +93,11 @@ pub fn catalog_viewport(ctx: *UiCtx, parent: El, id: []const u8, height: f32, re
         const thumb_h = @min(view_h_dev, @max(uic.view.dp(min_thumb, scale), view_h_dev * view_h_dev / content_h));
         const thumb_travel = view_h_dev - thumb_h;
 
-        const spacer = try el.div(ctx, track, "above");
+        const spacer = try track.div("above");
         const thumb_y = (state.offset / max_offset) * thumb_travel;
         _ = spacer.with_size_px(.{ .fixed = uic.view.dp(gutter, scale) }, .{ .fixed = thumb_y });
 
-        const thumb = try el.div(ctx, track, "thumb");
+        const thumb = try track.div("thumb");
         // Inset thumb: slightly narrower than the gutter, so it reads as sitting *in* the track.
         _ = thumb.with_size_px(.{ .fixed = uic.view.dp(gutter - 2, scale) }, .{ .fixed = thumb_h })
             .with_style(.{Style{ .fill = th.line2 }});

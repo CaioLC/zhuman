@@ -50,9 +50,10 @@ fn valueColor(th: uic.Theme, tone: Tone) Color {
 /// Build one stock token into `parent`. The token sizes to its content (abbrev + value),
 /// swapping to the full label while hovered/focused so only it grows. Its tone applies only to
 /// the value, leaving the label dim. The token is a focusable readout rather than a control.
-pub fn stock_token(ctx: *UiCtx, parent: El, id: []const u8, s: Stock) !void {
+pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const box = try el.div(ctx, parent, id);
+    const box = try parent.div(id);
     ctx.registerFocus(box.get().key, true);
     const q = box.query();
     const focused = ctx.isFocused(box.get().key);
@@ -68,32 +69,34 @@ pub fn stock_token(ctx: *UiCtx, parent: El, id: []const u8, s: Stock) !void {
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
     const label_txt = std.fmt.bufPrint(&buf, "{s}:", .{label}) catch label;
-    const lbl = (try el.text(ctx, box, "l", label_txt))
+    const lbl = (try box.text("l", label_txt))
         .with_style(.{ style.heading, Style{ .text = th.dim } });
-    const val = (try el.text(ctx, box, "v", s.value))
+    const val = (try box.text("v", s.value))
         .with_style(.{ style.heading, Style{ .text = valueColor(th, s.tone) } });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like resource_bar
     _ = lbl;
 }
 
 /// A dim `|` divider between tokens (heading size, matching the token baseline).
-fn sep(ctx: *UiCtx, parent: El, id: []const u8) !void {
-    _ = (try el.text(ctx, parent, id, "|"))
+fn sep(parent: El, id: []const u8) !void {
+    const ctx = parent.ctx;
+    _ = (try parent.text(id, "|"))
         .with_style(.{ style.heading, Style{ .text = ctx.res.view.theme.dim } });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
 /// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice.
-pub fn stockline(ctx: *UiCtx, parent: El, id: []const u8, stocks: []const Stock) !El {
-    const bar = try el.div(ctx, parent, id);
+pub fn stockline(parent: El, id: []const u8, stocks: []const Stock) !El {
+    const ctx = parent.ctx;
+    const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.stack);
     for (stocks, 0..) |s, i| {
         if (i > 0) {
             const skey = try std.fmt.allocPrint(ctx.arena, "sep{d}", .{i});
-            try sep(ctx, bar, skey);
+            try sep(bar, skey);
         }
         const tkey = try std.fmt.allocPrint(ctx.arena, "tok{d}", .{i});
-        try stock_token(ctx, bar, tkey, s);
+        try stock_token(bar, tkey, s);
     }
     return bar;
 }

@@ -92,14 +92,15 @@ const detail_wrap_w: f32 = 560;
 
 /// Build one Shelter/Exchange milestone. The disclosure row and CTA are separate hit targets;
 /// only a `.ready` CTA reports `clicked`.
-pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Milestone {
+pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const pres = presentationOf(goal.state);
     const tone = toneColor(ctx, pres.tone);
     const readiness = if (goal.readiness.len > 0) goal.readiness else pres.readiness;
     const ready = goal.state == .ready;
 
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.query(); // keep a stamped geometry slot for the paint-only wash/rail next frame
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column })
@@ -108,13 +109,13 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
     // State wash and 2px semantic rail paint behind the in-flow content and do not participate
     // in sizing. Ready/done are 11% good; locked/unfunded are 8% danger, fading at 76%.
     const wash_alpha: u8 = if (pres.tone == .good) 28 else 20;
-    const wash = try el.gradient(ctx, outer, "wash", .horizontal, &.{
+    const wash = try outer.gradient("wash", .horizontal, &.{
         .{ .pos = 0, .color = alpha(tone, wash_alpha) },
         .{ .pos = 0.76, .color = alpha(tone, 0) },
         .{ .pos = 1, .color = alpha(tone, 0) },
     }, 1.0);
     _ = wash.with_layout(.top_left).pass_through();
-    const state_rail = try el.div(ctx, outer, "state_rail");
+    const state_rail = try outer.div("state_rail");
     _ = state_rail.with_layout(.top_left)
         .with_style(.{Style{ .fill = tone }})
         .pass_through();
@@ -128,16 +129,16 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
 
     // Exact bar columns without content-box padding drift:
     // 10px inset | flexible disclosure | 10px | 132px CTA | 5px inset.
-    const bar = try el.div(ctx, outer, "bar");
+    const bar = try outer.div("bar");
     _ = bar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = bar_h })
         .with_flow(.{ .dir = .row, .cross = .center });
-    const lead = try el.div(ctx, bar, "lead");
+    const lead = try bar.div("lead");
     _ = lead.with_size(.{ .fixed = bar_left }, .{ .fixed = bar_h }).pass_through();
 
-    const disclosure_lane = try el.div(ctx, bar, "disclosure_lane");
+    const disclosure_lane = try bar.div("disclosure_lane");
     _ = disclosure_lane.with_size(.grow, .{ .fixed = bar_h })
         .with_flow(.{ .dir = .column, .main = .center });
-    const disclosure = try el.div(ctx, disclosure_lane, "disclosure");
+    const disclosure = try disclosure_lane.div("disclosure");
     _ = disclosure.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_h })
         .with_offset(0, bar_control_offset_y)
         .with_style(.{Style{ .fill = th.bg }});
@@ -164,42 +165,42 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
     // text leaves sit directly in the fixed-height parent, this engine centers them only within
     // their intrinsic line band; the anchored group gives Shelter, details, and the CTA one
     // shared vertical center while preserving the flexible summary column.
-    const disclosure_content = try el.div(ctx, disclosure, "content");
+    const disclosure_content = try disclosure.div("content");
     _ = disclosure_content.with_layout(.center)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center })
         .with_gap(summary_gap);
-    _ = (try el.text(ctx, disclosure_content, "title", goal.title))
+    _ = (try disclosure_content.text("title", goal.title))
         .with_style(.{Style{ .font = 15, .text = title_color }});
-    _ = (try el.text(ctx, disclosure_content, "readiness", readiness))
+    _ = (try disclosure_content.text("readiness", readiness))
         .with_style(.{Style{ .font = 9, .text = tone }});
 
     // The compact column is the only flexible summary field and clips before it can displace
     // the affordance or fixed action button.
-    const compact = try el.div(ctx, disclosure_content, "compact");
+    const compact = try disclosure_content.div("compact");
     _ = compact.with_size(.grow, .fit_children)
         .with_overflow(.clip);
-    _ = (try el.text(ctx, compact, "text", goal.summary))
+    _ = (try compact.text("text", goal.summary))
         .with_style(.{Style{ .font = 9, .text = th.dim }});
 
-    const affordance = try el.div(ctx, disclosure_content, "affordance");
+    const affordance = try disclosure_content.div("affordance");
     _ = affordance.with_size(.fit_children, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center })
         .with_gap(ha.tokens.gap.inline_);
-    _ = (try el.text(ctx, affordance, "word", if (disclosure_state.expanded) "close" else "details"))
+    _ = (try affordance.text("word", if (disclosure_state.expanded) "close" else "details"))
         .with_style(.{Style{ .font = 9, .text = th.dim }});
-    _ = (try el.text(ctx, affordance, "arrow", if (disclosure_state.expanded) "\u{2191}" else "\u{2193}"))
+    _ = (try affordance.text("arrow", if (disclosure_state.expanded) "\u{2191}" else "\u{2193}"))
         .with_style(.{Style{ .font = 9, .text = th.dim }});
 
     var clicked = false;
     if (goal.action.len > 0) {
-        const gap = try el.div(ctx, bar, "action_gap");
+        const gap = try bar.div("action_gap");
         _ = gap.with_size(.{ .fixed = bar_gap }, .{ .fixed = bar_h }).pass_through();
 
-        const action_lane = try el.div(ctx, bar, "action_lane");
+        const action_lane = try bar.div("action_lane");
         _ = action_lane.with_size(.{ .fixed = action_w }, .{ .fixed = bar_h })
             .with_flow(.{ .dir = .column, .main = .center });
-        const action = try el.div(ctx, action_lane, "action");
+        const action = try action_lane.div("action");
         _ = action.with_size(.{ .fixed = action_w }, .{ .fixed = action_h })
             .with_offset(0, bar_control_offset_y);
         const action_key = action.get().key;
@@ -217,75 +218,75 @@ pub fn milestone_goal(ctx: *UiCtx, parent: El, id: []const u8, goal: Goal) !Mile
         ctx.res.semantics.publish(uic.semantic.describeButton(action_key, goal.action, ready, action_focused));
         const action_color = if (!ready) th.dim else if (aq.hovering or action_focused) th.acc else th.fg;
         _ = action.with_style(.{Style{ .outline_color = action_color }});
-        _ = (try el.text(ctx, action, "label", goal.action))
+        _ = (try action.text("label", goal.action))
             .with_layout(.center)
             .with_style(.{Style{ .font = 9, .text = action_color }});
         clicked = ready and aq.clicked;
     }
-    const tail = try el.div(ctx, bar, "tail");
+    const tail = try bar.div("tail");
     _ = tail.with_size(.{ .fixed = bar_right }, .{ .fixed = bar_h }).pass_through();
 
     if (disclosure_state.expanded) {
-        const details = try el.div(ctx, outer, "details");
+        const details = try outer.div("details");
         _ = details.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .column });
-        const divider = try el.div(ctx, details, "divider");
+        const divider = try details.div("divider");
         _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
             .with_style(.{Style{ .fill = th.line }});
 
         // Horizontal spacer nodes reproduce 12px/10px CSS padding without percentage-width
         // content-box overflow. Vertical padding remains a harmless style inset.
-        const detail_row = try el.div(ctx, details, "row");
+        const detail_row = try details.div("row");
         _ = detail_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .row });
-        const detail_lead = try el.div(ctx, detail_row, "lead");
+        const detail_lead = try detail_row.div("lead");
         _ = detail_lead.with_size(.{ .fixed = detail_left }, .{ .fixed = 1 }).pass_through();
-        const content = try el.div(ctx, detail_row, "content");
+        const content = try detail_row.div("content");
         _ = content.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column }).with_gap(4)
             .with_style(.{style.pad_each(6, 0, 8, 0)});
-        const detail_tail = try el.div(ctx, detail_row, "tail");
+        const detail_tail = try detail_row.div("tail");
         _ = detail_tail.with_size(.{ .fixed = detail_right }, .{ .fixed = 1 }).pass_through();
 
         if (goal.kicker.len > 0 or goal.cost.len > 0) {
-            const head = try el.div(ctx, content, "head");
+            const head = try content.div("head");
             _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
                 .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
             if (goal.kicker.len > 0) {
                 const kicker_color = if (goal.state == .done) th.good else th.acc;
-                _ = (try el.text(ctx, head, "kicker", goal.kicker))
+                _ = (try head.text("kicker", goal.kicker))
                     .with_style(.{Style{ .font = 9, .tracking = 0.08, .text = kicker_color }});
             }
             if (goal.cost.len > 0) {
-                _ = (try el.text(ctx, head, "cost", goal.cost))
+                _ = (try head.text("cost", goal.cost))
                     .with_style(.{Style{ .font = 9, .text = th.dim }});
             }
         }
 
         if (goal.copy.len > 0) {
-            _ = (try el.text(ctx, content, "copy", goal.copy))
+            _ = (try content.text("copy", goal.copy))
                 .with_wrap(detail_wrap_w)
                 .with_style(.{Style{ .font = 10, .text = th.fg }});
         }
 
         if (goal.requirements.len > 0) {
-            const requirements = try el.div(ctx, content, "requirements");
+            const requirements = try content.div("requirements");
             _ = requirements.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
                 .with_flow(.{ .dir = .row, .wrap = true, .cross = .center })
                 .with_gap(13);
             for (goal.requirements, 0..) |requirement, i| {
                 const key = try std.fmt.allocPrint(ctx.arena, "r{d}", .{i});
-                const token = try el.div(ctx, requirements, key);
+                const token = try requirements.div(key);
                 _ = token.with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(4);
-                _ = (try el.text(ctx, token, "label", requirement.label))
+                _ = (try token.text("label", requirement.label))
                     .with_style(.{Style{ .font = 8.5, .text = th.line2 }});
-                _ = (try el.text(ctx, token, "value", requirement.value))
+                _ = (try token.text("value", requirement.value))
                     .with_style(.{Style{ .font = 8.5, .text = if (requirement.met) th.good else th.danger }});
             }
         }
 
         if (goal.explanation.len > 0) {
-            _ = (try el.text(ctx, content, "explanation", goal.explanation))
+            _ = (try content.text("explanation", goal.explanation))
                 .with_style(.{Style{ .font = 9, .text = th.dim }});
         }
     }

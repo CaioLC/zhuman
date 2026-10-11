@@ -93,12 +93,13 @@ pub fn layers(spec: Spec, out: *[max_layers]Layer) []const Layer {
 /// local space, as bounded translucent-black fill rects (RENDER-05). Call this **before**
 /// building the box so the layers paint under it (siblings paint in child order). `id` keys
 /// the layer nodes. Understated flat black; the RENDER-01 `.blend` baseline composites them.
-pub fn drop(ctx: *UiCtx, parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32, spec: Spec) !void {
+pub fn drop(parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32, spec: Spec) !void {
+    const ctx = parent.ctx;
     var buf: [max_layers]Layer = undefined;
     const ls = layers(spec, &buf);
     for (ls, 0..) |l, i| {
         const key = try std.fmt.allocPrint(ctx.arena, "{s}_sh{d}", .{ id, i });
-        const node = try el.div(ctx, parent, key);
+        const node = try parent.div(key);
         _ = node.with_layout(.top_left)
             .with_offset(x - l.spread + l.dx, y - l.spread + l.dy)
             .with_size(.{ .fixed = w + 2 * l.spread }, .{ .fixed = h + 2 * l.spread })

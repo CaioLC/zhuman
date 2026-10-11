@@ -32,8 +32,8 @@ pub const ViewNav = struct { active: usize, el: El };
 
 /// Render the shared view-switching tablist into `nav_parent` (typically the shell's
 /// `regions.nav`). Returns the active index; the caller builds that view into the body.
-pub fn view_nav(ctx: *UiCtx, nav_parent: El, id: []const u8, labels: []const []const u8) !ViewNav {
-    const t = try tabs.tabs(ctx, nav_parent, id, labels);
+pub fn view_nav(nav_parent: El, id: []const u8, labels: []const []const u8) !ViewNav {
+    const t = try tabs.tabs(nav_parent, id, labels);
     return .{ .active = t.active, .el = t.el };
 }
 
@@ -43,6 +43,7 @@ pub fn view_nav(ctx: *UiCtx, nav_parent: El, id: []const u8, labels: []const []c
 /// allocating the view's nodes, so returning to the view restores its scroll/collapse exactly.
 /// A no-op-safe wrapper over `Node.retainChildState`, so a screen retains a view without
 /// naming the engine's retention primitive. Returns whether a slot was retained.
-pub fn retain(ctx: *UiCtx, parent: El, child_id: []const u8, comptime T: type) bool {
+pub fn retain(parent: El, child_id: []const u8, comptime T: type) bool {
+    const ctx = parent.ctx;
     return parent.get().retainChildState(ctx, child_id, T);
 }

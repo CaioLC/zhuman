@@ -17,16 +17,17 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enabled: bool) !El {
+pub fn button(parent: El, id: []const u8, label: []const u8, enabled: bool) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
     // Outer clickable box: flows, lays its label out horizontally, and hugs it (fit).
     // No content of its own — just the outline chrome.
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);
 
     // Label content leaf (flows by default); padding lives on it so glyphs clear the border.
-    const lbl = try el.text(ctx, outer, "lbl", label);
+    const lbl = try outer.text("lbl", label);
     _ = lbl.with_style(.{ style.body, style.pad_sym(8, 4) });
 
     // Chrome reads the published state, whose authority remains the caller's `enabled`.

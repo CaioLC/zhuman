@@ -45,7 +45,7 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
     _ = root.query(); // fullscreen scrim: a queried root structurally blocks lower trees
     ctx.res.commands.registerEscape(root.get().key);
 
-    const box = try el.div(ctx, root, "box");
+    const box = try root.div("box");
     _ = box.with_layout(.center)
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_size(.fit_children, .fit_children)

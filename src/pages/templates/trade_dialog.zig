@@ -45,9 +45,9 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     const m = try modal_mod.modal(ctx, id, identity.title, modal_mod.default_width);
     out_root.* = m.root;
 
-    const close_clicked = try header_mod.modal_header(ctx, m.box, m.width, identity.kicker, meta, identity.title);
-    const body = try body_mod.modal_body(ctx, m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
-    const footer = try footer_mod.modal_footer(ctx, m.box, m.width, identity.footer, identity.cta, body.can_confirm);
+    const close_clicked = try header_mod.modal_header(m.box, m.width, identity.kicker, meta, identity.title);
+    const body = try body_mod.modal_body(m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
+    const footer = try footer_mod.modal_footer(m.box, m.width, identity.footer, identity.cta, body.can_confirm);
 
     return .{
         .mode = body.mode,

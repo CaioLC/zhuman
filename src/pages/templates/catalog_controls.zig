@@ -62,20 +62,21 @@ fn signature(query_text: []const u8, sort: usize, dir: Direction) u64 {
 /// Build the catalog controls into `parent`. `sort_kinds` are the Sort-by option labels; the
 /// surface owns `enabled`. Returns the resolved `Catalog`. `id` keys the surface's independent
 /// state — pass distinct ids for ACTIONS vs BUILD so their query/sort/open stay separate.
-pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []const []const u8) !Catalog {
-    const bar = try el.div(ctx, parent, id);
+pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const u8) !Catalog {
+    const ctx = parent.ctx;
+    const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     const st = bar.get().state(ctx, CatalogState);
     if (st.sort >= sort_kinds.len) st.sort = 0;
 
     // Row 1: the search field + the adjacent sort toggle.
-    const row = try el.div(ctx, bar, "row");
+    const row = try bar.div("row");
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
     // Search field (`uic.text_input`): owns the query text, registers the `/` shortcut.
-    const field = try uic.text_input(ctx, row, "search", "Search…", 200);
+    const field = try uic.text_input(row, "search", "Search…", 200);
     const field_key = field.get().key;
     const editor = field.get().state(ctx, uic.UiState.TextInputState);
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
@@ -87,7 +88,7 @@ pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []c
     const query_text = editor.text();
 
     // Adjacent sort toggle: opens/closes the disclosed sort row.
-    const toggle = try el.div(ctx, row, "sort_toggle");
+    const toggle = try row.div("sort_toggle");
     ctx.registerFocus(toggle.get().key, true);
     const toggle_key = toggle.get().key;
     const tq = toggle.query();
@@ -99,22 +100,22 @@ pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []c
     const tfocused = ctx.isFocused(toggle_key);
     uic.publishControlState(ctx, toggle_key, .{ .focused = tfocused, .focus_visible = tfocused });
     _ = toggle.with_layout(.center_right).with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
-    _ = (try el.text(ctx, toggle, "t", if (st.sort_open) "sort \u{2191}" else "sort \u{2193}"))
+    _ = (try toggle.text("t", if (st.sort_open) "sort \u{2191}" else "sort \u{2193}"))
         .with_style(.{ style.small, style.btn_secondary });
 
     // Row 2 (disclosed): Sort-by + Direction selects. Built only while open (nothing in it is
     // focusable when closed). Escape inside closes and restores focus to the toggle.
     if (st.sort_open) {
-        const sort_row = try el.div(ctx, bar, "sort_row");
+        const sort_row = try bar.div("sort_row");
         _ = sort_row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.group)
             .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_style(.{style.pad_each(2, 0, 0, 0)});
 
-        const by = try select_mod.select(ctx, sort_row, "sort_by", "Sort", sort_kinds, true);
+        const by = try select_mod.select(sort_row, "sort_by", "Sort", sort_kinds, true);
         st.sort = by.value;
 
         const dir_labels = [_][]const u8{ "None", "Asc", "Desc" };
-        const dir_sel = try select_mod.select(ctx, sort_row, "sort_dir", "Dir", &dir_labels, true);
+        const dir_sel = try select_mod.select(sort_row, "sort_dir", "Dir", &dir_labels, true);
         st.dir = @enumFromInt(dir_sel.value);
 
         // Escape inside the sort row closes it and restores focus to the toggle. The row's own
@@ -138,10 +139,11 @@ pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []c
 
 /// The **count-only live summary** — render "{n} shown" (never the row contents). Call after
 /// filtering, passing the visible count. Kept separate so the caller counts its own rows.
-pub fn count_summary(ctx: *UiCtx, parent: El, id: []const u8, shown: usize) !void {
+pub fn count_summary(parent: El, id: []const u8, shown: usize) !void {
+    const ctx = parent.ctx;
     var buf: [24]u8 = undefined;
     const txt = std.fmt.bufPrint(&buf, "{d} shown", .{shown}) catch "?";
-    _ = (try el.text(ctx, parent, id, txt)).with_style(.{ style.small, Style{ .text = ctx.res.view.theme.dim } });
+    _ = (try parent.text(id, txt)).with_style(.{ style.small, Style{ .text = ctx.res.view.theme.dim } });
 }
 
 /// Compose a caller's key comparison with the **deterministic name tie-break** (KIT-15). Given

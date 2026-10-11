@@ -45,7 +45,6 @@ fn focusRegistrationEnabled(enabled: bool, running: bool, focused: bool) bool {
 /// (`−{energy}e {optional input costs}`) and `duration_txt` the trailing duration, joined by a
 /// middot. `kind` selects the curve glyph and its shared accessible label.
 pub fn tile(
-    ctx: *UiCtx,
     parent: El,
     id: []const u8,
     name: []const u8,
@@ -57,10 +56,11 @@ pub fn tile(
     can: bool,
     progress: ?f32,
 ) !Tile {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const running = progress != null;
 
-    const box = try el.div(ctx, parent, id);
+    const box = try parent.div(id);
     // Affordability/running remains authoritative here; publication is a visual/semantic
     // projection and explicitly clears stale disabled state when the facts change.
     const box_key = box.get().key;
@@ -98,49 +98,49 @@ pub fn tile(
     _ = box.with_flow(.{ .dir = .column })
         .with_style(.{ Style{ .outline_color = chrome }, style.pad_each(0, 0, 1, 0) });
 
-    const inner = try el.div(ctx, box, "inner");
+    const inner = try box.div("inner");
     _ = inner.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2)
         .with_style(.{style.pad_sym(12, 6)});
 
     const lit = can or running; // dimmed tiles flatten everything onto the chrome
 
-    _ = (try el.text(ctx, inner, "name", name)).with_style(.{ style.h3, Style{ .text = chrome } });
+    _ = (try inner.text("name", name)).with_style(.{ style.h3, Style{ .text = chrome } });
 
     // KIT-17: an optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.
     if (state.len > 0) {
-        _ = (try el.text(ctx, inner, "state", state))
+        _ = (try inner.text("state", state))
             .with_style(.{ style.small, Style{ .text = if (running) th.acc else if (!enabled) th.dim else th.dim } });
     }
 
     // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and
     // the expected payoff. Center-aligned across (the icon box has no baseline). Disabled ⟹
     // everything takes the dim chrome, one flat scan-off signal.
-    const row = try el.div(ctx, inner, "info");
+    const row = try inner.div("info");
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
-    _ = (try el.text(ctx, row, "cost", cost_txt))
+    _ = (try row.text("cost", cost_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
     // The middot joins the price segment and the duration (KIT-17), so additional input costs
     // stay in the price segment *before* the middot.
-    _ = (try el.text(ctx, row, "mid", "\u{00B7}"))
+    _ = (try row.text("mid", "\u{00B7}"))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
-    _ = (try el.text(ctx, row, "dur", duration_txt))
+    _ = (try row.text("dur", duration_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
 
     // RENDER-02: recolor the icon raster's ink through the style fold's `tint` field rather
     // than poking `render_data.svg` — same last-fragment-wins path as every other look.
-    _ = (try el.svg(ctx, row, "kind", info.kind_icon(kind), icon_px))
+    _ = (try row.svg("kind", info.kind_icon(kind), icon_px))
         .with_style(.{Style{ .tint = if (lit) th.dim else chrome }});
 
-    _ = (try el.text(ctx, row, "yield", yield_txt))
+    _ = (try row.text("yield", yield_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.fg else chrome } });
 
     // The underbar: full tile width × progress, sized from LAST frame's rect (this frame
     // isn't laid out yet — the prior-frame pattern). Anchored, so it never resizes the tile.
     if (progress) |p| {
         if (box.get().rect(ctx)) |r| {
-            const bar = try el.div(ctx, box, "bar");
+            const bar = try box.div("bar");
             // `r.w` is the stamped (device-px) box width; the underbar width tracks it, so use
             // `with_size_px` (VIEW-02) — the 3px logical height is scaled through `view.dp`.
             _ = bar.with_layout(.bottom_left)
@@ -156,7 +156,6 @@ pub fn tile(
 /// `requires`/`yields` and funnels a click through `act_fn`. Returns the tile `El`
 /// (null if the agent doesn't hold the action) — the caller places it.
 pub fn action_tile(
-    ctx: *UiCtx,
     parent: El,
     world: *World,
     e: Entity,
@@ -165,6 +164,7 @@ pub fn action_tile(
     name: []const u8,
     comptime act_fn: anytype,
 ) !?El {
+    const ctx = parent.ctx;
     if (!world.has(e, ActionT)) return null;
     const act = world.get(e, ActionT).?;
     const vigor = world.get(e, comp.Vigor).?;
@@ -210,7 +210,7 @@ pub fn action_tile(
     else
         std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{c}", .{ lo, hi, dom.letter }) catch "?";
 
-    const t = try tile(ctx, parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
+    const t = try tile(parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
     if (t.clicked) act_fn(world, e, ctx.res);
     return t.el;
 }

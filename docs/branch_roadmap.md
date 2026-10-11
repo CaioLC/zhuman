@@ -334,9 +334,12 @@ call sites, not by new wrappers.
 
 ### Step 2 — `El` additions
 
-- [ ] **ZUI-05 — Child constructors as methods, `ctx` dropped everywhere.** The nine leaves move
+- [x] **ZUI-05 — Child constructors as methods, `ctx` dropped everywhere.** The nine leaves move
   onto `El`; every leaf and every composition takes a parent `El` first. Delete the free leaf
   functions, `textWrapped` and the `el` sugar.
+  - Done: about 350 leaf calls and 90 composition signatures and their call sites, across
+    every template, page and foundation composition. Root builders (`root`, `terminal`,
+    `shell`, `modal`, `tooltip`, `trade_dialog`) keep `ctx` because they have no parent.
 - [ ] **ZUI-06 — `text_fit` and the `TextFit` union.** Remove `with_wrap`, `with_cell`,
   `with_orientation` and `vertical`; migrate the fourteen constrained-text sites. Optionally
   store the union on `TextState`.

@@ -12,14 +12,15 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-pub fn panel(ctx: *UiCtx, parent: El, id: []const u8, title: []const u8) !El {
+pub fn panel(parent: El, id: []const u8, title: []const u8) !El {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    const outer = try el.div(ctx, parent, id);
+    const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .column }).with_size(.fit_children, .fit_children)
         .with_style(.{ Style{ .outline_color = th.line }, style.pad(12), style.gap(8) });
 
-    const ttl = try el.text(ctx, outer, "title", title);
+    const ttl = try outer.text("title", title);
     // TEXT-04: a panel title is the prototype's **eyebrow / section-heading** — 11px,
     // UPPERCASE, positive (loosened) tracking — not a body heading. The `eyebrow` role
     // carries the size + uppercase transform + in-band tracking; the theme `dim` color is

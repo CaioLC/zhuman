@@ -50,12 +50,13 @@ pub const Slider = struct {
 
 /// Build one range input. The returned value may change this frame from pointer or keyboard
 /// input; assign it back to caller state. The visible control deliberately contains no text.
-pub fn slider(ctx: *UiCtx, parent: El, opts: Options) !Slider {
+pub fn slider(parent: El, opts: Options) !Slider {
+    const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const model = SliderModel{ .min = opts.min, .max = opts.max, .step = opts.step };
     var value = model.snap(opts.value);
 
-    const control = try el.div(ctx, parent, opts.id);
+    const control = try parent.div(opts.id);
     _ = control.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = control_h });
     const key = control.get().key;
     ctx.registerFocus(key, opts.enabled);
@@ -124,7 +125,7 @@ pub fn slider(ctx: *UiCtx, parent: El, opts: Options) !Slider {
 
     // Hard split at the current fraction: accent progress, line-2 remainder. The geometry is
     // presentation-only/pass-through so the full control lane remains the sole hit target.
-    const rail = try el.gradient(ctx, control, "rail", .horizontal, &.{
+    const rail = try control.gradient("rail", .horizontal, &.{
         .{ .pos = 0, .color = if (opts.enabled) th.acc else th.dim },
         .{ .pos = fraction, .color = if (opts.enabled) th.acc else th.dim },
         .{ .pos = fraction, .color = th.line2 },
@@ -142,19 +143,19 @@ pub fn slider(ctx: *UiCtx, parent: El, opts: Options) !Slider {
         const lane_h_px = uic.view.dp(control_h, scale);
         const x = @round(r.w * fraction - thumb_px / 2);
         const y = @round((lane_h_px - thumb_px) / 2);
-        const thumb = try el.div(ctx, control, "thumb");
+        const thumb = try control.div("thumb");
         _ = thumb.with_layout(.top_left)
             .with_offset_px(x, y)
             .with_size_px(.{ .fixed = thumb_px }, .{ .fixed = thumb_px })
             .pass_through();
 
-        const fill = try el.polygon(ctx, thumb, "fill", &diamond, th.bg, 1.0);
+        const fill = try thumb.polygon("fill", &diamond, th.bg, 1.0);
         _ = fill.with_layout(.top_left)
             .with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
             .pass_through();
 
         const edge_color = if (!opts.enabled) th.dim else if (focused or q.hovering or state.dragging) th.acc else th.fg;
-        const edge = try el.polyline(ctx, thumb, "edge", &diamond, thumb_half_stroke, true, .butt, edge_color, 1.0);
+        const edge = try thumb.polyline("edge", &diamond, thumb_half_stroke, true, .butt, edge_color, 1.0);
         _ = edge.with_layout(.top_left)
             .with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
             .pass_through();
