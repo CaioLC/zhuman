@@ -307,6 +307,13 @@ pub const UiState = struct {
             const last: isize = @intCast(n - 1);
             s.highlight = @intCast(std.math.clamp(cur + delta, 0, last));
         }
+        /// The pointer path's one transition per frame. A click on option `row` commits it and
+        /// closes; that same click bubbles to the control, which must not also toggle, so the
+        /// control's own `clicked` only counts when no row was clicked. Disabled controls never
+        /// reach here (the template gates on `enabled`).
+        pub fn pointer(s: *SelectState, row: ?usize, control_clicked: bool, n: usize) void {
+            if (row) |i| s.commit(i, n) else if (control_clicked) s.toggle(false);
+        }
         /// Commit `index` as the value and close (Enter on the highlight, or a click on option).
         pub fn commit(s: *SelectState, index: usize, n: usize) void {
             if (n == 0) return;
@@ -996,4 +1003,14 @@ test "SliderModel.nudge: arrows one step, page coarse, Home/End jump to ends" {
     // Nudging past an end clamps.
     try std.testing.expectApproxEqAbs(@as(f32, 100), m.nudge(100, .right), 1e-4);
     try std.testing.expectApproxEqAbs(@as(f32, 0), m.nudge(0, .left), 1e-4);
+}
+
+test "SelectState: a click on an option commits it; the click that bubbles to the control does not toggle" {
+    var s = UiState.SelectState{};
+    s.openPopup(false);
+    s.pointer(2, true, 3); // the row's click bubbles to the control too
+    try std.testing.expectEqual(@as(usize, 2), s.value);
+    try std.testing.expect(!s.open);
+    s.pointer(null, true, 3); // the control's own click: toggle open
+    try std.testing.expect(s.open);
 }
