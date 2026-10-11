@@ -81,3 +81,13 @@ fn debugRequested(arena: std.mem.Allocator) bool {
     if (std.ascii.eqlIgnoreCase(raw, "false")) return false;
     return true;
 }
+
+test {
+    _ = @import("./templates/root.zig");
+    _ = @import("./fmt.zig");
+    _ = @import("./play_game.zig");
+    _ = @import("./debug_page.zig");
+    _ = @import("./gameover.zig");
+    _ = @import("./act_one_end.zig");
+    _ = @import("./mock.zig");
+}

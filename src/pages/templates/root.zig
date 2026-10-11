@@ -153,3 +153,49 @@ pub const figure = figure_mod.figure;
 pub const Status = status_mod.Status;
 pub const actor_status = status_mod.actor_status;
 pub const heartbeat_color = status_mod.heartbeat_color;
+
+// Re-exporting a function does not pull its file's tests into a test build; referencing the
+// module does. One line per shelf module keeps every template's tests in `zig build test`.
+test {
+    _ = button_mod;
+    _ = panel_mod;
+    _ = scroll_view_mod;
+    _ = figure_mod;
+    _ = status_mod;
+    _ = action_button_mod;
+    _ = row_mod;
+    _ = stat_mod;
+    _ = log_view_mod;
+    _ = resource_bar_mod;
+    _ = action_card_mod;
+    _ = action_tile_mod;
+    _ = tabs_mod;
+    _ = holdings_mod;
+    _ = build_list_mod;
+    _ = capital_row_mod;
+    _ = good_text_mod;
+    _ = terminal_mod;
+    _ = rail_mod;
+    _ = view_nav_mod;
+    _ = select_mod;
+    _ = slider_mod;
+    _ = disclosure_mod;
+    _ = stock_token_mod;
+    _ = runline_mod;
+    _ = header_mod;
+    _ = market_strip_mod;
+    _ = catalog_controls_mod;
+    _ = catalog_viewport_mod;
+    _ = eating_policy_mod;
+    _ = milestone_goal_mod;
+    _ = modal_mod;
+    _ = modal_header_mod;
+    _ = modal_body_mod;
+    _ = modal_footer_mod;
+    _ = trade_dialog_mod;
+    _ = act_one_surface_mod;
+    _ = act_one_workspace_mod;
+    _ = board_primitives_mod;
+    _ = @import("./actions_section.zig");
+    _ = @import("./build_section.zig");
+}

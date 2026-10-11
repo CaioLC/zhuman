@@ -6,7 +6,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 
 ```bash
 zig build run     # build and run
-zig build test    # unit tests (whole library)
+zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build         # build only
 ```

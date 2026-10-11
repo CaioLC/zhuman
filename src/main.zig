@@ -649,3 +649,9 @@ pub fn spawn_player(world: *ha.world.World) ha.world.Entity {
     world.add(e, tag.Player{});
     return e;
 }
+
+// The pages are game content outside the `ha` library; the executable module is their test
+// root, so this block is what pulls their test declarations into `zig build test`.
+test {
+    _ = pages;
+}
