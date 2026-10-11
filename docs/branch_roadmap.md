@@ -424,9 +424,25 @@ call sites, not by new wrappers.
   - Done: `scroll_view(parent, id, Options, state)`. The merge also put the generic view's
     clamp in device px; it had compared a device-px content height against a logical
     viewport height, identity only at DPI 1. The catalog viewport had no caller left.
-- [ ] **ZUI-19 — Approved prior-frame sites.** The underbar, the milestone wash, the slider
+- [x] **ZUI-19 — Approved prior-frame sites.** The underbar, the milestone wash, the slider
   thumb, the scroll probe and the terminal box are listed as the component-internal geometry
   readers; nothing else reads a rect.
+  - Done. `tools/boundary_check.sh` is the §5 check: lifecycle wiring, formatted ids and key
+    arithmetic in a page or template fail it outright; geometry and host-service sites are
+    printed as an inventory and fail only outside the approved files. The approved files and
+    what each is allowed:
+    - `scroll_view`: the content probe (prior rect, pass-through, device-px clamp, thumb).
+    - `action_tile`: the progress underbar from the prior tile rect.
+    - `milestone_goal`: the wash and state rail from the prior card rect.
+    - `slider`: the lane rect, pointer capture, press-time focus, the drag cursor.
+    - `terminal`: the centered box in device px.
+    - `tabs`: the strip's group node. `capital_row`: a row's sub-action relation.
+      `eating_policy`: the richer slider value. `select`: the popup's hover cursor.
+      `catalog_controls`: the Escape focus restore. `templates/modal`: dismissal consumption.
+    - `ui_client/modal`, `tooltip`, `text_input`: the host services they bind.
+    - `play_game`, `debug_page`: overlay root placement.
+    Three pass-through declarations on never-queried decorative nodes (the holdings divider,
+    the milestone wash and state rail) were redundant and are gone.
 - [ ] **ZUI-20 — BUILD column schema.** One column array in `capital_row.zig` read by header and
   rows; delete the inline duplicate. Verify header and body alignment at the `900`, `760`,
   `560` and `440` widths.

@@ -114,11 +114,10 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .{ .pos = 0.76, .color = alpha(tone, 0) },
         .{ .pos = 1, .color = alpha(tone, 0) },
     }, 1.0);
-    _ = wash.with_layout(.top_left).pass_through();
+    _ = wash.with_layout(.top_left);
     const state_rail = try outer.div("state_rail");
     _ = state_rail.with_layout(.top_left)
-        .with_style(.{Style{ .fill = tone }})
-        .pass_through();
+        .with_style(.{Style{ .fill = tone }});
     // Anchored percentage height under a fit-content parent is indefinite in the pure layout
     // pass. Size these paint-only layers from the prior stamped card rect (the established
     // prior-geometry pattern) so they cover the complete collapsed or expanded card.

@@ -179,7 +179,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     _ = try panel.spacer("divider_top", 1, 9);
     const divider = try panel.div("divider");
     _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-        .with_style(.{Style{ .fill = th.line }}).pass_through();
+        .with_style(.{Style{ .fill = th.line }});
     _ = try panel.spacer("divider_bottom", 1, 7);
     try sectionLabel(panel, "margins_title", "MARGINS");
     _ = try panel.spacer("margins_gap", 1, 8);
