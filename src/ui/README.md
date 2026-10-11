@@ -155,7 +155,7 @@ aspect needs via `node.state`.
 slot-map:
 
 - **Keys are a rolling hash.** `key(seed, id) = Wyhash(seed, id)`; `key_i` folds a
-  loop index. A node's key is `key(parent.key, id)`, threaded automatically by
+  loop index, and a node made with `pcreate_i` carries that index so `rekey` keeps it. A node's key is `key(parent.key, id)`, threaded automatically by
   `add_child`, which re-keys the child's whole subtree on attach (`rekey`) — so
   identity is structural, deterministic across runs, and **independent of wiring
   order** (assemble a subtree first, attach it later, the keys resolve the same).

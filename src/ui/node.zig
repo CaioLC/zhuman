@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 const features = @import("./features/root.zig");
 const geometry = @import("./geometry.zig");
 const key = @import("./cache.zig").key;
+const key_i = @import("./cache.zig").key_i;
 
 const Rect = geometry.Rect;
 const Anchor = features.Anchor;
@@ -41,6 +42,9 @@ pub fn Node(comptime RenderData: type) type {
         /// It bridges the frame boundary: the tree is rebuilt each frame, but the key
         /// re-derives identically and re-finds the node's slots.
         key: u64,
+        /// A repeated child's loop index, folded into `key` through `key_i` so identity never
+        /// depends on an id formatted per iteration; it survives `rekey`. Null for a named child.
+        index: ?usize = null,
         /// Host-defined render descriptor (policy). Core only carries it; the host's
         /// render walk reads it to decide what/how to draw — which aspects, in which
         /// color. Frame-local (rebuilt each frame). Defaults to all-clear (`.{}`).
@@ -112,6 +116,16 @@ pub fn Node(comptime RenderData: type) type {
             return node;
         }
 
+        /// `pcreate` for the `i`-th repeated child: the index folds into the key (`key_i`), so a
+        /// loop needs no per-iteration id string and the node keeps its index through `rekey`.
+        pub fn pcreate_i(allocator: Allocator, id: []const u8, i: usize, parent: *Self) !*Self {
+            const node = try allocator.create(Self);
+            node.* = Self.init(id);
+            node.index = i;
+            try parent.add_child(allocator, node);
+            return node;
+        }
+
         pub fn with_size(self: *Self, size: features.Size) *Self {
             self.size = size;
             return self;
@@ -143,7 +157,7 @@ pub fn Node(comptime RenderData: type) type {
         /// subtree re-keys all of it, not just the top node. Trees are small and
         /// rebuilt per frame, so the walk is free.
         fn rekey(self: *Self, seed: u64) void {
-            self.key = key(seed, self.id);
+            self.key = if (self.index) |i| key_i(seed, self.id, i) else key(seed, self.id);
             for (self.children.items) |child| child.rekey(self.key);
         }
 

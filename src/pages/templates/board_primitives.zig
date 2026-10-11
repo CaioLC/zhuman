@@ -35,8 +35,7 @@ pub fn cost_list(parent: El, id: []const u8, costs: []const Cost) !El {
     const col = try parent.div(id);
     _ = col.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight).with_size(.fit_children, .fit_children);
     for (costs, 0..) |c, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "c{d}", .{i});
-        const row = try col.div(key);
+        const row = try col.item("c", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.group)
             .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
         _ = (try row.text("l", c.label)).with_style(.{ style.small, Style{ .text = th.dim } });
@@ -60,8 +59,7 @@ pub fn legend(parent: El, id: []const u8, items: []const LegendItem) !El {
     _ = row.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(ha.tokens.gap.group)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     for (items, 0..) |item, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "L{d}", .{i});
-        const cell = try row.div(key);
+        const cell = try row.item("L", i);
         _ = cell.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
         const dot = try cell.div("d");
         _ = dot.with_size(.{ .fixed = 8 }, .{ .fixed = 8 }).with_style(.{Style{ .fill = legendFill(ctx, item.resource) }});

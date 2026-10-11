@@ -51,9 +51,13 @@ fn valueColor(th: uic.Theme, tone: Tone) Color {
 /// swapping to the full label while hovered/focused so only it grows. Its tone applies only to
 /// the value, leaving the label dim. The token is a focusable readout rather than a control.
 pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
-    const ctx = parent.ctx;
+    try stock_token_in(try parent.div(id), s);
+}
+
+/// Fill `box` as a stock token. `stockline` hands it an `item`, so a loop needs no ids.
+fn stock_token_in(box: El, s: Stock) !void {
+    const ctx = box.ctx;
     const th = ctx.res.view.theme;
-    const box = try parent.div(id);
     ctx.registerFocus(box.get().key, true);
     const q = box.query();
     const focused = ctx.isFocused(box.get().key);
@@ -77,26 +81,21 @@ pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
     _ = lbl;
 }
 
-/// A dim `|` divider between tokens (heading size, matching the token baseline).
-fn sep(parent: El, id: []const u8) !void {
-    const ctx = parent.ctx;
-    _ = (try parent.text(id, "|"))
-        .with_style(.{ style.heading, Style{ .text = ctx.res.view.theme.dim } });
+/// The `i`-th dim `|` divider between tokens (heading size, matching the token baseline).
+fn sep(parent: El, i: usize) !void {
+    const slot = try parent.item("sep", i);
+    _ = (try slot.text("t", "|"))
+        .with_style(.{ style.heading, Style{ .text = parent.ctx.res.view.theme.dim } });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
 /// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice.
 pub fn stockline(parent: El, id: []const u8, stocks: []const Stock) !El {
-    const ctx = parent.ctx;
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.stack);
     for (stocks, 0..) |s, i| {
-        if (i > 0) {
-            const skey = try std.fmt.allocPrint(ctx.arena, "sep{d}", .{i});
-            try sep(bar, skey);
-        }
-        const tkey = try std.fmt.allocPrint(ctx.arena, "tok{d}", .{i});
-        try stock_token(bar, tkey, s);
+        if (i > 0) try sep(bar, i);
+        try stock_token_in(try bar.item("tok", i), s);
     }
     return bar;
 }

@@ -47,11 +47,6 @@ const holding_bundle = .{
     comp.Shelter,
 };
 
-fn spacer(parent: El, id: []const u8, height: f32) !void {
-    const gap = try parent.div(id);
-    _ = gap.with_size(.{ .fixed = 1 }, .{ .fixed = height }).pass_through();
-}
-
 /// A roster/margin line: body-size primary copy and the reference's 11px right readout.
 fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
     const ctx = parent.ctx;
@@ -160,7 +155,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     var count_buf: [32]u8 = undefined;
     const count = std.fmt.bufPrint(&count_buf, "{d} KINDS, {d}", .{ kinds, units }) catch "HOLDINGS";
     try sectionLabel(heading, "count", count);
-    try spacer(panel, "heading_gap", 8);
+    _ = try panel.spacer("heading_gap", 1, 8);
 
     const roster = try panel.div("roster");
     _ = roster.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
@@ -181,13 +176,13 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
         }
     }
 
-    try spacer(panel, "divider_top", 9);
+    _ = try panel.spacer("divider_top", 1, 9);
     const divider = try panel.div("divider");
     _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
         .with_style(.{Style{ .fill = th.line }}).pass_through();
-    try spacer(panel, "divider_bottom", 7);
+    _ = try panel.spacer("divider_bottom", 1, 7);
     try sectionLabel(panel, "margins_title", "MARGINS");
-    try spacer(panel, "margins_gap", 8);
+    _ = try panel.spacer("margins_gap", 1, 8);
 
     const margins = try panel.div("margins");
     _ = margins.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)

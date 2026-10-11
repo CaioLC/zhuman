@@ -205,6 +205,24 @@ pub const El = struct {
         return .{ .ctx = self.ctx, .node = try child(self, id) };
     }
 
+    /// The `i`-th repeated child under this node: a box keyed by `id` **and** the index through
+    /// the engine's `key_i`, so a loop body never formats an id into the arena. Build the
+    /// item's content into the returned box. When the item owns state or focus, pass a stable
+    /// domain index (a recipe's catalog index), never a filtered or sorted position, so the
+    /// item keeps its identity when the list reorders.
+    pub fn item(self: El, id: []const u8, i: usize) !El {
+        const node = try Node.pcreate_i(self.ctx.arena, id, i, self.node);
+        node.layout.anchor = .relative;
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A fixed-size empty box that only takes up space (logical px). Non-interactive by
+    /// construction: nothing queries it, so it owns no interaction slot and neither takes nor
+    /// blocks a hit — no pass-through declaration needed.
+    pub fn spacer(self: El, id: []const u8, w: f32, h: f32) !El {
+        return (try self.div(id)).with_size(.{ .fixed = w }, .{ .fixed = h });
+    }
+
     /// A content-sized text node holding `str` (measured at the default font; recolor/resize
     /// with `with_style`).
     pub fn text(self: El, id: []const u8, str: []const u8) !El {

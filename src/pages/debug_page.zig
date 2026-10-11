@@ -109,8 +109,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
     _ = (try index.text("ihdr", "TEMPLATES"))
         .with_style(.{ style.small, Style{ .text = th.dim } });
     for (entries, 0..) |name, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "e{d}", .{i});
-        const item = try index.div(key);
+        const item = try index.item("e", i);
         ctx.registerFocus(item.get().key, true);
         const iq = item.query();
         if (iq.clicked) {
@@ -393,7 +392,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.eating_policy(demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
-            _ = try t.capital_row(stage, world, a[0], comp.Sandals, "cr", .ready, 1.0);
+            _ = try t.capital_row(stage, world, a[0], comp.Sandals, 0, .ready, 1.0);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }

@@ -39,8 +39,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
     var member_len: usize = 0;
 
     for (labels, 0..) |label, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "tab{d}", .{i});
-        const chip = try bar.div(key);
+        const chip = try bar.item("tab", i);
         const chip_key = chip.get().key;
         const q = chip.query();
         ctx.registerRovingFocus(bar_key, chip_key, true);

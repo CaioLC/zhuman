@@ -61,7 +61,7 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
     _ = stock.with_size(.{ .fixed = 220 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
     _ = (try stock.text("heading", "THEIR STOCK")).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
     for (offers, 0..) |offer, i| {
-        const row = try stock.div(try std.fmt.allocPrint(ctx.arena, "of{d}", .{i}));
+        const row = try stock.item("of", i);
         _ = row.with_size(.{ .fixed = 204 }, .fit_children) // 220px border-box minus 8px side padding
             .with_flow(.{ .dir = .row, .main = .space_between, .cross = .start })
             .with_style(.{style.pad_sym(8, 7)});
@@ -114,13 +114,13 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
     _ = hold.with_size(.{ .fixed = hold_width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
     _ = (try hold.text("heading", "YOU HOLD")).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
     for (holdings, 0..) |holding, i| {
-        const row = try hold.div(try std.fmt.allocPrint(ctx.arena, "h{d}", .{i}));
+        const row = try hold.item("h", i);
         _ = row.with_size(.{ .fixed = hold_width - 2 }, .fit_children) // subtract 1px side padding
             .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center })
             .with_style(.{style.pad_each(4, 1, 4, 1)});
         _ = (try row.text("label", holding.label)).with_style(.{ style.small, Style{ .text = th.dim } });
         _ = (try row.text("value", holding.value)).with_style(.{ style.small, Style{ .text = th.fg } });
-        try modal_mod.rule(hold, try std.fmt.allocPrint(ctx.arena, "hr{d}", .{i}), hold_width);
+        _ = (try hold.item("hr", i)).with_size(.{ .fixed = hold_width }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }});
     }
     _ = (try hold.text_fit("side_note", "The preview is final: payment, replacement, and remaining stock are visible before exchange.", .{ .wrap = hold_width - 20 }))
         .with_style(.{ style.small, Style{ .text = th.dim }, style.pad_each(9, 10, 0, 10) });

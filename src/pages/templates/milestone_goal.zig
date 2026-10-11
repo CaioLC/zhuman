@@ -132,8 +132,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const bar = try outer.div("bar");
     _ = bar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = bar_h })
         .with_flow(.{ .dir = .row, .cross = .center });
-    const lead = try bar.div("lead");
-    _ = lead.with_size(.{ .fixed = bar_left }, .{ .fixed = bar_h }).pass_through();
+    _ = try bar.spacer("lead", bar_left, bar_h);
 
     const disclosure_lane = try bar.div("disclosure_lane");
     _ = disclosure_lane.with_size(.grow, .{ .fixed = bar_h })
@@ -194,8 +193,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
 
     var clicked = false;
     if (goal.action.len > 0) {
-        const gap = try bar.div("action_gap");
-        _ = gap.with_size(.{ .fixed = bar_gap }, .{ .fixed = bar_h }).pass_through();
+        _ = try bar.spacer("action_gap", bar_gap, bar_h);
 
         const action_lane = try bar.div("action_lane");
         _ = action_lane.with_size(.{ .fixed = action_w }, .{ .fixed = bar_h })
@@ -223,8 +221,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .with_style(.{Style{ .font = 9, .text = action_color }});
         clicked = ready and aq.clicked;
     }
-    const tail = try bar.div("tail");
-    _ = tail.with_size(.{ .fixed = bar_right }, .{ .fixed = bar_h }).pass_through();
+    _ = try bar.spacer("tail", bar_right, bar_h);
 
     if (disclosure_state.expanded) {
         const details = try outer.div("details");
@@ -239,14 +236,12 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         const detail_row = try details.div("row");
         _ = detail_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .row });
-        const detail_lead = try detail_row.div("lead");
-        _ = detail_lead.with_size(.{ .fixed = detail_left }, .{ .fixed = 1 }).pass_through();
+        _ = try detail_row.spacer("lead", detail_left, 1);
         const content = try detail_row.div("content");
         _ = content.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column }).with_gap(4)
             .with_style(.{style.pad_each(6, 0, 8, 0)});
-        const detail_tail = try detail_row.div("tail");
-        _ = detail_tail.with_size(.{ .fixed = detail_right }, .{ .fixed = 1 }).pass_through();
+        _ = try detail_row.spacer("tail", detail_right, 1);
 
         if (goal.kicker.len > 0 or goal.cost.len > 0) {
             const head = try content.div("head");
@@ -274,8 +269,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
                 .with_flow(.{ .dir = .row, .wrap = true, .cross = .center })
                 .with_gap(13);
             for (goal.requirements, 0..) |requirement, i| {
-                const key = try std.fmt.allocPrint(ctx.arena, "r{d}", .{i});
-                const token = try requirements.div(key);
+                const token = try requirements.item("r", i);
                 _ = token.with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(4);
                 _ = (try token.text("label", requirement.label))
                     .with_style(.{Style{ .font = 8.5, .text = th.line2 }});

@@ -33,7 +33,11 @@ fn txt(parent: El, id: []const u8, s: []const u8, spec: anytype) !El {
 /// point being that a translucent `fill` (a < 255) must blend against what is under it, not
 /// paint opaque. `col` carries its own alpha byte.
 fn layer(parent: El, id: []const u8, dx: f32, dy: f32, w: f32, h: f32, col: uic.Color) !El {
-    const box = try parent.div(id);
+    return layer_in(try parent.div(id), dx, dy, w, h, col);
+}
+
+/// `layer` over a box the caller already made — an `item` in the wash loop.
+fn layer_in(box: El, dx: f32, dy: f32, w: f32, h: f32, col: uic.Color) El {
     _ = box.with_layout(.top_left)
         .with_offset(dx, dy)
         .with_size(.{ .fixed = w }, .{ .fixed = h })
@@ -129,9 +133,8 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     _ = try layer(blend_stage, "wash_base", 220, 0, 320, 116, th.panel);
     var band: usize = 0;
     while (band < 8) : (band += 1) {
-        const key = try std.fmt.allocPrint(ctx.arena, "wash_band{d}", .{band});
         const bx = 220 + @as(f32, @floatFromInt(band)) * 40;
-        _ = try layer(blend_stage, key, bx, 0, 320 - @as(f32, @floatFromInt(band)) * 40, 116, alpha(th.fg, 30));
+        _ = layer_in(try blend_stage.item("wash_band", band), bx, 0, 320 - @as(f32, @floatFromInt(band)) * 40, 116, alpha(th.fg, 30));
     }
 
     // Actions — exercises `action_button` + `actor_status` against the live player.
@@ -151,10 +154,9 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const sv = try t.scroll_view(spanel, "sv", 260, 120);
     var i: usize = 0;
     while (i < 16) : (i += 1) {
-        const key = try std.fmt.allocPrint(ctx.arena, "row{d}", .{i});
         var b: [32]u8 = undefined;
         const line = std.fmt.bufPrint(&b, "log entry #{d}", .{i}) catch "row";
-        _ = try txt(sv.content, key, line, .{Style{ .text = th.dim }});
+        _ = try txt(try sv.content.item("row", i), "t", line, .{Style{ .text = th.dim }});
     }
 
     return root.get();

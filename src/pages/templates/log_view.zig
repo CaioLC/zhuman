@@ -82,8 +82,7 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
     while (i < shown) : (i += 1) {
         const entry = feed.get(i);
         const newest = i == 0;
-        const key = try std.fmt.allocPrint(ctx.arena, "log{d}", .{i});
-        const row = try col.div(key);
+        const row = try col.item("log", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
             .with_size(.{ .fixed = @max(0, width - footer_row_pad_x * 2) }, .fit_children)
             .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
@@ -112,8 +111,7 @@ pub fn log_history(parent: El, id: []const u8, feed: *const Log, width: f32, hei
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
-        const key = try std.fmt.allocPrint(ctx.arena, "h{d}", .{i});
-        const row = try view.content.div(key);
+        const row = try view.content.item("h", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
             .with_size(.{ .fixed = col_w }, .fit_children);
         var sbuf: [8]u8 = undefined;

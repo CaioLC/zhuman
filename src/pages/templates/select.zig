@@ -96,8 +96,7 @@ pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []
             .with_overflow(.clip)
             .with_style(.{ Style{ .fill = th.panel, .outline_color = th.line2 }, style.pad_sym(0, 4) });
         for (options, 0..) |opt, i| {
-            const okey = try std.fmt.allocPrint(ctx.arena, "o{d}", .{i});
-            const row = try pop.div(okey);
+            const row = try pop.item("o", i);
             const rq = row.query();
             if (rq.hovering) {
                 ctx.res.cursor.request(.pointer);

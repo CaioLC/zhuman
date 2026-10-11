@@ -616,7 +616,9 @@ _ = try header.text("title", "BUILD").with_style(.{ h1, red }); // style — a f
 
 **A method on `El` describes this one node; a function describes a composition.** The
 content leaves are methods on the parent handle — `div`, `text`, `image`, `sprite`, `svg`,
-`line`, `polygon`, `polyline`, `gradient` — plus the placement, look, behaviour and state
+`line`, `polygon`, `polyline`, `gradient` — with `item(id, i)` for a repeated child keyed by
+its index (no id formatted per iteration) and `spacer(id, w, h)` for an empty fixed box that
+is never queried and so never hittable — plus the placement, look, behaviour and state
 methods below. `root(ctx, id)` is the one free constructor, because a root has no parent
 handle to hang off (fullscreen, sized to the live window, the only non-`.relative` one).
 Anything that creates more than one node or returns holes for a caller to fill — every

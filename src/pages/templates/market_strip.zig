@@ -111,22 +111,19 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center });
 
-    const lead = try content.div("lead");
-    _ = lead.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("lead", market_pad_x, 1);
 
     _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = signal_color }});
 
-    const gap_one = try content.div("gap_one");
-    _ = gap_one.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_one", market_gap, 1);
 
     const copy_lane = try content.div("copy_lane");
     _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip);
     _ = (try copy_lane.text("copy", idn.copy))
         .with_style(.{Style{ .font = market_font, .text = th.fg }});
 
-    const gap_two = try content.div("gap_two");
-    _ = gap_two.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_two", market_gap, 1);
 
     // The prototype action is a zero-padding link, not a primary button. The text itself is
     // the hit target; it rests dim and lifts to accent on hover/hold/focus.
@@ -144,8 +141,7 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
     _ = (try act.text("label", idn.action))
         .with_style(.{Style{ .font = market_font, .text = action_color }});
 
-    const tail = try content.div("tail");
-    _ = tail.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("tail", market_pad_x, 1);
     return act;
 }
 
@@ -194,30 +190,26 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center });
 
-    const lead = try content.div("lead");
-    _ = lead.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("lead", market_pad_x, 1);
 
     _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = state_color }});
 
-    const gap_one = try content.div("gap_one");
-    _ = gap_one.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_one", market_gap, 1);
 
     const subject_lane = try content.div("subject_lane");
     _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip);
     _ = (try subject_lane.text("subject", subject))
         .with_style(.{Style{ .font = market_font, .text = th.fg }});
 
-    const gap_two = try content.div("gap_two");
-    _ = gap_two.with_size(.{ .fixed = market_gap }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("gap_two", market_gap, 1);
 
     if (metadata.len > 0) {
         _ = (try content.text("metadata", metadata))
             .with_style(.{Style{ .font = market_font, .text = state_color }});
     }
 
-    const tail = try content.div("tail");
-    _ = tail.with_size(.{ .fixed = market_pad_x }, .{ .fixed = 1 }).pass_through();
+    _ = try content.spacer("tail", market_pad_x, 1);
 
     // Live announcement on a state change (idle→working→building). Composed from the same
     // subject the strip shows, so what is spoken matches what is drawn.

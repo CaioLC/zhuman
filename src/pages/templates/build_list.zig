@@ -231,12 +231,12 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8) !El {
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     }
 
-    for (entries, 0..) |ent, slot| {
-        var idbuf: [8]u8 = undefined;
-        const rid = std.fmt.bufPrint(&idbuf, "r{d}", .{slot}) catch "r";
+    for (entries) |ent| {
         inline for (capital.buildable_bundle, 0..) |G, i| {
             if (G != comp.Shelter and i == ent.i) {
-                const r = try capital_row(rows, world, e, G, rid, ent.kind, ent.reach);
+                // Keyed by the recipe's catalog index, not its sorted position, so a row's
+                // focus and state follow the recipe through a re-sort or a filter change.
+                const r = try capital_row(rows, world, e, G, ent.i, ent.kind, ent.reach);
                 // ACT1-10: the lifecycle is the simulation's. A ready/owned click pays through
                 // begin_build; the cancel corner runs the existing refund path. No UI timers.
                 if (r.clicked_build) capital.begin_build(world, e, ctx.res, G);

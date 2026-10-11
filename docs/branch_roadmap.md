@@ -346,8 +346,11 @@ call sites, not by new wrappers.
   - Done on the `El` surface: `TextFit` with a `clip`/`ellipsis`-only cell mode, fourteen
     sites migrated, README sections for TEXT-02/03/06 updated. `TextState` still holds the
     three fields; folding them into the union is a `text.zig` refactor left for a later pass.
-- [ ] **ZUI-07 — `item` and `spacer`.** Replace the fourteen formatted loop ids and the six local
+- [x] **ZUI-07 — `item` and `spacer`.** Replace the fourteen formatted loop ids and the six local
   spacer functions. A spacer is non-interactive by construction.
+  - Done. `Node.pcreate_i` stores the index on the node so `rekey` folds it through `key_i`;
+    `El.item` wraps it. `El.spacer` is a plain fixed box: an unqueried node has no interaction
+    slot, so the old pass-through declarations on spacers were redundant and are gone.
 - [ ] **ZUI-08 — `state`, `retain_child` and `track`.** Thin wrappers over what `Node` and `Ctx`
   already have, so templates stop dropping to `.get()` for them.
 - [ ] **ZUI-09 — Prove the additions on the debug page.** The template audit page is the first
@@ -366,8 +369,10 @@ call sites, not by new wrappers.
 
 ### Step 4 — identity and state
 
-- [ ] **ZUI-13 — Key BUILD rows by recipe index.** Per-row focus and state survive re-sort and
+- [x] **ZUI-13 — Key BUILD rows by recipe index.** Per-row focus and state survive re-sort and
   filtering.
+  - Done with ZUI-07: `capital_row` takes the recipe's catalog index and builds into
+    `parent.item("r", index)`.
 - [ ] **ZUI-14 — Optional state pointer on every stateful template.** Tabs, disclosure, select,
   slider, text input, scroll, catalog controls, rail. `modal_body` passes the trade state's
   mode to `tabs` and stops copying.

@@ -165,19 +165,14 @@ const footer_height: f32 = 86;
 const footer_pad_top: f32 = 4;
 const footer_pad_bottom: f32 = 2;
 
-fn spacer(parent: El, id: []const u8, width: f32, height: f32) !void {
-    const s = try parent.div(id);
-    _ = s.with_size(.{ .fixed = width }, .{ .fixed = height }).pass_through();
-}
-
 fn insetRegion(parent: El, id: []const u8, inset: f32) !El {
     const row = try parent.div(id);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .start });
-    try spacer(row, "lead", inset, 1);
+    _ = try row.spacer("lead", inset, 1);
     const region = try row.div("content");
     _ = region.with_size(.grow, .fit_children);
-    try spacer(row, "tail", inset, 1);
+    _ = try row.spacer("tail", inset, 1);
     return region;
 }
 
@@ -200,11 +195,11 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     const header_band = try content.div("shell_header_band");
     _ = header_band.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .start });
-    try spacer(header_band, "lead", opts.page_pad, 1);
+    _ = try header_band.spacer("lead", opts.page_pad, 1);
     const header = try header_band.div("shell_header");
     _ = header.with_size(.grow, .{ .fixed = header_content_height })
         .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
-    try spacer(header_band, "tail", opts.page_pad, 1);
+    _ = try header_band.spacer("tail", opts.page_pad, 1);
 
     // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.
     // The underway Act I surface owns its own market/activity strips, so these regions are absent
@@ -224,16 +219,16 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     const grid_band = try content.div("shell_grid_band");
     _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, .grow)
         .with_flow(.{ .dir = .column });
-    try spacer(grid_band, "top", 1, grid_pad_top);
+    _ = try grid_band.spacer("top", 1, grid_pad_top);
     const grid_row = try grid_band.div("row");
     _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, .grow)
         .with_flow(.{ .dir = .row, .cross = .start });
-    try spacer(grid_row, "lead", opts.page_pad, 1);
+    _ = try grid_row.spacer("lead", opts.page_pad, 1);
     const grid = try grid_row.div("shell_grid");
     _ = grid.with_size(.grow, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .row }).with_gap(opts.section_gap);
-    try spacer(grid_row, "tail", opts.page_pad, 1);
-    try spacer(grid_band, "bottom", 1, grid_pad_bottom);
+    _ = try grid_row.spacer("tail", opts.page_pad, 1);
+    _ = try grid_band.spacer("bottom", 1, grid_pad_bottom);
 
     const rail = if (opts.rail) blk: {
         const r = try grid.div("shell_rail");
@@ -261,19 +256,19 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         const row = try band.div("row");
         _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
             .with_flow(.{ .dir = .row, .cross = .start });
-        try spacer(row, "lead", opts.page_pad, 1);
+        _ = try row.spacer("lead", opts.page_pad, 1);
         const frame = try row.div("frame");
         _ = frame.with_size(.grow, .{ .fixed = footer_height })
             .with_flow(.{ .dir = .column })
             .with_overflow(.clip)
             .with_style(.{Style{ .outline_color = th.line2 }});
-        try spacer(frame, "top", 1, footer_pad_top);
+        _ = try frame.spacer("top", 1, footer_pad_top);
         const f = try frame.div("shell_footer");
         _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
             .with_overflow(.clip);
-        try spacer(frame, "bottom", 1, footer_pad_bottom);
-        try spacer(row, "tail", opts.page_pad, 1);
-        try spacer(band, "margin", 1, opts.page_pad);
+        _ = try frame.spacer("bottom", 1, footer_pad_bottom);
+        _ = try row.spacer("tail", opts.page_pad, 1);
+        _ = try band.spacer("margin", 1, opts.page_pad);
         break :blk f;
     } else null;
 

@@ -129,7 +129,7 @@ pub fn capital_row(
     world: *World,
     e: Entity,
     comptime GoodT: type,
-    id: []const u8,
+    index: usize,
     kind: Kind,
     reach: f32,
 ) !Row {
@@ -137,7 +137,8 @@ pub fn capital_row(
     const th = ctx.res.view.theme;
     const cost = (GoodT{}).requires;
 
-    const row = try parent.div(id);
+    // `index` is the recipe's catalog index: the row's identity across re-sorts and filters.
+    const row = try parent.item("r", index);
     const hot = kind == .ready;
     const row_key = row.get().key;
     ctx.registerFocus(row_key, hot);
@@ -329,7 +330,7 @@ fn reach_meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
     const lit_segments = reachSegments(frac);
     var s: usize = 0;
     while (s < 3) : (s += 1) {
-        const seg = try track.div(&[_]u8{ 's', '0' + @as(u8, @intCast(s)) });
+        const seg = try track.item("s", s);
         _ = seg.with_size(.{ .fixed = 10 }, .{ .fixed = 4 })
             .with_style(.{Style{ .fill = if (s < lit_segments) color else th.line }});
     }

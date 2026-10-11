@@ -40,11 +40,6 @@ pub const Result = struct {
     market_action: El,
 };
 
-fn spacer(parent: El, id: []const u8, height: f32) !void {
-    const gap = try parent.div(id);
-    _ = gap.with_size(.{ .fixed = 1 }, .{ .fixed = height }).pass_through();
-}
-
 fn retainBuildCatalog(surface: El) void {
     const ctx = surface.ctx;
     const section_key = ha.ui.key(surface.get().key, "buildsection");
@@ -71,9 +66,9 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD" });
     _ = tabs.el.with_layout(.bottom_left);
 
-    try spacer(surface, "nav_gap", nav_to_market);
+    _ = try surface.spacer("nav_gap", 1, nav_to_market);
     const market_action = try market_strip_mod.market_strip(surface, "market", opts.market);
-    try spacer(surface, "market_gap", market_to_activity);
+    _ = try surface.spacer("market_gap", 1, market_to_activity);
     _ = try market_strip_mod.activity_strip(
         surface,
         "activity",
@@ -82,7 +77,7 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
         opts.activity.metadata,
         opts.activity.last,
     );
-    try spacer(surface, "activity_gap", activity_to_section);
+    _ = try surface.spacer("activity_gap", 1, activity_to_section);
 
     if (tabs.active == 0) {
         retainBuildCatalog(surface);
