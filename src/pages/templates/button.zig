@@ -33,6 +33,9 @@ pub fn button(ctx: *UiCtx, parent: El, id: []const u8, label: []const u8, enable
     const outer_key = outer.get().key;
     ctx.registerFocus(outer_key, enabled);
     const q = outer.query();
+    // KIT-03: a disabled button cannot activate — a pointer `.clicked` that reached it is
+    // consumed here, so it neither reports to the caller nor bubbles to an ancestor.
+    if (q.clicked and !enabled) _ = ctx.consumeFlag(outer_key, .clicked);
     if (q.clicked and enabled) _ = ctx.requestFocus(outer_key);
     const focused = ctx.isFocused(outer_key);
     uic.publishControlState(ctx, outer_key, .{

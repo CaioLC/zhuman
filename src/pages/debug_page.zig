@@ -64,6 +64,7 @@ const entries = [_][]const u8{
     "market_strip",
     "activity_strip",
     "trade_dialog",
+    "tooltip",
     "tag",
     "cost_list",
     "legend",
@@ -428,6 +429,15 @@ fn render_one(ctx: *UiCtx, world: *World, stage: El, name: []const u8, audit_tra
         _ = try t.activity_strip(ctx, demo, "as", .idle, "no work in progress", "ready", .idle);
     } else if (eq(name, "trade_dialog")) {
         return auditTradeOverlay(ctx, audit_trade);
+    } else if (eq(name, "tooltip")) {
+        // An overlay root: the tooltip is its own tree, returned as the frame's second root so
+        // it floats above the stage and the index. Placed just under its anchor label, in device
+        // px; a production caller also runs `clampToTerminal` on the prior-frame size.
+        _ = try el.text(ctx, stage, "anchor", "a control the tooltip describes");
+        const tip = try uic.tooltip(ctx, "tip", "Vigor \u{00b7} 7 / 10");
+        const s = ctx.res.view.scale;
+        _ = tip.with_offset_px(uic.view.dp(40, s), uic.view.dp(44, s));
+        return tip.get();
     } else if (eq(name, "tag")) {
         _ = try t.tag(ctx, stage, "tg", "crude");
     } else if (eq(name, "cost_list")) {

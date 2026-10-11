@@ -737,7 +737,7 @@ test "KIT-03: a disabled control consumes its click so it neither reports nor bu
     try std.testing.expect(u.interactionOf(btn).clicked);
     try std.testing.expect(u.interactionOf(row).clicked); // bubbled
 
-    // KIT-03: the disabled button consumes its own click (what `widgets.button` does when
+    // KIT-03: the disabled button consumes its own click (what the button contract does when
     // `!enabled`). Consuming clears the flag on the node AND its ancestors, so neither the
     // button (its caller) nor the row (an ancestor control) can act on it.
     try std.testing.expect(u.consumeFlag(btn, .clicked));

@@ -1,7 +1,7 @@
 //! `catalog_controls` (KIT-15) — the shared controls bar above a catalog's results: a search
 //! field, an adjacent sort toggle, and a disclosed Sort-by + Direction row, plus a count-only
 //! live summary. It **composes** the earlier controls rather than reinventing them — the search
-//! field is `widgets.text_input` (INPUT-07 editor, with the `/` shortcut), the sort row is a
+//! field is `uic.text_input` (INPUT-07 editor, with the `/` shortcut), the sort row is a
 //! `disclosure` (KIT-11) holding two `select`s (KIT-09), and the query is `query.zig` (KIT-14).
 //!
 //! Contract (KIT-15):
@@ -74,13 +74,14 @@ pub fn catalog_controls(ctx: *UiCtx, parent: El, id: []const u8, sort_kinds: []c
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    // Search field (widgets.text_input): owns the query text, registers the `/` shortcut.
-    const field = try uic.text_input(ctx, row.get(), "search", "Search…", 200);
-    const editor = field.state(ctx, uic.UiState.TextInputState);
+    // Search field (`uic.text_input`): owns the query text, registers the `/` shortcut.
+    const field = try uic.text_input(ctx, row, "search", "Search…", 200);
+    const field_key = field.get().key;
+    const editor = field.get().state(ctx, uic.UiState.TextInputState);
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty). `main`'s dismiss routes `.dismissed` to the focused/escape target; here we
     // clear the buffer when the field is focused and holds text and Escape was routed to it.
-    if (ctx.isFocused(field.key) and editor.len > 0 and field.query(ctx).dismissed) {
+    if (ctx.isFocused(field_key) and editor.len > 0 and field.query().dismissed) {
         _ = editor.clear();
     }
     const query_text = editor.text();

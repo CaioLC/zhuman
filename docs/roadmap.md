@@ -425,7 +425,8 @@ Capture at the reference `900×820` logical size and compare to the current HTML
 
 ## 14. Cleanup after parity
 
-- [ ] **CLEAN-01 — Retire `src/ui_client/widgets.zig` only after replacements land.** Remove duplicate button/panel/scroll/modal/tooltip/text-input implementations and barrel re-exports; keep one foundation/template path.
+- [x] **CLEAN-01 — Retire `src/ui_client/widgets.zig` only after replacements land.** Remove duplicate button/panel/scroll/modal/tooltip/text-input implementations and barrel re-exports; keep one foundation/template path.
+  - COMMENT: Deleted `widgets.zig`. `text_input`, `modal` and `tooltip` are `El`-based functions in `ui_client/` (`text_input.zig`, `modal.zig`, `tooltip.zig`), re-exported from the barrel; `label`/`img`/`progress_bar`/`button`/`icon_button`/`panel`/`scroll_view` had no callers and were already superseded by templates. The rest of the composition consolidation is `branch_roadmap.md`.
 - [ ] **CLEAN-02 — Remove superseded BUILD state/types.** Delete chip-filter `BuildViewState` fields, `Kind.blocked`, blocked-row copy/styles, old tier/effect filtering, and stale “good” terminology. Keep `GoodT` as a domain type name only if technically useful; player-facing text says recipe/good according to context.
 - [ ] **CLEAN-03 — Remove static distribution assets only when no live/reference consumer remains.** Keep prototype files/screenshots as design fixtures; production should use generated curves only after DEFER-09 is approved, implemented, and every live consumer has migrated.
 - [ ] **CLEAN-04 — Remove prototype-only global event patterns from production design.** No equivalents of `window.prototype*`, DOM CustomEvents, hash routing, or query-parameter state in game code. Use typed domain results, session UI state, and the fixture harness.

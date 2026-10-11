@@ -7,12 +7,14 @@
 //!   - `features`    — the paint-feature registry (text/fill/outline/img/svg) + `attach` mixins
 //!   - `draw`        — the render walk (paint a whole laid-out tree, with the clip stack)
 //!   - `tree`        — frame assembly (`collect` flattens builder returns; `Trees` wraps them)
-//!   - `widgets`     — the widget palette (button, panel, scroll_view, modal, …)
+//!   - `text_input` / `modal` / `tooltip` — the foundation compositions, functions over `El`
 const ctx_binding = @import("./ctx_binding.zig");
 const features = @import("./features/root.zig");
 const draw = @import("./draw.zig");
 const tree = @import("./tree.zig");
-const widgets = @import("./widgets.zig");
+const text_input_mod = @import("./text_input.zig");
+const modal_mod = @import("./modal.zig");
+const tooltip_mod = @import("./tooltip.zig");
 const cursor = @import("./cursor.zig");
 const drag = @import("./drag.zig");
 const command = @import("./command.zig");
@@ -146,19 +148,14 @@ pub const data_img = features.data_img;
 pub const data_sprite = features.data_sprite;
 pub const data_svg = features.data_svg;
 
-// widgets
-pub const label = widgets.label;
-pub const img = widgets.img;
-pub const progress_bar = widgets.progress_bar;
-pub const button = widgets.button;
-pub const icon_button = widgets.icon_button;
-pub const tooltip = widgets.tooltip;
-pub const panel = widgets.panel;
-pub const ScrollView = widgets.ScrollView;
-pub const scroll_view = widgets.scroll_view;
-pub const Modal = widgets.Modal;
-pub const modal = widgets.modal;
-pub const text_input = widgets.text_input;
+// foundation compositions — functions over `El` that bind host services (the editor model and
+// SDL text input, the Escape owner and focus trap, the pass-through overlay root). The game's
+// templates wrap them with chrome.
+pub const text_input = text_input_mod.text_input;
+pub const Modal = modal_mod.Modal;
+pub const modal = modal_mod.modal;
+pub const tooltip = tooltip_mod.tooltip;
+pub const clampToTerminal = tooltip_mod.clampToTerminal;
 
 test {
     _ = input;
@@ -168,7 +165,9 @@ test {
     _ = features;
     _ = draw;
     _ = tree;
-    _ = widgets;
+    _ = text_input_mod;
+    _ = modal_mod;
+    _ = tooltip_mod;
     _ = cursor;
     _ = drag;
     _ = command;

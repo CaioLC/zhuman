@@ -121,20 +121,20 @@ the one shared `.clicked` flag, so changing the event-stage policy migrates them
 `.pressed` remains separately available for controls that need press-time behavior; text
 input uses it to distinguish an inside press from an outside focus-clear.
 
-**Consistent button semantics (KIT-03).** Every stock button (`widgets.button`,
-`icon_button`) follows one contract: the **whole outer box owns the interaction** and the
-label/icon is content; a **disabled** button cannot activate — it is not registered for focus
-(so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it while
-disabled is **consumed** at the widget, so it neither reports to its caller nor bubbles to an
-ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`); and **keyboard
-activation matches pointer activation** because Enter/Space map to `command.activate`, which
-`markKey`s the focused control's `.clicked` — the very same flag a pointer release produces.
-A **nested** cancel/close inside a row activates by consuming `.clicked` (`El.consume`), which
-clears the flag on itself *and* its ancestors so the row doesn't also act — while leaving
-`hovering` untouched, so the ancestor stays hovered. Colors are single-sourced: the button
-resolves the KIT-02 `style.btn_primary` / `btn_icon` fragment and paints its border and ink
-from that one result, so the resting/hover/held/focus/disabled mapping can never drift between
-variants.
+**Consistent button semantics (KIT-03).** Every button (the `button` template and the icon
+controls built on `El`) follows one contract: the **whole outer box owns the interaction** and
+the label/icon is content; a **disabled** button cannot activate — it is not registered for
+focus (so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it
+while disabled is **consumed** at the control, so it neither reports to its caller nor bubbles
+to an ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`); and
+**keyboard activation matches pointer activation** because Enter/Space map to
+`command.activate`, which `markKey`s the focused control's `.clicked` — the very same flag a
+pointer release produces. A **nested** cancel/close inside a row activates by consuming
+`.clicked` (`El.consume`), which clears the flag on itself *and* its ancestors so the row
+doesn't also act — while leaving `hovering` untouched, so the ancestor stays hovered. Colors
+follow the KIT-02 state→role mapping — `dim` when disabled, `acc` on held/hover/focus-visible,
+else the resting ink — which the `style.btn_*` fragments encode for any control that composes
+them.
 
 ## Ordered pointer routing and overlays
 
@@ -280,12 +280,12 @@ Lifecycle is wired like the command registry: `Resources` holds `semantics` and
 `announcements`; `main` calls `semantics.beginBuild()` before `build_ui` and
 `semantics.endBuild()` after `endFrame()`. Representative `describe*` helpers turn
 authoritative widget/domain facts into a `SemanticNode`; controls call them right where
-they already call `publishControlState` (stock `button`/`icon_button`/`progress_bar`
-/`text_input`/`modal`, and game `tabs`/`slider`/`build_list`/`capital_row`
-/`action_tile`). Honest limitations: an icon button and a bare progress bar have no widget
-string for a name (they publish an empty label; a named variant/domain helper supplies
-one), `expanded` is owned only by the dialog shell, and no production board/search/modal
-*consumer* exists yet — the model describes the controls that do exist.
+they already call `publishControlState` (`text_input`/`modal`, and game `tabs`/`slider`
+/`build_list`/`capital_row`/`action_tile`/the modal header and offer rows). Honest
+limitations: `describeIconButton` and `describeProgressBar` take a caller-supplied name
+because a glyph or a bar has no string of its own, `expanded` is owned only by the dialog
+shell, and no production board *consumer* exists yet — the model describes the controls that
+do exist.
 
 ## Accessibility bridge (`a11y.zig`)
 
@@ -846,9 +846,12 @@ drawn in order. The flattening of a builder's return shape (a `*Node`, an `?*Nod
 tuple of them) into that list is `Node.collect`, an engine mechanism; this file only names
 the wrapper so `pages/` can build against it.
 
-## `widgets.zig`
+## Foundation compositions (`text_input.zig`, `modal.zig`, `tooltip.zig`)
 
-The palette that predates `elements` — `label`, `button`, `panel`, `scroll_view`, `modal`,
-`tooltip`, `text_input`. Nothing outside this folder calls it: the screens moved onto
-`pages/templates/`, so it stays reachable only through `root.zig`'s re-exports. Retiring it is
-in [`../../docs/roadmap.md`](../../docs/roadmap.md).
+The three compositions the foundation owns because they bind host services no template should
+reach for: `text_input` (the `editor.zig` model, SDL text input, the command registry's
+text/search owner), `modal` (a scrim root, the Escape owner, the focus trap, the dialog
+semantics) and `tooltip` (a pass-through root plus `clampToTerminal`). Each is a free function
+over `El` — taking its parent handle, or building its own root — and returns `El` handles, so
+its output feeds the next call like any template's. The game's `pages/templates/modal.zig`
+wraps the shell with its chrome and dismissal result; the debug page proves the tooltip.

@@ -20,11 +20,11 @@ pub const Modal = struct {
 pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8, width: f32) !Modal {
     const th = ctx.res.view.theme;
     const shell = try uic.modal(ctx, id, title);
-    const box = El{ .node = shell.box, .ctx = ctx };
+    const box = shell.box;
     _ = box.with_size(.{ .fixed = width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{Style{ .fill = th.bg, .outline_color = th.warn }});
-    return .{ .root = shell.root, .box = box, .width = width };
+    return .{ .root = shell.root.get(), .box = box, .width = width };
 }
 
 pub fn rule(ctx: *UiCtx, parent: El, id: []const u8, width: f32) !void {

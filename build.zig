@@ -94,7 +94,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
-    // UI-layer unit tests: the reusable engine + host binding (features/draw/widgets),
+    // UI-layer unit tests: the reusable engine + host binding (features/draw/compositions),
     // excluding `pages.zig` (game-content screens that import the parked-broken
     // `main.zig`). Lets the UI be verified in isolation while the sim half is mid-refactor.
     // See `src/ui_client/test_ui.zig`.

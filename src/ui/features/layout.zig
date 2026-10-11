@@ -135,7 +135,7 @@ pub const Layout = struct {
     offset_y: f32 = 0,
     /// Translates this node's *children* (not the node itself) by `-scroll_x`/`-scroll_y`
     /// — a positive value shifts flowed content up/left, as if scrolled down/right. This
-    /// is how a scroll container (`widgets.scroll_view`) moves its overflowing `content`
+    /// is how a scroll container (`scroll_view`) moves its overflowing `content`
     /// without a second layout pass: the container holds the offset, `place` folds it into
     /// the base position it hands each child. Defaults to 0 (no effect on ordinary nodes).
     /// Distinct from `origin`, which positions a *root* itself, not its children.

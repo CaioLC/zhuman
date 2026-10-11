@@ -322,11 +322,15 @@ call sites, not by new wrappers.
 
 ### Step 1 — retire the widget path
 
-- [ ] **ZUI-04 — Delete `widgets.zig`.** Its two live callers are the search field in
+- [x] **ZUI-04 — Delete `widgets.zig`.** Its two live callers are the search field in
   `catalog_controls` and the shell in `templates/modal.zig`. `text_input`, `modal` and
   `tooltip` become `El`-based functions; `label`, `img`, `progress_bar`, `button`,
   `icon_button`, `panel` and `scroll_view` are already superseded. Remove the barrel re-exports
   and the test import.
+  - Done: `ui_client/text_input.zig`, `modal.zig`, `tooltip.zig` (functions over `El`, still
+    on the `(ctx, parent, …)` signature until ZUI-05). The `button` template gained the
+    disabled-click consumption the widget had and the template lacked. The debug page has a
+    `tooltip` entry. Verified by screenshot: search field, tooltip, trade dialog.
 
 ### Step 2 — `El` additions
 
