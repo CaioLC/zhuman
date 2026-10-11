@@ -65,7 +65,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // expanded rail itself is 252px wide and visually transparent; only its 24x26 collapse
     // control is boxed. When collapsed, that control becomes the separate 36x124 restore box.
     const box = try parent.div(opts.id);
-    const st = box.get().state(ctx, RailState);
+    const st = box.state(RailState);
     if (opts.force_collapsed) st.collapsed = true;
 
     // Build the body before the toggle so the control remains the top-painted sibling after

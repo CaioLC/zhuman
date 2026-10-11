@@ -50,7 +50,7 @@ pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []
     const n = options.len;
 
     const box = try parent.div(id);
-    const st = box.get().state(ctx, SelectState);
+    const st = box.state(SelectState);
     if (st.value >= n) st.value = 0; // options shrank across frames — stay valid
     if (st.highlight >= n) st.highlight = 0;
 

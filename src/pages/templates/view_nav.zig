@@ -44,6 +44,5 @@ pub fn view_nav(nav_parent: El, id: []const u8, labels: []const []const u8) !Vie
 /// A no-op-safe wrapper over `Node.retainChildState`, so a screen retains a view without
 /// naming the engine's retention primitive. Returns whether a slot was retained.
 pub fn retain(parent: El, child_id: []const u8, comptime T: type) bool {
-    const ctx = parent.ctx;
-    return parent.get().retainChildState(ctx, child_id, T);
+    return parent.retain_child(child_id, T);
 }

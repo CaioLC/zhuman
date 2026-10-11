@@ -42,7 +42,7 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
     // VIEW-02: `el.root` sizes the scrim to the whole drawable, in device px (the layout space).
     const root = try el.root(ctx, id);
     _ = root.with_style(.{Style{ .fill = th.bg }});
-    _ = root.query(); // fullscreen scrim: a queried root structurally blocks lower trees
+    _ = root.track(); // fullscreen scrim: a queried root structurally blocks lower trees
     ctx.res.commands.registerEscape(root.get().key);
 
     const box = try root.div("box");
@@ -50,7 +50,7 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_size(.fit_children, .fit_children)
         .with_style(.{Style{ .fill = th.bg, .outline_color = th.line2 }});
-    _ = box.query(); // a blocking target, and keeps the slot alive so its prior geometry resolves
+    _ = box.track(); // a blocking target, and keeps the slot alive so its prior geometry resolves
 
     // KIT-08 focus trap: everything registered from here on (the caller's controls) is the
     // trapped set. The modal is listed last, so its content is exactly this suffix.

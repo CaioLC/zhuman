@@ -95,7 +95,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !PlayTrees {
 
         // The nested surface returns its borderless TRADE link; encounter eligibility and modal
         // state remain page responsibilities rather than presentation concerns.
-        trade_ts = workspace.surface.market_action.get().state(ctx, uic.UiState.TradeState);
+        trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
         if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }

@@ -646,6 +646,12 @@ consume before ancestor action decisions; ancestors re-query afterward. `capital
 uses this for its nested cancel control, so cancel no longer needs a manual `!cancelled`
 guard to keep the containing build action from firing.
 
+Three more hooks name things the raw node left implicit. `track()` is the keep-alive read:
+query a node only so it owns a slot and its rect is stamped — a scroll view's content probe,
+the modal scrim and box, the tooltip. `state(T)` is the node's pooled slot, the home of a
+template's logical state unless the caller passes a pointer. `retain_child(id, T)` keeps a
+hidden direct child's slot alive from its always-built owner, without building the child.
+
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that
 owner outside its box, then owner-releases; the event layer cancels capture and pending

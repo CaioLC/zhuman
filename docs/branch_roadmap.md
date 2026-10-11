@@ -351,10 +351,14 @@ call sites, not by new wrappers.
   - Done. `Node.pcreate_i` stores the index on the node so `rekey` folds it through `key_i`;
     `El.item` wraps it. `El.spacer` is a plain fixed box: an unqueried node has no interaction
     slot, so the old pass-through declarations on spacers were redundant and are gone.
-- [ ] **ZUI-08 — `state`, `retain_child` and `track`.** Thin wrappers over what `Node` and `Ctx`
+- [x] **ZUI-08 — `state`, `retain_child` and `track`.** Thin wrappers over what `Node` and `Ctx`
   already have, so templates stop dropping to `.get()` for them.
-- [ ] **ZUI-09 — Prove the additions on the debug page.** The template audit page is the first
+  - Done. The six keep-alive reads say `track()`; fifteen `.get().state(ctx, T)` hops are
+    `state(T)`; `view_nav.retain` is `retain_child`.
+- [x] **ZUI-09 — Prove the additions on the debug page.** The template audit page is the first
   migrated consumer.
+  - Done through ZUI-05 to 08: the audit page builds every template through the new surface
+    and was screenshot after each slice, alongside the live page.
 
 ### Step 3 — controls
 

@@ -57,7 +57,7 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !*uic.Node {
     const dialog = try t.panel(regions.body, "curtain", "ACT I");
     _ = dialog.with_layout(.center);
 
-    const st = dialog.get().state(ctx, StepState);
+    const st = dialog.state(StepState);
     if (st.step >= beats.len) st.step = 0; // the script shrank across frames — stay valid
     const beat = beats[st.step];
 

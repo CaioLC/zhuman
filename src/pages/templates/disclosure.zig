@@ -39,7 +39,7 @@ pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool
     _ = box.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    const st = box.get().state(ctx, DisclosureState);
+    const st = box.state(DisclosureState);
 
     // The summary row is the toggle: the whole row owns the interaction (KIT-03).
     const row = try box.div("summary");

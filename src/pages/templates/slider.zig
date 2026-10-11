@@ -63,7 +63,7 @@ pub fn slider(parent: El, opts: Options) !Slider {
     ctx.res.commands.registerRange(key);
 
     const q = control.query();
-    const state = control.get().state(ctx, SliderState);
+    const state = control.state(SliderState);
 
     // Host-routed keyboard commands. These flags are transient and targeted only when this
     // stable key was the focused range owner in the prior frame.

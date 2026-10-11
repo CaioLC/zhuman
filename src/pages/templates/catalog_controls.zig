@@ -67,7 +67,7 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    const st = bar.get().state(ctx, CatalogState);
+    const st = bar.state(CatalogState);
     if (st.sort >= sort_kinds.len) st.sort = 0;
 
     // Row 1: the search field + the adjacent sort toggle.
@@ -78,7 +78,7 @@ pub fn catalog_controls(parent: El, id: []const u8, sort_kinds: []const []const 
     // Search field (`uic.text_input`): owns the query text, registers the `/` shortcut.
     const field = try uic.text_input(row, "search", "Search…", 200);
     const field_key = field.get().key;
-    const editor = field.get().state(ctx, uic.UiState.TextInputState);
+    const editor = field.state(uic.UiState.TextInputState);
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty). `main`'s dismiss routes `.dismissed` to the focused/escape target; here we
     // clear the buffer when the field is focused and holds text and Escape was routed to it.

@@ -82,11 +82,11 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !DebugTrees {
         .with_style(.{Style{ .fill = th.bg }});
 
     // Selection lives on a stable node's TabsState (`active` = the entry index).
-    const sel = root.get().state(ctx, uic.UiState.TabsState);
+    const sel = root.state(uic.UiState.TabsState);
     if (sel.active >= entries.len) sel.active = 0;
     // Unlike ordinary in-stage templates, the modal needs a persistent lifecycle so dismissing
     // it reveals the audit index instead of rebuilding an always-open local state next frame.
-    const audit_trade = root.get().state(ctx, uic.UiState.TradeState);
+    const audit_trade = root.state(uic.UiState.TradeState);
 
     // --- the inspection stage: top-left, small, the selected template only ------------------
     // The whole page root is already `top_left`, so the padded wrap sits at the top-left; the

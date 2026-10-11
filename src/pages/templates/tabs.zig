@@ -31,7 +31,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8) !Tabs {
     _ = bar.with_flow(.{ .dir = .row }).with_gap(10);
     const bar_key = bar.get().key;
 
-    const st = bar.get().state(ctx, TabsState);
+    const st = bar.state(TabsState);
     if (st.active >= labels.len) st.active = 0; // labels shrank across frames — stay valid
 
     // INPUT-08: collect the member keys in paint order for the group's `controls` links.

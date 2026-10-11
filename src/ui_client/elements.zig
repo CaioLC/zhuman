@@ -83,6 +83,29 @@ pub const El = struct {
         return self.node.query(self.ctx);
     }
 
+    /// The keep-alive read: query this node only so it owns an interaction slot and its rect
+    /// is stamped — for a node whose flags nobody reads. A scroll view's content probe (read
+    /// back next frame for the clamp), the modal scrim and box (a stamped root occludes the
+    /// trees beneath it), the tooltip box. Says what `_ = x.query()` left implicit.
+    pub fn track(self: El) El {
+        _ = self.node.query(self.ctx);
+        return self;
+    }
+
+    /// This node's pooled `T` slot — acquired on first use, kept while touched each frame,
+    /// pruned when the node stops being built (see the engine README, "Where node state
+    /// lives"). A template owns its logical state here unless the caller passes a pointer.
+    pub fn state(self: El, comptime T: type) *T {
+        return self.node.state(self.ctx, T);
+    }
+
+    /// Keep a hidden direct child's `T` slot alive this frame without building the child.
+    /// Derives the child's structural key; returns false when no such slot exists. Call it
+    /// every hidden frame from the always-built owner; pruning resumes when the owner stops.
+    pub fn retain_child(self: El, child_id: []const u8, comptime T: type) bool {
+        return self.node.retainChildState(self.ctx, child_id, T);
+    }
+
     /// Observe and consume one host interaction flag on this node and its stamped
     /// ancestors. Descendants consume before ancestor action decisions; hover and
     /// unrelated flags remain available.

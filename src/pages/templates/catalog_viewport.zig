@@ -70,9 +70,9 @@ pub fn catalog_viewport(parent: El, id: []const u8, height: f32, reset: bool) !V
     // Read last frame's content height for clamping (prior-frame rect, the scroll_view pattern).
     const content_h = if (content.get().rect(ctx)) |r| r.h else 0;
     ctx.setPassThrough(content.get().key, true); // geometry probe only — never the hit
-    _ = content.query(); // keep the slot alive so `content.rect` resolves next frame
+    _ = content.track(); // keep the slot alive so `content.rect` resolves next frame
 
-    const state = outer.get().state(ctx, uic.UiState.ScrollState);
+    const state = outer.state(uic.UiState.ScrollState);
     if (reset) state.offset = 0; // KIT-16: reset-to-top on a requested data change.
 
     // height is logical; the stamped content height is device px — clamp in device px.

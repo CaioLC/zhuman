@@ -101,7 +101,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ready = goal.state == .ready;
 
     const outer = try parent.div(id);
-    _ = outer.query(); // keep a stamped geometry slot for the paint-only wash/rail next frame
+    _ = outer.track(); // keep a stamped geometry slot for the paint-only wash/rail next frame
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column })
         .with_overflow(.clip);
@@ -142,7 +142,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .with_offset(0, bar_control_offset_y)
         .with_style(.{Style{ .fill = th.bg }});
     const disclosure_key = disclosure.get().key;
-    const disclosure_state = disclosure.get().state(ctx, DisclosureState);
+    const disclosure_state = disclosure.state(DisclosureState);
     ctx.registerFocus(disclosure_key, true);
     const dq = disclosure.query();
     if (dq.clicked) {

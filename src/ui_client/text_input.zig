@@ -30,7 +30,7 @@ const El = el.El;
 const Style = style.Style;
 
 /// Build a text field of `width` logical px into `parent`. Returns the field box; the caller
-/// reads the model through `.get().state(ctx, UiState.TextInputState)`.
+/// reads the model through `.state(UiState.TextInputState)`.
 pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f32) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
@@ -38,7 +38,7 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
     // The box is created first so its key is final before the model is acquired on it.
     const field = try parent.div(id);
     const key = field.get().key;
-    const state = field.get().state(ctx, UiState.TextInputState);
+    const state = field.state(UiState.TextInputState);
     ctx.registerFocus(key, true);
     ctx.res.commands.registerText(key, true);
 

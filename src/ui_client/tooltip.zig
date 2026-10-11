@@ -27,7 +27,7 @@ pub fn tooltip(ctx: *UiCtx, id: []const u8, text: []const u8) !El {
     _ = box.with_flow(.{ .dir = .column })
         .with_size(.fit_children, .fit_children)
         .with_style(.{ style.pad(6), Style{ .fill = th.panel, .outline_color = th.line2 } });
-    _ = box.query(); // keep the slot alive for its geometry read-back
+    _ = box.track(); // keep the slot alive for its geometry read-back
     _ = box.pass_through(); // informational overlay, never a hit target
 
     _ = (try box.text("lbl", text)).with_style(.{Style{ .text = th.fg }});

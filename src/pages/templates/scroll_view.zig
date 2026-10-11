@@ -53,10 +53,10 @@ pub fn scroll_view(parent: El, id: []const u8, width: f32, height: f32) !ScrollV
     const content_h = if (content_node.rect(ctx)) |r| r.h else 0;
     // Queried for its geometry alone, so it must not take the hit: it covers the whole
     // viewport, and `mark` stops at the topmost node it lands on.
-    _ = content.pass_through().query();
+    _ = content.pass_through().track();
 
     const max_offset = @max(0.0, content_h - height);
-    const st = outer.get().state(ctx, ScrollState);
+    const st = outer.state(ScrollState);
     if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0) {
         st.offset -= ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up ⇒ toward the top
     }
