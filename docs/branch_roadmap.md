@@ -468,12 +468,22 @@ call sites, not by new wrappers.
 
 ### Step 7 — migrations and reconciliation
 
-- [ ] **ZUI-23 — Complete vertical migrations.** BUILD catalog; the Trade dialog; ACTIONS and
+- [x] **ZUI-23 — Complete vertical migrations.** BUILD catalog; the Trade dialog; ACTIONS and
   the activity strip; header, stock tokens, runline, Holdings and rail; game-over and the Act I
   curtain. A slice lands only when input, focus, state, semantics, responsive behaviour and
   visuals all work through `El`.
-- [ ] **ZUI-24 — Audit every remaining call site** against §5. Approved raw sites are the ones
+  - Done. Every surface builds through the `El` surface, the control lifecycle and the state
+    convention, and each was screenshot after its slice: the live page (header, stock
+    tokens, runline, Holdings, rail, ACTIONS, activity strip, footer log), the collapsed rail,
+    BUILD, the trade dialog (opening with TRADE focused), the select, the tooltip, game over
+    and the Act I curtain. The control lifecycle has SDL-free tests on the real pools, focus
+    registry, semantic registry and cursor state (ZUI-QA-03).
+- [x] **ZUI-24 — Audit every remaining call site** against §5. Approved raw sites are the ones
   ZUI-19 lists, documented where they sit.
+  - Done. `tools/boundary_check.sh` is clean: no lifecycle wiring, formatted id or key
+    arithmetic in a page or template, and every geometry or host-service site sits in an
+    approved component. No page or template creates a node through the engine directly. The
+    dead `BuildViewState` the catalog had superseded is deleted.
 - [ ] **ZUI-25 — Document and reconcile.** `src/ui_client/README.md` describes the `El` contract
   present-tense (updated in the same pass as each slice); `roadmap.md` receives any unresolved
   item; this file is deleted.

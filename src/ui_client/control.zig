@@ -99,3 +99,100 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
 
     return node.query(ctx);
 }
+
+// --- Tests: the lifecycle without a window ---------------------------------------------------
+// `control` never touches the platform, so a `Resources` with an undefined platform and a
+// default simulation is enough to run it against the real pools, focus registry, semantic
+// registry and cursor state.
+
+const std = @import("std");
+const testing = std.testing;
+const Resources = @import("../res.zig").Resources;
+
+const Rig = struct {
+    res: Resources,
+    arena: std.heap.ArenaAllocator,
+    ctx: UiCtx,
+
+    fn init(self: *Rig) void {
+        self.res = .{ .platform = undefined, .sim = .{} };
+        self.arena = std.heap.ArenaAllocator.init(testing.allocator);
+        self.ctx = UiCtx.init(&self.res, testing.allocator, self.arena.allocator());
+        self.ctx.beginFrame();
+        self.res.semantics.beginBuild();
+    }
+
+    fn deinit(self: *Rig) void {
+        self.ctx.deinit();
+        self.arena.deinit();
+    }
+};
+
+test "a disabled control consumes its click, publishes disabled, and asks for not-allowed" {
+    var rig: Rig = undefined;
+    rig.init();
+    defer rig.deinit();
+    const ctx = &rig.ctx;
+
+    const root = try Node.create(ctx.arena, "root");
+    const btn = try Node.pcreate(ctx.arena, "btn", root);
+    ctx.setFlag(btn.key, .clicked, true);
+    ctx.setFlag(btn.key, .hovering, true);
+
+    const q = control(ctx, btn, .{ .enabled = false, .name = "Build", .role = .button });
+    try testing.expect(!q.clicked); // consumed: it neither reports nor bubbles
+    try testing.expect(!ctx.interactionOf(btn.key).clicked);
+    try testing.expect(q.disabled and !q.focused and !q.focus_visible);
+    try testing.expect(!ctx.isFocused(btn.key));
+    try testing.expectEqual(cursor.Kind.not_allowed, rig.res.cursor.requested);
+}
+
+test "an enabled click focuses the control and publishes its state and semantics" {
+    var rig: Rig = undefined;
+    rig.init();
+    defer rig.deinit();
+    const ctx = &rig.ctx;
+
+    const root = try Node.create(ctx.arena, "root");
+    const btn = try Node.pcreate(ctx.arena, "btn", root);
+    ctx.setFlag(btn.key, .clicked, true);
+    ctx.setFlag(btn.key, .hovering, true);
+
+    const q = control(ctx, btn, .{ .name = "Build", .role = .button, .selected = true, .value = "ready" });
+    try testing.expect(q.clicked and q.focused and q.focus_visible and q.selected and !q.disabled);
+    try testing.expect(ctx.isFocused(btn.key));
+    try testing.expectEqual(cursor.Kind.pointer, rig.res.cursor.requested);
+
+    rig.res.semantics.endBuild();
+    var found = false;
+    for (rig.res.semantics.snapshot()) |n| {
+        if (n.key != btn.key) continue;
+        found = true;
+        try testing.expectEqual(semantics.Role.button, n.role);
+        try testing.expectEqualStrings("Build", n.label.slice());
+        try testing.expectEqualStrings("ready", n.value.slice());
+        try testing.expect(n.state.selected and n.state.focused and !n.state.disabled);
+    }
+    try testing.expect(found);
+}
+
+test "the focusable override keeps an enabled control out of focus; a roving member focuses" {
+    var rig: Rig = undefined;
+    rig.init();
+    defer rig.deinit();
+    const ctx = &rig.ctx;
+
+    const root = try Node.create(ctx.arena, "root");
+    const tile = try Node.pcreate(ctx.arena, "tile", root);
+    ctx.setFlag(tile.key, .clicked, true);
+    const running = control(ctx, tile, .{ .name = "Forage", .role = .tile, .focusable = false });
+    try testing.expect(running.clicked and !running.focused);
+    try testing.expect(!ctx.isFocused(tile.key));
+
+    const strip = try Node.pcreate(ctx.arena, "strip", root);
+    const chip = try Node.pcreate(ctx.arena, "chip", strip);
+    ctx.setFlag(chip.key, .clicked, true);
+    const member = control(ctx, chip, .{ .name = "BUILD", .role = .radio, .roving_group = strip.key });
+    try testing.expect(member.clicked and member.focused);
+    try testing.expect(ctx.isFocused(chip.key));
+}

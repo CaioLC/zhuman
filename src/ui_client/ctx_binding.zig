@@ -378,19 +378,6 @@ pub const UiState = struct {
     ///
     /// `init` returns the declared semantic defaults, so enum declaration order can
     /// change without silently changing what the player sees on a fresh run.
-    pub const BuildViewState = struct {
-        pub const Sort = enum { reach, materials, time };
-        pub const Show = enum { in_reach, ready, all };
-        pub const Tier = enum { any, crude, manufactured };
-        sort: Sort = .reach,
-        show: Show = .in_reach,
-        tier: Tier = .any,
-        built: bool = false,
-
-        pub fn init() BuildViewState {
-            return .{};
-        }
-    };
     /// A `text_input`'s persisted, authoritative editing model (INPUT-07). This is the
     /// full host editor — buffer plus caret/anchor selection, UTF-8 and single-line
     /// validation, an explicit `max_query_bytes`, and non-silent refusal — defined in
