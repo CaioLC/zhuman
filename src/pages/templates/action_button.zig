@@ -1,8 +1,8 @@
 //! `action_button` template — one labor-action button wired to an agent's own action
 //! component. Reads the agent's copy of `ActionT` for its price/yield, gates affordability
-//! on vigor, shows the dominant yield's p10–p90 band, and funnels a click through `act_fn`
-//! (`actions.action_*`). Skips silently if the agent doesn't hold this action. Migrated onto
-//! the new foundation — it composes the `button` template rather than the old widget.
+//! on vigor, shows the dominant yield's p10–p90 band, and reports the gated click; the
+//! caller calls the simulation. Returns false silently if the agent doesn't hold this
+//! action. Composes the `button` template.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -24,10 +24,9 @@ pub fn action_button(
     comptime ActionT: type,
     id: []const u8,
     name: []const u8,
-    comptime act_fn: anytype,
-) !void {
+) !bool {
     const ctx = parent.ctx;
-    if (!world.has(e, ActionT)) return;
+    if (!world.has(e, ActionT)) return false;
     const act = world.get(e, ActionT).?;
     const vigor = world.get(e, comp.Vigor).?;
     // `gather` treats `requires.energy >= vigor.v` as "can't do it", so affordable is strict.
@@ -49,5 +48,5 @@ pub fn action_button(
     var buf: [64]u8 = undefined;
     const txt = std.fmt.bufPrint(&buf, "{s}  (-{d:.0} e, +{s}{c})", .{ name, act.requires.energy, range, dom.letter }) catch name;
     const btn = try button(parent, id, txt, can);
-    if (btn.query().clicked and can) act_fn(world, e, ctx.res);
+    return btn.query().clicked and can;
 }

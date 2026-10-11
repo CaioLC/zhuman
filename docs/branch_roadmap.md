@@ -379,8 +379,10 @@ call sites, not by new wrappers.
     the catalog's Escape focus restore, the select popup's hover cursor, the text field's
     pointer-only clear glyph, and the eating policy's richer slider value (an in-place update
     of the slider's published node, since the wording depends on the value the slider lands on).
-- [ ] **ZUI-12 — No domain functions in template signatures.** `action_tile` and
+- [x] **ZUI-12 — No domain functions in template signatures.** `action_tile` and
   `action_button` return the activation; `actions_section` calls the simulation.
+  - Done, `action_card` included. The section keeps a verb table of component, id, label
+    and simulation operation, and places each tile by index parity across its two lanes.
 
 ### Step 4 — identity and state
 

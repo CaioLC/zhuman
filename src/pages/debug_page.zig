@@ -242,7 +242,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
-            _ = try t.action_tile(stage, world, a[0], comp.ActionForage, "at", "Forage", actions.action_forage);
+            if (try t.action_tile(stage, world, a[0], comp.ActionForage, "at", "Forage")) |tl| {
+                if (tl.clicked) actions.action_forage(world, a[0], ctx.res);
+            }
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }

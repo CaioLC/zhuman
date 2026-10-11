@@ -27,11 +27,9 @@ fn gridColumns(compact: bool) u8 {
     return if (compact) 1 else 2;
 }
 
-fn placeTile(tile: ?El) void {
-    if (tile) |t| {
-        _ = t.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
-            .with_flow(.{ .dir = .column, .main = .center });
-    }
+fn placeTile(tile: El) void {
+    _ = tile.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
+        .with_flow(.{ .dir = .column, .main = .center });
 }
 
 fn placePolicy(parent: El, world: *World, e: Entity) !void {
@@ -44,8 +42,19 @@ fn placePolicy(parent: El, world: *World, e: Entity) !void {
     }
 }
 
-/// Build the complete actions section. Action execution remains delegated to `action_tile`;
-/// every card fills its equal column and the policy value remains live simulation state.
+/// The five Act I verbs in reading order: the action component, the tile id and label, and
+/// the simulation operation the section calls when the tile reports its activation. The
+/// section is the game adapter; the tile is presentation and takes no domain function.
+const verbs = .{
+    .{ comp.ActionForage, "forage", "Forage", actions.action_forage },
+    .{ comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge },
+    .{ comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood },
+    .{ comp.ActionFish, "fish", "Fish", actions.action_fish },
+    .{ comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps },
+};
+
+/// Build the complete actions section. Every card fills its equal column and the policy
+/// value remains live simulation state.
 pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
@@ -70,17 +79,13 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El
     const grid = try section.div("grid");
     _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    if (gridColumns(compact) == 1) {
+    // One column at the compact breakpoint; otherwise two equal grow columns that preserve
+    // row-major reading order visually: Forage/Scavenge, Split wood/Fish, Check traps/Eating
+    // Policy. `lanes` is the column each verb lands in by its index parity.
+    const lanes: [2]El = if (gridColumns(compact) == 1) blk: {
         _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        placeTile(try action_tile_mod.action_tile(grid, world, e, comp.ActionForage, "forage", "Forage", actions.action_forage));
-        placeTile(try action_tile_mod.action_tile(grid, world, e, comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge));
-        placeTile(try action_tile_mod.action_tile(grid, world, e, comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood));
-        placeTile(try action_tile_mod.action_tile(grid, world, e, comp.ActionFish, "fish", "Fish", actions.action_fish));
-        placeTile(try action_tile_mod.action_tile(grid, world, e, comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps));
-        try placePolicy(grid, world, e);
-    } else {
-        // Two equal grow columns preserve row-major reading order visually:
-        // Forage/Scavenge, Split wood/Fish, Check traps/Eating Policy.
+        break :blk .{ grid, grid };
+    } else blk: {
         _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(grid_gap);
         const left = try grid.div("left");
         _ = left.with_size(.grow, .fit_children)
@@ -88,14 +93,16 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El
         const right = try grid.div("right");
         _ = right.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
+        break :blk .{ left, right };
+    };
 
-        placeTile(try action_tile_mod.action_tile(left, world, e, comp.ActionForage, "forage", "Forage", actions.action_forage));
-        placeTile(try action_tile_mod.action_tile(right, world, e, comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge));
-        placeTile(try action_tile_mod.action_tile(left, world, e, comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood));
-        placeTile(try action_tile_mod.action_tile(right, world, e, comp.ActionFish, "fish", "Fish", actions.action_fish));
-        placeTile(try action_tile_mod.action_tile(left, world, e, comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps));
-        try placePolicy(right, world, e);
+    inline for (verbs, 0..) |verb, i| {
+        if (try action_tile_mod.action_tile(lanes[i % 2], world, e, verb[0], verb[1], verb[2])) |t| {
+            placeTile(t.el);
+            if (t.clicked) verb[3](world, e, ctx.res);
+        }
     }
+    try placePolicy(lanes[1], world, e);
 
     return section;
 }

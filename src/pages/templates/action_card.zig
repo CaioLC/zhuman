@@ -3,8 +3,9 @@
 //! shares — **cost** (the energy price), **yield** (what lands, on average), **odds**
 //! (the p10–p90 band read as "N-M in 8 of 10", plus the distribution's name). The
 //! no-tutorial teacher: the player's first action *is* the reference card. Mechanics
-//! mirror `action_button` (gate on vigor, click funnels through `act_fn`); returns the
-//! card `El` (or null if the agent doesn't hold the action) — the caller places it.
+//! mirror `action_button` (gate on vigor, report the click); returns the card and its
+//! activation (or null if the agent doesn't hold the action) — the caller places it and
+//! calls the simulation.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -32,6 +33,8 @@ fn info(parent: El, id: []const u8, label: []const u8, value: []const u8) !void 
     _ = (try line.text("v", value)).with_style(.{ style.body, Style{ .text = th.fg } });
 }
 
+pub const Card = struct { el: El, clicked: bool };
+
 pub fn action_card(
     parent: El,
     world: *World,
@@ -39,8 +42,7 @@ pub fn action_card(
     comptime ActionT: type,
     id: []const u8,
     name: []const u8,
-    comptime act_fn: anytype,
-) !?El {
+) !?Card {
     const ctx = parent.ctx;
     if (!world.has(e, ActionT)) return null;
     const act = world.get(e, ActionT).?;
@@ -52,7 +54,7 @@ pub fn action_card(
     _ = card.with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
 
     const btn = try button(card, "btn", name, can);
-    if (btn.query().clicked and can) act_fn(world, e, ctx.res);
+    const clicked = btn.query().clicked and can;
 
     // Dominant yield (food or materials, by mean) — the shared pick (`action_info`),
     // scaled by the same two-level quality factor `gather` draws with.
@@ -75,5 +77,5 @@ pub fn action_card(
     // p10–p90 spelled out: 8 of 10 draws land inside the band. The spread IS the risk.
     try info(card, "odds", "odds", std.fmt.bufPrint(&buf, "{d:.0}-{d:.0} in 8 of 10 ({s})", .{ @round(dom.band.p10 * quality), @round(dom.band.p90 * quality), @tagName(dom.kind) }) catch "?");
 
-    return card;
+    return .{ .el = card, .clicked = clicked };
 }

@@ -142,8 +142,9 @@ pub fn tile(
 }
 
 /// A tile for one typed action component: formats price/band from the agent's own
-/// `requires`/`yields` and funnels a click through `act_fn`. Returns the tile `El`
-/// (null if the agent doesn't hold the action) — the caller places it.
+/// `requires`/`yields` and reports the affordability-gated click. Returns the tile and its
+/// activation (null if the agent doesn't hold the action); the caller places it and calls
+/// the simulation — a template never takes a domain operation as a parameter.
 pub fn action_tile(
     parent: El,
     world: *World,
@@ -151,8 +152,7 @@ pub fn action_tile(
     comptime ActionT: type,
     id: []const u8,
     name: []const u8,
-    comptime act_fn: anytype,
-) !?El {
+) !?Tile {
     const ctx = parent.ctx;
     if (!world.has(e, ActionT)) return null;
     const act = world.get(e, ActionT).?;
@@ -199,9 +199,7 @@ pub fn action_tile(
     else
         std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{c}", .{ lo, hi, dom.letter }) catch "?";
 
-    const t = try tile(parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
-    if (t.clicked) act_fn(world, e, ctx.res);
-    return t.el;
+    return try tile(parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
 }
 
 test "running action retains existing focus without becoming a new tab stop" {
