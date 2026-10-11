@@ -1,5 +1,5 @@
 #!/bin/sh
-# Composition boundary check — the repository check the branch roadmap's §5 asks for. It
+# Composition boundary check — see `src/ui_client/README.md`, "Where geometry is read". It
 # covers the authoring tiers (`src/pages/` and the foundation compositions in `src/ui_client/`),
 # not the mechanism files beneath them.
 #
@@ -13,7 +13,7 @@
 #   2. Inventory. Geometry read-back, pass-through probes, device-pixel sizing, semantic and
 #      cursor publication, focus requests, pointer capture. These are allowed only inside a
 #      component that owns geometry or a host service, or a page placing an overlay root; the
-#      branch roadmap (ZUI-19) names them. The check prints every site so an audit can compare
+#      README paragraph names them. The check prints every site so an audit can compare
 #      the list against that record, and fails when a site appears in a file not on the
 #      approved list below.
 #

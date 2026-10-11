@@ -677,6 +677,20 @@ template that takes an owner handle rather than a pointer, because the host rout
 text into its editor by key: the field registers itself and the owner's key with the command
 registry, and `main` looks the model up through `editorKeyOf`.
 
+**Where geometry is read.** Prior-frame rects, pass-through probes, device-pixel sizing,
+pointer capture and direct focus or cursor requests live only inside a component that owns
+geometry or a host service, never in an ordinary page or template: `scroll_view` (its content
+probe and thumb), `action_tile` (the progress underbar from the prior tile rect — a percent
+rule cannot size it, because the tile is content-sized), `milestone_goal` (the wash and state
+rail, likewise), `slider` (the lane rect, capture, press-time focus, the drag cursor),
+`terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
+sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
+cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
+consumption), the foundation's `modal`, `tooltip` and `text_input`, and the pages that place
+overlay roots. `tools/boundary_check.sh` lists every such site and fails on one anywhere else,
+and fails outright on lifecycle wiring, a formatted loop id or key arithmetic in any page or
+template.
+
 `UiCtx` also exposes singular stable-key pointer capture. A drag-capable widget captures
 its queried key on press, lets subsequent `mark` calls route motion/release flags to that
 owner outside its box, then owner-releases; the event layer cancels capture and pending
