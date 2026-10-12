@@ -225,11 +225,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // A coherent debug-only four-kind/six-unit fixture matching the reference anatomy.
             // Values remain ordinary live ECS data; the component performs all projections.
-            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
-            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
-            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
-            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
-            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = (comp.ActionForage{}).requires.energy * 0.85;
+            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 } });
             if (world.get(a[0], comp.InventoryFood)) |food| {
                 food.v = 7.8;
                 food.quality = 1;
@@ -250,8 +246,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
-            if (try t.action_tile(stage, world, a[0], comp.ActionForage, "at", "Forage")) |tl| {
-                if (tl.clicked) actions.action_forage(world, a[0], ctx.res);
+            const forage = ctx.res.catalog.actionIndex("forage").?;
+            if (try t.action_tile(stage, world, a[0], forage, "at")) |tl| {
+                if (tl.clicked) actions.begin(world, a[0], ctx.res, forage);
             }
         } else {
             _ = try stage.text("na", "(needs a live player)");
@@ -305,15 +302,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // Populate the debug-only actor with the reference's representative holdings and
             // unlocked verbs; production remains entirely progression-driven.
-            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
-            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
-            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
-            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = 1.7;
+            // The verbs come with their tools: the hatchet, a rod and snares unlock three more.
+            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
-            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
-            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
-            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
-            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
 
             const demo = try stage.div("workspace_demo");
             _ = demo.with_size(.{ .fixed = 926 }, .{ .fixed = 700 });
@@ -333,20 +324,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // One large reference composition: shared shell rows around one live workspace.
             // Debug-only grants make the authored five-verb/holdings state visible; production
             // continues to derive every stock, unlock, activity, and log line from live state.
-            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
-            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
-            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
-            if (world.get(a[0], comp.ActionForage)) |forage| forage.requires.energy = 1.7;
+            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
             if (world.get(a[0], comp.InventoryFood)) |food| food.v = 11.6;
             if (world.get(a[0], comp.Vigor)) |vigor| {
                 vigor.max = 15;
                 vigor.v = 14;
             }
-            if (world.get(a[0], comp.Sandals)) |held| held.count = 2 else world.add(a[0], comp.Sandals{ .count = 2 });
-            if (world.get(a[0], comp.RootCellar)) |held| held.count = 1 else world.add(a[0], comp.RootCellar{});
-            if (world.get(a[0], comp.LeafBed)) |held| held.count = 1 else world.add(a[0], comp.LeafBed{});
-            if (world.get(a[0], comp.Hatchet)) |held| held.count = 2 else world.add(a[0], comp.Hatchet{ .count = 2 });
 
             const demo = try stage.div("act_one_page_demo");
             _ = demo.with_size(.{ .fixed = 900 }, .{ .fixed = 820 })
@@ -399,7 +383,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.eating_policy(demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
-            _ = try t.capital_row(stage, world, a[0], comp.Sandals, 0, .ready, 1.0);
+            const gi = ctx.res.catalog.goodIndex("sandals").?;
+            if (ha.capital.quote(world, a[0], &ctx.res.catalog, gi)) |q| {
+                _ = try t.capital_row(stage, world, a[0], q, .ready);
+            }
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -499,6 +486,17 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
         return null;
     }
     return result.root;
+}
+
+/// Debug-only holdings: set the counts of the named goods and settle, so the verbs they
+/// grant and the margins they move are derived exactly as in production.
+fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { []const u8, u32 }) void {
+    const cat = &ctx.res.catalog;
+    const goods = world.get(e, comp.Goods) orelse return;
+    for (counts) |c| {
+        if (cat.goodIndex(c[0])) |gi| goods.count[gi] = c[1];
+    }
+    ha.capital.settle(world, e, cat);
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

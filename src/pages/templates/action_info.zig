@@ -1,29 +1,39 @@
-//! Shared read-side helpers over an action's `yields` — which resource dominates (by
-//! mean), its display band, and the icon for its distribution shape. Used by the action
+//! Shared read-side helpers over a verb's output lines — which line dominates (by mean),
+//! its display band, and the icon for its distribution shape. Used by the action
 //! presentations (`action_button`, `action_card`, `action_tile`) so they never drift on
-//! the pick. `yields` comes in as `anytype`: the `Yields` shape is deliberately private
-//! to `components.zig` (see `src/README.md`), so it can't be named here — field access is all
-//! that's needed.
+//! the pick.
 
 const ha = @import("ha");
+const roster = ha.roster;
 
 pub const Dominant = struct {
     band: ha.dist.Stats,
     kind: ha.dist.Kind,
-    /// 'f'/'m' — the header resource bar's one-letter vocabulary.
-    letter: u8,
+    /// The resource's letter — the header resource bar's one-letter vocabulary — or, for a
+    /// good, its id.
+    letter: []const u8,
     /// "food"/"materials" — the teaching card's spelled-out form.
     word: []const u8,
 };
 
-/// The action's dominant yield (food vs materials, by mean) — the one a compact
-/// presentation shows.
-pub fn dominant(yields: anytype) Dominant {
-    const food_band = ha.dist.stats(yields.food);
-    const mat_band = ha.dist.stats(yields.materials);
-    if (food_band.mean >= mat_band.mean)
-        return .{ .band = food_band, .kind = yields.food.kind, .letter = 'f', .word = "food" };
-    return .{ .band = mat_band, .kind = yields.materials.kind, .letter = 'm', .word = "materials" };
+/// The dominant once-output of a verb's effective terms, by mean — the one a compact
+/// presentation shows. Null when the verb yields nothing at completion.
+pub fn dominant(cat: *const roster.Catalog, output: []const roster.Line) ?Dominant {
+    var best: ?Dominant = null;
+    for (output) |l| {
+        if (l.per != .once) continue;
+        const band = ha.dist.stats(l.asDist());
+        if (best == null or band.mean > best.?.band.mean) {
+            best = .{ .band = band, .kind = l.kind, .letter = letterOf(l.item), .word = ha.actions.itemWord(cat, l.item) };
+        }
+    }
+    return best;
+}
+
+/// The letter an amount of `item` is written with: a resource's, or the id of a good.
+pub fn letterOf(item: []const u8) []const u8 {
+    if (roster.Catalog.resource(item)) |r| return r.letter();
+    return item;
 }
 
 /// The tiny curve icon for a distribution shape — a tile's one-glance risk profile.

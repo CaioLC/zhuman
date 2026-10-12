@@ -2,7 +2,8 @@
 // `src/README.md` ("The authored roster"): `requires` is the body-and-time price, paid at
 // begin; `input` is what the act consumes, paid at begin; `output` is what it draws at
 // completion. A line's `kind` defaults to `.fixed` (exact); the other kinds draw, and the
-// spread is the risk. Ids are plain and share one space with resources and goods.
+// spread is the risk. Ids are plain and share one space with resources and goods. The order
+// here is the ACTIONS surface's reading order.
 .{
     // Forage: glean the greenbelt. The safe calorie baseline — normal, steady.
     .{
@@ -27,16 +28,6 @@
             .{ .item = "materials", .n = 3.0, .kind = .exponential },
         },
     },
-    // Fish: unlocked by the fishing rod. Better mean than Forage but poisson-lumpy — feast
-    // or famine; wants a larder buffer under the metabolism.
-    .{
-        .id = "fish",
-        .name = "Fish",
-        .requires = .{ .energy = 2.0, .hours = 6.0 },
-        .output = .{
-            .{ .item = "food", .n = 3.0, .kind = .poisson },
-        },
-    },
     // Split wood: unlocked by the hatchet — you cannot split logs bare-handed. Steady
     // materials; uniform, an even spread rather than a bell.
     .{
@@ -45,6 +36,16 @@
         .requires = .{ .energy = 2.5, .hours = 5.0 },
         .output = .{
             .{ .item = "materials", .n = 5.0, .kind = .uniform },
+        },
+    },
+    // Fish: unlocked by the fishing rod. Better mean than Forage but poisson-lumpy — feast
+    // or famine; wants a larder buffer under the metabolism.
+    .{
+        .id = "fish",
+        .name = "Fish",
+        .requires = .{ .energy = 2.0, .hours = 6.0 },
+        .output = .{
+            .{ .item = "food", .n = 3.0, .kind = .poisson },
         },
     },
     // Check traps: unlocked by wire snares. The first stock-consuming verb — the bait is

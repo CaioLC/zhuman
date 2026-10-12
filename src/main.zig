@@ -551,8 +551,9 @@ pub fn main() !void {
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
-        const housed = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = &app.world };
-        if (housed.get() == null) {
+        const player = ecs.MaybeSingle(.{ ha.world.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
+        const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.catalog, .act_one) else false;
+        if (!housed) {
             ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
             ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation

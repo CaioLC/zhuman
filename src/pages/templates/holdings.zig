@@ -7,7 +7,8 @@ const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
-const capital = ha.capital;
+const effects = ha.effects;
+const roster = ha.roster;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
@@ -17,8 +18,6 @@ const El = el.El;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
-const gt = @import("./good_text.zig");
-
 // CSS counterpart: a 252px rail minus 2px rail padding and 10px panel margin. The engine's
 // fixed sizes are content boxes, so panel widths below subtract their authored padding.
 const column_width: f32 = 240;
@@ -26,32 +25,11 @@ const main_content_width: f32 = 214; // 240 - 10 left - 16 right
 const body_content_width: f32 = 220; // 240 - 10 left - 10 right
 const panel_gap: f32 = 12;
 
-// The reference gives frequently-read, body-scale goods first. The catalog remains authoritative
-// for ownership/count semantics; this tuple only owns roster presentation order.
-const holding_bundle = .{
-    comp.Sandals,
-    comp.RootCellar,
-    comp.LeafBed,
-    comp.Hatchet,
-    comp.FishRod,
-    comp.WireSnares,
-    comp.AirRifle,
-    comp.WorkGloves,
-    comp.Bicycle,
-    comp.Cookpot,
-    comp.Chainsaw,
-    comp.Pantry,
-    comp.MedicineChest,
-    comp.GardenBed,
-    comp.ChickenCoop,
-    comp.Shelter,
-};
-
-/// A roster/margin line: body-size primary copy and the reference's 11px right readout.
-fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
-    const ctx = parent.ctx;
+/// A roster/margin line: body-size primary copy and the reference's 11px right readout,
+/// filled into a row the caller keyed.
+fn lineIn(row: El, left: []const u8, right: []const u8, right_color: uic.Color) !void {
+    const ctx = row.ctx;
     const th = ctx.res.view.theme;
-    const row = try parent.div(id);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .baseline });
     _ = (try row.text("label", left))
@@ -62,6 +40,10 @@ fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_c
         .with_style(.{Style{ .font = 11, .text = right_color }});
 }
 
+fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: uic.Color) !void {
+    try lineIn(try parent.div(id), left, right, right_color);
+}
+
 fn sectionLabel(parent: El, id: []const u8, text: []const u8) !void {
     const ctx = parent.ctx;
     _ = (try parent.text(id, text)).with_style(.{
@@ -69,52 +51,39 @@ fn sectionLabel(parent: El, id: []const u8, text: []const u8) !void {
     });
 }
 
-/// Compact ownership copy used by the narrow rail. BUILD keeps the longer explanatory sentence.
-fn compactEffect(comptime GoodT: type) []const u8 {
-    return switch (GoodT) {
-        comp.FishRod => "can fish",
-        comp.Hatchet => "can split wood",
-        comp.WireSnares => "can check traps",
-        comp.AirRifle => "can hunt",
-        comp.Sandals => "forage costs less",
-        comp.WorkGloves => "split wood costs less",
-        comp.Bicycle => "roaming costs less",
-        comp.Cookpot => "food feeds further",
-        comp.RootCellar => "food keeps 2\u{00d7}",
-        comp.Chainsaw => "fuel does the work",
-        comp.LeafBed => "vigor ceiling +1",
-        comp.Pantry => "vigor ceiling +2",
-        comp.MedicineChest => "vigor ceiling +2",
-        comp.GardenBed => "grows food",
-        comp.ChickenCoop => "hens lay food",
-        comp.Shelter => "room for four",
-        else => @compileError("no compact holding effect for " ++ @typeName(GoodT)),
-    };
-}
-
-fn actionMargin(parent: El, world: *World, e: Entity, comptime ActionT: type, id: []const u8, name: []const u8) !void {
+/// One margin line per held verb whose price the goods have moved: `1.7e → 1.4e`.
+fn actionMargins(parent: El, world: *World, e: Entity) !void {
     const ctx = parent.ctx;
-    const live = world.get(e, ActionT) orelse return;
-    const base = (ActionT{}).requires.energy;
-    if (@abs(live.requires.energy - base) < 0.001) return;
     const th = ctx.res.view.theme;
-    var buf: [40]u8 = undefined;
-    const value = std.fmt.bufPrint(&buf, "{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }) catch return;
-    try line(parent, id, name, value, if (live.requires.energy < base) th.good else th.danger);
+    const cat = &ctx.res.catalog;
+    const goods = world.get(e, comp.Goods) orelse return;
+    for (cat.actions, 0..) |rec, ai| {
+        const live = effects.verb(cat, goods, ai) orelse continue;
+        const base = rec.requires.energy;
+        if (@abs(live.requires.energy - base) < 0.001) continue;
+        var buf: [40]u8 = undefined;
+        const value = std.fmt.bufPrint(&buf, "{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }) catch continue;
+        try lineIn(try parent.item("margin", ai), rec.name, value, if (live.requires.energy < base) th.good else th.danger);
+    }
 }
 
-fn spareUnits(world: *World, e: Entity) u32 {
+/// Units beyond the first of every owned good — what a trader could take.
+fn spareUnits(world: *World, e: Entity, cat: *const roster.Catalog) u32 {
+    const goods = world.get(e, comp.Goods) orelse return 0;
     var spares: u32 = 0;
-    inline for (capital.buildable_bundle) |GoodT| {
-        if (world.get(e, GoodT)) |held| spares += held.count -| 1;
-    }
+    for (cat.goods, 0..) |_, gi| spares += goods.count[gi] -| 1;
     return spares;
 }
 
-fn generatorFoodPerDay(world: *World, e: Entity) f32 {
+/// The authored per-day food flow of the owned goods, by scale.
+fn generatorFoodPerDay(world: *World, e: Entity, cat: *const roster.Catalog) f32 {
+    const goods = world.get(e, comp.Goods) orelse return 0;
     var per_day: f32 = 0;
-    inline for (.{ comp.GardenBed, comp.ChickenCoop }) |GoodT| {
-        if (world.has(e, GoodT)) per_day += (GoodT{}).yields.food.s;
+    for (cat.goods, 0..) |rec, gi| {
+        if (goods.count[gi] == 0) continue;
+        for (rec.output) |l| if (l.per == .day and std.mem.eql(u8, l.item, "food")) {
+            per_day += l.n;
+        };
     }
     return per_day;
 }
@@ -133,6 +102,7 @@ fn bodySentence(parent: El, id: []const u8, prefix: []const u8, value: []const u
 fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
+    const cat = &ctx.res.catalog;
     const panel = try parent.div("panel");
     _ = panel.with_size(.{ .fixed = main_content_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
@@ -143,10 +113,13 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     });
 
     var units: u32 = 0;
-    inline for (capital.buildable_bundle) |GoodT| {
-        if (world.get(e, GoodT)) |held| units += held.count;
+    var kinds: u32 = 0;
+    if (world.get(e, comp.Goods)) |goods| {
+        for (cat.goods, 0..) |_, gi| {
+            units += goods.count[gi];
+            if (goods.count[gi] > 0) kinds += 1;
+        }
     }
-    const kinds = capital.goods_owned(world, e);
 
     const heading = try panel.div("heading");
     _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
@@ -157,22 +130,23 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     try sectionLabel(heading, "count", count);
     _ = try panel.spacer("heading_gap", 1, 8);
 
-    const roster = try panel.div("roster");
-    _ = roster.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+    const owned = try panel.div("roster");
+    _ = owned.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(3);
     if (kinds == 0) {
-        _ = (try roster.text("none", "nothing built yet"))
+        _ = (try owned.text("none", "nothing built yet"))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
-    } else {
-        inline for (holding_bundle, 0..) |GoodT, i| {
-            if (world.get(e, GoodT)) |held| {
-                var label_buf: [48]u8 = undefined;
-                const label = if (held.count > 1)
-                    std.fmt.bufPrint(&label_buf, "{s} \u{00d7}{d}", .{ gt.display_name(GoodT), held.count }) catch gt.display_name(GoodT)
-                else
-                    gt.display_name(GoodT);
-                try line(roster, std.fmt.comptimePrint("good{d}", .{i}), label, compactEffect(GoodT), th.dim);
-            }
+    } else if (world.get(e, comp.Goods)) |goods| {
+        // Owned goods in roster order, keyed by catalog index so a row follows its good.
+        for (cat.goods, 0..) |rec, gi| {
+            const n = goods.count[gi];
+            if (n == 0) continue;
+            var label_buf: [48]u8 = undefined;
+            const label = if (n > 1)
+                std.fmt.bufPrint(&label_buf, "{s} \u{00d7}{d}", .{ rec.name, n }) catch rec.name
+            else
+                rec.name;
+            try lineIn(try owned.item("good", gi), label, rec.copy.short, th.dim);
         }
     }
 
@@ -187,12 +161,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     const margins = try panel.div("margins");
     _ = margins.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(4);
-    try actionMargin(margins, world, e, comp.ActionForage, "forage", "Forage");
-    try actionMargin(margins, world, e, comp.ActionScavenge, "scavenge", "Scavenge");
-    try actionMargin(margins, world, e, comp.ActionChopWood, "wood", "Split wood");
-    try actionMargin(margins, world, e, comp.ActionFish, "fish", "Fish");
-    try actionMargin(margins, world, e, comp.ActionCheckTraps, "traps", "Traps");
-    try actionMargin(margins, world, e, comp.ActionHunt, "hunt", "Hunt");
+    try actionMargins(margins, world, e);
 
     if (world.get(e, comp.InventoryFood)) |food| {
         if (food.quality != ha.baselines.food_quality) {
@@ -213,7 +182,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     }
 
     var spare_buf: [32]u8 = undefined;
-    const spares = spareUnits(world, e);
+    const spares = spareUnits(world, e, cat);
     const spare_text = std.fmt.bufPrint(&spare_buf, "{d} spare {s}", .{ spares, if (spares == 1) "unit" else "units" }) catch "?";
     try line(margins, "trade", "Trade stock", spare_text, th.dim);
 
@@ -244,7 +213,7 @@ fn buildBodyPanel(parent: El, world: *World, e: Entity) !El {
     const policy = ha.eating.word(ha.eating.valueFromRate(rate));
     try bodySentence(panel, "policy", "Eating ", policy, ".", th.fg);
 
-    const net = ha.systems.net_food_drawdown(met.base_rate, rate, generatorFoodPerDay(world, e));
+    const net = ha.systems.net_food_drawdown(met.base_rate, rate, generatorFoodPerDay(world, e, &ctx.res.catalog));
     if (net <= 0.001) {
         try bodySentence(panel, "coverage", "Larder ", "holds", ".", th.good);
     } else {
@@ -296,18 +265,24 @@ test "holdings column geometry mirrors the standalone reference" {
     try std.testing.expectEqual(@as(f32, 240), body_content_width + 10 + 10);
 }
 
-test "holdings uses compact rail-specific effect copy" {
-    try std.testing.expectEqualStrings("forage costs less", compactEffect(comp.Sandals));
-    try std.testing.expectEqualStrings("food keeps 2\u{00d7}", compactEffect(comp.RootCellar));
-    try std.testing.expectEqualStrings("vigor ceiling +1", compactEffect(comp.LeafBed));
-    try std.testing.expectEqualStrings("can split wood", compactEffect(comp.Hatchet));
-}
-
-test "the authored roster's short copy is the rail's compact copy" {
-    const roster = ha.roster;
+test "every buildable good carries the rail's compact copy" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
-    inline for (capital.buildable_bundle) |G| {
-        try std.testing.expectEqualStrings(compactEffect(G), cat.good(ha.bridge.goodIdOf(G)).?.copy.short);
+    for (cat.goods) |g| {
+        if (g.buildable) try std.testing.expect(g.copy.short.len > 0);
     }
+    try std.testing.expectEqualStrings("forage costs less", cat.good("sandals").?.copy.short);
+    try std.testing.expectEqualStrings("food keeps 2\u{00d7}", cat.good("root_cellar").?.copy.short);
+}
+
+test "the goods' day lines and spares feed the body panel's numbers" {
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    var w = World.init();
+    const e = w.spawn(.{comp.Goods{}});
+    const goods = w.get(e, comp.Goods).?;
+    goods.count[cat.goodIndex("garden_bed").?] = 1;
+    goods.count[cat.goodIndex("sandals").?] = 3;
+    try std.testing.expectEqual(@as(f32, 1.5), generatorFoodPerDay(&w, e, &cat));
+    try std.testing.expectEqual(@as(u32, 2), spareUnits(&w, e, &cat));
 }

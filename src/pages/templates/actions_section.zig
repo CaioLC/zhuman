@@ -6,6 +6,7 @@ const std = @import("std");
 const ha = @import("ha");
 const comp = ha.comp;
 const actions = ha.actions;
+const roster = ha.roster;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
@@ -42,16 +43,21 @@ fn placePolicy(parent: El, world: *World, e: Entity) !void {
     }
 }
 
-/// The five Act I verbs in reading order: the action component, the tile id and label, and
-/// the simulation operation the section calls when the tile reports its activation. The
-/// section is the game adapter; the tile is presentation and takes no domain function.
-const verbs = .{
-    .{ comp.ActionForage, "forage", "Forage", actions.action_forage },
-    .{ comp.ActionScavenge, "scavenge", "Scavenge", actions.action_scavenge },
-    .{ comp.ActionChopWood, "split_wood", "Split wood", actions.action_chop_wood },
-    .{ comp.ActionFish, "fish", "Fish", actions.action_fish },
-    .{ comp.ActionCheckTraps, "check_traps", "Check traps", actions.action_check_traps },
-};
+/// Whether a verb record is on the Act I ACTIONS surface: flagged on-surface and of this
+/// act. The roster's order is the reading order; the section is the game adapter, the tile
+/// is presentation and takes no domain function.
+fn onSurface(rec: roster.Action) bool {
+    return rec.on_surface and rec.act <= 1;
+}
+
+/// How many verbs the surface lists.
+pub fn surfaceCount(cat: *const roster.Catalog) usize {
+    var n: usize = 0;
+    for (cat.actions) |rec| {
+        if (onSurface(rec)) n += 1;
+    }
+    return n;
+}
 
 /// Build the complete actions section. Every card fills its equal column and the policy
 /// value remains live simulation state.
@@ -73,7 +79,10 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El
         .with_style(.{ style.h3, Style{ .text = th.fg } });
     _ = (try heading_copy.text("subtitle", "What will this body do now?"))
         .with_style(.{Style{ .font = 11, .text = th.dim }});
-    _ = (try heading.text("count", "5 VERBS"))
+    const cat = &ctx.res.catalog;
+    var count_buf: [16]u8 = undefined;
+    const count_txt = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{surfaceCount(cat)}) catch "VERBS";
+    _ = (try heading.text("count", count_txt))
         .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 
     const grid = try section.div("grid");
@@ -96,11 +105,17 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8) !El
         break :blk .{ left, right };
     };
 
-    inline for (verbs, 0..) |verb, i| {
-        if (try action_tile_mod.action_tile(lanes[i % 2], world, e, verb[0], verb[1], verb[2])) |t| {
-            placeTile(t.el);
-            if (t.clicked) verb[3](world, e, ctx.res);
+    // A surface verb takes a lane whether or not the agent holds it yet, so the grid keeps
+    // its reading order as verbs arrive.
+    var lane: usize = 0;
+    for (cat.actions, 0..) |rec, i| {
+        if (!onSurface(rec)) continue;
+        const ai: u16 = @intCast(i);
+        if (try action_tile_mod.action_tile(lanes[lane % 2], world, e, ai, rec.id)) |tl| {
+            placeTile(tl.el);
+            if (tl.clicked) actions.begin(world, e, ctx.res, ai);
         }
+        lane += 1;
     }
     try placePolicy(lanes[1], world, e);
 

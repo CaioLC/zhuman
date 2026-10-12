@@ -288,6 +288,10 @@
             .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.7 } },
             .{ .scale = .{ .target = "fish", .stat = .{ .output = "food" }, .by = 1.5 } },
         },
+        .copy = .{
+            .effect = "fishing costs less and catches more",
+            .short = "fish better",
+        },
     },
     .{
         .id = "hand_axe",
@@ -298,6 +302,10 @@
             .{ .grant = "chop_wood" },
             .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.7 } },
             .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "materials" }, .by = 1.4 } },
+        },
+        .copy = .{
+            .effect = "splitting wood costs less and yields more",
+            .short = "split wood better",
         },
     },
 }

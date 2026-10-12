@@ -263,18 +263,19 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             });
         }
     }
-    // Owned tradeable goods (map to a ware the passerby recognizes).
-    inline for (.{ .{ comp.FishNet, Ware.fish_hook }, .{ comp.HandAxe, Ware.whetstone } }) |pair| {
-        const G = pair[0];
-        const ware = pair[1];
-        if (world.has(e, G)) {
+    // Owned tradeable goods (the wares the passerby recognizes, by their roster id).
+    const cat = &ctx.res.catalog;
+    const goods = world.get(e, comp.Goods);
+    for ([_]Ware{ .fish_hook, .whetstone }) |ware| {
+        const gi = cat.goodIndex(barter.goodOf(ware).?) orelse continue;
+        const owned: u32 = if (goods) |g| g.count[gi] else 0;
+        if (owned > 0) {
             const q = market.sell_quote(ware, 0, 200 + @as(u32, @intFromEnum(ware)), enc.id);
             const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(ware)});
             const recv_s = bundleLabel(gbuf[gw..], &q.receive);
             gw += recv_s.len;
-            const owned = world.get(e, G).?;
             try sells.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = owned.count },
+                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = @intCast(@min(owned, std.math.maxInt(u16))) },
                 .quote = q,
             });
         }
@@ -296,14 +297,12 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     var holding_views = std.ArrayList(t.TradeHolding).empty;
     try holding_views.append(ctx.arena, .{ .label = "Food", .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
     try holding_views.append(ctx.arena, .{ .label = "Materials", .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
-    inline for (.{
-        .{ comp.Sandals, "Sandals" },
-        .{ comp.Hatchet, "Hatchet" },
-        .{ comp.FishNet, "Fishing net" },
-        .{ comp.HandAxe, "Hand axe" },
-    }) |entry| {
-        if (world.get(e, entry[0])) |owned| {
-            try holding_views.append(ctx.arena, .{ .label = entry[1], .value = try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{owned.count}) });
+    // The goods a passerby's deal turns on: the two tools it trades and the two it compares.
+    for ([_][]const u8{ "sandals", "hatchet", "fish_net", "hand_axe" }) |gid| {
+        const gi = cat.goodIndex(gid) orelse continue;
+        const owned: u32 = if (goods) |g| g.count[gi] else 0;
+        if (owned > 0) {
+            try holding_views.append(ctx.arena, .{ .label = cat.goods[gi].name, .value = try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{owned}) });
         }
     }
 

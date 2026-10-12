@@ -274,7 +274,7 @@ The flag is the load-bearing part: a component *existing* is not a reason to sho
 `ActionHunt` and `AirRifle` are defined and off the Act I surface, which is exactly five
 verbs. The goods table is generated comptime over `capital.buildable_bundle`, so it cannot
 drift from the roster, and its tiers come from `capital.is_crude`. Copy (display names,
-effect sentences) stays at the page tier in `good_text`; this module owns identity, type,
+effect sentences) is the record's `copy` in the authored roster; this module owns identity, type,
 order, and membership.
 
 **The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
@@ -307,12 +307,12 @@ reason. `market` stays world-free; `barter` is the only place a `Quote` meets an
 
 ## The authored roster (`roster.zig`, `data/`)
 
-The labor verbs and the capital goods are also written as data: `data/actions.zon` and
-`data/goods.zon`, parsed at load by `std.zon.parse` into one `roster.Catalog`. The typed
-components above remain the roster the sim runs on; the catalog is held equal to them by
-test, record for record (`bridge.zig` is that bridge), and the
-interpreter that runs the sim from the catalog instead is roadmap work ("CAT-01"). The files
-are the contract new content is written against.
+The labor verbs and the capital goods are data: `data/actions.zon` and `data/goods.zon`,
+parsed at load by `std.zon.parse` into one `roster.Catalog`, which is what the sim runs on
+(`actions.zig`, `capital.zig`, `effects.zig`) and the pages read. The typed components above
+are its shadow, kept current by `bridge.shadow` and held equal to the records by `bridge.zig`'s
+tests until they are retired ("CAT-01"). The files are the contract new content is written
+against.
 
 **One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
 the file is its kind. Resources, actions and goods share the space: a reference resolves by

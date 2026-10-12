@@ -142,9 +142,10 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     if (q.get()) |a| {
         const e, const vigor = a;
         const apanel = try t.panel(root, "apanel", "Actions");
-        if (try t.action_button(apanel, world, e, comp.ActionForage, "forage", "Forage")) actions.action_forage(world, e, ctx.res);
-        if (try t.action_button(apanel, world, e, comp.ActionFish, "fish", "Fish")) actions.action_fish(world, e, ctx.res);
-        if (try t.action_button(apanel, world, e, comp.ActionChopWood, "chop", "Chop wood")) actions.action_chop_wood(world, e, ctx.res);
+        for ([_][]const u8{ "forage", "fish", "chop_wood" }) |verb| {
+            const ai = ctx.res.catalog.actionIndex(verb) orelse continue;
+            if (try t.action_button(apanel, world, e, ai, verb)) actions.begin(world, e, ctx.res, ai);
+        }
         const s = t.actor_status(th, vigor, ctx.res.config);
         _ = try txt(apanel, "status", s.word, .{Style{ .text = s.color }});
     }

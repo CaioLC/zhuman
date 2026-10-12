@@ -306,8 +306,9 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
 }
 
 /// Every change of ownership ends here: the body and larder take the goods' contribution,
-/// and the typed components mirror the derived state for what still reads them.
-fn settle(w: *World, e: Entity, cat: *const Catalog) void {
+/// and the typed components mirror the derived state for what still reads them. Public for
+/// a fixture that sets counts by hand.
+pub fn settle(w: *World, e: Entity, cat: *const Catalog) void {
     effects.apply(w, e, cat);
     bridge.shadow(w, e, cat);
 }

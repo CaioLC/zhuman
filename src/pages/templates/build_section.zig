@@ -38,7 +38,7 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, catal
         .with_style(.{Style{ .font = 11, .text = th.dim }});
 
     var count_buf: [24]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.authored_total}) catch "RECIPES";
+    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.authoredTotal(&ctx.res.catalog)}) catch "RECIPES";
     _ = (try heading.text("count", count))
         .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 

@@ -13,24 +13,24 @@
 //! narrow the ready set. **Prerequisite-locked recipes stay absent** in both modes (a row you
 //! cannot even attempt is noise); a **build in progress is always visible and pinned to the top**
 //! (you need the way out). The summary always reads `{visible} of {authored total} recipes shown`,
-//! where the total is the **full authored catalog** count (every buildable good but the Shelter),
+//! where the total is the **full authored catalog** count (every buildable good but the milestone),
 //! even though locked recipes contribute no row.
 //!
-//! **Build lifecycle:** starting a ready/owned row pays through `capital.begin_build`;
-//! the live `Busy` row renders its own progress/time and a cancel corner that calls
+//! **Build lifecycle:** starting a ready/owned row pays through `capital.begin`; the live
+//! `Busy` row renders its own progress/time and a cancel corner that calls
 //! `capital.cancel_build` (the refund path); completion is the simulation's — no UI-local timers.
 //!
-//! **Shelter milestone:** the Shelter is not a row. It is a `milestone_goal`
-//! pinned below the list, **outside** the filter/sort, because it is how the act ends rather than
-//! an item in it. Its lifecycle (locked/unfunded/ready) and every requirement recompute from
-//! authoritative state each frame.
+//! **Shelter milestone:** the milestone good is not a row. It is a `milestone_goal` pinned
+//! below the list, **outside** the filter/sort, because it is how the act ends rather than an
+//! item in it. Its lifecycle and every requirement recompute from authoritative state each frame.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.comp;
 const capital = ha.capital;
-const catalog = ha.catalog;
+const roster = ha.roster;
+const ledger = ha.ledger;
 const query = ha.query;
 const uic = ha.ui_client;
 const el = uic.elements;
@@ -41,7 +41,6 @@ const El = el.El;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
-const gt = @import("./good_text.zig");
 const row_mod = @import("./capital_row.zig");
 const capital_row = row_mod.capital_row;
 const capital_header = row_mod.capital_header;
@@ -51,24 +50,30 @@ const milestone_mod = @import("./milestone_goal.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
 
-/// The buildable goods, minus the Shelter (which is the milestone, not a row). This is the
+/// The buildable goods, minus the milestone (which is the goal, not a row). This is the
 /// **authored total** the summary reports against — a locked recipe still counts even when it
 /// contributes no row.
-pub const authored_total = capital.buildable_bundle.len - 1;
+pub fn authoredTotal(cat: *const roster.Catalog) usize {
+    var n: usize = 0;
+    for (cat.goods) |g| {
+        if (g.buildable and g.milestone == null) n += 1;
+    }
+    return n;
+}
 
 /// The Sort-by option labels the controls disclose. Reach is the default (index 0), so the blank
 /// list opens sorted by how close each recipe is to affordable, descending.
 const sort_kinds = [_][]const u8{ "reach", "inputs", "time", "name" };
 const Sort = enum(usize) { reach = 0, inputs = 1, time = 2, name = 3 };
 
-/// One classified recipe for this frame: the comptime index into `buildable_bundle`, its display
-/// `kind`, reach fraction, materials/hours cost, and the `name`/`type_word`/`state_word` used to
-/// answer `query` fields. Everything is a comptime-known string or a live number — no allocation.
+/// One classified recipe for this frame: its quote (which carries the catalog index and the
+/// record), its display `kind`, the inputs/hours it sorts by, and the `name`/`type_word`/
+/// `state_word` used to answer `query` fields. Everything is a record string or a live number —
+/// no allocation.
 const Entry = struct {
-    i: usize,
+    q: capital.Quote,
     kind: Kind,
-    reach: f32,
-    mats: f32,
+    inputs: f32,
     hours: f32,
     name: []const u8,
     type_word: []const u8,
@@ -92,7 +97,7 @@ const RecipeRow = struct {
         return self.e.name;
     }
     pub fn inReach(self: RecipeRow) bool {
-        return self.e.kind == .ready or self.e.reach >= 0.5;
+        return self.e.kind == .ready or self.e.q.reach >= 0.5;
     }
 };
 
@@ -108,12 +113,27 @@ fn stateWord(kind: Kind) []const u8 {
     };
 }
 
+/// The tier word a recipe answers `type:` with.
+pub fn tierWord(rec: *const roster.Good) []const u8 {
+    return if (rec.tier == .crude) "crude" else "made";
+}
+
+/// The units in a build order, for the `inputs` sort.
+fn orderTotal(rec: *const roster.Good) f32 {
+    var n: f32 = 0;
+    for (rec.input) |l| if (l.per == .once) {
+        n += l.n;
+    };
+    return n;
+}
+
 /// Build the list. `catalog_state` and `search_owner` are the catalog state and the node holding the
 /// search editor when the caller owns them (the always-built surface, so a hidden BUILD tab
 /// keeps its query and sort); null lets the controls keep their own.
 pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
+    const cat = &ctx.res.catalog;
 
     const outer = try parent.div(id);
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
@@ -124,58 +144,50 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
     const q = query.parse(controls.query_text);
     const blank = controls.query_text.len == 0;
 
-    // --- classify every non-Shelter good, then filter by mode + query ----------------------
-    var buf: [authored_total]Entry = undefined;
+    // --- classify every non-milestone recipe, then filter by mode + query --------------------
+    var buf: [roster.max_goods]Entry = undefined;
     var n: usize = 0;
-    const stock = world.get(e, comp.InventoryMaterial).?;
-    const vigor = world.get(e, comp.Vigor).?;
     const busy = world.get(e, comp.Busy);
 
-    inline for (capital.buildable_bundle, 0..) |G, i| {
-        if (G != comp.Shelter) {
-            const cost = (G{}).requires;
-            const owned = world.has(e, G);
-            const gi = ha.bridge.goodIndexOf(&ctx.res.catalog, G) orelse std.math.maxInt(u16);
-            const doing_this = busy != null and busy.?.isBuild(gi);
-            const affordable = cost.energy < vigor.v and cost.materials <= stock.v;
-            const reach = if (cost.materials <= 0) 1.0 else @min(1.0, stock.v / cost.materials);
+    for (cat.goods, 0..) |*rec, i| {
+        if (!rec.buildable or rec.milestone != null) continue;
+        const gi: u16 = @intCast(i);
+        const quote = capital.quote(world, e, cat, gi) orelse continue;
+        const doing_this = busy != null and busy.?.isBuild(gi);
 
-            const kind: Kind = if (doing_this) .building else if (owned)
-                .owned
-            else if (!capital.prereq_met(world, e, G))
-                .blocked
-            else if (!capital.unlock_met(world, e, G))
-                .locked
-            else if (affordable and busy == null) .ready else .reach;
+        const kind: Kind = if (doing_this) .building else if (quote.count > 0) .owned else switch (quote.standing) {
+            .needs => .blocked,
+            .unlock => .locked,
+            .ready => .ready,
+            .busy, .energy, .short => .reach,
+        };
 
-            const ent = Entry{
-                .i = i,
-                .kind = kind,
-                .reach = reach,
-                .mats = cost.materials,
-                .hours = cost.hours,
-                .name = gt.display_name(G),
-                .type_word = if (capital.is_crude(G)) "crude" else "made",
-                .state_word = stateWord(kind),
-            };
+        const ent = Entry{
+            .q = quote,
+            .kind = kind,
+            .inputs = orderTotal(rec),
+            .hours = rec.requires.?.hours,
+            .name = rec.name,
+            .type_word = tierWord(rec),
+            .state_word = stateWord(kind),
+        };
 
-            // A build in progress is never filtered away — the corner is the way out.
-            const pinned = kind == .building;
-            // Prerequisite-locked recipes stay absent under every mode: a row you cannot even
-            // attempt is noise, not information.
-            const attemptable = kind != .blocked;
+        // A build in progress is never filtered away — the corner is the way out.
+        const pinned = kind == .building;
+        // Prerequisite-locked recipes stay absent under every mode: a row you cannot even
+        // attempt is noise, not information.
+        const attemptable = kind != .blocked;
 
-            const keep = pinned or (attemptable and if (blank)
-                // Blank: ready plus reach ≥ 0.5, excluding what you already own.
-                ((kind == .ready or reach >= 0.5) and kind != .owned)
-            else
-                // A search runs over every non-locked record — owned and far-off included.
-                query.matches(&q, RecipeRow{ .e = &ent }));
+        const keep = pinned or (attemptable and if (blank)
+            // Blank: ready plus reach ≥ 0.5, excluding what you already own.
+            ((kind == .ready or quote.reach >= 0.5) and kind != .owned)
+        else
+            // A search runs over every non-locked record — owned and far-off included.
+            query.matches(&q, RecipeRow{ .e = &ent }));
 
-            if (keep) {
-                buf[n] = ent;
-                n += 1;
-            }
+        if (keep) {
+            buf[n] = ent;
+            n += 1;
         }
     }
 
@@ -191,12 +203,12 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
             var pe = true; // primary-equal
             switch (ctxt.sort) {
                 .reach => {
-                    pl = a.reach < b.reach;
-                    pe = a.reach == b.reach;
+                    pl = a.q.reach < b.q.reach;
+                    pe = a.q.reach == b.q.reach;
                 },
                 .inputs => {
-                    pl = a.mats < b.mats;
-                    pe = a.mats == b.mats;
+                    pl = a.inputs < b.inputs;
+                    pe = a.inputs == b.inputs;
                 },
                 .time => {
                     pl = a.hours < b.hours;
@@ -219,7 +231,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
 
     // --- summary + aligned table header ----------------------------------------------------
     var sbuf: [40]u8 = undefined;
-    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authored_total }) catch "?";
+    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ n, authoredTotal(cat) }) catch "?";
     _ = (try outer.text("summary", summary))
         .with_style(.{ style.small, Style{ .text = th.dim } });
 
@@ -235,67 +247,90 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
     }
 
     for (entries) |ent| {
-        inline for (capital.buildable_bundle, 0..) |G, i| {
-            if (G != comp.Shelter and i == ent.i) {
-                // Keyed by the recipe's catalog index, not its sorted position, so a row's
-                // focus and state follow the recipe through a re-sort or a filter change.
-                const r = try capital_row(rows, world, e, G, ent.i, ent.kind, ent.reach);
-                // The lifecycle is the simulation's. A ready/owned click pays through
-                // begin_build; the cancel corner runs the existing refund path. No UI timers.
-                if (r.clicked_build) capital.begin_build(world, e, ctx.res, G);
-                if (r.clicked_cancel) _ = capital.cancel_build(world, e, ctx.res);
-            }
-        }
+        // Keyed by the recipe's catalog index (inside the quote), not its sorted position, so a
+        // row's focus and state follow the recipe through a re-sort or a filter change.
+        const r = try capital_row(rows, world, e, ent.q, ent.kind);
+        // The lifecycle is the simulation's. A ready/owned click pays through `begin`; the
+        // cancel corner runs the existing refund path. No UI timers.
+        if (r.clicked_build) capital.begin(world, e, ctx.res, ent.q.gi);
+        if (r.clicked_cancel) _ = capital.cancel_build(world, e, ctx.res);
     }
 
-    // --- the Shelter milestone, pinned below and outside the filter --------------
+    // --- the milestone, pinned below and outside the filter ------------------------------
     try shelter_goal(outer, world, e, "goal");
     return outer;
 }
 
-/// The Shelter as a `milestone_goal` — outside the recipe filtering/sorting because it
-/// is the act's ending, not an item in it. Its lifecycle and requirements recompute live.
+/// The act's milestone good as a `milestone_goal` — outside the recipe filtering/sorting
+/// because it is the act's ending, not an item in it. Its lifecycle and requirements
+/// recompute live.
 fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
     const ctx = parent.ctx;
-    const G = comp.Shelter;
-    if (world.has(e, G)) return; // owning it raises the curtain — the act is over
-
-    const cost = (G{}).requires;
-    const u = (G{}).unlock;
-    const stock = world.get(e, comp.InventoryMaterial).?;
+    const cat = &ctx.res.catalog;
+    if (capital.ownsMilestone(world, e, cat, .act_one)) return; // owning it raises the curtain — the act is over
+    var found: ?u16 = null;
+    for (cat.goods, 0..) |g, i| {
+        if (g.milestone == .act_one) found = @intCast(i);
+    }
+    const gi = found orelse return;
+    const quote = capital.quote(world, e, cat, gi) orelse return;
+    const rec = quote.rec;
+    const price = rec.requires.?;
+    const u = rec.unlock orelse return;
     const vigor = world.get(e, comp.Vigor).?;
-    const food = world.get(e, comp.InventoryFood).?;
-    const kinds = capital.goods_owned(world, e);
-    const busy = world.get(e, comp.Busy);
+    const food = ledger.balance(world, e, .food);
+    const kinds = capital.goodsOwned(world, e, cat);
 
     // Lifecycle from authoritative state: locked until the standing conditions hold, then
-    // unfunded until materials/energy are on hand and hands are free, then ready.
-    const unlocked = capital.unlock_met(world, e, G);
-    const funded = cost.materials <= stock.v and cost.energy < vigor.v and busy == null;
-    const state: milestone_mod.Lifecycle = if (!unlocked) .locked else if (!funded) .unfunded else .ready;
+    // unfunded until the order and energy are on hand and hands are free, then ready.
+    const state: milestone_mod.Lifecycle = switch (quote.standing) {
+        .needs, .unlock => .locked,
+        .busy, .energy, .short => .unfunded,
+        .ready => .ready,
+    };
 
-    // Cost/copy: `60m 6e · 6.0d` — materials, energy, days.
-    var cbuf: [40]u8 = undefined;
-    const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e \u{00B7} {d:.1}d", .{ cost.materials, cost.energy, cost.hours / 24.0 }) catch "?";
+    // Cost/copy: `60m 6e · 6.0d` — the order, energy, days.
+    var cbuf: [48]u8 = undefined;
+    const cost_txt = blk: {
+        var cw = std.Io.Writer.fixed(&cbuf);
+        for (rec.input) |l| if (l.per == .once) {
+            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(l.item) }) catch {};
+        };
+        cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 }) catch {};
+        break :blk cw.buffered();
+    };
 
     // The compact bar and expanded requirement row read the same authoritative checks. Values
     // are separate strings so the shared card can color each met/unmet output like the HTML.
     const vigor_met = vigor.v >= u.vigor_abs;
-    const food_met = food.v >= u.food;
+    const food_met = food >= u.food;
     const recipes_met = kinds >= u.goods;
-    const materials_met = stock.v >= cost.materials;
     var compact_buf: [32]u8 = undefined;
     var vigor_buf: [24]u8 = undefined;
     var food_buf: [24]u8 = undefined;
     var recipes_buf: [16]u8 = undefined;
-    var materials_buf: [24]u8 = undefined;
-    const compact = std.fmt.bufPrint(&compact_buf, "materials {d:.0}/{d:.0}", .{ stock.v, cost.materials }) catch "materials";
-    const requirements = [_]milestone_mod.Requirement{
-        .{ .label = "VIGOR", .value = std.fmt.bufPrint(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met },
-        .{ .label = "FOOD", .value = std.fmt.bufPrint(&food_buf, "{d:.1}/{d:.0}", .{ food.v, u.food }) catch "?", .met = food_met },
-        .{ .label = "RECIPES", .value = std.fmt.bufPrint(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met },
-        .{ .label = "MATERIALS", .value = std.fmt.bufPrint(&materials_buf, "{d:.0}/{d:.0}", .{ stock.v, cost.materials }) catch "?", .met = materials_met },
-    };
+    var order_bufs: [roster.max_lines][24]u8 = undefined;
+    var order_labels: [roster.max_lines][24]u8 = undefined;
+    var requirements: [3 + roster.max_lines]milestone_mod.Requirement = undefined;
+    var nreq: usize = 0;
+    requirements[nreq] = .{ .label = "VIGOR", .value = std.fmt.bufPrint(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
+    nreq += 1;
+    requirements[nreq] = .{ .label = "FOOD", .value = std.fmt.bufPrint(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = food_met };
+    nreq += 1;
+    requirements[nreq] = .{ .label = "RECIPES", .value = std.fmt.bufPrint(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met };
+    nreq += 1;
+    var compact: []const u8 = "";
+    var li: usize = 0;
+    for (rec.input) |l| {
+        if (l.per != .once) continue;
+        const have = ledger.held(world, e, cat, l);
+        const word = ha.actions.itemWord(cat, l.item);
+        const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
+        requirements[nreq] = .{ .label = label, .value = std.fmt.bufPrint(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
+        nreq += 1;
+        if (li == 0) compact = std.fmt.bufPrint(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, l.n }) catch word;
+        li += 1;
+    }
     const readiness = switch (state) {
         .locked => "not ready",
         .unfunded => "inputs short",
@@ -306,17 +341,17 @@ fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
 
     const m = try milestone_mod.milestone_goal(parent, id, .{
         .state = state,
-        .title = gt.display_name(G),
+        .title = rec.name,
         .summary = compact,
         .readiness = readiness,
         .kicker = "A PLACE FOR OTHERS",
         .cost = cost_txt,
         .copy = "a roof with room for four. you're not alone anymore.",
-        .requirements = &requirements,
+        .requirements = requirements[0..nreq],
         .explanation = "Hold 60 materials with a settled body and four kinds of goods.",
         .action = action,
     });
-    // Raising the shelter is the same begin_build lifecycle; the transition itself
-    // happens when the build completes in the simulation (no UI-local shortcut).
-    if (m.clicked) capital.begin_build(world, e, ctx.res, G);
+    // Raising the shelter is the same begin lifecycle; the transition itself happens when
+    // the build completes in the simulation (no UI-local shortcut).
+    if (m.clicked) capital.begin(world, e, ctx.res, gi);
 }

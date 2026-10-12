@@ -15,6 +15,8 @@ const ha = @import("ha");
 
 const comp = ha.comp;
 const capital = ha.capital;
+const ledger = ha.ledger;
+const roster = ha.roster;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
@@ -25,7 +27,7 @@ const World = ha.world.World;
 const Entity = ha.world.Entity;
 const Color = uic.Color;
 
-const gt = @import("./good_text.zig");
+const info = @import("./action_info.zig");
 
 /// The table's lanes, in order. The header and every row iterate this one array, so their
 /// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
@@ -133,30 +135,49 @@ fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary
     }
 }
 
-/// One row. `state` decides the colors and what the last two columns say; the caller has
-/// already decided the row belongs on screen at all (see `build_list`).
+/// The verb or tool a recipe's first `needs` names, in the player's words.
+fn needsName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
+    if (rec.needs.len == 0) return "a tool";
+    const id = rec.needs[0];
+    if (cat.action(id)) |a| return a.name;
+    if (cat.good(id)) |g| return g.name;
+    return "a tool";
+}
+
+/// `48m 2e` — the build order, then the energy.
+fn costText(buf: []u8, rec: *const roster.Good) []const u8 {
+    var cw = std.Io.Writer.fixed(buf);
+    for (rec.input) |l| if (l.per == .once) {
+        cw.print("{d:.0}{s} ", .{ l.n, info.letterOf(l.item) }) catch {};
+    };
+    cw.print("{d:.0}e", .{rec.requires.?.energy}) catch {};
+    return cw.buffered();
+}
+
+/// One row over a recipe's quote. `kind` decides the colors and what the last two columns
+/// say; the caller has already decided the row belongs on screen at all (see `build_list`).
 pub fn capital_row(
     parent: El,
     world: *World,
     e: Entity,
-    comptime GoodT: type,
-    index: usize,
+    q: capital.Quote,
     kind: Kind,
-    reach: f32,
 ) !Row {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const cost = (GoodT{}).requires;
+    const cat = &ctx.res.catalog;
+    const rec = q.rec;
 
-    // `index` is the recipe's catalog index: the row's identity across re-sorts and filters.
-    const row = try parent.item("r", index);
+    // The quote's index is the recipe's catalog index: the row's identity across re-sorts
+    // and filters.
+    const row = try parent.item("r", q.gi);
     const hot = kind == .ready;
     const row_key = row.get().key;
-    // The row is a composite tile: the good's display name is its accessible name and `hot`
-    // is the same enabled fact the build click gates on.
-    const q = row.control(.{ .enabled = hot, .name = gt.display_name(GoodT), .role = .tile });
+    // The row is a composite tile: the good's name is its accessible name and `hot` is the
+    // same enabled fact the build click gates on.
+    const ctl = row.control(.{ .enabled = hot, .name = rec.name, .role = .tile });
     const lit: Color = switch (kind) {
-        .ready => if (q.held or q.hovering or q.focused) th.acc else th.fg,
+        .ready => if (ctl.held or ctl.hovering or ctl.focused) th.acc else th.fg,
         .building => th.fg,
         .owned => th.dim,
         .reach, .blocked, .locked => th.dim,
@@ -166,24 +187,23 @@ pub fn capital_row(
     // The row's lanes are the header's: the same columns, widths and visibility.
     _ = row.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
-        .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
+        .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's type sub-label).
-    const type_word = if (capital.is_crude(GoodT)) "crude" else "made";
-    try name_cell(row, "nm", col(.recipe).w, gt.display_name(GoodT), type_word, lit);
+    const type_word = if (rec.tier == .crude) "crude" else "made";
+    try name_cell(row, "nm", col(.recipe).w, rec.name, type_word, lit);
 
-    var cbuf: [24]u8 = undefined;
-    const cost_txt = std.fmt.bufPrint(&cbuf, "{d:.0}m {d:.0}e", .{ cost.materials, cost.energy }) catch "?";
-    try cell(row, "co", col(.cost).w, cost_txt, faint, false);
+    var cbuf: [40]u8 = undefined;
+    try cell(row, "co", col(.cost).w, costText(&cbuf, rec), faint, false);
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
-        const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{cost.hours / 24.0}) catch "?";
+        const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
         try cell(row, "dy", col(.time).w, days_txt, faint, false);
     }
 
     if (col(.effect).visible(ctx)) {
-        try cell(row, "sa", col(.effect).w, gt.effect(GoodT), if (kind == .ready) th.fg else faint, false);
+        try cell(row, "sa", col(.effect).w, rec.copy.effect, if (kind == .ready) th.fg else faint, false);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
@@ -198,8 +218,8 @@ pub fn capital_row(
         .owned => _ = (try state_in.text("owned", "owned"))
             .with_style(.{ style.body, Style{ .text = th.line2 } }),
         .blocked => {
-            var nbuf: [32]u8 = undefined;
-            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{gt.prereq_name(GoodT) orelse "a tool"}) catch "needs a tool";
+            var nbuf: [40]u8 = undefined;
+            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{needsName(cat, rec)}) catch "needs a tool";
             _ = (try state_in.text("blocked", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
@@ -213,10 +233,15 @@ pub fn capital_row(
             _ = (try state_in.text("time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
         },
         .reach => {
-            const stock = world.get(e, comp.InventoryMaterial).?;
+            // How far the first line of the order is: `31/48m`.
             var rbuf: [24]u8 = undefined;
-            const txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}m", .{ stock.v, cost.materials }) catch "?";
-            try reach_meter(state_in, "meter", reach, th.line2);
+            var txt: []const u8 = "";
+            for (rec.input) |l| {
+                if (l.per != .once) continue;
+                txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(l.item) }) catch "?";
+                break;
+            }
+            try reach_meter(state_in, "meter", q.reach, th.line2);
             _ = (try state_in.text("materials", txt)).with_style(.{ style.body, Style{ .text = faint } });
         },
     }
@@ -234,10 +259,8 @@ pub fn capital_row(
         .ready => _ = (try action_in.text("build", "Build \u{2192}"))
             .with_style(.{ style.body, Style{ .text = lit } }),
         .owned => {
-            const stock = world.get(e, comp.InventoryMaterial).?;
-            const busy = world.get(e, comp.Busy);
-            const affordable = busy == null and stock.v >= cost.materials;
-            if (affordable) {
+            // Another unit is stock; offered whenever the quote would accept it.
+            if (q.ready()) {
                 const more = try action_in.div("more");
                 const mq = more.control(.{ .name = "Build +1", .role = .button });
                 _ = (try more.text("t", "Build +1"))
@@ -260,12 +283,12 @@ pub fn capital_row(
     // known only once it is built, so the row's published node is updated in place with the
     // relation (same key, first-seen paint order preserved).
     if (cancel_key) |ck| {
-        ctx.res.semantics.publish(uic.semantic.describeTile(row_key, gt.display_name(GoodT), hot, q.focused, &[_]u64{ck}));
+        ctx.res.semantics.publish(uic.semantic.describeTile(row_key, rec.name, hot, ctl.focused, &[_]u64{ck}));
     }
 
     return .{
         .kind = kind,
-        .reach = reach,
+        .reach = q.reach,
         // The corner sits inside the row, so hover still bubbles and keeps the row lit.
         // Its activation is consumed above; re-query after descendants for the action.
         // `clicked_build` fires for a ready row's whole-box click OR an owned row's `Build +1`.
@@ -331,4 +354,13 @@ test "wide BUILD table fits the expanded Act I content lane" {
     const content = cells + (columns.len - 1) * row_gap;
     try std.testing.expectEqual(@as(f32, 582), content);
     try std.testing.expectEqual(@as(f32, 594), content + 2 * row_pad_x);
+}
+
+test "the cost text is the order then the energy" {
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    var buf: [40]u8 = undefined;
+    try std.testing.expectEqualStrings("48m 2e", costText(&buf, cat.good("hatchet").?));
+    try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
+    try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
 }

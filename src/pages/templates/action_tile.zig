@@ -141,46 +141,47 @@ pub fn tile(
     return .{ .el = box, .clicked = !running and can and q.clicked };
 }
 
-/// A tile for one typed action component: formats price/band from the agent's own
-/// `requires`/`yields` and reports the affordability-gated click. Returns the tile and its
-/// activation (null if the agent doesn't hold the action); the caller places it and calls
-/// the simulation — a template never takes a domain operation as a parameter.
+/// A tile for one verb of the roster: formats price/band from the agent's quote and reports
+/// the affordability-gated click. Returns the tile and its activation (null if the agent
+/// doesn't hold the verb); the caller places it and calls the simulation — a template never
+/// takes a domain operation as a parameter.
 pub fn action_tile(
     parent: El,
     world: *World,
     e: Entity,
-    comptime ActionT: type,
+    ai: u16,
     id: []const u8,
-    name: []const u8,
 ) !?Tile {
     const ctx = parent.ctx;
-    if (!world.has(e, ActionT)) return null;
-    const act = world.get(e, ActionT).?;
-    const vigor = world.get(e, comp.Vigor).?;
+    const cat = &ctx.res.catalog;
+    const q = ha.actions.quote(world, e, cat, ctx.res.config, ai) orelse return null;
+    const rec = cat.actions[ai];
     // One body, one act: any work in progress disables every tile; the one being
     // performed shows the underbar instead of dimming.
     const busy = world.get(e, comp.Busy);
-    const ai = ha.bridge.actionIndexOf(&ctx.res.catalog, ActionT) orelse std.math.maxInt(u16);
     const running = busy != null and busy.?.isLabor(ai);
     const progress: ?f32 = if (running) 1.0 - busy.?.remaining / busy.?.total else null;
-    // Same strict energy gate as `begin_labor`: spending vigor to exactly 0 would be death.
-    const can = busy == null and vigor.v > act.requires.energy;
+    // The same gates `begin` applies: strict energy, payable inputs, a free body.
+    const can = q.ready();
 
-    // Price segment: `−{energy}e` then any additional input costs (e.g. Check traps'
-    // `−1m`), all *before* the middot; the duration is the trailing segment after it. Energy
-    // and materials use `fmt_amount` (one decimal only when fractional), so Forage reads `−1.7e`
-    // while Scavenge reads `−2e` (metric style).
+    // Price segment: `−{energy}e` then every input line (e.g. Check traps' `−1m`), all
+    // *before* the middot; the duration is the trailing segment after it. Amounts use
+    // `fmt_amount` (one decimal only when fractional), so Forage reads `−1.7e` while
+    // Scavenge reads `−2e` (metric style).
     const fmt = @import("../fmt.zig");
-    var ebuf: [8]u8 = undefined;
-    var mbuf: [8]u8 = undefined;
-    var cbuf: [24]u8 = undefined;
-    const etxt = fmt.fmt_amount(&ebuf, act.requires.energy);
-    const cost_txt = if (act.requires.materials > 0)
-        std.fmt.bufPrint(&cbuf, "-{s}e -{s}m", .{ etxt, fmt.fmt_amount(&mbuf, act.requires.materials) }) catch "?"
-    else
-        std.fmt.bufPrint(&cbuf, "-{s}e", .{etxt}) catch "?";
+    var cbuf: [40]u8 = undefined;
+    var cw = std.Io.Writer.fixed(&cbuf);
+    {
+        var ebuf: [8]u8 = undefined;
+        cw.print("-{s}e", .{fmt.fmt_amount(&ebuf, q.verb.requires.energy)}) catch {};
+    }
+    for (q.verb.input.slice()) |l| {
+        var nbuf: [8]u8 = undefined;
+        cw.print(" -{s}{s}", .{ fmt.fmt_amount(&nbuf, l.n), info.letterOf(l.item) }) catch {};
+    }
+    const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
-    const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{act.requires.hours}) catch "?";
+    const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{q.verb.requires.hours}) catch "?";
 
     // The prototype action tile always keeps the same two-line anatomy: name, then metrics.
     // Running state is already communicated by the ActivityStrip and the tile's progress
@@ -188,19 +189,22 @@ pub fn action_tile(
     // status row here, because it changes the tile height when an action starts.
     const state_txt: []const u8 = "";
 
-    // Band scaled by the same two-level factor `begin_labor` locks in (weak = ×0.7 below
-    // the WEARY threshold) — the promise is exactly what a click right now would pay.
-    const dom = info.dominant(act.yields);
-    const quality = ha.actions.yield_factor(vigor, ctx.res.config);
-    const lo = @round(dom.band.p10 * quality);
-    const hi = @round(dom.band.p90 * quality);
+    // Band scaled by the same two-level factor `begin` locks in (weak = ×0.7 below the
+    // WEARY threshold) — the promise is exactly what a click right now would pay.
     var ybuf: [16]u8 = undefined;
-    const yield_txt = if (lo == hi)
-        std.fmt.bufPrint(&ybuf, "+{d:.0}{c}", .{ hi, dom.letter }) catch "?"
-    else
-        std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{c}", .{ lo, hi, dom.letter }) catch "?";
+    var kind: ha.dist.Kind = .fixed;
+    var yield_txt: []const u8 = "+0";
+    if (info.dominant(cat, q.verb.output.slice())) |dom| {
+        kind = dom.kind;
+        const lo = @round(dom.band.p10 * q.quality);
+        const hi = @round(dom.band.p90 * q.quality);
+        yield_txt = if (lo == hi)
+            std.fmt.bufPrint(&ybuf, "+{d:.0}{s}", .{ hi, dom.letter }) catch "?"
+        else
+            std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
+    }
 
-    return try tile(parent, id, name, state_txt, cost_txt, duration_txt, dom.kind, yield_txt, can, progress);
+    return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress);
 }
 
 test "running action retains existing focus without becoming a new tab stop" {
