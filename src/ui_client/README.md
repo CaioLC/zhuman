@@ -22,9 +22,9 @@ The foundation owns the **roles** a widget paints from; the game owns the **valu
 `text` and `svg` may default a node's ink to `res.view.theme.fg` without reaching upward —
 `Theme` is this layer's own type, with its own defaults.
 
-**Design tokens are encoded once (KIT-01).** Colors split by *where a role belongs*: the ten
+**Design tokens are encoded once.** Colors split by *where a role belongs*: the ten
 foundation roles are on `Theme` (`bg`/`panel`/`line`/`line2`/`dim`/`fg`/`acc`/`warn`/`danger`
-and the KIT-01 addition **`good`** — success/gain, the semantic counterpart to `danger`), and
+and **`good`** — success/gain, the semantic counterpart to `danger`), and
 the game's finalized values live in `src/palette.zig`. Colors the engine has no concept of stay
 out of `Theme`: the terminal **ground** and the six **resource/sector** hues (Food/Water/Fuel/
 Metal/Minerals/Biomass) are game content in `palette.zig`, carried on `View` (`view.ground`,
@@ -61,7 +61,7 @@ pub const Node  = ui.Node(RenderData);
   A state with semantic defaults declares no-argument `init() T`; states without it
   explicitly use the engine's bitwise-zero fallback. Every fresh slot and reused hole
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
-  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail (TEXT-01); a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` (TEXT-02) while an `overflow` cell clips/ellipsizes a fixed width (TEXT-03) and `tracking` sets device-px letter-spacing (TEXT-04), and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail (TEXT-06). Since **TEXT-05** it also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
+  `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail; a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` while an `overflow` cell clips/ellipsizes a fixed width and `tracking` sets device-px letter-spacing, and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail. It also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
   `TabsState`, `StepState`,
   `TextInputState`, `LineState`, `GeometryState` and `SvgState`, plus the templates' logical states (`TabsState`, `SelectState`, `DisclosureState`, `SliderState`, `RailState`, `CatalogState`, `TradeState`, `ModalState`). `LineState` and `GeometryState` are the ones that carry
   *variable-length* data — a polyline's points, and an indexed triangle mesh's vertices/indices — since `RenderData` holds a single payload
@@ -121,7 +121,7 @@ the one shared `.clicked` flag, so changing the event-stage policy migrates them
 `.pressed` remains separately available for controls that need press-time behavior; text
 input uses it to distinguish an inside press from an outside focus-clear.
 
-**Consistent button semantics (KIT-03).** Every button (the `button` template and the icon
+**Consistent button semantics.** Every button (the `button` template and the icon
 controls built on `El`) follows one contract: the **whole outer box owns the interaction** and
 the label/icon is content; a **disabled** button cannot activate — it is not registered for
 focus (so keyboard Enter/Space can never reach it) and any pointer `.clicked` that lands on it
@@ -132,7 +132,7 @@ to an ancestor; the **pressed** state is visible (`.held` lifts the ink to `acc`
 pointer release produces. A **nested** cancel/close inside a row activates by consuming
 `.clicked` (`El.consume`), which clears the flag on itself *and* its ancestors so the row
 doesn't also act — while leaving `hovering` untouched, so the ancestor stays hovered. Colors
-follow the KIT-02 state→role mapping — `dim` when disabled, `acc` on held/hover/focus-visible,
+follow the state→role mapping — `dim` when disabled, `acc` on held/hover/focus-visible,
 else the resting ink — which the `style.btn_*` fragments encode for any control that composes
 them.
 
@@ -152,7 +152,7 @@ them after the screen blocks covered controls for hover, press, release, wheel, 
 without `modal_open` guards. Geometry-only or intentionally transparent overlays must opt out
 explicitly with `pass_through`.
 
-**Overlay controls on `El` (KIT-08).** `modal` adds a **focus trap**: it calls
+**Overlay controls on `El`.** `modal` adds a **focus trap**: it calls
 `ctx.beginFocusScope()` before the caller builds the dialog's focusables, and because a modal
 is stamped last, everything registered after that call is the trapped suffix — `moveFocus`
 (Tab/Shift+Tab) then cycles only within the dialog and can never land on a control the scrim
@@ -166,7 +166,7 @@ open starts clean.
 `tooltip` is now **pass-through** (`setPassThrough`): despite being stamped last it takes no
 pointer hit, so it never intercepts input to the control it describes; `clampToTerminal` keeps
 it inside the terminal rect. `text_input` remains backed by the authoritative `editor.zig`
-`LineEditor` model (INPUT-07).
+`LineEditor` model.
 
 ## Visual interaction state ownership
 
@@ -180,28 +180,26 @@ press origin even when motion shares the same SDL event batch, maps pointer trav
 clamped offset, applies the release position, and owner-releases. Capture-first routing keeps
 it dragging beyond its narrow track; focus loss/cancellation, lost ownership,
 disappearing overflow, and prune repair all terminate safely. `ThresholdDrag` exposes the
-same strict `>4` logical-pixel boundary as `PointerActivation`: future board/slider
-consumers can capture immediately while emitting no movement before threshold, and the
-activation state suppresses the tile/control click generated by a crossed gesture. The
-Act II board and a production slider do not exist yet, so no game-only placeholder was
-invented here.
+same strict `>4` logical-pixel boundary as `PointerActivation`: a drag-capable control can
+capture immediately while emitting no movement before threshold, and the activation state
+suppresses the tile/control click generated by a crossed gesture.
 
 `CursorState` resets to default each frame and accepts paint-order requests from hovered
 controls. Buttons/chips use pointer, disabled actions use not-allowed, text fields use
 text, and scroll thumbs use grab/grabbing. `PlatformCursors` owns the SDL system handles,
 falls back to the default when a shape is unavailable, and maps both grab variants to
 SDL's `move` cursor because SDL 3 exposes no distinct grab/grabbing shapes. The vocabulary
-also includes horizontal-resize for the future slider.
+also includes horizontal-resize.
 
 `ControlState` carries `disabled`, `focused`, `focus_visible`, `selected`, and `checked`.
 `publishControlState(ctx, key, state)` writes all five—including false—on every build.
 Authority stays elsewhere: enabled/affordability/readiness and row classification decide
 disabled; the focus registry decides text-input focus; `TabsState` and `CatalogState`
-decide tab/filter state; simulation `Metabolism.setting` decides ration selection.
+decide tab/filter state; simulation `Metabolism.rate` decides the eating-policy slider's
+position.
 The interaction slot is their cross-widget visual/semantic projection, never an
-independent toggle. Current desktop policy visibly outlines every focused text field, so
-its `focused` and `focus_visible` are both true; INPUT-06 may refine origin policy when
-keyboard command routing lands.
+independent toggle. Current desktop policy visibly outlines every focused control, so
+`focused` and `focus_visible` are both true.
 
 ## Focus binding
 
@@ -247,8 +245,8 @@ affordance; the keyboard clear is Ctrl+A then Backspace against the same model.
 
 ## Semantic model (`semantics.zig`)
 
-INPUT-08 adds a fully host-side accessibility model — the source INPUT-09's platform
-bridge will read, **not** a second source of truth. The generic `src/ui` engine knows
+`semantics.zig` is a fully host-side accessibility model — the source the accessibility
+bridge reads, **not** a second source of truth. The generic `src/ui` engine knows
 nothing about roles, labels, or announcements; everything here is keyed by the same stable
 `node.key` the interaction/focus/command registries use, so a control's semantics can
 never disagree with what it publishes through `publishControlState`.
@@ -286,13 +284,12 @@ authoritative widget/domain facts into a `SemanticNode`; controls call them righ
 they already call `publishControlState` (`text_input`/`modal`, and game `tabs`/`slider`
 /`build_list`/`capital_row`/`action_tile`/the modal header and offer rows). Honest
 limitations: `describeIconButton` and `describeProgressBar` take a caller-supplied name
-because a glyph or a bar has no string of its own, `expanded` is owned only by the dialog
-shell, and no production board *consumer* exists yet — the model describes the controls that
-do exist.
+because a glyph or a bar has no string of its own, and `expanded` is owned only by the dialog
+shell.
 
 ## Accessibility bridge (`a11y.zig`)
 
-INPUT-09 adds the host-side **bridge** that consumes the INPUT-08 model — it never
+`a11y.zig` is the host-side **bridge** that consumes the semantic model — it never
 re-derives a semantic fact. `Bridge` has a deterministic, allocation-free lifecycle that
 mirrors the registries: `init(provider)` installs a provider and goes `active`, per-frame
 `poll(snapshot, overflow, field_refused, channel)` forwards this frame's published snapshot
@@ -305,7 +302,7 @@ the snapshot only for the call and copies the last message into an owned `OwnedT
 holds no frame-arena or channel pointer across frames. `Resources` holds `a11y` (defaulting
 to the inert `NoopProvider`); `main` polls it right after `semantics.endBuild()`.
 
-The future Windows UIA seam is a narrow `Provider` vtable
+The Windows UIA seam is a narrow `Provider` vtable
 (`getRoot`/`elementFromKey`/`mapRole`/`raiseFocus`/`raiseAnnouncement`) — exactly what a
 `WM_GETOBJECT`-answering `IRawElementProviderFragmentRoot` needs. The default `NoopProvider`
 implements it as inert sinks (no element, custom role id `0`, no-op raises), so the whole
@@ -313,8 +310,8 @@ bridge runs and is tested with no platform surface, and a real provider slots in
 bridge, `src/ui`, or the semantics source changing.
 
 `Capabilities` is an honest report of what this build ships:
-`keyboard`/`visible_focus`/`non_color_state`/`live_region_plumbing` are `true` (all
-exercised today — see INPUT-04/06/07), and `screen_reader_export` is **`false`**. This build
+`keyboard`/`visible_focus`/`non_color_state`/`live_region_plumbing` are `true`, and
+`screen_reader_export` is **`false`**. This build
 exports no live screen-reader tree because a UIA provider must hook the SDL-owned window's
 `WndProc` to answer `WM_GETOBJECT`, and `zig-sdl3` 0.1.6 does not implement
 `SDL_SetWindowsMessageHook` (only the X11 hook exists); hand-rolled subclassing or forking
@@ -324,7 +321,7 @@ stays here in `ui_client`; `src/ui` remains accessibility-unaware.
 
 ## Reduced-motion policy (`motion.zig`)
 
-INPUT-10 adds a one-bit host-side **reduced-motion policy** that decides whether *optional*
+`motion.zig` holds a one-bit host-side **reduced-motion policy** that decides whether *optional*
 transitions animate or **snap** — while functional progress, state changes, pointer/focus
 cues, and the simulation always stay visible. `Policy { reduced_motion }` is resolved
 **once at init** (`App.setup`, right after `Resources.init`), stored on `Resources.motion`,
@@ -351,16 +348,14 @@ a preference was read.
 eating-policy slider position are *functional determinate progress/simulation readouts* — they remain
 visible under reduced motion, unchanged. The one genuinely decorative clock-driven
 oscillation is `status.heartbeat_color` (used only on the dev `mock.zig` showcase); under
-reduced motion it freezes its sine phase to the `0.5` midpoint via `Policy.phase`. No
-production optional transitions exist yet (no tween engine — that is RENDER-08), so the
-policy ships a reusable **snap gate**, `Policy.snap(T, to, value)`, returning the end state
-`to` when reduced motion is on and the caller's interpolated `value` otherwise, ready for
-RENDER-08 to route every future optional transition through one policy check. `src/ui`
-stays motion-unaware.
+reduced motion it freezes its sine phase to the `0.5` midpoint via `Policy.phase`. Optional
+transitions go through the tween registry (below), which snaps them through the policy's
+**snap gate**, `Policy.snap(T, to, value)` — the end state `to` when reduced motion is on,
+the caller's interpolated `value` otherwise. `src/ui` stays motion-unaware.
 
 ## Transition/tween state (`tween.zig`)
 
-RENDER-08 adds a small **host-layer tween registry** for the prototype's few *functional*
+`tween.zig` is a small **host-layer tween registry** for the prototype's few *functional*
 transitions — the Holdings column/gap collapse (`120ms`), a stock token's font change (`90ms`),
 and the board's opacity/stroke changes (`100–110ms`, named `holdings_s`/`stock_token_s`/`board_s`
 as seconds). It is a deliberately tiny **value provider**, not a general timeline engine and not
@@ -371,30 +366,30 @@ consumer reads `registry.value(id, fallback)` to drive a size, gap, opacity, or 
 `retarget(id, to, duration)` **interrupts/reverses from the current value** — a half-open rail
 glides back from where it is rather than snapping and re-animating — while a brand-new id sits
 at its target (a control's first appearance is its state, not a transition). It **obeys reduced
-motion** by routing through the INPUT-10 `motion.Policy`: when reduced motion is on, a tween
+motion** by routing through the `motion.Policy`: when reduced motion is on, a tween
 reports its end value immediately (the transition snaps, the functional end state always
 reached). Fixed-capacity and non-allocating (a full table drops a new id, so its `value` returns
 the fallback target — snap, never crash); `Resources.tween` holds it inline and `main` projects
 the motion policy onto it each frame. Pure and SDL-free (the caller supplies `dt`), so
 interpolation, interrupt/reverse, reduced-motion snap, and stable-key independence are unit-tested
-without a renderer or a clock. Its **first consumer is the KIT-05 Holdings/BODY rail**
-(`pages/templates/rail.zig`): the rail keys a tween by its own node id and rides the width
+without a renderer or a clock. Its consumers are the **Holdings/BODY rail**
+(`pages/templates/rail.zig`) and the Act I workspace's inter-column gap, which follows the
+same policy: the rail keys a tween by its own node id and rides the width
 between `tokens.rail.collapsed` (36) and `tokens.rail.expanded` (252) over `tokens.dur_rail_s`
 (120ms), so a toggle animates and a mid-transition re-toggle reverses smoothly; the collapse bit
-itself lives in a keyed `RailState` pool (distinct rails → separate ACTIONS/BUILD memories; the
-STRUCTURE rail is forced collapsed on entry without touching the others), and the vertical
-restore affordance is a chevron over a `.vertical`-fit (TEXT-06 CCW-90) label. StockToken (KIT-12)
-and the board (BOARD-05) read this registry when they land.
+itself lives in a keyed `RailState` pool (distinct rails → separate ACTIONS/BUILD memories; a
+rail built with `force_collapsed` overwrites only its own bit), and the vertical restore
+affordance is a chevron over a `.vertical`-fit label.
 ## Frame-local view metrics (`view.zig`)
 
-VIEW-01 computes a `ViewMetrics` once per frame in `build_ui`'s prologue and stores it on
+`view.zig` computes a `ViewMetrics` once per frame in `build_ui`'s prologue and stores it on
 `Resources.view.metrics`. Everything responsive reads it. It keeps **two scales apart**: the
 **DPI scale** (`dpi_scale` = drawable pixels ÷ window coordinates) is the crispness factor set
 onto `View.scale`, so text opens the font at the right device size (`type.toDevice`) and
-hairlines snap to whole device pixels (RENDER-06) — it does *not* change layout, which is
+hairlines snap to whole device pixels — it does *not* change layout, which is
 solved in logical (window-coordinate) space; and the **responsive class**, derived from the
 logical width against the prototype's `760/560/440` breakpoints, drives the layout branches
-(VIEW-04) and the framed/centered terminal (VIEW-03). `compute(logical_w, logical_h,
+and the framed/centered terminal. `compute(logical_w, logical_h,
 pixel_density)` is pure and SDL-free (the prologue supplies the window's coordinate size and
 `getPixelDensity`, degrading to the reference metrics on a query error), so the reference-fit,
 centering, and breakpoint math are unit-tested without a window. `terminal` is the terminal
@@ -402,7 +397,7 @@ rect in logical px — capped at the `900×820` reference and centered when fram
 760), else the full window; `width_class.atMost(.w560)` is the natural stacked-breakpoint test,
 and `metrics.framed()` gates the outer terminal chrome.
 
-**One logical→device scaling helper (VIEW-02).** The layout is solved in **device pixels** (the
+**One logical→device scaling helper.** The layout is solved in **device pixels** (the
 space the renderer draws), so every authored dimension is a *logical* px value multiplied by the
 frame scale exactly once, through `view.dp(logical, scale)` — the single conversion point. The
 El/style seams call it: `El.with_size` (`.fixed` extents), `with_gap`, `with_offset`,
@@ -416,16 +411,16 @@ prior-frame-geometry sites (the action-tile underbar and the page content box) d
 (`scale == 1`) every conversion is identity, so production is unchanged; the scale becomes
 load-bearing on a high-DPI display.
 
-**Centered terminal workspace (VIEW-03).** The `pages/templates/terminal.zig` shell is what a
+**Centered terminal workspace.** The `pages/templates/terminal.zig` shell is what a
 screen builds inside: it reads `metrics` and, when **framed** (logical width > 760), fills the
 window with the near-black terminal **ground** (`#090806`) and places a `metrics.terminal`-sized
-box — capped at `900×820` and centered — with a soft drop shadow (RENDER-05 `shadow.drop`), a
+box — capped at `900×820` and centered — with a soft drop shadow (`shadow.drop`), a
 hairline border, its own `bg`, and **clipped** internals, returning the inner box for the screen
 to fill. At **≤760** the terminal is the whole window (no ground/shadow/border/cap) — the
 prototype's full-width mode. `play_game`/`gameover`/`act_one_end` build into the returned content
 box. The terminal rect is scaled to device px once here.
 
-**One shell, region descriptors (KIT-04).** `terminal.zig` also exports `shell(ctx, opts)` —
+**One shell, region descriptors.** `terminal.zig` also exports `shell(ctx, opts)` —
 the single region skeleton every screen composes into, built on top of `terminal` (the chrome
 is unchanged). A screen passes a `ShellOptions` descriptor (its `act` identity, responsive
 `page_pad`/`section_gap`, and which optional regions it wants) and gets back a `Regions` struct
@@ -433,31 +428,30 @@ of `El` handles to fill: always `header` (thin top strip) and `body` (the growin
 surface), plus optional `rail`, `nav`, `market`, `activity`, and a bottom-anchored `footer` —
 each `null` unless requested. The interior is laid out in the prototype's arrangement (header ·
 optional strips · a grid row of `rail | body` · optional nav · footer), so a screen never
-hand-builds that graph again — Act I turns on `footer`, Act II will turn on `rail`/`nav`/strips
-against the same skeleton. **Overlay roots (tooltip/modal) stay the screen's own top-layer
+hand-builds that graph again — Act I turns on `rail`, `market`, `activity` and `footer` and
+places its tab strip inside its own surface; Act II adds `nav` against the same skeleton. **Overlay roots (tooltip/modal) stay the screen's own top-layer
 roots**, deliberately *not* children of the terminal box, so they float above the clip and can
 cover any control; the shell owns only the in-terminal regions. `play_game`/`gameover`/
 `act_one_end` all build through `shell` now.
 
-**Responsive branches (VIEW-04).** Screens and templates read `metrics.width_class.atMost(.w560)`
-(and `.w440`, `.w760`) to branch on the prototype's stacked breakpoints. What is wired today:
+**Responsive branches.** Screens and templates read `metrics.width_class.atMost(.w560)`
+(and `.w440`, `.w760`) to branch on the prototype's stacked breakpoints. The branches in place:
 the HUD page padding tightens to `10px` at ≤560, and the optional "Act I ·" run-context label is
-dropped at ≤560 (the functional Day counter always stays — reachability preserved). The page
-grid is already a single stacked column, so ≤760 stacking is inherent. The remaining prototype
-branches — the two/one action-column counts, hiding the BUILD effect/cost columns, and stacking
-the trade-dialog actions — attach to their templates when those land (KIT-15/17/18/21, the board
-BOARD-*) using the same `width_class.atMost` test; they have no consumer to branch yet.
+dropped at ≤560 (the functional Day counter always stays — reachability preserved); the action
+grid drops from two columns to one at ≤440; a BUILD row hides its time column at ≤560 and its
+effect column at ≤440, recomputing its width so the visible lanes stay aligned. The page grid
+is already a single stacked column, so ≤760 stacking is inherent.
 
-**Trade dialog wired (ACT1-17).** The KIT-21 `trade_dialog` now has a live consumer: the Act I HUD
-opens it as its own overlay root (drawn last, over the shell) when the Passerby strip's Hail is
-clicked and the `market.Encounter` is `present`. Its `TradeState` (mode + per-mode selection +
+**The trade dialog.** The Act I HUD opens `trade_dialog` as its own overlay root (drawn last,
+over the shell) when the Passerby strip's Hail is clicked and the `market.Encounter` is
+`present`. Its `TradeState` (mode + per-mode selection +
 an `open` lifecycle flag) rides on the *stable* market-strip node so it survives the frame-arena
 rebuild; the dialog takes that state by pointer rather than owning it on the transient modal box.
 Offers are built in the page from live `market.Quote`s (buys from the passerby's satchel, sells
 from the diminishing schedule), and a confirmed offer routes to `barter.resolve` — so the header,
 Holdings rail, and log refresh the same frame because they read live world state after the resolve.
 
-**Resize without state loss (VIEW-05).** Because the UI is immediate-mode — `build_ui`'s
+**Resize without state loss.** Because the UI is immediate-mode — `build_ui`'s
 prologue recomputes `ViewMetrics` every frame and the tree is rebuilt from the arena — a
 resize needs no relayout hook: layout, clip, and scroll limits recompute for free, and all
 per-view state (focus, tab selection, query/sort/collapse, scroll offset) survives because it
@@ -468,8 +462,7 @@ hazard is the **one-frame clickable ghost**: the event stage routes pointer hits
 `geometry_stale` flag and cancels any in-flight gesture; while set, pointer **activation**
 (press → click) is suppressed, and the flag is cleared right after the frame re-stamps at the
 new size. So a click during the stale frame is dropped rather than routed to a ghost, and
-normal interaction resumes the moment geometry is fresh. Camera clamping is deferred with its
-consumer (the board is not built).
+normal interaction resumes the moment geometry is fresh.
 
 ## Paint features (`features/`)
 
@@ -492,36 +485,35 @@ tile. Adding a visual is one module + one `list` entry + one `RenderData` field,
 engine change; `assertFeature` turns a drifted descriptor into a build error rather than a
 silently undrawn aspect.
 
-**`geometry` — colored triangles and honest thick polylines (RENDER-03).** Backed by SDL's
+**`geometry` — colored triangles and honest thick polylines.** Backed by SDL's
 `renderGeometry`, it draws untextured per-vertex-colored triangle meshes: a convex-polygon
 fill (a hex body, a marker) and a thick polyline with correct **miter joins** (bevel fallback
 past the miter limit) and butt/square **caps** (a hex rail, a distribution curve, a slider
 diamond, a diagonal indicator). It is the second *variable-length* feature after `line`: a
 mesh's vertex/index count does not fit in a `RenderData` payload, so the vertices live in a
 pooled `GeometryState` and the payload (`?Geometry`) carries only a per-mesh `opacity`
-multiplier (the RENDER-07 dimming hook). Points are **node-local unit-square** coords like
+multiplier (the dimming hook). Points are **node-local unit-square** coords like
 `line`, so a shape survives resize/zoom; `draw` maps them to device px through the node's box,
 converts each per-vertex `Color` to SDL's float `FColor` with opacity folded into alpha, and
-submits one indexed draw (the RENDER-01 `.blend` baseline makes vertex alpha composite, and
+submits one indexed draw (the `.blend` baseline makes vertex alpha composite, and
 the render walk's clip stack crops the triangles). The tessellation math —
 `fillConvex`/`fillConvexMulti` fan triangulation and `strokePolyline` — lives **SDL-free** in
 `features/geometry_tess.zig` with a bounded `Mesh` builder that **refuses an over-capacity mesh
 as a whole** (no torn triangle), so the whole fan/join/cap surface is unit-tested without a
-graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zig`'s
-first-segment-normal thick approximation is **not** yet retired — that waits until the board
-migrates onto this feature (roadmap RENDER-03).
+graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zig` still
+widens a polyline along its first segment's normal for its own callers (roadmap RENDER-09).
 
-**Linear-gradient composition (RENDER-04).** The same feature draws an explicit linear
+**Linear-gradient composition.** The same feature draws an explicit linear
 gradient: `El.gradient(dir, stops, opacity)` fills the node box along `.horizontal`/`.vertical`
 through an ordered list of `{ pos, color }` stops, tessellated (`fillGradient`) into a quad
 strip whose per-vertex colors `renderGeometry` interpolates. It is deliberately narrow — the
 two axis-aligned directions and explicit stops the prototype uses, **not** a CSS gradient
 grammar. Two stops at the **same** position make a **hard split** (the eating-slider track:
 `acc` then `line2`); a `tint → transparent` pair (an `a = 0` end stop) makes a **wash** (a
-milestone/state fade), the transparent end compositing over what is under it via the RENDER-01
-`.blend` baseline. Stops carry a full `Color`, so alpha rides along. The named consumers (the
-range slider KIT-10/KIT-19, the milestone component KIT-20) are not built yet, so this ships
-the primitive and its stops explicitly, tested SDL-free.
+milestone/state fade), the transparent end compositing over what is under it via the
+`.blend` baseline. Stops carry a full `Color`, so alpha rides along. The `slider` template
+draws its split track with it and `milestone_goal` its wash; the tessellation is tested
+SDL-free.
 
 Clipping is *not* a feature. It is `Layout.overflow` in the engine, because it is geometry
 two consumers read (the render walk, and eventually hit-testing), not a paint the backend
@@ -535,7 +527,7 @@ node is a recursive pre-order paint carrying a clip stack: apply the inherited c
 clip for the subtree if this node is `.clip`. The traversal and the clip stack live here;
 the primitives live with their features, so adding a visual never edits this file.
 
-**Alpha-blending policy (RENDER-01).** The renderer's draw blend mode is set to `.blend`
+**Alpha-blending policy.** The renderer's draw blend mode is set to `.blend`
 explicitly — once at renderer creation (`main.zig`), and again at the top of every
 `draw_tree` so the baseline is self-healing after a device reset. SDL's default is `.none`
 (source *replaces* destination, ignoring `a`), which would render a translucent hover row,
@@ -551,16 +543,16 @@ translucent aspect is authored, not a separate feature. The dev `mock.zig` showc
 a "Blending" fixture — a translucent row-hover tint, a backdrop scrim over a bright block, a
 dimmed locked tile, and a stacked-band wash — that reads correctly only when blending is on.
 
-**Crisp hairlines at scale (RENDER-06).** A one-logical-pixel border, outline, focus ring, or
+**Crisp hairlines at scale.** A one-logical-pixel border, outline, focus ring, or
 rail must stay a crisp whole-device-pixel line at any DPI scale, or it anti-aliases into a
 blurry 1–2px smear and adjacent columns/rails **shimmer** as their sub-pixel coverage shifts.
 `paint.hairline(logical_w, scale)` rounds a hairline width to a whole number of device px
 (floored at 1), and `paint.snap(device_coord)` puts a hairline edge on a whole-pixel boundary.
 The `outline` feature snaps its box edges and bar thickness through these; the `line` feature
-snaps its stroke width. Today `View.scale` is `1`, so both are identity for integer-authored
-geometry (production is unchanged); they become load-bearing when VIEW-01 feeds a real
-fractional DPI factor. Pure and SDL-free, tested at scale ≠ 1.
-**Per-node visual opacity (RENDER-07).** A node carries an optional `render_data.opacity`
+snaps its stroke width. At DPI 1 both are identity for integer-authored geometry; a
+high-DPI display's fractional `View.scale` is what makes them load-bearing. Pure and SDL-free,
+tested at scale ≠ 1.
+**Per-node visual opacity.** A node carries an optional `render_data.opacity`
 (0..1, default 1) — *not* a paint feature but a render-walk modulation. `draw_node` carries an
 inherited opacity down the tree (alongside the clip stack), multiplies each node's own opacity
 into it, folds the product into **every** feature's paint alpha (`paint.applyOpacity` for the
@@ -576,18 +568,17 @@ reads it, so a dimmed node's clickability is unchanged — state logic decides t
 
 SDL has no blur, so the prototype's soft drop shadows (`box-shadow: 0 16px 80px #000a` on the
 terminal, `0 18px 80px #000d` on a dialog, `0 4px 14px #0008` on a popup) are approximated by
-a small **bounded stack of translucent-black rectangles** (RENDER-05) — each a little wider
+a small **bounded stack of translucent-black rectangles** — each a little wider
 and more offset than the last, at low alpha, building a soft penumbra without a real gaussian.
 Deliberately understated: flat black translucency, no rounded corners, no gloss. The pure,
 SDL-free `shadow.layers(Spec)` turns a prototype-style `{ offset_y, blur, base_alpha, count }`
 into ordered `Layer`s (outermost widest/faintest → inner tightest/darkest, each carrying the
 full drop offset, alpha divided across the layers so they *sum* to the intended darkness) and
 is unit-tested without a renderer. `shadow.drop(...)` is the thin `El` emitter: call it before
-building a box so the layers paint under it (siblings paint in child order); the RENDER-01
+building a box so the layers paint under it (siblings paint in child order); the
 `.blend` baseline composites them. `shadow.backdropColor(ground)` is the modal/dialog scrim —
 the near-black terminal ground at the prototype's `0xd9` alpha, for the fullscreen root a modal
-already builds. The named consumers (the centered terminal VIEW-03, the dialog/popup shadows
-KIT-08/09, the modal backdrop KIT-08) wire this in when they land.
+already builds. The framed terminal draws its drop shadow through `drop`.
 
 ## Five-pass profiling
 
@@ -597,11 +588,9 @@ across roots, then times aggregate `stamp_rects` and `draw_tree` loops. A generi
 Presentation, simulation, event polling, and UI construction are intentionally outside
 this diagnostic: the question is whether stamping is material relative to the other four
 UI tree passes. Representative worst-case capture remains QA-17; absent that evidence,
-the existing paint-order stamp walk stays unchanged. A bounded 600-frame desktop smoke
-capture on 2026-09-07 (current Act I screen, development build) reported averages of
-4.7µs intrinsic, 6.9µs relative/grow, 7.8µs placement, 8.2µs stamping, and 2370.5µs
-drawing: stamping was 0.3% of these five measured passes (93.6µs max in that window).
-This is evidence against a speculative rewrite, not a QA-17 worst-case result.
+the existing paint-order stamp walk stays unchanged. A development smoke capture on the
+Act I screen put stamping well under 1% of the five measured passes — evidence against a
+speculative rewrite, not a worst-case result.
 
 ## Content: elements and the `El` handle (`elements.zig`)
 
@@ -654,7 +643,7 @@ or under a roving group), activation, consumption of a disabled click, focus acq
 click, `ControlState` and semantic publication, the cursor request — once, for the node it is
 called on, returning the node's interaction read after publication. The caller keeps its
 enabled gate, its accessible name and role, and the chrome it paints from the result. Every
-control in the templates goes through it, so the KIT-03 contract holds by construction rather
+control in the templates goes through it, so the button contract holds by construction rather
 than by each template remembering it. A composition that changes selection or expansion on the
 click reads `query()` first and passes the new fact in, so the published bit is current on the
 click frame.
@@ -668,7 +657,7 @@ hidden direct child's slot alive from its always-built owner, without building t
 **Who owns a template's state.** Every stateful template takes an optional pointer: null and
 it owns the slot on its own node; a pointer and the caller owns it — the tab strip's `active`,
 a select's `value`, a disclosure's `expanded`, the rail's `collapsed`, a scroll view's
-`ScrollState`, the catalog's `CatalogState`. A view that is sometimes not built keeps its state
+`ScrollState`, the catalog's `CatalogState`. A view that is only sometimes built keeps its state
 on the node that is always built and passes pointers down: the Act I surface holds BUILD's
 catalog state and search editor, so hiding the tab prunes nothing. A pointer from `state(T)`
 is valid for the frame as long as no slot of the same type is acquired after it (the pool may
@@ -698,9 +687,9 @@ its queried key on press, lets subsequent `mark` calls route motion/release flag
 owner outside its box, then owner-releases; the event layer cancels capture and pending
 activation on platform cancellation or window-focus loss. Disappearing owners are pruned
 automatically. This is still generic mechanism: host `PointerActivation` owns pointer
-identity and click suppression, while `ui_client.drag` owns concrete math. Both production
-scroll thumbs now capture and owner-release; `ThresholdDrag` shares the strict `>4px`
-boundary for the future Act II board and slider, neither of which exists in production yet.
+identity and click suppression, while `ui_client.drag` owns concrete math. The scroll view's
+thumb and the slider capture and owner-release; `ThresholdDrag` shares the strict `>4px`
+boundary with pointer activation.
 
 **Why a handle rather than `*Node` methods:** applying a `font` re-measures the text, which
 needs the font backend on `ctx`, and the engine's `Node` is deliberately ctx-agnostic. `El`
@@ -718,12 +707,12 @@ The function form is what lets one mechanism cover all three cases: static prese
 themed colors (they need `ctx.res.view.theme`), and interaction-aware chrome (a button's
 hover color reads `node.query(ctx)` on the node it was just handed).
 
-**The primitive fragment library (KIT-02).** `style.zig` ships the shared vocabulary of
+**The primitive fragment library.** `style.zig` ships the shared vocabulary of
 *look* every template composes from, so a call site names an intent, not a color: surfaces
 (`panel`, `section_heading`), the button family (`btn_primary`/`btn_secondary`/`btn_text`/
 `btn_icon`/`btn_link` — a shared `btn_ink` maps published state → color: `dim` disabled,
 `acc` on held/hover/focus-visible, else the variant's resting ink), `tab`/`chip`/`tag`,
-semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the KIT-01 roles
+semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the roles
 including `good`), interaction chrome (`row_hover`, `focus_ring` — drawn **only** on
 `.focus_visible`, never bare hover — `disabled_chrome`, `selected_chrome`, `provisional` the
 dim-dashed placeholder box), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
@@ -743,8 +732,8 @@ catches the mistake; `Style` stays uniform rather than typed per widget so tuple
 composition stays free.
 
 The style payload carries every *render-affecting look* an aspect has, each an optional
-field that folds last-non-null-wins (RENDER-02). For text that is `text` (glyph ink), `font`
-(logical size), `tracking` (em letter-spacing), and `transform` (case) — the TEXT-04
+field that folds last-non-null-wins. For text that is `text` (glyph ink), `font`
+(logical size), `tracking` (em letter-spacing), and `transform` (case) — the
 typography contract. For a texture aspect it is `tint`: a set `tint` recolors a present `svg`
 raster (rasterized white, tinted at blit — the same model as the `text` composite), so a
 template styles an icon's color through the fold instead of assigning `render_data.svg`
@@ -768,8 +757,8 @@ from reusable pieces; placement does not, because a node sits in exactly one pla
 
 ## Color: roles here, values in the game (`theme.zig`)
 
-`Theme` is nine named roles — `bg`, `panel`, `line`, `line2`, `dim`, `fg`, `acc`, `warn`,
-`danger` — and **every one is defaulted**, to a plain greyscale plus three conventional
+`Theme` is ten named roles — `bg`, `panel`, `line`, `line2`, `dim`, `fg`, `acc`, `warn`,
+`danger`, `good` — and **every one is defaulted**, to a plain greyscale plus four conventional
 semantic hues. That default exists so the layer is complete on its own: a content leaf
 needs ink, and requiring a palette before anything renders would make an unstyled node
 invisible. The defaults are deliberately not anyone's visual identity, so a screen that
@@ -781,10 +770,19 @@ never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`)
 Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
 `ctx.res.view.theme` — none of them imports the palette module.
 
-The typography scale lives beside the roles: `default_font` (14) is what a text leaf renders
-at when nothing styles it, and `body` is defined *from* it, so "unstyled" and "explicitly
-body" cannot drift. `h3`/`h2`/`h1` step up from there. `font.zig` is the backend — a lazy
-size-to-font cache — and owns no typography; `Fonts.init` takes the size to pre-warm.
+The typography contract lives in `type.zig` as one role table — body `14`, small `11`,
+heading `21` at `−0.04em`, and the uppercase eyebrow `11` at `+0.07em` — all regular weight,
+with `−0.025em` tracking elsewhere; the unstyled default is defined *from* `body`, so
+"unstyled" and "explicitly body" cannot drift, and `style.body/small/heading/eyebrow` are its
+fragment projections (`h3` aliases `heading`; `h1`/`h2` are display sizes above the
+contract). `toDevice` is the single logical→device multiply for a font size, and
+`deviceTracking` rounds letter-spacing to whole device pixels, which is what keeps measure
+and draw bit-identical. SDL_ttf has no letter-spacing, so tracking is applied per codepoint
+cluster in the host's own measure/draw walk — glyphs rasterize one cluster at a time, which,
+with the ligature-free font build, is what rules ligatures out. `font.zig` is the backend — a
+lazy size-to-font cache keyed by device px — and owns no typography; `Fonts.init` takes the
+size to pre-warm. The face is JetBrains Mono NL; its provenance and license are in
+`docs/fonts.md`.
 
 `theme.zig` is a **leaf**: it imports only `sdl3`, never the engine or `ctx_binding`. That
 is what lets `res.zig` hold a `Theme` on `View` with no import cycle — `res.zig` → this →
@@ -798,7 +796,7 @@ palette blend and a pulsing readout both need.
 glyph cache on every call and rescaling a loaded pixel font is lossy. A text leaf measures
 at `font.default_px`; a resolved `font` fragment re-measures at its size.
 
-### Constrained multiline text (TEXT-02)
+### Constrained multiline text
 
 A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
 over the content box, the fast path dense rows pay nothing for. `text_fit(id, str, .{ .wrap = max_w })` opts a node into **constrained multiline**: it stores an explicit
@@ -810,7 +808,7 @@ The line breaking lives in `features/wrap.zig` as a **pure, allocation-free** ro
 callback-free at the engine boundary *and* SDL-free to test. `features/text.zig` backs the
 `Measurer` with the live font, and **both** `attach` (measure) and `draw` (render) run the
 *same* routine over the same metrics — so the reserved box and the drawn glyphs cannot drift,
-the TEXT-01 "measure and draw read one source" invariant extended to N lines. The algorithm
+the "measure and draw read one source" invariant extended to N lines. The algorithm
 is greedy word wrap: it packs space-separated words while the line fits, breaks on `\n`
 (`\n\n` yields a genuine empty line), collapses run-of-space at breaks, and hard-breaks a
 single over-long word on **codepoint boundaries** via `TTF_MeasureString` (always ≥ 1
@@ -823,12 +821,12 @@ line's descent, so a wrapped block still baseline-aligns as the final line in a 
 Wrap is **placement, not style** (it sets a measurement constraint), so it is imperative like
 `with_size`; a later `with_style(.{ font })` re-measures through the same shared routine and
 re-wraps at the same width. `wrap_width` stays **POD** (spans are recomputed, never stored),
-so the pool contract is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a
-too-long source is still refused whole and reserves a zero box, wrapping or not. The explicit
-width is the seam VIEW-01's `ViewMetrics` will later feed; today `log_view` passes the scroll
-column width and `act_one_end` passes an explicit dialog prose width.
+so the pool contract is unchanged and the `cap = 256` **whole-refusal** is preserved — a
+too-long source is still refused whole and reserves a zero box, wrapping or not. The width is
+a logical value scaled once through `view.dp`; `log_view` passes its column width and
+`act_one_end` its dialog prose width.
 
-### Single-line overflow cells (TEXT-03)
+### Single-line overflow cells
 
 Where a label must live in a slot of an **explicitly allocated width** — a catalog name
 column, a status readout in a narrow tile — `text_fit(id, str, .{ .cell = .{ .mode, .width } })` opts the node into a
@@ -862,12 +860,12 @@ label. Only the *visible glyphs* are bounded:
   without drawing that cell.
 
 Both modes keep `overflow` **POD** (the fit is recomputed, never stored), so the pool contract
-is unchanged and TEXT-01's `cap = 256` **whole-refusal** is preserved — a refused string draws
+is unchanged and the `cap = 256` **whole-refusal** is preserved — a refused string draws
 nothing and reserves the cell (or zero) box, cell or not. `.visible` + 0 is the unchanged
 fast/wrapped path. Integrated at two representative sites: `capital_row`'s name column
 (`.ellipsis` at its fixed column width) and `mock`'s heartbeat readout (`.clip` at 64px).
 
-### Rotated collapsed-rail copy (TEXT-06)
+### Rotated collapsed-rail copy
 
 The collapsed Holdings rail carries its `HOLDINGS` label set vertically, reading
 bottom-to-top — a 90° counter-clockwise turn. `TextState.orientation` names the only two
@@ -879,7 +877,7 @@ its bounding box stays axis-aligned and no broader non-rectangular hit-geometry 
 needed.
 
 Orientation is a **final-blit transform, not a composite-pixel input**. The glyphs still
-rasterize into the TEXT-05 upright white composite exactly as horizontal text does, so
+rasterize into the upright white composite exactly as horizontal text does, so
 orientation is *not* a cache-key dimension — switching a node between horizontal and vertical
 reuses the same cached texture with no glyph re-raster or re-upload. `remeasure` applies a
 pure axis transform (`orientMetrics`) to the upright metrics: horizontal keeps them, and
@@ -890,9 +888,8 @@ footprint** — layout, focus, and hit geometry agree with the rendered pixels b
 never rotated independently. At blit, the upright `w×h` texture is centered on the swapped
 `h×w` content box and drawn with SDL's `renderTextureRotated` at 270° clockwise (= 90°
 counter-clockwise) about its own center, landing the final pixels exactly on the oriented box.
-The placement is pure geometry (`blitPlacement`), tested SDL-free. The `mock` showcase carries
-a 36×124 collapsed-rail stand-in whose `.vertical`-fit `HOLDINGS` label reads bottom-to-top at
-the prototype's 9px / 0.09em collapsed-rail density.
+The placement is pure geometry (`blitPlacement`), tested SDL-free. The collapsed rail's
+`HOLDINGS` label reads bottom-to-top at the prototype's 9px / 0.09em collapsed-rail density.
 
 ## Frame assembly (`tree.zig`)
 

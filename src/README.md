@@ -10,9 +10,9 @@ The UI engine is [`ui/README.md`](ui/README.md) and its host binding is
 
 ## The model
 
-The first slice is **one actor under scarcity** — Robinson Crusoe economics, no exchange and
-no money. There is deliberately **no world and no space**: everything the player sees and does
-is UI.
+The first slice is **one actor under scarcity** — Robinson Crusoe economics, plus a passing
+merchant for the first barter; no money. There is deliberately **no world and no space**:
+everything the player sees and does is UI.
 
 The resource model separates survival from accounting:
 
@@ -27,9 +27,25 @@ The resource model separates survival from accounting:
   for the market.
 
 **Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
-every tick at the rate the player selects (`comp.Metabolism.setting`: ration ½× / normal /
-feast 2×), and an empty larder drains vigor instead. Because labor's energy gate is strict —
-an action can never take vigor to zero — **starvation is the only path to death**.
+every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
+multiplier in `[0.5, 2.0]` (`1.0` at normal) that the Eating Policy slider sets; `Config` owns
+the range and default, and `Config.clampMetabolism` is the one place a rate is made legal. An
+empty larder drains vigor instead. Because labor's energy gate is strict — an action can never
+take vigor to zero — **starvation is the only path to death**.
+
+**Starting values live on the components.** `Vigor`, `InventoryFood`, and `Metabolism` carry
+field defaults, `spawn_agent` spawns them default-valued, and `baselines.zig` *reads* those
+defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, so Holdings can show
+current-vs-base margins against a value that cannot drift from the spawn.
+
+**The BODY readouts are the sim's own arithmetic.** `body.project` takes larder units and
+quality, the vigor deficit and ceiling, base metabolism, the rate, and `vigor_per_food`, and
+returns food coverage in days plus a tagged `Recovery` — `at_ceiling`, `no_food`,
+`no_quality`, `partial`, or `recovering { days }` — using the same products `metabolize`
+applies, so the projection and the loop agree by construction. `eating.zig` is the slider's
+side of it: `rate(value) = 0.5 × 4^(value/100)` over a `0..100` slider, its inverse
+`valueFromRate`, the policy word ladder (meager … lavish), and the per-act coverage/recovery
+constants; it imports nothing and serves both the template and a future system.
 
 That yields the two praxeological margins the game is about: *labor vs. leisure* (working
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
@@ -37,8 +53,8 @@ later* (act for food and materials now, or spend materials and hours on capital)
 
 Death is total: a start-over wipes everything accumulated (`res.sim.reset()`).
 
-The decision is split **`decide → act`**. The player is the only decider today; AI deciders
-are meant to feed the same options later.
+The decision is split **`decide → act`**. The player is the only decider; the roadmap's AI
+deciders are meant to feed the same options.
 
 ## Main loop (`main.zig`)
 
@@ -67,10 +83,12 @@ Each frame:
    only SDL quit/terminating exits the process.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
-3. **Update** — `ecs.run(&world, &res, system)` per system, in the order below.
+3. **Update** — the tween registry advances by the frame `dt` and takes the reduced-motion
+   policy, then `ecs.run(&world, &res, system)` per system in the order below, with the
+   passerby clock (`market.tick`) and the generators run as direct calls between them.
 4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
    returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
-   The command registry and the host **semantic snapshot** (`res.semantics`, INPUT-08) both
+   The command registry and the host **semantic snapshot** (`res.semantics`) both
    `beginBuild` here, so interactive controls publish their prior-build command owners and
    their owned accessibility metadata (role/label/value/state/relationships/live-region) in
    paint order as they build.
@@ -81,7 +99,7 @@ Each frame:
 7. **Render** — `ui_client.draw_tree()` per root in list order, so later trees paint on top.
    Then `ui.endFrame()`; the command registry and the semantic snapshot `endBuild` here,
    double-buffer-swapping this frame's build into the completed prior snapshot the next
-   event stage (and INPUT-09's platform bridge) reads — the semantic snapshot owns its
+   event stage (and the accessibility bridge) reads — the semantic snapshot owns its
    strings by value, so it never borrows the frame arena that resets in step 4.
 
 There is no retained tree between frames. The interaction slot pool is what bridges the
@@ -152,6 +170,8 @@ after (`despawn_dead` is the pattern); and an entity that can be despawned must 
 | `update_food` | spoils each larder toward zero at its own `spoils` rate |
 | `metabolize` | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; logs each band crossing once |
 | `resolve_busy` | ticks work in progress and dispatches its finish half at completion, then drops the `Busy` |
+| `track_reach` | logs `A new recipe is within reach: {name}.` once on the false→true edge of a prerequisite-gated good's `prereq_met`; the seen-set is `Sim.reach_seen`, indexed by `buildable_bundle` order, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `market.tick` | advances the passerby's clock (not an ECS system — one encounter per run, on `Sim`) |
 | `capital.run_generators` | pays each generator's upkeep and deposits its yields |
 | `mark_dead` | tags `Dead` at `vigor ≤ 0` and logs the death line |
 | `despawn_dead` | reaps them; the UI then shows the start-over screen |
@@ -206,7 +226,8 @@ costs no materials at all).
 
 ### Capital
 
-Sixteen goods, all buildable end-to-end, in four behavioral variants over one build path.
+Sixteen buildable goods in four behavioral variants over one build path, plus two that only
+the passerby carries (below).
 `begin_build` / `finish_build` / `break_good` are comptime-parameterized over the good exactly
 as labor is over the action — the gate/pay/start half is identical for all sixteen, only
 `grant`/`revoke` differ.
@@ -226,7 +247,20 @@ and ×10 the hours: a hatchet is four days of building nothing else while the la
 They are not forbidden, only priced past what one body's time is worth — buying one is meant
 to beat building it, which is the whole argument the merchant makes. Two goods may modify one
 verb and stack (sandals and a bicycle both cheapen Forage); a better tool *superseding* a
-weaker one is a different rule with no subject yet.
+weaker one is a different rule, below.
+
+**Supersession is per family, by recompute.** `FishNet` outranks `FishRod` and `HandAxe`
+outranks `Hatchet`; both rank-2 tools are traded, not built, so the BUILD catalog count is
+unchanged. On any grant or break in a family, `recompute_fishing`/`recompute_chopping` read
+the best rank owned and set the verb's stats *from the action's canonical defaults* — rank 2
+is 0.7× energy and 1.4–1.5× yield — then re-apply the independent modifiers that share the
+verb (gloves, chainsaw) on top. Resetting from base is what makes three things hold at once:
+same-family stats replace rather than stack, breaking the better tool restores the next-best
+exactly, and any number of build → sell → build cycles leaves the stats bit-exact. The verb
+component is added only when absent, so a family change never appends a duplicate dense
+entry. `break_good` removes the good before it revokes, so the recompute sees post-removal
+state. The health pair is deliberately asymmetric: `health_apply` raises `max` and fills `v`,
+`health_remove` lowers `max` and only clamps, so a night's rest is kept, not un-rested.
 
 A modifier's `apply_*`/`remove_*` pair *scales* its target's `.s`/`.sd` rather than replacing
 them, so a boost preserves the distribution's shape. The health trio is relative (`+=`/`-=`)
@@ -248,10 +282,13 @@ the tile, so a modifier can never be applied to a component that is not there, w
 panic in `getMany`. It is also the roster's only tech-tree edge.
 
 `capital.unlock_met` is the second gate, and the Shelter is its only subject: a good may carry
-an `unlock` — a vigor *fraction*, a larder floor and a count of goods already owned — stating
-what it asks of the builder, as against `requires`, which is what the build spends. Goods with
-no `unlock` field are ungated (`@hasField`). The conditions are read at `begin_build` and not
-again, so a dip mid-build doesn't stop work already paid for. `capital.goods_owned` counts them
+an `unlock` — an *absolute* current-Vigor floor (`vigor_abs`, so a raised ceiling never moves
+the bar), a larder floor and a count of good kinds already owned — stating what it asks of
+the builder, as against `requires`, which is what the build spends. Goods with no `unlock`
+field are ungated (`@hasField`). One function serves the milestone's checklist, its action
+enablement, and `begin_build`. The conditions are read at `begin_build` and not again, so a
+dip mid-build doesn't stop work already paid for. Completing the Shelter is what raises the
+Act I curtain; `pages/root` routes on the player owning one. `capital.goods_owned` counts them
 by sweeping `buildable_bundle` with `has`, so it counts **kinds** — four pairs of sandals are
 never four goods built.
 
@@ -262,6 +299,8 @@ component and runs `grant` only on the way in from absent. It increments rather 
 because `SparseSet.add` does not guard duplicates: a second `add` would append a second dense
 entry and leave the index pointing at one of them. `break_good` takes spares first and revokes
 only with the last unit, so losing a spare can't cost you the discount you're still wearing.
+`grant_public` is the same grant path exposed for a *bought* good, so a traded tool lands its
+effect exactly as a built one does.
 
 `capital.cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the
 materials and frees the body, while the energy and every hour already spent are gone. The refund
@@ -270,6 +309,65 @@ draws them down over time — a time-proportional refund would imply a consumpti
 sim doesn't run. `good_of_doing` inverts `doing_of_good` to recover the price from a `Busy` that
 was never handed one, and returns null for the six labor verbs, which is what refuses a cancel
 on a half-finished forage.
+
+## Catalog, passerby, and barter (`catalog.zig`, `market.zig`, `barter.zig`)
+
+**`catalog.zig` is the one table of stable identity.** Every action and good component maps to
+a stable string ID (`act.forage`, `good.*`), a `Kind` (`action` / `crude_good` /
+`manufactured_good`), coarse input/output keys, an authored order, and an `on_surface` flag.
+The flag is the load-bearing part: a component *existing* is not a reason to show it —
+`ActionHunt` and `AirRifle` are defined and off the Act I surface, which is exactly five
+verbs. The goods table is generated comptime over `capital.buildable_bundle`, so it cannot
+drift from the roster, and its tiers come from `capital.is_crude`. Copy (display names,
+effect sentences) stays at the page tier in `good_text`; this module owns identity, type,
+order, and membership.
+
+**The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
+machine `absent → approaching → present → departed → absent`, ticked by `market.tick` off the
+sim clock (never a calendar day). Each arrival bumps a monotonic `id` and refills a finite
+satchel of `Ware`s (food, materials, fish_hook, whetstone); stock does not regenerate until
+the next visit. `dealable()` is `phase == .present`, the only gate the UI reads, so hiding the
+strip cannot change whether a passerby is here.
+
+**One transfer grammar.** A `Line{item, qty}` and a fixed-cap `Bundle` express both sides of
+any deal; a `Quote` carries the offer's stable `id`, the encounter `rev` it was captured
+under, its `Direction`, give/receive bundles, an effect preview, remaining `stock`, and
+`next_unit` — what the *following* unit of a sell would fetch, shown before confirmation.
+`Quote.refusal` is the single revalidation everyone shares, in precedence order: `departed`,
+then `stale` (the passerby changed), then `sold_out`, then `unaffordable`; every refusal has
+player-readable copy.
+
+**Sell prices diminish.** `sell_value(ware, n)` is a geometric decline `base·ratio^n` clamped
+to a positive floor, authored per ware: Food `2.5 / 0.75 / 0.5`, Materials `1.5 / 0.6 /
+0.25`, the tools `~6–8 / 0.3 / 1.0`. The floor is the anti-domination guarantee — selling
+always beats discarding, and the first units pay well — while the satchel and the visit
+window cap how much can be dumped at the top price.
+
+**`barter.resolve` is all-or-nothing.** It revalidates the quote plus give-side ownership
+before touching anything, then moves both bundles: Food/Materials on the inventory
+components, a sold good through `capital.break_good` (its effect leaves symmetrically), a
+bought good through `capital.grant_public` (its effect lands once; a repeat is stock), the
+satchel decremented, one log line pushed. A failed check mutates nothing and returns the
+reason. `market` stays world-free; `barter` is the only place a `Quote` meets an entity.
+
+## Shared text and search
+
+`query.zig` is the one catalog query parser. It tokenizes a search string once into a bounded
+`Query` whose terms are slices of the input — quoted phrases, a leading `-` for negation, a
+bare `*` wildcard, `field:value` with comma-OR alternatives, all case-insensitive — and
+matches rows through a duck-typed provider (`text(field)`, `haystack()`, `inReach()`) with no
+per-row allocation. Fields are one enum for both catalogs (`in`/`out`/`type`/`state`/`is`,
+plus the recipe-only `tech`); `input`/`output`/`kind`/`status` alias onto them, `built` folds
+to `owned`, `state:in-reach` means ready or reach ≥ 0.5, and `is:` matches state or type.
+
+`log.Log` is a 64-entry ring of toned lines with a `max_len` of 256 bytes per entry. A longer
+message is refused as a whole: the entry stores the visible `overflow_marker` and sets
+`refused`, never a cut or mid-codepoint prefix, and `push` stays `void` because the refusal is
+observable on the stored entry.
+
+`tokens.zig` is the leaf of design tokens — page padding, the gap ladder, the hairline, the
+control-height and rail-width ladders — in logical px, with the typography sizes and
+transition durations re-exported from `ui_client` so every finalized number has one home.
 
 ## Module map
 
@@ -282,10 +380,18 @@ on a half-finished forage.
 | `systems.zig` | the sim systems, in tick order |
 | `actions.zig` | per-agent labor, `actions_bundle`, `yield_factor` |
 | `capital.zig` | the generic build path, the modifier pairs, the generator system |
-| `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band |
-| `res.zig` | `Resources`, grouped by who writes it: `platform`, `input`, `time`, `sim`, `config`, `view` |
-| `palette.zig` | the game's palette — the nine `Theme` roles, filled in |
-| `log.zig` | `Log`, a 64-entry ring buffer of toned event lines. Leaf module |
+| `baselines.zig` | the fresh-agent baseline, read from the component defaults |
+| `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
+| `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
+| `catalog.zig` | stable IDs, kinds, authored order, and Act I surface membership for actions and goods |
+| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
+| `barter.zig` | atomic resolution of a quote against the world |
+| `query.zig` | the catalog query parser |
+| `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band, and `kindLabel` for the glyphs' spoken names |
+| `res.zig` | `Resources`, grouped by who writes it: `platform`, `input`, `time`, `sim`, `config`, `view`, plus the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`). `Sim` carries the log, the reach seen-set and the passerby encounter |
+| `palette.zig` | the game's palette — the ten `Theme` roles, the terminal ground, and the six resource hues |
+| `tokens.zig` | the non-color design tokens, in logical px |
+| `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
 | `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`) and the template shelf |
 | `root.zig` | the `ha` library root and its re-exports |
@@ -300,5 +406,5 @@ slot at a fixed zero, and without the exemption each draw silently deposited +0.
 
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
-  `ui_client.icon_sprite`. Currently unused; the tray that drew from it is not built.
+  `ui_client.icon_sprite`. Currently unused.
 - `assets/hello.png` — test image.

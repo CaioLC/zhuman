@@ -29,7 +29,8 @@ It runs on two things built here rather than imported: an immediate-mode UI layo
 a Bevy-style sparse-set ECS. Those two are the project — the scope rule is **UI and AI,
 nothing else**.
 
-Today it plays the first slice: a lone actor under scarcity, no exchange, no money.
+Today it plays Act I: a lone actor under scarcity, and a passing merchant for the first
+barter. No money.
 
 ## Where the knowledge lives
 
@@ -88,6 +89,11 @@ pass, not later.
 `pub const <Name> = struct {…}` type declarations — `World` enumerates them at comptime, and a
 stray public decl generates a storage for it. A shared shape that is not a component belongs
 in a non-public decl.
+
+**Repeated rows carry a domain key.** A row or tile that repeats is keyed by what it is — the
+recipe's catalog index, the offer's quote id — never by its sorted position or filtered
+index, so selection, focus, scroll anchors and cached textures follow the thing through a
+re-sort or filter. `tools/boundary_check.sh` rejects a formatted loop id in a page or template.
 
 **Verifying UI changes.** There is no synthetic-input path into SDL. Confirm visual work with
 a screenshot (PrintWindow) and, where a state is hard to reach, a temporarily flipped flag —
