@@ -274,8 +274,8 @@ fn axis_rule(node: anytype, axis: Axis) size_mod.SizeRule {
 
 /// `fit_children` on one axis. On the **main** axis: sum of *in-flow* child extents plus
 /// one `gap` per adjacent pair — a `fit` parent wraps its spaced children exactly.
-/// Anchored (out-of-flow) children are **excluded** from the main sum (changed
-/// 2026-08-16): they overlay, they don't size their parent — a progress bar anchored
+/// Anchored (out-of-flow) children are **excluded** from the main sum: they overlay,
+/// they don't size their parent — a progress bar anchored
 /// inside a tile must not make the tile grow/pulse with it (CSS absolute semantics). On
 /// the **cross** axis: `fit_cross` (a max, or a baseline-aware ascent+descent for a
 /// baseline row) — which deliberately *does* still count anchored children (the header's

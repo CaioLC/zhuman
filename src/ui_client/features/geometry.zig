@@ -15,9 +15,8 @@
 //! crops the triangles like any other paint.
 //!
 //! This is the primitive shared by hex bodies/rails/markers, distribution curves, slider
-//! diamonds, and diagonal indicators. It does **not** replace `line.zig`'s
-//! first-segment-normal thick-line approximation; moving the board's rails onto this feature
-//! and retiring that approximation is tracked in docs/roadmap.md (RENDER-09).
+//! diamonds, and diagonal indicators. `line.zig`'s first-segment-normal approximation has no
+//! callers left; deleting it is roadmap CLEAN-07.
 
 const std = @import("std");
 const sdl = @import("sdl3");

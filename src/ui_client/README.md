@@ -500,8 +500,8 @@ the render walk's clip stack crops the triangles). The tessellation math —
 `fillConvex`/`fillConvexMulti` fan triangulation and `strokePolyline` — lives **SDL-free** in
 `features/geometry_tess.zig` with a bounded `Mesh` builder that **refuses an over-capacity mesh
 as a whole** (no torn triangle), so the whole fan/join/cap surface is unit-tested without a
-graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zig` still
-widens a polyline along its first segment's normal for its own callers (roadmap RENDER-09).
+graphics context. `El.polygon` / `El.polyline` are the fluent builders. `line.zig`, the
+older first-segment-normal approximation, has no callers left (roadmap CLEAN-07 deletes it).
 
 **Linear-gradient composition.** The same feature draws an explicit linear
 gradient: `El.gradient(dir, stops, opacity)` fills the node box along `.horizontal`/`.vertical`
