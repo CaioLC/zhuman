@@ -1,0 +1,303 @@
+// The capital goods — recipes for the BUILD shelf, plus the two tools only the passerby
+// carries. The grammar is described in `src/README.md` ("The authored roster"). `requires`
+// is the build price in body and time; `input` lines are the build order (`once`) or the
+// upkeep (`per = .day`); `output` lines with `per = .day` are a flow. What owning a good
+// does is its `effects`, from a fixed vocabulary; `family` + `rank` say which tool a better
+// one supersedes; `needs` names the verb a modifier works on. `copy` is the player's words.
+//
+// Crude goods are what one person makes from scavenged scrap in half a day; manufactured
+// goods carry ×8 the materials and ×10 the hours — buildable, but priced past what one
+// body's time is worth, which is the argument for trading instead.
+.{
+    // —— Unlockers: owning the tool is what makes the verb possible at all ——————————————
+    .{
+        .id = "fish_rod",
+        .name = "Fishing rod",
+        .tier = .manufactured,
+        .requires = .{ .energy = 3.0, .hours = 120.0 },
+        .input = .{.{ .item = "materials", .n = 64.0 }},
+        .family = .{ .name = "fishing", .rank = 1 },
+        .effects = .{
+            .{ .grant = "fish" },
+        },
+        .copy = .{
+            .effect = "you can fish",
+            .short = "can fish",
+            .built = "You built a fish rod. Fishing is now possible.",
+        },
+    },
+    .{
+        .id = "hatchet",
+        .name = "Hatchet",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 100.0 },
+        .input = .{.{ .item = "materials", .n = 48.0 }},
+        .family = .{ .name = "chopping", .rank = 1 },
+        .effects = .{
+            .{ .grant = "chop_wood" },
+        },
+        .copy = .{
+            .effect = "you can split wood",
+            .short = "can split wood",
+            .built = "You built a hatchet. You can split wood now.",
+        },
+    },
+    .{
+        .id = "wire_snares",
+        .name = "Wire snares",
+        .tier = .crude,
+        .requires = .{ .energy = 2.0, .hours = 8.0 },
+        .input = .{.{ .item = "materials", .n = 5.0 }},
+        .effects = .{
+            .{ .grant = "check_traps" },
+        },
+        .copy = .{
+            .effect = "you can check traps",
+            .short = "can check traps",
+            .built = "You set wire snares. Check them for game.",
+        },
+    },
+    .{
+        .id = "air_rifle",
+        .name = "Air rifle",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 160.0 },
+        .input = .{.{ .item = "materials", .n = 200.0 }},
+        .effects = .{
+            .{ .grant = "hunt" },
+        },
+        .copy = .{
+            .effect = "you can hunt",
+            .short = "can hunt",
+            .built = "You assembled an air rifle. You can hunt now.",
+        },
+    },
+
+    // —— Modifiers: a margin on a verb you already have ——————————————————————————————————
+    .{
+        .id = "sandals",
+        .name = "Sandals",
+        .tier = .crude,
+        .requires = .{ .energy = 1.0, .hours = 6.0 },
+        .input = .{.{ .item = "materials", .n = 3.0 }},
+        .effects = .{
+            .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.85 } },
+        },
+        .copy = .{
+            .effect = "foraging costs less",
+            .short = "forage costs less",
+            .built = "You bound sandals from bark. Foraging costs a little less.",
+        },
+    },
+    .{
+        .id = "work_gloves",
+        .name = "Work gloves",
+        .tier = .manufactured,
+        .requires = .{ .energy = 1.0, .hours = 50.0 },
+        .input = .{.{ .item = "materials", .n = 24.0 }},
+        .needs = .{"chop_wood"},
+        .effects = .{
+            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.75 } },
+        },
+        .copy = .{
+            .effect = "splitting wood costs less",
+            .short = "split wood costs less",
+            .built = "You stitched work gloves. Splitting wood costs less.",
+        },
+    },
+    .{
+        .id = "bicycle",
+        .name = "Bicycle",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 140.0 },
+        .input = .{.{ .item = "materials", .n = 120.0 }},
+        .effects = .{
+            .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.6 } },
+            .{ .scale = .{ .target = "scavenge", .stat = .energy, .by = 0.6 } },
+        },
+        .copy = .{
+            .effect = "roaming costs less",
+            .short = "roaming costs less",
+            .built = "You rebuilt a bicycle. Distance got cheap.",
+        },
+    },
+    .{
+        .id = "cookpot",
+        .name = "Cookpot",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 80.0 },
+        .input = .{.{ .item = "materials", .n = 56.0 }},
+        .effects = .{
+            .{ .food_quality = 1 },
+        },
+        .copy = .{
+            .effect = "food feeds you further",
+            .short = "food feeds further",
+            .built = "You built a cookpot. Cooked food feeds you further.",
+        },
+    },
+    .{
+        .id = "root_cellar",
+        .name = "Root cellar",
+        .tier = .crude,
+        .requires = .{ .energy = 4.0, .hours = 12.0 },
+        .input = .{.{ .item = "materials", .n = 10.0 }},
+        .effects = .{
+            .{ .spoil_scale = 0.5 },
+        },
+        .copy = .{
+            .effect = "food keeps twice as long",
+            .short = "food keeps 2×",
+            .built = "You dug a root cellar. Food keeps twice as long.",
+        },
+    },
+    // The Act One capstone and the Act II teaser: the first substitution of external energy
+    // for muscle. Splitting wood stops pricing the body and starts pricing fuel.
+    .{
+        .id = "chainsaw",
+        .name = "Chainsaw",
+        .tier = .manufactured,
+        .requires = .{ .energy = 3.0, .hours = 300.0 },
+        .input = .{.{ .item = "materials", .n = 480.0 }},
+        .needs = .{"chop_wood"},
+        .effects = .{
+            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.3 } },
+            .{ .add = .{ .target = "chop_wood", .stat = .{ .input = "materials" }, .by = 1.0 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "materials" }, .by = 2.5 } },
+        },
+        .copy = .{
+            .effect = "fuel does the work, not you",
+            .short = "fuel does the work",
+            .built = "You got a chainsaw running. The engine works, not your back.",
+        },
+    },
+
+    // —— Health goods: capacity capital — each raises the vigor ceiling ——————————————————
+    .{
+        .id = "leaf_bed",
+        .name = "Leaf bed",
+        .tier = .crude,
+        .requires = .{ .energy = 2.0, .hours = 10.0 },
+        .input = .{.{ .item = "materials", .n = 6.0 }},
+        .effects = .{
+            .{ .vigor_ceiling = 1.0 },
+        },
+        .copy = .{
+            .effect = "+1 vigor ceiling",
+            .short = "vigor ceiling +1",
+            .built = "You piled a leaf bed. You sleep off the ground now.",
+        },
+    },
+    .{
+        .id = "pantry",
+        .name = "Pantry",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 140.0 },
+        .input = .{.{ .item = "materials", .n = 112.0 }},
+        .effects = .{
+            .{ .vigor_ceiling = 2.0 },
+        },
+        .copy = .{
+            .effect = "+2 vigor ceiling",
+            .short = "vigor ceiling +2",
+            .built = "You built a pantry. You eat properly now.",
+        },
+    },
+    .{
+        .id = "medicine_chest",
+        .name = "Medicine chest",
+        .tier = .manufactured,
+        .requires = .{ .energy = 2.0, .hours = 160.0 },
+        .input = .{.{ .item = "materials", .n = 160.0 }},
+        .effects = .{
+            .{ .vigor_ceiling = 2.0 },
+        },
+        .copy = .{
+            .effect = "+2 vigor ceiling",
+            .short = "vigor ceiling +2",
+            .built = "You stocked a medicine chest. You mend properly now.",
+        },
+    },
+
+    // —— Generators: capital that runs itself. Day lines are authored per in-game day ————
+    .{
+        .id = "garden_bed",
+        .name = "Garden bed",
+        .tier = .crude,
+        .requires = .{ .energy = 4.0, .hours = 16.0 },
+        .input = .{
+            .{ .item = "materials", .n = 12.0 },
+            .{ .item = "materials", .n = 0.1, .per = .day },
+        },
+        .output = .{
+            .{ .item = "food", .n = 1.5, .kind = .uniform, .per = .day },
+        },
+        .copy = .{
+            .effect = "grows food on its own",
+            .short = "grows food",
+            .built = "You planted a garden bed. It grows without you.",
+        },
+    },
+    .{
+        .id = "chicken_coop",
+        .name = "Chicken coop",
+        .tier = .manufactured,
+        .requires = .{ .energy = 3.0, .hours = 200.0 },
+        .input = .{
+            .{ .item = "materials", .n = 144.0 },
+            .{ .item = "materials", .n = 0.3, .per = .day },
+        },
+        .output = .{
+            .{ .item = "food", .n = 2.5, .kind = .poisson, .per = .day },
+        },
+        .copy = .{
+            .effect = "the hens lay for you",
+            .short = "hens lay food",
+            .built = "You raised a chicken coop. The hens lay without you.",
+        },
+    },
+
+    // —— Shelter: the roof that ends Act I ————————————————————————————————————————————————
+    // `unlock` is what it asks of the builder (absolute current vigor, a larder, goods already
+    // owned) as against `input`, which is what the build spends.
+    .{
+        .id = "shelter",
+        .name = "Shelter",
+        .tier = .manufactured,
+        .requires = .{ .energy = 6.0, .hours = 144.0 },
+        .input = .{.{ .item = "materials", .n = 60.0 }},
+        .unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
+        .capacity = 4,
+        .milestone = .act_one,
+        .copy = .{
+            .effect = "room here for four",
+            .short = "room for four",
+            .built = "You raised a shelter. There is room here for others.",
+        },
+    },
+
+    // —— Traded only: the passerby's rank-2 tools. A family's verb takes the stats of the
+    // best rank owned; losing the better tool restores the next-best exactly. —————————————
+    .{
+        .id = "fish_net",
+        .name = "Fishing net",
+        .buildable = false,
+        .family = .{ .name = "fishing", .rank = 2 },
+        .effects = .{
+            .{ .grant = "fish" },
+            .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.7 } },
+            .{ .scale = .{ .target = "fish", .stat = .{ .output = "food" }, .by = 1.5 } },
+        },
+    },
+    .{
+        .id = "hand_axe",
+        .name = "Hand axe",
+        .buildable = false,
+        .family = .{ .name = "chopping", .rank = 2 },
+        .effects = .{
+            .{ .grant = "chop_wood" },
+            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.7 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "materials" }, .by = 1.4 } },
+        },
+    },
+}

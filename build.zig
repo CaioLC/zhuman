@@ -55,6 +55,11 @@ pub fn build(b: *std.Build) void {
     // compilation root (`zig build test`); the exe build, which drives the component types
     // through `World`, would fail to find module 'ha'.
     ha_mod.addImport("ha", ha_mod);
+    // The authored roster (`src/roster.zig`) compiles the shipped data files in by name
+    // (`@embedFile("actions.zon")`), so a release build carries its content and the parser
+    // runs over the same bytes a dev build reads from `data/`.
+    ha_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
+    ha_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
 
     // Executable
     const exe_mod = b.createModule(.{

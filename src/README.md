@@ -350,6 +350,43 @@ bought good through `capital.grant_public` (its effect lands once; a repeat is s
 satchel decremented, one log line pushed. A failed check mutates nothing and returns the
 reason. `market` stays world-free; `barter` is the only place a `Quote` meets an entity.
 
+## The authored roster (`roster.zig`, `data/`)
+
+The labor verbs and the capital goods are also written as data: `data/actions.zon` and
+`data/goods.zon`, parsed at load by `std.zon.parse` into one `roster.Catalog`. The typed
+components above remain the roster the sim runs on; the catalog is held equal to them by
+test, record for record (`roster.typed_actions`/`typed_goods` is the bridge), and the
+interpreter that runs the sim from the catalog instead is roadmap work ("CAT-01"). The files
+are the contract new content is written against.
+
+**One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
+the file is its kind. Resources, actions and goods share the space: a reference resolves by
+lookup, and a collision is a load error. Resources are the `Resource` enum in code, not data,
+because each one is structural (a stockline, a palette hue, a board wedge) and has its own
+behavior (food spoils, coin settles); a line names one by its tag name.
+
+**Lines.** Every quantity is a `Line { item, n, kind = .fixed, sd, per = .once }`: an item and
+an amount, drawn when `kind` is not `.fixed`, settled `once` (an input at begin, an output at
+completion) or per `day` (a flow while the good is owned — all of a good's day lines
+together, affordable-or-nothing). A record carries `requires { energy, hours }` — the
+body-and-time price, apart from the lines because energy is a flow and its gate is strict —
+plus `input` and `output` lists. A generator is a good with day lines; an intermediate is a
+good whose once-output is a lot of itself; neither is a category field.
+
+**Effects.** What owning a good does is a list from a fixed vocabulary: `grant` a verb;
+`scale` or `add` a verb's `energy`, `hours`, or a named `input`/`output` line;
+`vigor_ceiling`; `food_quality`; `spoil_scale`. A `family { name, rank }` says a better tool
+supersedes a weaker one; `needs` names the verb a modifier works on; `unlock`, `capacity` and
+`milestone` are the shelter's. `copy` carries the player's words — the BUILD effect sentence,
+the rail's short form, the receipt line.
+
+**Validation.** `roster.load` refuses a file whole: a parse error carries its line and
+column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
+or target, a later-act reference, a grant on an innate verb, a modifier on a verb the good
+neither needs nor grants, a rank or milestone collision, a drawn input, a day line on an
+action. The shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed
+through the same path, so `zig build test` validates the real content.
+
 ## Shared text and search
 
 `query.zig` is the one catalog query parser. It tokenizes a search string once into a bounded
@@ -384,6 +421,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `catalog.zig` | stable IDs, kinds, authored order, and Act I surface membership for actions and goods |
+| `roster.zig` | the authored roster: the record grammar, the ZON loader and validator, and the bridge table to the typed components |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `query.zig` | the catalog query parser |
@@ -404,6 +442,7 @@ slot at a fixed zero, and without the exemption each draw silently deposited +0.
 
 ## Assets
 
+- `data/actions.zon`, `data/goods.zon` — the authored roster, compiled in by `build.zig`.
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
   `ui_client.icon_sprite`. Currently unused.

@@ -71,3 +71,20 @@ pub fn prereq_name(comptime GoodT: type) ?[]const u8 {
         else => @compileError("no prereq name for " ++ @typeName(P)),
     };
 }
+
+test "the authored roster's copy is the copy this module speaks" {
+    const std = @import("std");
+    const roster = ha.roster;
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    inline for (ha.capital.buildable_bundle) |G| {
+        const rec = cat.good(roster.goodIdOf(G)).?;
+        try std.testing.expectEqualStrings(display_name(G), rec.name);
+        try std.testing.expectEqualStrings(effect(G), rec.copy.effect);
+        if (prereq_name(G)) |needs| {
+            try std.testing.expectEqualStrings(needs, cat.action(rec.needs[0]).?.name);
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), rec.needs.len);
+        }
+    }
+}

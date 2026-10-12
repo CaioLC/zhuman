@@ -302,3 +302,12 @@ test "holdings uses compact rail-specific effect copy" {
     try std.testing.expectEqualStrings("vigor ceiling +1", compactEffect(comp.LeafBed));
     try std.testing.expectEqualStrings("can split wood", compactEffect(comp.Hatchet));
 }
+
+test "the authored roster's short copy is the rail's compact copy" {
+    const roster = ha.roster;
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    inline for (capital.buildable_bundle) |G| {
+        try std.testing.expectEqualStrings(compactEffect(G), cat.good(roster.goodIdOf(G)).?.copy.short);
+    }
+}

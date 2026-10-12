@@ -124,8 +124,9 @@ pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
     return goods_owned(w, e) >= u.goods;
 }
 
-/// The receipt line for a completed build.
-fn built_msg(comptime GoodT: type) []const u8 {
+/// The receipt line for a completed build. Public so the authored roster's copy can be held
+/// equal to it (`roster.zig`).
+pub fn built_msg(comptime GoodT: type) []const u8 {
     return switch (GoodT) {
         comp.FishRod => "You built a fish rod. Fishing is now possible.",
         comp.Hatchet => "You built a hatchet. You can split wood now.",

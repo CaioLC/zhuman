@@ -1,0 +1,79 @@
+// The labor verbs — what a body can do with its hours. The grammar is described in
+// `src/README.md` ("The authored roster"): `requires` is the body-and-time price, paid at
+// begin; `input` is what the act consumes, paid at begin; `output` is what it draws at
+// completion. A line's `kind` defaults to `.fixed` (exact); the other kinds draw, and the
+// spread is the risk. Ids are plain and share one space with resources and goods.
+.{
+    // Forage: glean the greenbelt. The safe calorie baseline — normal, steady.
+    .{
+        .id = "forage",
+        .name = "Forage",
+        .innate = true,
+        .requires = .{ .energy = 1.7, .hours = 4.0 },
+        .output = .{
+            .{ .item = "food", .n = 2.0, .kind = .normal },
+        },
+    },
+    // Scavenge: pick through the derelict edge of town. The day-one materials verb —
+    // exponential on both sides: mostly scraps, occasionally a jackpot find, and sometimes
+    // a forgotten can of food. This is what bootstraps the first tool.
+    .{
+        .id = "scavenge",
+        .name = "Scavenge",
+        .innate = true,
+        .requires = .{ .energy = 2.0, .hours = 5.0 },
+        .output = .{
+            .{ .item = "food", .n = 0.5, .kind = .exponential },
+            .{ .item = "materials", .n = 3.0, .kind = .exponential },
+        },
+    },
+    // Fish: unlocked by the fishing rod. Better mean than Forage but poisson-lumpy — feast
+    // or famine; wants a larder buffer under the metabolism.
+    .{
+        .id = "fish",
+        .name = "Fish",
+        .requires = .{ .energy = 2.0, .hours = 6.0 },
+        .output = .{
+            .{ .item = "food", .n = 3.0, .kind = .poisson },
+        },
+    },
+    // Split wood: unlocked by the hatchet — you cannot split logs bare-handed. Steady
+    // materials; uniform, an even spread rather than a bell.
+    .{
+        .id = "chop_wood",
+        .name = "Split wood",
+        .requires = .{ .energy = 2.5, .hours = 5.0 },
+        .output = .{
+            .{ .item = "materials", .n = 5.0, .kind = .uniform },
+        },
+    },
+    // Check traps: unlocked by wire snares. The first stock-consuming verb — the bait is
+    // materials — converting m→f cheaply in both energy and hours; a bad draw eats the bait
+    // anyway. Poisson: trap luck is lumpy.
+    .{
+        .id = "check_traps",
+        .name = "Check traps",
+        .requires = .{ .energy = 1.0, .hours = 2.0 },
+        .input = .{
+            .{ .item = "materials", .n = 1.0 },
+        },
+        .output = .{
+            .{ .item = "food", .n = 3.0, .kind = .poisson },
+        },
+    },
+    // Hunt: unlocked by the air rifle. The best food-per-energy in Act One, priced in the two
+    // currencies that bite: deep vigor and a whole working day — plus ammo. Defined, grantable,
+    // and off the Act I ACTIONS surface, which is exactly five verbs.
+    .{
+        .id = "hunt",
+        .name = "Hunt",
+        .on_surface = false,
+        .requires = .{ .energy = 4.0, .hours = 8.0 },
+        .input = .{
+            .{ .item = "materials", .n = 1.0 },
+        },
+        .output = .{
+            .{ .item = "food", .n = 6.0, .kind = .poisson },
+        },
+    },
+}
