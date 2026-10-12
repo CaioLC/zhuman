@@ -355,7 +355,7 @@ reason. `market` stays world-free; `barter` is the only place a `Quote` meets an
 The labor verbs and the capital goods are also written as data: `data/actions.zon` and
 `data/goods.zon`, parsed at load by `std.zon.parse` into one `roster.Catalog`. The typed
 components above remain the roster the sim runs on; the catalog is held equal to them by
-test, record for record (`roster.typed_actions`/`typed_goods` is the bridge), and the
+test, record for record (`bridge.zig` is that bridge), and the
 interpreter that runs the sim from the catalog instead is roadmap work ("CAT-01"). The files
 are the contract new content is written against.
 
@@ -379,6 +379,20 @@ good whose once-output is a lot of itself; neither is a category field.
 supersedes a weaker one; `needs` names the verb a modifier works on; `unlock`, `capacity` and
 `milestone` are the shelter's. `copy` carries the player's words — the BUILD effect sentence,
 the rail's short form, the receipt line.
+
+**The interpreter (`effects.zig`, `ledger.zig`).** What an agent can do, and on what
+terms, is a pure function of the catalog and the goods it owns: `effects.verb` folds every
+applying good's effects into the base record, in roster order, and returns null when
+nothing grants the verb. Nothing is cached and there is no remove path — losing a good is a
+different input to the same function, which is what keeps a build → sell → build cycle
+bit-exact. A family's best rank owned is the only member of that family that applies. The
+body and larder are the one exception to derive-never-store, because their components have
+other writers: `effects.apply` computes the contribution, diffs it against `comp.Granted`,
+and applies the delta — a raised ceiling fills what it adds, a lowered one only clamps.
+`ledger.zig` is where a line meets holdings: the one switch over `Resource` to the inventory
+components, plus `comp.Goods` counts for a good item, with `short`/`pay`/`draw` over a list
+of lines. Per agent that leaves `Goods` (a count per catalog index) and `Granted`; the
+catalog itself sits on `Resources` as `catalog`, so a system declares `*const roster.Catalog`.
 
 **Validation.** `roster.load` refuses a file whole: a parse error carries its line and
 column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
@@ -421,7 +435,10 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `catalog.zig` | stable IDs, kinds, authored order, and Act I surface membership for actions and goods |
-| `roster.zig` | the authored roster: the record grammar, the ZON loader and validator, and the bridge table to the typed components |
+| `roster.zig` | the authored roster: the record grammar, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
+| `bridge.zig` | which record each typed component transcribes, and the parity tests; goes with the typed roster |
+| `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
+| `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `query.zig` | the catalog query parser |

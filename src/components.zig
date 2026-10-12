@@ -7,6 +7,8 @@
 //! will fail compilation.
 const ha = @import("ha");
 const dist = ha.dist;
+// Relative, like `res.zig`'s imports: `test-ui` compiles this file without `ha`.
+const roster = @import("./roster.zig");
 
 // Private on purpose: these are pieces of larger components, never components themselves,
 // and `World`'s comptime scan only sees a file's *public* decls — so keeping them private
@@ -61,6 +63,22 @@ pub const InventoryFood = struct {
 
 pub const InventoryMaterial = struct {
     v: f32 = 0,
+};
+
+/// The capital goods an agent owns, as a count per catalog index of the authored roster
+/// (`roster.zig`); zero is not owned. Only ownership carries an effect — a second pair of
+/// sandals is stock — so what the goods *do* is derived, never stored here (`effects.zig`).
+pub const Goods = struct {
+    count: [roster.max_goods]u32 = [_]u32{0} ** roster.max_goods,
+};
+
+/// What the owned goods currently contribute to the body and the larder, so those
+/// contributions can be applied as relative deltas (`effects.apply`) and anything else that
+/// moves the ceiling composes underneath.
+pub const Granted = struct {
+    vigor_ceiling: f32 = 0,
+    food_quality: u8 = 0,
+    spoil_scale: f32 = 1,
 };
 
 // -- Innate actions: the bare-handed verbs every agent spawns with -----------------------

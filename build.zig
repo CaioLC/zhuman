@@ -114,6 +114,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
+    // `res.zig` carries the authored roster, and the UI tests compile `res.zig`, so the
+    // data files resolve here too.
+    ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
+    ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
     const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
     const run_ui_tests = b.addRunArtifact(ui_tests);
 

@@ -308,6 +308,6 @@ test "the authored roster's short copy is the rail's compact copy" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     inline for (capital.buildable_bundle) |G| {
-        try std.testing.expectEqualStrings(compactEffect(G), cat.good(roster.goodIdOf(G)).?.copy.short);
+        try std.testing.expectEqualStrings(compactEffect(G), cat.good(ha.bridge.goodIdOf(G)).?.copy.short);
     }
 }

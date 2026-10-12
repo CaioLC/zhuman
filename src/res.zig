@@ -3,6 +3,7 @@ const sdl = @import("sdl3");
 const comp = @import("./components.zig");
 const logmod = @import("./log.zig");
 const marketmod = @import("./market.zig");
+const rostermod = @import("./roster.zig");
 const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
 
@@ -240,19 +241,32 @@ pub const Resources = struct {
     sim: Sim,
     config: Config = .{},
     view: View = .{},
+    /// The authored roster (`roster.zig`), loaded once from the shipped files. Written by
+    /// nobody after init; a system reads it as `*const roster.Catalog`. Defaults to no
+    /// records, so a rig that builds `Resources` by hand and never reads the roster needs
+    /// nothing.
+    catalog: rostermod.Catalog = rostermod.Catalog.empty,
 
-    pub fn init(f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+    pub fn init(gpa: std.mem.Allocator, f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+        var diag = rostermod.Diagnostics{};
+        var catalog = rostermod.load(gpa, rostermod.shipped, &diag) catch |err| {
+            std.log.err("{s}", .{diag.message()});
+            return err;
+        };
+        errdefer catalog.deinit();
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");
         const icons = try sdl.image.loadTexture(r.*, "assets/icons.png");
         return .{
             .platform = .{ .font = f, .renderer = r, .window = w, .tex = tex, .icons = icons },
             .sim = .{ .prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())) },
+            .catalog = catalog,
         };
     }
 
     pub fn deinit(self: *Resources) void {
         self.platform.tex.deinit();
         self.platform.icons.deinit();
+        self.catalog.deinit();
     }
 
     /// A `std.Random` over `sim.prng` — call `.float(f32)`, `.boolean()`, etc. on it.

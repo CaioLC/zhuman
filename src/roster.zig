@@ -10,13 +10,13 @@
 //! offending id — never half-applied.
 //!
 //! Today the catalog is read by tests, which hold it equal to the typed components it
-//! transcribes (`typed_actions`/`typed_goods` is that bridge); the interpreter that runs the
+//! transcribes (`bridge.zig` holds that bridge); the interpreter that runs the
 //! sim from it is the next step (`docs/roadmap.md`, "CAT-01").
 
 const std = @import("std");
-const ha = @import("ha");
-const dist = ha.dist;
-const comp = ha.comp;
+// A relative import, not `ha`: `res.zig` carries the catalog, and `test-ui` compiles `res.zig`
+// without the `ha` module. The bridge to the typed components lives in `bridge.zig`.
+const dist = @import("./dist.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -64,6 +64,40 @@ pub const Line = struct {
     /// The line as the distribution the sim samples.
     pub fn asDist(self: Line) dist.Dist {
         return .{ .kind = self.kind, .s = self.n, .sd = self.sd };
+    }
+};
+
+/// The caps the sim's bounded per-agent containers rely on; the validator holds the files
+/// to them. `max_lines` bounds one side of a verb *after* every `add` effect on it has
+/// inserted its line.
+pub const max_goods = 64;
+pub const max_lines = 4;
+
+/// A bounded list of lines — one side of a verb's effective terms, or a receipt.
+pub const Lines = struct {
+    items: [max_lines]Line = undefined,
+    len: u8 = 0,
+
+    pub fn of(src: []const Line) Lines {
+        var l = Lines{};
+        for (src) |x| l.push(x);
+        return l;
+    }
+
+    pub fn slice(self: *const Lines) []const Line {
+        return self.items[0..self.len];
+    }
+
+    pub fn push(self: *Lines, l: Line) void {
+        std.debug.assert(self.len < max_lines);
+        self.items[self.len] = l;
+        self.len += 1;
+    }
+
+    /// The line for `item` at cadence `per`, if present.
+    pub fn find(self: *Lines, item: []const u8, per: Cadence) ?*Line {
+        for (self.items[0..self.len]) |*l| if (l.per == per and eql(l.item, item)) return l;
+        return null;
     }
 };
 
@@ -189,6 +223,14 @@ pub const Catalog = struct {
     actions: []const Action,
     goods: []const Good,
 
+    /// No records at all, over an arena that owns nothing — what a `Resources` holds before
+    /// `load`, and what a UI test rig that never reads the roster gets for free.
+    pub const empty: Catalog = .{
+        .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+        .actions = &.{},
+        .goods = &.{},
+    };
+
     pub fn deinit(self: *Catalog) void {
         self.arena.deinit();
         self.* = undefined;
@@ -201,6 +243,18 @@ pub const Catalog = struct {
 
     pub fn good(self: *const Catalog, id: []const u8) ?*const Good {
         for (self.goods) |*g| if (std.mem.eql(u8, g.id, id)) return g;
+        return null;
+    }
+
+    /// The catalog index of an action — what a `Busy` and the sim's per-agent containers key
+    /// on within one load. The id is the identity across loads.
+    pub fn actionIndex(self: *const Catalog, id: []const u8) ?u16 {
+        for (self.actions, 0..) |a, i| if (std.mem.eql(u8, a.id, id)) return @intCast(i);
+        return null;
+    }
+
+    pub fn goodIndex(self: *const Catalog, id: []const u8) ?u16 {
+        for (self.goods, 0..) |g, i| if (std.mem.eql(u8, g.id, id)) return @intCast(i);
         return null;
     }
 
@@ -272,6 +326,9 @@ pub const Rule = enum {
     bad_cadence,
     /// A negative quantity, a drawn input, or a non-positive scale.
     bad_number,
+    /// More goods than `max_goods`, or more lines on one side of a record than `max_lines`
+    /// once every `add` on it has inserted its line.
+    too_many,
 };
 
 /// Where a load failed: the file, the rule if validation refused it (null for a parse error),
@@ -338,6 +395,52 @@ const Validator = struct {
         for (self.actions) |a| try self.checkAction(a);
         var claimed = [_]bool{false} ** @typeInfo(Milestone).@"enum".fields.len;
         for (self.goods, 0..) |g, gi| try self.checkGood(g, gi, &claimed);
+        try self.checkCapacity();
+    }
+
+    /// The caps the sim's bounded containers rely on.
+    fn checkCapacity(self: *Validator) Error!void {
+        if (self.goods.len > max_goods) return self.fail(.goods, .too_many, self.goods[max_goods].id, "goods");
+        for (self.actions) |a| {
+            try self.checkSide(.actions, a.id, a.input, true);
+            try self.checkSide(.actions, a.id, a.output, false);
+        }
+        for (self.goods) |g| {
+            if (g.input.len > max_lines) return self.fail(.goods, .too_many, g.id, "input lines");
+            if (g.output.len > max_lines) return self.fail(.goods, .too_many, g.id, "output lines");
+        }
+    }
+
+    /// One side of a verb must still fit after every `add` on it has inserted its line.
+    fn checkSide(self: *Validator, file: File, id: []const u8, base: []const Line, is_input: bool) Error!void {
+        if (base.len > max_lines) return self.fail(file, .too_many, id, "lines");
+        var inserted: [max_lines][]const u8 = undefined;
+        var ins: usize = 0;
+        for (self.goods) |g| {
+            for (g.effects) |e| {
+                const tw = switch (e) {
+                    .add => |t| t,
+                    else => continue,
+                };
+                if (!eql(tw.target, id)) continue;
+                const item = switch (tw.stat) {
+                    .input => |i| if (is_input) i else continue,
+                    .output => |o| if (!is_input) o else continue,
+                    else => continue,
+                };
+                var present = false;
+                for (base) |l| if (l.per == .once and eql(l.item, item)) {
+                    present = true;
+                };
+                for (inserted[0..ins]) |x| if (eql(x, item)) {
+                    present = true;
+                };
+                if (present) continue;
+                if (base.len + ins + 1 > max_lines) return self.fail(file, .too_many, id, item);
+                inserted[ins] = item;
+                ins += 1;
+            }
+        }
     }
 
     fn ids(self: *Validator) Error!void {
@@ -486,56 +589,6 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-// ============================ The bridge to the typed roster ============================
-// Which record each typed component transcribes. The tests below hold the two equal; the
-// interpreter that retires the typed roster deletes this table with it.
-
-pub const typed_actions = .{
-    .{ "forage", comp.ActionForage },
-    .{ "scavenge", comp.ActionScavenge },
-    .{ "fish", comp.ActionFish },
-    .{ "chop_wood", comp.ActionChopWood },
-    .{ "check_traps", comp.ActionCheckTraps },
-    .{ "hunt", comp.ActionHunt },
-};
-
-pub const typed_goods = .{
-    .{ "fish_rod", comp.FishRod },
-    .{ "hatchet", comp.Hatchet },
-    .{ "wire_snares", comp.WireSnares },
-    .{ "air_rifle", comp.AirRifle },
-    .{ "sandals", comp.Sandals },
-    .{ "work_gloves", comp.WorkGloves },
-    .{ "bicycle", comp.Bicycle },
-    .{ "cookpot", comp.Cookpot },
-    .{ "root_cellar", comp.RootCellar },
-    .{ "chainsaw", comp.Chainsaw },
-    .{ "leaf_bed", comp.LeafBed },
-    .{ "pantry", comp.Pantry },
-    .{ "medicine_chest", comp.MedicineChest },
-    .{ "garden_bed", comp.GardenBed },
-    .{ "chicken_coop", comp.ChickenCoop },
-    .{ "shelter", comp.Shelter },
-    .{ "fish_net", comp.FishNet },
-    .{ "hand_axe", comp.HandAxe },
-};
-
-/// The record id a typed action component transcribes.
-pub fn actionIdOf(comptime ActionT: type) []const u8 {
-    inline for (typed_actions) |pair| {
-        if (pair[1] == ActionT) return pair[0];
-    }
-    @compileError("no roster record for " ++ @typeName(ActionT));
-}
-
-/// The record id a typed good component transcribes.
-pub fn goodIdOf(comptime GoodT: type) []const u8 {
-    inline for (typed_goods) |pair| {
-        if (pair[1] == GoodT) return pair[0];
-    }
-    @compileError("no roster record for " ++ @typeName(GoodT));
-}
-
 // ============================ Tests =====================================================
 
 const testing = std.testing;
@@ -548,176 +601,17 @@ fn loadShipped() !Catalog {
     };
 }
 
-/// A once-line for `item` with exactly `qty` when `qty > 0`, and no line for it at all when
-/// `qty == 0` — the typed `Requires.materials = 0` has no line to transcribe.
-fn expectQty(lines: []const Line, item: []const u8, qty: f32) !void {
-    var found: ?Line = null;
-    for (lines) |l| if (l.per == .once and eql(l.item, item)) {
-        found = l;
-    };
-    if (qty == 0) {
-        try testing.expect(found == null);
-        return;
-    }
-    const l = found orelse return error.MissingLine;
-    try testing.expectEqual(dist.Kind.fixed, l.kind);
-    try testing.expectEqual(qty, l.n);
-}
-
-/// A line for `item` equal to the typed distribution, or none when the typed yield is the
-/// `.fixed` zero placeholder that means "nothing on this side".
-fn expectDist(lines: []const Line, item: []const u8, per: Cadence, d: dist.Dist) !void {
-    var found: ?Line = null;
-    for (lines) |l| if (l.per == per and eql(l.item, item)) {
-        found = l;
-    };
-    if (d.kind == .fixed and d.s == 0) {
-        try testing.expect(found == null);
-        return;
-    }
-    const l = found orelse return error.MissingLine;
-    try testing.expectEqual(d.kind, l.kind);
-    try testing.expectEqual(d.s, l.n);
-    try testing.expectEqual(d.sd, l.sd);
-}
-
 test "the shipped files load and validate" {
     var cat = try loadShipped();
     defer cat.deinit();
-    try testing.expectEqual(typed_actions.len, cat.actions.len);
-    try testing.expectEqual(typed_goods.len, cat.goods.len);
+    try testing.expect(cat.actions.len > 0);
+    try testing.expect(cat.goods.len > 0);
+    try testing.expect(cat.actionIndex("forage") != null);
+    try testing.expect(cat.goodIndex("shelter") != null);
 }
 
-test "every typed action is one record, number for number" {
-    var cat = try loadShipped();
-    defer cat.deinit();
-    inline for (typed_actions) |pair| {
-        const rec = cat.action(pair[0]) orelse return error.MissingRecord;
-        const typed = (pair[1]{});
-        try testing.expectEqual(typed.requires.energy, rec.requires.energy);
-        try testing.expectEqual(typed.requires.hours, rec.requires.hours);
-        try expectQty(rec.input, "materials", typed.requires.materials);
-        try testing.expectEqual(@as(usize, if (typed.requires.materials > 0) 1 else 0), rec.input.len);
-        try expectDist(rec.output, "food", .once, typed.yields.food);
-        try expectDist(rec.output, "materials", .once, typed.yields.materials);
-        // Innate ⇔ spawned on every agent; on-surface ⇔ the stable-id catalog's flag; the
-        // name is the one the activity strip speaks.
-        var innate = false;
-        inline for (ha.actions.actions_bundle) |A| {
-            if (A == pair[1]) innate = true;
-        }
-        try testing.expectEqual(innate, rec.innate);
-        var on_surface: ?bool = null;
-        for (ha.catalog.actions) |r| {
-            if (eql(r.id, "act." ++ pair[0])) on_surface = r.on_surface;
-        }
-        try testing.expectEqual(on_surface.?, rec.on_surface);
-        try testing.expectEqualStrings(ha.actions.doing_label(ha.actions.doing_of(pair[1])), rec.name);
-        try testing.expectEqual(@as(u8, 1), rec.act);
-    }
-}
-
-test "every typed good is one record, number for number" {
-    var cat = try loadShipped();
-    defer cat.deinit();
-    var buildable: usize = 0;
-    inline for (typed_goods) |pair| {
-        const G = pair[1];
-        const rec = cat.good(pair[0]) orelse return error.MissingRecord;
-        const typed = (G{});
-        try testing.expectEqual(@as(u8, 1), rec.act);
-        if (@hasField(G, "requires")) {
-            // Buildable: the price, the build order, the tier, the stable id, the receipt.
-            buildable += 1;
-            try testing.expect(rec.buildable);
-            try testing.expectEqual(typed.requires.energy, rec.requires.?.energy);
-            try testing.expectEqual(typed.requires.hours, rec.requires.?.hours);
-            try expectQty(rec.input, "materials", typed.requires.materials);
-            try testing.expectEqual(
-                if (ha.capital.is_crude(G)) Tier.crude else Tier.manufactured,
-                rec.tier.?,
-            );
-            try testing.expectEqualStrings(ha.catalog.goodId(G), "good." ++ pair[0]);
-            try testing.expectEqualStrings(ha.capital.built_msg(G), rec.copy.built);
-            try testing.expectEqualStrings(ha.actions.doing_label(ha.capital.doing_of_good(G)), rec.name);
-        } else {
-            try testing.expect(!rec.buildable);
-            try testing.expectEqual(@as(?Price, null), rec.requires);
-            try testing.expectEqual(@as(?Tier, null), rec.tier);
-        }
-        // The prerequisite verb is the one `needs` names.
-        if (ha.capital.prereq_of(G)) |P| {
-            try testing.expectEqual(@as(usize, 1), rec.needs.len);
-            try testing.expectEqualStrings(actionIdOf(P), rec.needs[0]);
-        } else {
-            try testing.expectEqual(@as(usize, 0), rec.needs.len);
-        }
-        // A generator's upkeep and yield are its day lines; nothing else has any.
-        if (@hasField(G, "upkeep")) {
-            try expectDist(rec.input, "materials", .day, .{ .kind = .fixed, .s = typed.upkeep.materials });
-            try expectDist(rec.output, "food", .day, typed.yields.food);
-            try expectDist(rec.output, "materials", .day, typed.yields.materials);
-        } else {
-            for (rec.input) |l| try testing.expectEqual(Cadence.once, l.per);
-            for (rec.output) |l| try testing.expectEqual(Cadence.once, l.per);
-        }
-        // The shelter's standing conditions and capacity.
-        if (@hasField(G, "unlock")) {
-            try testing.expectEqual(typed.unlock.vigor_abs, rec.unlock.?.vigor_abs);
-            try testing.expectEqual(typed.unlock.food, rec.unlock.?.food);
-            try testing.expectEqual(typed.unlock.goods, rec.unlock.?.goods);
-        } else {
-            try testing.expectEqual(@as(?Unlock, null), rec.unlock);
-        }
-        if (@hasField(G, "capacity")) {
-            try testing.expectEqual(typed.capacity, rec.capacity);
-        } else {
-            try testing.expectEqual(@as(u32, 0), rec.capacity);
-        }
-    }
-    try testing.expectEqual(ha.capital.buildable_bundle.len, buildable);
-}
-
-test "an unlocker's grant names the verb its typed grant adds" {
-    var cat = try loadShipped();
-    defer cat.deinit();
-    var w = ha.world.World.init();
-    const pairs = .{
-        .{ "fish_rod", comp.FishRod, "fish", comp.ActionFish },
-        .{ "hatchet", comp.Hatchet, "chop_wood", comp.ActionChopWood },
-        .{ "wire_snares", comp.WireSnares, "check_traps", comp.ActionCheckTraps },
-        .{ "air_rifle", comp.AirRifle, "hunt", comp.ActionHunt },
-        .{ "fish_net", comp.FishNet, "fish", comp.ActionFish },
-        .{ "hand_axe", comp.HandAxe, "chop_wood", comp.ActionChopWood },
-    };
-    inline for (pairs) |p| {
-        const rec = cat.good(p[0]).?;
-        var granted = false;
-        for (rec.effects) |e| switch (e) {
-            .grant => |t| if (eql(t, p[2])) {
-                granted = true;
-            },
-            else => {},
-        };
-        try testing.expect(granted);
-        const e = w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{} });
-        w.add(e, p[1]{});
-        ha.capital.grant_public(&w, e, p[1]);
-        try testing.expect(w.has(e, p[3]));
-    }
-}
-
-test "the two tool families rank rod under net and hatchet under hand axe" {
-    var cat = try loadShipped();
-    defer cat.deinit();
-    try testing.expectEqualStrings("fishing", cat.good("fish_rod").?.family.?.name);
-    try testing.expectEqual(@as(u8, 1), cat.good("fish_rod").?.family.?.rank);
-    try testing.expectEqual(@as(u8, 2), cat.good("fish_net").?.family.?.rank);
-    try testing.expectEqualStrings("chopping", cat.good("hand_axe").?.family.?.name);
-    try testing.expectEqual(@as(u8, 1), cat.good("hatchet").?.family.?.rank);
-    try testing.expectEqual(@as(u8, 2), cat.good("hand_axe").?.family.?.rank);
-}
-
+/// A once-line for `item` with exactly `qty` when `qty > 0`, and no line for it at all when
+/// `qty == 0` — the typed `Requires.materials = 0` has no line to transcribe.
 // —— the validator bites ————————————————————————————————————————————————————————————————
 
 const ok_actions =

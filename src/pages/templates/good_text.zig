@@ -78,7 +78,7 @@ test "the authored roster's copy is the copy this module speaks" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     inline for (ha.capital.buildable_bundle) |G| {
-        const rec = cat.good(roster.goodIdOf(G)).?;
+        const rec = cat.good(ha.bridge.goodIdOf(G)).?;
         try std.testing.expectEqualStrings(display_name(G), rec.name);
         try std.testing.expectEqualStrings(effect(G), rec.copy.effect);
         if (prereq_name(G)) |needs| {
