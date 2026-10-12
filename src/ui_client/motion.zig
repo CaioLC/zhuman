@@ -1,4 +1,4 @@
-//! Host-side reduced-motion policy (INPUT-10) — the deterministic seam that decides whether
+//! Host-side reduced-motion policy — the deterministic seam that decides whether
 //! *optional* UI transitions animate or **snap** to their end state, while functional
 //! progress, state changes, pointer/focus feedback, and the simulation always remain visible.
 //!
@@ -11,7 +11,7 @@
 //! underbar, the eating-policy slider position), the day/clock readouts, or any state/focus cue — those
 //! are *functional* and remain visible regardless of the policy. It only gates genuinely
 //! *decorative* time-varying visuals (today: the mock screen's heartbeat oscillation), and
-//! leaves a reusable `snap` gate for the future tween engine (RENDER-08).
+//! provides the `snap` gate the tween registry routes every optional transition through.
 //!
 //! ## The platform preference (and its honest limitation)
 //!
@@ -53,11 +53,11 @@ pub const Policy = struct {
     /// unaffected and remain visible.
     reduced_motion: bool = false,
 
-    /// A reusable gate for the future tween engine (RENDER-08). Given an interpolation from
+    /// The gate the tween registry routes optional transitions through. Given an interpolation from
     /// `from` to `to` at parameter `t`, return `to` immediately when reduced motion is on
     /// (the transition *snaps*); otherwise return the caller's already-interpolated `value`.
-    /// The tween math itself stays with RENDER-08 — this only defines *the gate* now, so
-    /// every future optional transition routes its result through one policy check.
+    /// The tween math lives in `tween.zig`; this only defines *the gate*, so every optional
+    /// transition routes its result through one policy check.
     pub fn snap(self: Policy, comptime T: type, to: T, value: T) T {
         return if (self.reduced_motion) to else value;
     }
@@ -65,7 +65,7 @@ pub const Policy = struct {
     /// A convenience gate for a scalar animation *phase* in `[0,1]` (e.g. the heartbeat's
     /// sine phase): when reduced motion is on, collapse to a caller-chosen constant `frozen`
     /// so the visual holds still; otherwise pass the live `phase` through. Used by the mock
-    /// heartbeat migration; kept general for RENDER-08.
+    /// heartbeat; kept general for any phase-driven visual.
     pub fn phase(self: Policy, live: f32, frozen: f32) f32 {
         return if (self.reduced_motion) frozen else live;
     }

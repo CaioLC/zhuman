@@ -16,7 +16,7 @@ const t = @import("./templates/root.zig");
 pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
-    // KIT-04: the game-over screen lives in the one terminal shell; it needs only the main
+    // The game-over screen lives in the one terminal shell; it needs only the main
     // body (no header/footer/rail), so it fills `regions.body` with its centered content.
     const regions = try t.shell(ctx, .{
         .id = "over",

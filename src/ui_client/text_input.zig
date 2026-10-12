@@ -51,7 +51,7 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
     if (!pre.clicked and ctx.isFocused(key) and ctx.res.input.pointer.buttons.primary.pressed and !pre.pressed) {
         ctx.clearFocus();
     }
-    // INPUT-08: the accessible name is the placeholder/purpose; the value is the model's
+    // The accessible name is the placeholder/purpose; the value is the model's
     // authoritative text (never the caret/selection display string). A refused edit is an
     // assertive live region, matching the `danger` outline.
     const q = field.control(.{
@@ -68,7 +68,7 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
         sdl.keyboard.stopTextInput(ctx.res.platform.window) catch {};
     }
 
-    // Compose the display string from the authoritative editor model (INPUT-07).
+    // Compose the display string from the authoritative editor model.
     var buf: [UiState.TextInputState.max_query_bytes + 8]u8 = undefined;
     const shown: []const u8 = blk: {
         if (state.len == 0 and !focused) break :blk placeholder;

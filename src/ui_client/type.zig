@@ -1,14 +1,13 @@
-//! `type` — the **centralized, SDL-free typography contract** (TEXT-04). One place that
+//! `type` — the **centralized, SDL-free typography contract**. One place that
 //! declares the prototype's text roles (size in *logical* px, letter-spacing in `em`,
 //! case transform), the single logical→device scale seam, and the pure tracking math both
 //! measurement and rendering run. Everything here is host policy and deterministic — no
 //! SDL, no allocation, no I/O — so the whole contract is unit-testable without a live font.
 //!
-//! **Why a module and not scattered constants:** before TEXT-04 the sizes lived as bare
-//! `Style{ .font = N }` presets in `style.zig` and there was no scale layer at all. The
-//! typography contract (prototype.css `:root`) is a *set* of coupled attributes — size +
-//! tracking + case — that must travel together and be applied at exactly one multiply
-//! point so VIEW-01 can later feed a real DPI factor without touching every call site.
+//! **Why a module and not scattered constants:** the typography contract (prototype.css
+//! `:root`) is a *set* of coupled attributes — size + tracking + case — that must travel
+//! together and be applied at exactly one multiply point, so the DPI factor reaches every
+//! call site without any of them knowing.
 //!
 //! **The contract (confirmed against `prototypes/prototype.css`):**
 //!   - body    = 14 logical px, tracking -0.025em, no transform   (the unstyled default)
@@ -17,15 +16,14 @@
 //!   - eyebrow = 11 logical px, tracking +0.07em,  UPPERCASE       (mid of the 0.05–0.09em band)
 //!   All roles are **regular weight (400)**; no bold/italic is packaged (see `docs/fonts.md`).
 //!
-//! **Scale seam (VIEW-01):** `toDevice(logical_px, scale)` is the *only* logical→device
-//! multiply. Until VIEW-01 lands, `scale` is sourced from a single `View.scale` field that
-//! defaults to `1`, so today the device px equals the logical px byte-for-byte and nothing
-//! changes visually — but the seam exists and every font size already routes through it.
+//! **Scale seam:** `toDevice(logical_px, scale)` is the *only* logical→device multiply.
+//! `scale` is the single `View.scale` field, set each frame from the view metrics' DPI
+//! factor; at DPI 1 the device px equals the logical px.
 //!
 //! **Tracking (the hard invariant):** SDL_ttf has no letter-spacing API, so tracking is
 //! host-side. `deviceTracking(em, device_px)` converts an em spacing to an **integer**
 //! device-px delta added after each glyph cluster. Rounding to whole device px keeps
-//! hairline-crisp alignment (RENDER-06) and — crucially — makes the measure and draw passes
+//! hairline-crisp alignment and — crucially — makes the measure and draw passes
 //! bit-identical: both add the *same* integer `dx` between the *same* clusters. The actual
 //! cluster iteration lives in `features/text.zig` (it needs the live font's per-glyph
 //! advance), but the *policy* (how many device px each gap is) is here, in one function.
@@ -38,7 +36,7 @@ const std = @import("std");
 pub const Transform = enum { none, upper };
 
 /// A typography role: the coupled `(size, tracking, transform)` triple the prototype
-/// authors together. `size_logical_px` is pre-scale (VIEW-01 multiplies it); `tracking_em`
+/// authors together. `size_logical_px` is pre-scale (`toDevice` multiplies it); `tracking_em`
 /// is letter-spacing in `em` (negative = tighter, the prototype's global default; positive
 /// = looser, only the uppercase eyebrow); `transform` is the case rule.
 pub const Role = struct {
@@ -71,7 +69,7 @@ pub const eyebrow_tracking_max: f32 = 0.09;
 /// "explicitly body" are provably the same number. `style.default_font` re-exports this.
 pub const default_logical_px: f32 = body.size_logical_px;
 
-/// The **one** logical→device multiply (VIEW-01 seam). Clamped to a positive scale and a
+/// The **one** logical→device multiply (the scale seam). Clamped to a positive scale and a
 /// ≥1px floor so a degenerate scale can never ask the font backend for a 0/negative size.
 /// Every font size in the host routes through here before it reaches `Fonts.at`.
 pub fn toDevice(logical_px: f32, scale: f32) f32 {
@@ -81,7 +79,7 @@ pub fn toDevice(logical_px: f32, scale: f32) f32 {
 
 /// The integer device-px letter-spacing added *between* glyph clusters for `tracking_em` at
 /// a given device size. Rounded to a whole device pixel so measure and draw stay bit-identical
-/// and hairlines stay crisp (RENDER-06). Negative for tighter (the global default), positive
+/// and hairlines stay crisp. Negative for tighter (the global default), positive
 /// for the eyebrow. `0em` (or a rounding that lands on 0) yields `0` — the untracked fast path.
 pub fn deviceTracking(tracking_em: f32, device_px: f32) f32 {
     return @round(tracking_em * device_px);
@@ -136,7 +134,7 @@ test "type: default logical size is the body role (unstyled == body)" {
     try testing.expectEqual(@as(f32, 14), default_logical_px);
 }
 
-test "type: toDevice is identity at scale 1 (VIEW-01 not yet feeding a factor)" {
+test "type: toDevice is identity at scale 1" {
     try testing.expectEqual(@as(f32, 14), toDevice(14, 1));
     try testing.expectEqual(@as(f32, 21), toDevice(21, 1));
 }

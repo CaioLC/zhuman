@@ -30,7 +30,7 @@ const Yields = struct {
 /// conditions, as against `Requires`, which is what the build spends. Read once, in
 /// `capital.begin_build`: a dip afterwards doesn't stop work already paid for.
 const Unlock = struct {
-    /// The **absolute current Vigor** the builder must have (ACT1-04) — not a fraction of an
+    /// The **absolute current Vigor** the builder must have — not a fraction of an
     /// upgradeable ceiling. The finalized Shelter requirement is `15` current Vigor: capacity
     /// capital raises `max` but the bar is a fixed amount of body, so the same `15` gates the
     /// checklist, action enablement, and `begin_build` regardless of the ceiling.
@@ -45,7 +45,7 @@ const Unlock = struct {
 pub const Label = struct { v: []const u8 };
 
 /// Vigor: human energy source. Field defaults are the **authoritative starting baseline**
-/// (ACT1-01): a rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults
+/// A rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults
 /// (and the `baselines` module names them) rather than repeating literals, so Holdings can
 /// derive a current-vs-base margin against the same numbers.
 pub const Vigor = struct {
@@ -102,7 +102,7 @@ pub const ActionFish = struct {
 };
 
 /// Split wood: unlocked by the Hatchet — you cannot split logs bare-handed. Steady
-/// materials. Uniform (ACT1-08 finalized kind): an even spread rather than a bell — a
+/// materials. Uniform: an even spread rather than a bell — a
 /// day's splitting is a flat range of output, not a most-likely-mean.
 pub const ActionChopWood = struct {
     requires: Requires = .{ .energy = 2.5, .materials = 0.0, .hours = 5 },
@@ -114,7 +114,7 @@ pub const ActionChopWood = struct {
 
 /// Check traps: unlocked by Wire snares. The first stock-consuming verb — the bait is
 /// materials — converting m→f cheaply in both energy and hours; a bad draw eats the
-/// bait anyway. Poisson (ACT1-08 finalized kind): trap luck is lumpy — count-like, feast
+/// bait anyway. Poisson: trap luck is lumpy — count-like, feast
 /// or nothing, not an even spread.
 pub const ActionCheckTraps = struct {
     requires: Requires = .{ .energy = 1.0, .materials = 1.0, .hours = 2 },
@@ -181,7 +181,7 @@ pub const Busy = struct {
 
 /// The continuous eating policy: an agent consumes its own larder every tick — eating
 /// happens regardless of action (see `systems.metabolize`); what the player controls is
-/// the *rate*. `rate` is a **bounded scalar multiplier** (ACT1-02) in `[0.5, 2.0]`, `1.0` at
+/// the *rate*. `rate` is a **bounded scalar multiplier** in `[0.5, 2.0]`, `1.0` at
 /// normal: it scales `base_rate` continuously (ration = stretch the larder and stay weak,
 /// feast = restore fast and burn the stock), replacing the old three-value ration/normal/feast
 /// enum. `base_rate` is food/day at `rate = 1.0`. The `Config` owns the range/default and the
@@ -229,7 +229,7 @@ pub const Hatchet = struct {
 };
 
 // -- Tool ranks: a *better* tool in an existing family supersedes the weaker one ----------
-// (ACT1-16). A family's action stats come from the **highest-rank tool owned**, recomputed
+// A family's action stats come from the **highest-rank tool owned**, recomputed
 // from a canonical base each time membership changes — so equipping the better tool replaces
 // the stats (never stacks with its own family), losing it restores the next-best, and repeated
 // build→sell→build never drifts. These are traded upgrades (the passerby carries them), not
@@ -378,11 +378,11 @@ pub const ChickenCoop = struct {
 
 /// Shelter.
 pub const Shelter = struct {
-    // ACT1-11: the finalized Act I ending price — 60 materials, 6 energy, 144 hours (6.0 days).
+    // The Act I ending price — 60 materials, 6 energy, 144 hours (6.0 days).
     requires: Requires = .{ .energy = 6.0, .materials = 60.0, .hours = 144 },
     /// How many of this good the agent holds. Only the first carries the effect.
     count: u32 = 1,
-    // ACT1-11: the finalized standing conditions — current Vigor 15, Food 12, and 5 owned
+    // The standing conditions — current Vigor 15, Food 12, and 5 owned
     // good kinds ("you have made a life here"). Materials are the build cost, not an unlock.
     unlock: Unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
     /// How many humans live under it. Act II's population fills this; Act I only asks

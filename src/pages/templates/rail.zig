@@ -1,8 +1,8 @@
-//! `rail` — the **collapsible Holdings/BODY side rail** (KIT-05). Fills the KIT-04 shell's
+//! `rail` — the **collapsible Holdings/BODY side rail**. Fills the shell's
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
 //! content (Holdings in Act I, BODY in Act II), or a narrow collapsed strip (width
 //! `tokens.rail.collapsed`, 36) showing a **vertical restore affordance** — a chevron above the
-//! rail's label set 90° counter-clockwise (TEXT-06, the `.vertical` text fit), reading bottom-to-top.
+//! rail's label set 90° counter-clockwise (the `.vertical` text fit), reading bottom-to-top.
 //!
 //! **One toggle, synchronized everything.** The rail's collapsed/expanded bit lives in a keyed
 //! `RailState` pool (survives the frame-arena rebuild by `node.key`). One stable toggle control
@@ -12,7 +12,7 @@
 //! collapse memories** for free; the **STRUCTURE rail** passes `force_collapsed`, which
 //! overwrites *its own* state to collapsed every entry while leaving the other keys untouched.
 //!
-//! **The width animates (120ms, RENDER-08 tween).** The rail asks the host tween registry to
+//! **The width animates (120ms, host tween).** The rail asks the host tween registry to
 //! ride toward the target width over `tokens.dur_rail_s`, keyed by the rail node; `value(key,
 //! target)` drives the node's fixed width, so an interrupted toggle reverses smoothly and a
 //! first appearance simply sits at its target. Reduced motion snaps (the registry's policy).
@@ -152,7 +152,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
 // ============================ Tests (SDL-free) =========================================
 // The rail's visual composition needs a live font (measured text), so it is verified in the
 // running app; the pure state→width policy is unit-tested here against the real token widths
-// and the RENDER-08 tween registry — the same registry the rail drives at runtime.
+// and the tween registry — the same registry the rail drives at runtime.
 
 const testing = std.testing;
 const tween = uic.tween;

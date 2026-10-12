@@ -49,15 +49,15 @@ pub fn draw(u: *UiCtx, node: *Node, stroke: cb.Stroke, opacity: f32) void {
     for (pts, 0..) |p, i| buf[i] = .{ .x = r.x + p.x * r.w, .y = r.y + p.y * r.h };
     const mapped = buf[0..pts.len];
 
-    const c = paint.applyOpacity(stroke.color, opacity); // RENDER-07 subtree dimming
+    const c = paint.applyOpacity(stroke.color, opacity); // subtree dimming
     u.res.platform.renderer.setDrawColor(.{ .r = c.r, .g = c.g, .b = c.b, .a = c.a }) catch return;
 
     // A hairline is one call. Thickness is faked by re-stroking along the normal of the
     // *first* segment, which is honest for the straight runs both consumers draw and
     // visibly wrong on a tight corner — a real thick stroke wants `renderGeometry` with
     // mitred quads, which is the same call the board's filled tiles will need.
-    // RENDER-06: snap the width to a whole device px (≥1) at the frame scale so a 1px rail
-    // stays crisp at high-DPI. Today `scale` is 1 (identity); it matters under VIEW-01.
+    // Snap the width to a whole device px (≥1) at the frame scale so a 1px rail
+    // stays crisp at high-DPI; at DPI 1 it is identity.
     const w = paint.hairline(stroke.width, u.res.view.scale);
     if (w <= 1.0) {
         u.res.platform.renderer.renderLines(mapped) catch return;

@@ -64,7 +64,7 @@ pub fn doing_of(comptime ActionT: type) comp.Busy.Doing {
 }
 
 /// Whether a `Busy.Doing` is a capital build (vs a labor verb) — the activity strip picks the
-/// `.building` glyph for a build, `.working` for labor (ACT1-07).
+/// `.building` glyph for a build, `.working` for labor.
 pub fn is_build(d: comp.Busy.Doing) bool {
     return switch (d) {
         .forage, .scavenge, .fish, .chop_wood, .check_traps, .hunt => false,
@@ -126,7 +126,7 @@ fn begin_labor(w: *World, e: Entity, res: *Resources, comptime ActionT: type) vo
         res.config.condition(vigor.v / vigor.max) != .alive)
         res.sim.log.push(.warn, "You feel weak. Work will yield less.");
 
-    // ACT1-08: log the upfront payment — the price is paid now, the yield resolves at
+    // Log the upfront payment — the price is paid now, the yield resolves at
     // completion, so the feed shows the debit the moment the work begins.
     {
         var buf: [48]u8 = undefined;
@@ -251,7 +251,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     try std.testing.expectEqual(res_mod.hours_to_secs(4, res.config.secs_per_day), b.total); // Forage's 4h
     try std.testing.expectEqual(@as(f32, 1.0), b.quality); // locked at full strength
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v); // no deposit
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the upfront-payment line (ACT1-08)
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // the upfront-payment line
     try std.testing.expect(res.sim.tutorial_done); // a successful begin sets run-progression memory
 
     // A second begin while busy must refuse, leaving no trace.

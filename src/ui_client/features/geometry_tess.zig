@@ -1,5 +1,4 @@
-//! `geometry_tess` — the **pure, SDL-free tessellation** behind the `geometry` feature
-//! (RENDER-03). It turns high-level shapes (a convex polygon, a thick polyline) into an
+//! `geometry_tess` — the **pure, SDL-free tessellation** behind the `geometry` feature. It turns high-level shapes (a convex polygon, a thick polyline) into an
 //! indexed triangle mesh: a flat vertex list plus `u16` indices, three per triangle. It
 //! touches no SDL, no allocator, and no I/O — the caller hands it fixed-capacity slices and
 //! it reports overflow rather than allocating — so the geometry math (fan triangulation,
@@ -25,7 +24,7 @@ pub const V2 = struct { x: f32, y: f32 };
 
 /// An rgba color as bytes (0..255) — the host `Color`'s shape without importing SDL. The
 /// feature converts this to SDL's float `FColor` at draw; per-vertex color is what lets one
-/// mesh carry a gradient (RENDER-04's seam) or a multi-hue rail.
+/// mesh carry a gradient (the gradient seam) or a multi-hue rail.
 pub const Rgba = struct { r: u8, g: u8, b: u8, a: u8 };
 
 /// One mesh vertex: a position plus its own color. `renderGeometry` interpolates the colors
@@ -96,7 +95,7 @@ pub fn fillConvex(mesh: *Mesh, points: []const V2, color: Rgba) void {
 
 /// Fan-triangulate a convex polygon with **per-vertex** colors (`colors[i]` for `points[i]`),
 /// so `renderGeometry` interpolates them across the fill — a flat tint when all equal, a
-/// gradient/mixed fill when not (the RENDER-04 seam). `colors` must be at least `points.len`
+/// gradient/mixed fill when not (the gradient seam). `colors` must be at least `points.len`
 /// long; when `null`, `flat` is used for every vertex. Fewer than 3 points is a no-op.
 pub fn fillConvexMulti(mesh: *Mesh, points: []const V2, flat: Rgba, colors: ?[]const Rgba) void {
     if (points.len < 3) return;
@@ -119,7 +118,7 @@ pub fn fillConvexMulti(mesh: *Mesh, points: []const V2, flat: Rgba, colors: ?[]c
     }
 }
 
-/// The axis a linear gradient runs along (RENDER-04). Only the two axis-aligned directions
+/// The axis a linear gradient runs along. Only the two axis-aligned directions
 /// the prototype uses — a full CSS gradient angle grammar is out of scope. `horizontal` runs
 /// along +x (left→right), `vertical` along +y (top→bottom), both in the unit square.
 pub const Dir = enum { horizontal, vertical };
@@ -132,7 +131,7 @@ pub const Dir = enum { horizontal, vertical };
 pub const Stop = struct { pos: f32, color: Rgba };
 
 /// Fill a rect (the node's unit square) with an **explicit linear gradient** along `dir`
-/// through ordered `stops` (RENDER-04). Between each consecutive pair of stops it emits a quad
+/// through ordered `stops`. Between each consecutive pair of stops it emits a quad
 /// (two triangles) whose four corners carry the two stops' colors, so `renderGeometry`
 /// interpolates them across the span — a smooth ramp for distinct positions, a **hard split**
 /// for a duplicated position, and a **wash** when a stop's color is transparent. The cross
@@ -483,7 +482,7 @@ test "strokePolyline: fewer than 2 points or zero width is a no-op" {
     try testing.expectEqual(@as(usize, 0), m.indices().len);
 }
 
-// ---- RENDER-04 linear-gradient composition --------------------------------------------
+// ---- linear-gradient composition --------------------------------------------
 
 test "fillGradient: a two-stop horizontal ramp is one quad spanning the cross axis" {
     var v: [8]Vertex = undefined;

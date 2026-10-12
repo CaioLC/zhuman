@@ -26,7 +26,7 @@ const t = @import("./templates/root.zig");
 
 /// The prose column width for the curtain's note, in px — an explicit dialog measure so the
 /// note wraps as a paragraph rather than stretching the `fit_children` panel to one long
-/// line. A template constant today; VIEW-01's `ViewMetrics` will feed the same parameter.
+/// line. A template constant, in logical px.
 const dialog_prose_w: f32 = 320;
 
 /// The curtain's script. The last beat's button is the one that starts a new run.
@@ -47,7 +47,7 @@ const beats = [_]Beat{
 pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
-    // KIT-04: the Act I curtain lives in the one terminal shell; it needs only the main body.
+    // The Act I curtain lives in the one terminal shell; it needs only the main body.
     const regions = try t.shell(ctx, .{
         .id = "act1",
         .act = .act_one,
@@ -68,7 +68,7 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // The note is genuine prose, longer than a heading and worth reading as a paragraph —
     // constrain it to an explicit dialog column so it wraps on word boundaries instead of
     // stretching the panel to a single long line. The width is a template constant (the
-    // dialog's prose measure); VIEW-01's ViewMetrics will later feed the same parameter.
+    // dialog's prose measure), scaled once by the text fit.
     _ = (try dialog.text_fit("note", beat.note, .{ .wrap = dialog_prose_w }))
         .with_style(.{ style.body, Style{ .text = th.dim } });
 

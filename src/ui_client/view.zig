@@ -1,9 +1,9 @@
-//! `view` — **frame-local view metrics** (VIEW-01). Once per frame, `build_ui`'s prologue
+//! `view` — **frame-local view metrics**. Once per frame, `build_ui`'s prologue
 //! computes a `ViewMetrics` from the window's coordinate size, its drawable pixel size (DPI),
 //! and the `900×820` design **reference**, and stores it on `Resources.View`. Everything
-//! responsive reads it: the logical→device scale (feeding `type.toDevice` and the RENDER-06
-//! hairline snap), the logical viewport the layout is laid out in, the centered terminal rect
-//! (VIEW-03), and the width class that drives the `760/560/440` responsive branches (VIEW-04).
+//! responsive reads it: the logical→device scale (feeding `type.toDevice` and the
+//! hairline snap), the logical viewport the layout is laid out in, the centered terminal rect,
+//! and the width class that drives the `760/560/440` responsive branches.
 //!
 //! **Two independent scales, kept apart:**
 //!   - **DPI scale** (`dpi_scale`) = drawable pixels ÷ window coordinates. It is the
@@ -12,8 +12,8 @@
 //!     whole device pixels. It does **not** change layout: the layout is solved in logical
 //!     (window-coordinate) space, which is what SDL's renderer maps to pixels.
 //!   - **Responsive class** — derived from the *logical* width against the prototype's
-//!     breakpoints, so the layout branches (VIEW-04) and the framed/centered terminal
-//!     (VIEW-03) key off the design-space width, not the physical pixel count.
+//!     breakpoints, so the layout branches and the framed/centered terminal
+//!     key off the design-space width, not the physical pixel count.
 //!
 //! The compute is **pure and SDL-free** (`compute(logical_w, logical_h, pixel_density)`), so
 //! the reference-fit, centering, and breakpoint math are unit-tested without a window.
@@ -33,7 +33,7 @@ pub const bp_760: f32 = 760;
 pub const bp_560: f32 = 560;
 pub const bp_440: f32 = 440;
 
-/// The responsive width class, from the logical viewport width (VIEW-04). Ordered widest →
+/// The responsive width class, from the logical viewport width. Ordered widest →
 /// narrowest; a consumer typically asks `class.atMost(.w560)` rather than matching one value.
 pub const WidthClass = enum {
     /// Wider than 760 logical px: the full framed/centered terminal layout.
@@ -66,7 +66,7 @@ pub const WidthClass = enum {
     }
 };
 
-/// Frame-local view metrics (VIEW-01). All rects/sizes are in **logical** (window-coordinate)
+/// Frame-local view metrics. All rects/sizes are in **logical** (window-coordinate)
 /// px — the space the layout is solved in; `dpi_scale` converts those to device px for
 /// crispness. Recomputed every frame, so a resize just produces new metrics.
 pub const ViewMetrics = struct {
@@ -79,14 +79,14 @@ pub const ViewMetrics = struct {
     logical_h: f32 = ref_h,
     /// Device pixels per logical pixel (crispness factor). `View.scale` is set from this.
     dpi_scale: f32 = 1,
-    /// The terminal rect in logical px: capped at the reference and centered when framed
-    /// (VIEW-03), else the full window.
+    /// The terminal rect in logical px: capped at the reference and centered when framed,
+    /// else the full window.
     terminal: ui.Rect = .{ .x = 0, .y = 0, .w = ref_w, .h = ref_h },
     /// The responsive width class from `logical_w`.
     width_class: WidthClass = .full,
 
     /// Whether the framed/centered terminal chrome (border, shadow, ground) is shown — true
-    /// above the 760 breakpoint (VIEW-03).
+    /// above the 760 breakpoint.
     pub fn framed(self: ViewMetrics) bool {
         return self.width_class.framed();
     }
@@ -127,7 +127,7 @@ pub fn compute(logical_w: f32, logical_h: f32, pixel_density: f32) ViewMetrics {
     };
 }
 
-// --- The one logical→device scaling helper (VIEW-02) ------------------------------------
+// --- The one logical→device scaling helper ------------------------------------
 //
 // Every **authored dimension** — padding, gaps, fixed sizes, stroke widths, the drag
 // threshold, scrollbar widths, icon sizes — is a *logical* px value multiplied by the frame
@@ -136,10 +136,10 @@ pub fn compute(logical_w: f32, logical_h: f32, pixel_density: f32) ViewMetrics {
 // and stays consistent with text, which already routes through `type.toDevice`. Simulation
 // values and camera percentages are **not** dimensions and never pass through this. Unlike the
 // font `toDevice` there is **no ≥1px floor**: a 0 gap/padding stays 0, a scaled dimension is
-// exactly `logical * scale` (crisp snapping of *hairlines* is `paint.hairline`'s job, RENDER-06).
+// exactly `logical * scale` (crisp snapping of *hairlines* is `paint.hairline`'s job).
 
-/// A logical px dimension in device px at `scale`. The single conversion point VIEW-02 routes
-/// every authored dimension through. `scale ≤ 0` is treated as 1 (never a negative size).
+/// A logical px dimension in device px at `scale`. The single conversion point
+/// every authored dimension goes through. `scale ≤ 0` is treated as 1 (never a negative size).
 pub fn dp(logical: f32, scale: f32) f32 {
     return logical * (if (scale > 0) scale else 1);
 }

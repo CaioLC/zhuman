@@ -79,7 +79,7 @@ pub const Log = struct {
     }
 };
 
-// --- Tests (TEXT-01: non-silent log storage) --------------------------------------------
+// --- Tests (non-silent log storage) --------------------------------------------
 
 const std = @import("std");
 const testing = std.testing;

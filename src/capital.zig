@@ -119,7 +119,7 @@ pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
     if (!@hasField(GoodT, "unlock")) return true;
     const u = (GoodT{}).unlock;
     const vigor, const food = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryFood });
-    if (vigor.v < u.vigor_abs) return false; // ACT1-04: absolute current Vigor, not a fraction
+    if (vigor.v < u.vigor_abs) return false; // absolute current Vigor, not a fraction
     if (food.v < u.food) return false;
     return goods_owned(w, e) >= u.goods;
 }
@@ -179,7 +179,7 @@ fn grant(w: *World, e: Entity, comptime GoodT: type) void {
 }
 
 /// A public wrapper over `grant` — the same "apply the good's effect once, on the way in from
-/// absent" the build path runs, exposed so a **bought** good (ACT1-14 barter) lands its effect
+/// absent" the build path runs, exposed so a **bought** good (barter) lands its effect
 /// through the identical path rather than duplicating the switch. Ownership (`w.add`) is the
 /// caller's; this is only the effect.
 pub fn grant_public(w: *World, e: Entity, comptime GoodT: type) void {
@@ -314,7 +314,7 @@ pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) v
         held.count -= 1;
         return;
     }
-    // Remove the component **first**, then revoke — so a family recompute (ACT1-16) sees the
+    // Remove the component **first**, then revoke — so a family recompute sees the
     // post-removal state and restores the correct next-best rank. Every other revoke reads its
     // *target* component (a verb, the larder, Vigor), never the good itself, so the order is
     // safe for them too.
@@ -441,7 +441,7 @@ pub fn remove_chainsaw(w: *World, agent: Entity) void {
     chop.yields.materials.sd /= 2.5;
 }
 
-// --- Tool families and supersession (ACT1-16) ---------------------------------------
+// --- Tool families and supersession ---------------------------------------
 // A family's verb stats come from the **highest-rank tool owned**, recomputed **from the
 // action's canonical base** each time family membership changes. Recomputing from base (rather
 // than multiply-on-equip / divide-on-remove) is what makes supersession correct *and*
@@ -513,7 +513,7 @@ fn recompute_chopping(w: *World, e: Entity) void {
 // All mutations are relative (+=/−=), so a future aging system decrementing `max`
 // composes underneath without special cases.
 //
-// **ACT1-16 — the asymmetry is intentional, and now explicit.** `health_apply` raises `max` *and*
+// **The asymmetry is intentional.** `health_apply` raises `max` *and*
 // fills `v` by the same amount; `health_remove` lowers `max` and only *clamps* `v` down to the
 // new ceiling. So the pair does **not** round-trip: a bed that you sleep in (filling you) and then
 // lose leaves you with the vigor you gained, capped at the lower ceiling — you do not un-rest. This
@@ -830,7 +830,7 @@ test "a generator pays its upkeep and deposits its flow, per day" {
 /// materials for the price. Individual conditions are then knocked out one at a time.
 fn spawn_settler(w: *World) Entity {
     return w.spawn(.{
-        comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15 (ACT1-04), max is irrelevant
+        comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15, max is irrelevant
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the finalized 12
         comp.InventoryMaterial{ .v = 100 }, // >= the finalized 60 price
         comp.Sandals{},
@@ -876,7 +876,7 @@ test "each standing condition refuses the shelter on its own" {
         begin_build(&w, e, &res, comp.Shelter);
         try std.testing.expect(!w.has(e, comp.Busy));
     }
-    // ACT1-04 boundary: the requirement is an *absolute* 15, independent of `max`. 14.99 fails
+    // Boundary: the requirement is an *absolute* 15, independent of `max`. 14.99 fails
     // and 15 passes whether the ceiling is 15, 20, or 100.
     {
         var w = World.init();
@@ -959,7 +959,7 @@ test "cancel refuses on labor, and on an idle body" {
     try std.testing.expectEqual(before, w.get(e, comp.InventoryMaterial).?.v);
 }
 
-// ============================ ACT1-16: tool supersession & reversible effects ===========
+// ============================ tool supersession & reversible effects ===========
 
 /// Own a non-buildable rank-2 tool in a test (the passerby's upgrade), applying its family
 /// recompute — the same two steps `barter.resolve` runs for a bought good.
@@ -1081,7 +1081,7 @@ test "repeated build → sell → build never drifts (recompute from base)" {
     try std.testing.expectEqual(base_food, fish.yields.food.s);
 }
 
-test "health lifecycle is intentionally non-round-tripping (ACT1-16 explicit)" {
+test "health lifecycle is intentionally non-round-tripping (intentional)" {
     var w = World.init();
     var res = test_res();
     const e = spawn_test_agent(&w);

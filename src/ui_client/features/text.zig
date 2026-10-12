@@ -29,16 +29,16 @@ pub const State = cb.UiState.TextState;
 // degrades to "nothing fits" rather than panicking mid-frame; the caller treats a failed
 // measure as an empty box (like a refused string), keeping box and render in agreement.
 //
-// **TEXT-04 tracking:** the measurer carries a device-px `tracking` delta added *between*
+// **Tracking:** the measurer carries a device-px `tracking` delta added *between*
 // glyph clusters. When `tracking == 0` every width/prefix call falls through to SDL's own
-// `getStringSize`/`measureString` — byte-for-byte the pre-TEXT-04 behavior, so untracked
+// `getStringSize`/`measureString`, so untracked
 // text costs nothing. When `tracking != 0`, width/prefix are computed by the shared
 // `trackedAdvance` routine that walks codepoint clusters accumulating per-glyph advances
 // (plus kerning) and adding `tracking` between clusters — the SAME routine `draw`'s
 // per-cluster blit loop uses to place glyphs, so measurement and rendering add the identical
 // integer `dx` between the identical clusters and cannot drift on any path (single-line,
 // wrap, clip, ellipsis). Walking per codepoint also means no multi-codepoint run is ever
-// handed to a shaper, so no ligature can form — the render-path half of TEXT-04's
+// handed to a shaper, so no ligature can form — the render-path half of the
 // two-layer "no ligatures" defense (the NL font asset is the other half).
 
 const FontMeasurer = struct {
@@ -224,7 +224,7 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
         const tw, const th, const baseline = measureWrapped(font, measured, st.wrap_width, st.tracking);
         break :blk .{ .width = tw, .height = th, .baseline = baseline };
     } else if (st.overflow != .visible) blk: {
-        // TEXT-03: an explicitly allocated single-line cell. The *box* is the allocated
+        // An explicitly allocated single-line cell. The *box* is the allocated
         // width, never the unbounded glyph width — including a legal zero-width cell. A
         // widening label cannot shift its neighbors, and hit-testing uses this stamped cell.
         // Height and baseline still come from the font, single-line, so the cell baseline-aligns
@@ -260,8 +260,8 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
 /// refuses a source past `State.cap` (non-silent, whole-string), the state holds no text,
 /// so this measures nothing (a zero box) rather than reserving space for a string the
 /// renderer will not draw — box and render stay in agreement. A too-long string is thus
-/// dropped visibly (empty node), never cut mid-codepoint. TEXT-02 adds wrapping for text
-/// that must actually be longer than `State.cap`.
+/// dropped visibly (empty node), never cut mid-codepoint. Text that must actually be
+/// longer than `State.cap` goes through the wrap fit.
 ///
 /// Wrapping is off here (`wrap_width` stays 0, the single-line fast path) — a caller opts a
 /// node into constrained multiline with `El.text_fit(.{ .wrap = w })`, which sets the width and re-measures.
@@ -284,7 +284,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 }
 
 /// Blit the node's cached text in `c` over its content box. **Every** variant is cached as
-/// one composite white texture in `State.tex` (TEXT-05): a cache miss generates the composite
+/// one composite white texture in `State.tex`: a cache miss generates the composite
 /// once (see `renderComposite`), a hit blits it tinted — no variant re-rasterizes per frame,
 /// unlike a naive `renderTextSolid`-every-frame path.
 ///
@@ -305,16 +305,16 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
     const st = node.state(u, State);
     const fmt = st.text() orelse {
-        // TEXT-01 refused/empty: nothing to draw. Release any texture still cached from a
+        // Refused/empty: nothing to draw. Release any texture still cached from a
         // prior accepted string (renderer alive here) so an emptied label doesn't leak.
         if (st.tex != null) st.deinit();
         return;
     };
-    const tint = paint.applyOpacity(c, opacity); // RENDER-07 subtree dimming (tint-on-blit)
+    const tint = paint.applyOpacity(c, opacity); // subtree dimming (tint-on-blit)
     const r = paint.content(node) orelse return;
     const f = u.res.platform.font.at(st.px) catch return;
 
-    // **TEXT-05 (all variants cached):** every accepted variant — normal, tracked, wrapped,
+    // **All variants cached:** every accepted variant — normal, tracked, wrapped,
     // clip, ellipsis, and their tracked combinations — is rasterized into **one composite
     // white texture** on a cache miss and blitted (tinted) thereafter. The only per-frame,
     // render-time-only operation is the `.clip` cell's clip rectangle: the *pixels* of a
@@ -325,7 +325,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
     drawCached(u, st, f, fmt, tint, r, clip_cell);
 }
 
-/// Build the TEXT-05 cache inputs from the current state + the live renderer generation.
+/// Build the cache inputs from the current state + the live renderer generation.
 /// The one place `State` fields are projected onto the SDL-free key seam, so the enumerated
 /// key dimensions stay in sync with `text_cache.Key`. Color is deliberately absent (tint-on-
 /// blit). `content` is the accepted/transformed bytes (`fmt`), already folded by `attach`.
@@ -347,7 +347,7 @@ fn cacheInputs(u: *UiCtx, st: *const State, fmt: []const u8) text_cache.Inputs {
 /// tracks the actual glyph and the same token draws as was measured.
 pub const ellipsis_token = "\u{2026}";
 
-// ============================ Unified composite cache (TEXT-05) ========================
+// ============================ Unified composite cache ========================
 //
 // **Every** accepted variant — normal, tracked, wrapped, clip, ellipsis, and the tracked
 // combinations of wrap/clip/ellipsis — rasterizes into **one composite white texture** on a
@@ -690,12 +690,12 @@ fn blitPlacement(orientation: State.Orientation, box: ui.Rect, texture_w: f32, t
 }
 
 /// Blit an already-cached upright composite, tinted in `c`. Orientation is deliberately a
-/// final-blit transform: horizontal and vertical uses share the same TEXT-05 texture and a
+/// final-blit transform: horizontal and vertical uses share the same texture and a
 /// mode switch causes no glyph raster/upload churn. The 90° path uses an axis-aligned center
 /// rotation, matching `orientMetrics`' swapped layout/focus/hit box.
 fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, box: ui.Rect, orientation: State.Orientation) void {
     const w, const h = tex.getSize() catch return;
-    // RENDER-01: honor the tint alpha explicitly (the composite is already generated with
+    // Honor the tint alpha explicitly (the composite is already generated with
     // `.blend`, but set it here too so a translucent/dimmed label composites consistently).
     tex.setBlendMode(.blend) catch {};
     tex.setColorMod(c.r, c.g, c.b) catch {};
@@ -730,15 +730,16 @@ fn intersectIRect(a: sdl.rect.IRect, b: sdl.rect.IRect) sdl.rect.IRect {
 
 // --- Tests ------------------------------------------------------------------------------
 //
-// `attach` and `draw` cannot run without a live SDL font/renderer, but their TEXT-01
+// `attach` and `draw` cannot run without a live SDL font/renderer, but their
 // correctness rests on a single, SDL-free invariant: both derive the string they act on
 // from the *same* accessor, `State.text()`. `attach` measures `st.text() orelse ""` (so
 // the reserved layout box matches what will be drawn, and a refused/over-cap string
 // reserves a zero box rather than space for text that will never appear); `draw` renders
 // `st.text() orelse return` (drawing nothing for that same refused/empty state). These
 // tests pin that shared source directly, so the measure-vs-render agreement — the bug
-// TEXT-01 fixes — is guarded without a graphics context. The wrap *routine* itself
-// (`wrap.zig`) is separately and thoroughly tested SDL-free with a fake measurer.
+// the whole-refusal rule exists for — is guarded without a graphics context. The wrap
+// *routine* itself (`wrap.zig`) is separately and thoroughly tested SDL-free with a fake
+// measurer.
 
 test {
     _ = wrap; // pull `wrap.zig`'s SDL-free wrap tests into the feature test binary
@@ -778,7 +779,7 @@ test "text feature: wrap_width is POD state that round-trips; default is the fas
 }
 
 test "text feature: an over-cap string is still refused whole even with wrap set" {
-    // TEXT-01's whole-refusal is preserved: wrapping is not a way to smuggle a too-long
+    // The whole-refusal is preserved: wrapping is not a way to smuggle a too-long
     // source past the cap. A refused state has no text, so the wrapped measure sees "" and
     // reserves a zero box — identical to the single-line refusal path.
     var st = State.init();
@@ -805,7 +806,7 @@ test "text feature: overflow mode/width are POD state that round-trip; default i
 }
 
 test "text feature: an over-cap string is still refused whole even with an overflow cell" {
-    // TEXT-01's whole-refusal holds: an overflow cell is not a way to smuggle a too-long
+    // The whole-refusal holds: an overflow cell is not a way to smuggle a too-long
     // source past the cap. A refused state has no text, so the cell draws nothing.
     var st = State.init();
     st.overflow = .clip;
@@ -817,7 +818,7 @@ test "text feature: an over-cap string is still refused whole even with an overf
 }
 
 test "text feature: an overflow cell measures to the allocated width, not the glyph width" {
-    // The core TEXT-03 geometry invariant, pinned SDL-free: `remeasure` writes
+    // The core geometry invariant, pinned SDL-free: `remeasure` writes
     // `data_width = overflow_width` for an overflow cell, independent of the glyph width. We
     // stand in for `remeasure`'s cell branch (which needs a live font for height/baseline)
     // by exercising the exact rule it applies to the width — the width comes from the field,
@@ -891,9 +892,9 @@ test "text feature: integer clip-rect intersection is the overlap, empties to ze
 }
 
 test "text feature: tracking is POD state that round-trips; default is the untracked fast path" {
-    // TEXT-04: `tracking` defaults to 0 (the untracked fast path — one getStringSize measure
-    // and one renderTextSolid span, byte-for-byte the pre-TEXT-04 behavior). A resolved
-    // device-px delta round-trips like `wrap_width`/`overflow`, with no allocator (POD).
+    // `tracking` defaults to 0 (the untracked fast path — one getStringSize measure and one
+    // renderTextSolid span). A resolved device-px delta round-trips like
+    // `wrap_width`/`overflow`, with no allocator (POD).
     var st = State.init();
     try std.testing.expectEqual(@as(f32, 0), st.tracking); // default: untracked
     try std.testing.expect(st.update("IN REACH"));
@@ -907,7 +908,7 @@ test "text feature: tracking is POD state that round-trips; default is the untra
 }
 
 test "text feature: an over-cap string is still refused whole even with tracking set" {
-    // TEXT-04 tracking is not a way to smuggle a too-long source past TEXT-01's cap.
+    // Tracking is not a way to smuggle a too-long source past the cap.
     var st = State.init();
     st.tracking = 1;
     var over: [State.cap + 1]u8 = undefined;

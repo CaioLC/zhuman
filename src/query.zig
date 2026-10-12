@@ -1,4 +1,4 @@
-//! `query` — the **one catalog query parser** (KIT-14), shared by every catalog view (ACTIONS,
+//! `query` — the **one catalog query parser**, shared by every catalog view (ACTIONS,
 //! BUILD, and the trade/recipe lists). It parses a search string **once** into a bounded set of
 //! terms and then matches each row against them **without allocating per row** — the terms are
 //! slices into the original query bytes, and matching is pure `[]const u8` comparison.
@@ -162,7 +162,7 @@ pub fn matchFieldValue(field_value: []const u8, term_value: []const u8) bool {
     return false;
 }
 
-/// The row-facing contract (KIT-14). A catalog wraps its row in something that answers a
+/// The row-facing contract. A catalog wraps its row in something that answers a
 /// `Field` with the row's text for that field, plus a `haystack` for free text, and the two
 /// cross-field facts: `ready`/`reach` (for `state:in-reach`) and the `is:` union of state+type.
 /// This is where the catalog-specific semantics live, keeping the parser pure. Duck-typed

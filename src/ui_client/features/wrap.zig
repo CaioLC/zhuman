@@ -1,8 +1,8 @@
 //! `wrap` — the host-side, **pure** line-breaking routine behind constrained multiline
-//! text (TEXT-02). It is the *single source of truth* both `text.attach` (build-time
+//! text. It is the *single source of truth* both `text.attach` (build-time
 //! measurement) and `text.draw` (per-line render) run, so the reserved layout box always
 //! matches the glyphs that get drawn — the same "measure and draw read one source"
-//! invariant TEXT-01 pins for the single-line path, extended to N lines.
+//! invariant the single-line path pins, extended to N lines.
 //!
 //! **Why a separate module, and why parameterized by a `Measurer`:** the generic engine
 //! `src/ui` must stay callback-free and typography-unaware; wrapping is host policy that
@@ -22,8 +22,8 @@
 //! hard-break fallback — is what lets "renders exactly the measured lines" be a guarantee
 //! rather than a hope.
 //!
-//! This module does **no** clipping/ellipsis (that is TEXT-03) and **no** typography
-//! changes (TEXT-04); it only decides where lines break for a given width.
+//! This module does **no** clipping/ellipsis (that is the overflow cell) and **no** typography
+//! changes; it only decides where lines break for a given width.
 
 const std = @import("std");
 
@@ -206,7 +206,7 @@ fn wrapParagraph(
     return true;
 }
 
-// --- Single-line overflow: ellipsis fitting (TEXT-03) -----------------------------------
+// --- Single-line overflow: ellipsis fitting -----------------------------------
 //
 // The pure counterpart to `wrapLines` for the *single-line* overflow case. Like wrap, it is
 // SDL-free (it asks the same `Measurer` for widths) and deterministic, so `text.remeasure`
@@ -456,7 +456,7 @@ test "wrap: measure and render agreement — one routine, identical spans" {
     }
 }
 
-// --- Tests: ellipsisFit (TEXT-03), same 1px/byte fake ----------------------------------
+// --- Tests: ellipsisFit, same 1px/byte fake ----------------------------------
 //
 // The fake bills 1px/byte and its `prefixBytes` returns the codepoint-aligned bytes fitting
 // `floor(max_w)`. So a cell width reads as a byte budget, and every fit/boundary/UTF-8/tiny
@@ -551,9 +551,9 @@ test "ellipsisFit: determinism — identical inputs yield identical fit (measure
     try testing.expectEqual(a.prefix_len, b.prefix_len);
 }
 
-// --- Tests: TEXT-04 tracking-aware measurer feeds wrap/ellipsis unchanged ----------------
+// --- Tests: tracking-aware measurer feeds wrap/ellipsis unchanged ----------------
 //
-// TEXT-04's leverage point: `wrapLines`/`ellipsisFit` take ONLY a `Measurer`, so making the
+// The leverage point: `wrapLines`/`ellipsisFit` take ONLY a `Measurer`, so making the
 // measurer tracking-aware (add a fixed device-px `dx` between clusters) makes wrap and
 // ellipsis tracking-correct with ZERO changes to these pure routines. This fake bills
 // 1px/byte PLUS `dx` between adjacent ASCII bytes (one byte == one cluster here), exactly

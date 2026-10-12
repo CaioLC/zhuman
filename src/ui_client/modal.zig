@@ -11,7 +11,7 @@
 //! subsequent `.clicked` on the root is then an outside activation (the game's modal template
 //! packages this as `dismissed`).
 //!
-//! **Focus (KIT-08).** The shell opens a focus trap (`ctx.beginFocusScope`) before the
+//! **Focus.** The shell opens a focus trap (`ctx.beginFocusScope`) before the
 //! caller's dialog focusables are built, so Tab/Shift+Tab cycle only within the dialog while
 //! it is open; nothing the scrim covers is Tab-reachable. The shell also sees the open edge:
 //! a pooled `ModalState` on its root, pruned once the dialog stops building, records the key
@@ -44,7 +44,7 @@ pub const Modal = struct {
 pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
     const th = ctx.res.view.theme;
 
-    // VIEW-02: `el.root` sizes the scrim to the whole drawable, in device px (the layout space).
+    // `el.root` sizes the scrim to the whole drawable, in device px (the layout space).
     const root = try el.root(ctx, id);
     _ = root.with_style(.{Style{ .fill = th.bg }});
     _ = root.track(); // fullscreen scrim: a queried root structurally blocks lower trees
@@ -57,7 +57,7 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
         .with_style(.{Style{ .fill = th.bg, .outline_color = th.line2 }});
     _ = box.track(); // a blocking target, and keeps the slot alive so its prior geometry resolves
 
-    // KIT-08 focus trap: everything registered from here on (the caller's controls) is the
+    // Focus trap: everything registered from here on (the caller's controls) is the
     // trapped set. The modal is listed last, so its content is exactly this suffix.
     ctx.beginFocusScope();
 

@@ -1,9 +1,9 @@
-//! `terminal` — the **centered terminal workspace shell** (VIEW-03). Every screen builds
+//! `terminal` — the **centered terminal workspace shell**. Every screen builds
 //! inside it. It reads the frame's `ViewMetrics` and composes the outer chrome:
 //!
 //!   - **Framed** (logical width > 760): the window is filled with the near-black terminal
 //!     **ground** (`#090806`), and the terminal itself is a `metrics.terminal`-sized box —
-//!     capped at the `900×820` reference and centered — with a soft drop shadow (RENDER-05),
+//!     capped at the `900×820` reference and centered — with a soft drop shadow,
 //!     a hairline border, its own `bg` fill, and **clipped** internals. The screen fills the
 //!     returned inner box, so nothing spills past the terminal edge.
 //!   - **Full-window** (≤760): the terminal *is* the window — no ground, no shadow, no border,
@@ -11,10 +11,10 @@
 //!
 //! The shell returns the **inner content box** (an `El`) for the screen to lay out into, plus
 //! the terminal rect it occupies, so a screen positions against the terminal, not the window.
-//! Coordinates are device px (VIEW-02): `metrics.terminal` is logical, so it is scaled by the
+//! Coordinates are device px: `metrics.terminal` is logical, so it is scaled by the
 //! frame `scale` here, once.
 //!
-//! **`shell` (KIT-04)** extends this into the one region skeleton every screen composes into:
+//! **`shell`** extends this into the one region skeleton every screen composes into:
 //! a screen passes a `ShellOptions` descriptor (act identity, responsive padding, and which
 //! optional regions it wants) and gets a `Regions` struct of `El` handles — always `header`
 //! and `body`, plus optional `rail`/`nav`/`market`/`activity`/`footer` — laid out in the
@@ -60,13 +60,13 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
     // Framed: the window is the terminal ground; the terminal is a centered, capped box.
     _ = root.with_layout(.top_left).with_style(.{Style{ .fill = ground }});
 
-    // The terminal rect in device px (metrics.terminal is logical — scale once, VIEW-02).
+    // The terminal rect in device px (metrics.terminal is logical — scale once).
     const tx = uic.view.dp(m.terminal.x, scale);
     const ty = uic.view.dp(m.terminal.y, scale);
     const tw = uic.view.dp(m.terminal.w, scale);
     const twh = uic.view.dp(m.terminal.h, scale);
 
-    // A soft drop shadow behind the terminal (RENDER-05), placed before the box so it paints
+    // A soft drop shadow behind the terminal, placed before the box so it paints
     // under it. Understated: the prototype's `0 16px 80px #000a`, in device px.
     try uic.shadow.drop(root, id, tx, ty, tw, twh, .{
         .offset_y = uic.view.dp(16, scale),
@@ -87,7 +87,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
     return .{ .root = root, .content = box };
 }
 
-// === KIT-04 · one terminal shell template ==============================================
+// === The shell: one region skeleton for every screen ==============================================
 //
 // `shell` extends `terminal` (the outer chrome) into the **region skeleton every screen
 // composes into**, so a screen supplies *descriptors* — which regions it wants and its
@@ -115,7 +115,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 
 /// What a screen asks the shell to compose. `act` is carried for descriptor-driven region
 /// content (which strips/nav a given act shows) and to key the shell; the booleans turn the
-/// optional regions on. `page_pad`/`section_gap` are the screen's responsive choice (VIEW-04)
+/// optional regions on. `page_pad`/`section_gap` are the screen's responsive choice
 /// so the shell does not re-derive the width class.
 pub const ShellOptions = struct {
     id: []const u8,

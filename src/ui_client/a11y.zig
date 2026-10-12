@@ -1,5 +1,5 @@
-//! Host-side accessibility bridge (INPUT-09) — the deterministic seam between the
-//! `INPUT-08` semantic model and a future platform (Windows UI Automation) provider.
+//! Host-side accessibility bridge — the deterministic seam between the
+//! semantic model and a platform (Windows UI Automation) provider.
 //!
 //! ## What this is, and what it is honestly *not*
 //!
@@ -26,9 +26,9 @@
 //!
 //! ### What this build *does* ship (and this bridge verifies is plumbed)
 //!
-//!   * Full keyboard operation — `command.zig` + focus routing (INPUT-06/07).
-//!   * Visible focus — focus-visible chrome on every focusable control (INPUT-04/06).
-//!   * Non-color state cues — outline/shape state projections, never color alone (INPUT-04).
+//!   * Full keyboard operation — `command.zig` + focus routing.
+//!   * Visible focus — focus-visible chrome on every focusable control.
+//!   * Non-color state cues — outline/shape state projections, never color alone.
 //!   * Live-announcement plumbing — `AnnouncementChannel`; this bridge is the reader that
 //!     drains it through a generation cursor and forwards each new message to the active
 //!     `Provider` sink (a no-op/logging default now; a UIA notification later).

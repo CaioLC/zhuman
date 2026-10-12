@@ -40,7 +40,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*us
         a.* = st.active;
     };
 
-    // INPUT-08: collect the member keys in paint order for the group's `controls` links.
+    // Collect the member keys in paint order for the group's `controls` links.
     var member_keys: [uic.semantic.max_relations]u64 = undefined;
     var member_len: usize = 0;
 

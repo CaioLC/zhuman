@@ -1,5 +1,5 @@
-//! `log_view` (KIT-22) — the normalized EventLog footer: the **four newest** lines, newest
-//! first and **emphasized**, each recolored by its `Tone` (including the KIT-01 `good` role).
+//! `log_view` — the normalized EventLog footer: the **four newest** lines, newest
+//! first and **emphasized**, each recolored by its `Tone` (including the `good` role).
 //! The newest line is stamped **NOW**; older lines carry a relative age marker. The footer log
 //! **does not scroll** — the `Log` preserves the full history beyond four, but it is only
 //! reachable through the explicit `log_history` view (a scroll region), never an independent
@@ -7,7 +7,7 @@
 //! reader hears the newest event, and the feed publishes a stable **semantic region** at the
 //! screen level so the bridge treats it as one live log.
 //!
-//! `log_view` works in **logical** px (VIEW-02): the El/style seams scale the whole thing to
+//! `log_view` works in **logical** px: the El/style seams scale the whole thing to
 //! device px, so the reserved height tracks the font.
 
 const std = @import("std");
@@ -29,8 +29,8 @@ const sv = @import("./scroll_view.zig");
 const footer_row_pad_x: f32 = 5;
 const footer_content_gap: f32 = 0;
 
-/// Map a log entry's tone to the current theme's matching color role (host policy). KIT-22:
-/// `good` maps to the dedicated `good` role (KIT-01), not the accent, so a gain reads as a gain.
+/// Map a log entry's tone to the current theme's matching color role (host policy).
+/// `good` maps to the dedicated `good` role, not the accent, so a gain reads as a gain.
 fn log_tone_color(t: Theme, tone: Tone) Color {
     return switch (tone) {
         .dim => t.dim,
@@ -58,7 +58,7 @@ fn line_height(ctx: *UiCtx) f32 {
     return @max(17, @as(f32, @floatFromInt(h)));
 }
 
-/// The normalized footer EventLog (KIT-22): the newest `lines` entries (typically 4), newest
+/// The normalized footer EventLog: the newest `lines` entries (typically 4), newest
 /// first and emphasized, tone-colored, each with its `NOW`/age stamp — **no scrolling**. `width`
 /// is a logical px column. The full history stays in `feed`; `log_history` is the way to it.
 pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
@@ -72,7 +72,7 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         .with_size(.{ .fixed = width }, .{ .fixed = band });
 
     // Publish a polite announcement of the newest line so a reader hears the latest event once
-    // (KIT-22 live region). The full history stays in `feed`; `log_history` is the way to it.
+    // (live region). The full history stays in `feed`; `log_history` is the way to it.
     if (feed.count > 0) {
         _ = ctx.res.announcements.announce(feed.get(0).text());
     }
@@ -99,7 +99,7 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
     }
 }
 
-/// The explicit **history view** (KIT-22): the full `Log` in a scroll region, newest first,
+/// The explicit **history view**: the full `Log` in a scroll region, newest first,
 /// tone-colored. This is the *only* place the feed scrolls — opened deliberately (a modal or a
 /// dedicated panel), never the footer. `width` is a logical px total footprint; `height` the
 /// logical viewport height.

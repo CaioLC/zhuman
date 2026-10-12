@@ -127,7 +127,7 @@ pub const act_one_workspace = act_one_workspace_mod.act_one_workspace;
 pub const ActOneWorkspace = act_one_workspace_mod.Result;
 pub const ActOneWorkspaceOptions = act_one_workspace_mod.Options;
 pub const TradeResult = trade_dialog_mod.Result;
-// KIT-23 board-level primitives
+// Board-level primitives
 pub const tag = board_primitives_mod.tag;
 pub const cost_list = board_primitives_mod.cost_list;
 pub const Cost = board_primitives_mod.Cost;

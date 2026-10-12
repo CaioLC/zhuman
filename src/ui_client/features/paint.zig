@@ -48,7 +48,7 @@ pub fn irect(r: ?ui.Rect) ?sdl.rect.IRect {
     };
 }
 
-// --- Hairline snapping (RENDER-06) -------------------------------------------------------
+// --- Hairline snapping -------------------------------------------------------
 //
 // A one-logical-pixel border/outline/rail/focus ring must stay a **crisp whole-device-pixel**
 // line at any DPI scale. Layout geometry is device-space f32; a hairline landing on a
@@ -56,9 +56,9 @@ pub fn irect(r: ?ui.Rect) ?sdl.rect.IRect {
 // is anti-aliased into a blurry 1–2px smear, and adjacent columns/rails at fractional
 // positions **shimmer** as their coverage shifts sub-pixel. The fix is to snap the hairline's
 // *position* to a whole device pixel and its *width* to a whole number of device px (≥ 1), so
-// every hairline is exactly N crisp pixels at a pixel boundary. Today `View.scale` is 1 so
-// this is identity for integer-authored widths; it becomes load-bearing when VIEW-01 feeds a
-// real DPI factor. These are pure, testable, and shared by every feature that strokes a line.
+// every hairline is exactly N crisp pixels at a pixel boundary. At DPI 1 this is identity for
+// integer-authored widths; a fractional `View.scale` is what makes it load-bearing.
+// These are pure, testable, and shared by every feature that strokes a line.
 
 /// Snap a device-space coordinate to the nearest whole pixel — a hairline edge sits *on* a
 /// pixel boundary rather than straddling two. Used for outline/rail positions.
@@ -75,7 +75,7 @@ pub fn hairline(logical_w: f32, scale: f32) f32 {
     return @max(1, @round(logical_w * s));
 }
 
-// --- Per-node visual opacity (RENDER-07) -------------------------------------------------
+// --- Per-node visual opacity -------------------------------------------------
 //
 // The render walk carries an inherited opacity (0..1) down the tree and multiplies it into
 // every feature's paint alpha, so a whole subtree can be dimmed (a board tile filtered out, a

@@ -11,7 +11,7 @@ pub const Focus = struct {
     building: std.ArrayList(Target) = .empty,
     groups: std.ArrayList(Group) = .empty,
     focused: ?u64 = null,
-    /// **Focus trap (KIT-08).** While a modal is open it calls `openScope()` just before it
+    /// **Focus trap.** While a modal is open it calls `openScope()` just before it
     /// builds its own focusable content; that records the index in `building` from which the
     /// trapped targets begin (the modal is always built last, so everything from here on is
     /// "inside" the modal). Carried into `current` at `endFrame`, it restricts global Tab
@@ -39,7 +39,7 @@ pub const Focus = struct {
         for (self.groups.items) |*g| g.seen = false;
     }
 
-    /// Open a focus trap at the current build position (KIT-08). Everything registered after
+    /// Open a focus trap at the current build position. Everything registered after
     /// this call (the modal's own focusables) becomes the trapped set; `move` next frame cycles
     /// only within it. Idempotent within a frame — the earliest open wins (an outer modal).
     pub fn openScope(self: *Focus) void {
@@ -368,7 +368,7 @@ test "roving group exposes one global stop and retains directional navigation" {
     try std.testing.expectEqual(@as(?u64, 2), focus.focusedKey());
 }
 
-test "KIT-08 focus trap: an open scope confines Tab traversal to the modal's suffix" {
+test "focus trap: an open scope confines Tab traversal to the modal's suffix" {
     var focus = Focus.init(std.testing.allocator);
     defer focus.deinit();
 
@@ -393,7 +393,7 @@ test "KIT-08 focus trap: an open scope confines Tab traversal to the modal's suf
     try std.testing.expectEqual(@as(?u64, 102), focus.focusedKey());
 }
 
-test "KIT-08 focus trap lifts when the modal closes (no scope next frame)" {
+test "focus trap lifts when the modal closes (no scope next frame)" {
     var focus = Focus.init(std.testing.allocator);
     defer focus.deinit();
 

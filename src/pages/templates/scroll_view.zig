@@ -6,8 +6,8 @@
 //! The clamp needs the content height, but this frame's rows are not laid out yet, so the
 //! content box reads its own prior-frame rect — a pass-through geometry probe, `track`ed so
 //! its rect is stamped for next frame. One frame stale, invisible at 60fps. Every quantity is
-//! in device px: the stamped rect is device px, so the authored heights are scaled once here
-//! (VIEW-02). The thumb captures primary input and keeps dragging outside its narrow track,
+//! in device px: the stamped rect is device px, so the authored heights are scaled once here.
+//! The thumb captures primary input and keeps dragging outside its narrow track,
 //! with grab/grabbing cursors. This component is an approved reader of prior-frame geometry.
 
 const std = @import("std");

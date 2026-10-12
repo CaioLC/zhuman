@@ -1,10 +1,10 @@
-//! `text_cache` — the **pure, SDL-free seam** for TEXT-05 rendered-text texture caching.
+//! `text_cache` — the **pure, SDL-free seam** for rendered-text texture caching.
 //!
 //! The per-frame text hot path (`features/text.zig`) used to rasterize *and* upload *and*
 //! free a GPU texture for **every visible string every frame** — an unchanged label paid a
 //! full `renderTextSolid → createTextureFromSurface → renderTexture → deinit` round trip
 //! 60×/second, and every catalog-filter keystroke re-rasterized the whole visible result
-//! set. TEXT-05 caches **one composite white texture per `TextState`** — for **every**
+//! set. The cache holds **one composite white texture per `TextState`** — for **every**
 //! variant (single-line, tracked, wrapped, clip, ellipsis, and the tracked combinations) —
 //! in the node's pooled `State` (mirroring the `svg` feature) and re-rasterizes **only**
 //! when a render-affecting input changes. No variant re-rasterizes on a cache hit.
@@ -21,7 +21,7 @@
 //! **Color strategy (tint-on-blit):** color is deliberately **not** a key dimension. The
 //! glyphs are rasterized **white** and tinted at blit time via SDL `setColorMod`/
 //! `setAlphaMod` — exactly the `svg.draw` model — so a hover/focus recolor reuses the same
-//! cached texture and never churns the cache. This is the "color strategy" TEXT-05 keys on:
+//! cached texture and never churns the cache. This is the "color strategy" the cache keys on:
 //! the strategy is fixed (tint-on-blit), so the RGBA never enters the key.
 //!
 //! **The generic/host boundary is preserved:** this is `ui_client` host policy. The generic
@@ -36,7 +36,7 @@ const std = @import("std");
 /// a matching key is a safe cache hit; any change misses and re-rasterizes. Derived purely
 /// from already-resolved `TextState` fields + the live renderer generation — see `keyOf`.
 ///
-/// Enumerated against the TEXT-01..04 render-affecting set (docs/roadmap.md TEXT-05):
+/// Enumerated against the render-affecting set:
 ///   - `content_hash` — the **accepted, transformed** bytes (`State.text()`); the uppercase
 ///     eyebrow transform is already folded in-place into the buffer by `style.apply`, so
 ///     hashing the accepted bytes captures the transform for free. A refused/empty string
@@ -45,14 +45,14 @@ const std = @import("std");
 ///     changes `px`, so scale is captured transitively (not double-counted).
 ///   - `font_id` — a font identity/weight token. One face today (a constant), but keyed now
 ///     so a future multi-face/weight change invalidates correctly.
-///   - `tracking` — TEXT-04 device-px letter-spacing (changes glyph advances/positions).
-///   - `overflow` / `overflow_width` — TEXT-03 cell discipline. `.clip` blits the whole
+///   - `tracking` — device-px letter-spacing (changes glyph advances/positions).
+///   - `overflow` / `overflow_width` — cell discipline. `.clip` blits the whole
 ///     string (pixels depend on content only — the clip *rect* is a per-frame render-time
 ///     op, not a cached pixel), but `.ellipsis` changes the actual pixels (prefix + token),
 ///     so the cell width must be in the key for the ellipsis path.
-///   - `wrap_width` — TEXT-02 constraint. Break spans are a *pure function* of already-keyed
+///   - `wrap_width` — constraint. Break spans are a *pure function* of already-keyed
 ///     inputs (content, width, px, tracking), so keying the width is sufficient.
-///   - `generation` — the renderer generation (TEXT-05). A reset bumps it so a texture from
+///   - `generation` — the renderer generation. A reset bumps it so a texture from
 ///     a dead renderer can never match and be blitted.
 /// Color is **absent by design** (tint-on-blit, see the module doc-comment).
 pub const Key = struct {
@@ -99,7 +99,7 @@ pub const Inputs = struct {
 };
 
 /// Fold `Inputs` into a `Key`, or `null` when there is nothing to cache (a refused/empty
-/// string — TEXT-01 whole-refusal — has no pixels and gets no texture). Float fields are
+/// string — whole-refusal — has no pixels and gets no texture). Float fields are
 /// keyed by their exact bit pattern (`@bitCast`) so a change of any magnitude misses, and
 /// two identical frames hit; content is hashed with Wyhash (same family the key-cache uses).
 pub fn keyOf(in: Inputs) ?Key {
@@ -445,7 +445,7 @@ test "text_cache: texture handles survive pool growth (handle, not pointer)" {
 }
 
 test "text_cache: filtering a catalog frees only pruned rows, survivors keep one texture" {
-    // The TEXT-05 acceptance proof: a scrollable/filterable catalog of M row-label slots.
+    // The acceptance proof: a scrollable/filterable catalog of M row-label slots.
     // Over several "filter" frames the visible subset changes; only the rows that actually
     // leave the result set are pruned+freed, and every surviving row keeps its single
     // texture (no per-frame re-raster, no per-frame destroy churn).
@@ -486,7 +486,7 @@ test "text_cache: filtering a catalog frees only pruned rows, survivors keep one
 
 // ===================== Per-variant composite proofs (all variants cached) =============
 //
-// TEXT-05 caches EVERY accepted variant as one composite white texture: normal, tracked,
+// The cache holds EVERY accepted variant as one composite white texture: normal, tracked,
 // wrapped, clip, ellipsis, and the tracked combinations. `keyOf` already folds every
 // pixel-affecting dimension, and `decide`/`FakeSlot.sync` are variant-agnostic, so these
 // prove — SDL-free — that each variant (a) rasterizes+uploads exactly once across 120

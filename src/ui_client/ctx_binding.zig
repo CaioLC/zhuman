@@ -28,8 +28,8 @@ pub const UiState = struct {
         /// labels, values, a full `max_query_bytes = 128` search query rendered as text,
         /// and the game's short log/status copy — with headroom. A source past this is
         /// **refused as a whole** (see `update`), never a silently cut prefix, so the
-        /// renderer never draws half a string or a severed UTF-8 codepoint. TEXT-02
-        /// wrapping/ellipsis is the mechanism for text that genuinely needs to be longer.
+        /// renderer never draws half a string or a severed UTF-8 codepoint. The wrap and cell
+        /// fits are the mechanism for text that genuinely needs to be longer.
         pub const cap = 256;
 
         buf: [cap]u8,
@@ -46,7 +46,7 @@ pub const UiState = struct {
         /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
-        /// Maximum content width, in px, for constrained multiline text (TEXT-02). `0` (the
+        /// Maximum content width, in px, for constrained multiline text. `0` (the
         /// default) is the **single-line fast path**: the node measures/draws one line
         /// exactly as before, so dense rows pay nothing for the wrap machinery. A positive
         /// value makes `attach`/`draw` run the pure `features/wrap.zig` routine — the same
@@ -55,8 +55,8 @@ pub const UiState = struct {
         /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
         /// so the pool contract is unchanged (line spans are recomputed, never stored).
         wrap_width: f32 = 0,
-        /// Single-line overflow discipline for a *cell* of an explicitly allocated width
-        /// (TEXT-03). This is the vocabulary for a fixed-width slot — a stock token, a
+        /// Single-line overflow discipline for a *cell* of an explicitly allocated width.
+        /// This is the vocabulary for a fixed-width slot — a stock token, a
         /// catalog name column, a status readout in a narrow tile — where the drawn glyphs
         /// must never redefine the box: the layout/hit geometry stays the allocated cell,
         /// only the *visible* glyphs are constrained. Explicit, never implicit:
@@ -69,7 +69,7 @@ pub const UiState = struct {
         /// Mutually exclusive with `wrap_width`: wrapping is multiline, overflow is
         /// single-line; if both are set the wrap path wins (a wrapped node is not a cell).
         overflow: Overflow = .visible,
-        /// The allocated cell width, in px, for `overflow != .visible` (TEXT-03). A
+        /// The allocated cell width, in px, for `overflow != .visible`. A
         /// **required nonnegative** value the caller allocates (a column/token/tile width);
         /// `0` is a degenerate but legal zero-width cell (draws nothing, reserves nothing).
         /// When positive and not wrapping, `remeasure` writes `data_width = overflow_width`
@@ -78,7 +78,7 @@ pub const UiState = struct {
         /// come from the font (a single line). POD like `wrap_width`; no allocator.
         overflow_width: f32 = 0,
         /// **Device-px letter-spacing** added between glyph clusters when rendering and
-        /// measuring this text (TEXT-04). `0` (the default) is the **untracked fast path**:
+        /// measuring this text. `0` (the default) is the **untracked fast path**:
         /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, exactly
         /// as before, so untracked text (and dense rows) pay nothing. A non-zero value (set by
         /// `style.apply` from a role's `tracking_em` resolved through the frame `scale` at
@@ -86,21 +86,21 @@ pub const UiState = struct {
         /// per-cluster advance routine — the measured width and the drawn glyph positions add
         /// the identical integer `dx` between the identical clusters, so box and render agree
         /// exactly for single-line, wrapped, clip, and ellipsis paths. Already an **integer**
-        /// device px (rounded at resolve time) so it stays crisp (RENDER-06). POD like
+        /// device px (rounded at resolve time) so it stays crisp. POD like
         /// `wrap_width`/`overflow` in *shape*, but the state as a whole is **no longer POD**
-        /// (see `tex`/`cache_key` below): TEXT-05 gave it an owned GPU texture and a `deinit`.
-        /// This is the render-affecting attribute the TEXT-05 texture cache keys on.
+        /// (see `tex`/`cache_key` below): it owns a GPU texture and declares `deinit`.
+        /// This is the render-affecting attribute the texture cache keys on.
         tracking: f32 = 0,
-        /// Final text orientation (TEXT-06). `.horizontal` is every ordinary label.
+        /// Final text orientation. `.horizontal` is every ordinary label.
         /// `.counter_clockwise_90` rotates the cached upright composite 90° counter-clockwise
         /// at blit time so the collapsed-rail label reads bottom-to-top. `text.remeasure`
         /// swaps the content-box axes for the same state, keeping layout, focus outline, and
         /// rectangular hit geometry synchronized with the rotated pixels. Orientation is a
         /// final-blit transform, not a composite-pixel input, so changing it reuses the
-        /// TEXT-05 texture rather than re-rasterizing glyphs.
+        /// texture rather than re-rasterizing glyphs.
         orientation: Orientation = .horizontal,
 
-        /// **TEXT-05 cached composite texture.** The uploaded, white-rasterized **composite**
+        /// **Cached composite texture.** The uploaded, white-rasterized **composite**
         /// for whatever variant this node draws — single-line (tracked or not), wrapped,
         /// `.clip`, or `.ellipsis`, including the tracked combinations — tinted at blit via
         /// `setColorMod`/`setAlphaMod` (so color is not a cache dimension — a hover/focus
@@ -122,13 +122,13 @@ pub const UiState = struct {
         /// alongside the texture exactly like `SvgState.src_key`, generalized to the full key.
         cache_key: ?@import("features/text_cache.zig").Key = null,
 
-        /// TEXT-03 single-line overflow modes. `.visible` is today's behavior (no cell
+        /// Single-line overflow modes. `.visible` is the default behavior (no cell
         /// constraint); `.clip` and `.ellipsis` bound the drawn glyphs to `overflow_width`
         /// while the layout box stays that allocated cell. Declared here (not with the
         /// feature) for the same import-cycle reason as `TextState` itself.
         pub const Overflow = enum { visible, clip, ellipsis };
 
-        /// The only axis-aligned text orientations the product uses (TEXT-06). A bounded enum
+        /// The only axis-aligned text orientations the product uses. A bounded enum
         /// keeps measurement exact (90° is a width/height swap) instead of exposing arbitrary
         /// angles whose non-axis-aligned hit bounds would require a broader geometry policy.
         pub const Orientation = enum { horizontal, counter_clockwise_90 };
@@ -137,7 +137,7 @@ pub const UiState = struct {
             return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };
         }
 
-        /// Release the cached GPU texture (TEXT-05) — the pool eviction hook. Called by
+        /// Release the cached GPU texture — the pool eviction hook. Called by
         /// `Pool.evict` on prune (node disappeared) and once more at pool teardown for a live
         /// slot; `initialValue` re-inits a reused hole so a freed slot never double-frees or
         /// inherits a stale handle. Frees **exactly once** per occupant (the proven pattern,
@@ -151,7 +151,7 @@ pub const UiState = struct {
             self.cache_key = null;
         }
 
-        /// Drop the cached texture **without** freeing it (TEXT-05 renderer-reset path). Used
+        /// Drop the cached texture **without** freeing it (renderer-reset path). Used
         /// only when a true render-device reset has already invalidated the underlying GPU
         /// texture: calling `deinit` on it would double-free an object SDL already destroyed,
         /// so the handle is **abandoned** instead. The ordinary content/px/tracking
@@ -169,7 +169,7 @@ pub const UiState = struct {
         /// a truncated or mid-codepoint prefix — the same non-silent contract as
         /// `semantics.OwnedText.set` and the editor's whole-edit refusal. An empty slice
         /// clears the field (accepted). The content buffer stays **inline/allocator-free**
-        /// (owned by value, safe under pool relocation); TEXT-05's cached texture is the
+        /// (owned by value, safe under pool relocation); the cached texture is the
         /// state's only heap/GPU resource and is released by `deinit`, so the pool contract
         /// (init on fresh/reused slots, eviction frees the texture exactly once) holds.
         pub fn update(self: *TextState, t: []const u8) bool {
@@ -223,7 +223,7 @@ pub const UiState = struct {
     /// switches: the caller reads `step`, builds that step, and bumps it on a click.
     /// Step 0 is the semantic and bitwise-zero default.
     pub const StepState = struct { step: usize = 0 };
-    /// A collapsible rail's expanded/collapsed memory (KIT-05), keyed by the rail's own
+    /// A collapsible rail's expanded/collapsed memory, keyed by the rail's own
     /// `node.key`. `false` (expanded) is the semantic and bitwise-zero default. Distinct
     /// rails carry distinct keys, so the ACTIONS and BUILD rails keep *separate* collapse
     /// memories for free; the STRUCTURE rail is forced collapsed on every entry by the
@@ -233,13 +233,13 @@ pub const UiState = struct {
     /// `opener` the key focused when it opened (restored on close). Pruned with the dialog, and
     /// reset by the closing frame so an immediate reopen is a fresh open.
     pub const ModalState = struct { seen: bool = false, opener: ?u64 = null };
-    /// A disclosure control's expanded/collapsed memory (KIT-11), keyed by the control's own
+    /// A disclosure control's expanded/collapsed memory, keyed by the control's own
     /// `node.key`. `false` (collapsed — details hidden, summary showing) is the semantic and
-    /// bitwise-zero default. The whole summary row owns the toggle (the KIT-03 button contract);
+    /// bitwise-zero default. The whole summary row owns the toggle (the button contract);
     /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
     /// details nodes and nothing in them is focusable.
     pub const DisclosureState = struct { expanded: bool = false };
-    /// A catalog controls bar's persisted state (KIT-15): `sort` is the chosen sort-kind index,
+    /// A catalog controls bar's persisted state: `sort` is the chosen sort-kind index,
     /// `dir` the direction (`none` disables/resets ordering), `sort_open` whether the disclosed
     /// sort row is showing. It lives where the caller keeps it — on an always-built owner (BUILD's
     /// is on the Act I surface) or the bar's own node — and distinct ids keep ACTIONS and BUILD
@@ -251,7 +251,7 @@ pub const UiState = struct {
         dir: Direction = .none,
         sort_open: bool = false,
     };
-    /// A trade dialog's per-mode selection (KIT-21), keyed by the dialog node. `mode` is the
+    /// A trade dialog's per-mode selection, keyed by the dialog node. `mode` is the
     /// active tab (0 = buy, 1 = sell); `buy_sel`/`sell_sel` are the selected offer index **kept
     /// separately per mode**, so switching tabs does not discard the other mode's choice. All
     /// default to 0 (buy tab, first offer) — bitwise zero.
@@ -259,7 +259,7 @@ pub const UiState = struct {
         mode: usize = 0,
         buy_sel: usize = 0,
         sell_sel: usize = 0,
-        /// Whether the trade dialog is open (ACT1-17). Kept on a **stable** node (the market
+        /// Whether the trade dialog is open. Kept on a **stable** node (the market
         /// strip, built every frame) so the open/close lifecycle survives the frame-arena rebuild;
         /// the dialog's `mode`/selection ride here too, so a reopened dialog can restore them.
         open: bool = false,
@@ -273,7 +273,7 @@ pub const UiState = struct {
             if (self.mode == 0) self.buy_sel = i else self.sell_sel = i;
         }
     };
-    /// A select/popup control's state (KIT-09), keyed by the control's own `node.key`: whether
+    /// A select/popup control's state, keyed by the control's own `node.key`: whether
     /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
     /// move while open (the pending choice Enter commits). All default to the closed, first-item
     /// state (bitwise zero). Carries the **pure state machine** (open/toggle/cancel/move/commit)
@@ -326,7 +326,7 @@ pub const UiState = struct {
         }
     };
 
-    /// The **range slider value math** (KIT-10) — pure, stateless, no UI. The slider control
+    /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`
     /// snapped to `step`; the caller maps that to a rate. Both the pointer drag and the
     /// keyboard deltas resolve through these, so a drag and an arrow land on the same grid.
@@ -370,7 +370,7 @@ pub const UiState = struct {
         }
     };
 
-    /// A range slider's pointer-drag state (KIT-10), keyed by the slider's own `node.key`:
+    /// A range slider's pointer-drag state, keyed by the slider's own `node.key`:
     /// whether the thumb currently owns capture, and the captured pointer's identity so an
     /// unrelated pointer cannot steal the drag. The value itself is **not** stored here — the
     /// caller owns it (the control owns no domain math); this is only the transient capture.
@@ -385,7 +385,7 @@ pub const UiState = struct {
     ///
     /// `init` returns the declared semantic defaults, so enum declaration order can
     /// change without silently changing what the player sees on a fresh run.
-    /// A `text_input`'s persisted, authoritative editing model (INPUT-07). This is the
+    /// A `text_input`'s persisted, authoritative editing model. This is the
     /// full host editor — buffer plus caret/anchor selection, UTF-8 and single-line
     /// validation, an explicit `max_query_bytes`, and non-silent refusal — defined in
     /// `ui_client/editor.zig` so the generic engine stays unaware of editor semantics.
@@ -435,7 +435,7 @@ pub const UiState = struct {
         }
     };
 
-    /// An indexed triangle **mesh** for the `geometry` feature (RENDER-03): the vertices and
+    /// An indexed triangle **mesh** for the `geometry` feature: the vertices and
     /// `u16` indices produced by `features/geometry_tess.zig` (a convex-polygon fan, a thick
     /// polyline with miter joins/caps). Like `LineState` this is the *variable-length* kind of
     /// state — a mesh has a variable vertex/index count that does not fit in a `RenderData`
@@ -490,7 +490,7 @@ pub const UiState = struct {
 
 /// One mesh vertex for the `geometry` feature: a node-local unit-square position plus its
 /// own `Color`. Per-vertex color is what lets one mesh carry a flat fill (all equal), a
-/// gradient/mixed fill (unequal — the RENDER-04 seam), or a multi-hue rail. The device-px
+/// gradient/mixed fill (unequal — the gradient seam), or a multi-hue rail. The device-px
 /// mapping and the `Color`→SDL `FColor` conversion happen in `features/geometry.zig` at draw.
 pub const Vert = struct { p: Point, color: Color };
 
@@ -503,11 +503,11 @@ pub const Point = struct { x: f32, y: f32 };
 /// variable-length, so it lives in `LineState`). Width is in px, unscaled.
 pub const Stroke = struct { color: Color, width: f32 = 1 };
 
-/// The `geometry` feature's payload (RENDER-03): the per-mesh draw parameters that are *not*
+/// The `geometry` feature's payload: the per-mesh draw parameters that are *not*
 /// the variable-length vertices (those live in `GeometryState`, like a polyline's points live
 /// in `LineState`). Today that is a single `opacity` multiplier applied to every vertex's
 /// alpha at draw — a cheap mesh-wide fade that is the natural hook for per-node dimming
-/// (RENDER-07) without recomputing each vertex color. Present ⟹ draw the node's pooled mesh.
+/// without recomputing each vertex color. Present ⟹ draw the node's pooled mesh.
 pub const Geometry = struct { opacity: f32 = 1 };
 
 /// Host-defined interaction vocabulary (policy — the engine stores it opaquely,
@@ -631,7 +631,7 @@ pub const RenderData = struct {
     line: ?Stroke = null, // polyline through node.state(LineState)'s points, in this stroke
     geometry: ?Geometry = null, // indexed triangle mesh in node.state(GeometryState), per-vertex color
 
-    /// **Per-node visual opacity** (RENDER-07), 0..1, default fully opaque. *Not* a paint
+    /// **Per-node visual opacity**, 0..1, default fully opaque. *Not* a paint
     /// feature — it is a render-walk modulation: `draw_tree` multiplies a node's opacity into
     /// the opacity it inherits from ancestors and folds the product into every feature's paint
     /// alpha, so a whole subtree dims (a filtered board tile, a disabled control) without
@@ -716,7 +716,7 @@ test "control activation marks press immediately and click once on valid release
     try std.testing.expectEqual(@as(?u64, null), gesture.release(u.targetAt(80, 20), .mouse, 1, .{ .x = 80, .y = 20 }));
 }
 
-test "KIT-03: a disabled control consumes its click so it neither reports nor bubbles" {
+test "a disabled control consumes its click so it neither reports nor bubbles" {
     var u = UiCtx.init(undefined, std.testing.allocator, undefined);
     defer u.deinit();
     u.beginFrame();
@@ -734,7 +734,7 @@ test "KIT-03: a disabled control consumes its click so it neither reports nor bu
     try std.testing.expect(u.interactionOf(btn).clicked);
     try std.testing.expect(u.interactionOf(row).clicked); // bubbled
 
-    // KIT-03: the disabled button consumes its own click (what the button contract does when
+    // The disabled button consumes its own click (what the button contract does when
     // `!enabled`). Consuming clears the flag on the node AND its ancestors, so neither the
     // button (its caller) nor the row (an ancestor control) can act on it.
     try std.testing.expect(u.consumeFlag(btn, .clicked));
@@ -766,7 +766,7 @@ test "held dragging and captured states follow pointer owners and reset" {
     try std.testing.expect(!cleared.held and !cleared.dragging and !cleared.captured);
 }
 
-// --- TextState (TEXT-01): non-silent, whole-string cached text -------------------------
+// --- TextState: non-silent, whole-string cached text -------------------------
 
 const TextStateT = UiState.TextState;
 
@@ -891,9 +891,9 @@ test "TextState pool: deinit under a failing allocator does not leak (POD state)
     // Reaching here (and the deferred deinit) proves teardown is clean after a failure.
 }
 
-test "INPUT-07 regression: text input keeps its 128-byte whole-edit refusal" {
-    // TEXT-01 migrates the *render-cache* TextState; the authoritative text-input editor
-    // (INPUT-07) must be untouched — still the 128-byte LineEditor that refuses an
+test "regression: text input keeps its 128-byte whole-edit refusal" {
+    // The render-cache `TextState` and the authoritative text-input editor are separate
+    // models; the editor stays the 128-byte LineEditor that refuses an
     // over-length edit as a whole rather than becoming unbounded or truncating.
     const LineEditor = editor.LineEditor;
     try std.testing.expectEqual(UiState.TextInputState, LineEditor);
@@ -912,7 +912,7 @@ test "INPUT-07 regression: text input keeps its 128-byte whole-edit refusal" {
     try std.testing.expectEqualStrings("iron ore", ed.text()); // unchanged, not truncated
 }
 
-// ---- KIT-09 select/popup state machine ----------------------------------------------------
+// ---- select/popup state machine ----------------------------------------------------
 
 test "SelectState: toggle open seeds highlight at value; toggles closed; disabled is inert" {
     var s = UiState.SelectState{ .value = 2 };
@@ -963,7 +963,7 @@ test "SelectState: commit clamps an out-of-range index to the last option" {
     try std.testing.expectEqual(@as(usize, 2), s.value);
 }
 
-// ---- KIT-10 range slider value math -------------------------------------------------------
+// ---- range slider value math -------------------------------------------------------
 
 test "SliderModel.snap clamps to range and snaps to the nearest step" {
     const m = UiState.SliderModel{ .min = 0, .max = 100, .step = 1 };

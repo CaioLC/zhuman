@@ -31,13 +31,13 @@ const dash_gap: f32 = 4;
 pub fn draw(u: *UiCtx, node: *Node, o: cb.Outline, opacity: f32) void {
     const r = paint.full(node) orelse return;
     const rnd = u.res.platform.renderer;
-    const col = paint.applyOpacity(o.color, opacity); // RENDER-07 subtree dimming
+    const col = paint.applyOpacity(o.color, opacity); // subtree dimming
     rnd.setDrawColor(.{ .r = col.r, .g = col.g, .b = col.b, .a = col.a }) catch return;
 
-    // RENDER-06: a hairline border is snapped to a whole device-px width (≥1) at the frame
+    // A hairline border is snapped to a whole device-px width (≥1) at the frame
     // scale and its bars are placed on whole-pixel boundaries, so a 1px logical outline / focus
     // ring stays crisp at high-DPI instead of anti-aliasing into a fractional smear, and
-    // adjacent columns don't shimmer. Today `scale` is 1 (identity); it matters under VIEW-01.
+    // adjacent columns don't shimmer; at DPI 1 it is identity.
     const w = paint.hairline(o.width, u.res.view.scale);
     // Snap the box edges to whole device pixels so the inward bars sit on pixel boundaries.
     const x0 = paint.snap(r.x);

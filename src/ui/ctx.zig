@@ -142,7 +142,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             self.focus.register(key, enabled);
         }
 
-        /// Open a **focus trap** at the current build position (KIT-08 modal). Every focusable
+        /// Open a **focus trap** at the current build position (a modal). Every focusable
         /// registered after this call becomes the trapped set, and Tab/Shift+Tab
         /// (`moveFocus`) next frame cycle only within it — so a modal, built last, traps focus
         /// to its own controls and Tab can never reach a control the scrim covers. No-op-safe;

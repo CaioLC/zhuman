@@ -15,7 +15,7 @@ const Color = uic.Color;
 ///
 /// This is the one genuinely *decorative* time-varying visual in the project (a clock-driven
 /// oscillation with no functional readout — it lives only on the mock showcase screen). Under
-/// reduced motion (INPUT-10) it snaps: the sine phase is frozen to a constant `0.5`
+/// reduced motion it snaps: the sine phase is frozen to a constant `0.5`
 /// mid-blend, so the color holds still at the midpoint between `dim` and `acc` instead of
 /// oscillating. Functional readouts (the action-tile underbar and eating-policy slider) and all
 /// state/focus cues are *not* gated by this — they remain fully visible regardless.

@@ -1,4 +1,4 @@
-//! The authoritative host-side single-line text editor model (INPUT-07).
+//! The authoritative host-side single-line text editor model.
 //!
 //! This is *policy*, owned by `ui_client`: the generic engine in `src/ui` knows nothing
 //! about carets, selections, UTF-8 validation, or a maximum query length. A `LineEditor`

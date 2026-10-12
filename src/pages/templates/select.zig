@@ -1,4 +1,4 @@
-//! `select` — the **keyboard-operable select / popup control** (KIT-09). A compact
+//! `select` — the **keyboard-operable select / popup control**. A compact
 //! `label value ▾` control that opens a popup list of options; choosing one commits it and
 //! closes. One reusable control for every "pick one of N" (sort kind, sort direction, …)
 //! rather than a bespoke dropdown per catalog.
@@ -7,7 +7,7 @@
 //! node, so it survives the frame-arena rebuild: `value` is the committed choice, `open`
 //! whether the popup is showing, `highlight` the arrow-movable pending choice while open.
 //!
-//! **Interaction (KIT-09 checklist):**
+//! **Interaction:**
 //!   - **label / value** — the closed control shows `{label}  {value} ▾`.
 //!   - **open / close** — clicking the control toggles the popup; clicking an option commits
 //!     it and closes; clicking outside (or Escape) closes without committing.
@@ -15,7 +15,7 @@
 //!     (open moves the highlight; Enter commits the highlight and closes; Escape closes); a
 //!     host routes key events into it the way `main.zig` routes text into the editor. The
 //!     pointer path drives the same `Model`, so keyboard and pointer stay one source of truth.
-//!   - **disabled** — a disabled control cannot open or commit (the KIT-03 button contract:
+//!   - **disabled** — a disabled control cannot open or commit (the button contract:
 //!     a stray `.clicked` is consumed).
 //!   - **focus restoration** — closing returns focus to the control (the opener), so keyboard
 //!     flow continues from the select, not from the vanished popup.
@@ -42,7 +42,7 @@ const SelectState = uic.UiState.SelectState;
 pub const Select = struct { value: usize, el: El };
 
 /// Build a select control into `parent`. `label` is the static lead-in, `options` the choices;
-/// returns the committed value index. `enabled` gates open/commit (KIT-03). The popup is an
+/// returns the committed value index. `enabled` gates open/commit. The popup is an
 /// overlay child clipped to itself, placed under the closed control. When the caller passes
 /// `value`, that is the committed choice (read on entry, written on exit) and the control's
 /// own slot keeps only its open/highlight state; null means the control owns the value.
@@ -93,7 +93,7 @@ pub fn select(parent: El, id: []const u8, label: []const u8, options: []const []
         }
     }
 
-    // The closed control: label + value + caret, at the compact control height (KIT-01 token).
+    // The closed control: label + value + caret, at the compact control height (the `tokens` value).
     // The prototype gives the native choice field a 112px minimum; this template combines its
     // lead-in, value, and caret into one box, so reserve enough width for all three. A definite
     // width also gives the out-of-flow popup a real containing width instead of asking a

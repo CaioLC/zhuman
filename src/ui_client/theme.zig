@@ -56,7 +56,7 @@ pub const Theme = struct {
     /// Failure or loss.
     danger: Color = rgb(210, 85, 70),
     /// Success / gain — a positive readout (a surplus, a met requirement, a good log tone).
-    /// The semantic counterpart to `danger`: added in KIT-01 so a positive value reads as a
+    /// The semantic counterpart to `danger`, so a positive value reads as a
     /// success rather than borrowing the accent. Default is a plain conventional green.
     good: Color = rgb(120, 170, 110),
 };

@@ -1,4 +1,4 @@
-//! `stock_token` and `stockline` (KIT-12) — the header's stock summary as reusable tokens
+//! `stock_token` and `stockline` — the header's stock summary as reusable tokens
 //! whose **footprint never changes** as their label swaps.
 //!
 //! A **StockToken** shows a two-letter **abbreviation** with its value (`VI: 3/10`) and swaps to

@@ -1,4 +1,4 @@
-//! `view_nav` — the **shared tab/view navigation** (KIT-07). A thin, reusable layer over the
+//! `view_nav` — the **shared tab/view navigation**. A thin, reusable layer over the
 //! `tabs` strip that formalizes the prototype's view-switching contract so a screen does not
 //! re-implement it per act:
 //!
@@ -17,7 +17,7 @@
 //!     restores exactly where it was when the player returns to it (`src/ui_client/README.md`,
 //!     "Who owns a template's state").
 //!
-//! It renders into the shell's `regions.nav` (KIT-04). The caller reads `active` and builds that
+//! It renders into the shell's `regions.nav`. The caller reads `active` and builds that
 //! one view into the body. The strip chrome, roving focus, selection persistence, and
 //! accessibility group all come from `tabs` unchanged — this adds the view contract and a
 //! single place to document it.

@@ -1,5 +1,5 @@
 //! `geometry` feature — untextured colored triangles and honest thick polylines, backed by
-//! SDL's `renderGeometry` (RENDER-03). It is the second *variable-length* feature after
+//! SDL's `renderGeometry`. It is the second *variable-length* feature after
 //! `line`: a mesh has a variable vertex/index count, so the coordinates live in a pooled
 //! `GeometryState` (declared in `ctx_binding.UiState`, like every feature state) and the
 //! `RenderData` payload carries only the per-mesh draw parameters (an opacity multiplier).
@@ -11,13 +11,13 @@
 //! tessellator once at build; `draw` maps the stored unit vertices to device px through the
 //! node's laid-out box, converts each per-vertex `Color` (u8) to SDL's float `FColor` with
 //! the mesh opacity folded into alpha, and submits one `renderGeometry` call. The render
-//! walk's `.blend` baseline (RENDER-01) makes vertex alpha composite; the walk's clip stack
+//! walk's `.blend` baseline makes vertex alpha composite; the walk's clip stack
 //! crops the triangles like any other paint.
 //!
 //! This is the primitive shared by hex bodies/rails/markers, distribution curves, slider
-//! diamonds, and diagonal indicators. It does **not** yet replace `line.zig`'s
-//! first-segment-normal thick-line approximation — that migration waits until the parity
-//! consumers (the board) move onto this feature (see docs/roadmap.md RENDER-03).
+//! diamonds, and diagonal indicators. It does **not** replace `line.zig`'s
+//! first-segment-normal thick-line approximation; moving the board's rails onto this feature
+//! and retiring that approximation is tracked in docs/roadmap.md (RENDER-09).
 
 const std = @import("std");
 const sdl = @import("sdl3");
@@ -36,7 +36,7 @@ pub const State = cb.UiState.GeometryState;
 /// The polyline end-cap discipline, re-exported so call sites (`El.polyline`) name one type.
 pub const Cap = tess.Cap;
 
-/// The gradient axis (RENDER-04), re-exported for call sites (`El.gradient`).
+/// The gradient axis, re-exported for call sites (`El.gradient`).
 pub const Dir = tess.Dir;
 
 /// One host-level gradient stop: a position along the axis (0..1) and a host `Color` there.
@@ -72,7 +72,7 @@ pub fn attach_polyline(ctx: *UiCtx, node: *Node, points: []const cb.Point, half_
     node.render_data.geometry = .{ .opacity = opacity };
 }
 
-/// Give `node` an **explicit linear gradient** fill (RENDER-04) along `dir` through ordered
+/// Give `node` an **explicit linear gradient** fill along `dir` through ordered
 /// `stops` (node-local, positions 0..1 on the axis), drawn by the geometry feature via
 /// per-vertex-colored quads. Covers the eating-slider **split track** (two stops at the same
 /// position = a hard `acc`|`line2` edge) and milestone/state **washes** (a `tint → transparent`
@@ -117,7 +117,7 @@ pub fn draw(u: *UiCtx, node: *Node, g: cb.Geometry, opacity: f32) void {
     if (verts.len < 3 or idx.len < 3) return;
     const r = paint.full(node) orelse return;
 
-    // Combine the per-mesh payload opacity with the inherited subtree opacity (RENDER-07).
+    // Combine the per-mesh payload opacity with the inherited subtree opacity.
     const op = std.math.clamp(g.opacity, 0, 1) * std.math.clamp(opacity, 0, 1);
     var out: [State.vcap]sdl.render.Vertex = undefined;
     for (verts, 0..) |v, i| {

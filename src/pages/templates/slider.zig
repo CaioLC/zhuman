@@ -1,4 +1,4 @@
-//! `slider` — the prototype-faithful horizontal range control (KIT-10).
+//! `slider` — the prototype-faithful horizontal range control.
 //!
 //! The template owns only range-control behavior and chrome: an 18px interaction lane, a 3px
 //! split rail, and a true 12px outlined diamond thumb. Labels, policy wording, and endpoint

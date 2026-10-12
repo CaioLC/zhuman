@@ -35,7 +35,7 @@ const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 const Sprite = cb.Sprite;
 
-/// Re-exports so screens name the gradient vocabulary through `elements` (RENDER-04).
+/// Re-exports so screens name the gradient vocabulary through `elements`.
 pub const GradientStop = feat.geometry.GradientStop;
 pub const GradientDir = feat.geometry.Dir;
 
@@ -44,17 +44,17 @@ pub const GradientDir = feat.geometry.Dir;
 pub const TextFit = union(enum) {
     /// The measured glyph box, single line.
     free,
-    /// Constrained multiline (TEXT-02): greedy word wrap at this many logical px, with a
+    /// Constrained multiline: greedy word wrap at this many logical px, with a
     /// deterministic UTF-8-safe hard break for an over-long word; the box is the wrapped
     /// width × height and the render draws exactly the measured lines.
     wrap: f32,
-    /// A single-line cell of an allocated logical width (TEXT-03): the layout box and the hit
+    /// A single-line cell of an allocated logical width: the layout box and the hit
     /// box are exactly `width`, never the glyph width, so a widening label cannot shove its
     /// neighbours and a shorter one still reserves its column. `.clip` crops the glyphs to the
     /// cell; `.ellipsis` draws the longest codepoint-aligned prefix plus an ellipsis. `width`
     /// must be nonnegative; `0` is a legal zero-width cell that draws nothing.
     cell: Cell,
-    /// One line rotated 90° counter-clockwise, reading bottom-to-top (TEXT-06, the collapsed
+    /// One line rotated 90° counter-clockwise, reading bottom-to-top (the collapsed
     /// rail label); the box is the swapped footprint. A bounded orientation, not an angle.
     vertical,
 
@@ -138,7 +138,7 @@ pub const El = struct {
         return self;
     }
 
-    /// Spacing between this node's in-flow children, in **logical** px (VIEW-02 scales it to
+    /// Spacing between this node's in-flow children, in **logical** px (scaled to
     /// device px by the frame scale). A `fit_children` parent grows to include the gaps.
     pub fn with_gap(self: El, g: f32) El {
         self.node.layout.gap = view.dp(g, self.ctx.res.view.scale);
@@ -147,7 +147,7 @@ pub const El = struct {
 
     /// Per-axis size rule — `.fit_children`, `.grow`, `.{ .fixed = 240 }`,
     /// `.{ .pct_of_parent = 1 }`, …. A **fixed** extent is a *logical* px value scaled to
-    /// device px by the frame scale (VIEW-02); `content`/`pct`/`grow`/`fit_children` are
+    /// device px by the frame scale; `content`/`pct`/`grow`/`fit_children` are
     /// derived (content is the already-device-scaled measured box; the others are relative),
     /// so only `.fixed` scales. Extents computed from **stamped geometry** (already device px)
     /// use `with_size_px` to avoid double-scaling.
@@ -157,8 +157,8 @@ pub const El = struct {
         return self;
     }
 
-    /// Per-axis size rule from **device-px** values that must **not** be scaled again
-    /// (VIEW-02): extents derived from stamped geometry (`.rect`/`.prior_geometry`) or a
+    /// Per-axis size rule from **device-px** values that must **not** be scaled again:
+    /// extents derived from stamped geometry (`.rect`/`.prior_geometry`) or a
     /// parent's resolved `size.*.fixed`, which are already device px. Authored logical
     /// literals use `with_size`.
     pub fn with_size_px(self: El, w: ui.SizeRule, h: ui.SizeRule) El {
@@ -167,7 +167,7 @@ pub const El = struct {
         return self;
     }
 
-    /// Displace this node in **logical** px (VIEW-02 scales to device px) from wherever its
+    /// Displace this node in **logical** px (scales to device px) from wherever its
     /// anchor or its parent's flow put it. `.center` plus a computed delta is polar placement
     /// — the way anything positioned by its own arithmetic (a radial board, a graph) reaches
     /// the screen.
@@ -178,7 +178,7 @@ pub const El = struct {
         return self;
     }
 
-    /// Displace this node by a **device-px** offset that must not be scaled again (VIEW-02) —
+    /// Displace this node by a **device-px** offset that must not be scaled again —
     /// for offsets derived from stamped geometry or an already-device-px rect (the centered
     /// terminal box). Authored logical offsets use `with_offset`.
     pub fn with_offset_px(self: El, dx: f32, dy: f32) El {
@@ -199,7 +199,7 @@ pub const El = struct {
         return self;
     }
 
-    /// Set this node's **visual opacity** (0..1) — RENDER-07. The render walk multiplies it
+    /// Set this node's **visual opacity** (0..1). The render walk multiplies it
     /// into the opacity inherited from ancestors and folds the product into every feature's
     /// paint alpha, so this node *and its whole subtree* dim together without recomputing any
     /// child's color (a filtered board tile, a disabled control). Purely visual: it never
@@ -266,7 +266,7 @@ pub const El = struct {
     /// A text leaf with a measurement constraint — see `TextFit`. The fit is *placement* (it
     /// sets the reserved box), so it is a creation parameter of the leaf rather than a style
     /// field; a later `with_style(.{ font })` re-measures at the same fit. Widths are logical
-    /// px, scaled once here against the device-px font metrics (VIEW-02). The rotated footprint,
+    /// px, scaled once here against the device-px font metrics. The rotated footprint,
     /// the cell box and the wrapped box are what the engine stamps, so layout, focus outline and
     /// hit target agree with the drawn glyphs by construction.
     pub fn text_fit(self: El, id: []const u8, str: []const u8, fit: TextFit) !El {
@@ -344,7 +344,7 @@ pub const El = struct {
 
     /// A filled **convex polygon** through `pts` — node-local unit-square coordinates like
     /// `line`, stretching to whatever box the caller sizes the node to. Fan-triangulated and
-    /// drawn by the `geometry` feature (RENDER-03). Flat `color`; `opacity` fades the whole
+    /// drawn by the `geometry` feature. Flat `color`; `opacity` fades the whole
     /// mesh. Does not size the node.
     pub fn polygon(self: El, id: []const u8, pts: []const cb.Point, color: cb.Color, opacity: f32) !El {
         const node = try child(self, id);
@@ -362,7 +362,7 @@ pub const El = struct {
         return .{ .ctx = self.ctx, .node = node };
     }
 
-    /// A **linear gradient** fill (RENDER-04) along `dir` through ordered `stops` (positions
+    /// A **linear gradient** fill along `dir` through ordered `stops` (positions
     /// 0..1 on the axis), drawn by the `geometry` feature via per-vertex colors. Two stops at
     /// the same position give a hard split; a `tint → transparent` pair gives a wash.
     /// `opacity` fades the whole mesh. Does not size the node.
@@ -380,7 +380,7 @@ fn child(parent: El, id: []const u8) !*Node {
     return node;
 }
 
-/// Scale a `SizeRule`'s **fixed** extent from logical to device px (VIEW-02); leave
+/// Scale a `SizeRule`'s **fixed** extent from logical to device px; leave
 /// `content`/`grow`/`fit_children`/`pct_of_parent` untouched.
 fn scaleRule(rule: ui.SizeRule, scale: f32) ui.SizeRule {
     return switch (rule) {
@@ -400,7 +400,7 @@ pub fn root(ctx: *UiCtx, id: []const u8) !El {
     // crashed the first time death ever fired, because unlike the play screen it never
     // overrode the anchor. Set here so the doc's promise ("stays non-relative") is true.
     node.layout.anchor = .top_left;
-    // VIEW-02: the layout is solved in **device pixels** (the space the renderer draws and
+    // The layout is solved in **device pixels** (the space the renderer draws and
     // that text boxes already live in via `type.toDevice`), so the root is the drawable pixel
     // size (`metrics.px_w/px_h` = logical × DPI). At DPI 1 this equals the window coordinate
     // size (today's behavior); at high-DPI it fills the whole drawable crisply.

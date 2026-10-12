@@ -26,7 +26,7 @@ pub const Platform = struct {
     /// here; the UI samples cells from it by source rect (see the `img` feature's
     /// `attach_sprite`, re-exported as `ui_client.data_sprite`).
     icons: sdl.render.Texture,
-    /// **Renderer generation** (TEXT-05). A monotonic counter bumped every time the SDL
+    /// **Renderer generation**. A monotonic counter bumped every time the SDL
     /// renderer's device/targets are (re)set — the host loop advances it on an
     /// `SDL_EVENT_RENDER_TARGETS_RESET` / `RENDER_DEVICE_RESET` / `RENDER_DEVICE_LOST`
     /// event (`bumpGeneration`). It is folded into the text-texture cache key so a texture
@@ -37,7 +37,7 @@ pub const Platform = struct {
     /// it. Read-only outside the host loop's reset handler and `Resources.init`.
     generation: u32 = 0,
 
-    /// Advance the renderer generation (TEXT-05). Called by the host loop when SDL reports
+    /// Advance the renderer generation. Called by the host loop when SDL reports
     /// a render targets/device reset or loss: every GPU texture uploaded under the prior
     /// generation is now invalid, so bumping this makes the text cache miss (and abandon,
     /// not free, the dead handles) and re-rasterize under the new generation. Saturates
@@ -87,7 +87,7 @@ pub const Config = struct {
     starve_per_day: f32 = 4.0,
     /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
     vigor_per_food: f32 = 2.0,
-    /// The bounded metabolism-rate range and default (ACT1-02). `Metabolism.rate` is a scalar
+    /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar
     /// multiplier the player sets continuously; the *range* and *default* are config (not UI
     /// words), and `clampMetabolism` is the one place a rate is made legal. Normal is the
     /// default (`1.0`); ration/feast are just points inside `[min, max]`.
@@ -116,7 +116,7 @@ pub const Config = struct {
         return if (c == .alive) 1.0 else self.weary_yield;
     }
 
-    /// Clamp a metabolism rate into the authoritative `[min, max]` band (ACT1-02) — the one
+    /// Clamp a metabolism rate into the authoritative `[min, max]` band — the one
     /// place a rate is made legal, used on migration/reset and by any UI that sets the rate.
     pub fn clampMetabolism(self: Config, rate: f32) f32 {
         return std.math.clamp(rate, self.metabolism_rate_min, self.metabolism_rate_max);
@@ -140,7 +140,7 @@ pub const Sim = struct {
     /// against this. Held here so the player today and the AI deciders later draw
     /// uncertainty from the same stream. Reached through `Resources.random()`.
     prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0),
-    /// **Eligibility transition memory (ACT1-06)** — one bit per buildable good (indexed by
+    /// **Eligibility transition memory** — one bit per buildable good (indexed by
     /// `capital.buildable_bundle` order; the fixed `16` is that bundle's length), recording
     /// whether the good's prerequisite has *already* been seen satisfied this run. The
     /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
@@ -148,7 +148,7 @@ pub const Sim = struct {
     /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
     reach_seen: [16]bool = [_]bool{false} ** 16,
 
-    /// **The Passerby encounter (ACT1-12)** — the run's one Act I counterparty as a clock-driven
+    /// **The Passerby encounter** — the run's one Act I counterparty as a clock-driven
     /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite
     /// per-visit satchel). Ticked each frame by `market.tick` off the sim clock (never a hardcoded
     /// day); the UI reads it. Cleared by `reset` for a fresh run.
@@ -176,28 +176,27 @@ pub const View = struct {
     /// still has a sane, non-clashing value.
     ground: thememod.Color = .{ .r = 14, .g = 12, .b = 9, .a = 255 },
     /// This frame's six resource/sector colors (Food/Water/Fuel/Metal/Minerals/Biomass) —
-    /// game content, not `Theme` roles (KIT-01). Installed from `palette.resources` by
+    /// game content, not `Theme` roles. Installed from `palette.resources` by
     /// `build_ui`; the HUD/legend samples a hue by name.
     resources: @import("./palette.zig").ResourceColors = .{},
-    /// This frame's reduced-motion policy (INPUT-10), projected from `Resources.motion`
+    /// This frame's reduced-motion policy, projected from `Resources.motion`
     /// in `build_ui`'s prologue. When `true`, *optional/decorative* transitions must snap
     /// to their end state (via `ui_client.MotionPolicy.snap`/`.phase`); functional progress
     /// indicators, state changes, pointer/focus cues, and the simulation stay visible and
     /// are never gated by it.
     reduced_motion: bool = false,
-    /// This frame's **logical→device scale factor** (TEXT-04 seam for VIEW-01). Every font
+    /// This frame's **logical→device scale factor**, set from `metrics.dpi_scale`. Every font
     /// size the host resolves is multiplied by this exactly once, in
     /// `ui_client.type.toDevice`, before it reaches the font backend — so a heading at 21
     /// *logical* px opens the font at `21 * scale` device px and tracking is computed at the
-    /// device size. Defaults to `1` (device px == logical px, today's behavior byte-for-byte)
-    /// until VIEW-01 computes the real DPI/reference-fit factor here each frame. Kept as a
-    /// single field so there is exactly one multiply point for the whole UI.
+    /// device size; every authored dimension goes through `view.dp` with the same factor. Kept
+    /// as a single field so there is exactly one multiply point for the whole UI.
     scale: f32 = 1,
-    /// This frame's **view metrics** (VIEW-01): the logical viewport, drawable/DPI scale, the
+    /// This frame's **view metrics**: the logical viewport, drawable/DPI scale, the
     /// centered terminal rect, and the responsive width class — computed once per frame in
     /// `build_ui`'s prologue from the window's coordinate size and pixel density against the
     /// `900×820` reference. `scale` above is set from `metrics.dpi_scale`; the responsive
-    /// templates (VIEW-03/04) read `metrics.terminal`/`metrics.width_class`. Defaults to the
+    /// templates read `metrics.terminal`/`metrics.width_class`. Defaults to the
     /// reference metrics so a view built before the prologue runs is still sane.
     metrics: @import("./ui_client/view.zig").ViewMetrics = .{},
 };
@@ -210,27 +209,27 @@ pub const Resources = struct {
     input: Input = .{},
     cursor: @import("./ui_client/cursor.zig").State = .{},
     commands: @import("./ui_client/command.zig").Registry = .{},
-    /// Host-side accessibility model (INPUT-08): the double-buffered semantic snapshot the
-    /// platform bridge (INPUT-09) will read, plus the polite live-announcement channel.
+    /// Host-side accessibility model: the double-buffered semantic snapshot the
+    /// platform bridge reads, plus the polite live-announcement channel.
     /// Presentation plumbing only — no simulation system reads or writes it. Built in paint
     /// order during `build_ui` and published after end-frame, exactly like `commands`.
     semantics: @import("./ui_client/semantics.zig").SemanticRegistry = .{},
     announcements: @import("./ui_client/semantics.zig").AnnouncementChannel = .{},
-    /// Host-side accessibility bridge (INPUT-09): consumes the published `semantics` snapshot
+    /// Host-side accessibility bridge: consumes the published `semantics` snapshot
     /// and drains `announcements` to the active platform provider each frame. Default provider
     /// is the inert `NoopProvider` — this build ships no Windows UIA screen-reader tree
     /// (`zig-sdl3` 0.1.6 exposes no `WM_GETOBJECT` hook), and the bridge's capability report
     /// says so honestly. All platform policy stays host-side; no simulation system touches it.
     a11y: @import("./ui_client/a11y.zig").Bridge =
         @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
-    /// Host-side reduced-motion policy (INPUT-10): a one-bit preference resolved **once** at
+    /// Host-side reduced-motion policy: a one-bit preference resolved **once** at
     /// init — an explicit `HA_REDUCED_MOTION` override, else the Windows
     /// `SPI_GETCLIENTAREAANIMATION` probe, else a deterministic `false` fallback — and then
     /// projected onto `view.reduced_motion` every frame in `build_ui`. Avoids per-frame OS
     /// calls. Presentation policy only; no simulation system reads or writes it. Defaults to
     /// motion-allowed until `init` resolves the real preference.
     motion: @import("./ui_client/motion.zig").Policy = .{},
-    /// Host-side transition/tween registry (RENDER-08): scalar transitions keyed by stable
+    /// Host-side transition/tween registry: scalar transitions keyed by stable
     /// node/domain id for the prototype's functional animations (Holdings collapse, stock-token
     /// font swap, board state changes). `main` advances it by the frame `dt` and projects the
     /// reduced-motion policy onto it each frame; a consumer reads `value(id, fallback)` to

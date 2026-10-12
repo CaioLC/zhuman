@@ -1,4 +1,4 @@
-//! `catalog` (ACT1-05) — the **stable action/recipe presentation catalog**: one authoritative
+//! `catalog` — the **stable action/recipe presentation catalog**: one authoritative
 //! table mapping each typed action/good component to a **stable string ID**, a display name, a
 //! `Kind` (action vs the good tiers), input/output *keys*, effect copy, and — the load-bearing
 //! part — an **Act I surface** flag that reconciles the components that merely *exist* against
@@ -6,7 +6,7 @@
 //! mean it is shown: the catalog is the single place that decides membership, in authored order,
 //! so a screen never accidentally renders an extra just because the type is defined.
 //!
-//! Stable IDs are the contract: they are the keys transitions (ACT1-06), saves, and the Act II
+//! Stable IDs are the contract: they are the keys transitions, saves, and the Act II
 //! migration key off, so they must not change even if a component is renamed. The *copy*
 //! (display name / effect sentence) is presentation and stays a read of `good_text`/`action`
 //! at the page tier where it belongs; this module owns the identity, type, order, and surface.
@@ -25,7 +25,7 @@ pub const Kind = enum { action, crude_good, manufactured_good };
 /// One catalog record. `id` is the stable string identity; `T` the component type it presents;
 /// `kind` its type column; `on_surface` whether it appears on the finalized **Act I** surface
 /// (a defined-but-off-surface component like Hunt/Air rifle is `false`). Input/output *keys* are
-/// coarse resource tags (`"energy"`, `"materials"`, `"food"`), the shape ACT1-08/09 render from.
+/// coarse resource tags (`"energy"`, `"materials"`, `"food"`), the shape ACTIONS and BUILD render from.
 pub const Record = struct {
     id: []const u8,
     kind: Kind,
@@ -65,7 +65,7 @@ pub fn actionId(comptime ActionT: type) []const u8 {
 // —— BUILD (goods) ——————————————————————————————————————————————————————————————————————
 // The 16 buildable goods, in `capital.buildable_bundle` order, each with a stable ID and its
 // crude/manufactured tier. All 16 are on the Act I BUILD surface (BUILD's default *filter* hides
-// some rows, but they are catalog members — a query can reach them; that is ACT1-09's job, not a
+// some rows, but they are catalog members — a query can reach them; that is the search's job, not a
 // surface exclusion). The `kind` comes from `capital.is_crude`, so the tier can never drift.
 
 pub const goods = blk: {

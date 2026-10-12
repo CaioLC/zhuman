@@ -35,7 +35,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
 
     // Header data is formatted by the screen, then assembled with the run context by `header`.
     // An empty stock slice keeps only the right-pinned runline when no live actor remains.
-    var overlay: ?*Node = null; // ACT1-17: the trade dialog's own overlay root, when open
+    var overlay: ?*Node = null; // the trade dialog's own overlay root, when open
     var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
     var vbuf: [24]u8 = undefined;
     var fbuf: [24]u8 = undefined;
@@ -47,7 +47,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     }){ .world = world };
     if (q.get()) |a| {
         const e, const vigor, const food, const materials = a;
-        // KIT-12: the stockline is a row of StockTokens whose order/membership is this act's
+        // The stockline is a row of StockTokens whose order/membership is this act's
         // descriptor. Act I lists Vigor/Food/Materials; each token shows a two-letter abbrev
         // (full label on hover/focus), tints danger on a low/zero value, and keeps a stable
         // footprint (fixed cell) so a swap never shifts its neighbors. The values are formatted
@@ -100,7 +100,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
             trade_ts.?.open = true;
         }
 
-        // ACT1-17: the TradeDialog. Built last, as its own overlay root (drawn on top), only while
+        // The TradeDialog. Built last, as its own overlay root (drawn on top), only while
         // open. Offers are built from live `market.Quote`s — buys from the passerby's satchel
         // wares, sells from the diminishing schedule for the player's surplus/goods — so BUY/SELL
         // tabs, stock, preview, and both `YOU GIVE` directions are authoritative, and a confirmed
@@ -109,8 +109,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
-    // KIT-12: assemble the complete HUD header — stocks left, run context right. Energy rate
-    // is omitted in Act I, and VIEW-04 drops the optional act label at ≤560.
+    // Assemble the complete HUD header — stocks left, run context right. Energy rate
+    // is omitted in Act I, and the compact branch drops the optional act label at ≤560.
     const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
     _ = try t.header(header, "hud", .{
         .stocks = header_stocks[0..header_stock_count],
@@ -122,7 +122,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     });
 
     // --- footer: the event log, full width inside the shell's reserved 86px framed logger row.
-    // log_view authors in logical px (VIEW-02); the content column in logical is the terminal's
+    // log_view authors in logical px; the content column in logical is the terminal's
     // logical width minus the page padding.
     if (regions.footer) |footer| {
         const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
@@ -206,7 +206,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         if (have > 0) {
             // A simple posted buy price: the passerby wants Materials (bulk) or Food+Materials
             // (tools) for what it carries. Kept modest; the sell side is where diminishing value
-            // is taught (ACT1-15).
+            // is taught.
             var q = market.Quote{ .id = @as(u32, @intFromEnum(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
             switch (ware) {
                 .food => {

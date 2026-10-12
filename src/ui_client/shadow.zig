@@ -1,4 +1,4 @@
-//! `shadow` — reusable **shadow / backdrop composition** (RENDER-05). SDL has no blur, so
+//! `shadow` — reusable **shadow / backdrop composition**. SDL has no blur, so
 //! the prototype's soft drop shadows (`box-shadow: 0 16px 80px #000a`, dialog `0 18px 80px
 //! #000d`, popup `0 4px 14px #0008`) are approximated by a small **bounded stack of
 //! translucent black rectangles** — each a little larger and more offset than the last, with
@@ -15,7 +15,7 @@
 //!     modal scrim: one fullscreen translucent fill.
 //!
 //! Colors are the host `Color` (SDL's) — a shadow is flat black at a per-layer alpha, a
-//! backdrop is the near-black terminal ground at the prototype's `0xd9` alpha. The RENDER-01
+//! backdrop is the near-black terminal ground at the prototype's `0xd9` alpha. The
 //! `.blend` baseline is what makes every one of these translucent layers composite.
 
 const std = @import("std");
@@ -90,9 +90,9 @@ pub fn layers(spec: Spec, out: *[max_layers]Layer) []const Layer {
 }
 
 /// Emit a soft drop shadow behind a target box of size `w`×`h` at (`x`,`y`) in `parent`'s
-/// local space, as bounded translucent-black fill rects (RENDER-05). Call this **before**
+/// local space, as bounded translucent-black fill rects. Call this **before**
 /// building the box so the layers paint under it (siblings paint in child order). `id` keys
-/// the layer nodes. Understated flat black; the RENDER-01 `.blend` baseline composites them.
+/// the layer nodes. Understated flat black; the `.blend` baseline composites them.
 pub fn drop(parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32, spec: Spec) !void {
     const ctx = parent.ctx;
     var buf: [max_layers]Layer = undefined;
@@ -107,7 +107,7 @@ pub fn drop(parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32, spec: Sp
     }
 }
 
-/// The modal/dialog **backdrop scrim** (RENDER-05): one translucent fill over the whole
+/// The modal/dialog **backdrop scrim**: one translucent fill over the whole
 /// window, the near-black terminal ground at the prototype's `0xd9` alpha. Returns the fill
 /// color so a caller can set it on a fullscreen root (the modal already builds that root).
 pub fn backdropColor(ground: Color) Color {

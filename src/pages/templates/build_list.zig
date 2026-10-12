@@ -1,9 +1,8 @@
 //! `build_list` — the BUILD tab: a searched, sorted list of recipes over the **live catalog**.
 //!
-//! ACT1-09 replaced the hand-rolled SORT/SHOW/TIER/built chips (a second fixed taxonomy) with
-//! the shared catalog surface: a `catalog_controls` bar (KIT-15 — one search field + a disclosed
-//! Sort-by/Direction, a count-only summary) driving `capital_row`s (KIT-18) filtered by the one
-//! `query` parser (KIT-14). The axis belongs to the player: type to search, or sort by reach,
+//! It is built from the shared catalog surface: a `catalog_controls` bar (one search field +
+//! a disclosed Sort-by/Direction, a count-only summary) driving `capital_row`s filtered by
+//! the one `query` parser. The axis belongs to the player: type to search, or sort by reach,
 //! inputs, or time.
 //!
 //! **What the blank list shows vs a search.** With no query the list answers *what can I act on
@@ -17,11 +16,11 @@
 //! where the total is the **full authored catalog** count (every buildable good but the Shelter),
 //! even though locked recipes contribute no row.
 //!
-//! **ACT1-10 (build lifecycle):** starting a ready/owned row pays through `capital.begin_build`;
+//! **Build lifecycle:** starting a ready/owned row pays through `capital.begin_build`;
 //! the live `Busy` row renders its own progress/time and a cancel corner that calls
 //! `capital.cancel_build` (the refund path); completion is the simulation's — no UI-local timers.
 //!
-//! **ACT1-11 (Shelter milestone):** the Shelter is not a row. It is a `milestone_goal` (KIT-20)
+//! **Shelter milestone:** the Shelter is not a row. It is a `milestone_goal`
 //! pinned below the list, **outside** the filter/sort, because it is how the act ends rather than
 //! an item in it. Its lifecycle (locked/unfunded/ready) and every requirement recompute from
 //! authoritative state each frame.
@@ -76,7 +75,7 @@ const Entry = struct {
     state_word: []const u8,
 };
 
-/// The row-facing `query` contract (KIT-14): answers a `Field` with this recipe's text, a free-
+/// The row-facing `query` contract: answers a `Field` with this recipe's text, a free-
 /// text `haystack` (the name), and the `state:in-reach` fact. Recipes expose `type`/`state`
 /// (and `is:` folds over both); `in`/`out`/`tech` are always-miss here (BUILD costs are uniform
 /// energy+materials, and Act I recipes carry no research links).
@@ -120,7 +119,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(6);
 
-    // --- the controls bar (KIT-15): search + disclosed sort ------------------------------
+    // --- the controls bar: search + disclosed sort ------------------------------
     const controls = try cc.catalog_controls(outer, "build_ctl", &sort_kinds, catalog_state, search_owner);
     const q = query.parse(controls.query_text);
     const blank = controls.query_text.len == 0;
@@ -240,7 +239,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
                 // Keyed by the recipe's catalog index, not its sorted position, so a row's
                 // focus and state follow the recipe through a re-sort or a filter change.
                 const r = try capital_row(rows, world, e, G, ent.i, ent.kind, ent.reach);
-                // ACT1-10: the lifecycle is the simulation's. A ready/owned click pays through
+                // The lifecycle is the simulation's. A ready/owned click pays through
                 // begin_build; the cancel corner runs the existing refund path. No UI timers.
                 if (r.clicked_build) capital.begin_build(world, e, ctx.res, G);
                 if (r.clicked_cancel) _ = capital.cancel_build(world, e, ctx.res);
@@ -248,12 +247,12 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
         }
     }
 
-    // --- the Shelter milestone (ACT1-11), pinned below and outside the filter --------------
+    // --- the Shelter milestone, pinned below and outside the filter --------------
     try shelter_goal(outer, world, e, "goal");
     return outer;
 }
 
-/// The Shelter as a `milestone_goal` (KIT-20) — outside the recipe filtering/sorting because it
+/// The Shelter as a `milestone_goal` — outside the recipe filtering/sorting because it
 /// is the act's ending, not an item in it. Its lifecycle and requirements recompute live.
 fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
     const ctx = parent.ctx;
@@ -316,7 +315,7 @@ fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
         .explanation = "Hold 60 materials with a settled body and four kinds of goods.",
         .action = action,
     });
-    // ACT1-10/11: raising the shelter is the same begin_build lifecycle; the transition itself
+    // Raising the shelter is the same begin_build lifecycle; the transition itself
     // happens when the build completes in the simulation (no UI-local shortcut).
     if (m.clicked) capital.begin_build(world, e, ctx.res, G);
 }

@@ -45,15 +45,15 @@ test {
     _ = cursor; // cursor request lifecycle and SDL system-shape mappings
     _ = drag; // strict threshold and capture-backed scrollbar drag tests
     _ = editor; // authoritative single-line editor model: UTF-8/selection/refusal tests
-    _ = semantics; // INPUT-08 host-side semantic registry + announcement channel tests
-    _ = a11y; // INPUT-09 host-side accessibility bridge: lifecycle, capabilities, seam, drain tests
-    _ = motion; // INPUT-10 host-side reduced-motion policy: override parse/precedence/fallback + snap/phase gate tests
-    _ = typography; // TEXT-04 typography contract: roles/scale/tracking/transform pure tests
-    _ = shadow; // RENDER-05 shadow/backdrop composition: pure layer math tests
-    _ = tween; // RENDER-08 host-layer tween registry: interp/interrupt/reduced-motion/keying tests
-    _ = view; // VIEW-01 frame-local metrics: breakpoint classification + reference-fit/center/DPI tests
-    _ = text_feature; // TEXT-01..04 text feature state + tracking-aware advance/measure tests (pulls wrap.zig)
-    _ = text_cache; // TEXT-05 pure cache-key/decision/lifecycle seam + fake-backend counter tests (hit/miss/invalidate/failure/reset/prune/reuse/growth/deinit + catalog-filter perf)
+    _ = semantics; // host-side semantic registry + announcement channel tests
+    _ = a11y; // host-side accessibility bridge: lifecycle, capabilities, seam, drain tests
+    _ = motion; // host-side reduced-motion policy: override parse/precedence/fallback + snap/phase gate tests
+    _ = typography; // typography contract: roles/scale/tracking/transform pure tests
+    _ = shadow; // shadow/backdrop composition: pure layer math tests
+    _ = tween; // host-layer tween registry: interp/interrupt/reduced-motion/keying tests
+    _ = view; // frame-local metrics: breakpoint classification + reference-fit/center/DPI tests
+    _ = text_feature; // text feature state + tracking-aware advance/measure tests (pulls wrap.zig)
+    _ = text_cache; // pure cache-key/decision/lifecycle seam + fake-backend counter tests (hit/miss/invalidate/failure/reset/prune/reuse/growth/deinit + catalog-filter perf)
     std.testing.refAllDecls(cb);
     std.testing.refAllDecls(features);
     std.testing.refAllDecls(draw);

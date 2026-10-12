@@ -38,9 +38,9 @@ pub fn update_food(
     }
 }
 
-/// Net daily food drawdown (Holdings/BODY projection, KIT-06): the metabolism's per-day
+/// Net daily food drawdown (Holdings/BODY projection): the metabolism's per-day
 /// consumption (`base_rate × rate` — the *same* product `metabolize` applies, with `rate` the
-/// bounded scalar from ACT1-02) minus a per-day generator inflow. `≤0` means the larder holds.
+/// bounded scalar) minus a per-day generator inflow. `≤0` means the larder holds.
 /// Lives here beside `metabolize` so the projection provably reads the loop's rate rather than
 /// a copied tuning constant, and so it is covered by `zig build test`.
 pub fn net_food_drawdown(base_rate: f32, rate: f32, inflow_per_day: f32) f32 {
@@ -61,7 +61,7 @@ test "net_food_drawdown: consumption minus inflow; days = food/net when positive
 
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
 /// larder — no eat action, eating happens regardless; the *rate* is the agent's standing
-/// choice (`Metabolism.rate`, a bounded scalar — ACT1-02). Food converts to vigor as it's consumed (scaled by the
+/// choice (`Metabolism.rate`, a bounded scalar). Food converts to vigor as it's consumed (scaled by the
 /// larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
 /// this is the drain that finally makes `mark_dead` fire, and the clock pressure that
 /// makes every action intentional: ration and stay weak, feast and burn the stock.
@@ -192,7 +192,7 @@ pub fn despawn_dead(
     for (dead[0..n]) |e| w.despawn(e);
 }
 
-/// **Eligibility transition tracking (ACT1-06).** For each prerequisite-gated good, when its
+/// **Eligibility transition tracking.** For each prerequisite-gated good, when its
 /// prerequisite becomes satisfied for the first time this run, log one "A new recipe is within
 /// reach: {name}." Only goods with a `prereq_of` participate — a good with no prerequisite is
 /// reachable from the first breath, so it is not a *transition* and never logs. The seen-set is
@@ -331,7 +331,7 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
     try std.testing.expectEqual(@import("./log.zig").Tone.good, res.sim.log.get(0).tone);
-    // The message names the good and uses the exact ACT1-06 copy.
+    // The message names the good and uses the exact copy.
     try std.testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "within reach") != null);
 
     // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.

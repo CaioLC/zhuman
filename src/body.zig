@@ -1,4 +1,4 @@
-//! `body` (ACT1-03) — the **authoritative BODY projection**: from an agent's real component
+//! `body` — the **authoritative BODY projection**: from an agent's real component
 //! state (larder units + quality, vigor deficit/ceiling, base metabolism, the bounded rate, and
 //! `vigor_per_food`) it computes **food coverage** (days the larder lasts at the current rate)
 //! and the **recovery** outcome — either a time-to-full-vigor in days, or an explicit
@@ -7,7 +7,7 @@
 //! (`base_rate × rate` consumption, `× vigor_per_food × quality` conversion), so the projection
 //! can never disagree with what actually happens.
 //!
-//! Leaf, pure, allocation-free — imports only `std`. The caller (Holdings/BODY, and the ACT1-08
+//! Leaf, pure, allocation-free — imports only `std`. The caller (Holdings/BODY, and the
 //! ACTIONS eating panel) passes the scalar inputs it read from the components/config; this owns
 //! no ECS and no formatting, only the arithmetic and the state classification.
 

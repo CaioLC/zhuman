@@ -66,7 +66,7 @@ fn syncMouseButtons(input: *ui_client.Input, state: sdl.mouse.ButtonFlags) void 
 }
 
 /// Scale an incoming SDL pointer coordinate (window/logical space) into the UI's **device-px**
-/// layout space (VIEW-02): the layout, hit geometry, and drag math live in device pixels
+/// layout space: the layout, hit geometry, and drag math live in device pixels
 /// (logical × DPI), while SDL delivers mouse/finger coordinates in window coordinates, so every
 /// coordinate is multiplied by the frame's `dpi_scale` at this one seam before it reaches the
 /// input model or hit-testing. At DPI 1 this is identity (today's behavior).
@@ -77,7 +77,7 @@ fn pointerAt(app: *App, x: f32, y: f32) ui_client.InputPoint {
 }
 
 fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
-    // VIEW-05: right after a resize the stamped rects are the previous size's, so do not
+    // Right after a resize the stamped rects are the previous size's, so do not
     // begin an activation against them — a press this frame would target stale geometry.
     if (app.geometry_stale) return;
     const target = app.ui.markTarget(.pressed, position.x, position.y);
@@ -92,7 +92,7 @@ fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position
 }
 
 fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
-    // VIEW-05: while geometry is stale from a resize, cancel any in-flight gesture rather than
+    // While geometry is stale from a resize, cancel any in-flight gesture rather than
     // routing a release/click to the previous frame's rects (the one-frame clickable ghost).
     if (app.geometry_stale) {
         cancelPointerGesture(app);
@@ -134,7 +134,7 @@ const CommandRoute = struct {
 
 /// The authoritative editor model for the currently focused text owner, or null when the
 /// focused control is not a registered text field. `main` only *routes* into this model;
-/// all editing rules live in `ui_client/editor.zig` (INPUT-07).
+/// all editing rules live in `ui_client/editor.zig`.
 fn focusedEditor(app: *App) ?*ui_client.UiState.TextInputState {
     const key = app.ui.focusedKey() orelse return null;
     // The field registers which key holds its model: itself, or an always-built owner.
@@ -324,7 +324,7 @@ const App = struct {
     pointer_activation: ui_client.PointerActivation = .{},
     platform_cursors: ui_client.PlatformCursors,
     ui_profiler: ui_client.FrameProfiler = .{},
-    /// VIEW-05: set when the window resizes, cleared after the frame re-stamps geometry.
+    /// Set when the window resizes, cleared after the frame re-stamps geometry.
     /// While set, pointer activation is suppressed so a click cannot land on the previous
     /// frame's now-stale stamped rects (the "one-frame clickable ghost").
     geometry_stale: bool = false,
@@ -346,7 +346,7 @@ const App = struct {
         renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
             frame_capper.mode = .{ .limited = fps };
         };
-        // RENDER-01: configure the draw blend mode explicitly. SDL defaults to `.none`
+        // Configure the draw blend mode explicitly. SDL defaults to `.none`
         // (source replaces destination, ignoring alpha); `.blend` makes translucent fills,
         // rings, scrims, and dimming alpha-composite. The render walk re-asserts this per
         // tree so it survives a device reset, but set it here so the initial clear and any
@@ -369,7 +369,7 @@ const App = struct {
     fn setup(self: *App, allocator: std.mem.Allocator) !void {
         self.font = try ha.font.Fonts.init(allocator, font_path, ui_client.style.default_font);
         self.resources = try Resources.init(&self.font, &self.renderer, self.window);
-        // Resolve the reduced-motion policy ONCE here (INPUT-10): an explicit
+        // Resolve the reduced-motion policy ONCE here: an explicit
         // `HA_REDUCED_MOTION` override wins, else the platform probe (Windows
         // `SPI_GETCLIENTAREAANIMATION`; deterministic `false` elsewhere), else a `false`
         // fallback. No per-frame OS call — `build_ui` only projects this onto
@@ -468,7 +468,7 @@ pub fn main() !void {
                 },
                 .finger_down, .finger_up, .finger_motion => |finger| {
                     // Finger coordinates are normalized 0..1; map to the **device-px** viewport
-                    // (VIEW-02) so touch lands in the same space as the layout/hit geometry.
+                    // so touch lands in the same space as the layout/hit geometry.
                     const width: f32 = app.resources.view.metrics.px_w;
                     const height: f32 = app.resources.view.metrics.px_h;
                     const id: u64 = @intCast(finger.finger_id.value);
@@ -504,7 +504,7 @@ pub fn main() !void {
                     cancelPointerGesture(&app);
                     sdl.keyboard.stopTextInput(app.window) catch {};
                 },
-                // TEXT-05: a render targets/device reset or loss invalidates every uploaded
+                // A render targets/device reset or loss invalidates every uploaded
                 // GPU texture (D3D/GPU device-lost). Bump the renderer generation so the
                 // text-texture cache misses and *abandons* (never double-frees) the now-dead
                 // handles, re-rasterizing under the new generation on the next draw. CPU-side
@@ -512,7 +512,7 @@ pub fn main() !void {
                 .render_targets_reset, .render_device_reset, .render_device_lost => {
                     app.resources.platform.bumpGeneration();
                 },
-                // VIEW-05: the window resized. This frame's stamped rects are still the
+                // The window resized. This frame's stamped rects are still the
                 // previous size's, so mark geometry stale — pointer activation is suppressed
                 // (a click can't land on the ghost of a moved control) until the frame
                 // rebuilds and re-stamps at the new size, when the flag is cleared. Any
@@ -541,7 +541,7 @@ pub fn main() !void {
         // Update Stage
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
-        // RENDER-08: advance host-layer UI transitions by the frame delta and keep the
+        // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at
         // the Act I curtain, since UI transitions are independent of the sim clock.
@@ -557,8 +557,8 @@ pub fn main() !void {
             ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
             ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
-            ecs.run(&app.world, &app.resources, sys.track_reach); // ACT1-06: newly in-reach recipes → one log
-            // ACT1-12: advance the Passerby encounter on the sim clock (arrival/departure logs,
+            ecs.run(&app.world, &app.resources, sys.track_reach); // newly in-reach recipes → one log
+            // Advance the Passerby encounter on the sim clock (arrival/departure logs,
             // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
             // run, so it ticks directly rather than over a per-entity query.
             _ = ha.market.tick(&app.resources.sim.encounter, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
@@ -571,7 +571,7 @@ pub fn main() !void {
         app.ui.beginFrame();
         app.resources.cursor.beginFrame();
         app.resources.commands.beginBuild();
-        app.resources.semantics.beginBuild(); // INPUT-08: rebuild the semantic tree in paint order
+        app.resources.semantics.beginBuild(); // rebuild the semantic tree in paint order
         _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
         const frame = try pages.build_ui(&app.ui, &app.world);
         app.platform_cursors.apply(app.resources.cursor.requested);
@@ -587,7 +587,7 @@ pub fn main() !void {
             ui_client.stamp_rects(&app.ui, t); // geometry + paint order for next event stage
         }
         ui_sample.stamping = ui_timer.read();
-        // VIEW-05: geometry has now been re-stamped at the current window size, so the next
+        // Geometry has now been re-stamped at the current window size, so the next
         // event stage can safely route pointer activation again — clear the resize guard.
         app.geometry_stale = false;
 
@@ -619,8 +619,8 @@ pub fn main() !void {
 
         app.ui.endFrame();
         app.resources.commands.endBuild();
-        app.resources.semantics.endBuild(); // INPUT-08: publish this frame's snapshot for the bridge
-        // INPUT-09: the accessibility bridge consumes the just-published snapshot and drains
+        app.resources.semantics.endBuild(); // publish this frame's snapshot for the bridge
+        // The accessibility bridge consumes the just-published snapshot and drains
         // the announcement channel to the active provider (a no-op sink on this build — no
         // Windows UIA tree; see a11y.zig). Host-side only; the sim never sees it.
         app.resources.a11y.poll(
@@ -633,7 +633,7 @@ pub fn main() !void {
 }
 
 fn spawn_agent(world: *ha.world.World) ha.world.Entity {
-    // ACT1-01: spawn from the components' authoritative default baselines (see `baselines.zig`)
+    // Spawn from the components' authoritative default baselines (see `baselines.zig`)
     // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
     // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
     // starting state has exactly one source and Holdings can derive current-vs-base against it.

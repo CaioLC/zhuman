@@ -1,4 +1,4 @@
-//! `market` — the Act I Passerby, as authoritative **simulation** state (ACT1-12+).
+//! `market` — the Act I Passerby, as authoritative **simulation** state.
 //!
 //! Act I's only counterparty is a passerby who wanders in, lingers a while with a finite
 //! satchel, and leaves. This module owns that encounter as a clock-driven **state machine** —
@@ -9,15 +9,15 @@
 //!
 //! **Stable identity.** Each arrival bumps a monotonic `id`; a quote/offer captured mid-visit
 //! carries that id, so a barter can tell "the passerby I was dealing with" from "a different one
-//! who has since arrived" — the revision check ACT1-14 revalidates against.
+//! who has since arrived" — the revision check `barter.resolve` revalidates against.
 //!
 //! **Finite inventory.** A visit refills a small satchel (per-good stock counts); selling into
 //! it and buying out of it decrement those counts, and they do not regenerate until the *next*
 //! arrival — scarcity is per-encounter, not per-frame.
 //!
-//! Later slices layer on: typed bundle/quote contracts (ACT1-13), atomic barter (ACT1-14),
-//! diminishing marginal sell prices (ACT1-15), and tool supersession (ACT1-16); the UI wiring is
-//! ACT1-17. This slice is the encounter clock and its finite satchel.
+//! The encounter clock and its finite satchel are here, with the typed bundle/quote contracts
+//! and the diminishing sell-price schedule below; `barter.zig` resolves a quote atomically and
+//! `capital.zig` owns tool supersession.
 
 const std = @import("std");
 const logmod = @import("./log.zig");
@@ -29,8 +29,8 @@ const logmod = @import("./log.zig");
 pub const Phase = enum { absent, approaching, present, departed };
 
 /// The kinds of thing a passerby's satchel can hold in Act I. Deliberately coarse — Act I trades
-/// Food, generic Materials, and a couple of small tools — but named so ACT1-13's typed bundles
-/// and ACT1-16's tool families have stable slots to fill. The `count`-per-slot lives in
+/// Food, generic Materials, and a couple of small tools — but named so the typed bundles
+/// and the tool families have stable slots to fill. The `count`-per-slot lives in
 /// `Encounter.stock`, indexed by `@intFromEnum`.
 pub const Ware = enum { food, materials, fish_hook, whetstone };
 pub const ware_count = @typeInfo(Ware).@"enum".fields.len;
@@ -59,7 +59,7 @@ pub const Encounter = struct {
     }
 
     /// Take `n` units of `w` from the satchel (a completed buy). Saturates at 0 — the caller
-    /// (ACT1-14) revalidates stock first, so this is the mechanical decrement.
+    /// revalidates stock first, so this is the mechanical decrement.
     pub fn take(self: *Encounter, w: Ware, n: u16) void {
         const i = @intFromEnum(w);
         self.stock[i] -= @min(self.stock[i], n);
@@ -141,10 +141,10 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Lo
     };
 }
 
-// ============================ Typed bundles & quotes (ACT1-13) ===========================
+// ============================ Typed bundles & quotes ===========================
 //
 // One **transfer representation** for everything a trade moves — Food, generic Materials, and
-// owned goods — so barter resolution (ACT1-14) has a single shape to validate and apply, and Act
+// owned goods — so barter resolution has a single shape to validate and apply, and Act
 // II can extend it by adding `Item` variants (typed resources, Coin) without a new grammar.
 
 /// A thing a bundle can carry. Today: Food, generic Materials, and the two small tools the
@@ -201,8 +201,8 @@ pub const Bundle = struct {
 pub const Direction = enum { buy, sell };
 
 /// Why a quote cannot be taken right now — a player-readable reason, not a silent disable. `none`
-/// means it is takeable. `stale`/`departed` are the encounter-revision failures ACT1-14 revalidates;
-/// `sold_out`/`unaffordable` are the stock/holdings failures.
+/// means it is takeable. `stale`/`departed` are the encounter-revision failures
+/// `barter.resolve` revalidates; `sold_out`/`unaffordable` are the stock/holdings failures.
 pub const Refusal = enum {
     none,
     unaffordable,
@@ -223,10 +223,10 @@ pub const Refusal = enum {
 
 /// A **quote**: one concrete offer the player can weigh, with everything barter needs to revalidate
 /// and everything the dialog needs to render. Captured against a specific encounter visit (`rev` =
-/// the encounter `id` at capture) so ACT1-14 can tell a live quote from one whose passerby has left
+/// the encounter `id` at capture) so barter can tell a live quote from one whose passerby has left
 /// or been replaced. `id` is a stable per-catalog offer identity (which line of the passerby's
 /// board this is). `next` is the **next marginal sell quote** — for a sell, what the *following*
-/// unit would fetch (filled by ACT1-15's diminishing schedule); null when not applicable.
+/// unit would fetch (filled by the diminishing schedule); null when not applicable.
 pub const Quote = struct {
     id: u32,
     rev: u32,
@@ -238,7 +238,7 @@ pub const Quote = struct {
     /// the player may sell before the schedule bottoms out). 0 ⇒ sold out.
     stock: u16 = 1,
     /// The Materials the *next* unit of a sell would fetch, if this is a sell with more to sell —
-    /// exposed before confirmation so diminishing returns are visible, not a surprise (ACT1-15).
+    /// exposed before confirmation so diminishing returns are visible, not a surprise.
     next_unit: ?f32 = null,
 
     /// Whether this quote is takeable against a live encounter and the player's holdings.
@@ -260,14 +260,14 @@ pub const Quote = struct {
     }
 };
 
-// ============================ Diminishing sell prices (ACT1-15) ==========================
+// ============================ Diminishing sell prices ==========================
 //
 // The first explicit exchange numbers Act I teaches, and the largest unset numbers in it — so
 // they are a product-design choice, not fixture tuning. A passerby values the *first* unit of a
 // surplus most and each further unit less: `sell_value(n)` is the Materials the passerby pays for
 // the **n-th** unit sold this visit (n = 0 for the first). The decline is geometric toward a
 // **floor**, never to zero — so selling always beats throwing surplus away, yet a long sell-off
-// earns less per unit than the first trade. Finite stock and the passerby's short window (ACT1-12)
+// earns less per unit than the first trade. Finite stock and the passerby's short window
 // do the rest: you cannot dump an unbounded surplus at the top price, but neither is production
 // for sale strictly dominated by scavenging — the first few units pay well.
 

@@ -30,7 +30,7 @@ const Color = cb.Color;
 /// `Color` (SDL's); `font` is a **logical** px size the content builder measures text at
 /// (multiplied by the frame `scale` through `type.toDevice` at `apply` time — the one
 /// logical→device seam). `tracking` is letter-spacing in `em` and `transform` is a case
-/// rule; both are the TEXT-04 typography payload and, like every field here, fold
+/// rule; both are the typography payload and, like every field here, fold
 /// last-non-null-wins so a role fragment sets them and a later fragment can override.
 pub const Style = struct {
     font: ?f32 = null,
@@ -43,7 +43,7 @@ pub const Style = struct {
     /// Case transform (`.none`/`.upper`) applied to the rendered bytes at `apply` time. Unset
     /// composes as "inherit". Only the uppercase eyebrow role sets `.upper`.
     transform: ?typ.Transform = null,
-    /// **Texture-content ink** (RENDER-02): the tint a *non-text* content aspect paints with.
+    /// **Texture-content ink**: the tint a *non-text* content aspect paints with.
     /// Today that is `svg` (an icon raster is rasterized white and tinted at blit, the
     /// `svg.draw`/`text` composite model), so a set `tint` recolors `render_data.svg`. It is a
     /// separate field from `text` on purpose — `text` is *glyph* ink and `tint` is *texture*
@@ -70,7 +70,7 @@ pub const Style = struct {
 pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
 // Every scalar below is authored at one reference resolution; the responsive scale factor
-// (`View.scale`, VIEW-01) is applied at `apply` time through `type.toDevice` — the single
+// (`View.scale`) is applied at `apply` time through `type.toDevice` — the single
 // logical→device multiply point.
 
 // The prototype typography contract lives in `type.zig` (sizes/tracking/transform, all
@@ -129,7 +129,7 @@ pub const solid: Style = .{ .outline_style = .solid };
 pub const dashed: Style = .{ .outline_style = .dashed };
 pub const dotted: Style = .{ .outline_style = .dotted };
 
-// === KIT-02 · primitive style/state fragments ===========================================
+// === Primitive style/state fragments ===========================================
 //
 // The shared vocabulary of *look* every template composes from — surfaces, section labels,
 // button variants, tabs/chips/tags, semantic state text, and small chrome (meter, progress,
@@ -140,7 +140,7 @@ pub const dotted: Style = .{ .outline_style = .dotted };
 //   • **stateful** fragments are `fn(*UiCtx, *Node) Style` — resolved *with the just-built
 //     node*, so they read `node.query(ctx)` (hover / held / focus-visible / disabled /
 //     selected — the `Interaction` bits `publishControlState` sets) and return the chrome for
-//     that state. This is the KIT-02 seam KIT-03 leans on: a control publishes its state, and
+//     that state. This is the seam the button contract leans on: a control publishes its state, and
 //     the box paints itself from these fragments by composing e.g. `.{ btn_primary }`.
 //
 // Every color is a `Theme` *role* (never a literal), so a game palette moves them all at once;
@@ -162,7 +162,7 @@ pub fn section_heading(ctx: *UiCtx, _: *Node) Style {
 }
 
 // —— Buttons ————————————————————————————————————————————————————————————————————————————
-// The whole outer box owns interaction (KIT-03); these paint it from the published state.
+// The whole outer box owns interaction; these paint it from the published state.
 // A disabled control never brightens; otherwise held/hover/focus-visible lifts the ink to
 // `acc`. They set only *look* (ink/fill/border); placement/padding stay imperative or come
 // from a sibling `pad_*` fragment, so a variant is composable with any size.
@@ -240,7 +240,7 @@ pub fn tag(ctx: *UiCtx, _: *Node) Style {
 
 // —— Semantic state text ————————————————————————————————————————————————————————————————
 // A readout whose *color* carries meaning: a good value, a caution, a failure, or muted.
-// These are the KIT-01 semantic roles projected to text ink, so a "+3 food" reads good and a
+// These are the semantic roles projected to text ink, so a "+3 food" reads good and a
 // "−2" reads danger without each call site naming a color.
 
 pub fn state_good(ctx: *UiCtx, _: *Node) Style {
@@ -310,8 +310,8 @@ pub fn meter_fill(ctx: *UiCtx, _: *Node) Style {
 /// A thin progress-bar fill — same `acc` fill; the "thin" is the node's height, set imperatively.
 pub const progress_fill = meter_fill;
 
-/// A resource legend dot — a filled swatch for one of the six resource hues (KIT-01,
-/// `view.resources`). `which` picks the hue by field name so a legend cites the resource,
+/// A resource legend dot — a filled swatch for one of the six resource hues
+/// (`view.resources`). `which` picks the hue by field name so a legend cites the resource,
 /// not a color: `.{ style.legend_dot(.food) }`.
 pub const Resource = enum { food, water, fuel, metal, minerals, biomass };
 pub fn legend_dot(comptime which: Resource) fn (*UiCtx, *Node) Style {
@@ -370,9 +370,9 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         .width = s.outline_width orelse 1,
         .style = s.outline_style orelse .solid,
     };
-    // VIEW-02: padding and gap are authored in *logical* px; scale to device by the frame
+    // Padding and gap are authored in *logical* px; scale to device by the frame
     // scale (`view.dp`) to match the device-px layout and text boxes. `outline_width` is NOT
-    // scaled here — it is scaled at draw by `paint.hairline` (RENDER-06), so scaling it here
+    // scaled here — it is scaled at draw by `paint.hairline`, so scaling it here
     // too would double-apply.
     if (s.padding) |p| {
         const sc = ctx.res.view.scale;
@@ -385,7 +385,7 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
     }
     if (s.gap) |g| node.layout.gap = view.dp(g, ctx.res.view.scale);
 
-    // RENDER-02: texture-content ink. A set `tint` recolors a present `svg` aspect (an icon
+    // Texture-content ink. A set `tint` recolors a present `svg` aspect (an icon
     // raster tinted at blit), routed through the same fragment fold as every other look — so
     // a caller styles an icon's color instead of poking `render_data.svg` directly.
     if (node.render_data.svg != null) {
@@ -396,8 +396,8 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
         if (s.text) |c| node.render_data.text = c;
         // The typography payload (size / tracking / transform) is applied together and then
         // re-measured **once** through the one shared routine, so the reserved box always
-        // matches the spaced/transformed glyphs `draw` will place — the TEXT-01..03
-        // "measure and draw read one source" invariant, extended to TEXT-04 tracking/case.
+        // matches the spaced/transformed glyphs `draw` will place — the
+        // "measure and draw read one source" invariant, extended to tracking/case.
         const wants_type = s.font != null or s.tracking != null or s.transform != null;
         if (wants_type) {
             const st = node.state(ctx, cb.UiState.TextState);
@@ -425,7 +425,7 @@ pub fn apply(ctx: *UiCtx, node: *Node, spec: anytype) void {
     }
 }
 
-/// Apply a case transform to a `TextState`'s buffer in place (TEXT-04). The uppercase fold is
+/// Apply a case transform to a `TextState`'s buffer in place. The uppercase fold is
 /// ASCII-only and length-preserving, so byte offsets used by wrap/clip/ellipsis stay valid,
 /// and `text()`'s length/`refused` invariants are untouched (we rewrite bytes, never the
 /// length). A `.none` transform is a no-op. Idempotent: re-applying is safe if `apply` runs
@@ -470,7 +470,7 @@ test "apply: decorations + padding write; inert text style on a non-text node is
     defer arena.deinit();
     const node = try Node.create(arena.allocator(), "n");
 
-    // VIEW-02: `apply` scales padding/gap by `ctx.res.view.scale`, so give it a real ctx with
+    // `apply` scales padding/gap by `ctx.res.view.scale`, so give it a real ctx with
     // the default view (scale 1) rather than `undefined`.
     var resources: @import("../res.zig").Resources = undefined;
     resources.view = .{};
@@ -507,7 +507,7 @@ test "apply: outline width/style without a color draw nothing (no border)" {
     try std.testing.expectEqual(@as(?cb.Outline, null), node.render_data.outline);
 }
 
-// ---- TEXT-04 typography roles ----------------------------------------------------------
+// ---- typography roles ----------------------------------------------------------
 
 test "style: default_font equals the body role's logical size (unstyled == body)" {
     try std.testing.expectEqual(typ.default_logical_px, default_font);
@@ -540,7 +540,7 @@ test "style: role fragments carry the prototype contract (size + tracking + tran
 }
 
 test "style: a later fragment overrides a role's tracking/transform (last-wins fold)" {
-    // RENDER-02 payload composes for free through the field-wise merge — a caller can take
+    // The style payload composes for free through the field-wise merge — a caller can take
     // the eyebrow role but override its tracking, or drop the uppercase transform.
     const s = resolve(undefined, undefined, .{ eyebrow, Style{ .tracking = 0.05, .transform = .none } });
     try std.testing.expectEqual(@as(?f32, 11), s.font); // kept from eyebrow
@@ -562,7 +562,7 @@ test "applyTransformInPlace: uppercases the buffer in place, preserving length; 
     try std.testing.expectEqualStrings("IN REACH", st.text().?);
 }
 
-// ---- RENDER-02 texture-content tint ----------------------------------------------------
+// ---- texture-content tint ----------------------------------------------------
 
 test "style: tint folds last-non-null-wins independently of text" {
     const red: Color = .{ .r = 200, .g = 40, .b = 40, .a = 255 };
@@ -574,7 +574,7 @@ test "style: tint folds last-non-null-wins independently of text" {
     try std.testing.expectEqual(blue, s.text.?); // text kept from the first fragment
 }
 
-test "apply: tint recolors a present svg aspect (RENDER-02) and is inert without one" {
+test "apply: tint recolors a present svg aspect and is inert without one" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -609,7 +609,7 @@ test "apply: tint does not disturb text ink; text ink does not disturb svg tint"
     try std.testing.expectEqual(@as(?Color, null), icon.render_data.text);
 }
 
-// ---- KIT-02 primitive style/state fragments --------------------------------------------
+// ---- primitive style/state fragments --------------------------------------------
 
 // A test harness: an arena, a real ctx, and a theme+resources installed on the view, so the
 // stateful fragments resolve against known role colors and published interaction bits.
@@ -648,7 +648,7 @@ const KitFixture = struct {
     }
 };
 
-test "KIT-02 btn_primary: dim disabled, acc on hover/held/focus, else fg" {
+test "btn_primary: dim disabled, acc on hover/held/focus, else fg" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -671,7 +671,7 @@ test "KIT-02 btn_primary: dim disabled, acc on hover/held/focus, else fg" {
     try std.testing.expectEqual(th.dim, resolve(&f.ctx, dis, .{btn_primary}).text.?);
 }
 
-test "KIT-02 tab: selected accents ink+border; unselected is dim, fg on hover" {
+test "tab: selected accents ink+border; unselected is dim, fg on hover" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -686,7 +686,7 @@ test "KIT-02 tab: selected accents ink+border; unselected is dim, fg on hover" {
     try std.testing.expectEqual(th.acc, ss.outline_color.?);
 }
 
-test "KIT-02 semantic state text maps to the right roles" {
+test "semantic state text maps to the right roles" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -697,7 +697,7 @@ test "KIT-02 semantic state text maps to the right roles" {
     try std.testing.expectEqual(th.dim, resolve(&f.ctx, n, .{state_muted}).text.?);
 }
 
-test "KIT-02 focus_ring draws only on focus_visible, never on hover alone" {
+test "focus_ring draws only on focus_visible, never on hover alone" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -713,7 +713,7 @@ test "KIT-02 focus_ring draws only on focus_visible, never on hover alone" {
     try std.testing.expectEqual(th.acc, resolve(&f.ctx, fv, .{focus_ring}).outline_color.?);
 }
 
-test "KIT-02 row_hover lifts fill on hover, transparent at rest" {
+test "row_hover lifts fill on hover, transparent at rest" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -726,7 +726,7 @@ test "KIT-02 row_hover lifts fill on hover, transparent at rest" {
     try std.testing.expectEqual(th.panel, resolve(&f.ctx, hov, .{row_hover}).fill.?);
 }
 
-test "KIT-02 provisional is a dim dashed border" {
+test "provisional is a dim dashed border" {
     const f = try KitFixture.init();
     defer f.deinit();
     const th = f.resources.view.theme;
@@ -736,7 +736,7 @@ test "KIT-02 provisional is a dim dashed border" {
     try std.testing.expectEqual(cb.LineStyle.dashed, s.outline_style.?);
 }
 
-test "KIT-02 legend_dot fills with the named resource hue" {
+test "legend_dot fills with the named resource hue" {
     const f = try KitFixture.init();
     defer f.deinit();
     const n = try f.node("d");
@@ -744,7 +744,7 @@ test "KIT-02 legend_dot fills with the named resource hue" {
     try std.testing.expectEqual(f.resources.view.resources.food, s.fill.?);
 }
 
-test "KIT-02 later fragment overrides a variant field (precedence)" {
+test "later fragment overrides a variant field (precedence)" {
     const f = try KitFixture.init();
     defer f.deinit();
     const red: Color = .{ .r = 200, .g = 0, .b = 0, .a = 255 };

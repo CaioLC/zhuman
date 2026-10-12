@@ -38,7 +38,7 @@ fn focusRegistrationEnabled(enabled: bool, running: bool, focused: bool) bool {
 }
 
 /// The bare tile — box, name, optional **state line**, `price · risk icon · payoff` row —
-/// from pre-formatted strings (KIT-17). Reports the (affordability-gated) click; the caller
+/// from pre-formatted strings. Reports the (affordability-gated) click; the caller
 /// acts on it. A non-null `progress` marks the tile as *running*: fg chrome, inert, and a
 /// bottom underbar filling left-to-right (0..1) — a discrete task completing once. `state` is
 /// an optional short status word ("short", "working") rendered **only when nonempty**; `cost_txt` is the normalized price segment
@@ -64,7 +64,7 @@ pub fn tile(
     // Affordability/running remains authoritative here; the lifecycle publishes it. The tile's
     // accessible name is the action's own; its spoken value is the determinate progress
     // readout while running (from the same fraction the underbar fills to, so the bridge can
-    // speak "62%"), else the risk profile's shared label (KIT-17: the curve glyph is not a
+    // speak "62%"), else the risk profile's shared label (the curve glyph is not a
     // string, so "Forage" reads with its "normal" distribution).
     const enabled = !running and can;
     const was_focused = ctx.isFocused(box.get().key);
@@ -95,7 +95,7 @@ pub fn tile(
 
     _ = (try inner.text("name", name)).with_style(.{ style.h3, Style{ .text = chrome } });
 
-    // KIT-17: an optional state line, rendered **only when nonempty** (e.g. "short",
+    // An optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.
     if (state.len > 0) {
         _ = (try inner.text("state", state))
@@ -110,14 +110,14 @@ pub fn tile(
 
     _ = (try row.text("cost", cost_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
-    // The middot joins the price segment and the duration (KIT-17), so additional input costs
+    // The middot joins the price segment and the duration, so additional input costs
     // stay in the price segment *before* the middot.
     _ = (try row.text("mid", "\u{00B7}"))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
     _ = (try row.text("dur", duration_txt))
         .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
 
-    // RENDER-02: recolor the icon raster's ink through the style fold's `tint` field rather
+    // Recolor the icon raster's ink through the style fold's `tint` field rather
     // than poking `render_data.svg` — same last-fragment-wins path as every other look.
     _ = (try row.svg("kind", info.kind_icon(kind), icon_px))
         .with_style(.{Style{ .tint = if (lit) th.dim else chrome }});
@@ -131,7 +131,7 @@ pub fn tile(
         if (box.get().rect(ctx)) |r| {
             const bar = try box.div("bar");
             // `r.w` is the stamped (device-px) box width; the underbar width tracks it, so use
-            // `with_size_px` (VIEW-02) — the 3px logical height is scaled through `view.dp`.
+            // `with_size_px` — the 3px logical height is scaled through `view.dp`.
             _ = bar.with_layout(.bottom_left)
                 .with_size_px(.{ .fixed = r.w * std.math.clamp(p, 0, 1) }, .{ .fixed = uic.view.dp(3, ctx.res.view.scale) })
                 .with_style(.{Style{ .fill = th.acc }});
@@ -165,10 +165,10 @@ pub fn action_tile(
     // Same strict energy gate as `begin_labor`: spending vigor to exactly 0 would be death.
     const can = busy == null and vigor.v > act.requires.energy;
 
-    // Price segment (KIT-17): `−{energy}e` then any additional input costs (e.g. Check traps'
+    // Price segment: `−{energy}e` then any additional input costs (e.g. Check traps'
     // `−1m`), all *before* the middot; the duration is the trailing segment after it. Energy
     // and materials use `fmt_amount` (one decimal only when fractional), so Forage reads `−1.7e`
-    // while Scavenge reads `−2e` (ACT1-08 metric style).
+    // while Scavenge reads `−2e` (metric style).
     const fmt = @import("../fmt.zig");
     var ebuf: [8]u8 = undefined;
     var mbuf: [8]u8 = undefined;

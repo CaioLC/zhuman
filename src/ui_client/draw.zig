@@ -12,11 +12,11 @@ const UiCtx = cb.UiCtx;
 const Node = cb.Node;
 
 /// Paint a whole UI tree. Called once per root tree, in the render list's order (later
-/// trees draw on top). Establishes the explicit alpha-blending baseline (RENDER-01) and
+/// trees draw on top). Establishes the explicit alpha-blending baseline and
 /// restores the renderer's clip to "none" on the way out so the next tree isn't cropped
 /// by this one's leftover clip rect.
 ///
-/// **Blend-mode policy (RENDER-01):** the draw blend mode is set to `.blend` here, once per
+/// **Blend-mode policy:** the draw blend mode is set to `.blend` here, once per
 /// tree, so every geometry primitive a feature paints (`fill`/`outline`/`line`
 /// `renderFillRect`/`renderLines`) alpha-blends against what is underneath — SDL's default is
 /// `.none` (source replaces destination, ignoring `a`), which would render a translucent hover
@@ -33,7 +33,7 @@ pub fn draw_tree(u: *UiCtx, root: *Node) void {
 /// Recursive pre-order paint (a parent draws under its children). `clip` is the
 /// effective clip rect inherited from ancestors (`null` = unclipped); it's applied
 /// before this node paints, then narrowed for the subtree if this node is `.clip`.
-/// `opacity` is the inherited visual opacity (RENDER-07): this node's own
+/// `opacity` is the inherited visual opacity: this node's own
 /// `render_data.opacity` multiplies it, the product is folded into every feature's paint
 /// alpha, and the same product inherits to the children — so a whole subtree dims without
 /// recomputing child colors. Opacity is purely visual; hit-testing never reads it.

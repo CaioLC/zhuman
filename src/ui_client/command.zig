@@ -17,7 +17,7 @@ pub const Command = enum {
     delete_forward,
     line_start,
     line_end,
-    // INPUT-07 single-line editing: anchored selection, clipboard, and clear. Selection
+    // Single-line editing: anchored selection, clipboard, and clear. Selection
     // variants mirror the movement commands with the anchor held (Shift held). Clipboard
     // commands are gated to the focused text owner and to SDL clipboard availability by
     // the host; the mapping here is pure and platform-agnostic.
@@ -204,7 +204,7 @@ test "key events map to complete command vocabulary with repeat policy" {
     try std.testing.expectEqual(@as(?Command, null), fromKeyEvent(.{ .key = .slash, .action = press, .modifiers = .{ .control = true } }));
 }
 
-test "shift and accelerator chords map to INPUT-07 selection, clipboard, and select-all" {
+test "shift and accelerator chords map to selection, clipboard, and select-all" {
     const press = input.KeyAction.press;
     const repeat = input.KeyAction.repeat;
     const shift = input.Modifiers{ .shift = true };

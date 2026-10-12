@@ -1,4 +1,4 @@
-//! `tween` — a small **host-layer transition/tween state** (RENDER-08) for the prototype's
+//! `tween` — a small **host-layer transition/tween state** for the prototype's
 //! few *functional* transitions: the Holdings column/gap collapse (`120ms`), a stock token's
 //! font-size change (`90ms`), and the board's opacity/stroke changes (`100–110ms`). It is a
 //! deliberately tiny **value provider**, not a general timeline engine and not a node feature:
@@ -13,10 +13,10 @@
 //! and re-animating. A brand-new id starts at its `to` (nothing to animate from yet) or from
 //! an explicit `start` via `from`.
 //!
-//! **Obeys reduced motion:** every start routes through the INPUT-10 `motion.Policy` — when
+//! **Obeys reduced motion:** every start routes through the `motion.Policy` — when
 //! reduced motion is on, a tween reports its **end value immediately** (the transition snaps),
-//! while the functional end state is always reached. The policy is the single gate INPUT-10
-//! shipped for exactly this.
+//! while the functional end state is always reached. The policy is the single gate for
+//! exactly this.
 //!
 //! Pure and SDL-free: fixed-capacity, no allocator, deterministic — unit-tested without a
 //! renderer or a clock (the caller supplies `dt`).

@@ -1,10 +1,10 @@
-//! `catalog_controls` (KIT-15) — the shared controls bar above a catalog's results: a search
+//! `catalog_controls` — the shared controls bar above a catalog's results: a search
 //! field, an adjacent sort toggle, and a disclosed Sort-by + Direction row, plus a count-only
 //! live summary. It **composes** the earlier controls rather than reinventing them — the search
-//! field is `uic.text_input` (INPUT-07 editor, with the `/` shortcut), the sort row is a
-//! `disclosure` (KIT-11) holding two `select`s (KIT-09), and the query is `query.zig` (KIT-14).
+//! field is `uic.text_input` (editor, with the `/` shortcut), the sort row is a
+//! `disclosure` holding two `select`s, and the query is `query.zig`.
 //!
-//! Contract (KIT-15):
+//! Contract:
 //!   - **`/` focuses the search field of the *active* view only** — only the active catalog
 //!     builds its `text_input`, and `text_input` registers itself as the `/` search target, so
 //!     the shortcut naturally lands on the visible field (an inactive view builds nothing).
@@ -121,7 +121,7 @@ pub fn count_summary(parent: El, id: []const u8, shown: usize) !void {
     _ = (try parent.text(id, txt)).with_style(.{ style.small, Style{ .text = ctx.res.view.theme.dim } });
 }
 
-/// Compose a caller's key comparison with the **deterministic name tie-break** (KIT-15). Given
+/// Compose a caller's key comparison with the **deterministic name tie-break**. Given
 /// whether `a` sorts before `b` by the primary key (`primary_less`) and their equality
 /// (`primary_eq`), fall back to a case-insensitive name compare so equal keys never reorder
 /// frame to frame. `dir` applies the direction (`none` ⇒ keep the caller's natural order:

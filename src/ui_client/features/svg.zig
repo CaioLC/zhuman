@@ -43,8 +43,8 @@ pub fn attach(ctx: *UiCtx, node: *Node, path: [:0]const u8, px: f32) !void {
 pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
     const tex = node.state(u, State).tex orelse return;
     const r = paint.content(node) orelse return;
-    const col = paint.applyOpacity(c, opacity); // RENDER-07 subtree dimming
-    // RENDER-01: honor the tint alpha explicitly rather than relying on the texture's
+    const col = paint.applyOpacity(c, opacity); // subtree dimming
+    // Honor the tint alpha explicitly rather than relying on the texture's
     // default blend mode, so a dimmed/translucent icon composites consistently.
     tex.setBlendMode(.blend) catch {};
     tex.setColorMod(col.r, col.g, col.b) catch {};

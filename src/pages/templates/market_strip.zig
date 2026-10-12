@@ -1,4 +1,4 @@
-//! `market_strip` and `activity_strip` (KIT-13) — the two optional header strips that fill the
+//! `market_strip` and `activity_strip` — the two optional header strips that fill the
 //! shell's `regions.market` / `regions.activity`. Both are **identity-map driven**: a small
 //! enum selects the signal, stock copy, action label, and semantic **tone**, so presentation is a
 //! pure table (unit-tested) and the render just projects the tone to a theme role.

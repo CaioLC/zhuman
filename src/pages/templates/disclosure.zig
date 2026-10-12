@@ -1,10 +1,10 @@
-//! `disclosure` — the **disclosure control** (KIT-11): a summary row that toggles a details
+//! `disclosure` — the **disclosure control**: a summary row that toggles a details
 //! section open/closed. One reusable control for the milestone "details ↓ / close ↑" reveal and
 //! any sort/filter panel whose anatomy is a summary over a disclosed body.
 //!
 //! **Synchronized by one bit.** The expanded/collapsed state lives in a pooled
 //! `DisclosureState { expanded }` keyed by the control node (survives the frame-arena rebuild).
-//! The **whole summary row owns the toggle** (the KIT-03 button contract — outer box owns
+//! The **whole summary row owns the toggle** (the button contract — outer box owns
 //! interaction, a click flips the bit), and the affordance label (`details ↓` vs `close ↑`),
 //! the details visibility, focus, and the compact summary are all rebuilt from that one bit
 //! each frame, so they can never disagree. The **details subtree is built only while expanded**,
@@ -30,7 +30,7 @@ pub const Disclosure = struct {
 
 /// Build a disclosure into `parent`. `summary` is the always-visible compact label; the
 /// affordance reads `details ↓` when collapsed, `close ↑` when expanded. `enabled` gates the
-/// toggle (KIT-03). Returns the details box to fill when open. When the caller passes
+/// toggle. Returns the details box to fill when open. When the caller passes
 /// `expanded`, that bit is the state (read on entry, written on exit); null means the
 /// control owns it.
 pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool, expanded: ?*bool) !Disclosure {
@@ -47,7 +47,7 @@ pub fn disclosure(parent: El, id: []const u8, summary: []const u8, enabled: bool
         x.* = st.expanded;
     };
 
-    // The summary row is the toggle: the whole row owns the interaction (KIT-03).
+    // The summary row is the toggle: the whole row owns the interaction.
     const row = try box.div("summary");
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (enabled and row.query().clicked) st.expanded = !st.expanded;

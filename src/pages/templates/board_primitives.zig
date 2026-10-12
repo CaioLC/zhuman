@@ -1,8 +1,8 @@
-//! `board_primitives` (KIT-23) — the small, **generic** building blocks the STRUCTURE board
+//! `board_primitives` — the small, **generic** building blocks the STRUCTURE board
 //! (Act II) composes from: `tag`, `cost_list`, `legend`, `zoom_controls`, and `empty_state`.
 //! They are deliberately domain-free — every string is the caller's, so the technology/sector
 //! wording stays in the STRUCTURE screen and these templates never encode Act II vocabulary.
-//! They reuse the KIT-02 fragments (`style.tag`, `style.legend_dot`) so their look tracks the
+//! They reuse the fragments (`style.tag`, `style.legend_dot`) so their look tracks the
 //! one theme.
 
 const std = @import("std");
@@ -15,7 +15,7 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-/// A **tag** — a small `line`-bordered `dim` label (the KIT-02 `style.tag` fragment). Caller
+/// A **tag** — a small `line`-bordered `dim` label (the `style.tag` fragment). Caller
 /// supplies the text; returns the tag `El`. Metadata chrome, not a control.
 pub fn tag(parent: El, id: []const u8, text: []const u8) !El {
     const box = try parent.div(id);
@@ -46,11 +46,11 @@ pub fn cost_list(parent: El, id: []const u8, costs: []const Cost) !El {
     return col;
 }
 
-/// One legend entry: a resource hue (the KIT-01/02 `style.Resource`) and its caller label.
+/// One legend entry: a resource hue (the `style.Resource`) and its caller label.
 pub const LegendItem = struct { resource: style.Resource, label: []const u8 };
 
 /// A **legend** — a row (or wrap) of `● {label}` entries, each dot filled with its resource
-/// hue via the KIT-02 `style.legend_dot` fragment (so the legend cites the resource, not a
+/// hue via the `style.legend_dot` fragment (so the legend cites the resource, not a
 /// color). The labels are the caller's.
 pub fn legend(parent: El, id: []const u8, items: []const LegendItem) !El {
     const ctx = parent.ctx;

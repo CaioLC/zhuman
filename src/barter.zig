@@ -1,4 +1,4 @@
-//! `barter` — **atomic** resolution of a Passerby trade (ACT1-14).
+//! `barter` — **atomic** resolution of a Passerby trade.
 //!
 //! A trade either happens whole or not at all. On acceptance this revalidates the quote against
 //! live state — the encounter revision (still the same passerby?), the passerby's stock, the
@@ -42,8 +42,8 @@ pub const Result = struct {
 /// The good component a tradeable tool `Ware` maps to, or null for the bulk resources (food /
 /// materials, which move on inventory rather than as a good). This is the seam between the
 /// generic transfer vocabulary and the concrete components — a fish hook is a Fishing rod, a
-/// whetstone is a Hatchet (the hand-tool family ACT1-16 supersedes). Comptime-dispatched by the
-/// caller through an `inline` over `Ware`.
+/// whetstone is a Hatchet (the hand-tool families `capital` supersedes by rank).
+/// Comptime-dispatched by the caller through an `inline` over `Ware`.
 pub fn goodOf(w: Ware) ?type {
     return switch (w) {
         .food, .materials => null,

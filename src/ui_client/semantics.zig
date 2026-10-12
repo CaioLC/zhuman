@@ -1,7 +1,7 @@
-//! Host-side semantic model for interactive nodes/templates (INPUT-08).
+//! Host-side semantic model for interactive nodes/templates.
 //!
-//! This is the presentation-side accessibility source that INPUT-09's platform bridge will
-//! read from — it is **not** a second source of truth. Labels and values come from
+//! This is the presentation-side accessibility source that the platform bridge
+//! reads from — it is **not** a second source of truth. Labels and values come from
 //! authoritative widget/domain facts, and the interaction state carried here must match the
 //! same `ControlState`/focus owners a control already publishes through `publishControlState`
 //! (see `ctx_binding.zig`). The generic engine (`src/ui/`) never sees any of this; it stays

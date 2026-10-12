@@ -23,17 +23,17 @@ const semantics = @import("./semantics.zig");
 const a11y = @import("./a11y.zig");
 const motion = @import("./motion.zig");
 
-/// Reusable shadow/backdrop composition (RENDER-05): bounded translucent layers approximating
+/// Reusable shadow/backdrop composition: bounded translucent layers approximating
 /// the prototype's soft drop shadows, plus the modal backdrop scrim color. SDL-free layer math
 /// (`shadow.layers`) with thin `El` emitters (`shadow.drop`, `shadow.backdropColor`).
 pub const shadow = @import("./shadow.zig");
 
-/// Host-layer transition/tween state (RENDER-08): scalar transitions keyed by stable
-/// node/domain id, interrupt/reverse from current value, obeying the INPUT-10 reduced-motion
+/// Host-layer transition/tween state: scalar transitions keyed by stable
+/// node/domain id, interrupt/reverse from current value, obeying the reduced-motion
 /// policy, with the prototype's functional durations. A value provider, not a node feature.
 pub const tween = @import("./tween.zig");
 
-/// Frame-local view metrics (VIEW-01): the logical viewport, DPI scale, centered terminal
+/// Frame-local view metrics: the logical viewport, DPI scale, centered terminal
 /// rect, and responsive width class computed once per frame against the 900×820 reference.
 /// `build_ui`'s prologue computes it into `Resources.view.metrics`; responsive templates read
 /// it. Pure `compute` + `ViewMetrics`/`WidthClass` types, SDL-free and unit-tested.
@@ -42,7 +42,7 @@ pub const view = @import("./view.zig");
 /// The style + placement composition layers (`Style`/`resolve`, `Placement`/presets).
 /// Exposed as a namespace so call sites read `uic.style.h1`, `uic.style.row`, etc.
 pub const style = @import("./style.zig");
-/// The centralized typography contract (TEXT-04): the prototype text roles
+/// The centralized typography contract: the prototype text roles
 /// (`body`/`small`/`heading`/`eyebrow`), the single logical→device scale seam
 /// (`toDevice`), and the pure tracking math (`deviceTracking`). SDL-free host policy;
 /// `style` projects these roles into composable fragments. See `type.zig`.
@@ -70,7 +70,7 @@ pub const Command = command.Command;
 pub const CommandRegistry = command.Registry;
 pub const commandFromKeyEvent = command.fromKeyEvent;
 
-// INPUT-08 host-side semantic model (INPUT-09's platform-bridge source). All host-side;
+// Host-side semantic model (the platform bridge's source). All host-side;
 // the generic engine never sees it. See `semantics.zig`.
 pub const semantic = semantics;
 pub const SemanticRole = semantics.Role;
@@ -81,7 +81,7 @@ pub const SemanticRelations = semantics.Relations;
 pub const SemanticRegistry = semantics.SemanticRegistry;
 pub const AnnouncementChannel = semantics.AnnouncementChannel;
 
-// INPUT-09 host-side accessibility bridge: the deterministic seam that consumes the INPUT-08
+// Host-side accessibility bridge: the deterministic seam that consumes the
 // snapshot + announcement channel and holds a future Windows UIA provider slot. All platform
 // policy stays here in `ui_client`; `src/ui` never sees it. See `a11y.zig`.
 pub const a11y_bridge = a11y;
@@ -91,7 +91,7 @@ pub const AccessibilityCapabilities = a11y.Capabilities;
 pub const AccessibilityProvider = a11y.Provider;
 pub const NoopAccessibilityProvider = a11y.NoopProvider;
 
-// INPUT-10 host-side reduced-motion policy: a one-bit `Policy` resolved once at init (an
+// Host-side reduced-motion policy: a one-bit `Policy` resolved once at init (an
 // explicit `HA_REDUCED_MOTION` override, else a Windows `SPI_GETCLIENTAREAANIMATION` probe,
 // else a deterministic `false` fallback) and projected onto `view.reduced_motion` each frame.
 // Optional/decorative transitions snap under it via `Policy.snap`/`Policy.phase`; functional

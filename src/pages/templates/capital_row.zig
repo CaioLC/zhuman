@@ -30,7 +30,7 @@ const gt = @import("./good_text.zig");
 /// The table's lanes, in order. The header and every row iterate this one array, so their
 /// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
 /// width class at which the lane is dropped — the lower-priority lanes go first as the
-/// terminal narrows (KIT-18, the VIEW-04 pattern). The widths fit the canonical 594px
+/// terminal narrows. The widths fit the canonical 594px
 /// expanded Act-I content lane: 542px of cells, five 8px gaps, and 12px of row padding.
 const Column = struct {
     id: []const u8,
@@ -115,11 +115,11 @@ fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Color, 
         .with_style(.{ style.body, Style{ .text = color } });
 }
 
-/// A catalog **name** cell (TEXT-03): the label is an ellipsis cell of exactly the column
+/// A catalog **name** cell: the label is an ellipsis cell of exactly the column
 /// width, so a long good name is elided (`Reinforced Timber Fra…`) instead of stretching the
 /// row and knocking every downstream column out of its lane. The box and hit geometry stay
 /// the allocated `width`; only the visible glyphs are bounded. A **secondary type** sub-label
-/// (KIT-18) rides under the name in dim/small — the crude/manufactured tier word.
+/// rides under the name in dim/small — the crude/manufactured tier word.
 fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary: []const u8, color: Color) !void {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
@@ -168,7 +168,7 @@ pub fn capital_row(
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
         .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (q.held or q.hovering or q.focused)) th.panel else null } });
 
-    // Name + secondary type (crude vs manufactured — the row's KIT-18 type sub-label).
+    // Name + secondary type (crude vs manufactured — the row's type sub-label).
     const type_word = if (capital.is_crude(GoodT)) "crude" else "made";
     try name_cell(row, "nm", col(.recipe).w, gt.display_name(GoodT), type_word, lit);
 
@@ -256,7 +256,7 @@ pub fn capital_row(
         .reach, .blocked, .locked => {},
     }
 
-    // INPUT-08: the row controls its cancel sub-action when one exists. The sub-action's key is
+    // The row controls its cancel sub-action when one exists. The sub-action's key is
     // known only once it is built, so the row's published node is updated in place with the
     // relation (same key, first-seen paint order preserved).
     if (cancel_key) |ck| {
@@ -288,7 +288,7 @@ fn meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
         .with_style(.{Style{ .fill = color }});
 }
 
-/// The **3-segment reach meter** (KIT-18): three fixed cells that light in sequence as `frac`
+/// The **3-segment reach meter**: three fixed cells that light in sequence as `frac`
 /// crosses 1/3, 2/3, 3/3 — a coarse "how close to affordable" read that quantizes the reach
 /// into thirds rather than a smooth bar, matching the prototype's segmented treatment. A lit
 /// segment takes `color`; an unlit one the inactive `line`.

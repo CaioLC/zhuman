@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
-    // TEXT-04: package the UI typeface and its license next to the binary. SDL_ttf opens
+    // Package the UI typeface and its license next to the binary. SDL_ttf opens
     // the font from `assets/fonts/...` at runtime (see `main.font_path`), so the packaged
     // build must carry both the TTF and — as SIL OFL 1.1 §2 requires — the verbatim license
     // + copyright notice alongside it. These `installFile` steps run on `zig build`

@@ -1,10 +1,10 @@
-//! `runline` (KIT-12) — the header's right-side run context: the energy **rate**
+//! `runline` — the header's right-side run context: the energy **rate**
 //! (generated − consumed), the **act label**, and the **day**. A compact readout, not a
 //! control. Act I has no stored energy flow (energy is the price of actions, paid from vigor),
 //! so it passes `gen = consumed = 0` and only the act/day segments show; Act II passes its real
 //! generated/consumed rates and the `+{gen}/−{consumed}` segment appears. The caller supplies
 //! all values (the runline owns no domain math); segments are dim context except the day, which
-//! stays `fg` as the functional counter (VIEW-04 drops the optional act label when compact).
+//! stays `fg` as the functional counter (`compact` drops the optional act label).
 
 const std = @import("std");
 const ha = @import("ha");
@@ -18,7 +18,7 @@ const El = el.El;
 
 /// What the runline renders. `gen`/`consumed` are per-unit energy rates (0 in Act I → the
 /// energy segment is omitted); `act_label` is the optional context word ("Act I"); `day` the
-/// functional day counter; `compact` drops the optional act label (VIEW-04 ≤560).
+/// functional day counter; `compact` drops the optional act label (≤560).
 pub const Run = struct {
     gen: f32 = 0,
     consumed: f32 = 0,
@@ -45,7 +45,7 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
             .with_style(.{ style.heading, Style{ .text = th.dim } });
     }
 
-    // Act label — optional context, dropped when compact (VIEW-04); the middot follows it.
+    // Act label — optional context, dropped when compact; the middot follows it.
     if (!run.compact) {
         const atxt = std.fmt.bufPrint(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
         _ = (try row.text("act", atxt))

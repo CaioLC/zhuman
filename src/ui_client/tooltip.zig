@@ -1,6 +1,6 @@
 //! `tooltip` — a floating, filled, bordered, padded single-line box built as its **own root**
 //! so the page can list it after the screen and it floats above everything. It never
-//! intercepts input (KIT-08): it is pass-through, so despite being stamped last it takes no
+//! intercepts input: it is pass-through, so despite being stamped last it takes no
 //! pointer hit and does not occlude the control it describes. Place it in device px with
 //! `with_offset_px`, and keep it inside the terminal with `clampToTerminal` using the box's
 //! prior-frame geometry for its size.

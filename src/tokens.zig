@@ -1,9 +1,9 @@
-//! `tokens` — the game's **design tokens, encoded once** (KIT-01). One authoritative place
+//! `tokens` — the game's **design tokens, encoded once**. One authoritative place
 //! for the finalized non-color layout scalars: page padding, the common gap ladder, the
 //! hairline width, the control-height ladder, and a re-export of the already-centralized
 //! typography sizes (`ui_client.type`) and functional-transition durations
 //! (`ui_client.tween`). Colors are the other half of the token set and live where a color
-//! *role* belongs: the foundation roles in `ui_client/theme.zig` (`Theme`, incl. the KIT-01
+//! *role* belongs: the foundation roles in `ui_client/theme.zig` (`Theme`, incl. the
 //! `good` role) and the game's values + resource/sector hues + terminal ground in
 //! `palette.zig`. So a call site cites `tokens.pad_page` / `tokens.gap.row` /
 //! `tokens.control.h_std` / `type.heading` / `tween.holdings_s` instead of a bare literal,
@@ -12,7 +12,7 @@
 //! **All scalars here are *logical* px / seconds** — the pre-scale authoring units. The one
 //! logical→device multiply is `ui_client.type.toDevice` (fonts) / `view.dp` (geometry) /
 //! `paint.hairline` (borders); nothing here is pre-multiplied, so a token is stable across
-//! DPI and the responsive scale is applied downstream exactly once (VIEW-01/02).
+//! DPI and the responsive scale is applied downstream exactly once.
 //!
 //! A **leaf, data-only** module: no SDL, no engine, no allocation — just named constants —
 //! so it is free to import from any tier (templates, screens, `res`).
@@ -22,9 +22,9 @@ const tween = @import("./ui_client/tween.zig");
 
 // —— Typography sizes (re-exported; authored in `ui_client/type.zig`) ————————————————————
 // The typography contract (size + tracking + case, coupled) already lives in one module
-// (TEXT-04). Re-exported here as bare logical-px sizes so KIT-01's "centralize body/small/
-// heading sizes" has a single citation point next to the other layout tokens, without
-// duplicating the numbers — these *are* the `type` roles' sizes.
+// (`type.zig`). Re-exported here as bare logical-px sizes so the sizes have a single citation
+// point next to the other layout tokens, without duplicating the numbers — these *are* the
+// `type` roles' sizes.
 
 /// Body copy — the base of the ladder and the unstyled default (14 logical px).
 pub const size_body: f32 = typ.body.size_logical_px;
@@ -35,10 +35,9 @@ pub const size_heading: f32 = typ.heading.size_logical_px;
 
 // —— Page padding —————————————————————————————————————————————————————————————————————
 /// The standard page inset (desktop / roomy width classes). The responsive branch narrows
-/// it (VIEW-04 uses `pad_page_compact` at ≤560); both were bare literals in `play_game.zig`
-/// before KIT-01.
+/// it to `pad_page_compact` at ≤560.
 pub const pad_page: f32 = 16;
-/// The compact page inset applied at the ≤560 width class (VIEW-04).
+/// The compact page inset applied at the ≤560 width class.
 pub const pad_page_compact: f32 = 10;
 
 // —— The common gap ladder ————————————————————————————————————————————————————————————
@@ -62,13 +61,13 @@ pub const gap = struct {
 
 // —— Hairline ——————————————————————————————————————————————————————————————————————————
 /// The authored border/separator thickness (1 logical px). Snapped to a whole *device* px
-/// at draw by `paint.hairline` (RENDER-06), so this is the pre-scale intent, not the drawn
+/// at draw by `paint.hairline`, so this is the pre-scale intent, not the drawn
 /// width. The default `outline_width` when a `Style` sets only an `outline_color`.
 pub const hairline: f32 = 1;
 
 // —— Control heights ——————————————————————————————————————————————————————————————————
 /// The control-height ladder — the fixed heights interactive controls stand at, in logical
-/// px. `compact` is the prototype's `30px` popup/select height (KIT-09 cites it); `std` is
+/// px. `compact` is the prototype's `30px` popup/select height (the `select` control's height); `std` is
 /// the ordinary button/field height; `tall` is a primary/CTA row.
 pub const control = struct {
     pub const h_compact: f32 = 30;
@@ -76,8 +75,8 @@ pub const control = struct {
     pub const h_tall: f32 = 40;
 };
 
-// —— Rail widths (KIT-05) ——————————————————————————————————————————————————————————————
-/// The collapsible Holdings/BODY rail widths (KIT-05): `expanded` `252`, `collapsed` `36`.
+// —— Rail widths ——————————————————————————————————————————————————————————————
+/// The collapsible Holdings/BODY rail widths: `expanded` `252`, `collapsed` `36`.
 /// Encoded here so the rail template and any layout that reserves space for it read one value.
 pub const rail = struct {
     pub const expanded: f32 = 252;
@@ -85,11 +84,11 @@ pub const rail = struct {
 };
 
 // —— Transition durations (re-exported; authored in `ui_client/tween.zig`) ————————————————
-// The functional-transition durations already live in one module (RENDER-08), in seconds.
-// Re-exported so KIT-01's "centralize transition durations" has one citation point beside
+// The functional-transition durations live in one module (`tween.zig`), in seconds.
+// Re-exported so they have one citation point beside
 // the layout tokens without duplicating the values.
 
-/// Holdings/BODY rail collapse transition (`120ms`, KIT-05).
+/// Holdings/BODY rail collapse transition (`120ms`).
 pub const dur_rail_s: f32 = tween.holdings_s;
 /// Stock-token font swap transition (`90ms`).
 pub const dur_stock_token_s: f32 = tween.stock_token_s;
@@ -111,7 +110,7 @@ test "token durations mirror the tween durations (single source, no drift)" {
     try std.testing.expectEqual(@as(f32, 0.120), dur_rail_s);
 }
 
-test "the rail widths are the KIT-05 finalized values" {
+test "the rail widths are the design values" {
     try std.testing.expectEqual(@as(f32, 252), rail.expanded);
     try std.testing.expectEqual(@as(f32, 36), rail.collapsed);
 }

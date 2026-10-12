@@ -9,7 +9,7 @@
 //! `focus_visible`, `disabled`, `selected` and `checked` are the published bits — the same
 //! ones the `style.btn_*` fragments read off the node — and `clicked` is already false for a
 //! disabled control. Pointer and keyboard activation share `.clicked`: Enter/Space on the
-//! focused control mark the same flag a pointer release does (KIT-03). Nested consumption
+//! focused control mark the same flag a pointer release does. Nested consumption
 //! (`El.consume`) stays with the caller, since only it knows which descendant is the
 //! sub-action; ancestor hover is preserved either way.
 
@@ -62,7 +62,7 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
     }
 
     const q = node.query(ctx);
-    // KIT-03: a disabled control cannot activate. Its click is consumed here, so it neither
+    // A disabled control cannot activate. Its click is consumed here, so it neither
     // reports to the caller nor bubbles to an ancestor control.
     if (q.clicked and !opts.enabled) _ = ctx.consumeFlag(key, .clicked);
     if (q.clicked and opts.enabled) _ = ctx.requestFocus(key);
@@ -79,7 +79,7 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
         .checked = opts.checked,
     });
 
-    // INPUT-08: mirror the same facts into the semantic snapshot, in paint order.
+    // Mirror the same facts into the semantic snapshot, in paint order.
     var sem = semantics.SemanticNode{ .key = key, .role = opts.role };
     _ = sem.setLabel(opts.name);
     if (opts.value) |v| _ = sem.setValue(v);

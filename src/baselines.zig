@@ -1,10 +1,8 @@
-//! `baselines` (ACT1-01) — the authoritative **starting baselines** for a fresh agent, named
-//! once. Before this, `main.spawn_agent` carried bare literals (`Vigor{10,10}`,
-//! `InventoryFood{4,1,0.05}`) that Holdings could not compare against; now the values live on
-//! the component **field defaults**, and this module surfaces them as the canonical baseline a
-//! new agent spawns at and Holdings measures current-vs-base against. `spawn_agent` spawns the
-//! default-valued components (`comp.Vigor{}`, `comp.InventoryFood{}`, `comp.Metabolism{}`), so
-//! there is exactly one source for "what a new player starts with".
+//! `baselines` — the authoritative **starting baselines** for a fresh agent, named once. The
+//! values live on the component **field defaults**, and this module surfaces them as the
+//! canonical baseline a new agent spawns at and Holdings measures current-vs-base against.
+//! `spawn_agent` spawns the default-valued components (`comp.Vigor{}`, `comp.InventoryFood{}`,
+//! `comp.Metabolism{}`), so there is exactly one source for "what a new player starts with".
 //!
 //! Leaf module — imports only the components. The values here are *reads* of the component
 //! defaults (`(comp.Vigor{}).max`), never a second copy, so a default edit moves both the spawn

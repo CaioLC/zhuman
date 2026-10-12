@@ -28,7 +28,7 @@ fn txt(parent: El, id: []const u8, s: []const u8, spec: anytype) !El {
     return (try parent.text(id, s)).with_style(spec);
 }
 
-/// An absolutely-placed, fixed-size filled rect inside `parent` (RENDER-01 blending fixture).
+/// An absolutely-placed, fixed-size filled rect inside `parent` (blending fixture).
 /// Anchored top-left and offset in px so layers overlap and their alpha composites — the
 /// point being that a translucent `fill` (a < 255) must blend against what is under it, not
 /// paint opaque. `col` carries its own alpha byte.
@@ -45,7 +45,7 @@ fn layer_in(box: El, dx: f32, dy: f32, w: f32, h: f32, col: uic.Color) El {
     return box;
 }
 
-/// A translucent color: `base` with an explicit alpha byte (0..255). The RENDER-01 fixture
+/// A translucent color: `base` with an explicit alpha byte (0..255). The blending fixture
 /// leans on this — every layer's alpha is authored so the composite is predictable on screen.
 fn alpha(base: uic.Color, a: u8) uic.Color {
     return .{ .r = base.r, .g = base.g, .b = base.b, .a = a };
@@ -69,7 +69,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     _ = try txt(sizes, "sb", "body", .{ style.body, Style{ .text = th.dim } });
     _ = try txt(sizes, "ssm", "small", .{ style.small, Style{ .text = th.dim } });
 
-    // TEXT-04 eyebrow role: a section label authored in normal case; the role uppercases it
+    // Eyebrow role: a section label authored in normal case; the role uppercases it
     // (ASCII fold) and applies the loosened in-band tracking. Proves the transform + tracking
     // travel together from the role through `style.apply` to the drawn glyphs.
     _ = try txt(root, "eyebrow", "Section Label", .{ style.eyebrow, Style{ .text = th.acc } });
@@ -91,7 +91,7 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     const vpanel = try t.panel(root, "vpanel", "Vitals");
     const vrow = try t.row(vpanel, "vrow");
     try t.figure(vrow, t.figure_glyphs(0.7), th.acc);
-    // TEXT-03 clip cell: the heartbeat is status copy in a narrow readout. A `.clip` cell of
+    // Clip cell: the heartbeat is status copy in a narrow readout. A `.clip` cell of
     // a fixed width keeps the row's geometry stable — the box and hit target are exactly the
     // 64px cell, and the glyphs are cropped to it (renderer-scoped, prior clip restored)
     // rather than letting a longer readout widen the vitals row. The short `<3 <3 <3` draws
@@ -99,11 +99,11 @@ pub fn mock_page(ctx: *UiCtx, world: *World) !*Node {
     _ = (try vrow.text_fit("heart", "<3 <3 <3", .{ .cell = .{ .mode = .clip, .width = 64 } }))
         .with_style(.{Style{ .text = t.heartbeat_color(th, ctx.res.sim.elapsed, ctx.res.motion) }});
 
-    // RENDER-01 blending fixture: translucent fills only look right if the renderer's draw
+    // Blending fixture: translucent fills only look right if the renderer's draw
     // blend mode is `.blend` (SDL defaults to `.none`, which would render every layer opaque).
     // Each sub-figure stacks a translucent `fill` over an opaque base so the alpha composite
-    // is visible on screen. A gradient feature (RENDER-04) does not exist yet, so the "wash"
-    // is honestly a stack of translucent bands, not a true gradient.
+    // is visible on screen. The "wash" is a stack of translucent bands rather than a gradient, so
+    // each band proves the alpha composite on its own.
     const bpanel2 = try t.panel(root, "blendpanel", "Blending");
     const blend_stage = try bpanel2.div("blend_stage");
     _ = blend_stage.with_layout(.top_left)

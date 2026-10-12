@@ -1,4 +1,4 @@
-//! `eating` — the **shared EatingPolicy/BODY math** (KIT-19), pure and deterministic so the
+//! `eating` — the **shared EatingPolicy/BODY math**, pure and deterministic so the
 //! display and the (future) authoritative simulation compute the *same* numbers from one place.
 //! The eating policy is a `0..100` slider value; this module maps it to the consumption rate
 //! and the derived BODY projections. Leaf module — imports only `std`, no UI, no sim — so it is
