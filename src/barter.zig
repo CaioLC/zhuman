@@ -4,15 +4,15 @@
 //! live state — the encounter revision (still the same passerby?), the passerby's stock, the
 //! player's affordability, and, for a sell, ownership of the good being given — and only then
 //! moves **both** bundles: the give side leaves the player, the receive side arrives, the
-//! passerby's finite satchel decrements, any good effect applies/revokes exactly once, and one
+//! passerby's finite satchel decrements, any good effect lands or leaves exactly once, and one
 //! log line is pushed. A failed revalidation touches nothing and returns a player-readable reason,
 //! so a stale, departed, sold-out, or unaffordable trade rolls back by never having started.
 //!
 //! This module bridges the leaf `market` contracts to the world: `market` stays UI- and
-//! world-free, `capital` owns good grant/revoke, and `barter` is the one place that applies a
-//! `market.Quote` to a player entity. Food and generic Materials move on the inventory
-//! components; owned goods move through `capital` (a buy grants, a sell breaks) so a traded tool's
-//! effect lands/leaves through the same symmetric path a built/broken one does.
+//! world-free, `capital` owns ownership and its effects, and `barter` is the one place that
+//! applies a `market.Quote` to a player entity. Food and generic Materials move on the inventory
+//! components; owned goods move through `capital` (a buy acquires, a sell releases) so a traded
+//! tool's effect lands/leaves through the same path a built/broken one does.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -39,60 +39,48 @@ pub const Result = struct {
     }
 };
 
-/// The good component a tradeable tool `Ware` maps to, or null for the bulk resources (food /
+/// The roster id a tradeable tool `Ware` maps to, or null for the bulk resources (food /
 /// materials, which move on inventory rather than as a good). This is the seam between the
-/// generic transfer vocabulary and the concrete components — a fish hook is a Fishing rod, a
-/// whetstone is a Hatchet (the hand-tool families `capital` supersedes by rank).
-/// Comptime-dispatched by the caller through an `inline` over `Ware`.
-pub fn goodOf(w: Ware) ?type {
+/// generic transfer vocabulary and the authored goods — a fish hook is the fishing net, a
+/// whetstone the hand axe: the rank-2 tools `effects` lets supersede the built ones.
+pub fn goodOf(w: Ware) ?[]const u8 {
     return switch (w) {
         .food, .materials => null,
-        .fish_hook => comp.FishNet, // the passerby carries the *upgrade* (rank-2 fishing tool)
-        .whetstone => comp.HandAxe, // the rank-2 chopping tool
+        .fish_hook => "fish_net",
+        .whetstone => "hand_axe",
     };
 }
 
-/// Whether the player can satisfy the give side's **ownership** requirement — every non-resource
-/// (tool) line on the give side must be a good the player currently owns. Resource lines are
-/// covered by the affordability check in `Quote.refusal`.
-fn owns_give(w: *World, e: Entity, q: *const Quote) bool {
+/// Whether the player can satisfy the give side's **ownership** requirement — every tool line on
+/// the give side must be a good the player currently owns. Resource lines are covered by the
+/// affordability check in `Quote.refusal`.
+fn owns_give(w: *World, e: Entity, res: *Resources, q: *const Quote) bool {
     for (q.give.slice()) |line| {
-        switch (line.item) {
-            .food, .materials => {},
-            inline .fish_hook, .whetstone => |ware| {
-                const G = comptime goodOf(ware).?;
-                if (!w.has(e, G)) return false;
-            },
-        }
+        const id = goodOf(line.item) orelse continue;
+        if (!capital.owns(w, e, &res.catalog, id)) return false;
     }
     return true;
 }
 
 /// Resolve `q` on player `e`, atomically. Revalidates everything first; on any failure returns the
 /// reason and mutates nothing. On success: deducts the give side, credits the receive side,
-/// decrements the passerby's stock, applies/revokes good effects once, logs one line.
+/// decrements the passerby's stock, lands/leaves good effects once, logs one line.
 pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
     const enc = &res.sim.encounter;
+    const cat = &res.catalog;
     const food = w.get(e, comp.InventoryFood).?;
     const stock = w.get(e, comp.InventoryMaterial).?;
 
     // --- revalidate (all-or-nothing gate) ---------------------------------------------------
     const r = q.refusal(enc, food.v, stock.v);
     if (r != .none) return .{ .refusal = r };
-    if (!owns_give(w, e, q)) return .{ .refusal = .sold_out }; // player lacks the good to give
+    if (!owns_give(w, e, res, q)) return .{ .refusal = .sold_out }; // player lacks the good to give
     // The receive side of a buy comes out of the passerby's satchel — confirm the satchel holds
-    // every tool/resource ware the player is to receive (bulk food/materials are the passerby's
-    // to conjure at the quoted rate; the finite constraint is on the specific wares it carries).
+    // every tool ware the player is to receive (bulk food/materials are the passerby's to
+    // conjure at the quoted rate; the finite constraint is on the specific wares it carries).
     for (q.receive.slice()) |line| {
-        if (enc.stockOf(line.item) < @as(u16, @intFromFloat(@ceil(line.qty)))) {
-            // Only tool wares are truly finite in the satchel; bulk resources are not stock-gated
-            // on the receive side (the passerby always has coin-of-the-realm Materials/Food to
-            // hand over up to `Quote.stock`, which the refusal already checked).
-            switch (line.item) {
-                .food, .materials => {},
-                else => return .{ .refusal = .sold_out },
-            }
-        }
+        if (goodOf(line.item) == null) continue;
+        if (enc.stockOf(line.item) < @as(u16, @intFromFloat(@ceil(line.qty)))) return .{ .refusal = .sold_out };
     }
 
     // --- apply (both bundles move, or neither — we are past every gate now) ------------------
@@ -106,11 +94,12 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
                 stock.v -= line.qty;
                 materials_moved += line.qty;
             },
-            inline .fish_hook, .whetstone => |ware| {
-                const G = comptime goodOf(ware).?;
-                // Selling a good: break it (its effect leaves symmetrically). Spares go first.
-                capital.break_good(w, e, res, G);
-                enc.give(ware, @intFromFloat(@ceil(line.qty))); // the passerby now carries it
+            .fish_hook, .whetstone => {
+                // Selling a good: its effect leaves with the last unit, spares first.
+                const gi = cat.goodIndex(goodOf(line.item).?).?;
+                const units: u32 = @intFromFloat(@ceil(line.qty));
+                _ = capital.release(w, e, res, gi, units);
+                enc.give(line.item, @intCast(units)); // the passerby now carries it
             },
         }
     }
@@ -123,26 +112,17 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
                 stock.v += line.qty;
                 materials_moved += line.qty;
             },
-            inline .fish_hook, .whetstone => |ware| {
-                const G = comptime goodOf(ware).?;
-                // Buying a good: own it and apply its effect once (a repeat is stock, not a second
-                // effect — the same rule `finish_build` follows).
-                if (w.get(e, G)) |held| {
-                    held.count += 1;
-                } else {
-                    w.add(e, G{});
-                    capital.grant_public(w, e, G);
-                }
-                enc.take(ware, @intFromFloat(@ceil(line.qty))); // out of the finite satchel
+            .fish_hook, .whetstone => {
+                // Buying a good: own it and its effect lands once (a repeat is stock, not a second
+                // effect — the same rule a build follows).
+                const gi = cat.goodIndex(goodOf(line.item).?).?;
+                const units: u32 = @intFromFloat(@ceil(line.qty));
+                capital.acquire(w, e, res, gi, units);
+                enc.take(line.item, @intCast(units)); // out of the finite satchel
             },
         }
     }
 
-    // Decrement the offer's own stock and log one line.
-    if (q.stock > 0) {
-        // The caller holds the quote; the encounter-level satchel is the durable stock. The
-        // per-offer `stock` is advisory for the schedule and re-derived next quote.
-    }
     var buf: [96]u8 = undefined;
     const msg = switch (q.direction) {
         .buy => std.fmt.bufPrint(&buf, "You trade with the passerby.", .{}) catch "You trade.",
@@ -156,12 +136,15 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
 // ============================ Tests =====================================================
 
 const testing = std.testing;
+const roster = ha.roster;
+const effects = ha.effects;
 
-fn test_res() Resources {
+fn test_res() !Resources {
     var res: Resources = undefined;
     res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
     res.time = .{ .dt = 0 };
     res.config = .{};
+    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
     // A present passerby with a stocked satchel.
     res.sim.encounter = .{ .phase = .present, .id = 1 };
     res.sim.encounter.stock = .{ 8, 20, 1, 1 };
@@ -173,15 +156,22 @@ fn spawn_trader(w: *World) Entity {
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 6, .quality = 1, .spoils = 0 },
         comp.InventoryMaterial{ .v = 12 },
+        comp.Goods{},
+        comp.Granted{},
     } ++ @import("./actions.zig").actions_bundle);
+}
+
+fn held(w: *World, e: Entity, res: *Resources, verb: []const u8) bool {
+    return effects.held(&res.catalog, w.get(e, comp.Goods).?, res.catalog.actionIndex(verb).?);
 }
 
 test "a buy moves both bundles atomically and decrements the satchel" {
     var w = World.init();
-    var res = test_res();
+    var res = try test_res();
+    defer res.catalog.deinit();
     const e = spawn_trader(&w);
 
-    // Buy a fish hook (a Fishing rod) for 2 food + 4 materials.
+    // Buy a fish hook (the fishing net) for 2 food + 4 materials.
     var q = Quote{
         .id = 1,
         .rev = 1,
@@ -195,13 +185,15 @@ test "a buy moves both bundles atomically and decrements the satchel" {
         .receive = market.Bundle.one(.fish_hook, 1),
     };
 
-    try testing.expect(!w.has(e, comp.FishNet));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
     const r = resolve(&w, e, &res, &q);
     try testing.expect(r.ok());
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
     try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12-4
-    // Receive side arrived + its effect (the fishing verb, via the family recompute) applied once.
+    // Receive side arrived + its effect (the fishing verb) applied once; the shadow follows.
+    try testing.expect(capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(held(&w, e, &res, "fish"));
     try testing.expect(w.has(e, comp.FishNet));
     try testing.expect(w.has(e, comp.ActionFish));
     // The satchel decremented.
@@ -209,14 +201,14 @@ test "a buy moves both bundles atomically and decrements the satchel" {
     try testing.expectEqual(@as(usize, 1), res.sim.log.count); // one log line
 }
 
-test "a sell breaks the good, credits materials, and passes it to the passerby" {
+test "a sell releases the good, credits materials, and passes it to the passerby" {
     var w = World.init();
-    var res = test_res();
+    var res = try test_res();
+    defer res.catalog.deinit();
     const e = spawn_trader(&w);
-    // Own a hand axe to sell (grant its verb too, via the chopping-family recompute).
-    w.add(e, comp.HandAxe{});
-    capital.grant_public(&w, e, comp.HandAxe);
-    try testing.expect(w.has(e, comp.ActionChopWood));
+    // Own a hand axe to sell; its verb comes with it.
+    capital.acquire(&w, e, &res, res.catalog.goodIndex("hand_axe").?, 1);
+    try testing.expect(held(&w, e, &res, "chop_wood"));
 
     var q = Quote{
         .id = 1,
@@ -230,16 +222,20 @@ test "a sell breaks the good, credits materials, and passes it to the passerby" 
     try testing.expect(r.ok());
     try testing.expectApproxEqAbs(@as(f32, 5), r.materials_moved, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12+5
-    // The good left and its verb with it (symmetric break — no lower rank owned, so the verb goes).
+    // The good left and its verb with it (no lower rank owned, so the verb goes).
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "hand_axe"));
+    try testing.expect(!held(&w, e, &res, "chop_wood"));
     try testing.expect(!w.has(e, comp.HandAxe));
     try testing.expect(!w.has(e, comp.ActionChopWood));
-    // The passerby now carries a whetstone.
+    // The passerby now carries a whetstone, and the sale is the only line.
     try testing.expectEqual(@as(u16, 2), res.sim.encounter.stockOf(.whetstone)); // 1 + 1
+    try testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
 test "every refusal path rolls back — nothing moves" {
     var w = World.init();
-    var res = test_res();
+    var res = try test_res();
+    defer res.catalog.deinit();
     const e = spawn_trader(&w);
 
     var q = Quote{
@@ -258,27 +254,28 @@ test "every refusal path rolls back — nothing moves" {
     const before_mat = w.get(e, comp.InventoryMaterial).?.v;
     try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q).refusal);
     try testing.expectEqual(before_mat, w.get(e, comp.InventoryMaterial).?.v);
-    try testing.expect(!w.has(e, comp.FishRod));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
     // Affordable but stale (a different passerby now) → still nothing.
     q.give = market.Bundle.one(.materials, 2);
     res.sim.encounter.id = 2;
     try testing.expectEqual(market.Refusal.stale, resolve(&w, e, &res, &q).refusal);
-    try testing.expect(!w.has(e, comp.FishRod));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
 
     // Departed → nothing.
     res.sim.encounter.id = 1;
     res.sim.encounter.phase = .departed;
     try testing.expectEqual(market.Refusal.departed, resolve(&w, e, &res, &q).refusal);
-    try testing.expect(!w.has(e, comp.FishRod));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count); // never logged a failed trade
 }
 
 test "selling a good you do not own is refused, not a panic" {
     var w = World.init();
-    var res = test_res();
-    const e = spawn_trader(&w); // owns no hatchet
+    var res = try test_res();
+    defer res.catalog.deinit();
+    const e = spawn_trader(&w); // owns no hand axe
 
     var q = Quote{
         .id = 1,

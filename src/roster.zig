@@ -44,6 +44,20 @@ pub const Resource = enum {
             else => 2,
         };
     }
+
+    /// The one- or two-letter unit the runline and the log write after an amount.
+    pub fn letter(self: Resource) []const u8 {
+        return switch (self) {
+            .food => "f",
+            .materials => "m",
+            .biomass => "b",
+            .water => "w",
+            .fuel => "fu",
+            .metal => "me",
+            .minerals => "mi",
+            .coin => "c",
+        };
+    }
 };
 
 /// When a line settles. `once` is paid at begin (an input) or lands at completion (an
@@ -81,6 +95,13 @@ pub const Lines = struct {
     pub fn of(src: []const Line) Lines {
         var l = Lines{};
         for (src) |x| l.push(x);
+        return l;
+    }
+
+    /// The lines of `src` at one cadence: a build order or a flow, an upkeep or a product.
+    pub fn only(src: []const Line, per: Cadence) Lines {
+        var l = Lines{};
+        for (src) |x| if (x.per == per) l.push(x);
         return l;
     }
 

@@ -159,35 +159,11 @@ pub const ActionHunt = struct {
 /// the metabolism drains the body mid-work. Death mid-task loses the work: the component
 /// despawns with the agent, paid and undelivered.
 pub const Busy = struct {
-    /// Every act that can occupy the one body — labor verbs and capital builds alike.
-    /// Manual, like `actions_bundle`/`generator_bundle`: a fact about types, not entities
-    /// (`actions.doing_of` / `capital.doing_of_good` map the comptime type to its name,
-    /// and `systems.resolve_busy` dispatches back).
-    pub const Doing = enum {
-        // labor
-        forage,
-        scavenge,
-        fish,
-        chop_wood,
-        check_traps,
-        hunt,
-        // capital builds
-        build_fish_rod,
-        build_hatchet,
-        build_wire_snares,
-        build_air_rifle,
-        build_sandals,
-        build_work_gloves,
-        build_bicycle,
-        build_cookpot,
-        build_root_cellar,
-        build_chainsaw,
-        build_leaf_bed,
-        build_pantry,
-        build_medicine_chest,
-        build_garden_bed,
-        build_chicken_coop,
-        build_shelter,
+    /// The act that occupies the body: a labor verb or a capital build, by its index in the
+    /// authored roster (`roster.Catalog`). `systems.resolve_busy` dispatches on the tag.
+    pub const Doing = union(enum) {
+        labor: u16,
+        build: u16,
     };
     doing: Doing,
     /// Total work time and what's left of it, in game-seconds (see `res.hours_to_secs`).
@@ -195,6 +171,20 @@ pub const Busy = struct {
     remaining: f32,
     /// Labor quality locked at begin (see `actions.yield_factor`).
     quality: f32,
+
+    pub fn isLabor(self: Busy, ai: u16) bool {
+        return switch (self.doing) {
+            .labor => |i| i == ai,
+            .build => false,
+        };
+    }
+
+    pub fn isBuild(self: Busy, gi: u16) bool {
+        return switch (self.doing) {
+            .build => |i| i == gi,
+            .labor => false,
+        };
+    }
 };
 
 /// The continuous eating policy: an agent consumes its own larder every tick — eating

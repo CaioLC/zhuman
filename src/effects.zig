@@ -217,9 +217,12 @@ const Pair = struct {
         apply(w, self.data, cat);
     }
 
-    /// Lose one of `G` on both sides.
+    /// Lose one of `G` on both sides — the typed side through the reference revoke, spares
+    /// first, the data side by count.
     fn drop(self: Pair, w: *World, res: *Resources, cat: *const Catalog, comptime G: type) void {
-        capital.break_good(w, self.typed, res, G);
+        _ = res;
+        const owned = w.get(self.typed, G).?;
+        if (owned.count > 1) owned.count -= 1 else capital.revoke_public(w, self.typed, G);
         w.get(self.data, comp.Goods).?.count[cat.goodIndex(ha.bridge.goodIdOf(G)).?] -= 1;
         apply(w, self.data, cat);
     }

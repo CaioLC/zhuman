@@ -147,7 +147,7 @@ pub const Sim = struct {
     /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
     /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
     /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
-    reach_seen: [16]bool = [_]bool{false} ** 16,
+    reach_seen: [rostermod.max_goods]bool = [_]bool{false} ** rostermod.max_goods,
 
     /// **The Passerby encounter** — the run's one Act I counterparty as a clock-driven
     /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite

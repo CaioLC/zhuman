@@ -6,6 +6,7 @@ const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
 const actions = @import("./actions.zig");
 const capital = @import("./capital.zig");
+const roster = @import("./roster.zig");
 const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
@@ -129,29 +130,9 @@ pub fn resolve_busy(
         w.remove(e, comp.Busy);
         switch (b.doing) {
             // labor: draw at the locked quality, deposit, receipt
-            .forage => actions.finish_labor(w, e, res, comp.ActionForage, b.quality),
-            .scavenge => actions.finish_labor(w, e, res, comp.ActionScavenge, b.quality),
-            .fish => actions.finish_labor(w, e, res, comp.ActionFish, b.quality),
-            .chop_wood => actions.finish_labor(w, e, res, comp.ActionChopWood, b.quality),
-            .check_traps => actions.finish_labor(w, e, res, comp.ActionCheckTraps, b.quality),
-            .hunt => actions.finish_labor(w, e, res, comp.ActionHunt, b.quality),
-            // capital: own the good, apply what it grants, receipt
-            .build_fish_rod => capital.finish_build(w, e, res, comp.FishRod),
-            .build_hatchet => capital.finish_build(w, e, res, comp.Hatchet),
-            .build_wire_snares => capital.finish_build(w, e, res, comp.WireSnares),
-            .build_air_rifle => capital.finish_build(w, e, res, comp.AirRifle),
-            .build_sandals => capital.finish_build(w, e, res, comp.Sandals),
-            .build_work_gloves => capital.finish_build(w, e, res, comp.WorkGloves),
-            .build_bicycle => capital.finish_build(w, e, res, comp.Bicycle),
-            .build_cookpot => capital.finish_build(w, e, res, comp.Cookpot),
-            .build_root_cellar => capital.finish_build(w, e, res, comp.RootCellar),
-            .build_chainsaw => capital.finish_build(w, e, res, comp.Chainsaw),
-            .build_leaf_bed => capital.finish_build(w, e, res, comp.LeafBed),
-            .build_pantry => capital.finish_build(w, e, res, comp.Pantry),
-            .build_medicine_chest => capital.finish_build(w, e, res, comp.MedicineChest),
-            .build_garden_bed => capital.finish_build(w, e, res, comp.GardenBed),
-            .build_chicken_coop => capital.finish_build(w, e, res, comp.ChickenCoop),
-            .build_shelter => capital.finish_build(w, e, res, comp.Shelter),
+            .labor => |ai| actions.finish(w, e, res, ai, b.quality),
+            // capital: own the good, settle what it does, receipt
+            .build => |gi| capital.finish(w, e, res, gi),
         }
     }
 }
@@ -205,24 +186,25 @@ pub fn track_reach(
     w: *World,
     q: Query(.{ Entity, comp.Vigor, With(tag.Player) }),
 ) void {
+    const cat = &res.catalog;
     var it = q.iter();
     while (it.next()) |entry| {
         const e: Entity = entry[0];
-        inline for (capital.buildable_bundle, 0..) |G, i| {
-            // Only prerequisite-gated goods transition; a null prereq is reachable from the
-            // start and would false-fire on the first tick, so it is skipped entirely.
-            if (comptime capital.prereq_of(G) != null) {
-                const met = capital.prereq_met(w, e, G);
-                if (met and !res.sim.reach_seen[i]) {
-                    res.sim.reach_seen[i] = true;
-                    var buf: [64]u8 = undefined;
-                    const msg = std.fmt.bufPrint(&buf, "A new recipe is within reach: {s}.", .{capital.good_name(G)}) catch "A new recipe is within reach.";
-                    res.sim.log.push(.good, msg);
-                } else if (!met) {
-                    // The prerequisite went away (tool broke) — allow a fresh announcement if it
-                    // returns, so the transition tracking is symmetric.
-                    res.sim.reach_seen[i] = false;
-                }
+        for (cat.goods, 0..) |rec, gi| {
+            // Only goods with a `needs` transition; one without is reachable from the start
+            // and would false-fire on the first tick, so it is skipped entirely.
+            if (rec.needs.len == 0) continue;
+            const met = capital.needsMet(w, e, cat, @intCast(gi));
+            if (met and !res.sim.reach_seen[gi]) {
+                res.sim.reach_seen[gi] = true;
+                var nbuf: [48]u8 = undefined;
+                var buf: [96]u8 = undefined;
+                const msg = std.fmt.bufPrint(&buf, "A new recipe is within reach: {s}.", .{capital.lowerName(rec.name, &nbuf)}) catch "A new recipe is within reach.";
+                res.sim.log.push(.good, msg);
+            } else if (!met) {
+                // The prerequisite went away (tool broke) — allow a fresh announcement if it
+                // returns, so the transition tracking is symmetric.
+                res.sim.reach_seen[gi] = false;
             }
         }
     }
@@ -243,13 +225,17 @@ fn test_res(dt: f32) Resources {
 test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     var w = World.init();
     var res = test_res(0);
+    res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer res.catalog.deinit();
     res.time.dt = res_mod.hours_to_secs(2, res.config.secs_per_day); // 2h per tick
+    const forage = res.catalog.actionIndex("forage").?; // 4h of work, innate
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryMaterial{ .v = 0 },
-        comp.ActionForage{}, // 4h of work
-        comp.Busy{ .doing = .forage, .total = res_mod.hours_to_secs(4, res.config.secs_per_day), .remaining = res_mod.hours_to_secs(4, res.config.secs_per_day), .quality = 1 },
+        comp.Goods{},
+        comp.Granted{},
+        comp.Busy{ .doing = .{ .labor = forage }, .total = res_mod.hours_to_secs(4, res.config.secs_per_day), .remaining = res_mod.hours_to_secs(4, res.config.secs_per_day), .quality = 1 },
     });
 
     ecs.run(&w, &res, resolve_busy); // 2h in — still working
@@ -319,15 +305,18 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
 test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms if the prereq goes away" {
     var w = World.init();
     var res = test_res(0);
-    // A player with no ActionChopWood: Work gloves / Chainsaw (both prereq'd on it) are not
-    // in reach yet, and no-prereq goods never announce.
-    const e = w.spawn(.{ comp.Vigor{}, tag.Player{} });
+    res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer res.catalog.deinit();
+    const hatchet = res.catalog.goodIndex("hatchet").?;
+    // A player without Split wood: Work gloves / Chainsaw (both need it) are not in reach
+    // yet, and goods that need nothing never announce.
+    const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing became reachable
 
-    // Grant the prerequisite verb (as finishing a Hatchet build would): both prereq'd goods
+    // Own the hatchet (as finishing its build would): both goods that need Split wood
     // transition false→true this tick — two announcements, once each.
-    w.add(e, comp.ActionChopWood{});
+    w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
     try std.testing.expectEqual(@import("./log.zig").Tone.good, res.sim.log.get(0).tone);
@@ -339,10 +328,10 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // no repeat
 
     // The prerequisite going away (tool broke) re-arms the announcement; regaining it logs again.
-    w.remove(e, comp.ActionChopWood);
+    w.get(e, comp.Goods).?.count[hatchet] = 0;
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // losing it does not log
-    w.add(e, comp.ActionChopWood{});
+    w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 4), res.sim.log.count); // re-armed: two more
 }

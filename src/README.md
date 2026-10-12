@@ -184,131 +184,86 @@ status word, the vigor chip and `actions.yield_factor` all share.
 
 ## Actions and capital (`actions.zig`, `capital.zig`)
 
-**Every action an agent can perform, and every good it owns, is a typed component on that
-agent's entity.** Not a catalog row, not a separate entity. Two properties fall out for free:
-each agent can hold its own `ActionForage` with different costs and yields, and a good is
-owned by exactly one agent and can never be stacked — the sparse set structurally allows at
-most one instance of a type per entity, so no bookkeeping enforces it.
+**An agent owns goods as counts, and everything it can do follows from them.** `comp.Goods`
+is one count per record of the authored roster (below); zero is not owned. A verb is never
+stored on the agent: `effects.verb` derives its effective terms from the base record and
+the goods owned, so each agent's Forage has its own price once it owns sandals, and a good
+is owned by exactly one agent and stacks only as a count. `comp.Granted` records what the
+goods contribute to the body and larder, so those deltas stay relative.
 
 ### Actions
 
-Innate: `ActionForage`, `ActionScavenge`. Capital-unlocked: `ActionFish`, `ActionChopWood`,
-`ActionCheckTraps`, `ActionHunt`.
-
-Each carries `requires: Requires { energy, materials, hours }` — the price — and
-`yields: Yields { food, materials }` — the reward. Both yields are `dist.Dist`, sampled at
-resolution: **the spread is the risk**, there is no separate success roll. Every action has its
-own risk texture; all five `dist.Kind`s are in use (Scavenge is exponential on both sides —
-mostly scraps, occasionally a jackpot; Hunt is a big poisson). Check traps and Hunt are the
-first actions with `requires.materials > 0`, spending bait and ammunition as inputs.
-
-`Requires` and `Yields` are deliberately **not `pub`**. `World`'s comptime storage scan only
-sees a file's public decls when reflecting across files, so keeping them private avoids
-generating a dead `SparseSet` for each. The cost: no other file can name them to build one.
-
-`actions_bundle` lists the *innate* action types and is spliced into `World.spawn`'s bundle
-with `++`. It cannot simply be nested — `spawn` does not auto-flatten a nested tuple element,
-so nesting is a compile error.
+Innate verbs are the records flagged `innate`; every other verb exists while an owned good
+`grant`s it. `actions.quote` is the one gate calculation — the tile, `begin` and a future
+decider read the same answer: the verb's effective terms, the quality a begin would lock,
+and a `Standing` of `ready`, `busy`, `energy` or `short` with the first unpayable line.
 
 **Labor resolves in two halves,** because actions take time:
 
-- `begin_labor` — refuse if `Busy` (one body, one act) or unaffordable; pay upfront; lock
-  `quality` at the *advertised* pre-payment vigor; add `comp.Busy`.
-- `finish_labor` — sample the yields at that locked quality, deposit, log the receipt.
-  Dispatched by `resolve_busy` via `Busy.Doing` and `actions.doing_of`.
+- `begin` — refuse unless the quote is ready (one body, one act; energy strict; inputs
+  payable); pay the energy and the input lines upfront; lock `quality` at the *advertised*
+  pre-payment vigor; add `comp.Busy{ .doing = .{ .labor = index } }`.
+- `finish` — draw each output line at the locked quality (**the spread is the risk**, there
+  is no separate success roll), deposit through `ledger.draw`, log the receipt built from
+  what landed. A verb lost mid-task — the rod sold while fishing — finishes as nothing.
 
-Both are `comptime ActionT: type` parameterized, so each action stays its own queryable
-component while sharing one resolution path. Dying mid-task loses the work: paid, undelivered.
-
-The affordability gates are asymmetric on purpose — **energy is strict** (vigor must stay above
-zero), **materials may be spent to exactly zero** (a `>=` gate would refuse every action that
-costs no materials at all).
+Both take a catalog index; `systems.resolve_busy` dispatches on the busy marker's tag.
+The affordability gates are asymmetric on purpose — **energy is strict** (vigor must stay
+above zero), **an item may be spent to exactly zero** (a `>=` gate would refuse every action
+that costs no materials at all). The typed entry points (`action_forage` …) resolve their id
+and call `begin`.
 
 ### Capital
 
-Sixteen buildable goods in four behavioral variants over one build path, plus two that only
-the passerby carries (below).
-`begin_build` / `finish_build` / `break_good` are comptime-parameterized over the good exactly
-as labor is over the action — the gate/pay/start half is identical for all sixteen, only
-`grant`/`revoke` differ.
+Every buildable record goes through one path — `quote`, `begin`, `finish` — and what it does
+once owned is its `effects`, interpreted by `effects.zig`: a grant, a scale or offset on a
+verb's price or lines, a ceiling, a larder quality step, a spoilage factor. Generators are
+the goods with `day` lines, intermediates the goods whose once-output is a lot of themselves;
+neither is a category in code.
 
-| Variant | Goods | Behavior |
-|---|---|---|
-| **Unlocker** | Fishing rod, Hatchet, Wire snares, Air rifle | grants an action component outright — owning the good is what makes the verb possible |
-| **`ActionModifier`** | Sandals, Work gloves, Bicycle, Cookpot, Root cellar, Chainsaw, Leaf bed, Pantry, Medicine chest | mutates an existing margin once, at build and again at break |
-| **`Generator`** | Garden bed, Chicken coop | runs continuously: `requires` is the build order, `upkeep` the per-tick drain |
-| **Curtain** | Shelter | grants nothing mechanical: owning it is Act I's win condition, and `build_ui` routes to the curtain on it |
+`capital.quote` answers for the BUILD row and the gate at once: the units owned, the `reach`
+of the build order (the smallest held-over-needed across its once-inputs), and a `Standing`
+in precedence order — `needs` (the verb or tool a modifier works on is not held: the roster's
+only tech-tree edge, so a chainsaw is never offered without Split wood), `unlock` (the
+shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
+good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
+paid for), `busy`, `energy`, `short`, `ready`.
 
-Cutting across those variants is a second split, named by `capital.is_crude` and otherwise
-carried entirely by the prices. **Crude**
-goods — sandals, leaf bed, wire snares, root cellar, garden bed — are what one person makes
-from scavenged scrap in half a day. **Manufactured** goods are the rest, at ×8 the materials
-and ×10 the hours: a hatchet is four days of building nothing else while the larder drains.
-They are not forbidden, only priced past what one body's time is worth — buying one is meant
-to beat building it, which is the whole argument the merchant makes. Two goods may modify one
-verb and stack (sandals and a bicycle both cheapen Forage); a better tool *superseding* a
-weaker one is a different rule, below.
+**Ownership moves through four doors and settles the same way each time.** `finish` adds the
+built lot; `acquire` adds a traded one; `release` takes units, spares first; `break_one` is
+`release` with the receipt line. On the way in from zero and on the way out to zero they
+*settle*: `effects.apply` moves the body and larder by the delta of what the owned goods now
+contribute — a raised ceiling fills what it adds, a lowered one only clamps — and
+`bridge.shadow` mirrors the derived ownership and verb terms onto the typed components for
+what still reads them. **Only the first unit carries the effect**: a second pair of sandals
+is stock, and losing a spare keeps the discount.
 
-**Supersession is per family, by recompute.** `FishNet` outranks `FishRod` and `HandAxe`
-outranks `Hatchet`; both rank-2 tools are traded, not built, so the BUILD catalog count is
-unchanged. On any grant or break in a family, `recompute_fishing`/`recompute_chopping` read
-the best rank owned and set the verb's stats *from the action's canonical defaults* — rank 2
-is 0.7× energy and 1.4–1.5× yield — then re-apply the independent modifiers that share the
-verb (gloves, chainsaw) on top. Resetting from base is what makes three things hold at once:
-same-family stats replace rather than stack, breaking the better tool restores the next-best
-exactly, and any number of build → sell → build cycles leaves the stats bit-exact. The verb
-component is added only when absent, so a family change never appends a duplicate dense
-entry. `break_good` removes the good before it revokes, so the recompute sees post-removal
-state. The health pair is deliberately asymmetric: `health_apply` raises `max` and fills `v`,
-`health_remove` lowers `max` and only clamps, so a night's rest is kept, not un-rested.
+**Supersession is per family, by derivation.** A good's `family` and `rank` say the fishing
+net outranks the rod and the hand axe the hatchet; `effects.applies` lets only the best rank
+owned of a family apply, so same-family stats replace rather than stack, losing the better
+tool restores the next-best exactly, and any number of build → sell → build cycles leaves the
+terms bit-exact, because nothing is ever mutated in place. Goods outside a family stack
+freely (gloves and a chainsaw on the same verb).
 
-A modifier's `apply_*`/`remove_*` pair *scales* its target's `.s`/`.sd` rather than replacing
-them, so a boost preserves the distribution's shape. The health trio is relative (`+=`/`-=`)
-and fills what it adds — 1 for the crude leaf bed, 2 each for the manufactured pair — so
-`v/max` never dips on an upgrade — which matters because the status
-word and `yield_factor` both read that fraction. The Chainsaw is the Act II teaser: chop energy
-×0.3 but `requires.materials += 1` for fuel, the first substitution of external energy for
-muscle.
+`cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the build
+order and frees the body, while the energy and every hour already spent are gone. The refund
+is flat rather than prorated because the order is charged in full at `begin` and nothing
+draws it down over time. It refuses on a labor verb — half-foraging is not a thing you can
+take materials back from.
 
-A generator's `upkeep` and `yields` are authored **per in-game day** and scaled by the frame's
-dt, so a flow reads as a trickle. `run_generators` is an `inline for` over
-`capital.generator_bundle`, one `Query` per type. **That list is manual, not derived**, because
-"every component type tagged `Generator`" is a fact about *types*; the ECS only answers
-instance-level questions, so there is no runtime query for a type-level category.
+`run_generators` ticks every owned good with `day` lines on every agent: if this tick's
+slice of the upkeep is payable, pay it and deposit the same slice of the flow. Both are
+authored **per in-game day** and scaled by the frame's dt, so a flow reads as a trickle.
 
-`capital.prereq_of` declares a good's prerequisite component — Work gloves and Chainsaw both
-target `ActionChopWood`, which only exists once the Hatchet is built. It gates the build *and*
-the tile, so a modifier can never be applied to a component that is not there, which would
-panic in `getMany`. It is also the roster's only tech-tree edge.
+`goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
+`ownsMilestone` is what the curtain routes on; `capacity` sums the housing of what is owned.
 
-`capital.unlock_met` is the second gate, and the Shelter is its only subject: a good may carry
-an `unlock` — an *absolute* current-Vigor floor (`vigor_abs`, so a raised ceiling never moves
-the bar), a larder floor and a count of good kinds already owned — stating what it asks of
-the builder, as against `requires`, which is what the build spends. Goods with no `unlock`
-field are ungated (`@hasField`). One function serves the milestone's checklist, its action
-enablement, and `begin_build`. The conditions are read at `begin_build` and not again, so a
-dip mid-build doesn't stop work already paid for. Completing the Shelter is what raises the
-Act I curtain; `pages/root` routes on the player owning one. `capital.goods_owned` counts them
-by sweeping `buildable_bundle` with `has`, so it counts **kinds** — four pairs of sandals are
-never four goods built.
-
-Every good carries a `count`, and owning one is not a reason you can't make another: building
-for someone else is what a count is for. Only the **first unit carries the effect** — a second
-pair of sandals is stock, not a deeper discount — so `finish_build` increments an existing
-component and runs `grant` only on the way in from absent. It increments rather than re-adding
-because `SparseSet.add` does not guard duplicates: a second `add` would append a second dense
-entry and leave the index pointing at one of them. `break_good` takes spares first and revokes
-only with the last unit, so losing a spare can't cost you the discount you're still wearing.
-`grant_public` is the same grant path exposed for a *bought* good, so a traded tool lands its
-effect exactly as a built one does.
-
-`capital.cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the
-materials and frees the body, while the energy and every hour already spent are gone. The refund
-is flat rather than prorated because materials are charged in full at `begin_build` and nothing
-draws them down over time — a time-proportional refund would imply a consumption schedule the
-sim doesn't run. `good_of_doing` inverts `doing_of_good` to recover the price from a `Busy` that
-was never handed one, and returns null for the six labor verbs, which is what refuses a cancel
-on a half-finished forage.
+**The typed roster is a shadow.** `comp.FishRod` and the other typed good and verb components
+still exist and still carry the sim's numbers as field defaults; `bridge.shadow` keeps their
+presence, counts and terms equal to the derived state after every settle, so the pages, the
+stable-id catalog and the migration read them unchanged. The typed effect pairs at the end of
+`capital.zig` are the reference the interpreter is held equal to in `effects.zig`; nothing
+live calls them. Their retirement is roadmap work ("CAT-01").
 
 ## Catalog, passerby, and barter (`catalog.zig`, `market.zig`, `barter.zig`)
 

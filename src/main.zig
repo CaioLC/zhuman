@@ -642,6 +642,8 @@ fn spawn_agent(world: *ha.world.World) ha.world.Entity {
         comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
         comp.InventoryMaterial{ .v = 0 }, // nothing stockpiled yet
         comp.Metabolism{}, // eats continuously from the first breath (normal rate)
+        comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
+        comp.Granted{}, // and the goods contribute nothing to the body or larder yet
     } ++ actions.actions_bundle);
 }
 

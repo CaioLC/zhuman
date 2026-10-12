@@ -74,7 +74,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         else
             .idle;
         var activity_meta_buf: [24]u8 = undefined;
-        const activity_subject: []const u8 = if (busy) |b| actions.doing_label(b.doing) else "no work in progress";
+        const activity_subject: []const u8 = if (busy) |b| actions.doing_label(&ctx.res.catalog, b.doing) else "no work in progress";
         const activity_metadata: []const u8 = if (busy) |b| blk: {
             if (actions.is_build(b.doing)) {
                 const days_left = b.remaining / ctx.res.config.secs_per_day;

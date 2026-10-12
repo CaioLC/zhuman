@@ -135,7 +135,8 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
         if (G != comp.Shelter) {
             const cost = (G{}).requires;
             const owned = world.has(e, G);
-            const doing_this = busy != null and busy.?.doing == capital.doing_of_good(G);
+            const gi = ha.bridge.goodIndexOf(&ctx.res.catalog, G) orelse std.math.maxInt(u16);
+            const doing_this = busy != null and busy.?.isBuild(gi);
             const affordable = cost.energy < vigor.v and cost.materials <= stock.v;
             const reach = if (cost.materials <= 0) 1.0 else @min(1.0, stock.v / cost.materials);
 

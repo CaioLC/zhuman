@@ -14,6 +14,9 @@ const Cadence = roster.Cadence;
 const Price = roster.Price;
 const Tier = roster.Tier;
 const Unlock = roster.Unlock;
+const Lines = roster.Lines;
+const World = ha.world.World;
+const Entity = ha.world.Entity;
 
 // Which record each typed component transcribes.
 
@@ -61,6 +64,61 @@ pub fn goodIdOf(comptime GoodT: type) []const u8 {
         if (pair[1] == GoodT) return pair[0];
     }
     @compileError("no roster record for " ++ @typeName(GoodT));
+}
+
+/// The catalog index of a typed action's record within this load.
+pub fn actionIndexOf(cat: *const Catalog, comptime ActionT: type) ?u16 {
+    return cat.actionIndex(actionIdOf(ActionT));
+}
+
+/// The catalog index of a typed good's record within this load.
+pub fn goodIndexOf(cat: *const Catalog, comptime GoodT: type) ?u16 {
+    return cat.goodIndex(goodIdOf(GoodT));
+}
+
+/// Mirror the derived state onto the typed components, so everything that still reads them
+/// — the pages, the stable-id catalog, the migration — sees ownership and verb terms exactly
+/// as the interpreter computes them. Runs after every change of ownership (`capital`).
+/// Transitional: deleted with the typed roster.
+pub fn shadow(w: *World, e: Entity, cat: *const Catalog) void {
+    const goods = w.get(e, comp.Goods) orelse return;
+    inline for (typed_goods) |pair| {
+        if (cat.goodIndex(pair[0])) |gi| {
+            const n = goods.count[gi];
+            if (n > 0) {
+                if (w.get(e, pair[1])) |held| held.count = n else w.add(e, pair[1]{ .count = n });
+            } else if (w.has(e, pair[1])) {
+                w.remove(e, pair[1]);
+            }
+        }
+    }
+    inline for (typed_actions) |pair| {
+        if (cat.actionIndex(pair[0])) |ai| {
+            if (ha.effects.verb(cat, goods, ai)) |v| {
+                var typed = pair[1]{};
+                typed.requires.energy = v.requires.energy;
+                typed.requires.hours = v.requires.hours;
+                typed.requires.materials = onceQty(&v.input, "materials");
+                typed.yields.food = onceDist(&v.output, "food");
+                typed.yields.materials = onceDist(&v.output, "materials");
+                if (w.get(e, pair[1])) |held| held.* = typed else w.add(e, typed);
+            } else if (w.has(e, pair[1])) {
+                w.remove(e, pair[1]);
+            }
+        }
+    }
+}
+
+fn onceQty(side: *const Lines, item: []const u8) f32 {
+    var s = side.*;
+    const l = s.find(item, .once) orelse return 0;
+    return l.n;
+}
+
+fn onceDist(side: *const Lines, item: []const u8) dist.Dist {
+    var s = side.*;
+    const l = s.find(item, .once) orelse return .{ .kind = .fixed, .s = 0 };
+    return l.asDist();
 }
 
 // ============================ Tests =====================================================
@@ -141,7 +199,6 @@ test "every typed action is one record, number for number" {
             if (eql(r.id, "act." ++ pair[0])) on_surface = r.on_surface;
         }
         try testing.expectEqual(on_surface.?, rec.on_surface);
-        try testing.expectEqualStrings(ha.actions.doing_label(ha.actions.doing_of(pair[1])), rec.name);
         try testing.expectEqual(@as(u8, 1), rec.act);
     }
 }
@@ -168,7 +225,6 @@ test "every typed good is one record, number for number" {
             );
             try testing.expectEqualStrings(ha.catalog.goodId(G), "good." ++ pair[0]);
             try testing.expectEqualStrings(ha.capital.built_msg(G), rec.copy.built);
-            try testing.expectEqualStrings(ha.actions.doing_label(ha.capital.doing_of_good(G)), rec.name);
         } else {
             try testing.expect(!rec.buildable);
             try testing.expectEqual(@as(?Price, null), rec.requires);

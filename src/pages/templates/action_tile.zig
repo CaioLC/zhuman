@@ -160,7 +160,8 @@ pub fn action_tile(
     // One body, one act: any work in progress disables every tile; the one being
     // performed shows the underbar instead of dimming.
     const busy = world.get(e, comp.Busy);
-    const running = busy != null and busy.?.doing == ha.actions.doing_of(ActionT);
+    const ai = ha.bridge.actionIndexOf(&ctx.res.catalog, ActionT) orelse std.math.maxInt(u16);
+    const running = busy != null and busy.?.isLabor(ai);
     const progress: ?f32 = if (running) 1.0 - busy.?.remaining / busy.?.total else null;
     // Same strict energy gate as `begin_labor`: spending vigor to exactly 0 would be death.
     const can = busy == null and vigor.v > act.requires.energy;
