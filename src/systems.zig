@@ -173,11 +173,11 @@ pub fn despawn_dead(
     for (dead[0..n]) |e| w.despawn(e);
 }
 
-/// **Eligibility transition tracking.** For each prerequisite-gated good, when its
-/// prerequisite becomes satisfied for the first time this run, log one "A new recipe is within
-/// reach: {name}." Only goods with a `prereq_of` participate — a good with no prerequisite is
-/// reachable from the first breath, so it is not a *transition* and never logs. The seen-set is
-/// sim state (`Sim.reach_seen`, indexed by `capital.buildable_bundle` order), so it survives
+/// **Eligibility transition tracking.** For each prerequisite-gated good of this act, when
+/// its prerequisite becomes satisfied for the first time this run, log one "A new recipe is
+/// within reach: {name}." Only goods with `needs` participate — a good with no prerequisite
+/// is reachable from the first breath, so it is not a *transition* and never logs. The seen-set
+/// is sim state (`Sim.reach_seen`, by catalog index), so it survives
 /// frames untouched by the UI — tab switches, filter/sort changes, and rebuilds cannot re-emit
 /// the line; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a
 /// fresh run re-announces. Runs once per frame over the player.
@@ -191,9 +191,10 @@ pub fn track_reach(
     while (it.next()) |entry| {
         const e: Entity = entry[0];
         for (cat.goods, 0..) |rec, gi| {
-            // Only goods with a `needs` transition; one without is reachable from the start
-            // and would false-fire on the first tick, so it is skipped entirely.
-            if (rec.needs.len == 0) continue;
+            // Only this act's goods with a `needs` transition; one without is reachable from
+            // the start and would false-fire on the first tick, so it is skipped entirely, and
+            // a later act's recipe is announced by that act's own edge detector.
+            if (rec.needs.len == 0 or rec.act > 1) continue;
             const met = capital.needsMet(w, e, cat, @intCast(gi));
             if (met and !res.sim.reach_seen[gi]) {
                 res.sim.reach_seen[gi] = true;
@@ -334,4 +335,31 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 4), res.sim.log.count); // re-armed: two more
+}
+
+test "track_reach announces this act's recipes only" {
+    var w = World.init();
+    var res = test_res(0);
+    res.catalog = try roster.load(std.testing.allocator, .{
+        .actions =
+        \\.{
+        \\    .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\}
+        ,
+        .goods =
+        \\.{
+        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } },
+        \\    .{ .id = "hook", .name = "Hook", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .needs = .{"fish"} },
+        \\    .{ .id = "weir", .name = "Weir", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .needs = .{"fish"} },
+        \\}
+        ,
+    }, null);
+    defer res.catalog.deinit();
+    const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
+    w.get(e, comp.Goods).?.count[res.catalog.goodIndex("rod").?] = 1;
+    ecs.run(&w, &res, track_reach);
+    // The hook (this act) is announced; the weir (the next act) is not.
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
+    try std.testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "hook") != null);
 }

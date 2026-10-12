@@ -223,8 +223,9 @@ neither is a category in code.
 
 `capital.quote` answers for the BUILD row and the gate at once: the units owned, the `reach`
 of the build order (the smallest held-over-needed across its once-inputs), and a `Standing`
-in precedence order — `needs` (the verb or tool a modifier works on is not held: the roster's
-only tech-tree edge, so a chainsaw is never offered without Split wood), `unlock` (the
+in precedence order — `tech` (the technology the recipe waits on is not researched on the
+agent's board), `needs` (the verb or tool a modifier works on is not held, so a chainsaw is
+never offered without Split wood), `unlock` (the
 shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
 good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
 paid for), `busy`, `energy`, `short`, `ready`.
@@ -307,12 +308,12 @@ reason. `market` stays world-free; `barter` is the only place a `Quote` meets an
 
 ## The authored roster (`roster.zig`, `data/`)
 
-The labor verbs and the capital goods are data: `data/actions.zon` and `data/goods.zon`,
-parsed at load by `std.zon.parse` into one `roster.Catalog`, which is what the sim runs on
-(`actions.zig`, `capital.zig`, `effects.zig`) and the pages read. The typed components above
-are its shadow, kept current by `bridge.shadow` and held equal to the records by `bridge.zig`'s
-tests until they are retired ("CAT-01"). The files are the contract new content is written
-against.
+The labor verbs, the capital goods and the technologies are data: `data/actions.zon`,
+`data/goods.zon` and `data/technologies.zon`, parsed at load by `std.zon.parse` into one
+`roster.Catalog`, which is what the sim runs on (`actions.zig`, `capital.zig`, `effects.zig`)
+and the pages read. The typed components above are its shadow, kept current by
+`bridge.shadow` and held equal to the records by `bridge.zig`'s tests until they are retired
+("CAT-01"). The files are the contract new content is written against.
 
 **One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
 the file is its kind. Resources, actions and goods share the space: a reference resolves by
@@ -335,6 +336,20 @@ supersedes a weaker one; `needs` names the verb a modifier works on; `unlock`, `
 `milestone` are the shelter's. `copy` carries the player's words — the BUILD effect sentence,
 the rail's short form, the receipt line.
 
+**Technologies.** A tile of the research board is a `Technology { id, name, act, coord,
+cost, initial, effect, enables }`: an axial `coord` the ring and wedge derive from, a research
+`cost` as once-lines, and the `initial` state the act opens on (`locked`, `available`,
+`researched`). Technologies have an id space of their own — a tile is never an item, and only
+a good's `tech` names one — so a recipe and the technology that opens it may share a name. Per
+agent the board is `comp.Research`, one `TechState` per catalog index, seeded at the curtain by
+`Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
+`researched`.
+
+**Acts.** Every record carries the first `act` it exists in (a resource knows its own in
+code), and a reference may never reach forward. The Act I surfaces — the ACTIONS grid, the
+BUILD list and its total, the reach announcements — read records of act 1 only, so later
+content is authored into the same files without leaking back.
+
 **The interpreter (`effects.zig`, `ledger.zig`).** What an agent can do, and on what
 terms, is a pure function of the catalog and the goods it owns: `effects.verb` folds every
 applying good's effects into the base record, in roster order, and returns null when
@@ -353,8 +368,10 @@ catalog itself sits on `Resources` as `catalog`, so a system declares `*const ro
 column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
 or target, a later-act reference, a grant on an innate verb, a modifier on a verb the good
 neither needs nor grants, a rank or milestone collision, a drawn input, a day line on an
-action. The shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed
-through the same path, so `zig build test` validates the real content.
+action, a recipe waiting on no technology, a tile on the foundation or on another's
+coordinate, more records than the per-agent containers hold (`max_goods`, `max_techs`). The
+shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
+same path, so `zig build test` validates the real content.
 
 ## Shared text and search
 
@@ -390,7 +407,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `catalog.zig` | stable IDs, kinds, authored order, and Act I surface membership for actions and goods |
-| `roster.zig` | the authored roster: the record grammar, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
+| `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
 | `bridge.zig` | which record each typed component transcribes, and the parity tests; goes with the typed roster |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
@@ -414,7 +431,8 @@ slot at a fixed zero, and without the exemption each draw silently deposited +0.
 
 ## Assets
 
-- `data/actions.zon`, `data/goods.zon` — the authored roster, compiled in by `build.zig`.
+- `data/actions.zon`, `data/goods.zon`, `data/technologies.zon` — the authored roster,
+  compiled in by `build.zig`.
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
   `ui_client.icon_sprite`. Currently unused.

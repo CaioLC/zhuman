@@ -1,5 +1,6 @@
-//! `roster` — the **authored roster**: the labor verbs and the capital goods as data, loaded
-//! from `data/actions.zon` and `data/goods.zon` into one `Catalog`.
+//! `roster` — the **authored roster**: the labor verbs, the capital goods and the technologies
+//! as data, loaded from `data/actions.zon`, `data/goods.zon` and `data/technologies.zon` into
+//! one `Catalog`.
 //!
 //! The record grammar is the contract content is written against (the prose is in
 //! `src/README.md`, "The authored roster"): one flat id space shared by resources, actions
@@ -9,9 +10,8 @@
 //! is handed out, so a bad file is refused whole — with a line and column, or a rule and the
 //! offending id — never half-applied.
 //!
-//! Today the catalog is read by tests, which hold it equal to the typed components it
-//! transcribes (`bridge.zig` holds that bridge); the interpreter that runs the
-//! sim from it is the next step (`docs/roadmap.md`, "CAT-01").
+//! The sim runs on the catalog (`actions.zig`, `capital.zig`, `effects.zig`); the typed
+//! components are its shadow until they are retired (`docs/roadmap.md`, "CAT-01").
 
 const std = @import("std");
 // A relative import, not `ha`: `res.zig` carries the catalog, and `test-ui` compiles `res.zig`
@@ -81,11 +81,12 @@ pub const Line = struct {
     }
 };
 
-/// The caps the sim's bounded per-agent containers rely on; the validator holds the files
-/// to them. `max_lines` bounds one side of a verb *after* every `add` effect on it has
-/// inserted its line.
-pub const max_goods = 64;
+/// The caps the sim's bounded per-agent containers rely on (`comp.Goods`, `comp.Research`);
+/// the validator holds the files to them. `max_lines` bounds one side of a verb *after*
+/// every `add` effect on it has inserted its line.
+pub const max_goods = 128;
 pub const max_lines = 4;
+pub const max_techs = 128;
 
 /// A bounded list of lines — one side of a verb's effective terms, or a receipt.
 pub const Lines = struct {
@@ -233,7 +234,41 @@ pub const Good = struct {
     /// How many humans it houses. Zero for everything but a shelter.
     capacity: u32 = 0,
     milestone: ?Milestone = null,
+    /// The technology a recipe waits on: offered only once it is researched.
+    tech: ?[]const u8 = null,
     copy: Copy = .{},
+};
+
+/// An axial position on the research board. The ring and the pure/hybrid wedge derive from
+/// it (`grid/hex.zig`); ring 0 is the foundation and is never a record.
+pub const Coord = struct {
+    q: i32,
+    r: i32,
+
+    pub fn ring(self: Coord) u32 {
+        return @max(@abs(self.q), @abs(self.r), @abs(self.q + self.r));
+    }
+};
+
+/// Where a technology stands on the board: silent, offered, or established.
+pub const TechState = enum { locked, available, researched };
+
+/// A tile of the research board. Technologies have an id space of their own — a tile is
+/// never an item and only a good's `tech` names one — so a recipe and the technology that
+/// opens it may share a name. `cost` is the research price as once-lines; a tile established
+/// at the curtain has none. `initial` is its state when the act opens; the board promotes
+/// and establishes from there (`comp.Research`).
+pub const Technology = struct {
+    id: []const u8,
+    name: []const u8,
+    act: u8 = 2,
+    coord: Coord,
+    cost: []const Line = &.{},
+    initial: TechState = .locked,
+    /// What establishing it does, in the player's words.
+    effect: []const u8 = "",
+    /// What it opens — a recipe, a verb, a conversion. Empty when nothing distinct.
+    enables: []const u8 = "",
 };
 
 // ============================ The catalog ===============================================
@@ -243,6 +278,7 @@ pub const Catalog = struct {
     arena: std.heap.ArenaAllocator,
     actions: []const Action,
     goods: []const Good,
+    technologies: []const Technology,
 
     /// No records at all, over an arena that owns nothing — what a `Resources` holds before
     /// `load`, and what a UI test rig that never reads the roster gets for free.
@@ -250,6 +286,7 @@ pub const Catalog = struct {
         .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
         .actions = &.{},
         .goods = &.{},
+        .technologies = &.{},
     };
 
     pub fn deinit(self: *Catalog) void {
@@ -279,6 +316,17 @@ pub const Catalog = struct {
         return null;
     }
 
+    pub fn technology(self: *const Catalog, id: []const u8) ?*const Technology {
+        for (self.technologies) |*t| if (std.mem.eql(u8, t.id, id)) return t;
+        return null;
+    }
+
+    /// The catalog index of a technology — what `comp.Research` keys on within one load.
+    pub fn techIndex(self: *const Catalog, id: []const u8) ?u16 {
+        for (self.technologies, 0..) |t, i| if (std.mem.eql(u8, t.id, id)) return @intCast(i);
+        return null;
+    }
+
     /// The resource an id names, if it names one.
     pub fn resource(id: []const u8) ?Resource {
         return std.meta.stringToEnum(Resource, id);
@@ -295,24 +343,29 @@ pub const Catalog = struct {
 pub const File = enum {
     actions,
     goods,
+    technologies,
 
     pub fn path(self: File) []const u8 {
         return switch (self) {
             .actions => "data/actions.zon",
             .goods => "data/goods.zon",
+            .technologies => "data/technologies.zon",
         };
     }
 };
 
-/// The two files' bytes. `shipped` is the copy compiled into the binary.
+/// The files' bytes. `shipped` is the copy compiled into the binary. `technologies`
+/// defaults to no records, so a rig over the two Act I files alone needs nothing.
 pub const Sources = struct {
     actions: [:0]const u8,
     goods: [:0]const u8,
+    technologies: [:0]const u8 = ".{}",
 };
 
 pub const shipped = Sources{
     .actions = @embedFile("actions.zon"),
     .goods = @embedFile("goods.zon"),
+    .technologies = @embedFile("technologies.zon"),
 };
 
 /// The shape and cross-reference rules a loaded roster must satisfy.
@@ -329,6 +382,8 @@ pub const Rule = enum {
     unknown_need,
     /// A sector is not a resource name.
     unknown_sector,
+    /// A good's `tech` names no technology.
+    unknown_tech,
     /// A record references an item or verb from a later act than its own.
     later_act,
     /// A grant targets an innate verb.
@@ -345,10 +400,12 @@ pub const Rule = enum {
     buildable_shape,
     /// An action carries a day line; actions resolve once.
     bad_cadence,
-    /// A negative quantity, a drawn input, or a non-positive scale.
+    /// A negative quantity, a drawn input, a non-positive scale, or a zero research cost.
     bad_number,
-    /// More goods than `max_goods`, or more lines on one side of a record than `max_lines`
-    /// once every `add` on it has inserted its line.
+    /// A technology sits on the foundation (ring 0) or shares a coordinate with another.
+    bad_coord,
+    /// More goods than `max_goods` or technologies than `max_techs`, or more lines on one
+    /// side of a record than `max_lines` once every `add` on it has inserted its line.
     too_many,
 };
 
@@ -376,7 +433,7 @@ pub const Diagnostics = struct {
 
 pub const Error = error{ OutOfMemory, Invalid };
 
-/// Parse and validate both files. On `error.Invalid` nothing is allocated for the caller and
+/// Parse and validate the files. On `error.Invalid` nothing is allocated for the caller and
 /// `diag`, if given, says why.
 pub fn load(gpa: Allocator, src: Sources, diag: ?*Diagnostics) Error!Catalog {
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -384,9 +441,10 @@ pub fn load(gpa: Allocator, src: Sources, diag: ?*Diagnostics) Error!Catalog {
     const a = arena.allocator();
     const actions = try parseFile([]const Action, a, .actions, src.actions, diag);
     const goods = try parseFile([]const Good, a, .goods, src.goods, diag);
-    var v = Validator{ .actions = actions, .goods = goods, .diag = diag };
+    const technologies = try parseFile([]const Technology, a, .technologies, src.technologies, diag);
+    var v = Validator{ .actions = actions, .goods = goods, .technologies = technologies, .diag = diag };
     try v.run();
-    return .{ .arena = arena, .actions = actions, .goods = goods };
+    return .{ .arena = arena, .actions = actions, .goods = goods, .technologies = technologies };
 }
 
 fn parseFile(comptime T: type, a: Allocator, file: File, source: [:0]const u8, diag: ?*Diagnostics) Error!T {
@@ -404,6 +462,7 @@ fn parseFile(comptime T: type, a: Allocator, file: File, source: [:0]const u8, d
 const Validator = struct {
     actions: []const Action,
     goods: []const Good,
+    technologies: []const Technology,
     diag: ?*Diagnostics,
 
     fn fail(self: *Validator, file: File, rule: Rule, id: []const u8, subject: []const u8) Error {
@@ -416,12 +475,14 @@ const Validator = struct {
         for (self.actions) |a| try self.checkAction(a);
         var claimed = [_]bool{false} ** @typeInfo(Milestone).@"enum".fields.len;
         for (self.goods, 0..) |g, gi| try self.checkGood(g, gi, &claimed);
+        for (self.technologies, 0..) |t, ti| try self.checkTech(t, ti);
         try self.checkCapacity();
     }
 
     /// The caps the sim's bounded containers rely on.
     fn checkCapacity(self: *Validator) Error!void {
         if (self.goods.len > max_goods) return self.fail(.goods, .too_many, self.goods[max_goods].id, "goods");
+        if (self.technologies.len > max_techs) return self.fail(.technologies, .too_many, self.technologies[max_techs].id, "technologies");
         for (self.actions) |a| {
             try self.checkSide(.actions, a.id, a.input, true);
             try self.checkSide(.actions, a.id, a.output, false);
@@ -517,6 +578,10 @@ const Validator = struct {
         }
         for (g.sectors) |s| if (Catalog.resource(s) == null) return self.fail(.goods, .unknown_sector, g.id, s);
         for (g.needs) |n| try self.checkNeed(.goods, g.id, g.act, n);
+        if (g.tech) |t| {
+            const rec = self.findTech(t) orelse return self.fail(.goods, .unknown_tech, g.id, t);
+            if (rec.act > g.act) return self.fail(.goods, .later_act, g.id, t);
+        }
         for (g.effects) |e| try self.checkEffect(g, e);
         if (g.family) |f| {
             if (f.rank == 0) return self.fail(.goods, .rank_collision, g.id, "rank 0");
@@ -589,6 +654,27 @@ const Validator = struct {
         return false;
     }
 
+    /// A tile: a plain id unique among technologies, off the foundation and on a coordinate
+    /// of its own, priced in exact once-lines of positive amounts.
+    fn checkTech(self: *Validator, t: Technology, ti: usize) Error!void {
+        try self.checkId(.technologies, t.id);
+        for (self.technologies[0..ti]) |o| {
+            if (eql(t.id, o.id)) return self.fail(.technologies, .duplicate_id, t.id, o.id);
+            if (o.coord.q == t.coord.q and o.coord.r == t.coord.r) return self.fail(.technologies, .bad_coord, t.id, o.id);
+        }
+        if (t.coord.ring() == 0) return self.fail(.technologies, .bad_coord, t.id, "the foundation");
+        for (t.cost) |l| {
+            try self.checkLine(.technologies, t.id, t.act, l, true);
+            if (l.per == .day) return self.fail(.technologies, .bad_cadence, t.id, l.item);
+            if (l.n <= 0) return self.fail(.technologies, .bad_number, t.id, l.item);
+        }
+    }
+
+    fn findTech(self: *Validator, id: []const u8) ?*const Technology {
+        for (self.technologies) |*t| if (eql(t.id, id)) return t;
+        return null;
+    }
+
     fn findAction(self: *Validator, id: []const u8) ?*const Action {
         for (self.actions) |*a| if (eql(a.id, id)) return a;
         return null;
@@ -629,6 +715,8 @@ test "the shipped files load and validate" {
     try testing.expect(cat.goods.len > 0);
     try testing.expect(cat.actionIndex("forage") != null);
     try testing.expect(cat.goodIndex("shelter") != null);
+    try testing.expect(cat.technologies.len > 0);
+    try testing.expectEqual(TechState.researched, cat.technology("foraging").?.initial);
 }
 
 /// A once-line for `item` with exactly `qty` when `qty > 0`, and no line for it at all when
@@ -768,4 +856,82 @@ test "a lot of an intermediate is its own once-output" {
     }, null);
     defer cat.deinit();
     try testing.expectEqual(@as(f32, 4.0), cat.good("charcoal").?.output[0].n);
+}
+
+// —— technologies ———————————————————————————————————————————————————————————————————————
+
+const ok_techs =
+    \\.{
+    \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
+    \\       .cost = .{ .{ .item = "food", .n = 2.0 } }, .initial = .available },
+    \\}
+;
+
+fn expectTechRule(goods_src: [:0]const u8, techs_src: [:0]const u8, rule: Rule) !void {
+    var d = Diagnostics{};
+    if (load(testing.allocator, .{ .actions = ok_actions, .goods = goods_src, .technologies = techs_src }, &d)) |*cat| {
+        var c = cat.*;
+        c.deinit();
+        return error.ExpectedInvalid;
+    } else |err| {
+        try testing.expectEqual(Error.Invalid, err);
+        try testing.expectEqual(rule, d.rule.?);
+    }
+}
+
+test "a recipe names a technology that exists, of its own act or earlier" {
+    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods = 
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
+        \\     .tech = "kilns" } }
+    , .technologies = ok_techs }, null);
+    defer cat.deinit();
+    try testing.expectEqual(@as(u16, 0), cat.techIndex("kilns").?);
+    try testing.expectEqualStrings("kilns", cat.good("oven").?.tech.?);
+
+    try expectTechRule(
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
+        \\     .tech = "glass" } }
+    , ok_techs, .unknown_tech);
+    // Act I has no research: a first-act recipe cannot wait on a second-act tile.
+    try expectTechRule(
+        \\.{ .{ .id = "oven", .name = "Oven", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
+        \\     .tech = "kilns" } }
+    , ok_techs, .later_act);
+}
+
+test "technologies keep their shape" {
+    try expectTechRule(ok_goods,
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 0 } } }
+    , .bad_coord);
+    try expectTechRule(ok_goods,
+        \\.{
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 } },
+        \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 1, .r = 0 } },
+        \\}
+    , .bad_coord);
+    try expectTechRule(ok_goods,
+        \\.{
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 } },
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 1 } },
+        \\}
+    , .duplicate_id);
+    try expectTechRule(ok_goods,
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
+        \\     .cost = .{ .{ .item = "food", .n = 0.0 } } } }
+    , .bad_number);
+    try expectTechRule(ok_goods,
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
+        \\     .cost = .{ .{ .item = "food", .n = 2.0, .per = .day } } } }
+    , .bad_cadence);
+    try expectTechRule(ok_goods,
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
+        \\     .cost = .{ .{ .item = "clay", .n = 2.0 } } } }
+    , .unknown_item);
+}
+
+test "a coordinate's ring is its distance from the foundation" {
+    try testing.expectEqual(@as(u32, 0), (Coord{ .q = 0, .r = 0 }).ring());
+    try testing.expectEqual(@as(u32, 1), (Coord{ .q = 1, .r = -1 }).ring());
+    try testing.expectEqual(@as(u32, 2), (Coord{ .q = -1, .r = -1 }).ring());
+    try testing.expectEqual(@as(u32, 4), (Coord{ .q = 4, .r = -4 }).ring());
 }

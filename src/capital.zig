@@ -92,9 +92,10 @@ pub fn built_msg(comptime GoodT: type) []const u8 {
 
 // --- the quote ---------------------------------------------------------------------------
 
-/// Why a build cannot begin right now, or `ready`. The order is the precedence: a missing
-/// prerequisite says "needs" before anything else, standing conditions before the body.
-pub const Standing = enum { ready, needs, unlock, busy, energy, short };
+/// Why a build cannot begin right now, or `ready`. The order is the precedence: a technology
+/// not yet researched says "tech" before anything else, then a missing prerequisite "needs",
+/// standing conditions before the body.
+pub const Standing = enum { ready, tech, needs, unlock, busy, energy, short };
 
 pub const Quote = struct {
     gi: u16,
@@ -122,7 +123,9 @@ pub fn quote(w: *World, e: Entity, cat: *const Catalog, gi: u16) ?Quote {
     const price = rec.requires.?;
     const order = roster.Lines.only(rec.input, .once);
     var q = Quote{ .gi = gi, .rec = rec, .count = goods.count[gi], .standing = .ready, .reach = reachOf(w, e, cat, order.slice()) };
-    if (!needsMet(w, e, cat, gi)) {
+    if (!techMet(w, e, cat, gi)) {
+        q.standing = .tech;
+    } else if (!needsMet(w, e, cat, gi)) {
         q.standing = .needs;
     } else if (!unlockMet(w, e, cat, gi)) {
         q.standing = .unlock;
@@ -144,6 +147,15 @@ fn reachOf(w: *World, e: Entity, cat: *const Catalog, order: []const roster.Line
         r = @min(r, ledger.held(w, e, cat, l) / l.n);
     }
     return r;
+}
+
+/// Whether the technology a recipe waits on is researched for this agent. No `tech` means
+/// yes; an agent without a board has researched nothing.
+pub fn techMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
+    const id = cat.goods[gi].tech orelse return true;
+    const ti = cat.techIndex(id) orelse return false;
+    const research = w.get(e, comp.Research) orelse return false;
+    return research.state[ti] == .researched;
 }
 
 /// Whether every `needs` entry is held: a verb through the interpreter, a tool by count.
@@ -577,11 +589,15 @@ const testing = std.testing;
 /// A Resources with the groups the build path touches initialized — `platform` stays
 /// undefined. The caller deinits the catalog.
 fn test_res() !Resources {
+    return test_res_over(roster.shipped);
+}
+
+fn test_res_over(src: roster.Sources) !Resources {
     var res: Resources = undefined;
     res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
     res.time = .{ .dt = 0 };
     res.config = .{};
-    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
+    res.catalog = try roster.load(testing.allocator, src, null);
     return res;
 }
 
@@ -835,6 +851,40 @@ test "each standing condition refuses the shelter on its own" {
         try testing.expectEqual(@as(u32, 4), goodsOwned(&w, e, cat));
         try testing.expect(!unlockMet(&w, e, cat, shelter));
     }
+}
+
+test "a recipe that names a technology waits on the board" {
+    var w = World.init();
+    var res = try test_res_over(.{
+        .actions =
+        \\.{ .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        ,
+        .goods =
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
+        \\     .input = .{ .{ .item = "materials", .n = 2.0 } }, .tech = "kilns" } }
+        ,
+        .technologies =
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
+        \\     .cost = .{ .{ .item = "food", .n = 2.0 } }, .initial = .available } }
+        ,
+    });
+    defer res.catalog.deinit();
+    const cat = &res.catalog;
+    const oven = cat.goodIndex("oven").?;
+    const kilns = cat.techIndex("kilns").?;
+    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryMaterial{ .v = 2 }, comp.Goods{}, comp.Granted{} });
+
+    // No board at all: nothing is researched.
+    try testing.expectEqual(Standing.tech, quote(&w, e, cat, oven).?.standing);
+    // The curtain's board carries the tile at its authored state — offered, not established.
+    w.add(e, comp.Research.entry(cat));
+    try testing.expectEqual(roster.TechState.available, w.get(e, comp.Research).?.state[kilns]);
+    try testing.expectEqual(Standing.tech, quote(&w, e, cat, oven).?.standing);
+    // Established: the recipe is offered, and `begin` runs.
+    w.get(e, comp.Research).?.state[kilns] = .researched;
+    try testing.expectEqual(Standing.ready, quote(&w, e, cat, oven).?.standing);
+    begin(&w, e, &res, oven);
+    try testing.expect(w.get(e, comp.Busy).?.isBuild(oven));
 }
 
 test "a good with no unlock has no standing conditions, and a traded good has no quote" {

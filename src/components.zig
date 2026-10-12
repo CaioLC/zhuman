@@ -81,6 +81,21 @@ pub const Granted = struct {
     spoil_scale: f32 = 1,
 };
 
+/// Where each technology of the authored roster stands for this agent, by catalog index
+/// (`roster.zig`). Seeded at the curtain from every record's `initial`; the research board
+/// promotes and establishes from there, and a recipe that names a `tech` is offered only once
+/// it reads `researched` here (`capital.quote`).
+pub const Research = struct {
+    state: [roster.max_techs]roster.TechState = [_]roster.TechState{.locked} ** roster.max_techs,
+
+    /// The board as the act opens: every tile at its authored initial state.
+    pub fn entry(cat: *const roster.Catalog) Research {
+        var r = Research{};
+        for (cat.technologies, 0..) |t, i| r.state[i] = t.initial;
+        return r;
+    }
+};
+
 // -- Innate actions: the bare-handed verbs every agent spawns with -----------------------
 // (`actions.innate_actions_bundle`). Each action owns a distinct *risk texture* — the
 // dist kind is content, not decoration, and all five kinds are in play across the roster.

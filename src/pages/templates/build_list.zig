@@ -50,13 +50,22 @@ const milestone_mod = @import("./milestone_goal.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
 
-/// The buildable goods, minus the milestone (which is the goal, not a row). This is the
-/// **authored total** the summary reports against — a locked recipe still counts even when it
-/// contributes no row.
+/// The act this surface serves. A record of a later act is neither a row nor part of the
+/// total; the Act II shell lists its own.
+const act: u8 = 1;
+
+/// Whether a record is one of this act's recipes: buildable, of this act or earlier, and not
+/// the milestone (which is the goal, not a row).
+fn isRecipe(g: *const roster.Good) bool {
+    return g.buildable and g.milestone == null and g.act <= act;
+}
+
+/// This act's recipes. This is the **authored total** the summary reports against — a locked
+/// recipe still counts even when it contributes no row.
 pub fn authoredTotal(cat: *const roster.Catalog) usize {
     var n: usize = 0;
-    for (cat.goods) |g| {
-        if (g.buildable and g.milestone == null) n += 1;
+    for (cat.goods) |*g| {
+        if (isRecipe(g)) n += 1;
     }
     return n;
 }
@@ -150,13 +159,13 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
     const busy = world.get(e, comp.Busy);
 
     for (cat.goods, 0..) |*rec, i| {
-        if (!rec.buildable or rec.milestone != null) continue;
+        if (!isRecipe(rec)) continue;
         const gi: u16 = @intCast(i);
         const quote = capital.quote(world, e, cat, gi) orelse continue;
         const doing_this = busy != null and busy.?.isBuild(gi);
 
         const kind: Kind = if (doing_this) .building else if (quote.count > 0) .owned else switch (quote.standing) {
-            .needs => .blocked,
+            .tech, .needs => .blocked,
             .unlock => .locked,
             .ready => .ready,
             .busy, .energy, .short => .reach,
@@ -284,7 +293,7 @@ fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
     // Lifecycle from authoritative state: locked until the standing conditions hold, then
     // unfunded until the order and energy are on hand and hands are free, then ready.
     const state: milestone_mod.Lifecycle = switch (quote.standing) {
-        .needs, .unlock => .locked,
+        .tech, .needs, .unlock => .locked,
         .busy, .energy, .short => .unfunded,
         .ready => .ready,
     };
@@ -354,4 +363,22 @@ fn shelter_goal(parent: El, world: *World, e: Entity, id: []const u8) !void {
     // Raising the shelter is the same begin lifecycle; the transition itself happens when
     // the build completes in the simulation (no UI-local shortcut).
     if (m.clicked) capital.begin(world, e, ctx.res, gi);
+}
+
+test "the authored total counts this act's recipes only" {
+    var cat = try roster.load(std.testing.allocator, .{
+        .actions =
+        \\.{ .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        ,
+        .goods =
+        \\.{
+        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "hut", .name = "Hut", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .milestone = .act_one },
+        \\    .{ .id = "net", .name = "Net", .buildable = false },
+        \\    .{ .id = "kiln", .name = "Kiln", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\}
+        ,
+    }, null);
+    defer cat.deinit();
+    try std.testing.expectEqual(@as(usize, 1), authoredTotal(&cat));
 }

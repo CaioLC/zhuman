@@ -60,6 +60,7 @@ pub fn build(b: *std.Build) void {
     // runs over the same bytes a dev build reads from `data/`.
     ha_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
     ha_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
+    ha_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
 
     // Executable
     const exe_mod = b.createModule(.{
@@ -118,6 +119,7 @@ pub fn build(b: *std.Build) void {
     // data files resolve here too.
     ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
     ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
+    ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
     const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
     const run_ui_tests = b.addRunArtifact(ui_tests);
 
