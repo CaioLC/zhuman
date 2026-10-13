@@ -415,6 +415,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
+| `grid/` | the research board: pointy-top hex geometry (`hex`) and progression over the catalog and `comp.Research` (`board`) |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `query.zig` | the catalog query parser |
