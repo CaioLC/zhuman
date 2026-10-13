@@ -171,8 +171,13 @@ fn expectDist(lines: []const Line, item: []const u8, per: Cadence, d: dist.Dist)
 test "the shipped files load and validate" {
     var cat = try loadShipped();
     defer cat.deinit();
-    try testing.expectEqual(typed_actions.len, cat.actions.len);
-    try testing.expectEqual(typed_goods.len, cat.goods.len);
+    // The typed roster transcribes Act I alone; later acts are records with no typed twin.
+    var actions: usize = 0;
+    for (cat.actions) |a| actions += @intFromBool(a.act == 1);
+    var goods: usize = 0;
+    for (cat.goods) |g| goods += @intFromBool(g.act == 1);
+    try testing.expectEqual(typed_actions.len, actions);
+    try testing.expectEqual(typed_goods.len, goods);
 }
 
 test "every typed action is one record, number for number" {
