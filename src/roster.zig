@@ -208,6 +208,8 @@ pub const Action = struct {
     sectors: []const []const u8 = &.{},
     /// Retained tooling: ids that must be held for the verb to be offered.
     needs: []const []const u8 = &.{},
+    /// The technology that opens the verb: held once it is researched, as a grant would.
+    tech: ?[]const u8 = null,
     requires: Price,
     input: []const Line = &.{},
     output: []const Line = &.{},
@@ -382,7 +384,7 @@ pub const Rule = enum {
     unknown_need,
     /// A sector is not a resource name.
     unknown_sector,
-    /// A good's `tech` names no technology.
+    /// A good's or a verb's `tech` names no technology.
     unknown_tech,
     /// A record references an item or verb from a later act than its own.
     later_act,
@@ -562,6 +564,10 @@ const Validator = struct {
         }
         for (a.sectors) |s| if (Catalog.resource(s) == null) return self.fail(.actions, .unknown_sector, a.id, s);
         for (a.needs) |n| try self.checkNeed(.actions, a.id, a.act, n);
+        if (a.tech) |t| {
+            const rec = self.findTech(t) orelse return self.fail(.actions, .unknown_tech, a.id, t);
+            if (rec.act > a.act) return self.fail(.actions, .later_act, a.id, t);
+        }
     }
 
     fn checkGood(self: *Validator, g: Good, gi: usize, claimed: []bool) Error!void {
@@ -897,6 +903,24 @@ test "a recipe names a technology that exists, of its own act or earlier" {
         \\.{ .{ .id = "oven", .name = "Oven", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .tech = "kilns" } }
     , ok_techs, .later_act);
+}
+
+test "a verb names a technology that exists, of its own act or earlier" {
+    var cat = try load(testing.allocator, .{ .actions =
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+    , .goods = ".{}", .technologies = ok_techs }, null);
+    defer cat.deinit();
+    try testing.expectEqualStrings("kilns", cat.action("fire").?.tech.?);
+
+    var d = Diagnostics{};
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "glass", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+    , .goods = ".{}", .technologies = ok_techs }, &d));
+    try testing.expectEqual(Rule.unknown_tech, d.rule.?);
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
+        \\.{ .{ .id = "fire", .name = "Fire", .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+    , .goods = ".{}", .technologies = ok_techs }, &d));
+    try testing.expectEqual(Rule.later_act, d.rule.?);
 }
 
 test "technologies keep their shape" {

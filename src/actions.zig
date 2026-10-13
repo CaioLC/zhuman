@@ -1,8 +1,9 @@
 //! Actions: per-agent labor over the authored roster.
 //!
 //! A verb is a record in `data/actions.zon` (`roster.zig`). Whether an agent holds it, and
-//! on what terms, is derived from the goods it owns (`effects.verb`); nothing about a verb is
-//! stored on the agent. `quote` is the one gate calculation — the tile, `begin`, and a future
+//! on what terms, is derived from the goods it owns (`effects.verb`) and, for a verb that names
+//! a `tech`, from the agent's research (`verbOf`); nothing about a verb is stored on the agent.
+//! `quote` is the one gate calculation — the tile, `begin`, and a future
 //! decider read the same answer — and labor resolves in two halves because it takes time:
 //! `begin` gates, pays and starts the work; `finish` draws the yield at the quality locked at
 //! begin and deposits it, dispatched by `systems.resolve_busy` when the timer runs out.
@@ -66,10 +67,33 @@ pub const Quote = struct {
     }
 };
 
+/// Whether verb `ai`'s technology is researched for this agent. A verb without one is not
+/// opened by research.
+fn researched(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
+    const id = cat.actions[ai].tech orelse return false;
+    const ti = cat.techIndex(id) orelse return false;
+    const research = w.get(e, comp.Research) orelse return false;
+    return research.state[ti] == .researched;
+}
+
+/// Verb `ai`'s effective terms for agent `e`, or null when the agent does not hold it: innate,
+/// granted by an applying good, or opened by its researched technology. Owned goods modify it
+/// the same way in every case.
+pub fn verbOf(w: *World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb {
+    const goods = w.get(e, comp.Goods) orelse return null;
+    if (effects.verb(cat, goods, ai)) |v| return v;
+    if (!researched(w, e, cat, ai)) return null;
+    return effects.terms(cat, goods, ai);
+}
+
+/// Whether agent `e` holds verb `ai` (see `verbOf`).
+pub fn holds(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
+    return verbOf(w, e, cat, ai) != null;
+}
+
 /// The quote for verb `ai`, or null when the agent does not hold it.
 pub fn quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?Quote {
-    const goods = w.get(e, comp.Goods) orelse return null;
-    const v = effects.verb(cat, goods, ai) orelse return null;
+    const v = verbOf(w, e, cat, ai) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
     var q = Quote{ .verb = v, .standing = .ready, .quality = yield_factor(vigor, cfg) };
     if (w.has(e, comp.Busy)) {
@@ -119,8 +143,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
 /// mid-task (the tool was sold while fishing) finishes as nothing rather than a crash.
 pub fn finish(w: *World, e: Entity, res: *Resources, ai: u16, quality: f32) void {
     const cat = &res.catalog;
-    const goods = w.get(e, comp.Goods) orelse return;
-    const v = effects.verb(cat, goods, ai) orelse {
+    const v = verbOf(w, e, cat, ai) orelse {
         res.sim.log.push(.dim, "The work came to nothing.");
         return;
     };
@@ -368,4 +391,26 @@ test "the receipt names what landed, in line order" {
     try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r));
     r.len = 0;
     try testing.expectEqualStrings(nothing_text, receiptText(&buf, &cat, r));
+}
+
+test "a verb that names a technology is held once that technology is researched" {
+    var w = World.init();
+    var cat = try roster.load(testing.allocator, .{
+        .actions =
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        ,
+        .goods = ".{}",
+        .technologies =
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .initial = .available } }
+        ,
+    }, null);
+    defer cat.deinit();
+    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.Goods{}, comp.Granted{} });
+
+    try testing.expect(!holds(&w, e, &cat, 0)); // no board at all
+    w.add(e, comp.Research.entry(&cat));
+    try testing.expect(!holds(&w, e, &cat, 0)); // offered on the board, not established
+    w.get(e, comp.Research).?.state[0] = .researched;
+    try testing.expect(holds(&w, e, &cat, 0));
+    try testing.expect(quote(&w, e, &cat, .{}, 0).?.ready());
 }

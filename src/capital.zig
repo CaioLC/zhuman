@@ -158,12 +158,12 @@ pub fn techMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
     return research.state[ti] == .researched;
 }
 
-/// Whether every `needs` entry is held: a verb through the interpreter, a tool by count.
+/// Whether every `needs` entry is held: a verb as `actions.holds` answers it, a tool by count.
 pub fn needsMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
     const goods = w.get(e, comp.Goods) orelse return false;
     for (cat.goods[gi].needs) |n| {
         if (cat.actionIndex(n)) |ai| {
-            if (!effects.held(cat, goods, ai)) return false;
+            if (!ha.actions.holds(w, e, cat, ai)) return false;
         } else if (cat.goodIndex(n)) |ng| {
             if (goods.count[ng] == 0) return false;
         } else return false;

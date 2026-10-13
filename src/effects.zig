@@ -71,6 +71,13 @@ pub fn held(cat: *const Catalog, goods: *const comp.Goods, ai: usize) bool {
 /// The effective terms of verb `ai` for an agent owning `goods`, or null if not held.
 pub fn verb(cat: *const Catalog, goods: *const comp.Goods, ai: usize) ?Verb {
     if (!held(cat, goods, ai)) return null;
+    return terms(cat, goods, ai);
+}
+
+/// Verb `ai`'s terms with every applying good's effects folded in, without asking whether the
+/// goods hold it — for a caller that opens the verb another way, as research does
+/// (`actions.verbOf`).
+pub fn terms(cat: *const Catalog, goods: *const comp.Goods, ai: usize) Verb {
     const rec = cat.actions[ai];
     var v = Verb{
         .requires = rec.requires,

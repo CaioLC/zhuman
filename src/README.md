@@ -194,7 +194,8 @@ goods contribute to the body and larder, so those deltas stay relative.
 ### Actions
 
 Innate verbs are the records flagged `innate`; every other verb exists while an owned good
-`grant`s it. `actions.quote` is the one gate calculation — the tile, `begin` and a future
+`grant`s it or, for a verb that names a `tech`, once that technology is researched
+(`actions.verbOf`). `actions.quote` is the one gate calculation — the tile, `begin` and a future
 decider read the same answer: the verb's effective terms, the quality a begin would lock,
 and a `Standing` of `ready`, `busy`, `energy` or `short` with the first unpayable line.
 
@@ -340,10 +341,10 @@ the rail's short form, the receipt line.
 cost, initial, effect, enables }`: an axial `coord` the ring and wedge derive from, a research
 `cost` as once-lines, and the `initial` state the act opens on (`locked`, `available`,
 `researched`). Technologies have an id space of their own — a tile is never an item, and only
-a good's `tech` names one — so a recipe and the technology that opens it may share a name. Per
-agent the board is `comp.Research`, one `TechState` per catalog index, seeded at the curtain by
-`Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
-`researched`.
+a good's or a verb's `tech` names one — so a recipe and the technology that opens it may share
+a name. Per agent the board is `comp.Research`, one `TechState` per catalog index, seeded at the
+curtain by `Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
+`researched`, and a verb that names one is held from then on, as a grant would hold it.
 
 **Acts.** Every record carries the first `act` it exists in (a resource knows its own in
 code), and a reference may never reach forward. The Act I surfaces — the ACTIONS grid, the
@@ -368,7 +369,7 @@ catalog itself sits on `Resources` as `catalog`, so a system declares `*const ro
 column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
 or target, a later-act reference, a grant on an innate verb, a modifier on a verb the good
 neither needs nor grants, a rank or milestone collision, a drawn input, a day line on an
-action, a recipe waiting on no technology, a tile on the foundation or on another's
+action, a recipe or verb waiting on no technology, a tile on the foundation or on another's
 coordinate, more records than the per-agent containers hold (`max_goods`, `max_techs`). The
 shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
 same path, so `zig build test` validates the real content.
