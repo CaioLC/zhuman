@@ -3,7 +3,7 @@
 //! Two `attach` flavors differ only in how the node is sized: `attach_texture` fits
 //! the whole texture; `attach_sprite` draws a sheet cell at a caller-chosen `px`.
 
-const ui = @import("../../ui/root.zig");
+const ui = @import("ui");
 const sdl = @import("sdl3");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");

@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const sdl = @import("sdl3");
-const ui = @import("../../ui/root.zig");
+const ui = @import("ui");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
 const style = @import("../style.zig");

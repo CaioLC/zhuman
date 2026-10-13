@@ -133,11 +133,11 @@ pub const draw_tree = draw.draw_tree;
 
 // engine re-exports the game needs, so `pages/` + `main.zig` import only `ha.ui_client`
 // (never `ha.ui`). `stamp_rects` is the post-layout walk main runs each frame.
-pub const stamp_rects = @import("../ui/root.zig").stamp_rects;
+pub const stamp_rects = @import("ui").stamp_rects;
 
-pub const FrameProfileSample = @import("../ui/root.zig").FrameProfileSample;
-pub const FrameProfileReport = @import("../ui/root.zig").FrameProfileReport;
-pub const FrameProfiler = @import("../ui/root.zig").FrameProfiler;
+pub const FrameProfileSample = @import("ui").FrameProfileSample;
+pub const FrameProfileReport = @import("ui").FrameProfileReport;
+pub const FrameProfiler = @import("ui").FrameProfiler;
 
 // frame assembly
 pub const Trees = tree.Trees; // the return-type wrapper (host)

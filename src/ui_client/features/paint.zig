@@ -3,7 +3,7 @@
 //! Leaf module — imports only the engine, `sdl`, and the concrete `Node`; never a
 //! feature module, so every feature can import it without a cycle.
 
-const ui = @import("../../ui/root.zig");
+const ui = @import("ui");
 const sdl = @import("sdl3");
 const cb = @import("../ctx_binding.zig");
 

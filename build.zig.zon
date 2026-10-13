@@ -36,6 +36,8 @@
             .url = "git+https://codeberg.org/7Games/zig-sdl3?ref=master#eefd1b86205ed4fbc5f5274b5ba34aa97798d693",
             .hash = "sdl3-0.1.6-NmT1Q8kQJgCrbdH9Z3ZmLo5uJ1et3oxhfYazrNTtfsgv",
         },
+        // The UI engine: a package of its own inside this tree.
+        .ui = .{ .path = "src/ui" },
     },
     .paths = .{
         "build.zig",

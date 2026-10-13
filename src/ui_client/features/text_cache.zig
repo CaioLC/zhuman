@@ -265,7 +265,7 @@ pub const FakeSlot = struct {
 // ============================ Tests (deterministic, SDL-free) =========================
 
 const testing = std.testing;
-const Pool = @import("../../ui/cache.zig").Pool;
+const Pool = @import("ui").Pool;
 
 test "text_cache: a refused/empty string has no key" {
     try testing.expect(keyOf(.{ .content = null, .px = 14, .generation = 0 }) == null);

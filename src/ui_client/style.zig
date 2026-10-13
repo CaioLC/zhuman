@@ -15,7 +15,7 @@
 //! "Placement" struct folding over the engine's values. Style and placement stay apart.
 
 const std = @import("std");
-const ui = @import("../ui/root.zig");
+const ui = @import("ui");
 const cb = @import("./ctx_binding.zig");
 const typ = @import("./type.zig");
 const view = @import("./view.zig");

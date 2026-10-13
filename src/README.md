@@ -424,7 +424,9 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `root.zig` | the `ha` library root and its re-exports |
 
 `build.zig` makes the module import *itself* as `ha`, so library-internal files can
-`@import("ha")` rather than reaching across with relative paths.
+`@import("ha")` rather than reaching across with relative paths. The UI engine is a package of
+its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to
+`ha` and to the UI tests as the module `ui`, and runs its tests in both test steps.
 
 `dist`'s `.fixed` kind is exempt from the `scaleOf` 0.2 floor — every action leaves one yield
 slot at a fixed zero, and without the exemption each draw silently deposited +0.2.

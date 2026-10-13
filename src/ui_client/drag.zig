@@ -138,7 +138,7 @@ test "scroll thumb captures through outside motion and applies release position"
     defer ctx.deinit();
     ctx.beginFrame();
 
-    const key = @import("../ui/root.zig").key(0, "thumb");
+    const key = @import("ui").key(0, "thumb");
     _ = ctx.interactionOf(key);
     _ = ctx.stampRect(key, .{ .x = 0, .y = 0, .w = 10, .h = 20 }, null, null);
 

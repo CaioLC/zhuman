@@ -12,7 +12,7 @@
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
 const sdl = @import("sdl3");
-const ui = @import("../../ui/root.zig");
+const ui = @import("ui");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;

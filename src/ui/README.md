@@ -58,9 +58,17 @@ The host supplies, *one layer up* (today `src/ui_client/` + `src/res.zig`): the
 concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)` and
 `pub const Node = ui.Node(RenderData)` (`ctx_binding.zig`), the `Interaction` type, the
 paint-feature registry + `attach` mixins (`features/`), the content elements and style
-fold (`elements.zig` / `style.zig`), the render walk (`draw.zig`), and `Resources` itself. To lift this into
-its own project, take `src/ui/` as-is; `ui_client/` + `res.zig` are the template for how
-a host binds it. (The engine type is `Ctx`; the host names its binding `UiCtx`.)
+fold (`elements.zig` / `style.zig`), the render walk (`draw.zig`), and `Resources` itself.
+`ui_client/` + `res.zig` are the template for how a host binds it. (The engine type is `Ctx`;
+the host names its binding `UiCtx`.)
+
+**This folder is a package.** `build.zig` exposes one module, `ui`, rooted at `root.zig`, and
+a `test` step (`cd src/ui && zig build test`); `build.zig.zon` names the package. The game's
+manifest depends on it by path and its code imports `@import("ui")`, never a relative path
+into this folder: that would put one file in two modules, which Zig refuses. Moving the engine
+to a repository of its own is replacing that path with a url and hash.
+`tools/boundary_check.sh` fails when a file here imports anything but `std`, `builtin` or its
+own siblings.
 
 ## Module map
 

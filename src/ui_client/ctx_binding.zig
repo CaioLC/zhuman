@@ -1,7 +1,7 @@
 //! Implement Concrete Types for the Ui-Engine generic types
 
 const std = @import("std");
-const ui = @import("../ui/root.zig");
+const ui = @import("ui");
 const sdl = @import("sdl3");
 const theme = @import("./theme.zig");
 const Resources = @import("../res.zig").Resources;

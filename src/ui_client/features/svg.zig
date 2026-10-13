@@ -11,7 +11,7 @@
 //! path into a texture.
 
 const std = @import("std");
-const ui = @import("../../ui/root.zig");
+const ui = @import("ui");
 const sdl = @import("sdl3");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");

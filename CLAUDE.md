@@ -9,7 +9,8 @@ zig build run     # build and run
 zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build         # build only
-sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components
+sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, and the engine imports nothing outside src/ui
+(cd src/ui && zig build test)   # the engine package on its own
 ```
 
 `test-ui` compiles `src/ui/` + `src/ui_client/` in isolation — a faster loop that skips
@@ -56,7 +57,9 @@ src/ui_client/      host binding: elements, style, features, the render walk
 src/ui/             the UI engine — imports nothing from the game
 ```
 
-`src/ui/` is meant to be extractable into its own project. Nothing in it may name the game,
+`src/ui/` is a Zig package of its own (`src/ui/build.zig.zon`): the root manifest names it as a
+path dependency and the code imports it as `@import("ui")`, so moving it to its own repository
+is swapping that path for a url. Nothing in it may name the game,
 the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this program;
 `src/pages/` is the only tier that knows what a vigor bar is.
 

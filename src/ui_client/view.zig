@@ -19,7 +19,7 @@
 //! the reference-fit, centering, and breakpoint math are unit-tested without a window.
 
 const std = @import("std");
-const ui = @import("../ui/root.zig");
+const ui = @import("ui");
 
 /// The design reference the prototype is authored at: the terminal caps here and centers
 /// above it, and every authored dimension is a logical px against this space.

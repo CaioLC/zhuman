@@ -3,7 +3,8 @@
 # covers the authoring tiers (`src/pages/` and the foundation compositions in `src/ui_client/`),
 # not the mechanism files beneath them.
 #
-# Two tiers, because an allowlist per call would be brittle:
+# Three tiers. The first two split hard failures from an inventory, because an allowlist per
+# call would be brittle:
 #
 #   1. Hard failures. Protocol knowledge that has one home now and no legitimate use in a
 #      page or template: the control lifecycle ritual (register focus, publish control state),
@@ -18,6 +19,9 @@
 #      the list against that record, and fails when a site appears in a file not on the
 #      approved list below. Both tiers match spellings, not types: a new way to read
 #      geometry is added to the pattern here, or it goes uncounted.
+#
+#   3. The engine's imports. `src/ui/` is a package of its own (`src/ui/build.zig.zon`); an
+#      import there of anything but `std`, `builtin` or its own files fails.
 #
 # Run from anywhere: `sh tools/boundary_check.sh`. Exit 0 when clean, 1 on a failure.
 
@@ -45,6 +49,29 @@ strays=$(echo "$sites" | grep -vE "$approved")
 if [ -n "$strays" ]; then
     echo "boundary: sites in files that are not approved components:"
     echo "$strays"
+    status=1
+fi
+
+root=$(pwd -P)
+engine=$(grep -rnE '@import\("[^"]+"\)' src/ui --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//' |
+    while IFS=: read -r file line text; do
+        printf '%s\n' "$text" | grep -oE '@import\("[^"]+"\)' | while read -r match; do
+            target=${match#@import(\"}
+            target=${target%\")}
+            case "$target" in
+                std | builtin) continue ;;
+                *.zig | *.zon)
+                    case "$(realpath -m "$(dirname "$file")/$target")" in
+                        "$root"/src/ui/*) continue ;;
+                    esac
+                    ;;
+            esac
+            echo "$file:$line: $match"
+        done
+    done)
+if [ -n "$engine" ]; then
+    echo "boundary: the engine imports something outside src/ui:"
+    echo "$engine"
     status=1
 fi
 

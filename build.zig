@@ -42,6 +42,12 @@ pub fn build(b: *std.Build) void {
         // .image_enable_xv = true,
     });
 
+    // The UI engine is a package of its own (`src/ui/build.zig.zon`), named in `build.zig.zon`
+    // as a path dependency. The library and the UI tests import it as the module `ui`; a
+    // relative import into `src/ui/` would put an engine file in two modules, which Zig refuses.
+    const ui_dep = b.dependency("ui", .{ .target = target, .optimize = optimize });
+    const ui_mod = ui_dep.module("ui");
+
     // My lib
     const ha_mod = b.addModule("human_action", .{
         .root_source_file = b.path("src/root.zig"),
@@ -49,6 +55,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
+    ha_mod.addImport("ui", ui_mod);
     // Library-internal files (components/actions/capital) reach the library's own public
     // surface via `@import("ha")` (e.g. `ha.dist`), so the module must import itself under
     // that name. Without it the self-import resolves only when `ha_mod` happens to be the
@@ -115,6 +122,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
+    ui_test_mod.addImport("ui", ui_mod);
     // `res.zig` carries the authored roster, and the UI tests compile `res.zig`, so the
     // data files resolve here too.
     ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
@@ -125,4 +133,10 @@ pub fn build(b: *std.Build) void {
 
     const test_ui_step = b.step("test-ui", "Run UI-layer unit tests (engine + host binding, minus game content)");
     test_ui_step.dependOn(&run_ui_tests.step);
+
+    // The engine's own tests, from its package's module, in both test steps.
+    const engine_tests = b.addTest(.{ .root_module = ui_mod, .use_llvm = true });
+    const run_engine_tests = b.addRunArtifact(engine_tests);
+    test_step.dependOn(&run_engine_tests.step);
+    test_ui_step.dependOn(&run_engine_tests.step);
 }

@@ -1,11 +1,12 @@
-//! Compile + test entry for the **reusable UI layer in isolation** — the generic engine
-//! (`src/ui/`) plus the host binding (`ctx_binding`/`features`/`draw`/the compositions), but
+//! Compile + test entry for the **reusable UI layer in isolation** — the host binding
+//! (`ctx_binding`/`features`/`draw`/the compositions) over the engine module `ui`, but
 //! *not* `pages.zig`. `pages.zig` is game-content screen building and imports `main.zig`;
 //! the focused target deliberately validates the reusable UI boundary separately from the
 //! complete project `test` step. See `build.zig`'s `test-ui` step.
 //!
-//! Lives in `src/` (not `src/ui_client/`) so its module path covers `ui/`, `ui_client/`,
-//! and `res.zig` — Zig forbids `@import`ing files above a module's root. Referencing
+//! Lives in `src/` (not `src/ui_client/`) so its module path covers `ui_client/` and
+//! `res.zig` — Zig forbids `@import`ing files above a module's root. The engine's own tests
+//! run from its package (`build.zig`), in this step and in `test`. Referencing
 //! `features/root.zig` runs the `comptime` conformance check over the feature `list`;
 //! `refAllDecls` then forces the concrete composition/feature/draw bodies to compile
 //! (`svg.attach` is referenced explicitly since no composition calls it yet).
@@ -38,7 +39,6 @@ const text_feature = @import("./ui_client/features/text.zig");
 const text_cache = @import("./ui_client/features/text_cache.zig");
 
 test {
-    _ = @import("./ui/root.zig"); // engine's own unit tests + types
     _ = input; // host frame-input model + deterministic edge/state tests
     _ = activation; // release activation, drag/cancel suppression, and one-shot tests
     _ = command; // semantic key mapping and prior-build command-owner registry

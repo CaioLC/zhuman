@@ -3,7 +3,7 @@
 //! primitives live with their feature (`features/*.zig`), one `draw` per aspect. So
 //! adding a visual is adding a feature, not editing this file.
 
-const ui = @import("../ui/root.zig");
+const ui = @import("ui");
 const cb = @import("./ctx_binding.zig");
 const feat = @import("./features/root.zig");
 const paint = @import("./features/paint.zig");
