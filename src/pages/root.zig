@@ -72,4 +72,5 @@ test {
     _ = @import("./gameover.zig");
     _ = @import("./act_one_end.zig");
     _ = @import("./mock.zig");
+    _ = @import("./act_two/page.zig");
 }

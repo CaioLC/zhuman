@@ -349,7 +349,8 @@ curtain by `Research.entry`; a recipe that names a `tech` quotes `tech` until th
 **Acts.** Every record carries the first `act` it exists in (a resource knows its own in
 code), and a reference may never reach forward. The Act I surfaces — the ACTIONS grid, the
 BUILD list and its total, the reach announcements — read records of act 1 only, so later
-content is authored into the same files without leaking back.
+content is authored into the same files without leaking back; the Act II pages
+(`pages/act_two/`) read the records of act 2.
 
 **The interpreter (`effects.zig`, `ledger.zig`).** What an agent can do, and on what
 terms, is a pure function of the catalog and the goods it owns: `effects.verb` folds every
