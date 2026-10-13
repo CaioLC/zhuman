@@ -358,6 +358,18 @@ coordinate, more records than the per-agent containers hold (`max_goods`, `max_t
 shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
 same path, so `zig build test` validates the real content.
 
+**Live reload (`reload.zig`).** A `data/` directory in the working directory — beside
+`assets/` — overrides the shipped files one by one: `Resources.init` loads through
+`roster.loadData`, and a broken file there starts the game on the shipped copy with the reason
+in the console. While the game runs, `reload.Watch` looks at the files' modification times
+twice a second from the main loop, and a change re-parses them between frames. A load that
+fails keeps the catalog and logs why, in full to the console and in one line to the event
+log. A load that succeeds is swapped in: each agent's goods and research, the work in
+progress and the reach seen-set move to the new catalog indices by id, a record the files no
+longer hold takes its count and any work on it with it, and every agent resettles its body and
+larder. Rows that repeat are keyed by the record's id, so focus survives a reload that reorders
+a file.
+
 ## Shared text and search
 
 `query.zig` is the one catalog query parser. It tokenizes a search string once into a bounded
@@ -394,6 +406,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
+| `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
 | `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
 | `grid/` | the research board: pointy-top hex geometry (`hex`) and progression over the catalog and `comp.Research` (`board`) |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
@@ -419,7 +432,7 @@ slot at a fixed zero, and without the exemption each draw silently deposited +0.
 ## Assets
 
 - `data/actions.zon`, `data/goods.zon`, `data/technologies.zon` — the authored roster,
-  compiled in by `build.zig`.
+  compiled in by `build.zig`, and read from `data/` at startup and whenever a file changes.
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
   `ui_client.icon_sprite`. Currently unused.

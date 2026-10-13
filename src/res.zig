@@ -240,17 +240,19 @@ pub const Resources = struct {
     sim: Sim,
     config: Config = .{},
     view: View = .{},
-    /// The authored roster (`roster.zig`), loaded once from the shipped files. Written by
-    /// nobody after init; a system reads it as `*const roster.Catalog`. Defaults to no
-    /// records, so a rig that builds `Resources` by hand and never reads the roster needs
-    /// nothing.
+    /// The authored roster (`roster.zig`): loaded at init from `data/` where it has a file,
+    /// the shipped copy for the rest, and replaced only by `reload.swap`, between frames. A
+    /// system reads it as `*const roster.Catalog`. Defaults to no records, so a rig that builds
+    /// `Resources` by hand and never reads the roster needs nothing.
     catalog: rostermod.Catalog = rostermod.Catalog.empty,
 
     pub fn init(gpa: std.mem.Allocator, f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+        // A broken `data/` file does not stop the game: it starts on the shipped copy and says why.
         var diag = rostermod.Diagnostics{};
-        var catalog = rostermod.load(gpa, rostermod.shipped, &diag) catch |err| {
-            std.log.err("{s}", .{diag.message()});
-            return err;
+        var catalog = rostermod.loadData(gpa, &diag) catch |err| blk: {
+            if (err == error.OutOfMemory) return err;
+            std.log.err("data/ did not load, starting on the shipped roster: {s}", .{diag.message()});
+            break :blk try rostermod.load(gpa, rostermod.shipped, null);
         };
         errdefer catalog.deinit();
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");

@@ -370,6 +370,46 @@ pub const shipped = Sources{
     .technologies = @embedFile("technologies.zon"),
 };
 
+/// The directory, relative to the working directory, whose files override the shipped copy
+/// one by one — beside `assets/`, where the game finds its other files.
+pub const data_dir = "data";
+
+/// The most bytes one data file may hold.
+const max_file_bytes = 4 << 20;
+
+/// Load the roster from `dir`: each file it holds replaces the shipped copy of that file, and
+/// each file it lacks falls back to the shipped one. A file that exists but cannot be read
+/// fails the load like a parse error, with the reason in `diag`. The bytes read are freed
+/// before returning; the catalog owns copies of every string it keeps.
+pub fn loadDir(gpa: Allocator, dir: std.fs.Dir, diag: ?*Diagnostics) Error!Catalog {
+    const files = @typeInfo(File).@"enum".fields;
+    var src = shipped;
+    var owned: [files.len]?[:0]u8 = @splat(null);
+    defer for (owned) |o| if (o) |bytes| gpa.free(bytes);
+    inline for (files, 0..) |field, i| {
+        const file: File = @enumFromInt(field.value);
+        if (dir.readFileAllocOptions(gpa, std.fs.path.basename(file.path()), max_file_bytes, null, .of(u8), 0)) |bytes| {
+            owned[i] = bytes;
+            @field(src, field.name) = bytes;
+        } else |err| switch (err) {
+            error.FileNotFound => {},
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                if (diag) |d| d.set(file, null, "cannot read: {s}", .{@errorName(err)});
+                return error.Invalid;
+            },
+        }
+    }
+    return load(gpa, src, diag);
+}
+
+/// Load from `data_dir` when the working directory has one, else the shipped copy.
+pub fn loadData(gpa: Allocator, diag: ?*Diagnostics) Error!Catalog {
+    var dir = std.fs.cwd().openDir(data_dir, .{}) catch return load(gpa, shipped, diag);
+    defer dir.close();
+    return loadDir(gpa, dir, diag);
+}
+
 /// The shape and cross-reference rules a loaded roster must satisfy.
 pub const Rule = enum {
     /// An id is empty or not `[a-z][a-z0-9_]*`.

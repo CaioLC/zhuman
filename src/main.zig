@@ -328,6 +328,8 @@ const App = struct {
     /// While set, pointer activation is suppressed so a click cannot land on the previous
     /// frame's now-stale stamped rects (the "one-frame clickable ghost").
     geometry_stale: bool = false,
+    /// The `data/` files' modification times; a change reloads the roster between frames.
+    data_watch: ha.reload.Watch = .{},
 
     fn init() !App {
         const gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -541,6 +543,9 @@ pub fn main() !void {
         // Update Stage
         // 1. update game resources
         app.resources.time.dt = app.frame_capper.delay();
+        // A changed `data/` file reloads the roster here, between frames: before the systems
+        // read it and before the page build, so nothing holds the records being replaced.
+        if (app.data_watch.poll(app.resources.time.dt)) ha.reload.reload(&app.resources, &app.world);
         // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at
