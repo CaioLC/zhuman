@@ -170,7 +170,7 @@ after (`despawn_dead` is the pattern); and an entity that can be despawned must 
 | `update_food` | spoils each larder toward zero at its own `spoils` rate |
 | `metabolize` | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; logs each band crossing once |
 | `resolve_busy` | ticks work in progress and dispatches its finish half at completion, then drops the `Busy` |
-| `track_reach` | logs `A new recipe is within reach: {name}.` once on the false→true edge of a prerequisite-gated good's `prereq_met`; the seen-set is `Sim.reach_seen`, indexed by `buildable_bundle` order, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `track_reach` | logs `A new recipe is within reach: {name}.` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
 | `market.tick` | advances the passerby's clock (not an ECS system — one encounter per run, on `Sim`) |
 | `capital.run_generators` | pays each generator's upkeep and deposits its yields |
 | `mark_dead` | tags `Dead` at `vigor ≤ 0` and logs the death line |
@@ -211,8 +211,7 @@ and a `Standing` of `ready`, `busy`, `energy` or `short` with the first unpayabl
 Both take a catalog index; `systems.resolve_busy` dispatches on the busy marker's tag.
 The affordability gates are asymmetric on purpose — **energy is strict** (vigor must stay
 above zero), **an item may be spent to exactly zero** (a `>=` gate would refuse every action
-that costs no materials at all). The typed entry points (`action_forage` …) resolve their id
-and call `begin`.
+that costs no materials at all).
 
 ### Capital
 
@@ -235,9 +234,8 @@ paid for), `busy`, `energy`, `short`, `ready`.
 built lot; `acquire` adds a traded one; `release` takes units, spares first; `break_one` is
 `release` with the receipt line. On the way in from zero and on the way out to zero they
 *settle*: `effects.apply` moves the body and larder by the delta of what the owned goods now
-contribute — a raised ceiling fills what it adds, a lowered one only clamps — and
-`bridge.shadow` mirrors the derived ownership and verb terms onto the typed components for
-what still reads them. **Only the first unit carries the effect**: a second pair of sandals
+contribute — a raised ceiling fills what it adds, a lowered one only clamps. **Only the
+first unit carries the effect**: a second pair of sandals
 is stock, and losing a spare keeps the discount.
 
 **Supersession is per family, by derivation.** A good's `family` and `rank` say the fishing
@@ -260,24 +258,7 @@ authored **per in-game day** and scaled by the frame's dt, so a flow reads as a 
 `goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
 `ownsMilestone` is what the curtain routes on; `capacity` sums the housing of what is owned.
 
-**The typed roster is a shadow.** `comp.FishRod` and the other typed good and verb components
-still exist and still carry the sim's numbers as field defaults; `bridge.shadow` keeps their
-presence, counts and terms equal to the derived state after every settle, so the pages, the
-stable-id catalog and the migration read them unchanged. The typed effect pairs at the end of
-`capital.zig` are the reference the interpreter is held equal to in `effects.zig`; nothing
-live calls them. Their retirement is roadmap work ("CAT-01").
-
-## Catalog, passerby, and barter (`catalog.zig`, `market.zig`, `barter.zig`)
-
-**`catalog.zig` is the one table of stable identity.** Every action and good component maps to
-a stable string ID (`act.forage`, `good.*`), a `Kind` (`action` / `crude_good` /
-`manufactured_good`), coarse input/output keys, an authored order, and an `on_surface` flag.
-The flag is the load-bearing part: a component *existing* is not a reason to show it —
-`ActionHunt` and `AirRifle` are defined and off the Act I surface, which is exactly five
-verbs. The goods table is generated comptime over `capital.buildable_bundle`, so it cannot
-drift from the roster, and its tiers come from `capital.is_crude`. Copy (display names,
-effect sentences) is the record's `copy` in the authored roster; this module owns identity, type,
-order, and membership.
+## Passerby and barter (`market.zig`, `barter.zig`)
 
 **The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
 machine `absent → approaching → present → departed → absent`, ticked by `market.tick` off the
@@ -302,8 +283,8 @@ window cap how much can be dumped at the top price.
 
 **`barter.resolve` is all-or-nothing.** It revalidates the quote plus give-side ownership
 before touching anything, then moves both bundles: Food/Materials on the inventory
-components, a sold good through `capital.break_good` (its effect leaves symmetrically), a
-bought good through `capital.grant_public` (its effect lands once; a repeat is stock), the
+components, a sold good through `capital.release` (its effect leaves with the last unit), a
+bought good through `capital.acquire` (its effect lands once; a repeat is stock), the
 satchel decremented, one log line pushed. A failed check mutates nothing and returns the
 reason. `market` stays world-free; `barter` is the only place a `Quote` meets an entity.
 
@@ -312,9 +293,9 @@ reason. `market` stays world-free; `barter` is the only place a `Quote` meets an
 The labor verbs, the capital goods and the technologies are data: `data/actions.zon`,
 `data/goods.zon` and `data/technologies.zon`, parsed at load by `std.zon.parse` into one
 `roster.Catalog`, which is what the sim runs on (`actions.zig`, `capital.zig`, `effects.zig`)
-and the pages read. The typed components above are its shadow, kept current by
-`bridge.shadow` and held equal to the records by `bridge.zig`'s tests until they are retired
-("CAT-01"). The files are the contract new content is written against.
+and the pages read. No component type stands for a verb, a good or a technology: an agent
+holds goods as counts and research as one state per tile, and everything else is derived from
+the records. The files are the contract new content is written against.
 
 **One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
 the file is its kind. Resources, actions and goods share the space: a reference resolves by
@@ -405,14 +386,12 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `world.zig` | the sparse-set `World` |
 | `ecs.zig` | `ecs.run` + the system-param machinery, including `getMany` |
 | `systems.zig` | the sim systems, in tick order |
-| `actions.zig` | per-agent labor, `actions_bundle`, `yield_factor` |
-| `capital.zig` | the generic build path, the modifier pairs, the generator system |
+| `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
+| `capital.zig` | the build path, ownership and settling, the generator system |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
-| `catalog.zig` | stable IDs, kinds, authored order, and Act I surface membership for actions and goods |
 | `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
-| `bridge.zig` | which record each typed component transcribes, and the parity tests; goes with the typed roster |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |

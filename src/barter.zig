@@ -158,7 +158,7 @@ fn spawn_trader(w: *World) Entity {
         comp.InventoryMaterial{ .v = 12 },
         comp.Goods{},
         comp.Granted{},
-    } ++ @import("./actions.zig").actions_bundle);
+    });
 }
 
 fn held(w: *World, e: Entity, res: *Resources, verb: []const u8) bool {
@@ -191,11 +191,9 @@ test "a buy moves both bundles atomically and decrements the satchel" {
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
     try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12-4
-    // Receive side arrived + its effect (the fishing verb) applied once; the shadow follows.
+    // Receive side arrived + its effect (the fishing verb) applied once.
     try testing.expect(capital.owns(&w, e, &res.catalog, "fish_net"));
     try testing.expect(held(&w, e, &res, "fish"));
-    try testing.expect(w.has(e, comp.FishNet));
-    try testing.expect(w.has(e, comp.ActionFish));
     // The satchel decremented.
     try testing.expectEqual(@as(u16, 0), res.sim.encounter.stockOf(.fish_hook));
     try testing.expectEqual(@as(usize, 1), res.sim.log.count); // one log line
@@ -225,8 +223,6 @@ test "a sell releases the good, credits materials, and passes it to the passerby
     // The good left and its verb with it (no lower rank owned, so the verb goes).
     try testing.expect(!capital.owns(&w, e, &res.catalog, "hand_axe"));
     try testing.expect(!held(&w, e, &res, "chop_wood"));
-    try testing.expect(!w.has(e, comp.HandAxe));
-    try testing.expect(!w.has(e, comp.ActionChopWood));
     // The passerby now carries a whetstone, and the sale is the only line.
     try testing.expectEqual(@as(u16, 2), res.sim.encounter.stockOf(.whetstone)); // 1 + 1
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);

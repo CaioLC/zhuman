@@ -10,9 +10,6 @@
 //!
 //! The affordability gates are asymmetric on purpose: **energy is strict** (vigor may never
 //! reach zero, so labor alone cannot kill), an item may be spent to exactly zero.
-//!
-//! `actions_bundle` and the typed verb components it names are mirrored by `bridge.shadow`
-//! for what still reads them, and go with the typed roster (`docs/roadmap.md`, "CAT-01").
 
 const std = @import("std");
 const ha = @import("ha");
@@ -27,13 +24,6 @@ const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
 const Catalog = roster.Catalog;
-
-/// The typed innate verbs, still spawned on every agent for what reads them. The roster's
-/// `innate` flag is the fact; these are its shadow.
-pub const actions_bundle = .{
-    comp.ActionForage,
-    comp.ActionScavenge,
-};
 
 // --- labor quality: two levels, one constant step ---
 // An agent that isn't `.alive` yields `Config.weary_yield`; one that is yields full. A
@@ -213,28 +203,6 @@ fn paymentText(buf: []u8, cat: *const Catalog, v: effects.Verb) []const u8 {
     }
     wr.writeAll(" to begin.") catch {};
     return wr.buffered();
-}
-
-// --- typed entry points: resolve the id, then the index path ------------------------------
-// Kept for the pages until they read the catalog; each is one line over `begin`.
-
-pub fn action_forage(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("forage") orelse return);
-}
-pub fn action_scavenge(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("scavenge") orelse return);
-}
-pub fn action_fish(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("fish") orelse return);
-}
-pub fn action_chop_wood(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("chop_wood") orelse return);
-}
-pub fn action_check_traps(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("check_traps") orelse return);
-}
-pub fn action_hunt(w: *World, e: Entity, res: *Resources) void {
-    begin(w, e, res, res.catalog.actionIndex("hunt") orelse return);
 }
 
 // ============================ Tests ==========================================

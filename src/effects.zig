@@ -180,263 +180,217 @@ pub fn apply(w: *World, e: Entity, cat: *const Catalog) void {
 }
 
 // ============================ Tests =====================================================
-// The interpreter is held equal to the typed apply/remove pairs in `capital.zig`, verb by
-// verb and number by number, across single goods, stacks, family cycles and a long
-// build → sell → build loop. These tests are what lets the typed path be deleted.
+// The interpreter over the shipped roster: base terms, stacks, family supersession, the body
+// and larder deltas, and the property everything rests on — owning then losing a good leaves
+// every verb, the vigor ceiling and the larder exactly where they were.
 
 const testing = std.testing;
-const capital = ha.capital;
-const Resources = ha.res.Resources;
 
 fn fixture() !Catalog {
     return roster.load(testing.allocator, roster.shipped, null);
 }
 
-fn test_res() Resources {
-    var res: Resources = undefined;
-    res.sim = .{ .prng = std.Random.DefaultPrng.init(11) };
-    res.config = .{};
-    return res;
+fn spawnAgent(w: *World) Entity {
+    return w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{}, comp.Goods{}, comp.Granted{} });
 }
 
-/// Two agents with the same body and larder: one on the typed roster, one on the data.
-const Pair = struct {
-    typed: Entity,
-    data: Entity,
+/// Own one more of good `id`, settling the body and larder as the build path does.
+fn own(w: *World, e: Entity, cat: *const Catalog, id: []const u8) void {
+    w.get(e, comp.Goods).?.count[cat.goodIndex(id).?] += 1;
+    apply(w, e, cat);
+}
 
-    fn spawn(w: *World) Pair {
-        return .{
-            .typed = w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{} } ++ ha.actions.actions_bundle),
-            .data = w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{}, comp.Goods{}, comp.Granted{} }),
+/// Lose one of good `id`, spares first.
+fn lose(w: *World, e: Entity, cat: *const Catalog, id: []const u8) void {
+    w.get(e, comp.Goods).?.count[cat.goodIndex(id).?] -= 1;
+    apply(w, e, cat);
+}
+
+fn verbOf(w: *World, e: Entity, cat: *const Catalog, id: []const u8) ?Verb {
+    return verb(cat, w.get(e, comp.Goods).?, cat.actionIndex(id).?);
+}
+
+/// What an agent can do and how its body stands: every Act I verb's terms, the vigor and the
+/// larder.
+const Snapshot = struct {
+    verbs: [8]?Verb = [_]?Verb{null} ** 8,
+    max: f32,
+    v: f32,
+    quality: u8,
+    spoils: f32,
+
+    fn take(w: *World, e: Entity, cat: *const Catalog) Snapshot {
+        var s = Snapshot{
+            .max = w.get(e, comp.Vigor).?.max,
+            .v = w.get(e, comp.Vigor).?.v,
+            .quality = w.get(e, comp.InventoryFood).?.quality,
+            .spoils = w.get(e, comp.InventoryFood).?.spoils,
         };
-    }
-
-    /// Own one more of `G` on both sides — the typed side through the build path's
-    /// on-the-way-in grant, the data side by count.
-    fn equip(self: Pair, w: *World, cat: *const Catalog, comptime G: type) void {
-        if (w.get(self.typed, G)) |h| {
-            h.count += 1;
-        } else {
-            w.add(self.typed, G{});
-            capital.grant_public(w, self.typed, G);
+        var n: usize = 0;
+        for (cat.actions, 0..) |a, ai| {
+            if (a.act != 1) continue;
+            s.verbs[n] = verb(cat, w.get(e, comp.Goods).?, ai);
+            n += 1;
         }
-        w.get(self.data, comp.Goods).?.count[cat.goodIndex(ha.bridge.goodIdOf(G)).?] += 1;
-        apply(w, self.data, cat);
-    }
-
-    /// Lose one of `G` on both sides — the typed side through the reference revoke, spares
-    /// first, the data side by count.
-    fn drop(self: Pair, w: *World, res: *Resources, cat: *const Catalog, comptime G: type) void {
-        _ = res;
-        const owned = w.get(self.typed, G).?;
-        if (owned.count > 1) owned.count -= 1 else capital.revoke_public(w, self.typed, G);
-        w.get(self.data, comp.Goods).?.count[cat.goodIndex(ha.bridge.goodIdOf(G)).?] -= 1;
-        apply(w, self.data, cat);
+        return s;
     }
 };
 
-fn expectNear(expected: f32, actual: f32, tol: f32) !void {
-    if (tol == 0) return testing.expectEqual(expected, actual);
-    return testing.expectApproxEqAbs(expected, actual, tol);
+fn expectLines(a: *const Lines, b: *const Lines) !void {
+    try testing.expectEqual(a.len, b.len);
+    for (a.slice(), b.slice()) |x, y| {
+        try testing.expectEqualStrings(x.item, y.item);
+        try testing.expectEqual(x.n, y.n);
+        try testing.expectEqual(x.sd, y.sd);
+        try testing.expectEqual(x.kind, y.kind);
+    }
 }
 
-fn expectQty(side: *const Lines, item: []const u8, qty: f32, tol: f32) !void {
-    var s = side.*;
-    const l = s.find(item, .once);
-    if (qty == 0) {
-        if (l) |found| try expectNear(0, found.n, tol) else {}
-        return;
+fn expectSnapshot(a: Snapshot, b: Snapshot) !void {
+    for (a.verbs, b.verbs) |x, y| {
+        try testing.expectEqual(x == null, y == null);
+        const vx = x orelse continue;
+        const vy = y.?;
+        try testing.expectEqual(vx.requires.energy, vy.requires.energy);
+        try testing.expectEqual(vx.requires.hours, vy.requires.hours);
+        try expectLines(&vx.input, &vy.input);
+        try expectLines(&vx.output, &vy.output);
     }
-    try expectNear(qty, (l orelse return error.MissingLine).n, tol);
-}
-
-fn expectDist(side: *const Lines, item: []const u8, d: ha.dist.Dist, tol: f32) !void {
-    var s = side.*;
-    const l = s.find(item, .once);
-    if (d.kind == .fixed and d.s == 0) {
-        try testing.expect(l == null);
-        return;
-    }
-    const found = l orelse return error.MissingLine;
-    try testing.expectEqual(d.kind, found.kind);
-    try expectNear(d.s, found.n, tol);
-    try expectNear(d.sd, found.sd, tol);
-}
-
-/// Every verb, and the body and larder, equal between the two sides. `tol` is 0 where the
-/// two paths multiply in the same order (bit-exact) and small where they do not.
-fn expectSame(w: *World, p: Pair, cat: *const Catalog, tol: f32) !void {
-    const goods = w.get(p.data, comp.Goods).?;
-    inline for (ha.bridge.typed_actions) |pair| {
-        const ai = cat.actionIndex(pair[0]).?;
-        const v = verb(cat, goods, ai);
-        if (w.get(p.typed, pair[1])) |typed| {
-            const d = v orelse return error.VerbMissing;
-            try expectNear(typed.requires.energy, d.requires.energy, tol);
-            try expectNear(typed.requires.hours, d.requires.hours, tol);
-            try expectQty(&d.input, "materials", typed.requires.materials, tol);
-            try expectDist(&d.output, "food", typed.yields.food, tol);
-            try expectDist(&d.output, "materials", typed.yields.materials, tol);
-        } else {
-            try testing.expect(v == null);
-        }
-    }
-    const tv = w.get(p.typed, comp.Vigor).?;
-    const dv = w.get(p.data, comp.Vigor).?;
-    try testing.expectEqual(tv.max, dv.max);
-    try testing.expectEqual(tv.v, dv.v);
-    const tf = w.get(p.typed, comp.InventoryFood).?;
-    const df = w.get(p.data, comp.InventoryFood).?;
-    try testing.expectEqual(tf.quality, df.quality);
-    try expectNear(tf.spoils, df.spoils, 1e-7);
+    try testing.expectEqual(a.max, b.max);
+    // Current vigor keeps what a raised ceiling filled: that is the fill rule, not drift.
+    try testing.expect(b.v >= a.v);
+    try testing.expectEqual(a.quality, b.quality);
+    try testing.expectEqual(a.spoils, b.spoils);
 }
 
 test "with nothing owned, the innate verbs are the base records and nothing else is held" {
     var cat = try fixture();
     defer cat.deinit();
     var w = World.init();
-    const p = Pair.spawn(&w);
-    try expectSame(&w, p, &cat, 0);
-    const goods = w.get(p.data, comp.Goods).?;
-    try testing.expect(held(&cat, goods, cat.actionIndex("forage").?));
+    const e = spawnAgent(&w);
+    const goods = w.get(e, comp.Goods).?;
+    const forage = cat.action("forage").?;
+    const v = verbOf(&w, e, &cat, "forage").?;
+    try testing.expectEqual(forage.requires.energy, v.requires.energy);
+    try testing.expectEqual(forage.requires.hours, v.requires.hours);
+    try expectLines(&Lines.of(forage.output), &v.output);
+    try testing.expect(held(&cat, goods, cat.actionIndex("scavenge").?));
     try testing.expect(!held(&cat, goods, cat.actionIndex("fish").?));
 }
 
-test "each good alone: equip and drop match the typed grant and revoke, bit for bit" {
+test "owning a good and losing it again leaves every verb, the ceiling and the larder as they were" {
     var cat = try fixture();
     defer cat.deinit();
-    var res = test_res();
-    // One world, re-initialized per good inside a call of its own: an unrolled loop keeps a
-    // world-sized temporary per iteration in the test's frame and overflows the stack.
+    // One world, re-initialized per good inside a call of its own: a world-sized temporary
+    // per iteration would overflow the test's stack.
     var w = World.init();
-    inline for (ha.bridge.typed_goods) |pair| try checkAlone(pair[1], &w, &res, &cat);
+    for (cat.goods) |g| {
+        if (g.act != 1) continue;
+        try checkReversible(&w, &cat, g.id);
+    }
 }
 
-fn checkAlone(comptime G: type, w: *World, res: *Resources, cat: *const Catalog) !void {
+fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
     w.* = World.init();
-    const p = Pair.spawn(w);
-    // Start under the ceiling so a fill on equip is observable.
-    w.get(p.typed, comp.Vigor).?.v = 7;
-    w.get(p.data, comp.Vigor).?.v = 7;
-    // A modifier on Split wood needs the hatchet first — on both sides.
-    if (G == comp.WorkGloves or G == comp.Chainsaw) p.equip(w, cat, comp.Hatchet);
-    p.equip(w, cat, G);
-    try expectSame(w, p, cat, 0);
-    p.drop(w, res, cat, G);
-    try expectSame(w, p, cat, 0);
+    const e = spawnAgent(w);
+    w.get(e, comp.Vigor).?.v = 7; // under the ceiling, so a fill on the way in shows
+    // A modifier on Split wood works only once the hatchet is owned.
+    if (cat.good(id).?.needs.len > 0) own(w, e, cat, "hatchet");
+    const before = Snapshot.take(w, e, cat);
+    own(w, e, cat, id);
+    lose(w, e, cat, id);
+    try expectSnapshot(before, Snapshot.take(w, e, cat));
 }
 
 test "goods on one verb stack; a spare carries no second effect" {
     var cat = try fixture();
     defer cat.deinit();
-    var res = test_res();
     var w = World.init();
-    const p = Pair.spawn(&w);
-    p.equip(&w, &cat, comp.Sandals);
-    p.equip(&w, &cat, comp.Bicycle);
-    try expectSame(&w, p, &cat, 0);
-    p.equip(&w, &cat, comp.Sandals); // a second pair is stock
-    try expectSame(&w, p, &cat, 0);
-    try testing.expectApproxEqAbs(
-        @as(f32, 1.7 * 0.85 * 0.6),
-        verb(&cat, w.get(p.data, comp.Goods).?, cat.actionIndex("forage").?).?.requires.energy,
-        1e-5,
-    );
-    p.drop(&w, &res, &cat, comp.Sandals); // the spare goes first, the discount stays
-    try expectSame(&w, p, &cat, 0);
-    p.drop(&w, &res, &cat, comp.Bicycle);
-    p.drop(&w, &res, &cat, comp.Sandals);
-    try expectSame(&w, p, &cat, 0);
+    const e = spawnAgent(&w);
+    own(&w, e, &cat, "sandals");
+    own(&w, e, &cat, "bicycle");
+    const both = verbOf(&w, e, &cat, "forage").?.requires.energy;
+    try testing.expectApproxEqAbs(@as(f32, 1.7 * 0.85 * 0.6), both, 1e-5);
+    own(&w, e, &cat, "sandals"); // a second pair is stock
+    try testing.expectEqual(both, verbOf(&w, e, &cat, "forage").?.requires.energy);
+    lose(&w, e, &cat, "sandals"); // the spare goes first, the discount stays
+    try testing.expectEqual(both, verbOf(&w, e, &cat, "forage").?.requires.energy);
+    lose(&w, e, &cat, "bicycle");
+    lose(&w, e, &cat, "sandals");
+    try testing.expectEqual(cat.action("forage").?.requires.energy, verbOf(&w, e, &cat, "forage").?.requires.energy);
 }
 
 test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersedes the hatchet" {
     var cat = try fixture();
     defer cat.deinit();
-    var res = test_res();
     var w = World.init();
-    const p = Pair.spawn(&w);
-    p.equip(&w, &cat, comp.Hatchet);
-    p.equip(&w, &cat, comp.WorkGloves);
-    p.equip(&w, &cat, comp.Chainsaw);
-    try expectSame(&w, p, &cat, 0); // same multiplication order on both sides
-    p.equip(&w, &cat, comp.HandAxe); // the typed side recomputes base → rank 2 → modifiers
-    try expectSame(&w, p, &cat, 1e-5); // the data side folds in roster order
-    const goods = w.get(p.data, comp.Goods).?;
-    const chop = verb(&cat, goods, cat.actionIndex("chop_wood").?).?;
+    const e = spawnAgent(&w);
+    own(&w, e, &cat, "hatchet");
+    own(&w, e, &cat, "work_gloves");
+    own(&w, e, &cat, "chainsaw");
+    const with_hatchet = verbOf(&w, e, &cat, "chop_wood").?;
+    own(&w, e, &cat, "hand_axe");
+    const chop = verbOf(&w, e, &cat, "chop_wood").?;
     try testing.expectApproxEqAbs(@as(f32, 2.5 * 0.7 * 0.75 * 0.3), chop.requires.energy, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 5.0 * 1.4 * 2.5), chop.output.slice()[0].n, 1e-4);
-    p.drop(&w, &res, &cat, comp.HandAxe); // back to the hatchet's rank, modifiers kept
-    try expectSame(&w, p, &cat, 1e-5);
-    p.drop(&w, &res, &cat, comp.Hatchet); // the verb leaves with the last tool
-    try expectSame(&w, p, &cat, 0);
-    try testing.expect(verb(&cat, goods, cat.actionIndex("chop_wood").?) == null);
+    lose(&w, e, &cat, "hand_axe"); // back to the hatchet's rank, modifiers kept
+    const again = verbOf(&w, e, &cat, "chop_wood").?;
+    try testing.expectEqual(with_hatchet.requires.energy, again.requires.energy);
+    try expectLines(&with_hatchet.output, &again.output);
+    lose(&w, e, &cat, "hatchet"); // the verb leaves with the last tool
+    try testing.expect(verbOf(&w, e, &cat, "chop_wood") == null);
 }
 
-test "the fishing family: rod, net, sell the net, sell the rod" {
+test "fifty rod → net → sell → sell cycles leave the fishing terms bit-exact" {
     var cat = try fixture();
     defer cat.deinit();
-    var res = test_res();
     var w = World.init();
-    const p = Pair.spawn(&w);
-    p.equip(&w, &cat, comp.FishRod);
-    try expectSame(&w, p, &cat, 0);
-    p.equip(&w, &cat, comp.FishNet);
-    try expectSame(&w, p, &cat, 0);
-    p.drop(&w, &res, &cat, comp.FishNet);
-    try expectSame(&w, p, &cat, 0);
-    p.drop(&w, &res, &cat, comp.FishRod);
-    try expectSame(&w, p, &cat, 0);
-}
-
-test "fifty build → upgrade → sell → sell cycles leave the base untouched" {
-    var cat = try fixture();
-    defer cat.deinit();
-    var res = test_res();
-    var w = World.init();
-    const p = Pair.spawn(&w);
+    const e = spawnAgent(&w);
+    own(&w, e, &cat, "fish_rod");
+    const rod = verbOf(&w, e, &cat, "fish").?;
+    own(&w, e, &cat, "fish_net");
+    try testing.expect(verbOf(&w, e, &cat, "fish").?.output.slice()[0].n != rod.output.slice()[0].n);
+    lose(&w, e, &cat, "fish_net");
+    lose(&w, e, &cat, "fish_rod");
+    try testing.expect(verbOf(&w, e, &cat, "fish") == null);
     var i: usize = 0;
     while (i < 50) : (i += 1) {
-        p.equip(&w, &cat, comp.FishRod);
-        p.equip(&w, &cat, comp.FishNet);
-        p.drop(&w, &res, &cat, comp.FishNet);
-        p.drop(&w, &res, &cat, comp.FishRod);
+        own(&w, e, &cat, "fish_rod");
+        own(&w, e, &cat, "fish_net");
+        lose(&w, e, &cat, "fish_net");
+        lose(&w, e, &cat, "fish_rod");
     }
-    p.equip(&w, &cat, comp.FishRod);
-    try expectSame(&w, p, &cat, 0);
-    const fish = verb(&cat, w.get(p.data, comp.Goods).?, cat.actionIndex("fish").?).?;
-    try testing.expectEqual((comp.ActionFish{}).requires.energy, fish.requires.energy);
+    own(&w, e, &cat, "fish_rod");
+    const after = verbOf(&w, e, &cat, "fish").?;
+    try testing.expectEqual(rod.requires.energy, after.requires.energy);
+    try expectLines(&rod.output, &after.output);
 }
 
 test "the body and larder: ceilings fill on the way up and clamp on the way down" {
     var cat = try fixture();
     defer cat.deinit();
-    var res = test_res();
     var w = World.init();
-    const p = Pair.spawn(&w);
-    w.get(p.typed, comp.Vigor).?.v = 8;
-    w.get(p.data, comp.Vigor).?.v = 8;
-    p.equip(&w, &cat, comp.LeafBed); // max 11, v 9
-    try expectSame(&w, p, &cat, 0);
-    p.equip(&w, &cat, comp.Pantry); // max 13, v 11
-    try expectSame(&w, p, &cat, 0);
-    try testing.expectEqual(@as(f32, 13), w.get(p.data, comp.Vigor).?.max);
-    try testing.expectEqual(@as(f32, 11), w.get(p.data, comp.Vigor).?.v);
-    w.get(p.typed, comp.Vigor).?.v = 13;
-    w.get(p.data, comp.Vigor).?.v = 13;
-    p.drop(&w, &res, &cat, comp.Pantry); // max 11, v clamped to 11
-    try expectSame(&w, p, &cat, 0);
-    p.drop(&w, &res, &cat, comp.LeafBed); // max 10, v clamped to 10
-    try expectSame(&w, p, &cat, 0);
-    try testing.expectEqual(@as(f32, 10), w.get(p.data, comp.Vigor).?.v);
+    const e = spawnAgent(&w);
+    w.get(e, comp.Vigor).?.v = 8;
+    own(&w, e, &cat, "leaf_bed"); // max 11, v 9
+    own(&w, e, &cat, "pantry"); // max 13, v 11
+    try testing.expectEqual(@as(f32, 13), w.get(e, comp.Vigor).?.max);
+    try testing.expectEqual(@as(f32, 11), w.get(e, comp.Vigor).?.v);
+    w.get(e, comp.Vigor).?.v = 13;
+    lose(&w, e, &cat, "pantry"); // max 11, v clamped to 11
+    try testing.expectEqual(@as(f32, 11), w.get(e, comp.Vigor).?.v);
+    lose(&w, e, &cat, "leaf_bed"); // max 10, v clamped to 10
+    try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max);
+    try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v);
 
-    p.equip(&w, &cat, comp.Cookpot);
-    p.equip(&w, &cat, comp.RootCellar);
-    try expectSame(&w, p, &cat, 0);
-    try testing.expectEqual(@as(u8, 2), w.get(p.data, comp.InventoryFood).?.quality);
-    try testing.expectApproxEqAbs(@as(f32, 0.025), w.get(p.data, comp.InventoryFood).?.spoils, 1e-7);
-    p.drop(&w, &res, &cat, comp.RootCellar);
-    p.drop(&w, &res, &cat, comp.Cookpot);
-    try expectSame(&w, p, &cat, 0);
+    own(&w, e, &cat, "cookpot");
+    own(&w, e, &cat, "root_cellar");
+    try testing.expectEqual(@as(u8, 2), w.get(e, comp.InventoryFood).?.quality);
+    try testing.expectApproxEqAbs(@as(f32, 0.025), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
+    lose(&w, e, &cat, "root_cellar");
+    lose(&w, e, &cat, "cookpot");
+    try testing.expectEqual(@as(u8, 1), w.get(e, comp.InventoryFood).?.quality);
+    try testing.expectApproxEqAbs(@as(f32, 0.05), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
 }
 
 test "a scale on an absent line is nothing to scale; an add inserts the line" {

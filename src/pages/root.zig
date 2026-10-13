@@ -50,12 +50,11 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // the variable is set and non-empty. See `fixture.zig`.
     if (fixtureRequested(ui_ctx.arena)) |name| return try fixture.build_fixture(ui_ctx, world, name);
 
-    // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
-    // curtain, since owning a `Shelter` is the win condition; otherwise the live Act-I page.
-    const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const settled = ecs.MaybeSingle(.{ comp.Shelter, ecs.With(tag.Player) }){ .world = world };
-    if (player.get() == null) return try p_gameover(ui_ctx, world);
-    if (settled.get() != null) return try p_act_one_end(ui_ctx, world);
+    // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I curtain,
+    // since owning the good that ends the act is the win condition; otherwise the live page.
+    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+    const a = player.get() orelse return try p_gameover(ui_ctx, world);
+    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.catalog, .act_one)) return try p_act_one_end(ui_ctx, world);
     return try p_act_one(ui_ctx, world);
 }
 

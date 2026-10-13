@@ -10,12 +10,12 @@
 //! is handed out, so a bad file is refused whole — with a line and column, or a rule and the
 //! offending id — never half-applied.
 //!
-//! The sim runs on the catalog (`actions.zig`, `capital.zig`, `effects.zig`); the typed
-//! components are its shadow until they are retired (`docs/roadmap.md`, "CAT-01").
+//! The sim runs on the catalog (`actions.zig`, `capital.zig`, `effects.zig`), and so do the
+//! pages.
 
 const std = @import("std");
 // A relative import, not `ha`: `res.zig` carries the catalog, and `test-ui` compiles `res.zig`
-// without the `ha` module. The bridge to the typed components lives in `bridge.zig`.
+// without the `ha` module.
 const dist = @import("./dist.zig");
 
 const Allocator = std.mem.Allocator;
@@ -725,8 +725,6 @@ test "the shipped files load and validate" {
     try testing.expectEqual(TechState.researched, cat.technology("foraging").?.initial);
 }
 
-/// A once-line for `item` with exactly `qty` when `qty > 0`, and no line for it at all when
-/// `qty == 0` — the typed `Requires.materials = 0` has no line to transcribe.
 // —— the validator bites ————————————————————————————————————————————————————————————————
 
 const ok_actions =
@@ -906,18 +904,18 @@ test "a recipe names a technology that exists, of its own act or earlier" {
 }
 
 test "a verb names a technology that exists, of its own act or earlier" {
-    var cat = try load(testing.allocator, .{ .actions =
+    var cat = try load(testing.allocator, .{ .actions = 
         \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, null);
     defer cat.deinit();
     try testing.expectEqualStrings("kilns", cat.action("fire").?.tech.?);
 
     var d = Diagnostics{};
-    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions = 
         \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "glass", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.unknown_tech, d.rule.?);
-    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions = 
         \\.{ .{ .id = "fire", .name = "Fire", .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.later_act, d.rule.?);

@@ -2,8 +2,8 @@
 //!
 //! A good is a record in `data/goods.zon` (`roster.zig`); an agent owns it as a count on
 //! `comp.Goods`. Building, buying, selling and breaking all move that count, and every change
-//! of ownership *settles*: `effects.apply` for the body and larder, `bridge.shadow` for what
-//! still reads the typed components. What a good does to a **verb** is never stored —
+//! of ownership *settles* the body and larder (`effects.apply`). What a good does to a **verb**
+//! is never stored —
 //! `effects.verb` derives it. `quote` is the one gate calculation: the BUILD row, `begin`, and
 //! a future decider read the same answer.
 //!
@@ -17,19 +17,13 @@
 //! for someone else is what a count is for. **Only the first unit carries the effect**: a
 //! second pair of sandals is stock, not a deeper discount, so the effect lands on the way in
 //! from absent and leaves with the last unit; losing a spare keeps it.
-//!
-//! The typed effect pairs at the bottom (`apply_sandals` …) are the reference the interpreter
-//! is held equal to (`effects.zig`); nothing live calls them, and they go with the typed roster
-//! (`docs/roadmap.md`, "CAT-01").
 
 const std = @import("std");
 const ha = @import("ha");
 const comp = ha.comp;
-const dist = ha.dist;
 const roster = ha.roster;
 const effects = ha.effects;
 const ledger = ha.ledger;
-const bridge = ha.bridge;
 const ecs = @import("./ecs.zig");
 const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
@@ -38,57 +32,6 @@ const World = world.World;
 const Entity = world.Entity;
 const Resources = res_mod.Resources;
 const Catalog = roster.Catalog;
-
-// --- the typed roster: tables still read by the pages and the stable-id catalog -----------
-
-/// Every buildable good, in BUILD-shelf order — the typed shadow of the buildable records.
-pub const buildable_bundle = .{
-    comp.FishRod,       comp.Hatchet,    comp.WireSnares,  comp.AirRifle,
-    comp.Sandals,       comp.WorkGloves, comp.Bicycle,     comp.Cookpot,
-    comp.RootCellar,    comp.Chainsaw,   comp.LeafBed,     comp.Pantry,
-    comp.MedicineChest, comp.GardenBed,  comp.ChickenCoop, comp.Shelter,
-};
-
-/// The component a good's effect needs to already exist on the agent, if any — the typed
-/// form of the record's `needs`.
-pub fn prereq_of(comptime GoodT: type) ?type {
-    return switch (GoodT) {
-        comp.WorkGloves, comp.Chainsaw => comp.ActionChopWood,
-        else => null,
-    };
-}
-
-/// Whether a good is **crude** — the typed form of the record's `tier`.
-pub fn is_crude(comptime GoodT: type) bool {
-    return switch (GoodT) {
-        comp.Sandals, comp.LeafBed, comp.WireSnares, comp.RootCellar, comp.GardenBed => true,
-        else => false,
-    };
-}
-
-/// The receipt line for a completed build — the typed form of the record's `copy.built`,
-/// held equal to it by `bridge.zig`.
-pub fn built_msg(comptime GoodT: type) []const u8 {
-    return switch (GoodT) {
-        comp.FishRod => "You built a fish rod. Fishing is now possible.",
-        comp.Hatchet => "You built a hatchet. You can split wood now.",
-        comp.WireSnares => "You set wire snares. Check them for game.",
-        comp.AirRifle => "You assembled an air rifle. You can hunt now.",
-        comp.Sandals => "You bound sandals from bark. Foraging costs a little less.",
-        comp.WorkGloves => "You stitched work gloves. Splitting wood costs less.",
-        comp.Bicycle => "You rebuilt a bicycle. Distance got cheap.",
-        comp.Cookpot => "You built a cookpot. Cooked food feeds you further.",
-        comp.RootCellar => "You dug a root cellar. Food keeps twice as long.",
-        comp.Chainsaw => "You got a chainsaw running. The engine works, not your back.",
-        comp.LeafBed => "You piled a leaf bed. You sleep off the ground now.",
-        comp.Pantry => "You built a pantry. You eat properly now.",
-        comp.MedicineChest => "You stocked a medicine chest. You mend properly now.",
-        comp.GardenBed => "You planted a garden bed. It grows without you.",
-        comp.ChickenCoop => "You raised a chicken coop. The hens lay without you.",
-        comp.Shelter => "You raised a shelter. There is room here for others.",
-        else => @compileError("no build message for " ++ @typeName(GoodT)),
-    };
-}
 
 // --- the quote ---------------------------------------------------------------------------
 
@@ -317,12 +260,10 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
     return true;
 }
 
-/// Every change of ownership ends here: the body and larder take the goods' contribution,
-/// and the typed components mirror the derived state for what still reads them. Public for
-/// a fixture that sets counts by hand.
+/// Every change of ownership ends here: the body and larder take the goods' contribution.
+/// Public for a fixture that sets counts by hand.
 pub fn settle(w: *World, e: Entity, cat: *const Catalog) void {
     effects.apply(w, e, cat);
-    bridge.shadow(w, e, cat);
 }
 
 /// A built lot: a once-output naming the good itself, else one unit.
@@ -340,46 +281,6 @@ pub fn lowerName(name: []const u8, buf: *[48]u8) []const u8 {
     @memcpy(buf[0..n], name[0..n]);
     if (n > 0) buf[0] = std.ascii.toLower(buf[0]);
     return buf[0..n];
-}
-
-// --- typed entry points: resolve the type to its record, then the index path -------------
-// Kept for the pages (and their tests) until they read the catalog.
-
-pub fn begin_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    begin(w, e, res, bridge.goodIndexOf(&res.catalog, GoodT) orelse return);
-}
-
-pub fn finish_build(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    finish(w, e, res, bridge.goodIndexOf(&res.catalog, GoodT) orelse return);
-}
-
-pub fn break_good(w: *World, e: Entity, res: *Resources, comptime GoodT: type) void {
-    break_one(w, e, res, bridge.goodIndexOf(&res.catalog, GoodT) orelse return);
-}
-
-/// Whether `GoodT`'s prerequisite (if it has one) is satisfied — read off the typed shadow.
-pub fn prereq_met(w: *World, e: Entity, comptime GoodT: type) bool {
-    if (prereq_of(GoodT)) |P| return w.has(e, P);
-    return true;
-}
-
-/// How many goods from the catalog this agent owns, by kind — read off the typed shadow.
-pub fn goods_owned(w: *World, e: Entity) u32 {
-    var n: u32 = 0;
-    inline for (buildable_bundle) |G| {
-        if (w.has(e, G)) n += 1;
-    }
-    return n;
-}
-
-/// Whether the builder meets `GoodT`'s standing conditions — read off the typed shadow.
-pub fn unlock_met(w: *World, e: Entity, comptime GoodT: type) bool {
-    if (!@hasField(GoodT, "unlock")) return true;
-    const u = (GoodT{}).unlock;
-    const vigor, const food = ecs.getMany(w, e, .{ comp.Vigor, comp.InventoryFood });
-    if (vigor.v < u.vigor_abs) return false;
-    if (food.v < u.food) return false;
-    return goods_owned(w, e) >= u.goods;
 }
 
 // --- generators: capital that runs itself -------------------------------------------------
@@ -408,180 +309,6 @@ pub fn run_generators(w: *World, res: *Resources) void {
     }
 }
 
-// ============================ The typed effect pairs: the interpreter's reference ==========
-// Each pair applies/reverses its good's effect on a component that lives on the owning agent.
-// `effects.zig` holds the interpreter equal to these; nothing live calls them.
-
-/// What a good does the moment it exists — the typed path, for the parity tests.
-fn grant(w: *World, e: Entity, comptime GoodT: type) void {
-    switch (GoodT) {
-        comp.FishRod => recompute_fishing(w, e),
-        comp.FishNet => recompute_fishing(w, e),
-        comp.Hatchet => recompute_chopping(w, e),
-        comp.HandAxe => recompute_chopping(w, e),
-        comp.WireSnares => w.add(e, comp.ActionCheckTraps{}),
-        comp.AirRifle => w.add(e, comp.ActionHunt{}),
-        comp.Sandals => apply_sandals(w, e),
-        comp.WorkGloves => apply_work_gloves(w, e),
-        comp.Bicycle => apply_bicycle(w, e),
-        comp.Cookpot => apply_cookpot(w, e),
-        comp.RootCellar => apply_root_cellar(w, e),
-        comp.Chainsaw => apply_chainsaw(w, e),
-        comp.LeafBed => health_apply(w, e, 1.0),
-        comp.Pantry => health_apply(w, e, 2.0),
-        comp.MedicineChest => health_apply(w, e, 2.0),
-        comp.GardenBed, comp.ChickenCoop, comp.Shelter => {},
-        else => @compileError("no grant for " ++ @typeName(GoodT)),
-    }
-}
-
-/// The typed grant, exposed for the parity tests: the effect only, ownership is the caller's.
-pub fn grant_public(w: *World, e: Entity, comptime GoodT: type) void {
-    grant(w, e, GoodT);
-}
-
-/// The exact reverse of `grant`, for the parity tests: removes the good's component first so
-/// a family recompute sees post-removal state, then revokes.
-pub fn revoke_public(w: *World, e: Entity, comptime GoodT: type) void {
-    w.remove(e, GoodT);
-    switch (GoodT) {
-        comp.FishRod => recompute_fishing(w, e),
-        comp.FishNet => recompute_fishing(w, e),
-        comp.Hatchet => recompute_chopping(w, e),
-        comp.HandAxe => recompute_chopping(w, e),
-        comp.WireSnares => w.remove(e, comp.ActionCheckTraps),
-        comp.AirRifle => w.remove(e, comp.ActionHunt),
-        comp.Sandals => remove_sandals(w, e),
-        comp.WorkGloves => remove_work_gloves(w, e),
-        comp.Bicycle => remove_bicycle(w, e),
-        comp.Cookpot => remove_cookpot(w, e),
-        comp.RootCellar => remove_root_cellar(w, e),
-        comp.Chainsaw => remove_chainsaw(w, e),
-        comp.LeafBed => health_remove(w, e, 1.0),
-        comp.Pantry => health_remove(w, e, 2.0),
-        comp.MedicineChest => health_remove(w, e, 2.0),
-        comp.GardenBed, comp.ChickenCoop, comp.Shelter => {},
-        else => @compileError("no revoke for " ++ @typeName(GoodT)),
-    }
-}
-
-pub fn apply_sandals(w: *World, agent: Entity) void {
-    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy *= 0.85;
-}
-pub fn remove_sandals(w: *World, agent: Entity) void {
-    const forage = ecs.getMany(w, agent, .{comp.ActionForage});
-    forage.requires.energy /= 0.85;
-}
-
-pub fn apply_work_gloves(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy *= 0.75;
-}
-pub fn remove_work_gloves(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy /= 0.75;
-}
-
-pub fn apply_bicycle(w: *World, agent: Entity) void {
-    const forage, const scav = ecs.getMany(w, agent, .{ comp.ActionForage, comp.ActionScavenge });
-    forage.requires.energy *= 0.6;
-    scav.requires.energy *= 0.6;
-}
-pub fn remove_bicycle(w: *World, agent: Entity) void {
-    const forage, const scav = ecs.getMany(w, agent, .{ comp.ActionForage, comp.ActionScavenge });
-    forage.requires.energy /= 0.6;
-    scav.requires.energy /= 0.6;
-}
-
-pub fn apply_cookpot(w: *World, agent: Entity) void {
-    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
-    food.quality += 1;
-}
-pub fn remove_cookpot(w: *World, agent: Entity) void {
-    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
-    food.quality -= 1;
-}
-
-pub fn apply_root_cellar(w: *World, agent: Entity) void {
-    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
-    food.spoils *= 0.5;
-}
-pub fn remove_root_cellar(w: *World, agent: Entity) void {
-    const food = ecs.getMany(w, agent, .{comp.InventoryFood});
-    food.spoils /= 0.5;
-}
-
-pub fn apply_chainsaw(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy *= 0.3;
-    chop.requires.materials += 1.0;
-    chop.yields.materials.s *= 2.5;
-    chop.yields.materials.sd *= 2.5;
-}
-pub fn remove_chainsaw(w: *World, agent: Entity) void {
-    const chop = ecs.getMany(w, agent, .{comp.ActionChopWood});
-    chop.requires.energy /= 0.3;
-    chop.requires.materials -= 1.0;
-    chop.yields.materials.s /= 2.5;
-    chop.yields.materials.sd /= 2.5;
-}
-
-fn fishing_rank(w: *World, e: Entity) u8 {
-    if (w.has(e, comp.FishNet)) return 2;
-    if (w.has(e, comp.FishRod)) return 1;
-    return 0;
-}
-
-fn recompute_fishing(w: *World, e: Entity) void {
-    const rank = fishing_rank(w, e);
-    if (rank == 0) {
-        if (w.has(e, comp.ActionFish)) w.remove(e, comp.ActionFish);
-        return;
-    }
-    if (!w.has(e, comp.ActionFish)) w.add(e, comp.ActionFish{});
-    const fish = ecs.getMany(w, e, .{comp.ActionFish});
-    fish.* = comp.ActionFish{};
-    if (rank >= 2) {
-        fish.requires.energy = (comp.ActionFish{}).requires.energy * 0.7;
-        fish.yields.food.s = (comp.ActionFish{}).yields.food.s * 1.5;
-    }
-}
-
-fn chopping_rank(w: *World, e: Entity) u8 {
-    if (w.has(e, comp.HandAxe)) return 2;
-    if (w.has(e, comp.Hatchet)) return 1;
-    return 0;
-}
-
-fn recompute_chopping(w: *World, e: Entity) void {
-    const rank = chopping_rank(w, e);
-    if (rank == 0) {
-        if (w.has(e, comp.ActionChopWood)) w.remove(e, comp.ActionChopWood);
-        return;
-    }
-    if (!w.has(e, comp.ActionChopWood)) w.add(e, comp.ActionChopWood{});
-    const chop = ecs.getMany(w, e, .{comp.ActionChopWood});
-    chop.* = comp.ActionChopWood{};
-    if (rank >= 2) {
-        chop.requires.energy = (comp.ActionChopWood{}).requires.energy * 0.7;
-        chop.yields.materials.s = (comp.ActionChopWood{}).yields.materials.s * 1.4;
-    }
-    if (w.has(e, comp.WorkGloves)) apply_work_gloves(w, e);
-    if (w.has(e, comp.Chainsaw)) apply_chainsaw(w, e);
-}
-
-fn health_apply(w: *World, agent: Entity, amount: f32) void {
-    const vigor = ecs.getMany(w, agent, .{comp.Vigor});
-    vigor.max += amount;
-    vigor.v = @min(vigor.v + amount, vigor.max);
-}
-fn health_remove(w: *World, agent: Entity, amount: f32) void {
-    const vigor = ecs.getMany(w, agent, .{comp.Vigor});
-    vigor.max -= amount;
-    if (vigor.v > vigor.max) vigor.v = vigor.max;
-}
-
 // ============================ Tests ==========================================
 
 const testing = std.testing;
@@ -608,7 +335,7 @@ fn spawn_test_agent(w: *World, materials: f32) Entity {
         comp.InventoryMaterial{ .v = materials },
         comp.Goods{},
         comp.Granted{},
-    } ++ ha.actions.actions_bundle);
+    });
 }
 
 fn count(w: *World, e: Entity, cat: *const Catalog, id: []const u8) u32 {
@@ -644,8 +371,6 @@ test "build pays upfront and starts the work; finish owns the rod and grants the
     finish(&w, e, &res, rod);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "fish_rod"));
     try testing.expect(heldVerb(&w, e, cat, "fish")); // the unlock
-    try testing.expect(w.has(e, comp.FishRod)); // the typed shadow follows
-    try testing.expect(w.has(e, comp.ActionFish));
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try testing.expectEqualStrings(cat.goods[rod].copy.built, res.sim.log.get(0).text());
 }
@@ -712,7 +437,6 @@ test "a repeat build is stock: the count rises, the effect does not" {
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "sandals"));
     try testing.expectEqual(base, effects.verb(cat, goods, forage).?.requires.energy);
     try testing.expectEqualStrings("Your sandals broke.", res.sim.log.get(0).text());
-    try testing.expect(!w.has(e, comp.Sandals)); // the shadow follows
 }
 
 test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
@@ -742,7 +466,6 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
 
     break_one(&w, e, &res, hatchet);
     try testing.expect(!heldVerb(&w, e, cat, "chop_wood")); // the verb leaves with the tool
-    try testing.expect(!w.has(e, comp.ActionChopWood));
 }
 
 test "a generator pays its upkeep and deposits its flow, per day" {
@@ -809,7 +532,6 @@ test "the shelter is offered only once its standing conditions are met" {
     finish(&w, e, &res, shelter);
     try testing.expect(ownsMilestone(&w, e, cat, .act_one));
     try testing.expectEqual(@as(u32, 4), capacity(&w, e, cat));
-    try testing.expect(w.has(e, comp.Shelter)); // the shadow the curtain still routes on
 }
 
 test "each standing condition refuses the shelter on its own" {
@@ -953,48 +675,12 @@ test "a bought tool supersedes the built one; selling it restores the next-best 
     acquire(&w, e, &res, net, 1); // rank 2: the stats replace the rod's, not stack
     try testing.expectApproxEqAbs(base_energy * 0.7, effects.verb(cat, goods, fish).?.requires.energy, 1e-6);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "fish_rod")); // the rod is still owned (sellable)
-    try testing.expect(w.has(e, comp.FishNet)); // and shadowed
 
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, net, 1)); // sell the net
     try testing.expectEqual(base_energy, effects.verb(cat, goods, fish).?.requires.energy); // the rod's rank
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, rod, 1)); // sell the rod too
     try testing.expect(effects.verb(cat, goods, fish) == null); // no fishing tool left ⇒ the verb goes
     try testing.expectEqual(@as(u32, 0), release(&w, e, &res, rod, 1)); // nothing left to release
-}
-
-test "the typed entry points reach the same path" {
-    var w = World.init();
-    var res = try test_res();
-    defer res.catalog.deinit();
-    const cat = &res.catalog;
-    const e = spawn_test_agent(&w, 10);
-    begin_build(&w, e, &res, comp.LeafBed);
-    finish_build(&w, e, &res, comp.LeafBed);
-    try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "leaf_bed"));
-    try testing.expectEqual(@as(f32, 11), w.get(e, comp.Vigor).?.max); // the ceiling, through effects.apply
-    try testing.expect(prereq_met(&w, e, comp.Sandals));
-    try testing.expect(!prereq_met(&w, e, comp.WorkGloves)); // the shadow has no Split wood
-    try testing.expectEqual(@as(u32, 1), goods_owned(&w, e));
-    break_good(&w, e, &res, comp.LeafBed);
-    try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "leaf_bed"));
-    try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max);
-}
-
-test "modifier pairs are symmetric — apply then remove restores the margin (the reference)" {
-    var w = World.init();
-    const e = w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{} } ++ ha.actions.actions_bundle);
-
-    apply_sandals(&w, e);
-    apply_bicycle(&w, e);
-    const forage = w.get(e, comp.ActionForage).?;
-    const scav = w.get(e, comp.ActionScavenge).?;
-    try testing.expectApproxEqAbs(@as(f32, 1.7 * 0.85 * 0.6), forage.requires.energy, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 2.0 * 0.6), scav.requires.energy, 1e-5);
-
-    remove_bicycle(&w, e);
-    remove_sandals(&w, e);
-    try testing.expectApproxEqAbs(@as(f32, 1.7), forage.requires.energy, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 2.0), scav.requires.energy, 1e-5);
 }
 
 test "lowerName puts a sentence-case name into a sentence" {

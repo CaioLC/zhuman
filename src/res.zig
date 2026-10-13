@@ -98,7 +98,7 @@ pub const Config = struct {
 
     // —— capital ——
     /// Share of a cancelled build's materials that comes back. Flat, not prorated by
-    /// how far the work got: materials are spent in full at `begin_build` and nothing
+    /// how far the work got: materials are spent in full at `capital.begin` and nothing
     /// draws them down over time, so a time-proportional refund would imply a
     /// consumption schedule the sim doesn't run. What it means is salvage — you take
     /// back the stock you hadn't worked in yet. The energy and the hours are gone.
@@ -141,8 +141,7 @@ pub const Sim = struct {
     /// against this. Held here so the player today and the AI deciders later draw
     /// uncertainty from the same stream. Reached through `Resources.random()`.
     prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0),
-    /// **Eligibility transition memory** — one bit per buildable good (indexed by
-    /// `capital.buildable_bundle` order; the fixed `16` is that bundle's length), recording
+    /// **Eligibility transition memory** — one bit per good, by catalog index, recording
     /// whether the good's prerequisite has *already* been seen satisfied this run. The
     /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
     /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds

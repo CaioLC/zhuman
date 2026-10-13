@@ -255,12 +255,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         }
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
-            // The live debug player starts with only the two innate verbs. Grant canonical
-            // unlocked components in this debug-only world so the assembly audit represents
-            // the complete five-verb reference; production still follows capital unlocks.
-            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
-            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
-            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            // The live debug player starts with only the two innate verbs. Own the three tools
+            // that grant the rest, so the assembly audit shows the complete five-verb reference.
+            fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             const demo = try stage.div("actions_demo");
             _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
             _ = try t.actions_section(demo, world, a[0], "actions");
@@ -279,11 +276,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "act_one_surface")) {
         if (player.get()) |a| {
             // One interactive composition only: both authored sections switch beneath the same
-            // nav and context strips. Debug grants the canonical unlocks/materials without
-            // changing production progression.
-            if (!world.has(a[0], comp.ActionChopWood)) world.add(a[0], comp.ActionChopWood{});
-            if (!world.has(a[0], comp.ActionFish)) world.add(a[0], comp.ActionFish{});
-            if (!world.has(a[0], comp.ActionCheckTraps)) world.add(a[0], comp.ActionCheckTraps{});
+            // nav and context strips. Debug owns the three unlocking tools and stocks materials.
+            fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
             const demo = try stage.div("surface_demo");
             _ = demo.with_size(.{ .fixed = 652 }, .fit_children);
