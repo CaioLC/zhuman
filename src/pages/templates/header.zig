@@ -13,6 +13,8 @@ const run_mod = @import("./runline.zig");
 
 pub const Options = struct {
     stocks: []const stock_mod.Stock,
+    /// The long-line stockline form: Act II's nine stocks rest at the compact size.
+    compact_stocks: bool = false,
     run: run_mod.Run,
 };
 
@@ -30,7 +32,7 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     _ = root.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
 
-    const stocks = try stock_mod.stockline(root, "stocks", options.stocks);
+    const stocks = try stock_mod.stockline(root, "stocks", options.stocks, options.compact_stocks);
     const run = try run_mod.runline(root, "run", options.run);
 
     return .{ .el = root, .stocks = stocks, .run = run };

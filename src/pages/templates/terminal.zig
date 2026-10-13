@@ -17,7 +17,7 @@
 //! **`shell`** extends this into the one region skeleton every screen composes into:
 //! a screen passes a `ShellOptions` descriptor (act identity, responsive padding, and which
 //! optional regions it wants) and gets a `Regions` struct of `El` handles — always `header`
-//! and `body`, plus optional `rail`/`nav`/`market`/`activity`/`footer` — laid out in the
+//! and `body`, plus optional `rail`/`market`/`activity`/`footer` — laid out in the
 //! prototype's arrangement, so no screen hand-builds that graph. Overlay roots stay the
 //! screen's own top-layer roots, outside the clipped terminal box.
 
@@ -93,7 +93,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 // composes into**, so a screen supplies *descriptors* — which regions it wants and its
 // responsive padding — instead of hand-building the header/page-grid/rail/main/footer graph.
 // One shell serves Act I and Act II: the always-present regions (`header`, `body`) plus the
-// optional ones (`rail`, `nav`, `market`, `activity`, `footer`) are created only when the
+// optional ones (`rail`, `market`, `activity`, `footer`) are created only when the
 // descriptor asks, laid out in the prototype's arrangement:
 //
 //     ┌ content box (page padding, column, section gap) ──────────────┐
@@ -103,9 +103,11 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 //     │ ┌ page grid (row, grows) ─────────────────────────────────┐  │
 //     │ │ rail (optional)  │  body (main surface, grows)           │  │
 //     │ └──────────────────────────────────────────────────────────┘ │
-//     │ nav               (optional: tab/view navigation)            │
 //     │ footer            (optional: EventLog, bottom-anchored)       │
 //     └───────────────────────────────────────────────────────────────┘
+//
+// A tab strip is never a shell region: it is the first row of the surface it switches, in
+// both acts (`view_nav`).
 //
 // **Overlay roots** (tooltip, modal) are deliberately *not* children of the terminal box —
 // they are their own top-layer roots the screen stamps after the shell so they float above
@@ -114,7 +116,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 // inside the terminal box escapes it) while overlays still layer correctly.
 
 /// What a screen asks the shell to compose. `act` is carried for descriptor-driven region
-/// content (which strips/nav a given act shows) and to key the shell; the booleans turn the
+/// content (which strips a given act shows) and to key the shell; the booleans turn the
 /// optional regions on. `page_pad`/`section_gap` are the screen's responsive choice
 /// so the shell does not re-derive the width class.
 pub const ShellOptions = struct {
@@ -125,7 +127,6 @@ pub const ShellOptions = struct {
     page_pad: f32,
     section_gap: f32,
     rail: bool = false,
-    nav: bool = false,
     market: bool = false,
     activity: bool = false,
     footer: bool = false,
@@ -146,8 +147,6 @@ pub const Regions = struct {
     body: El,
     /// The side rail (Holdings/BODY), present iff `opts.rail`.
     rail: ?El = null,
-    /// The tab/view navigation region, present iff `opts.nav`.
-    nav: ?El = null,
     /// The optional market strip, present iff `opts.market`.
     market: ?El = null,
     /// The optional activity strip, present iff `opts.activity`.
@@ -239,12 +238,6 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     const body = try grid.div("shell_body");
     _ = body.with_size(.grow, .{ .pct_of_parent = 1.0 });
 
-    const nav = if (opts.nav) blk: {
-        const n = try grid_band.div("shell_nav");
-        _ = n.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-        break :blk n;
-    } else null;
-
     // Footer: reserve its complete 86px frame plus bottom page margin in normal flow. The
     // previous absolute child did not subtract itself from the growing grid, allowing workspace
     // content to run underneath the log. The returned handle is the frame's 80px content lane;
@@ -277,7 +270,6 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .header = header,
         .body = body,
         .rail = rail,
-        .nav = nav,
         .market = market,
         .activity = activity,
         .footer = footer,

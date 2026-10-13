@@ -172,7 +172,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             .{ .abbrev = "Fo", .full = "Food", .value = "4", .tone = .danger },
             .{ .abbrev = "Ma", .full = "Materials", .value = "24" },
         };
-        _ = try t.stockline(stage, "sl", &stocks);
+        _ = try t.stockline(stage, "sl", &stocks, false);
     } else if (eq(name, "runline")) {
         _ = try t.runline(stage, "run", .{ .act_label = "Act I", .day = 3 });
     } else if (eq(name, "header")) {
@@ -192,7 +192,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "tabs")) {
         _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "view_nav")) {
-        _ = try t.view_nav(stage, "vn", &.{ "ACTIONS", "BUILD" });
+        _ = try t.view_nav(stage, "vn", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "select")) {
         _ = try t.select(stage, "sel", "Sort", &.{ "reach", "inputs", "time", "name" }, true, null);
     } else if (eq(name, "slider")) {

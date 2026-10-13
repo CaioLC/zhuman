@@ -17,8 +17,9 @@
 //!     restores exactly where it was when the player returns to it (`src/ui_client/README.md`,
 //!     "Who owns a template's state").
 //!
-//! It renders into the shell's `regions.nav`. The caller reads `active` and builds that
-//! one view into the body. The strip chrome, roving focus, selection persistence, and
+//! It renders into the nav row that heads the surface it switches — a tab strip is never a
+//! shell region (`act_one_surface`, the Act II page). The caller reads `active` and builds that
+//! one view below it. The strip chrome, roving focus, selection persistence, and
 //! accessibility group all come from `tabs` unchanged — this adds the view contract and a
 //! single place to document it.
 
@@ -32,9 +33,11 @@ const tabs = @import("./tabs.zig");
 /// The nav result: the active view index (the caller builds that view) and the strip `El`.
 pub const ViewNav = struct { active: usize, el: El };
 
-/// Render the shared view-switching tablist into `nav_parent` (typically the shell's
-/// `regions.nav`). Returns the active index; the caller builds that view into the body.
-pub fn view_nav(nav_parent: El, id: []const u8, labels: []const []const u8) !ViewNav {
-    const t = try tabs.tabs(nav_parent, id, labels, null);
+/// Render the shared view-switching tablist into `nav_parent`, the surface's nav row. `active`
+/// is the selection when the caller keeps it on an always-built node — to open on a given view,
+/// or to hold it across a rebuilt strip; null means the strip keeps its own. Returns the active
+/// index; the caller builds that view below.
+pub fn view_nav(nav_parent: El, id: []const u8, labels: []const []const u8, active: ?*usize) !ViewNav {
+    const t = try tabs.tabs(nav_parent, id, labels, active);
     return .{ .active = t.active, .el = t.el };
 }

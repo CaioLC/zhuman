@@ -10,6 +10,10 @@
 //! with `warn` and `danger` tones available for condition/scarcity states, so the number reads
 //! louder than its label and severity reads in the color.
 //!
+//! A **compact** stockline — Act II's nine stocks — sets every token at 10px with 4px gaps, and
+//! the hovered or focused token returns to the full heading size, so the long line fits beside
+//! the runline and the one being read stays legible (the prototype's `.stockline.compact`).
+//!
 //! The **stockline** is a row of tokens separated by dim `|` dividers; its **order and
 //! membership come from the act descriptor** the caller passes (`&.[_]Stock{...}`), so Act I
 //! (Vigor/Food/Materials) and Act II (its sectors) list their own tokens without the template
@@ -28,6 +32,10 @@ const Color = uic.Color;
 
 /// Semantic tone for the numeric value. Labels remain dim in every state.
 pub const Tone = enum { normal, warn, danger };
+
+/// A compact line's resting type size and token gap, logical px.
+const compact_font: f32 = 10;
+const compact_gap: f32 = 4;
 
 /// One stock token's authored data — the act descriptor's row. `abbrev` is the two-letter
 /// short form, `full` the hover/focus label, `value` the already-formatted readout, and `tone`
@@ -51,11 +59,12 @@ fn valueColor(th: uic.Theme, tone: Tone) Color {
 /// swapping to the full label while hovered/focused so only it grows. Its tone applies only to
 /// the value, leaving the label dim. The token is a focusable readout rather than a control.
 pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
-    try stock_token_in(try parent.div(id), s);
+    try stock_token_in(try parent.div(id), s, false);
 }
 
 /// Fill `box` as a stock token. `stockline` hands it an `item`, so a loop needs no ids.
-fn stock_token_in(box: El, s: Stock) !void {
+/// `compact` rests the token at the compact size until it is hovered or focused.
+fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     const th = box.ctx.res.view.theme;
     // A focusable readout, not a control: the full label is its accessible name and the
     // formatted value its spoken value; hovering it is not an affordance, so no pointer cursor.
@@ -72,29 +81,33 @@ fn stock_token_in(box: El, s: Stock) !void {
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
     const label_txt = std.fmt.bufPrint(&buf, "{s}:", .{label}) catch label;
+    const size: Style = if (compact and !reveal) .{ .font = compact_font } else .{};
     const lbl = (try box.text("l", label_txt))
-        .with_style(.{ style.heading, Style{ .text = th.dim } });
+        .with_style(.{ style.heading, size, Style{ .text = th.dim } });
     const val = (try box.text("v", s.value))
-        .with_style(.{ style.heading, Style{ .text = valueColor(th, s.tone) } });
+        .with_style(.{ style.heading, size, Style{ .text = valueColor(th, s.tone) } });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like resource_bar
     _ = lbl;
 }
 
-/// The `i`-th dim `|` divider between tokens (heading size, matching the token baseline).
-fn sep(parent: El, i: usize) !void {
+/// The `i`-th dim `|` divider between tokens (the tokens' resting size, matching their baseline).
+fn sep(parent: El, i: usize, compact: bool) !void {
     const slot = try parent.item("sep", i);
+    const size: Style = if (compact) .{ .font = compact_font } else .{};
     _ = (try slot.text("t", "|"))
-        .with_style(.{ style.heading, Style{ .text = parent.ctx.res.view.theme.dim } });
+        .with_style(.{ style.heading, size, Style{ .text = parent.ctx.res.view.theme.dim } });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
-/// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice.
-pub fn stockline(parent: El, id: []const u8, stocks: []const Stock) !El {
+/// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice;
+/// `compact` is the long-line form (see the module doc).
+pub fn stockline(parent: El, id: []const u8, stocks: []const Stock, compact: bool) !El {
     const bar = try parent.div(id);
-    _ = bar.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.stack);
+    _ = bar.with_flow(.{ .dir = .row, .cross = .center })
+        .with_gap(if (compact) compact_gap else ha.tokens.gap.stack);
     for (stocks, 0..) |s, i| {
-        if (i > 0) try sep(bar, i);
-        try stock_token_in(try bar.item("tok", i), s);
+        if (i > 0) try sep(bar, i, compact);
+        try stock_token_in(try bar.item("tok", i), s, compact);
     }
     return bar;
 }

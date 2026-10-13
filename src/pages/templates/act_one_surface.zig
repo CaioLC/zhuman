@@ -58,7 +58,7 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
 
     const nav = try surface.div("nav");
     _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
-    const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD" });
+    const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     _ = tabs.el.with_layout(.bottom_left);
 
     _ = try surface.spacer("nav_gap", 1, nav_to_market);

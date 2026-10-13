@@ -1,11 +1,12 @@
 //! `scroll_view` — the one scroll component: a clipped viewport over a column the caller
 //! appends rows to, with a wheel-scrolled, thumb-dragged offset persisted in `ScrollState`.
-//! The viewport is a fixed `height` high and either a fixed `width` wide or, at 0, as wide as
-//! its parent.
+//! The viewport is either a fixed `height` high or, at 0, as high as its parent, whose height
+//! must then be definite; and either a fixed `width` wide or, at 0, as wide as its parent.
 //!
 //! The clamp needs the content height, but this frame's rows are not laid out yet, so the
 //! content box reads its own prior-frame rect — a pass-through geometry probe, `track`ed so
-//! its rect is stamped for next frame. One frame stale, invisible at 60fps. Every quantity is
+//! its rect is stamped for next frame. A parent-high viewport reads its own height the same
+//! way. One frame stale, invisible at 60fps. Every quantity is
 //! in device px: the stamped rect is device px, so the authored heights are scaled once here.
 //! The thumb captures primary input and keeps dragging outside its narrow track,
 //! with grab/grabbing cursors. This component is an approved reader of prior-frame geometry.
@@ -35,8 +36,10 @@ pub const content_gap: f32 = 4.0;
 pub const Options = struct {
     /// Viewport width in logical px; `0` fills the parent's width.
     width: f32 = 0,
-    /// Viewport height in logical px.
+    /// Viewport height in logical px; `0` fills the parent's height.
     height: f32,
+    /// Draw the viewport's hairline frame. A catalog region inside a surface goes without.
+    framed: bool = true,
 };
 
 pub const ScrollView = struct {
@@ -56,19 +59,21 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     const scale = ctx.res.view.scale;
 
     const fill = opts.width <= 0;
+    const fill_h = opts.height <= 0;
     const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .row });
-    _ = if (fill)
-        outer.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = opts.height })
-    else
-        outer.with_size(.fit_children, .fit_children);
+    _ = outer.with_size(
+        if (fill) .{ .pct_of_parent = 1.0 } else .fit_children,
+        if (fill_h) .{ .pct_of_parent = 1.0 } else if (fill) .{ .fixed = opts.height } else .fit_children,
+    );
 
     const viewport = try outer.div("viewport");
-    _ = viewport.with_overflow(.clip).with_style(.{Style{ .outline_color = th.line2 }});
-    _ = if (fill)
-        viewport.with_size(.grow, .{ .pct_of_parent = 1.0 })
-    else
-        viewport.with_size(.{ .fixed = opts.width }, .{ .fixed = opts.height });
+    _ = viewport.with_overflow(.clip);
+    if (opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.line2 }});
+    _ = viewport.with_size(
+        if (fill) .grow else .{ .fixed = opts.width },
+        if (fill or fill_h) .{ .pct_of_parent = 1.0 } else .{ .fixed = opts.height },
+    );
 
     const content = try viewport.div("content");
     _ = content.with_flow(.{ .dir = .column }).with_gap(content_gap);
@@ -79,8 +84,13 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
 
     const st = state orelse outer.state(ScrollState);
 
-    const view_h = uic.view.dp(opts.height, scale);
-    const max_offset = @max(0.0, content_h - view_h);
+    // A parent-high viewport knows its height only from the prior frame; until then it does
+    // not scroll.
+    const view_h = if (fill_h)
+        (if (viewport.get().rect(ctx)) |r| r.h else 0)
+    else
+        uic.view.dp(opts.height, scale);
+    const max_offset = if (view_h <= 0) 0 else @max(0.0, content_h - view_h);
     if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0) {
         st.offset -= ctx.res.input.pointer.wheel.y * uic.view.dp(scroll_speed, scale); // wheel up ⇒ toward the top
     }

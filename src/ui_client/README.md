@@ -425,11 +425,12 @@ the single region skeleton every screen composes into, built on top of `terminal
 is unchanged). A screen passes a `ShellOptions` descriptor (its `act` identity, responsive
 `page_pad`/`section_gap`, and which optional regions it wants) and gets back a `Regions` struct
 of `El` handles to fill: always `header` (thin top strip) and `body` (the growing main
-surface), plus optional `rail`, `nav`, `market`, `activity`, and a bottom-anchored `footer` —
+surface), plus optional `rail`, `market`, `activity`, and a bottom-anchored `footer` —
 each `null` unless requested. The interior is laid out in the prototype's arrangement (header ·
-optional strips · a grid row of `rail | body` · optional nav · footer), so a screen never
-hand-builds that graph again — Act I turns on `rail`, `market`, `activity` and `footer` and
-places its tab strip inside its own surface; Act II adds `nav` against the same skeleton. **Overlay roots (tooltip/modal) stay the screen's own top-layer
+optional strips · a grid row of `rail | body` · footer), so a screen never hand-builds that
+graph again — Act I turns on `footer` and composes HOLDINGS, its strips and its tabs inside its
+own workspace; Act II turns on `rail` and `footer`. A tab strip is never a shell region: in
+both acts it is the first row of the surface it switches. **Overlay roots (tooltip/modal) stay the screen's own top-layer
 roots**, deliberately *not* children of the terminal box, so they float above the clip and can
 cover any control; the shell owns only the in-terminal regions. `play_game`/`gameover`/
 `act_one_end` all build through `shell` now.
