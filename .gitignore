@@ -3,3 +3,6 @@
 
 # Per-developer Claude Code overrides (permissions, local env).
 .claude/settings.local.json
+
+# Kiro CLI working directory
+.kiro/
