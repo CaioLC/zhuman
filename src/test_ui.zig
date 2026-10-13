@@ -25,6 +25,8 @@ const elements = @import("./ui_client/elements.zig");
 const input = @import("./ui_client/input.zig");
 const activation = @import("./ui_client/activation.zig");
 const command = @import("./ui_client/command.zig");
+const replay = @import("./ui_client/replay.zig");
+const journey = @import("./ui_client/journey.zig");
 const cursor = @import("./ui_client/cursor.zig");
 const drag = @import("./ui_client/drag.zig");
 const editor = @import("./ui_client/editor.zig");
@@ -42,6 +44,8 @@ test {
     _ = input; // host frame-input model + deterministic edge/state tests
     _ = activation; // release activation, drag/cancel suppression, and one-shot tests
     _ = command; // semantic key mapping and prior-build command-owner registry
+    _ = replay; // SDL-free scripted-input driver: pointer/key/text/wheel event-stage replay tests
+    _ = journey; // keyboard-only Act I/II interaction journeys over the replay driver (QA-14/15)
     _ = cursor; // cursor request lifecycle and SDL system-shape mappings
     _ = drag; // strict threshold and capture-backed scrollbar drag tests
     _ = editor; // authoritative single-line editor model: UTF-8/selection/refusal tests

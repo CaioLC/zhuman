@@ -168,6 +168,22 @@ pointer hit, so it never intercepts input to the control it describes; `clampToT
 it inside the terminal rect. `text_input` remains backed by the authoritative `editor.zig`
 `LineEditor` model.
 
+## Scripted input replay and keyboard journeys (`replay.zig`, `journey.zig`)
+
+Everything above the SDL event poll is pure: `PointerActivation`, `command.fromKeyEvent`, and the
+engine's `markTarget`/`markKey`/`moveFocus` family are value transforms over the slot and focus
+pools, not SDL calls. `replay.zig` lifts that lower half of `main.zig`'s event loop into one
+reusable, SDL-free driver — `Driver.feed` takes a scripted pointer/key/text/wheel `Event`, updates
+the `Input` model, and runs the same activation + command + event-stage order the game does — so an
+interaction state machine is regression-tested by stamping the slots it probes, scripting input, and
+reading interaction flags back. Clipboard-bound editor commands are recognized but not executed (no
+window); pixel rendering stays out. `journey.zig` builds keyboard-only Act I/II journeys (QA-14/15)
+on top: its `Scene` runs the build→`endFrame`→event-stage cadence so focus traversal always reads a
+completed frame's registered order, and the journeys assert Tab/Shift+Tab, roving arrows, Enter
+activation, Escape dismissal, the `/` search shortcut, and range-owner arrows reach every control
+without a pointer. Both live in `test-ui`; the matching rendered screens are seeded by the
+deterministic fixtures in `pages/fixture.zig` for the screenshot/eyeball pass.
+
 ## Visual interaction state ownership
 
 The host vocabulary separates pointer facts from semantic facts. Main republishes `held`

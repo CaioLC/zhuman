@@ -70,6 +70,23 @@ pub const Command = command.Command;
 pub const CommandRegistry = command.Registry;
 pub const commandFromKeyEvent = command.fromKeyEvent;
 
+// Scripted synthetic-input driver: the SDL-free lower half of the event loop
+// (pointer activation + semantic commands + the engine's `mark*` event stage), lifted into one
+// reusable harness so interaction state machines can be regression-tested and deterministic
+// fixtures can script gestures without SDL polling. See `replay.zig`.
+pub const replay = @import("./replay.zig");
+pub const ReplayDriver = replay.Driver;
+pub const ReplayEvent = replay.Event;
+pub const ReplayCommandOutcome = replay.CommandOutcome;
+
+// Keyboard-only interaction journeys (QA-14/15): multi-frame keyboard scripts over a
+// representative stamped control set, built on the replay driver, asserting focus traversal,
+// activation, roving movement, and dismissal reach every control without a pointer. See
+// `journey.zig`.
+pub const journey = @import("./journey.zig");
+pub const JourneyScene = journey.Scene;
+pub const JourneyControl = journey.Control;
+
 // Host-side semantic model (the platform bridge's source). All host-side;
 // the generic engine never sees it. See `semantics.zig`.
 pub const semantic = semantics;
@@ -176,6 +193,8 @@ test {
     _ = cursor;
     _ = drag;
     _ = command;
+    _ = @import("./replay.zig");
+    _ = @import("./journey.zig");
     _ = semantics;
     _ = a11y;
     _ = motion;
