@@ -1,5 +1,5 @@
 /// The live Act-I page while the actor is alive: header and run context, the complete
-/// HOLDINGS/ACTIONS/BUILD workspace, the event log, and an optional trade overlay.
+/// HOLDINGS/ACTIONS/BUILD/GENERATORS workspace, the event log, and an optional trade overlay.
 const std = @import("std");
 // general lib ECS
 const ha = @import("ha");
@@ -20,7 +20,7 @@ const t = @import("./templates/root.zig");
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // The reviewed Act-I composition is the normal live page from the first frame. `shell`
     // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
-    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
+    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD/GENERATORS surface.
     const compact = ctx.res.view.metrics.width_class.atMost(.w560);
     const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
     const regions = try t.shell(ctx, .{
@@ -85,6 +85,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         } else "ready";
 
         const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
+            .market_available = ctx.res.sim.encounter.dealable(),
             .activity = .{
                 .state = act_state,
                 .subject = activity_subject,
@@ -93,8 +94,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
             },
         });
 
-        // The nested surface returns its borderless TRADE link; encounter eligibility and modal
-        // state remain page responsibilities rather than presentation concerns.
+        // The nested surface returns the phase-aware Passerby strip control; encounter eligibility
+        // and modal state remain page responsibilities rather than presentation concerns.
         trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
         if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
             trade_ts.?.open = true;
@@ -148,8 +149,8 @@ fn wareLabel(w: Ware) []const u8 {
     return switch (w) {
         .food => "food",
         .materials => "materials",
-        .fish_hook => "a fishing net",
-        .whetstone => "a hand axe",
+        .fish_hook => "a fishing rod",
+        .whetstone => "a hatchet",
     };
 }
 
@@ -172,8 +173,8 @@ fn wareTradeName(w: Ware) []const u8 {
     return switch (w) {
         .food => "Preserved food",
         .materials => "Materials",
-        .fish_hook => "Fishing net",
-        .whetstone => "Hand axe",
+        .fish_hook => "Fishing rod",
+        .whetstone => "Hatchet",
     };
 }
 
@@ -181,8 +182,8 @@ fn wareTradeDetail(w: Ware) []const u8 {
     return switch (w) {
         .food => "provisions \u{00b7} keeps well",
         .materials => "useful stock",
-        .fish_hook => "better Fish tool",
-        .whetstone => "better wood tool",
+        .fish_hook => "unlocks Fish",
+        .whetstone => "unlocks Split wood",
     };
 }
 
@@ -297,8 +298,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     var holding_views = std.ArrayList(t.TradeHolding).empty;
     try holding_views.append(ctx.arena, .{ .label = "Food", .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
     try holding_views.append(ctx.arena, .{ .label = "Materials", .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
-    // The goods a passerby's deal turns on: the two tools it trades and the two it compares.
-    for ([_][]const u8{ "sandals", "hatchet", "fish_net", "hand_axe" }) |gid| {
+    // The manufactured unlockers the passerby's deal turns on, plus one common crude holding.
+    for ([_][]const u8{ "sandals", "hatchet", "fish_rod" }) |gid| {
         const gi = cat.goodIndex(gid) orelse continue;
         const owned: u32 = if (goods) |g| g.count[gi] else 0;
         if (owned > 0) {

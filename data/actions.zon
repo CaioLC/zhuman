@@ -12,7 +12,7 @@
         .innate = true,
         .requires = .{ .energy = 1.7, .hours = 4.0 },
         .output = .{
-            .{ .item = "food", .n = 2.0, .kind = .normal },
+            .{ .item = "food", .n = 1.8, .kind = .normal },
         },
     },
     // Scavenge: pick through the derelict edge of town. The day-one materials verb —
@@ -24,8 +24,8 @@
         .innate = true,
         .requires = .{ .energy = 2.0, .hours = 5.0 },
         .output = .{
-            .{ .item = "food", .n = 0.5, .kind = .exponential },
-            .{ .item = "materials", .n = 3.0, .kind = .exponential },
+            .{ .item = "food", .n = 0.3, .kind = .exponential },
+            .{ .item = "materials", .n = 2.5, .kind = .exponential },
         },
     },
     // Split wood: unlocked by the hatchet — you cannot split logs bare-handed. Steady
@@ -33,7 +33,7 @@
     .{
         .id = "chop_wood",
         .name = "Split wood",
-        .requires = .{ .energy = 2.5, .hours = 5.0 },
+        .requires = .{ .energy = 5.0, .hours = 5.0 },
         .output = .{
             .{ .item = "materials", .n = 5.0, .kind = .uniform },
         },
@@ -48,12 +48,12 @@
             .{ .item = "food", .n = 3.0, .kind = .poisson },
         },
     },
-    // Check traps: unlocked by wire snares. The first stock-consuming verb — the bait is
-    // materials — converting m→f cheaply in both energy and hours; a bad draw eats the bait
-    // anyway. Poisson: trap luck is lumpy.
+    // Check traps is resolved by Wire snares on the GENERATORS surface. It remains a roster
+    // record for vocabulary/history but is not held or shown as body-occupying labor.
     .{
         .id = "check_traps",
         .name = "Check traps",
+        .on_surface = false,
         .requires = .{ .energy = 1.0, .hours = 2.0 },
         .input = .{
             .{ .item = "materials", .n = 1.0 },
@@ -62,13 +62,11 @@
             .{ .item = "food", .n = 3.0, .kind = .poisson },
         },
     },
-    // Hunt: unlocked by the air rifle. The best food-per-energy in Act One, priced in the two
-    // currencies that bite: deep vigor and a whole working day — plus ammo. Defined, grantable,
-    // and off the Act I ACTIONS surface, which is exactly five verbs.
+    // Hunt: unlocked by the crude spear. It joins the Act I ACTIONS surface as soon as the
+    // player owns one; before that the grant gate keeps the tile absent.
     .{
         .id = "hunt",
         .name = "Hunt",
-        .on_surface = false,
         .requires = .{ .energy = 4.0, .hours = 8.0 },
         .input = .{
             .{ .item = "materials", .n = 1.0 },

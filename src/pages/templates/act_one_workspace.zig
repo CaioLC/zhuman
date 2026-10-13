@@ -1,5 +1,5 @@
 //! `act_one_workspace` — the complete Act I page-grid composition: a persistent, collapsible
-//! HOLDINGS rail beside the reusable tabbed action/build surface. The rail owns its collapse
+//! tabbed ACTIONS/BUILD/GENERATORS surface. The rail owns its collapse
 //! memory and width tween; this outer composition synchronizes the inter-column gap with the
 //! same 120ms policy (22px expanded, 12px collapsed) and keeps one surface alive across both.
 

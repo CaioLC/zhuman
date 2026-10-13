@@ -5,16 +5,12 @@
 //! the one `query` parser. The axis belongs to the player: type to search, or sort by reach,
 //! inputs, or time.
 //!
-//! **What the blank list shows vs a search.** With no query the list answers *what can I act on
-//! now* — ready recipes plus everything with reach ≥ `0.5`, excluding what you already own, sorted
-//! by reach descending so the top is always the next thing. The moment you type, the question
-//! widens to *what does the catalog hold* — the search runs over **every non-locked** record,
-//! including owned and far-off ones, so the field is a way to find a specific recipe, not just to
-//! narrow the ready set. **Prerequisite-locked recipes stay absent** in both modes (a row you
-//! cannot even attempt is noise); a **build in progress is always visible and pinned to the top**
-//! (you need the way out). The summary always reads `{visible} of {authored total} recipes shown`,
-//! where the total is the **full authored catalog** count (every buildable good but the milestone),
-//! even though locked recipes contribute no row.
+//! **What the list shows.** Act I personal crafting is the crude tier. With no query the list
+//! shows every crude recipe for this act, including owned, unaffordable, and prerequisite-short
+//! rows; those rows stay visible and disabled instead of disappearing. Search only narrows that
+//! complete shelf. A **build in progress is always visible and pinned to the top** (you need the
+//! way out). The summary reports this crude shelf's authored total; the milestone remains outside
+//! it because it is the act goal rather than an ordinary recipe.
 //!
 //! **Build lifecycle:** starting a ready/owned row pays through `capital.begin`; the live
 //! `Busy` row renders its own progress/time and a cancel corner that calls
@@ -57,7 +53,7 @@ const act: u8 = 1;
 /// Whether a record is one of this act's recipes: buildable, of this act or earlier, and not
 /// the milestone (which is the goal, not a row).
 fn isRecipe(g: *const roster.Good) bool {
-    return g.buildable and g.milestone == null and g.act <= act;
+    return g.buildable and g.tier == .crude and g.milestone == null and g.act <= act;
 }
 
 /// This act's recipes. This is the **authored total** the summary reports against — a locked
@@ -124,7 +120,7 @@ fn stateWord(kind: Kind) []const u8 {
 
 /// The tier word a recipe answers `type:` with.
 pub fn tierWord(rec: *const roster.Good) []const u8 {
-    return if (rec.tier == .crude) "crude" else "made";
+    return if (rec.tier == .crude) "crude" else "manufactured";
 }
 
 /// The units in a build order, for the `inputs` sort.
@@ -181,18 +177,13 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, catalog_
             .state_word = stateWord(kind),
         };
 
-        // A build in progress is never filtered away — the corner is the way out.
+        // A build in progress is never filtered away — the corner is the way out. Otherwise
+        // the blank view is the complete crude shelf and a query only narrows it.
         const pinned = kind == .building;
-        // Prerequisite-locked recipes stay absent under every mode: a row you cannot even
-        // attempt is noise, not information.
-        const attemptable = kind != .blocked;
-
-        const keep = pinned or (attemptable and if (blank)
-            // Blank: ready plus reach ≥ 0.5, excluding what you already own.
-            ((kind == .ready or quote.reach >= 0.5) and kind != .owned)
+        const keep = pinned or if (blank)
+            true
         else
-            // A search runs over every non-locked record — owned and far-off included.
-            query.matches(&q, RecipeRow{ .e = &ent }));
+            query.matches(&q, RecipeRow{ .e = &ent });
 
         if (keep) {
             buf[n] = ent;

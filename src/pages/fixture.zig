@@ -44,11 +44,11 @@ pub const Encounter = enum { absent, present };
 /// One owned good for a fixture: a record id and how many.
 pub const Owned = struct { id: []const u8, n: u32 };
 
-/// Owning the hatchet, the fishing rod and the snares is what puts all five verbs on ACTIONS.
+/// Owning the hatchet, fishing rod and spear puts all five body-occupying verbs on ACTIONS.
 const five_verbs = [_]Owned{
     .{ .id = "hatchet", .n = 1 },
     .{ .id = "fish_rod", .n = 1 },
-    .{ .id = "wire_snares", .n = 1 },
+    .{ .id = "spear", .n = 1 },
 };
 
 /// A deterministic actor balance sheet. Each field seeds the matching component to an exact
@@ -114,10 +114,10 @@ pub const Settlement = struct {
 /// established that every Act II verb is open, thin stocks, and a granary going up.
 const settlement = Settlement{
     .researched = &.{
-        "spring_well",     "firepit",          "surface_ore",   "quarry_pit",
-        "well_cistern",    "smithy",           "stoneworks",    "loom_ropewalk",
-        "peat_works",      "smelting_hearth",  "pottery_works", "field_cultivation",
-        "iron_smelting",   "water_wheel",      "granary",       "irrigation_canals",
+        "spring_well",   "firepit",         "surface_ore",   "quarry_pit",
+        "well_cistern",  "smithy",          "stoneworks",    "loom_ropewalk",
+        "peat_works",    "smelting_hearth", "pottery_works", "field_cultivation",
+        "iron_smelting", "water_wheel",     "granary",       "irrigation_canals",
         "sanitation",
     },
     .stocks = &.{
@@ -167,6 +167,7 @@ pub const catalog = [_]Spec{
                 .{ .id = "leaf_bed", .n = 1 },
                 .{ .id = "fish_rod", .n = 1 },
                 .{ .id = "wire_snares", .n = 1 },
+                .{ .id = "spear", .n = 1 },
             },
         },
     },
@@ -325,7 +326,7 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     if (b.metabolism) |rate| {
         if (world.get(player, comp.Metabolism)) |met| met.rate = res.config.clampMetabolism(rate);
     }
-    
+
     // Set goods counts in the Goods component if catalog is loaded
     if (world.get(player, comp.Goods)) |goods| {
         // Only update Goods if catalog is loaded (may not be in tests)
@@ -336,7 +337,7 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
                     goods.count[gi] = pair.n;
                 }
             }
-            
+
             // Apply effects and shadow typed components
             ha.capital.settle(world, player, &res.catalog);
         }
@@ -411,7 +412,7 @@ fn seedRig(spec: Spec) !struct { res: Resources, world: World, player: Entity } 
     var diag: ha.roster.Diagnostics = .{};
     res.catalog = try ha.roster.load(testing.allocator, ha.roster.shipped, &diag);
     errdefer res.catalog.deinit();
-    
+
     var world = World.init();
     const player = spawn_player(&world);
     seed(&res, &world, player, spec);
@@ -473,7 +474,7 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     try testing.expect(vigor.max >= 15); // At least the fixture's max, possibly more from health bonuses
     try testing.expectApproxEqAbs(@as(f32, 11.6), rig.world.get(e, comp.InventoryFood).?.v, 1e-4);
     try testing.expectEqual(@as(f32, 31), rig.world.get(e, comp.InventoryMaterial).?.v);
-    
+
     // Check goods counts through Goods component
     const goods = rig.world.get(e, comp.Goods).?;
     const sandals_gi = rig.res.catalog.goodIndex("sandals").?;
@@ -484,10 +485,10 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     try testing.expectEqual(@as(u32, 2), goods.count[hatchet_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[root_cellar_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[leaf_bed_gi]);
-    
+
     // The owned tools grant the three verbs beyond the innate two.
     const cat = &rig.res.catalog;
-    for ([_][]const u8{ "chop_wood", "fish", "check_traps" }) |verb| {
+    for ([_][]const u8{ "chop_wood", "fish", "hunt" }) |verb| {
         try testing.expect(ha.effects.held(cat, goods, cat.actionIndex(verb).?));
     }
 }

@@ -79,8 +79,8 @@ pub const Schedule = struct {
     gap_days: f32 = 2.0,
     /// The heads-up before wares are dealable (approaching → present).
     approach_days: f32 = 0.25,
-    /// How long the passerby lingers with wares (present → departed).
-    linger_days: f32 = 1.0,
+    /// A generous two-day window to inspect and complete several exchanges.
+    linger_days: f32 = 2.0,
     /// The brief beat after leaving before the gap resets (departed → absent).
     depart_days: f32 = 0.15,
     /// A fresh satchel, per `Ware` (indexed by `@intFromEnum`): food, materials, fish_hook,

@@ -1,21 +1,21 @@
 // The capital goods — recipes for the BUILD shelf, plus the two tools only the passerby
 // carries. The grammar is described in `src/README.md` ("The authored roster"). `requires`
-// is the build price in body and time; `input` lines are the build order (`once`) or the
-// upkeep (`per = .day`); `output` lines with `per = .day` are a flow. What owning a good
-// does is its `effects`, from a fixed vocabulary; `family` + `rank` say which tool a better
-// one supersedes; `needs` names the verb a modifier works on. `copy` is the player's words.
+// is the build price in body and time; `input` lines are the build order (`once`) or cycle
+// upkeep (`per = .day`); day outputs are rates realized only on generator collection. What
+// owning a good does is its `effects`, from a fixed vocabulary; `family` + `rank` say which
+// tool a better one supersedes; `needs` names the verb a modifier works on. `copy` is the
+// player's words.
 //
-// Crude goods are what one person makes from scavenged scrap in half a day; manufactured
-// goods carry ×8 the materials and ×10 the hours — buildable, but priced past what one
-// body's time is worth, which is the argument for trading instead.
+// Crude goods are what one person can build in Act I. Manufactured unlockers are acquired
+// from the passerby instead; the remaining manufactured records stay catalogued for later
+// progression but never enter the Act I BUILD shelf. A generator's hours accumulate without
+// occupying the body; its low energy price and complete cycle settle only when collected.
 .{
-    // —— Unlockers: owning the tool is what makes the verb possible at all ——————————————
+    // —— Manufactured unlockers: passerby-only in Act I ———————————————————————————————
     .{
         .id = "fish_rod",
         .name = "Fishing rod",
-        .tier = .manufactured,
-        .requires = .{ .energy = 3.0, .hours = 120.0 },
-        .input = .{.{ .item = "materials", .n = 64.0 }},
+        .buildable = false,
         .family = .{ .name = "fishing", .rank = 1 },
         .effects = .{
             .{ .grant = "fish" },
@@ -29,9 +29,7 @@
     .{
         .id = "hatchet",
         .name = "Hatchet",
-        .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 100.0 },
-        .input = .{.{ .item = "materials", .n = 48.0 }},
+        .buildable = false,
         .family = .{ .name = "chopping", .rank = 1 },
         .effects = .{
             .{ .grant = "chop_wood" },
@@ -42,37 +40,42 @@
             .built = "You built a hatchet. You can split wood now.",
         },
     },
+    // Wire snares accumulate a trap round without occupying the body. Bait and yield are
+    // authored per cycle-day and settle together only when collected.
     .{
         .id = "wire_snares",
         .name = "Wire snares",
         .tier = .crude,
         .requires = .{ .energy = 2.0, .hours = 8.0 },
-        .input = .{.{ .item = "materials", .n = 5.0 }},
-        .effects = .{
-            .{ .grant = "check_traps" },
+        .generator = .{ .energy = 1.0, .hours = 24.0, .label = "Check traps" },
+        .input = .{
+            .{ .item = "materials", .n = 5.0 },
+            .{ .item = "materials", .n = 1.0, .per = .day },
+        },
+        .output = .{
+            .{ .item = "food", .n = 3.0, .kind = .poisson, .per = .day },
         },
         .copy = .{
-            .effect = "you can check traps",
-            .short = "can check traps",
-            .built = "You set wire snares. Check them for game.",
+            .effect = "readies game to collect",
+            .short = "traps game",
+            .built = "You set wire snares. They will ready game without occupying you.",
         },
     },
     .{
-        .id = "air_rifle",
-        .name = "Air rifle",
-        .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 160.0 },
-        .input = .{.{ .item = "materials", .n = 200.0 }},
+        .id = "spear",
+        .name = "Spear",
+        .tier = .crude,
+        .requires = .{ .energy = 5.0, .hours = 6.0 },
+        .input = .{.{ .item = "materials", .n = 10.0 }},
         .effects = .{
             .{ .grant = "hunt" },
         },
         .copy = .{
             .effect = "you can hunt",
             .short = "can hunt",
-            .built = "You assembled an air rifle. You can hunt now.",
+            .built = "A sharp, long stick. You can hunt now.",
         },
     },
-
     // —— Modifiers: a margin on a verb you already have ——————————————————————————————————
     .{
         .id = "sandals",
@@ -110,7 +113,7 @@
         .name = "Bicycle",
         .tier = .manufactured,
         .requires = .{ .energy = 2.0, .hours = 140.0 },
-        .input = .{.{ .item = "materials", .n = 120.0 }},
+        .input = .{.{ .item = "materials", .n = 280.0 }},
         .effects = .{
             .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.6 } },
             .{ .scale = .{ .target = "scavenge", .stat = .energy, .by = 0.6 } },
@@ -177,8 +180,8 @@
         .id = "leaf_bed",
         .name = "Leaf bed",
         .tier = .crude,
-        .requires = .{ .energy = 2.0, .hours = 10.0 },
-        .input = .{.{ .item = "materials", .n = 6.0 }},
+        .requires = .{ .energy = 4.0, .hours = 10.0 },
+        .input = .{.{ .item = "materials", .n = 8.0 }},
         .effects = .{
             .{ .vigor_ceiling = 1.0 },
         },
@@ -189,48 +192,48 @@
         },
     },
     .{
-        .id = "pantry",
-        .name = "Pantry",
-        .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 140.0 },
-        .input = .{.{ .item = "materials", .n = 112.0 }},
+        .id = "rope_bag",
+        .name = "Rope Bag",
+        .tier = .crude,
+        .requires = .{ .energy = 3.0, .hours = 8.0 },
+        .input = .{.{ .item = "materials", .n = 15.0 }},
         .effects = .{
-            .{ .vigor_ceiling = 2.0 },
+            .{ .vigor_ceiling = 1.0 },
         },
         .copy = .{
-            .effect = "+2 vigor ceiling",
-            .short = "vigor ceiling +2",
-            .built = "You built a pantry. You eat properly now.",
-        },
-    },
-    .{
-        .id = "medicine_chest",
-        .name = "Medicine chest",
-        .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 160.0 },
-        .input = .{.{ .item = "materials", .n = 160.0 }},
-        .effects = .{
-            .{ .vigor_ceiling = 2.0 },
-        },
-        .copy = .{
-            .effect = "+2 vigor ceiling",
-            .short = "vigor ceiling +2",
-            .built = "You stocked a medicine chest. You mend properly now.",
+            .effect = "+1 vigor ceiling",
+            .short = "vigor ceiling +1",
+            .built = "You have a simple bag. Carrying is easier now now.",
         },
     },
 
-    // —— Generators: capital that runs itself. Day lines are authored per in-game day ————
+    .{
+        .id = "medicinal_herb_bed",
+        .name = "Medicinal herb bed",
+        .tier = .crude,
+        .requires = .{ .energy = 3.0, .hours = 12.0 },
+        .input = .{.{ .item = "materials", .n = 10.0 }},
+        .generator = .{ .energy = 0.25, .hours = 48.0, .vigor = 1.5 },
+        .copy = .{
+            .effect = "readies a small vigor remedy",
+            .short = "grows remedies",
+            .built = "You planted medicinal herbs. A small remedy will mature every two days.",
+        },
+    },
+
+    // —— Generators: passive cycles collected by the player; day lines are rates —————————
     .{
         .id = "garden_bed",
         .name = "Garden bed",
         .tier = .crude,
-        .requires = .{ .energy = 4.0, .hours = 16.0 },
+        .requires = .{ .energy = 8.0, .hours = 16.0 },
+        .generator = .{ .energy = 0.5, .hours = 48.0 },
         .input = .{
-            .{ .item = "materials", .n = 12.0 },
+            .{ .item = "materials", .n = 8.0 },
             .{ .item = "materials", .n = 0.1, .per = .day },
         },
         .output = .{
-            .{ .item = "food", .n = 1.5, .kind = .uniform, .per = .day },
+            .{ .item = "food", .n = 0.5, .kind = .uniform, .per = .day },
         },
         .copy = .{
             .effect = "grows food on its own",
@@ -243,6 +246,7 @@
         .name = "Chicken coop",
         .tier = .manufactured,
         .requires = .{ .energy = 3.0, .hours = 200.0 },
+        .generator = .{ .energy = 0.5, .hours = 24.0 },
         .input = .{
             .{ .item = "materials", .n = 144.0 },
             .{ .item = "materials", .n = 0.3, .per = .day },
@@ -263,8 +267,8 @@
     .{
         .id = "shelter",
         .name = "Shelter",
-        .tier = .manufactured,
-        .requires = .{ .energy = 6.0, .hours = 144.0 },
+        .tier = .crude,
+        .requires = .{ .energy = 12.0, .hours = 144.0 },
         .input = .{.{ .item = "materials", .n = 60.0 }},
         .unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
         .capacity = 4,
@@ -372,9 +376,10 @@
         .act = 2,
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 7.0 },
+        .generator = .{ .energy = 0.5, .hours = 48.0 },
         // Act I's garden bed in biomass, number for number: the curtain converts 1:1.
         .input = .{
-            .{ .item = "biomass", .n = 12.0 },
+            .{ .item = "biomass", .n = 8.0 },
             .{ .item = "biomass", .n = 0.1, .per = .day },
         },
         .output = .{

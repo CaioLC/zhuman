@@ -48,9 +48,65 @@ pub const Platform = struct {
     }
 };
 
-/// This frame's timestep, written by the host loop before the systems run.
+/// This frame's two timesteps, written by the host loop before systems run. `real_dt` drives
+/// host concerns such as roster watching and UI motion; `dt` is real time multiplied by the
+/// selected simulation speed, or zero while paused.
 pub const Time = struct {
+    real_dt: f32 = 0,
     dt: f32 = 0,
+};
+
+/// Persistent host playback controls. They are not run state, so starting a fresh game keeps
+/// the player's selected speed. Only the reviewed 1×/2×/3× values are accepted.
+pub const Playback = struct {
+    speed: u8 = 1,
+    paused: bool = false,
+
+    pub fn setSpeed(self: *Playback, speed: u8) void {
+        self.speed = switch (speed) {
+            1, 2, 3 => speed,
+            else => 1,
+        };
+    }
+
+    pub fn togglePaused(self: *Playback) void {
+        self.paused = !self.paused;
+    }
+
+    pub fn multiplier(self: Playback) f32 {
+        return if (self.paused) 0 else @floatFromInt(self.speed);
+    }
+
+    pub fn simulationDelta(self: Playback, real_dt: f32) f32 {
+        return real_dt * self.multiplier();
+    }
+};
+
+/// Session-local menu lifecycle and host quit request. Opening the menu pauses simulation and
+/// remembers whether it was already paused; dismissing restores that prior state, while RESUME
+/// explicitly unpauses. These preferences are intentionally not written to disk.
+pub const MenuState = struct {
+    open: bool = false,
+    restore_paused: bool = false,
+    quit_requested: bool = false,
+
+    pub fn show(self: *MenuState, playback: *Playback) void {
+        if (self.open) return;
+        self.restore_paused = playback.paused;
+        self.open = true;
+        playback.paused = true;
+    }
+
+    pub fn dismiss(self: *MenuState, playback: *Playback) void {
+        self.open = false;
+        playback.paused = self.restore_paused;
+    }
+
+    pub fn resumeGame(self: *MenuState, playback: *Playback) void {
+        self.open = false;
+        playback.paused = false;
+        self.restore_paused = false;
+    }
 };
 
 /// Host frame input state, fed by the event loop and shared by UI/ECS consumers.
@@ -202,8 +258,9 @@ pub const View = struct {
 };
 
 /// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per
-/// writer: `platform` is set at init, `input`/`time` by the event loop, `sim` by the
-/// systems, `config` by nobody, `view` by `build_ui`.
+/// writer: `platform` is set at init, `input` and real/simulation `time` by the event loop,
+/// `playback` and the session-only `menu` by HUD/menu controls, `sim` by systems, `config` by
+/// nobody, and `view` by `build_ui`.
 pub const Resources = struct {
     platform: Platform,
     input: Input = .{},
@@ -237,6 +294,8 @@ pub const Resources = struct {
     /// non-allocating (POD), so it lives inline on `Resources`.
     tween: @import("./ui_client/tween.zig").Registry = .{},
     time: Time = .{},
+    playback: Playback = .{},
+    menu: MenuState = .{},
     sim: Sim,
     config: Config = .{},
     view: View = .{},

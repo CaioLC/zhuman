@@ -40,14 +40,13 @@ pub const Result = struct {
 };
 
 /// The roster id a tradeable tool `Ware` maps to, or null for the bulk resources (food /
-/// materials, which move on inventory rather than as a good). This is the seam between the
-/// generic transfer vocabulary and the authored goods — a fish hook is the fishing net, a
-/// whetstone the hand axe: the rank-2 tools `effects` lets supersede the built ones.
+/// materials, which move on inventory rather than as a good). The passerby's two tool slots
+/// carry the manufactured Act I unlockers: Fishing rod and Hatchet.
 pub fn goodOf(w: Ware) ?[]const u8 {
     return switch (w) {
         .food, .materials => null,
-        .fish_hook => "fish_net",
-        .whetstone => "hand_axe",
+        .fish_hook => "fish_rod",
+        .whetstone => "hatchet",
     };
 }
 
@@ -171,7 +170,7 @@ test "a buy moves both bundles atomically and decrements the satchel" {
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
 
-    // Buy a fish hook (the fishing net) for 2 food + 4 materials.
+    // Buy a fishing rod for 2 food + 4 materials.
     var q = Quote{
         .id = 1,
         .rev = 1,
@@ -185,14 +184,14 @@ test "a buy moves both bundles atomically and decrements the satchel" {
         .receive = market.Bundle.one(.fish_hook, 1),
     };
 
-    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     const r = resolve(&w, e, &res, &q);
     try testing.expect(r.ok());
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
     try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12-4
     // Receive side arrived + its effect (the fishing verb) applied once.
-    try testing.expect(capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expect(held(&w, e, &res, "fish"));
     // The satchel decremented.
     try testing.expectEqual(@as(u16, 0), res.sim.encounter.stockOf(.fish_hook));
@@ -205,7 +204,7 @@ test "a sell releases the good, credits materials, and passes it to the passerby
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
     // Own a hand axe to sell; its verb comes with it.
-    capital.acquire(&w, e, &res, res.catalog.goodIndex("hand_axe").?, 1);
+    capital.acquire(&w, e, &res, res.catalog.goodIndex("hatchet").?, 1);
     try testing.expect(held(&w, e, &res, "chop_wood"));
 
     var q = Quote{
@@ -221,7 +220,7 @@ test "a sell releases the good, credits materials, and passes it to the passerby
     try testing.expectApproxEqAbs(@as(f32, 5), r.materials_moved, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12+5
     // The good left and its verb with it (no lower rank owned, so the verb goes).
-    try testing.expect(!capital.owns(&w, e, &res.catalog, "hand_axe"));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "hatchet"));
     try testing.expect(!held(&w, e, &res, "chop_wood"));
     // The passerby now carries a whetstone, and the sale is the only line.
     try testing.expectEqual(@as(u16, 2), res.sim.encounter.stockOf(.whetstone)); // 1 + 1
@@ -250,20 +249,20 @@ test "every refusal path rolls back — nothing moves" {
     const before_mat = w.get(e, comp.InventoryMaterial).?.v;
     try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q).refusal);
     try testing.expectEqual(before_mat, w.get(e, comp.InventoryMaterial).?.v);
-    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
     // Affordable but stale (a different passerby now) → still nothing.
     q.give = market.Bundle.one(.materials, 2);
     res.sim.encounter.id = 2;
     try testing.expectEqual(market.Refusal.stale, resolve(&w, e, &res, &q).refusal);
-    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
 
     // Departed → nothing.
     res.sim.encounter.id = 1;
     res.sim.encounter.phase = .departed;
     try testing.expectEqual(market.Refusal.departed, resolve(&w, e, &res, &q).refusal);
-    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
+    try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count); // never logged a failed trade
 }
 

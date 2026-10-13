@@ -138,8 +138,8 @@ fn spawn_act_one_agent(w: *World, materials: f32) Entity {
         comp.Vigor{ .v = 8, .max = 10 },
         comp.InventoryFood{ .v = 7, .quality = 2, .spoils = 0.03 },
         comp.InventoryMaterial{ .v = materials },
-        comp.Goods{},     // Required for catalog ownership
-        comp.Granted{},   // Required for effects
+        comp.Goods{}, // Required for catalog ownership
+        comp.Granted{}, // Required for effects
     });
     return e;
 }
@@ -186,25 +186,14 @@ test "migration preserves built goods, their counts, and their granted effects" 
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_act_one_agent(&w, 0);
-    
+
     // Get catalog indices
     const fish_rod_gi = res.catalog.goodIndex("fish_rod").?;
     const fish_ai = res.catalog.actionIndex("fish").?;
-    
-    // Build a fish rod (it grants Fish), then stock a second as a spare so count==2: two build
-    // orders of materials.
-    const fish_rod_cost = res.catalog.goods[fish_rod_gi].input[0].n * 2;
-    w.get(e, comp.InventoryMaterial).?.v = fish_rod_cost;
-    
-    // Build using catalog index API
-    capital.begin(&w, e, &res, fish_rod_gi);
-    capital.finish(&w, e, &res, fish_rod_gi);
-    if (w.has(e, comp.Busy)) w.remove(e, comp.Busy);
-    
-    // Build second one
-    capital.begin(&w, e, &res, fish_rod_gi);
-    capital.finish(&w, e, &res, fish_rod_gi);
-    
+
+    // Acquire a passerby-only fishing rod and a spare through the ordinary ownership path.
+    capital.acquire(&w, e, &res, fish_rod_gi, 2);
+
     // Check counts in Goods component and effects.held
     const goods = w.get(e, comp.Goods).?;
     try std.testing.expectEqual(@as(u32, 2), goods.count[fish_rod_gi]);
@@ -268,8 +257,8 @@ test "an older save-version stamp is brought forward without re-converting a bal
     const e = w.spawn(.{
         comp.InventoryBiomass{ .v = 15 }, // already an Act II agent
         comp.Migrated{ .version = 0 }, // but stamped at a pre-release schema
-        comp.Goods{},     // Required for catalog
-        comp.Granted{},   // Required for effects
+        comp.Goods{}, // Required for catalog
+        comp.Granted{}, // Required for effects
     });
     // No InventoryMaterial exists; the version-boundary branch must bring the stamp forward
     // without touching the balance.
@@ -284,10 +273,10 @@ test "an agent lacking the Act I materials balance still migrates, carrying 0 bi
     var w = World.init();
     var cat = try test_catalog();
     defer cat.deinit();
-    const e = w.spawn(.{ 
+    const e = w.spawn(.{
         comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0.05 },
-        comp.Goods{},     // Required for catalog
-        comp.Granted{},   // Required for effects
+        comp.Goods{}, // Required for catalog
+        comp.Granted{}, // Required for effects
     });
     try std.testing.expect(migrate_to_act_two(&w, e, &cat));
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v);

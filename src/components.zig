@@ -37,6 +37,14 @@ pub const Goods = struct {
     count: [roster.max_goods]u32 = [_]u32{0} ** roster.max_goods,
 };
 
+/// Passive progress and on/off state for owned collectable generators, keyed by catalog good
+/// index. `off` defaults false so a newly acquired generator starts accumulating immediately;
+/// toggling off preserves `progress` and consumes nothing.
+pub const Generators = struct {
+    progress: [roster.max_goods]f32 = [_]f32{0} ** roster.max_goods,
+    off: [roster.max_goods]bool = [_]bool{false} ** roster.max_goods,
+};
+
 /// What the owned goods currently contribute to the body and the larder, so those
 /// contributions can be applied as relative deltas (`effects.apply`) and anything else that
 /// moves the ceiling composes underneath.

@@ -331,7 +331,7 @@ test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersede
     const with_hatchet = verbOf(&w, e, &cat, "chop_wood").?;
     own(&w, e, &cat, "hand_axe");
     const chop = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 2.5 * 0.7 * 0.75 * 0.3), chop.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 5.0 * 0.7 * 0.75 * 0.3), chop.requires.energy, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 5.0 * 1.4 * 2.5), chop.output.slice()[0].n, 1e-4);
     lose(&w, e, &cat, "hand_axe"); // back to the hatchet's rank, modifiers kept
     const again = verbOf(&w, e, &cat, "chop_wood").?;
@@ -373,11 +373,11 @@ test "the body and larder: ceilings fill on the way up and clamp on the way down
     const e = spawnAgent(&w);
     w.get(e, comp.Vigor).?.v = 8;
     own(&w, e, &cat, "leaf_bed"); // max 11, v 9
-    own(&w, e, &cat, "pantry"); // max 13, v 11
-    try testing.expectEqual(@as(f32, 13), w.get(e, comp.Vigor).?.max);
-    try testing.expectEqual(@as(f32, 11), w.get(e, comp.Vigor).?.v);
-    w.get(e, comp.Vigor).?.v = 13;
-    lose(&w, e, &cat, "pantry"); // max 11, v clamped to 11
+    own(&w, e, &cat, "rope_bag"); // max 12, v 10
+    try testing.expectEqual(@as(f32, 12), w.get(e, comp.Vigor).?.max);
+    try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v);
+    w.get(e, comp.Vigor).?.v = 12;
+    lose(&w, e, &cat, "rope_bag"); // max 11, v clamped to 11
     try testing.expectEqual(@as(f32, 11), w.get(e, comp.Vigor).?.v);
     lose(&w, e, &cat, "leaf_bed"); // max 10, v clamped to 10
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max);

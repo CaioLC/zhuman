@@ -61,8 +61,8 @@ pub const Resource = enum {
 };
 
 /// When a line settles. `once` is paid at begin (an input) or lands at completion (an
-/// output); `day` is authored per in-game day and settles every tick while the good is
-/// owned, all of a good's day lines together, affordable-or-nothing.
+/// output); `day` is an authored per-day rate on a generator and is realized as one complete,
+/// cycle-scaled amount when the player collects.
 pub const Cadence = enum { once, day };
 
 /// One quantity of one item — the only shape a cost, an upkeep, a yield, a satchel or a
@@ -129,6 +129,18 @@ pub const Lines = struct {
 pub const Price = struct {
     energy: f32,
     hours: f32,
+};
+
+/// A collectable generator's cycle. `hours` is passive accumulation time; `energy` is paid
+/// only when collecting and never occupies the actor. Day-cadence input/output lines remain
+/// rates and are multiplied by the cycle's fraction of a day. `vigor` is a fixed direct
+/// restoration for generators such as a medicinal herb bed.
+pub const Generator = struct {
+    energy: f32,
+    hours: f32,
+    vigor: f32 = 0,
+    /// Optional action label when collecting is a verb distinct from the owned good's name.
+    label: []const u8 = "",
 };
 
 /// What an effect tweaks on its target verb: the price, or one named input/output line.
@@ -226,8 +238,11 @@ pub const Good = struct {
     requires: ?Price = null,
     /// `once` lines are the build order; `day` lines are the upkeep.
     input: []const Line = &.{},
-    /// `once` lines are the product — absent means one of itself; `day` lines are a flow.
+    /// `once` lines are the product — absent means one of itself; `day` lines are the
+    /// generator's authored rate, realized only on collection.
     output: []const Line = &.{},
+    /// Passive cycle metadata. Null means this good is not shown on the GENERATORS surface.
+    generator: ?Generator = null,
     /// The verb (or tool) a modifier works on; must be held before the good is offered.
     needs: []const []const u8 = &.{},
     family: ?Family = null,
@@ -617,6 +632,9 @@ const Validator = struct {
             return self.fail(.goods, .buildable_shape, g.id, "a traded good has no price or tier");
         }
         if (g.requires) |p| try self.checkPrice(.goods, g.id, p);
+        if (g.generator) |gen| {
+            if (gen.energy < 0 or gen.hours <= 0 or gen.vigor < 0) return self.fail(.goods, .bad_number, g.id, "invalid generator cycle");
+        }
         for (g.input) |l| try self.checkLine(.goods, g.id, g.act, l, true);
         for (g.output) |l| {
             try self.checkLine(.goods, g.id, g.act, l, false);

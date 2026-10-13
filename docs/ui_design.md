@@ -122,13 +122,13 @@ scroll element and the same global scrollbar treatment; the current nine-recipe 
 naturally overflows it. The six-column heading remains sticky, while even broad 50-row queries leave
 search, Exchange and the event log fixed.
 
-**The log is part of ACTIONS and BUILD.** One four-line live event log occupies the terminal footer
+**The log is part of ACTIONS, BUILD, and GENERATORS.** One four-line live event log occupies the terminal footer
 on both panes and keeps its place while their result collections scroll. Lines read newest
 first, the newest stamped `NOW` and painted at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed itself keeps far more than four lines, and a history view is
 the only place it scrolls. STRUCTURE alone hides it to
-recover board height. Below 760 px the fixed-height workspace is released: ACTIONS and BUILD return
-to normal document scrolling, narrow BUILD drops lower-priority columns, and the log remains at the
+recover board height. Below 760 px the fixed-height workspace is released: ACTIONS, BUILD, and
+GENERATORS return to normal document scrolling, narrow BUILD drops lower-priority columns, and the log remains at the
 end of the document rather than creating nested touch scrollers.
 
 **The goal card ends the act but is not filtered with ordinary goods.** One milestone
@@ -147,6 +147,20 @@ days. Raising it pays those inputs, replaces the temporary passerby-descended me
 with a permanent Exchange, and opens Act III. A compact Exchange bar remains fixed below the
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
+
+## GENERATORS — collectable passive capital
+
+Act I's third work view lists only owned generators as the same compact, action-like tiles used
+for labor. A tile's underbar fills from authoritative simulation progress; while charging it is
+not collectable, at completion it changes to `ready — collect`, and collection pays the displayed
+small Vigor/upkeep price and realizes the complete cycle immediately. Collection never creates or
+interrupts `Busy`, so a trap round, food bed, or medicinal herb bed can be collected while the body
+is already working.
+
+Every generator carries an independent lower-left `ON`/`OFF` checkbox. Turning it off freezes its
+current progress and consumes nothing; turning it on resumes from that exact point. Garden bed and
+Wire snares realize their authored per-day resource rates over their cycle duration. Medicinal herb
+bed restores direct Vigor without raising its ceiling. No generator transfers resources every frame.
 
 ## HOLDINGS — the readout
 
@@ -169,6 +183,27 @@ appetite, and whether vigor is recovering, already full, starving, or stalled on
 feeds but does not restore. Both numbers come from the simulation's own arithmetic, never a
 copied constant.
 
+## Playback controls
+
+The compact `> / >> / >>>` selector sits on the HUD's right and represents 1×/2×/3×. It comes
+after the run context and immediately before the far-right `PAUSE / RESUME` toggle. Speed is an
+accessible single-selection group with descriptive rate names; pause is an accessible checked
+toggle. Both persist across tabs, while a fresh run always resumes at the previously selected speed.
+The multiplier applies only to simulation time: clock, spoilage, metabolism, work, passerby phases,
+and generator accumulation advance together. Pause skips that complete simulation stage without
+cancelling `Busy`, discarding generator progress, or changing the selected speed. Input, rendering,
+roster reload polling, and UI motion remain on real frame time, so controls, modal dismissal, and
+transitions stay responsive while paused or at faster game speeds.
+
+## Session menu
+
+`MENU` sits between speed and the far-right pause control. It opens a top-layer modal through the
+same focus trap, outside-click boundary, Escape dismissal, and opener restoration as trade. Opening
+temporarily pauses simulation and remembers whether it was already paused: Escape, ×, or an outside
+click restores that prior state, while `RESUME` explicitly unpauses. The menu exposes only speed,
+reduced motion, resume, and quit. Settings are session-only; raw tuning configuration and destructive
+run reset are absent until save persistence and confirmation have a product policy.
+
 ## The market strip and the trade dialog
 
 One strip and one dialog serve every counterparty the game will have; an identity map supplies
@@ -188,7 +223,8 @@ the control that opened it.
 
 In Act I the counterparty is the passerby, who arrives on the simulation's clock, lingers
 with a small satchel, and leaves; the strip reads that state and never infers it from the
-day count.
+day count. While absent the strip is dim and disabled and its `TRADE →` link is hidden. While
+present the link returns and opens the dialog.
 
 ## STRUCTURE — the board
 

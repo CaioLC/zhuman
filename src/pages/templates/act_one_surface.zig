@@ -1,5 +1,5 @@
 //! `act_one_surface` — the complete reusable right-hand Act I work surface from the authored
-//! references: ACTIONS/BUILD navigation, passerby and activity context strips, and exactly one
+//! references: ACTIONS/BUILD/GENERATORS navigation, passerby and activity context strips, and exactly one
 //! active section. The tab owns persistent selection; inactive BUILD controls retain their pooled
 //! catalog/editor state without remaining in the tree or focus order.
 
@@ -16,6 +16,7 @@ const view_nav_mod = @import("./view_nav.zig");
 const market_strip_mod = @import("./market_strip.zig");
 const actions_section_mod = @import("./actions_section.zig");
 const build_section_mod = @import("./build_section.zig");
+const generator_section_mod = @import("./generator_section.zig");
 
 const nav_height: f32 = 29;
 const nav_to_market: f32 = 12;
@@ -31,6 +32,7 @@ pub const Activity = struct {
 
 pub const Options = struct {
     market: market_strip_mod.MarketKind = .passerby,
+    market_available: bool = true,
     activity: Activity,
 };
 
@@ -40,8 +42,8 @@ pub const Result = struct {
     market_action: El,
 };
 
-/// Compose the tabbed Act I work surface. The returned market action is the strip's TRADE link;
-/// callers own encounter eligibility and modal lifecycle, while this template owns placement.
+/// Compose the tabbed Act I work surface. The returned market control is the stable trailing
+/// action node; callers own eligibility and modal lifecycle while the strip owns visibility.
 pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
     // The workspace owns the constant total width. This surface takes the entire growing
     // content lane, so collapsing HOLDINGS transfers every released pixel to the strips and
@@ -58,11 +60,11 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
 
     const nav = try surface.div("nav");
     _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
-    const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD" }, null);
+    const tabs = try view_nav_mod.view_nav(nav, "tabs", &.{ "ACTIONS", "BUILD", "GENERATORS" }, null);
     _ = tabs.el.with_layout(.bottom_left);
 
     _ = try surface.spacer("nav_gap", 1, nav_to_market);
-    const market_action = try market_strip_mod.market_strip(surface, "market", opts.market);
+    const market_action = try market_strip_mod.market_strip(surface, "market", opts.market, opts.market_available);
     _ = try surface.spacer("market_gap", 1, market_to_activity);
     _ = try market_strip_mod.activity_strip(
         surface,
@@ -74,10 +76,11 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     );
     _ = try surface.spacer("activity_gap", 1, activity_to_section);
 
-    if (tabs.active == 0) {
-        _ = try actions_section_mod.actions_section(surface, world, e, "actions_section");
-    } else {
-        _ = try build_section_mod.build_section(surface, world, e, "buildsection", catalog, surface);
+    switch (tabs.active) {
+        0 => _ = try actions_section_mod.actions_section(surface, world, e, "actions_section"),
+        1 => _ = try build_section_mod.build_section(surface, world, e, "buildsection", catalog, surface),
+        2 => _ = try generator_section_mod.generator_section(surface, world, e, "generator_section"),
+        else => unreachable,
     }
 
     return .{ .el = surface, .active = tabs.active, .market_action = market_action };

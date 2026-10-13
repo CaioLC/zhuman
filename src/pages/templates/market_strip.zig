@@ -64,7 +64,7 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
     return switch (kind) {
         .passerby => .{
             .signal = "\u{25CF} PASSERBY",
-            .copy = "Fishing net, hand axe, preserved food.",
+            .copy = "Fishing rod, hatchet, preserved food.",
             .action = "TRADE \u{2192}",
             .tone = .warn,
         },
@@ -83,13 +83,15 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
     };
 }
 
-/// Build the market strip for `kind`. Returns the borderless action-link `El` so the caller
-/// reads `.query().clicked` to open the deal (the strip owns presentation, the caller owns it).
-pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
+/// Build the market strip for `kind`. `available` controls whether it is interactive and whether
+/// its content is fully lit. The passerby's trailing action is hidden while absent and restored
+/// while dealable; permanent venues retain their action link.
+pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: bool) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const idn = marketIdentity(kind);
-    const signal_color = toneColor(ctx, idn.tone);
+    const signal_color = if (available) toneColor(ctx, idn.tone) else th.dim;
+    const copy_color = if (available) th.fg else th.dim;
 
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
     // line-2 edge. Padding is represented by in-flow lanes so percentage width remains the
@@ -121,18 +123,23 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind) !El {
     const copy_lane = try content.div("copy_lane");
     _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip);
     _ = (try copy_lane.text("copy", idn.copy))
-        .with_style(.{Style{ .font = market_font, .text = th.fg }});
+        .with_style(.{Style{ .font = market_font, .text = copy_color }});
 
-    _ = try content.spacer("gap_two", market_gap, 1);
+    const show_action = idn.action.len > 0 and (kind != .passerby or available);
+    if (show_action) _ = try content.spacer("gap_two", market_gap, 1);
 
-    // The prototype action is a zero-padding link, not a primary button. The text itself is
-    // the hit target; it rests dim and lifts to accent on hover/hold/focus.
+    // Keep the action node keyed and returned in every phase so its dialog state cannot jump
+    // between owners as the passerby arrives or leaves. Only its visible label and hit area
+    // appear during a dealable visit.
     const act = try content.div("act");
-    _ = act.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
-    const aq = act.control(.{ .name = idn.action, .role = .button });
-    const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
-    _ = (try act.text("label", idn.action))
-        .with_style(.{Style{ .font = market_font, .text = action_color }});
+    _ = act.with_size(if (show_action) .fit_children else .{ .fixed = 0 }, .fit_children)
+        .with_flow(.{ .dir = .row });
+    const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button });
+    if (show_action) {
+        const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
+        _ = (try act.text("label", idn.action))
+            .with_style(.{Style{ .font = market_font, .text = action_color }});
+    }
 
     _ = try content.spacer("tail", market_pad_x, 1);
     return act;
@@ -224,7 +231,7 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
 test "market identity map mirrors prototype signal copy action and tone" {
     const passerby = marketIdentity(.passerby);
     try std.testing.expectEqualStrings("\u{25CF} PASSERBY", passerby.signal);
-    try std.testing.expectEqualStrings("Fishing net, hand axe, preserved food.", passerby.copy);
+    try std.testing.expectEqualStrings("Fishing rod, hatchet, preserved food.", passerby.copy);
     try std.testing.expectEqualStrings("TRADE \u{2192}", passerby.action);
     try std.testing.expectEqual(Tone.warn, passerby.tone);
 

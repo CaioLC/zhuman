@@ -33,6 +33,7 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
 
     const restart = try t.button(center, "restart", "Start over", true);
     if (restart.query().clicked) {
+        ctx.res.playback.paused = false;
         _ = app.spawn_player(world);
         ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
         ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");

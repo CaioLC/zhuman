@@ -82,6 +82,7 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
             // still alive, and spawning over them would leave two.
             const settled = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
             if (settled.get()) |entry| world.despawn(entry[0]);
+            ctx.res.playback.paused = false;
             _ = app.spawn_player(world);
             ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
             ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");

@@ -176,7 +176,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
 
     const on_structure = active == 2;
     if (!on_structure) {
-        const market_action = try t.market_strip(column, "a2_market", .merchant);
+        const market_action = try t.market_strip(column, "a2_market", .merchant, true);
         if (market_action.query().clicked) trade_ts.open = true;
         _ = try column.spacer("market_gap", 1, market_to_activity);
 

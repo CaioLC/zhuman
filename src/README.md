@@ -83,9 +83,9 @@ Each frame:
    only SDL quit/terminating exits the process.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
-3. **Update** — the tween registry advances by the frame `dt` and takes the reduced-motion
-   policy, then `ecs.run(&world, &res, system)` per system in the order below, with the
-   passerby clock (`market.tick`) and the generators run as direct calls between them.
+3. **Update** — host `real_dt` advances roster watching and the tween registry. `Playback`
+   derives simulation `time.dt` at pause/1×/2×/3×; the host skips the complete simulation stage
+   while paused, and only the scaled delta reaches ECS systems, the passerby, and generators.
 4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
    returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
    The command registry and the host **semantic snapshot** (`res.semantics`) both
@@ -305,11 +305,13 @@ behavior (food spoils, coin settles); a line names one by its tag name.
 
 **Lines.** Every quantity is a `Line { item, n, kind = .fixed, sd, per = .once }`: an item and
 an amount, drawn when `kind` is not `.fixed`, settled `once` (an input at begin, an output at
-completion) or per `day` (a flow while the good is owned — all of a good's day lines
-together, affordable-or-nothing). A record carries `requires { energy, hours }` — the
-body-and-time price, apart from the lines because energy is a flow and its gate is strict —
-plus `input` and `output` lists. A generator is a good with day lines; an intermediate is a
-good whose once-output is a lot of itself; neither is a category field.
+completion) or authored per `day` for a collectable generator. A generator carries a cycle
+`generator { energy, hours, vigor = 0 }`: enabled cycles accumulate hours without occupying
+`Busy`; collection pays the low energy cost and the complete cycle-scaled upkeep, then realizes
+all day outputs and optional direct Vigor restoration atomically. Turning one off preserves its
+progress and consumes nothing. A record's ordinary `requires { energy, hours }` remains the
+body-and-time build price, plus its `input` and `output` lists. An intermediate is a good whose
+once-output is a lot of itself.
 
 **Effects.** What owning a good does is a list from a fixed vocabulary: `grant` a verb;
 `scale` or `add` a verb's `energy`, `hours`, or a named `input`/`output` line;

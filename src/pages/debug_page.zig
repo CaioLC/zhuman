@@ -410,7 +410,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "market_strip")) {
         const demo = try stage.div("market_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
-        _ = try t.market_strip(demo, "ms", .passerby);
+        _ = try t.market_strip(demo, "ms", .passerby, true);
     } else if (eq(name, "activity_strip")) {
         const demo = try stage.div("activity_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
@@ -457,8 +457,8 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     if (!audit_trade.open) return null;
 
     const buys = [_]t.TradeOffer{
-        .{ .id = 1, .name = "Fishing net", .detail = "better Fish tool", .give = "12 food + 16 materials", .receive = "Fishing net \u{00d7}1", .effect = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack." },
-        .{ .id = 2, .name = "Hand axe", .detail = "better wood tool", .give = "8 food + 24 materials", .receive = "Hand axe \u{00d7}1", .effect = "Replaces Hatchet margins: Split wood takes 20% less energy." },
+        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = "2 food + 8 materials", .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
+        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = "2 food + 6 materials", .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
         .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
     };
     const sells = [_]t.TradeOffer{

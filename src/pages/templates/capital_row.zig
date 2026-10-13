@@ -190,7 +190,7 @@ pub fn capital_row(
         .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's type sub-label).
-    const type_word = if (rec.tier == .crude) "crude" else "made";
+    const type_word = if (rec.tier == .crude) "crude" else "manufactured";
     try name_cell(row, "nm", col(.recipe).w, rec.name, type_word, lit);
 
     var cbuf: [40]u8 = undefined;
@@ -360,7 +360,7 @@ test "the cost text is the order then the energy" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var buf: [40]u8 = undefined;
-    try std.testing.expectEqualStrings("48m 2e", costText(&buf, cat.good("hatchet").?));
+    try std.testing.expectEqualStrings("10m 5e", costText(&buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
     try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
 }

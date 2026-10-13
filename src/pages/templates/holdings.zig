@@ -75,19 +75,6 @@ fn spareUnits(world: *World, e: Entity, cat: *const roster.Catalog) u32 {
     return spares;
 }
 
-/// The authored per-day food flow of the owned goods, by scale.
-fn generatorFoodPerDay(world: *World, e: Entity, cat: *const roster.Catalog) f32 {
-    const goods = world.get(e, comp.Goods) orelse return 0;
-    var per_day: f32 = 0;
-    for (cat.goods, 0..) |rec, gi| {
-        if (goods.count[gi] == 0) continue;
-        for (rec.output) |l| if (l.per == .day and std.mem.eql(u8, l.item, "food")) {
-            per_day += l.n;
-        };
-    }
-    return per_day;
-}
-
 /// One BODY sentence with dim prose and a foreground/semantic live value.
 fn bodySentence(parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: uic.Color) !void {
     const ctx = parent.ctx;
@@ -213,7 +200,7 @@ fn buildBodyPanel(parent: El, world: *World, e: Entity) !El {
     const policy = ha.eating.word(ha.eating.valueFromRate(rate));
     try bodySentence(panel, "policy", "Eating ", policy, ".", th.fg);
 
-    const net = ha.systems.net_food_drawdown(met.base_rate, rate, generatorFoodPerDay(world, e, &ctx.res.catalog));
+    const net = ha.systems.net_food_drawdown(met.base_rate, rate, 0);
     if (net <= 0.001) {
         try bodySentence(panel, "coverage", "Larder ", "holds", ".", th.good);
     } else {
@@ -275,14 +262,12 @@ test "every buildable good carries the rail's compact copy" {
     try std.testing.expectEqualStrings("food keeps 2\u{00d7}", cat.good("root_cellar").?.copy.short);
 }
 
-test "the goods' day lines and spares feed the body panel's numbers" {
+test "spare goods feed the holdings panel numbers" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var w = World.init();
     const e = w.spawn(.{comp.Goods{}});
     const goods = w.get(e, comp.Goods).?;
-    goods.count[cat.goodIndex("garden_bed").?] = 1;
     goods.count[cat.goodIndex("sandals").?] = 3;
-    try std.testing.expectEqual(@as(f32, 1.5), generatorFoodPerDay(&w, e, &cat));
     try std.testing.expectEqual(@as(u32, 2), spareUnits(&w, e, &cat));
 }

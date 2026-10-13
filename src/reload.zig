@@ -9,7 +9,8 @@
 //! so in the event log.
 //!
 //! A load that succeeds is swapped in. Everything kept by catalog index is carried to the new
-//! indices by id: each agent's goods and research, the work in progress, the reach seen-set.
+//! indices by id: each agent's goods, generator progress/toggles and research, the work in
+//! progress, and the reach seen-set.
 //! A record the new files no longer hold takes its count, its research state and any work on
 //! it with it. Then every agent resettles its body and larder against the new records. The
 //! swap runs between frames, before the systems and the page build, so nothing still reads the
@@ -115,6 +116,23 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
             for (old.goods, 0..) |g, gi| {
                 if (was.count[gi] == 0) continue;
                 if (cat.goodIndex(g.id)) |ni| goods.count[ni] = was.count[gi];
+            }
+        }
+    }
+
+    // Generator progress and toggles follow the good id independently of ownership counts.
+    {
+        var q: ecs.Query(.{comp.Generators}) = .{ .world = w };
+        var it = q.iter();
+        while (it.next()) |entry| {
+            const generators: *comp.Generators = entry;
+            const was = generators.*;
+            generators.* = .{};
+            for (old.goods, 0..) |g, gi| {
+                if (cat.goodIndex(g.id)) |ni| {
+                    generators.progress[ni] = was.progress[gi];
+                    generators.off[ni] = was.off[gi];
+                }
             }
         }
     }

@@ -266,8 +266,8 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const e = spawn_agent(&w, 10, 0);
-    const traps = cat.actionIndex("check_traps").?;
-    w.get(e, comp.Goods).?.count[cat.goodIndex("wire_snares").?] = 1;
+    const traps = cat.actionIndex("hunt").?;
+    w.get(e, comp.Goods).?.count[cat.goodIndex("spear").?] = 1;
     const q = quote(&w, e, cat, res.config, traps).?;
     try testing.expectEqual(Standing.short, q.standing);
     try testing.expectEqualStrings("materials", q.short.?.item);
@@ -327,11 +327,11 @@ test "an input is paid at begin and named in the payment line" {
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_agent(&w, 10, 3);
-    w.get(e, comp.Goods).?.count[res.catalog.goodIndex("wire_snares").?] = 1;
-    const traps = res.catalog.actionIndex("check_traps").?;
+    w.get(e, comp.Goods).?.count[res.catalog.goodIndex("spear").?] = 1;
+    const traps = res.catalog.actionIndex("hunt").?;
     begin(&w, e, &res, traps);
-    try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryMaterial).?.v); // the bait
-    try testing.expectEqualStrings("You spend 1.0e 1m to begin.", res.sim.log.get(0).text());
+    try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryMaterial).?.v); // the hunting supply
+    try testing.expectEqualStrings("You spend 4.0e 1m to begin.", res.sim.log.get(0).text());
 }
 
 test "a verb lost mid-task finishes as nothing" {

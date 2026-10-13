@@ -181,6 +181,7 @@ pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
     const cat = &res.catalog;
     const goods = w.get(e, comp.Goods) orelse return;
     const rec = &cat.goods[gi];
+    if (rec.generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
     goods.count[gi] += lot(rec);
     if (was > 0) {
@@ -199,6 +200,7 @@ pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
 /// on the way in from absent. Silent: the trade writes its own line.
 pub fn acquire(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) void {
     const goods = w.get(e, comp.Goods) orelse return;
+    if (units > 0 and res.catalog.goods[gi].generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
     goods.count[gi] += units;
     if (was == 0 and units > 0) settle(w, e, &res.catalog);
@@ -211,7 +213,13 @@ pub fn release(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) u32 {
     const had = goods.count[gi];
     const taken = @min(had, units);
     goods.count[gi] -= taken;
-    if (had > 0 and goods.count[gi] == 0) settle(w, e, &res.catalog);
+    if (had > 0 and goods.count[gi] == 0) {
+        if (w.get(e, comp.Generators)) |state| {
+            state.progress[gi] = 0;
+            state.off[gi] = false;
+        }
+        settle(w, e, &res.catalog);
+    }
     return taken;
 }
 
@@ -283,30 +291,131 @@ pub fn lowerName(name: []const u8, buf: *[48]u8) []const u8 {
     return buf[0..n];
 }
 
-// --- generators: capital that runs itself -------------------------------------------------
+// --- collectable generators ---------------------------------------------------------------
 
-/// Tick every owned good with day lines on every agent: if this tick's slice of the upkeep
-/// is affordable, pay it and deposit the same slice of the flow. Both are authored **per
-/// in-game day**, so everything scales by the frame's `dt` in days — the flow reads as a
-/// trickle (a discrete daily harvest, which would restore poisson's lumpiness, is a later
-/// refinement). An item may be spent to exactly zero, as everywhere.
+pub const GeneratorStanding = enum { charging, off, ready, energy, short };
+
+/// One owned generator's authoritative state and collection gate.
+pub const GeneratorQuote = struct {
+    gi: u16,
+    rec: *const roster.Good,
+    spec: roster.Generator,
+    standing: GeneratorStanding,
+    progress: f32,
+    total: f32,
+    cycle_days: f32,
+    short: ?roster.Line = null,
+
+    pub fn ready(self: GeneratorQuote) bool {
+        return self.standing == .ready;
+    }
+
+    pub fn fraction(self: GeneratorQuote) f32 {
+        if (self.total <= 0) return 1;
+        return std.math.clamp(self.progress / self.total, 0, 1);
+    }
+};
+
+fn ensureGenerators(w: *World, e: Entity) *comp.Generators {
+    if (w.get(e, comp.Generators)) |state| return state;
+    w.add(e, comp.Generators{});
+    return w.get(e, comp.Generators).?;
+}
+
+/// Quote collection without consulting `Busy`: generators mature beside body-occupying work.
+pub fn generator_quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, gi: u16) ?GeneratorQuote {
+    const rec = &cat.goods[gi];
+    const spec = rec.generator orelse return null;
+    const goods = w.get(e, comp.Goods) orelse return null;
+    if (goods.count[gi] == 0) return null;
+    const state = w.get(e, comp.Generators) orelse return null;
+    const vigor = w.get(e, comp.Vigor) orelse return null;
+    const total = res_mod.hours_to_secs(spec.hours, cfg.secs_per_day);
+    const progress = @min(state.progress[gi], total);
+    const cycle_days = spec.hours / 24.0;
+    var q = GeneratorQuote{
+        .gi = gi,
+        .rec = rec,
+        .spec = spec,
+        .standing = .ready,
+        .progress = progress,
+        .total = total,
+        .cycle_days = cycle_days,
+    };
+    if (state.off[gi]) {
+        q.standing = .off;
+    } else if (progress < total) {
+        q.standing = .charging;
+    } else if (spec.energy >= vigor.v) {
+        q.standing = .energy;
+    } else if (ledger.short(w, e, cat, roster.Lines.only(rec.input, .day).slice(), cycle_days)) |line| {
+        q.standing = .short;
+        q.short = line;
+    }
+    return q;
+}
+
+/// Accumulate owned, enabled generators to readiness. No resources move here and `Busy` is
+/// deliberately ignored; the collection click is the sole settlement point.
 pub fn run_generators(w: *World, res: *Resources) void {
     const cat = &res.catalog;
-    const dt_days = res.time.dt / res.config.secs_per_day;
-    var q: ecs.Query(.{ Entity, comp.Goods }) = .{ .world = w };
+    var q: ecs.Query(.{ Entity, comp.Goods, comp.Generators }) = .{ .world = w };
     var it = q.iter();
     while (it.next()) |entry| {
-        const e: Entity, const goods: *comp.Goods = entry;
+        const goods: *comp.Goods = entry[1];
+        const state: *comp.Generators = entry[2];
         for (cat.goods, 0..) |rec, gi| {
-            if (goods.count[gi] == 0) continue;
-            const upkeep = roster.Lines.only(rec.input, .day);
-            const flow = roster.Lines.only(rec.output, .day);
-            if (upkeep.len == 0 and flow.len == 0) continue;
-            if (ledger.short(w, e, cat, upkeep.slice(), dt_days) != null) continue; // can't pay this tick
-            ledger.pay(w, e, cat, upkeep.slice(), dt_days);
-            _ = ledger.draw(w, e, cat, flow.slice(), res.random(), 1, dt_days);
+            const spec = rec.generator orelse continue;
+            if (goods.count[gi] == 0 or state.off[gi]) continue;
+            const total = res_mod.hours_to_secs(spec.hours, res.config.secs_per_day);
+            state.progress[gi] = @min(total, state.progress[gi] + res.time.dt);
         }
     }
+}
+
+/// Toggle accumulation. Turning a generator off preserves its accumulated progress.
+pub fn toggle_generator(w: *World, e: Entity, cat: *const Catalog, gi: u16) void {
+    if (cat.goods[gi].generator == null) return;
+    const goods = w.get(e, comp.Goods) orelse return;
+    if (goods.count[gi] == 0) return;
+    const state = ensureGenerators(w, e);
+    state.off[gi] = !state.off[gi];
+}
+
+/// Atomically pay collection energy/upkeep, realize the cycle yield, and restart accumulation.
+/// This never creates or inspects `Busy`, so collecting does not interrupt other work.
+pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
+    const cat = &res.catalog;
+    const q = generator_quote(w, e, cat, res.config, gi) orelse return false;
+    if (!q.ready()) return false;
+
+    const vigor = w.get(e, comp.Vigor).?;
+    vigor.v -= q.spec.energy;
+    ledger.pay(w, e, cat, roster.Lines.only(q.rec.input, .day).slice(), q.cycle_days);
+    const receipt = ledger.draw(w, e, cat, roster.Lines.only(q.rec.output, .day).slice(), res.random(), 1, q.cycle_days);
+    const restored = @min(q.spec.vigor, vigor.max - vigor.v);
+    vigor.v += restored;
+    ensureGenerators(w, e).progress[gi] = 0;
+
+    var buf: [120]u8 = undefined;
+    var wr = std.Io.Writer.fixed(&buf);
+    wr.print("{s} cycle collected", .{q.rec.name}) catch {};
+    if (receipt.len > 0 or restored > 0) {
+        wr.writeAll(": ") catch {};
+        var wrote = false;
+        for (receipt.slice()) |d| {
+            if (wrote) wr.writeAll(", ") catch {};
+            wr.print("{d:.1} {s}", .{ d.amount, ha.actions.itemWord(cat, d.item) }) catch {};
+            wrote = true;
+        }
+        if (restored > 0) {
+            if (wrote) wr.writeAll(", ") catch {};
+            wr.print("+{d:.1} vigor", .{restored}) catch {};
+        }
+    }
+    wr.writeAll(".") catch {};
+    res.sim.log.push(.good, wr.buffered());
+    return true;
 }
 
 // ============================ Tests ==========================================
@@ -346,22 +455,22 @@ fn heldVerb(w: *World, e: Entity, cat: *const Catalog, id: []const u8) bool {
     return effects.held(cat, w.get(e, comp.Goods).?, cat.actionIndex(id).?);
 }
 
-test "build pays upfront and starts the work; finish owns the rod and grants the verb" {
+test "build pays upfront and starts the work; finish owns the spear and grants the verb" {
     var w = World.init();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const rod = cat.goodIndex("fish_rod").?;
+    const rod = cat.goodIndex("spear").?;
     const price = cat.goods[rod].requires.?;
-    const order = cat.goods[rod].input[0].n; // 64 materials
+    const order = cat.goods[rod].input[0].n;
     const e = spawn_test_agent(&w, order); // exactly the order — spendable to 0
-    try testing.expect(!heldVerb(&w, e, cat, "fish")); // no rod, no verb
+    try testing.expect(!heldVerb(&w, e, cat, "hunt")); // no spear, no verb
 
     begin(&w, e, &res, rod);
 
-    // Paid and busy — the rod doesn't exist until the work completes.
-    try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "fish_rod"));
-    try testing.expect(!heldVerb(&w, e, cat, "fish"));
+    // Paid and busy — the spear doesn't exist until the work completes.
+    try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear"));
+    try testing.expect(!heldVerb(&w, e, cat, "hunt"));
     try testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // spent to 0
     const b = w.get(e, comp.Busy).?;
@@ -369,8 +478,8 @@ test "build pays upfront and starts the work; finish owns the rod and grants the
     try testing.expectEqual(res_mod.hours_to_secs(price.hours, res.config.secs_per_day), b.total);
 
     finish(&w, e, &res, rod);
-    try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "fish_rod"));
-    try testing.expect(heldVerb(&w, e, cat, "fish")); // the unlock
+    try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "spear"));
+    try testing.expect(heldVerb(&w, e, cat, "hunt")); // the unlock
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try testing.expectEqualStrings(cat.goods[rod].copy.built, res.sim.log.get(0).text());
 }
@@ -380,7 +489,7 @@ test "begin refuses when unaffordable or busy; the quote says why" {
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const rod = cat.goodIndex("fish_rod").?;
+    const rod = cat.goodIndex("spear").?;
     const order = cat.goods[rod].input[0].n;
     const e = spawn_test_agent(&w, order - 1); // one material short
 
@@ -455,9 +564,7 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
     try testing.expect(!w.has(e, comp.Busy)); // refused, not a panic
     try testing.expectEqual(@as(f32, 100), w.get(e, comp.InventoryMaterial).?.v); // unpaid
 
-    begin(&w, e, &res, hatchet);
-    finish(&w, e, &res, hatchet);
-    w.remove(e, comp.Busy);
+    acquire(&w, e, &res, hatchet, 1);
     try testing.expect(heldVerb(&w, e, cat, "chop_wood"));
     try testing.expect(needsMet(&w, e, cat, gloves));
     begin(&w, e, &res, gloves);
@@ -468,7 +575,7 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
     try testing.expect(!heldVerb(&w, e, cat, "chop_wood")); // the verb leaves with the tool
 }
 
-test "a generator pays its upkeep and deposits its flow, per day" {
+test "a generator accumulates without moving resources and settles only when collected" {
     var w = World.init();
     var res = try test_res();
     defer res.catalog.deinit();
@@ -476,20 +583,26 @@ test "a generator pays its upkeep and deposits its flow, per day" {
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = 0.1 }, // exactly one day of upkeep
+        comp.InventoryMaterial{ .v = 0.2 }, // exactly one two-day cycle of upkeep
         comp.Goods{},
+        comp.Generators{},
         comp.Granted{},
     });
-    w.get(e, comp.Goods).?.count[res.catalog.goodIndex("garden_bed").?] = 1;
+    const garden = res.catalog.goodIndex("garden_bed").?;
+    w.get(e, comp.Goods).?.count[garden] = 1;
 
-    run_generators(&w, &res);
-    try testing.expectApproxEqAbs(@as(f32, 0.0), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
-    const fed = w.get(e, comp.InventoryFood).?.v;
-    try testing.expect(fed > 0); // uniform's floor over a full day is 0.375
+    run_generators(&w, &res); // halfway through a 48h cycle
+    try testing.expectApproxEqAbs(@as(f32, 0.2), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
+    try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
 
-    // Broke now — the next day can't pay the upkeep, so nothing moves.
-    run_generators(&w, &res);
-    try testing.expectApproxEqAbs(fed, w.get(e, comp.InventoryFood).?.v, 1e-6);
+    run_generators(&w, &res); // ready, but still no automatic settlement
+    try testing.expect(generator_quote(&w, e, &res.catalog, res.config, garden).?.ready());
+    try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
+    try testing.expect(collect_generator(&w, e, &res, garden));
+    try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
+    try testing.expect(w.get(e, comp.InventoryFood).?.v > 0);
+    try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
 }
 
 /// An agent stocked to build a shelter: the unlock's three conditions all met, and enough
@@ -523,7 +636,7 @@ test "the shelter is offered only once its standing conditions are met" {
 
     begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
-    try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // 16 - 6 energy
+    try testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 16 - 12 energy
     try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryMaterial).?.v); // 100 - 60
 
     // Vigor fell below the absolute 15 mid-build — the work is already paid for, so it stands.
@@ -617,7 +730,7 @@ test "a good with no unlock has no standing conditions, and a traded good has no
     const e = spawn_test_agent(&w, 0);
     try testing.expect(unlockMet(&w, e, cat, cat.goodIndex("fish_rod").?));
     try testing.expect(unlockMet(&w, e, cat, cat.goodIndex("chicken_coop").?));
-    try testing.expect(quote(&w, e, cat, cat.goodIndex("fish_net").?) == null);
+    try testing.expect(quote(&w, e, cat, cat.goodIndex("fish_rod").?) == null);
 }
 
 test "cancel salvages half the build order, frees the body, and grants nothing" {
@@ -625,7 +738,7 @@ test "cancel salvages half the build order, frees the body, and grants nothing" 
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const rod = cat.goodIndex("fish_rod").?;
+    const rod = cat.goodIndex("spear").?;
     const order = cat.goods[rod].input[0].n;
     const price = cat.goods[rod].requires.?;
     const e = spawn_test_agent(&w, order);
@@ -635,10 +748,10 @@ test "cancel salvages half the build order, frees the body, and grants nothing" 
 
     try testing.expect(cancel_build(&w, e, &res));
     try testing.expect(!w.has(e, comp.Busy)); // the body is free again
-    try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "fish_rod")); // and owns nothing for the trouble
-    try testing.expect(!heldVerb(&w, e, cat, "fish"));
+    try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear")); // and owns nothing for the trouble
+    try testing.expect(!heldVerb(&w, e, cat, "hunt"));
     try testing.expectApproxEqAbs(order * res.config.cancel_refund, w.get(e, comp.InventoryMaterial).?.v, 1e-5);
-    try testing.expectEqualStrings("You gave up on the fishing rod. Salvaged 32 materials.", res.sim.log.get(0).text());
+    try testing.expectEqualStrings("You gave up on the spear. Salvaged 5 materials.", res.sim.log.get(0).text());
     // The energy is gone with the hours — cancelling is an exit, not an undo.
     try testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
 }
@@ -665,10 +778,9 @@ test "a bought tool supersedes the built one; selling it restores the next-best 
     const rod = cat.goodIndex("fish_rod").?;
     const net = cat.goodIndex("fish_net").?;
     const fish = cat.actionIndex("fish").?;
-    const e = spawn_test_agent(&w, cat.goods[rod].input[0].n);
+    const e = spawn_test_agent(&w, 0);
     const goods = w.get(e, comp.Goods).?;
-    begin(&w, e, &res, rod);
-    finish(&w, e, &res, rod);
+    acquire(&w, e, &res, rod, 1);
     const base_energy = cat.actions[fish].requires.energy;
     try testing.expectEqual(base_energy, effects.verb(cat, goods, fish).?.requires.energy);
 

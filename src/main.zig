@@ -216,6 +216,9 @@ fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
             return .{ .handled = app.ui.markKey(target, .dismissed) };
         },
         .focus_search => {
+            // An open modal owns focus. Do not let `/` move focus to a catalog field behind
+            // its trap; consume the shortcut until the topmost Escape owner closes.
+            if (app.resources.commands.escapeTarget() != null) return .{ .handled = true, .suppress_text = true };
             const target = app.resources.commands.searchTarget() orelse return .{};
             const handled = app.ui.requestFocus(target);
             return .{ .handled = handled, .suppress_text = handled };
@@ -405,15 +408,13 @@ pub fn main() !void {
     defer app.deinit();
     try app.setup(app.gpa.allocator());
 
-    var quit = false;
-
-    while (!quit) {
+    while (!app.resources.menu.quit_requested) {
         // Event Stage
         const input = &app.resources.input;
         input.beginFrame();
         while (sdl.events.poll()) |event| {
             switch (event) {
-                .quit, .terminating => quit = true,
+                .quit, .terminating => app.resources.menu.quit_requested = true,
                 .key_down, .key_up => |key| if (key.key) |kc| {
                     const action: ui_client.KeyAction = if (!key.down)
                         .release
@@ -541,24 +542,30 @@ pub fn main() !void {
         };
 
         // Update Stage
-        // 1. update game resources
-        app.resources.time.dt = app.frame_capper.delay();
+        // 1. update game resources. Host time always advances normally; simulation time alone
+        // takes the selected playback multiplier (and later pause's zero multiplier).
+        const real_dt = app.frame_capper.delay();
+        app.resources.time.real_dt = real_dt;
+        app.resources.time.dt = app.resources.playback.simulationDelta(real_dt);
         // A changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
-        if (app.data_watch.poll(app.resources.time.dt)) ha.reload.reload(&app.resources, &app.world);
+        if (app.data_watch.poll(real_dt)) ha.reload.reload(&app.resources, &app.world);
         // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at
         // the Act I curtain, since UI transitions are independent of the sim clock.
         app.resources.tween.setPolicy(app.resources.motion);
-        app.resources.tween.advance(app.resources.time.dt);
+        app.resources.tween.advance(real_dt);
         // 2. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
         const player = ecs.MaybeSingle(.{ ha.world.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
         const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.catalog, .act_one) else false;
-        if (!housed) {
+        // Skip the simulation stage entirely while paused: passing zero through systems is not
+        // sufficient because boundary-state systems (an encounter at remaining=0, completed work,
+        // death/reach edge detectors) may still mutate without consuming time.
+        if (!housed and app.resources.time.dt > 0) {
             ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
             ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
@@ -568,7 +575,7 @@ pub fn main() !void {
             // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
             // run, so it ticks directly rather than over a per-entity query.
             _ = ha.market.tick(&app.resources.sim.encounter, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
-            ha.capital.run_generators(&app.world, &app.resources); // capital that runs itself
+            ha.capital.run_generators(&app.world, &app.resources); // collectable capital accumulates
             ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         }
@@ -649,6 +656,7 @@ fn spawn_agent(world: *ha.world.World) ha.world.Entity {
         comp.InventoryMaterial{ .v = 0 }, // nothing stockpiled yet
         comp.Metabolism{}, // eats continuously from the first breath (normal rate)
         comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
+        comp.Generators{}, // collectable capital accumulates independently of the body's work
         comp.Granted{}, // and the goods contribute nothing to the body or larder yet
     });
 }
