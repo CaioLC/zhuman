@@ -21,15 +21,22 @@ pub const VenueIdentity = struct {
     title: []const u8,
     buy_give: []const u8,
     sell_give: []const u8,
-    cta: []const u8,
+    /// The confirmation CTA while the BUY tab is active.
+    buy_cta: []const u8,
+    /// The confirmation CTA while the SELL tab is active. Equal to `buy_cta` for venues whose
+    /// CTA does not change by direction (Act I's single `TRADE →`).
+    sell_cta: []const u8,
     footer: []const u8,
 };
 
 pub fn venueIdentity(kind: market.MarketKind) VenueIdentity {
     return switch (kind) {
-        .passerby => .{ .kicker = "PASSERBY", .title = "What will you trade?", .buy_give = "YOU GIVE", .sell_give = "YOU GIVE", .cta = "TRADE \u{2192}", .footer = "Fixed ratios, finite stock, limited time. Selling repeats at diminishing marginal prices." },
-        .merchant => .{ .kicker = "MERCHANT", .title = "What will you trade?", .buy_give = "YOU GIVE", .sell_give = "YOU GIVE", .cta = "TRADE \u{2192}", .footer = "Prices are firm." },
-        .exchange => .{ .kicker = "EXCHANGE", .title = "What will you trade?", .buy_give = "BID", .sell_give = "OFFER", .cta = "EXECUTE \u{2192}", .footer = "Cleared on the book." },
+        // The Act I passerby and the exchange keep one CTA per venue; the Coin Merchant (Act II)
+        // is the first venue whose give-label and CTA change with direction: BUY spends Coin
+        // (`YOU PAY` / `BUY →`), SELL earns it (`YOU GIVE` / `SELL →`).
+        .passerby => .{ .kicker = "PASSERBY", .title = "What will you trade?", .buy_give = "YOU GIVE", .sell_give = "YOU GIVE", .buy_cta = "TRADE \u{2192}", .sell_cta = "TRADE \u{2192}", .footer = "Fixed ratios, finite stock, limited time. Selling repeats at diminishing marginal prices." },
+        .merchant => .{ .kicker = "MERCHANT", .title = "What will you trade?", .buy_give = "YOU PAY", .sell_give = "YOU GIVE", .buy_cta = "BUY \u{2192}", .sell_cta = "SELL \u{2192}", .footer = "Coin prices are firm; stock is finite and the merchant leaves at the end of market day." },
+        .exchange => .{ .kicker = "EXCHANGE", .title = "What will you trade?", .buy_give = "BID", .sell_give = "OFFER", .buy_cta = "EXECUTE \u{2192}", .sell_cta = "EXECUTE \u{2192}", .footer = "Cleared on the book." },
     };
 }
 
@@ -48,7 +55,10 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 
     const close_clicked = try header_mod.modal_header(m.box, m.width, identity.kicker, meta, identity.title);
     const body = try body_mod.modal_body(m.box, m.width, identity.buy_give, identity.sell_give, buy_offers, sell_offers, holdings, st);
-    const footer = try footer_mod.modal_footer(m.box, m.width, identity.footer, identity.cta, body.can_confirm);
+    // The CTA follows the active tab: a merchant shows `BUY →` on the buy tab and `SELL →` on
+    // the sell tab; single-CTA venues set both to the same label, so this is a no-op for them.
+    const cta = if (body.mode == 0) identity.buy_cta else identity.sell_cta;
+    const footer = try footer_mod.modal_footer(m.box, m.width, identity.footer, cta, body.can_confirm);
 
     return .{
         .mode = body.mode,
@@ -62,9 +72,14 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 test "venue identity map matches authored trade chrome" {
     try std.testing.expectEqualStrings("PASSERBY", venueIdentity(.passerby).kicker);
     try std.testing.expectEqualStrings("What will you trade?", venueIdentity(.passerby).title);
-    try std.testing.expectEqualStrings("TRADE \u{2192}", venueIdentity(.merchant).cta);
+    try std.testing.expectEqualStrings("TRADE \u{2192}", venueIdentity(.passerby).buy_cta);
     try std.testing.expectEqualStrings("BID", venueIdentity(.exchange).buy_give);
-    try std.testing.expectEqualStrings("EXECUTE \u{2192}", venueIdentity(.exchange).cta);
+    try std.testing.expectEqualStrings("EXECUTE \u{2192}", venueIdentity(.exchange).buy_cta);
+    // The Coin Merchant's give-label and CTA change with direction (ACT2-14).
+    try std.testing.expectEqualStrings("YOU PAY", venueIdentity(.merchant).buy_give);
+    try std.testing.expectEqualStrings("YOU GIVE", venueIdentity(.merchant).sell_give);
+    try std.testing.expectEqualStrings("BUY \u{2192}", venueIdentity(.merchant).buy_cta);
+    try std.testing.expectEqualStrings("SELL \u{2192}", venueIdentity(.merchant).sell_cta);
 }
 
 test "TradeState keeps per-mode selection separate" {
