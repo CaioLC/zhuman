@@ -136,6 +136,8 @@ Prototype catalogs are deterministic UX fixtures, not permission to hardcode eco
 
 ## 6. Exact visual/state parity checklist
 
+How each check is evidenced — the fixtures, captures, and interaction tests behind it — is laid out in `docs/parity_checklist.md`; the open items remain tracked here.
+
 - [ ] **PARITY-01 — Global visual grammar.** Dark-only terminal; square corners; regular-weight monospace; tight density; one-pixel lines; accent for interaction/progress; warn for attention/building; danger for shortage/failure/cancel; good for met/ready/standing; no unapproved rounded cards.
 - [ ] **PARITY-02 — Focus and disabled states.** Every interactive control has a `1px` warn focus-visible outline with `3px` logical offset or equivalent inset where clipping requires it. Disabled controls use line2/dim and reduced opacity, cannot activate, and retain readable reason text. Today `style.focus_ring` is a `1px` `acc` outline flush with the box, so both the color and the offset differ from the prototype.
 - [ ] **PARITY-03 — Overflow.** Terminal/board/dialog clip correctly; catalog/side/detail scroll regions do not paint or hit outside; scrollbar gutter is stable; long single-line cells ellipsize; multiline copy wraps; no hidden control becomes unreachable at narrow widths.
@@ -152,7 +154,7 @@ Prototype catalogs are deterministic UX fixtures, not permission to hardcode eco
 
 ### Deterministic UI fixture harness
 
-- [ ] **QA-07 — Add a development-only fixture entry point.** The template audit page (`HA_DEBUG_PAGE=1`, `src/pages/debug_page.zig`) shows one template at a time but seeds no named world state. Select named screen/state via CLI or compile-time dev menu, not production URL logic. Fixtures provide deterministic window size, time, catalogs, balances, focus/hover/selection where needed, and seeded domain snapshots while still exercising production templates.
+- [x] **QA-07 — Add a development-only fixture entry point.** `HA_FIXTURE=<name>` (`src/pages/fixture.zig`) seeds one named screen state — deterministic logical window size (driving the responsive class through `view.compute`), game clock, catalogs/balances, and passerby snapshot — and renders it through the production page (`ui_playgame`/`ui_act_two`). Selection is a compile-time catalog keyed by name, not production URL logic. The catalog and `seed` are pure and SDL-free (unit-tested for width class, clock, balances, encounter determinism); only `build_fixture` touches the window.
 - [x] **QA-08 — Support scripted input replay.** `src/ui_client/replay.zig` is the SDL-free lower half of `main.zig`'s event loop: it feeds synthetic pointer/key/text/wheel events into the `Input` model and runs the real pointer-activation policy, semantic-command mapping, and the engine's capture-aware `markTarget`/`markKey` event stage, so interaction state machines are regression-tested without SDL polling. Clipboard-bound editor commands are recognized but not executed (no window). Pixel rendering stays out: a test stamps the slots it probes and reads interaction flags back. Tested in `test-ui`.
 - [ ] **QA-09 — Add a node/layout debug dump.** For a fixture, emit stable IDs, rects, clips, focus/selection, render features, and semantic metadata. Use it to diagnose overlap/clipping and to assert hidden/locked nodes are not focusable/hittable.
 - [ ] **QA-20 — Template-level state and lifecycle tests.** Hide and show through a state pointer (BUILD's query and sort survive the ACTIONS tab), reorder by domain key, a focused control disappearing, independent ACTIONS and BUILD state, modal opener restoration and initial focus, scroll preservation. Needs QA-07/08 plus an SDL-free text measurer: a template with a text leaf measures through the platform font, which is why only `control.zig` has lifecycle tests without a window today.
@@ -160,6 +162,8 @@ Prototype catalogs are deterministic UX fixtures, not permission to hardcode eco
 ### Screenshot matrix
 
 Capture at the reference `900×820` logical size and compare to the current HTML/screenshots. Also capture `760`, `560`, and `440` width classes plus one high-DPI scale.
+
+The apparatus is in place: the deterministic fixtures (`src/pages/fixture.zig`, `HA_FIXTURE=<name>`) seed each reference state, the capture driver (`tools/capture_screenshots.ps1`) PrintWindow-captures one PNG per fixture, and `docs/parity_checklist.md` maps each fixture to its QA item and prototype reference. Running the capture + eyeball comparison, and adding the STRUCTURE/overlay fixtures (QA-12 and the remaining QA-13 states) once those screens are reachable in a production page, is what remains.
 
 - [ ] **QA-10 — Act I screenshots.** ACTIONS; BUILD default; BUILD query/sort; active build/cancel; Holdings collapsed; Shelter locked/unfunded/ready/details; Passerby BUY; Passerby SELL; low-stock/disabled states; narrow layouts.
 - [ ] **QA-11 — Act II shell/catalog screenshots.** ACTIONS default/filtered; BUILD default/all-filtered/active build; Merchant BUY/SELL/sold-out/insufficient Coin; Holdings expanded/collapsed; Exchange locked/unfunded/ready/details/standing; Act III identity.

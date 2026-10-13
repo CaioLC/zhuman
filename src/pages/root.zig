@@ -18,6 +18,7 @@ const p_act_one = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
+const fixture = @import("./fixture.zig");
 
 /// Returns a flattened list of *Nodes for the render stage
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
@@ -44,6 +45,11 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
     if (debugRequested(ui_ctx.arena)) return try p_debug(ui_ctx, world);
 
+    // The deterministic fixture harness: `HA_FIXTURE=<name>` seeds one named screen state and
+    // renders it through the production page. A developer opt-in like the debug page; off unless
+    // the variable is set and non-empty. See `fixture.zig`.
+    if (fixtureRequested(ui_ctx.arena)) |name| return try fixture.build_fixture(ui_ctx, world, name);
+
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I
     // curtain, since owning a `Shelter` is the win condition; otherwise the live Act-I page.
     const player = ecs.MaybeSingle(.{ comp.Vigor, ecs.With(tag.Player) }){ .world = world };
@@ -64,6 +70,15 @@ fn debugRequested(arena: std.mem.Allocator) bool {
     return true;
 }
 
+/// The requested fixture name from `HA_FIXTURE`, or null when the variable is unset or empty.
+/// The name is copied into the frame arena (valid for this build) and routed by
+/// `fixture.build_fixture`, which falls back to the first catalog entry for an unknown name.
+fn fixtureRequested(arena: std.mem.Allocator) ?[]const u8 {
+    const raw = std.process.getEnvVarOwned(arena, "HA_FIXTURE") catch return null;
+    if (raw.len == 0) return null;
+    return raw;
+}
+
 test {
     _ = @import("./templates/root.zig");
     _ = @import("./fmt.zig");
@@ -72,5 +87,6 @@ test {
     _ = @import("./gameover.zig");
     _ = @import("./act_one_end.zig");
     _ = @import("./mock.zig");
+    _ = @import("./fixture.zig");
     _ = @import("./act_two/page.zig");
 }

@@ -426,7 +426,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `tokens.zig` | the non-color design tokens, in logical px |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
-| `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`) and the template shelf |
+| `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`, the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
 | `root.zig` | the `ha` library root and its re-exports |
 
 `build.zig` makes the module import *itself* as `ha`, so library-internal files can
