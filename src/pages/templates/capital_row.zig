@@ -168,9 +168,9 @@ pub fn capital_row(
     const cat = &ctx.res.catalog;
     const rec = q.rec;
 
-    // The quote's index is the recipe's catalog index: the row's identity across re-sorts
-    // and filters.
-    const row = try parent.item("r", q.gi);
+    // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded
+    // roster that moves it to another index.
+    const row = try parent.div(rec.id);
     const hot = kind == .ready;
     const row_key = row.get().key;
     // The row is a composite tile: the good's name is its accessible name and `hot` is the

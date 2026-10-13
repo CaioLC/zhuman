@@ -94,7 +94,7 @@ stray public decl generates a storage for it. A shared shape that is not a compo
 in a non-public decl.
 
 **Repeated rows carry a domain key.** A row or tile that repeats is keyed by what it is — the
-recipe's catalog index, the offer's quote id — never by its sorted position or filtered
+recipe's id, the offer's quote id — never by its sorted position or filtered
 index, so selection, focus, scroll anchors and cached textures follow the thing through a
 re-sort or filter. `tools/boundary_check.sh` rejects a formatted loop id in a page or template.
 

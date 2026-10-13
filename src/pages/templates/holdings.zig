@@ -137,7 +137,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
         _ = (try owned.text("none", "nothing built yet"))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     } else if (world.get(e, comp.Goods)) |goods| {
-        // Owned goods in roster order, keyed by catalog index so a row follows its good.
+        // Owned goods in roster order, keyed by id so a row follows its good.
         for (cat.goods, 0..) |rec, gi| {
             const n = goods.count[gi];
             if (n == 0) continue;
@@ -146,7 +146,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
                 std.fmt.bufPrint(&label_buf, "{s} \u{00d7}{d}", .{ rec.name, n }) catch rec.name
             else
                 rec.name;
-            try lineIn(try owned.item("good", gi), label, rec.copy.short, th.dim);
+            try lineIn(try owned.div(rec.id), label, rec.copy.short, th.dim);
         }
     }
 
