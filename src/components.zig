@@ -96,6 +96,45 @@ pub const Research = struct {
     }
 };
 
+// -- Act II stocks: opened at the curtain, never before ------------------------------------
+// The Act I → II migration (`migration.zig`) is the one writer that creates these: Act II keeps
+// Food and Vigor, turns unspent generic Materials into Biomass `1:1`, and opens the other
+// resources a line can name at zero, so a yield always has somewhere to land. Each is a plain
+// balance in the `InventoryMaterial` shape, reached through `ledger.Stock`.
+
+/// Biomass, the Act II resource generic Materials becomes at the curtain.
+pub const InventoryBiomass = struct {
+    v: f32 = 0,
+};
+
+pub const InventoryWater = struct {
+    v: f32 = 0,
+};
+
+pub const InventoryFuel = struct {
+    v: f32 = 0,
+};
+
+pub const InventoryMetal = struct {
+    v: f32 = 0,
+};
+
+pub const InventoryMinerals = struct {
+    v: f32 = 0,
+};
+
+/// **Migration version stamp** — the versioned marker the Act I → II migration writes onto an
+/// agent the one time it runs. Its presence is what makes the migration idempotent: a second
+/// call sees the stamp and returns without re-converting Materials or re-seeding research. The
+/// `version` field is the save-version boundary — a migration authored for an older save shape
+/// can read it and decide whether a further step is owed. Act I agents do not carry it; owning
+/// it *is* "this agent has crossed the curtain".
+pub const Migrated = struct {
+    /// The migration schema version this agent was last carried to. Bumped when the migration
+    /// gains a new step; `migration.current_version` is the authority.
+    version: u32 = 0,
+};
+
 // -- Innate actions: the bare-handed verbs every agent spawns with -----------------------
 // (`actions.innate_actions_bundle`). Each action owns a distinct *risk texture* — the
 // dist kind is content, not decoration, and all five kinds are in play across the roster.

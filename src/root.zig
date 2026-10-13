@@ -23,6 +23,7 @@ pub const roster = @import("./roster.zig");
 pub const ledger = @import("./ledger.zig");
 pub const effects = @import("./effects.zig");
 pub const bridge = @import("./bridge.zig");
+pub const migration = @import("./migration.zig");
 pub const market = @import("./market.zig");
 pub const barter = @import("./barter.zig");
 pub const res = @import("./res.zig");
@@ -50,6 +51,7 @@ test {
     _ = ledger;
     _ = effects;
     _ = bridge;
+    _ = migration;
     _ = market;
     _ = barter;
     _ = res;

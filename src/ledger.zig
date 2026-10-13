@@ -19,12 +19,18 @@ const Line = roster.Line;
 const Resource = roster.Resource;
 
 /// The inventory component that holds a resource's balance, or null while the resource has
-/// no component yet — an agent then holds none of it.
+/// no component — an agent then holds none of it. Coin has none until the simulation
+/// recognizes a medium of exchange (`docs/roadmap.md`, "ACT2-09").
 pub fn Stock(comptime r: Resource) ?type {
     return switch (r) {
         .food => comp.InventoryFood,
         .materials => comp.InventoryMaterial,
-        else => null,
+        .biomass => comp.InventoryBiomass,
+        .water => comp.InventoryWater,
+        .fuel => comp.InventoryFuel,
+        .metal => comp.InventoryMetal,
+        .minerals => comp.InventoryMinerals,
+        .coin => null,
     };
 }
 

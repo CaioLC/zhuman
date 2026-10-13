@@ -361,7 +361,9 @@ body and larder are the one exception to derive-never-store, because their compo
 other writers: `effects.apply` computes the contribution, diffs it against `comp.Granted`,
 and applies the delta — a raised ceiling fills what it adds, a lowered one only clamps.
 `ledger.zig` is where a line meets holdings: the one switch over `Resource` to the inventory
-components, plus `comp.Goods` counts for a good item, with `short`/`pay`/`draw` over a list
+components — the Act II ones opened at the curtain, none for coin until the simulation
+recognizes a medium of exchange — plus `comp.Goods` counts for a good item, with
+`short`/`pay`/`draw` over a list
 of lines. Per agent that leaves `Goods` (a count per catalog index) and `Granted`; the
 catalog itself sits on `Resources` as `catalog`, so a system declares `*const roster.Catalog`.
 
@@ -412,6 +414,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `bridge.zig` | which record each typed component transcribes, and the parity tests; goes with the typed roster |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
+| `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `query.zig` | the catalog query parser |
