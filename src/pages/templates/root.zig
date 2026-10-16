@@ -43,6 +43,7 @@ const menu_dialog_mod = @import("./menu_dialog.zig");
 const act_one_surface_mod = @import("./act_one_surface.zig");
 const act_one_workspace_mod = @import("./act_one_workspace.zig");
 const board_primitives_mod = @import("./board_primitives.zig");
+const readout_mod = @import("./readout.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -138,6 +139,15 @@ pub const LegendItem = board_primitives_mod.LegendItem;
 pub const zoom_controls = board_primitives_mod.zoom_controls;
 pub const Zoom = board_primitives_mod.Zoom;
 pub const empty_state = board_primitives_mod.empty_state;
+// Readout panels (HOLDINGS / BODY)
+pub const ReadoutPad = readout_mod.Pad;
+pub const readout_panel = readout_mod.readout_panel;
+pub const readout_heading = readout_mod.readout_heading;
+pub const section_label = readout_mod.section_label;
+pub const kv_line = readout_mod.kv_line;
+pub const kv_line_in = readout_mod.kv_line_in;
+pub const sentence = readout_mod.sentence;
+pub const divider = readout_mod.divider;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
@@ -194,6 +204,7 @@ test {
     _ = act_one_surface_mod;
     _ = act_one_workspace_mod;
     _ = board_primitives_mod;
+    _ = readout_mod;
     _ = @import("./actions_section.zig");
     _ = @import("./build_section.zig");
 }
