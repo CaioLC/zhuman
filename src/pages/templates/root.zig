@@ -44,6 +44,7 @@ const act_one_surface_mod = @import("./act_one_surface.zig");
 const act_one_workspace_mod = @import("./act_one_workspace.zig");
 const board_primitives_mod = @import("./board_primitives.zig");
 const readout_mod = @import("./readout.zig");
+const table_mod = @import("./table.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -148,6 +149,13 @@ pub const kv_line = readout_mod.kv_line;
 pub const kv_line_in = readout_mod.kv_line_in;
 pub const sentence = readout_mod.sentence;
 pub const divider = readout_mod.divider;
+// Fixed-lane tables
+pub const TableLane = table_mod.Lane;
+pub const table_width = table_mod.lanes_width;
+pub const table_header_cell = table_mod.header_cell;
+pub const table_cell = table_mod.cell;
+pub const table_row = table_mod.table_row;
+pub const table_header = table_mod.table_header;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
@@ -205,6 +213,7 @@ test {
     _ = act_one_workspace_mod;
     _ = board_primitives_mod;
     _ = readout_mod;
+    _ = table_mod;
     _ = @import("./actions_section.zig");
     _ = @import("./build_section.zig");
 }

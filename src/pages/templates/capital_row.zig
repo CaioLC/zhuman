@@ -28,6 +28,7 @@ const Entity = ha.world.Entity;
 const Color = uic.Color;
 
 const info = @import("./action_info.zig");
+const table = @import("./table.zig");
 
 /// The table's lanes, in order. The header and every row iterate this one array, so their
 /// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
@@ -81,24 +82,14 @@ pub fn tableWidth(ctx: *UiCtx) f32 {
     return contentWidth(ctx) + row_pad_x * 2;
 }
 
-fn header_cell(parent: El, id: []const u8, width: f32, label: []const u8) !void {
-    const ctx = parent.ctx;
-    const box = try parent.div(id);
-    _ = box.with_size(.{ .fixed = width }, .fit_children);
-    _ = (try box.text("t", label)).with_style(.{
-        Style{ .font = 9, .tracking = 0.07, .text = ctx.res.view.theme.line2 },
-    });
-}
-
-/// Column labels aligned to the exact same responsive lanes as every capital row.
+/// Column labels aligned to the exact same responsive lanes as every capital row: the
+/// table's header row and cells, sized to the lanes visible at this width.
 pub fn capital_header(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
-    const header = try parent.div(id);
-    _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
-        .with_style(.{style.pad_sym(row_pad_x, 4)});
+    const header = try table.table_row(parent, id, row_gap, row_pad_x, 4);
+    _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children);
     for (columns) |c| {
-        if (c.visible(ctx)) try header_cell(header, c.id, c.w, c.label);
+        if (c.visible(ctx)) try table.header_cell(header, c.id, c.w, c.label);
     }
     return header;
 }
@@ -108,14 +99,8 @@ pub const Kind = enum { ready, reach, building, blocked, locked, owned };
 
 pub const Row = struct { kind: Kind, reach: f32, clicked_build: bool, clicked_cancel: bool };
 
-fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Color, right: bool) !void {
-    const box = try parent.div(id);
-    _ = box.with_size(.{ .fixed = width }, .fit_children);
-    const inner = try box.div("i");
-    _ = inner.with_layout(if (right) .center_right else .center_left);
-    _ = (try inner.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-        .with_style(.{ style.body, Style{ .text = color } });
-}
+/// A row's plain cell is the table's.
+const cell = table.cell;
 
 /// A catalog **name** cell: the label is an ellipsis cell of exactly the column
 /// width, so a long good name is elided (`Reinforced Timber Fra…`) instead of stretching the

@@ -71,6 +71,7 @@ const entries = [_][]const u8{
     "zoom_controls",
     "empty_state",
     "readout",
+    "table",
 };
 
 /// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
@@ -458,6 +459,23 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try p.spacer("margins_gap", 1, 8);
         try t.kv_line(p, "forage", "Forage", "1.7e \u{2192} 1.4e", th.good);
         try t.sentence(p, "coverage", "Food lasts ", "3.2d", ".", th.fg);
+    } else if (eq(name, "table")) {
+        const lanes = [_]t.TableLane{
+            .{ .id = "recipe", .label = "RECIPE", .w = 150 },
+            .{ .id = "inputs", .label = "INPUTS", .w = 110 },
+            .{ .id = "state", .label = "STATE", .w = 90 },
+        };
+        const demo = try stage.div("table_demo");
+        _ = demo.with_flow(.{ .dir = .column });
+        _ = try t.table_header(demo, "header", &lanes, 8, 6);
+        const r1 = try t.table_row(demo, "r1", 8, 6, 5);
+        try t.table_cell(r1, "recipe", 150, "Reinforced Timber Frame", th.fg, false);
+        try t.table_cell(r1, "inputs", 110, "12mi 4me", th.dim, false);
+        try t.table_cell(r1, "state", 90, "ready", th.good, true);
+        const r2 = try t.table_row(demo, "r2", 8, 6, 5);
+        try t.table_cell(r2, "recipe", 150, "Kiln", th.fg, false);
+        try t.table_cell(r2, "inputs", 110, "30mi", th.dim, false);
+        try t.table_cell(r2, "state", 90, "reach 60%", th.warn, true);
     } else {
         _ = try stage.text("unknown", "(unknown template)");
     }
