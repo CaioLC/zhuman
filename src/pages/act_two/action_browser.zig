@@ -29,6 +29,7 @@ const El = el.El;
 
 const tile_mod = @import("../templates/action_tile.zig");
 const cc = @import("../templates/catalog_controls.zig");
+const browser = @import("../templates/browser.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
 
@@ -208,17 +209,9 @@ pub fn action_browser(
         .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.stack);
 
     // Heading + the count of verbs held.
-    const heading = try outer.div("heading");
-    _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
-    const copy = try heading.div("copy");
-    _ = copy.with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try copy.text("title", "ACTIONS")).with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try copy.text("subtitle", "What will the settlement do now?"))
-        .with_style(.{Style{ .font = 11, .text = th.dim }});
     var count_buf: [16]u8 = undefined;
     const count = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{list.len}) catch "VERBS";
-    _ = (try heading.text("count", count)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = try browser.browser_heading(outer, "heading", "ACTIONS", "What will the settlement do now?", count);
 
     // Controls bar + classification/sort.
     const controls = try cc.catalog_controls(outer, "a2_actions_ctl", &sort_kinds, catalog_state, search_owner);
@@ -230,23 +223,11 @@ pub fn action_browser(
 
     // Two-column compact grid (one column at the compact breakpoint).
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
-    const grid = try outer.div("grid");
-    _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    const lanes: [2]El = if (compact) blk: {
-        _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        break :blk .{ grid, grid };
-    } else blk: {
-        _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(grid_gap);
-        const left = try grid.div("left");
-        _ = left.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        const right = try grid.div("right");
-        _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
-        break :blk .{ left, right };
-    };
+    const grid = try browser.tile_lanes(outer, "grid", compact, grid_gap);
 
     if (shown.len == 0) {
         const msg = if (list.len == 0) "No action is open yet. Build or research one." else "No action matches your search.";
-        _ = (try grid.text("empty", msg)).with_style(.{ style.body, Style{ .text = th.line2 } });
+        _ = (try grid.grid.text("empty", msg)).with_style(.{ style.body, Style{ .text = th.line2 } });
         return null;
     }
 
@@ -254,7 +235,7 @@ pub fn action_browser(
     for (shown.idx[0..shown.len], 0..) |i, pos| {
         const ent = &list[i];
         // Keyed by the verb's id, so focus and selection follow it through a re-sort or filter.
-        if (try tile_mod.action_tile(lanes[pos % 2], world, e, ent.ai, ent.rec.id)) |t| {
+        if (try tile_mod.action_tile(grid.lanes[pos % 2], world, e, ent.ai, ent.rec.id)) |t| {
             _ = t.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
                 .with_flow(.{ .dir = .column, .main = .center });
             if (t.clicked) activated = ent.ai;
