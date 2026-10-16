@@ -45,6 +45,7 @@ const act_one_workspace_mod = @import("./act_one_workspace.zig");
 const board_primitives_mod = @import("./board_primitives.zig");
 const readout_mod = @import("./readout.zig");
 const table_mod = @import("./table.zig");
+const browser_mod = @import("./browser.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -156,6 +157,10 @@ pub const table_header_cell = table_mod.header_cell;
 pub const table_cell = table_mod.cell;
 pub const table_row = table_mod.table_row;
 pub const table_header = table_mod.table_header;
+// Catalog browser chrome
+pub const browser_heading = browser_mod.browser_heading;
+pub const TileLanes = browser_mod.Lanes;
+pub const tile_lanes = browser_mod.tile_lanes;
 
 // vitals figure
 pub const Figure = figure_mod.Figure;
@@ -214,6 +219,7 @@ test {
     _ = board_primitives_mod;
     _ = readout_mod;
     _ = table_mod;
+    _ = browser_mod;
     _ = @import("./actions_section.zig");
     _ = @import("./build_section.zig");
 }

@@ -72,6 +72,8 @@ const entries = [_][]const u8{
     "empty_state",
     "readout",
     "table",
+    "browser_heading",
+    "tile_lanes",
 };
 
 /// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
@@ -476,6 +478,17 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         try t.table_cell(r2, "recipe", 150, "Kiln", th.fg, false);
         try t.table_cell(r2, "inputs", 110, "30mi", th.dim, false);
         try t.table_cell(r2, "state", 90, "reach 60%", th.warn, true);
+    } else if (eq(name, "browser_heading")) {
+        const demo = try stage.div("heading_demo");
+        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        _ = try t.browser_heading(demo, "bh", "ACTIONS", "What will the settlement do now?", "20 VERBS");
+    } else if (eq(name, "tile_lanes")) {
+        const demo = try stage.div("lanes_demo");
+        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const grid = try t.tile_lanes(demo, "grid", false, 10);
+        _ = try t.button(grid.lanes[0], "a", "first tile, left lane", true);
+        _ = try t.button(grid.lanes[1], "b", "second tile, right lane", true);
+        _ = try t.button(grid.lanes[0], "c", "third tile, left again", true);
     } else {
         _ = try stage.text("unknown", "(unknown template)");
     }
