@@ -1,436 +1,653 @@
-//! `replay` — **scripted synthetic input** into the host input model and the engine's event
-//! stage, without SDL polling. The game's event loop (`main.zig`) is the one production driver:
-//! it turns `sdl.events.poll()` into `Input.record*` calls, then runs the pointer-activation and
-//! command portions of the event stage (`markTarget`/`markKey`/`moveFocus`, `PointerActivation`,
-//! `commandFromKeyEvent`). None of that lower half touches SDL — the engine's `mark*` family is
-//! pure over the slot pool, `PointerActivation` and `command.fromKeyEvent` are pure value
-//! transforms — so an interaction state machine can be regression-tested by feeding the same
-//! `Input.record*` edges and running the same event-stage order against a laid-out slot pool.
+//! Synthetic input replay — a script of pointer, wheel, key, text, focus, cancellation,
+//! and resize events fed through the **same** entry points the SDL loop uses to fill the
+//! input model (`Input.record*`, `appendText`, `setWindowFocus`, `cancel`) and to route
+//! pointer edges (`route.Router`), then run through the frame driver one frame at a time.
+//! Nothing here bypasses `Input.beginFrame`'s edge semantics or the router's policy: a
+//! replayed frame is the desktop loop body minus SDL and minus the simulation tick.
 //!
-//! This is that lower half, lifted into one reusable, SDL-free driver so a test (QA-08) or a
-//! deterministic fixture (QA-07) can script pointer/key/text/wheel events and assert the
-//! resulting `Interaction` flags, focus, and capture — the regression surface for the
-//! interaction state machines. It owns no window, no font, no clipboard: clipboard-bound
-//! editing commands (`clipboard_*`) are deliberately **not** executed here (the production
-//! router gates them to SDL clipboard availability); every other command maps the same way the
-//! game does.
-//!
-//! **What it is not.** It does not build a UI frame or measure text — a frame's node tree needs
-//! the platform font (see `test_ui.zig`/`control.zig`). The caller stamps the slots it wants to
-//! probe (`Driver.stamp`) exactly as the post-layout `stamp_rects` walk would, scripts input,
-//! then reads flags back. Pixel rendering stays out: this asserts input/layout, nothing drawn.
+//! A replay never paints. The host it drives is headless — trees are built, laid out, and
+//! stamped, so hit testing, activation, focus, registries, and pools behave exactly as on
+//! the desktop — and the test asserts on `UiCtx`/`Resources` state (or on what its own
+//! build function observed) after each frame.
 
 const std = @import("std");
-const input = @import("input.zig");
-const activation = @import("activation.zig");
-const command = @import("command.zig");
+const sdl = @import("sdl3");
 const cb = @import("ctx_binding.zig");
-const ui = @import("ui");
+const input_mod = @import("input.zig");
+const frame_mod = @import("frame.zig");
+const route = @import("route.zig");
+const view = @import("view.zig");
+const Resources = @import("../res.zig").Resources;
 
-const UiCtx = cb.UiCtx;
-const Rect = ui.Rect;
-const Point = input.Point;
+pub const UiCtx = cb.UiCtx;
+pub const Trees = frame_mod.Trees;
+pub const Point = input_mod.Point;
+pub const PointerKind = input_mod.PointerKind;
+pub const PointerButton = input_mod.PointerButton;
+pub const Modifiers = input_mod.Modifiers;
+pub const Keycode = sdl.keycode.Keycode;
 
-/// One scripted input event. Mirrors the production event loop's SDL cases
-/// (`main.zig`'s `poll` switch) one-to-one so a script reads as the gestures a user performs.
-/// Coordinates are already in the engine's device-px layout space (production applies the DPI
-/// `pointerAt` seam before `record*`); a fixture builds its slots in the same space.
+/// Which pointer a synthetic event comes from. The default is the anonymous mouse, the
+/// identity SDL reports for an ordinary desktop mouse.
+pub const Pointer = struct { kind: PointerKind = .mouse, id: ?u64 = null };
+
+/// One synthetic event. Coordinates are in the input model's space — device px, the
+/// space the layout is solved and hit-tested in.
 pub const Event = union(enum) {
-    /// Pointer moved to `at`. `delta` defaults to the step from the last known position.
-    move: struct { at: Point, kind: input.PointerKind = .mouse, id: ?u64 = 0, delta: ?Point = null },
-    /// Primary (or named) button pressed at `at`.
-    press: struct { at: Point, button: input.PointerButton = .primary, kind: input.PointerKind = .mouse, id: ?u64 = 0, clicks: u8 = 1 },
-    /// Primary (or named) button released at `at`.
-    release: struct { at: Point, button: input.PointerButton = .primary, kind: input.PointerKind = .mouse, id: ?u64 = 0, clicks: u8 = 1 },
-    /// Mouse wheel scrolled by `delta` while the pointer is over `at`.
-    wheel: struct { at: Point, delta: Point, kind: input.PointerKind = .mouse, id: ?u64 = 0 },
-    /// A key edge (press/repeat/release) with modifiers. Routed through the same semantic
-    /// command mapping the game uses.
-    key: struct { key: @import("sdl3").keycode.Keycode, action: input.KeyAction = .press, modifiers: input.Modifiers = .{} },
-    /// Committed text (an IME/typed string), appended to the frame's text buffer.
+    pointer_move: Move,
+    pointer_press: Button,
+    pointer_release: Button,
+    wheel: Wheel,
+    key_press: Key,
+    key_repeat: Key,
+    key_release: Key,
+    /// Committed text bytes, as SDL's text-input event delivers them beside the key event.
     text: []const u8,
-    /// Window focus changed (focus loss cancels held input, exactly as the platform does).
-    window_focus: bool,
+    focus_lost,
+    focus_gained,
+    /// Platform/touch cancellation of every held input.
+    cancel,
+    /// The window changed size: recompute the view metrics and mark geometry stale.
+    resize: Resize,
+
+    pub const Move = struct { x: f32, y: f32, pointer: Pointer = .{} };
+    pub const Button = struct {
+        x: f32,
+        y: f32,
+        button: PointerButton = .primary,
+        clicks: u8 = 1,
+        pointer: Pointer = .{},
+    };
+    pub const Wheel = struct { x: f32, y: f32, dx: f32 = 0, dy: f32 = 0, pointer: Pointer = .{} };
+    pub const Key = struct { key: Keycode, modifiers: Modifiers = .{} };
+    pub const Resize = struct { logical_w: f32, logical_h: f32, pixel_density: f32 = 1 };
 };
 
-/// What a scripted key command did, so a test can assert routing without re-deriving it.
-pub const CommandOutcome = struct {
-    command: command.Command,
-    /// A focus-moving command (`focus_next`/`focus_previous`) that actually moved focus.
-    focus_moved: bool = false,
-    /// A roving-group move (`move_left/right/up/down`) that actually moved the roving focus.
-    roving_moved: bool = false,
-    /// An arrow/page command that fell through to the focused range owner (a slider) and
-    /// marked its increment/decrement flag, because no roving group claimed the move.
-    range_marked: bool = false,
-    /// `activate` (Enter/Space) that marked a focused control `clicked`.
-    activated: bool = false,
-    /// `dismiss` (Escape) that marked the registered escape owner `dismissed`.
-    dismissed: bool = false,
-    /// A clipboard/select-all command that this SDL-free driver does not execute (the
-    /// production router gates it to the SDL clipboard). Reported so a script can see it was
-    /// recognized but intentionally skipped.
-    clipboard_skipped: bool = false,
-};
+pub const Replay = struct {
+    driver: *frame_mod.Driver,
+    host: frame_mod.Host,
 
-/// The SDL-free lower half of the event stage, bound to one `UiCtx`. The caller owns the
-/// `UiCtx` and its `Resources` (whose `input` field this writes). Pointer gestures run through
-/// the real `PointerActivation` policy and the engine's capture-aware `markTarget`/`targetAt`,
-/// so a release validates against the same stamped target the production loop checks.
-pub const Driver = struct {
-    ctx: *UiCtx,
-    activation: activation.PointerActivation = .{},
-    /// Last pointer position, so a `move` without an explicit delta derives one.
-    last_pointer: Point = .{},
-
-    pub fn init(ctx: *UiCtx) Driver {
-        return .{ .ctx = ctx };
+    pub fn init(driver: *frame_mod.Driver, host: frame_mod.Host) Replay {
+        return .{ .driver = driver, .host = host };
     }
 
-    fn in(self: *Driver) *input.Input {
-        return &self.ctx.res.input;
+    /// One frame as the desktop loop runs it: reset the input model's edges, record and
+    /// route every event in order, then run the driver's step.
+    pub fn frame(self: *Replay, events: []const Event) !void {
+        self.driver.ui.res.input.beginFrame();
+        for (events) |event| self.feed(event);
+        try self.driver.step(self.host);
     }
 
-    /// Begin a frame's input exactly as the production loop does: clear per-frame edges on the
-    /// `Input` model (holding position/held state). Call once before scripting a frame's events.
-    pub fn beginInput(self: *Driver) void {
-        self.in().beginFrame();
+    /// `count` frames with no input — the frames that let geometry stamp and registries
+    /// publish before a script acts on them.
+    pub fn idle(self: *Replay, count: usize) !void {
+        for (0..count) |_| try self.frame(&.{});
     }
 
-    /// Stamp a slot the way the post-layout `stamp_rects` walk would, so the event stage can
-    /// hit-test and bubble against it. `clip` is the inherited clip (null = uncropped);
-    /// `parent` the nearest stamped ancestor key for containment bubbling.
-    pub fn stamp(self: *Driver, key: u64, rect: Rect, clip: ?Rect, parent: ?u64) void {
-        _ = self.ctx.interactionOf(key); // a node has no slot until queried
-        _ = self.ctx.stampRect(key, rect, clip, parent);
-    }
-
-    /// Feed one scripted event. Pointer events update the `Input` model and run the
-    /// activation/mark portion of the event stage; key events map to a semantic command and
-    /// route it; text/focus mirror the platform. Returns a command outcome only for a key
-    /// event that produced a routed command, else null.
-    pub fn feed(self: *Driver, event: Event) ?CommandOutcome {
+    /// Record one event into the input model and route it, exactly as the SDL loop does
+    /// for the corresponding SDL event. Primary presses/releases route for every pointer
+    /// kind: a synthetic touch is the finger event itself, not a synthesized duplicate.
+    pub fn feed(self: *Replay, event: Event) void {
+        const res = self.driver.ui.res;
+        const input = &res.input;
+        const router = &self.driver.router;
         switch (event) {
-            .move => |m| {
-                const delta = m.delta orelse Point{ .x = m.at.x - self.last_pointer.x, .y = m.at.y - self.last_pointer.y };
-                self.in().recordMotion(m.kind, m.id, m.at, delta);
-                self.last_pointer = m.at;
-                // Mouse motion routes an in-flight gesture (drag detection); touch does not,
-                // matching the production loop.
-                if (m.kind != .touch) {
-                    self.activation.motion(m.kind, m.id, m.at);
-                    if (self.activation.draggingKey()) |key| _ = self.ctx.markKey(key, .dragging);
-                }
+            .pointer_move => |m| {
+                const pos = Point{ .x = m.x, .y = m.y };
+                const prev = input.pointer.position;
+                input.recordMotion(m.pointer.kind, m.pointer.id, pos, .{ .x = pos.x - prev.x, .y = pos.y - prev.y });
+                router.pointerMotion(m.pointer.kind, m.pointer.id, pos);
             },
-            .press => |p| {
-                self.in().recordButton(p.kind, p.id, p.button, true, p.clicks, p.at);
-                self.last_pointer = p.at;
-                if (p.button == .primary and p.kind != .touch) {
-                    const target = self.ctx.markTarget(.pressed, p.at.x, p.at.y);
-                    self.activation.press(target, p.kind, p.id, p.at);
-                }
+            .pointer_press => |b| {
+                const pos = Point{ .x = b.x, .y = b.y };
+                input.recordButton(b.pointer.kind, b.pointer.id, b.button, true, b.clicks, pos);
+                if (b.button == .primary) router.pointerPress(b.pointer.kind, b.pointer.id, pos);
             },
-            .release => |r| {
-                self.in().recordButton(r.kind, r.id, r.button, false, r.clicks, r.at);
-                self.last_pointer = r.at;
-                if (r.button == .primary and r.kind != .touch) {
-                    self.activation.motion(r.kind, r.id, r.at);
-                    _ = self.ctx.markTarget(.released, r.at.x, r.at.y);
-                    const target = self.ctx.targetAt(r.at.x, r.at.y);
-                    if (self.activation.release(target, r.kind, r.id, r.at)) |key| _ = self.ctx.markKey(key, .clicked);
-                }
+            .pointer_release => |b| {
+                const pos = Point{ .x = b.x, .y = b.y };
+                input.recordButton(b.pointer.kind, b.pointer.id, b.button, false, b.clicks, pos);
+                if (b.button == .primary) router.pointerRelease(b.pointer.kind, b.pointer.id, pos);
             },
             .wheel => |w| {
-                self.in().recordWheel(w.kind, w.id, w.at, w.delta);
-                self.last_pointer = w.at;
-                self.ctx.mark(.wheel, w.at.x, w.at.y);
+                const pos = Point{ .x = w.x, .y = w.y };
+                input.recordWheel(w.pointer.kind, w.pointer.id, pos, .{ .x = w.dx, .y = w.dy });
+                router.wheel(pos);
             },
-            .key => |k| {
-                self.in().recordKey(k.key, k.action, k.modifiers);
-                const cmd = command.fromKeyEvent(.{ .key = k.key, .action = k.action, .modifiers = k.modifiers }) orelse return null;
-                return self.route(cmd);
+            .key_press => |k| input.recordKey(k.key, .press, k.modifiers),
+            .key_repeat => |k| input.recordKey(k.key, .repeat, k.modifiers),
+            .key_release => |k| input.recordKey(k.key, .release, k.modifiers),
+            .text => |bytes| input.appendText(bytes),
+            .focus_lost => {
+                input.setWindowFocus(false);
+                router.windowFocusLost();
             },
-            .text => |bytes| self.in().appendText(bytes),
-            .window_focus => |focused| self.in().setWindowFocus(focused),
+            .focus_gained => input.setWindowFocus(true),
+            .cancel => {
+                input.cancel();
+                router.cancelGesture();
+            },
+            .resize => |r| {
+                const m = view.compute(r.logical_w, r.logical_h, r.pixel_density);
+                res.view.metrics = m;
+                res.view.scale = m.dpi_scale;
+                router.geometryChanged();
+            },
         }
-        return null;
-    }
-
-    /// Script a whole gesture — press, optional moves, release — at one or more points. The
-    /// first point is the press; intermediate points are moves; the last is the release. A
-    /// single point is a click in place. Returns whether the gesture activated a control.
-    pub fn click(self: *Driver, at: Point) bool {
-        _ = self.feed(.{ .press = .{ .at = at } });
-        _ = self.feed(.{ .release = .{ .at = at } });
-        return self.activation.pressedKey() == null; // consumed by its matching release
-    }
-
-    /// Route a semantic command through the same decisions the game's `routeCommand` makes
-    /// for the SDL-free subset: focus traversal, roving movement, activation, and dismissal.
-    /// Clipboard/editor-text commands are recognized but not executed here (no window).
-    fn route(self: *Driver, cmd: command.Command) CommandOutcome {
-        var out: CommandOutcome = .{ .command = cmd };
-        switch (cmd) {
-            .focus_next => out.focus_moved = self.ctx.moveFocus(.next, true),
-            .focus_previous => out.focus_moved = self.ctx.moveFocus(.previous, true),
-            .move_left => {
-                out.roving_moved = self.ctx.moveFocusedRoving(.previous, true);
-                if (out.roving_moved) {
-                    if (self.ctx.focusedKey()) |key| _ = self.ctx.markKey(key, .clicked);
-                } else out.range_marked = self.markRange(.decrement);
-            },
-            .move_up => {
-                out.roving_moved = self.ctx.moveFocusedRoving(.previous, true);
-                if (out.roving_moved) {
-                    if (self.ctx.focusedKey()) |key| _ = self.ctx.markKey(key, .clicked);
-                } else out.range_marked = self.markRange(.increment);
-            },
-            .move_right => {
-                out.roving_moved = self.ctx.moveFocusedRoving(.next, true);
-                if (out.roving_moved) {
-                    if (self.ctx.focusedKey()) |key| _ = self.ctx.markKey(key, .clicked);
-                } else out.range_marked = self.markRange(.increment);
-            },
-            .move_down => {
-                out.roving_moved = self.ctx.moveFocusedRoving(.next, true);
-                if (out.roving_moved) {
-                    if (self.ctx.focusedKey()) |key| _ = self.ctx.markKey(key, .clicked);
-                } else out.range_marked = self.markRange(.decrement);
-            },
-            .page_up => out.range_marked = self.markRange(.page_increment),
-            .page_down => out.range_marked = self.markRange(.page_decrement),
-            .activate => if (self.ctx.focusedKey()) |key| {
-                out.activated = self.ctx.markKey(key, .clicked);
-            },
-            .dismiss => if (self.ctx.res.commands.escapeTarget()) |target| {
-                out.dismissed = self.ctx.markKey(target, .dismissed);
-            },
-            .focus_search => if (self.ctx.res.commands.searchTarget()) |target| {
-                out.focus_moved = self.ctx.requestFocus(target);
-            },
-            // Editor-text and clipboard commands need the focused editor model / SDL clipboard,
-            // which this SDL-free driver does not own. Flag the clipboard family so a script
-            // sees it was recognized; plain editing commands fall through as a no-op outcome.
-            .clipboard_copy, .clipboard_cut, .clipboard_paste, .select_all => out.clipboard_skipped = true,
-            else => {},
-        }
-        return out;
-    }
-
-    /// Mark one transient range command on the focused slider, matching production's
-    /// `markFocusedRange`: the focused key must be a registered range owner (so an arrow cannot
-    /// mutate an arbitrary focused node), then its flag is routed. Returns whether it marked.
-    fn markRange(self: *Driver, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
-        const key = self.ctx.focusedKey() orelse return false;
-        if (!self.ctx.res.commands.isRangeOwner(key)) return false;
-        return self.ctx.markKey(key, flag);
     }
 };
 
-// =============================== Tests (SDL-free) ==========================================
-// The driver is the lower half of `main.zig`'s event loop with SDL removed, so it is tested
-// exactly as `drag.zig`/`control.zig` are: a `Resources` with an undefined platform, real
-// pools/focus/semantics, slots stamped by hand, scripted input, flags read back. No window,
-// no font, no allocator ceremony beyond the pools.
+/// A `Resources` for a windowless run: every host registry at its default, the sim fresh,
+/// and `platform` left undefined because no renderer, font, or window exists. A headless
+/// build must therefore not create text, image, or svg content.
+pub fn headlessResources() Resources {
+    return .{ .platform = undefined, .sim = .{} };
+}
 
-const testing = std.testing;
-const Resources = @import("../res.zig").Resources;
-const key_of = @import("ui").key;
+/// A headless `frame_mod.Host` over a fixture whose type declares
+/// `fn build(self: *T, ui_ctx: *UiCtx) anyerror!Trees`. No cursor, draw, or report hooks.
+pub fn hostOf(comptime T: type, fixture: *T) frame_mod.Host {
+    const Thunk = struct {
+        fn build(user: *anyopaque, ui_ctx: *UiCtx) anyerror!Trees {
+            const self: *T = @ptrCast(@alignCast(user));
+            return self.build(ui_ctx);
+        }
+    };
+    return .{ .user = fixture, .build = Thunk.build };
+}
 
+/// An in-memory `route.Platform` for tests: one owned clipboard text and a count of
+/// text-input session stops.
+pub const MemoryPlatform = struct {
+    buf: [256]u8 = undefined,
+    len: usize = 0,
+    has_text: bool = false,
+    stops: u32 = 0,
+
+    pub fn platform(self: *MemoryPlatform) route.Platform {
+        return .{ .ctx = self, .vtable = &vtable };
+    }
+
+    pub fn text(self: *const MemoryPlatform) []const u8 {
+        return self.buf[0..self.len];
+    }
+
+    const vtable: route.Platform.VTable = .{
+        .clipboard_read = read,
+        .clipboard_write = write,
+        .stop_text_input = stop,
+    };
+
+    fn read(ctx: ?*anyopaque, buf: []u8) ?[]const u8 {
+        const self: *MemoryPlatform = @ptrCast(@alignCast(ctx.?));
+        if (!self.has_text) return null;
+        const n = @min(buf.len, self.len);
+        @memcpy(buf[0..n], self.buf[0..n]);
+        return buf[0..n];
+    }
+
+    fn write(ctx: ?*anyopaque, bytes: [:0]const u8) bool {
+        const self: *MemoryPlatform = @ptrCast(@alignCast(ctx.?));
+        if (bytes.len > self.buf.len) return false;
+        @memcpy(self.buf[0..bytes.len], bytes);
+        self.len = bytes.len;
+        self.has_text = true;
+        return true;
+    }
+
+    fn stop(ctx: ?*anyopaque) void {
+        const self: *MemoryPlatform = @ptrCast(@alignCast(ctx.?));
+        self.stops += 1;
+    }
+};
+
+// ============================ Tests ==========================================
+// Every fixture builds interactive nodes without text, so no font is needed. A fixture
+// records what its build observed (`.clicked`, focus, editor text, scroll offset) and the
+// test asserts on that after each frame — the same information a real screen acts on.
+
+const el = @import("elements.zig");
+const drag = @import("drag.zig");
+const ui_root = @import("ui");
+const UiState = cb.UiState;
+const Node = cb.Node;
+
+/// Everything one headless run owns, with stable addresses for the pointers between them.
 const Rig = struct {
     res: Resources,
-    ctx: UiCtx,
+    arena: std.heap.ArenaAllocator,
+    ui: UiCtx,
+    driver: frame_mod.Driver,
 
-    fn init(self: *Rig) void {
-        self.res = .{ .platform = undefined, .sim = .{} };
-        self.ctx = UiCtx.init(&self.res, testing.allocator, undefined);
-        self.ctx.beginFrame();
-        self.res.commands.beginBuild();
+    fn setUp(self: *Rig, platform: route.Platform) void {
+        self.res = headlessResources();
+        self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        self.ui = UiCtx.init(&self.res, std.testing.allocator, self.arena.allocator());
+        self.driver = frame_mod.Driver.init(&self.ui, &self.arena, platform);
     }
 
-    fn deinit(self: *Rig) void {
-        self.ctx.deinit();
+    fn tearDown(self: *Rig) void {
+        self.ui.deinit();
+        self.arena.deinit();
+    }
+
+    fn replay(self: *Rig, host: frame_mod.Host) Replay {
+        return Replay.init(&self.driver, host);
     }
 };
 
-test "a click over a stamped target activates it exactly once" {
-    var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
-
-    const btn = key_of(0, "btn");
-    d.stamp(btn, .{ .x = 0, .y = 0, .w = 100, .h = 40 }, null, null);
-
-    _ = d.feed(.{ .press = .{ .at = .{ .x = 20, .y = 20 } } });
-    _ = d.feed(.{ .release = .{ .at = .{ .x = 20, .y = 20 } } });
-    try testing.expect(rig.ctx.interactionOf(btn).clicked);
+fn roots(ui_ctx: *UiCtx, root: *Node) !Trees {
+    const list = try ui_ctx.arena.alloc(*Node, 1);
+    list[0] = root;
+    return list;
 }
 
-test "a release that drifts past the drag threshold is suppressed, not a click" {
+/// One 100×40 interactive box at (20, 20).
+const ClickFixture = struct {
+    clicks: u32 = 0,
+    pressed: bool = false,
+    held: bool = false,
+    dragging: bool = false,
+
+    fn build(self: *ClickFixture, ui_ctx: *UiCtx) anyerror!Trees {
+        const root = try el.root(ui_ctx, "root");
+        const btn = (try root.div("btn"))
+            .with_layout(.top_left)
+            .with_offset_px(20, 20)
+            .with_size_px(.{ .fixed = 100 }, .{ .fixed = 40 });
+        const q = btn.query();
+        self.pressed = q.pressed;
+        self.held = q.held;
+        self.dragging = q.dragging;
+        if (q.clicked) self.clicks += 1;
+        return roots(ui_ctx, root.get());
+    }
+};
+
+test "replay: press and release on an interactive node yields .clicked to its builder once" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ClickFixture{};
+    var r = rig.replay(hostOf(ClickFixture, &fx));
 
-    const btn = key_of(0, "btn");
-    d.stamp(btn, .{ .x = 0, .y = 0, .w = 200, .h = 200 }, null, null);
+    try r.idle(1); // build, layout, stamp — nothing is hittable before this
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
 
-    _ = d.feed(.{ .press = .{ .at = .{ .x = 20, .y = 20 } } });
-    _ = d.feed(.{ .move = .{ .at = .{ .x = 60, .y = 60 } } }); // well past the 4px threshold
-    _ = d.feed(.{ .release = .{ .at = .{ .x = 60, .y = 60 } } });
-    try testing.expect(!rig.ctx.interactionOf(btn).clicked);
+    // Press in one frame: the builder sees press and held, no click yet.
+    try r.frame(&.{.{ .pointer_press = .{ .x = 50, .y = 30 } }});
+    try std.testing.expect(fx.pressed and fx.held);
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
+
+    // Release over the same node in the next frame: exactly one click, then none.
+    try r.frame(&.{.{ .pointer_release = .{ .x = 52, .y = 31 } }});
+    try std.testing.expectEqual(@as(u32, 1), fx.clicks);
+    try std.testing.expect(!fx.held);
+    try r.idle(1);
+    try std.testing.expectEqual(@as(u32, 1), fx.clicks);
+
+    // Press and release inside one frame also complete.
+    try r.frame(&.{ .{ .pointer_press = .{ .x = 50, .y = 30 } }, .{ .pointer_release = .{ .x = 50, .y = 30 } } });
+    try std.testing.expectEqual(@as(u32, 2), fx.clicks);
 }
 
-test "a release over a different target does not activate the press target" {
+test "replay: a release outside the pressed node suppresses activation" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ClickFixture{};
+    var r = rig.replay(hostOf(ClickFixture, &fx));
+    try r.idle(1);
 
-    const a = key_of(0, "a");
-    const b = key_of(0, "b");
-    d.stamp(a, .{ .x = 0, .y = 0, .w = 50, .h = 50 }, null, null);
-    d.stamp(b, .{ .x = 60, .y = 0, .w = 50, .h = 50 }, null, null);
-
-    _ = d.feed(.{ .press = .{ .at = .{ .x = 10, .y = 10 } } });
-    _ = d.feed(.{ .release = .{ .at = .{ .x = 70, .y = 10 } } });
-    try testing.expect(!rig.ctx.interactionOf(a).clicked);
-    try testing.expect(!rig.ctx.interactionOf(b).clicked);
+    // Two pixels of travel, from just inside the right edge to just outside: no drag,
+    // but the geometric target differs, so no click.
+    try r.frame(&.{.{ .pointer_press = .{ .x = 119, .y = 30 } }});
+    try r.frame(&.{.{ .pointer_release = .{ .x = 121, .y = 30 } }});
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
+    try std.testing.expect(!fx.dragging);
 }
 
-test "topmost stamped slot takes a click; the one beneath is left alone" {
+test "replay: a drag past the threshold suppresses the click and publishes .dragging" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ClickFixture{};
+    var r = rig.replay(hostOf(ClickFixture, &fx));
+    try r.idle(1);
 
-    const under = key_of(0, "under");
-    const over = key_of(0, "over");
-    d.stamp(under, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
-    d.stamp(over, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null); // painted after → topmost
+    try r.frame(&.{.{ .pointer_press = .{ .x = 50, .y = 30 } }});
+    try r.frame(&.{.{ .pointer_move = .{ .x = 60, .y = 30 } }}); // 10px > the 4px threshold
+    try std.testing.expect(fx.dragging);
+    try r.frame(&.{.{ .pointer_release = .{ .x = 50, .y = 30 } }}); // back over the node
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
 
-    _ = d.feed(.{ .press = .{ .at = .{ .x = 50, .y = 50 } } });
-    _ = d.feed(.{ .release = .{ .at = .{ .x = 50, .y = 50 } } });
-    try testing.expect(rig.ctx.interactionOf(over).clicked);
-    try testing.expect(!rig.ctx.interactionOf(under).clicked);
+    // The gesture is consumed: the next ordinary click completes.
+    try r.frame(&.{ .{ .pointer_press = .{ .x = 50, .y = 30 } }, .{ .pointer_release = .{ .x = 50, .y = 30 } } });
+    try std.testing.expectEqual(@as(u32, 1), fx.clicks);
 }
 
-test "a wheel event marks the hovered scroll target" {
+test "replay: window focus loss and cancellation drop the in-flight activation" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ClickFixture{};
+    var r = rig.replay(hostOf(ClickFixture, &fx));
+    try r.idle(1);
 
-    const scroller = key_of(0, "scroll");
-    d.stamp(scroller, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
-    _ = d.feed(.{ .wheel = .{ .at = .{ .x = 50, .y = 50 }, .delta = .{ .x = 0, .y = -3 } } });
-    try testing.expect(rig.ctx.interactionOf(scroller).wheel);
-    try testing.expectEqual(@as(f32, -3), rig.res.input.pointer.wheel.y);
+    try r.frame(&.{.{ .pointer_press = .{ .x = 50, .y = 30 } }});
+    try r.frame(&.{ .focus_lost, .{ .pointer_release = .{ .x = 50, .y = 30 } } });
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
+    try std.testing.expect(!rig.res.input.window_focused);
+
+    try r.frame(&.{ .focus_gained, .{ .pointer_press = .{ .x = 50, .y = 30 } } });
+    try r.frame(&.{ .cancel, .{ .pointer_release = .{ .x = 50, .y = 30 } } });
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
 }
 
-test "Tab routes a focus_next command that moves focus between registered controls" {
+test "replay: a resize makes geometry stale for one frame so no click lands on the ghost" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ClickFixture{};
+    var r = rig.replay(hostOf(ClickFixture, &fx));
+    try r.idle(1);
 
-    const a = key_of(0, "a");
-    const b = key_of(0, "b");
-    // Focus traversal reads the LAST completed frame's registered order (the engine's
-    // double-buffered focus registry), exactly as the production event stage does. So the
-    // controls are registered and the frame is ended to publish that order before Tab moves.
-    rig.ctx.registerFocus(a, true);
-    rig.ctx.registerFocus(b, true);
-    rig.ctx.endFrame();
-    rig.ctx.beginFrame();
-    _ = rig.ctx.requestFocus(a);
-    d.beginInput();
+    try r.frame(&.{
+        .{ .resize = .{ .logical_w = 1200, .logical_h = 1000 } },
+        .{ .pointer_press = .{ .x = 50, .y = 30 } },
+        .{ .pointer_release = .{ .x = 50, .y = 30 } },
+    });
+    try std.testing.expectEqual(@as(u32, 0), fx.clicks);
+    try std.testing.expectEqual(@as(f32, 1200), rig.res.view.metrics.px_w);
+    // The frame re-stamped at the new size, so the guard lifted.
+    try std.testing.expect(!rig.driver.router.geometry_stale);
 
-    const out = d.feed(.{ .key = .{ .key = .tab } }).?;
-    try testing.expectEqual(command.Command.focus_next, out.command);
-    try testing.expect(out.focus_moved);
-    try testing.expect(rig.ctx.isFocused(b));
+    try r.frame(&.{ .{ .pointer_press = .{ .x = 50, .y = 30 } }, .{ .pointer_release = .{ .x = 50, .y = 30 } } });
+    try std.testing.expectEqual(@as(u32, 1), fx.clicks);
 }
 
-test "Enter activates the focused control; Escape dismisses the registered escape owner" {
+/// Two focusable boxes registered in order; `a` reports keyboard activation.
+const FocusFixture = struct {
+    a: u64 = 0,
+    b: u64 = 0,
+    a_clicks: u32 = 0,
+
+    fn build(self: *FocusFixture, ui_ctx: *UiCtx) anyerror!Trees {
+        const root = try el.root(ui_ctx, "root");
+        const a = (try root.div("a"))
+            .with_layout(.top_left)
+            .with_size_px(.{ .fixed = 40 }, .{ .fixed = 40 });
+        const b = (try root.div("b"))
+            .with_layout(.top_left)
+            .with_offset_px(60, 0)
+            .with_size_px(.{ .fixed = 40 }, .{ .fixed = 40 });
+        ui_ctx.registerFocus(a.node.key, true);
+        ui_ctx.registerFocus(b.node.key, true);
+        if (a.query().clicked) self.a_clicks += 1;
+        _ = b.query();
+        self.a = a.node.key;
+        self.b = b.node.key;
+        return roots(ui_ctx, root.get());
+    }
+};
+
+test "replay: Tab then Shift+Tab move focus between two registered targets; Enter activates" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = FocusFixture{};
+    var r = rig.replay(hostOf(FocusFixture, &fx));
+    try r.idle(1); // the build registers; endFrame publishes the traversal order
+    try std.testing.expectEqual(@as(?u64, null), rig.ui.focusedKey());
 
-    const btn = key_of(0, "btn");
-    d.stamp(btn, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, null, null);
-    rig.ctx.registerFocus(btn, true);
-    _ = rig.ctx.requestFocus(btn);
+    try r.frame(&.{.{ .key_press = .{ .key = .tab } }});
+    try std.testing.expectEqual(@as(?u64, fx.a), rig.ui.focusedKey());
+    try r.frame(&.{.{ .key_press = .{ .key = .tab } }});
+    try std.testing.expectEqual(@as(?u64, fx.b), rig.ui.focusedKey());
+    try r.frame(&.{.{ .key_press = .{ .key = .tab, .modifiers = .{ .shift = true } } }});
+    try std.testing.expectEqual(@as(?u64, fx.a), rig.ui.focusedKey());
 
-    const dialog = key_of(0, "dialog");
-    d.stamp(dialog, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, null, null);
-    rig.res.commands.registerEscape(dialog);
-    rig.res.commands.endBuild();
-
-    const enter = d.feed(.{ .key = .{ .key = .return_key } }).?;
-    try testing.expect(enter.activated);
-    try testing.expect(rig.ctx.interactionOf(btn).clicked);
-
-    const esc = d.feed(.{ .key = .{ .key = .escape } }).?;
-    try testing.expect(esc.dismissed);
-    try testing.expect(rig.ctx.interactionOf(dialog).dismissed);
+    // Enter emits the same `.clicked` a pointer release would; a repeat does not.
+    try r.frame(&.{.{ .key_press = .{ .key = .return_key } }});
+    try std.testing.expectEqual(@as(u32, 1), fx.a_clicks);
+    try r.frame(&.{.{ .key_repeat = .{ .key = .return_key } }});
+    try std.testing.expectEqual(@as(u32, 1), fx.a_clicks);
 }
 
-test "arrow keys move roving focus within a group" {
+/// A registered search field over a view that registers itself as the Escape target.
+const SearchFixture = struct {
+    field: u64 = 0,
+    focused: bool = false,
+    text: [UiState.TextInputState.max_query_bytes]u8 = undefined,
+    len: usize = 0,
+    refused: bool = false,
+    view_dismissed: u32 = 0,
+
+    fn build(self: *SearchFixture, ui_ctx: *UiCtx) anyerror!Trees {
+        const root = try el.root(ui_ctx, "root");
+        const view_el = (try root.div("view"))
+            .with_layout(.top_left)
+            .with_size_px(.{ .fixed = 400 }, .{ .fixed = 300 });
+        // No Escape owner is registered here: under the host's modal-blocked `/` policy a
+        // registered Escape target (an open modal) would suppress the search shortcut. A
+        // catalog search field is not behind a modal, so it stays slash-reachable. The view
+        // query keeps its slot alive and lets the test assert it is never dismissed.
+        if (view_el.query().dismissed) self.view_dismissed += 1;
+
+        const field = (try view_el.div("search"))
+            .with_layout(.top_left)
+            .with_offset_px(10, 10)
+            .with_size_px(.{ .fixed = 200 }, .{ .fixed = 30 });
+        ui_ctx.registerFocus(field.node.key, true);
+        // `editorKeyOf` indirection: a field owns its own editor model, so the editor key
+        // is the field key; `search_shortcut = true` makes `/` focus it.
+        ui_ctx.res.commands.registerText(field.node.key, field.node.key, true);
+        _ = field.query();
+        const ed = field.node.state(ui_ctx, UiState.TextInputState);
+        const t = ed.text();
+        @memcpy(self.text[0..t.len], t);
+        self.len = t.len;
+        self.refused = ed.refused;
+        self.focused = ui_ctx.isFocused(field.node.key);
+        self.field = field.node.key;
+        return roots(ui_ctx, root.get());
+    }
+
+    fn shown(self: *const SearchFixture) []const u8 {
+        return self.text[0..self.len];
+    }
+};
+
+test "replay: slash focuses the registered text owner and typed text lands in its editor" {
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = SearchFixture{};
+    var r = rig.replay(hostOf(SearchFixture, &fx));
+    try r.idle(1);
+    try std.testing.expect(!fx.focused);
 
-    const group = key_of(0, "tabs");
-    const t0 = key_of(0, "t0");
-    const t1 = key_of(0, "t1");
-    // As with Tab, roving navigation reads the last completed frame's registered group, so the
-    // members are registered and the frame ended to publish them before the arrow moves focus.
-    rig.ctx.registerRovingFocus(group, t0, true);
-    rig.ctx.registerRovingFocus(group, t1, true);
-    rig.ctx.endFrame();
-    rig.ctx.beginFrame();
-    _ = rig.ctx.requestFocus(t0);
-    d.beginInput();
+    // The slash key arrives with its own text byte; the shortcut suppresses that byte.
+    try r.frame(&.{ .{ .key_press = .{ .key = .slash } }, .{ .text = "/" } });
+    try std.testing.expect(fx.focused);
+    try std.testing.expectEqualStrings("", fx.shown());
 
-    const right = d.feed(.{ .key = .{ .key = .right } }).?;
-    try testing.expect(right.roving_moved);
-    try testing.expect(rig.ctx.isFocused(t1));
+    try r.frame(&.{ .{ .key_press = .{ .key = .a } }, .{ .text = "a" }, .{ .key_press = .{ .key = .b } }, .{ .text = "b" } });
+    try std.testing.expectEqualStrings("ab", fx.shown());
+    try r.frame(&.{.{ .key_press = .{ .key = .backspace } }});
+    try std.testing.expectEqualStrings("a", fx.shown());
+
+    // Escape reaches the focused text owner first: focus clears, the view is not dismissed.
+    try r.frame(&.{.{ .key_press = .{ .key = .escape } }});
+    try std.testing.expect(!fx.focused);
+    try std.testing.expectEqual(@as(u32, 0), fx.view_dismissed);
+    // Text with no focused owner goes nowhere.
+    try r.frame(&.{.{ .text = "z" }});
+    try std.testing.expectEqualStrings("a", fx.shown());
 }
 
-test "a clipboard command is recognized but intentionally skipped without a window" {
+test "replay: clipboard chords route through the injected platform seam" {
+    var platform = MemoryPlatform{};
     var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+    rig.setUp(platform.platform());
+    defer rig.tearDown();
+    var fx = SearchFixture{};
+    var r = rig.replay(hostOf(SearchFixture, &fx));
+    try r.idle(1);
 
-    const ctrl = input.Modifiers{ .control = true };
-    const out = d.feed(.{ .key = .{ .key = .c, .modifiers = ctrl } }).?;
-    try testing.expectEqual(command.Command.clipboard_copy, out.command);
-    try testing.expect(out.clipboard_skipped);
+    try r.frame(&.{.{ .key_press = .{ .key = .slash } }});
+    try r.frame(&.{.{ .text = "ab" }});
+    const ctrl = Modifiers{ .control = true };
+    // Ctrl+A selects all and Ctrl+C copies; their letter bytes are suppressed.
+    try r.frame(&.{
+        .{ .key_press = .{ .key = .a, .modifiers = ctrl } },
+        .{ .text = "a" },
+        .{ .key_press = .{ .key = .c, .modifiers = ctrl } },
+        .{ .text = "c" },
+    });
+    try std.testing.expectEqualStrings("ab", platform.text());
+    try std.testing.expectEqualStrings("ab", fx.shown());
+    // End collapses the selection to the end; Ctrl+V pastes there.
+    try r.frame(&.{.{ .key_press = .{ .key = .end } }});
+    try r.frame(&.{ .{ .key_press = .{ .key = .v, .modifiers = ctrl } }, .{ .text = "v" } });
+    try std.testing.expectEqualStrings("abab", fx.shown());
+    try std.testing.expect(!fx.refused);
+
+    // Escape on the text owner ends the platform text-input session; so does focus loss.
+    try r.frame(&.{.{ .key_press = .{ .key = .escape } }});
+    try std.testing.expectEqual(@as(u32, 1), platform.stops);
+    try r.frame(&.{.focus_lost});
+    try std.testing.expectEqual(@as(u32, 2), platform.stops);
 }
 
-test "window focus loss cancels an in-flight press so no later release activates it" {
-    var rig: Rig = undefined;
-    rig.init();
-    defer rig.deinit();
-    var d = Driver.init(&rig.ctx);
-    d.beginInput();
+/// Two overlapping views that both register for Escape; the later one is topmost.
+const EscapeFixture = struct {
+    under_dismissed: u32 = 0,
+    over_dismissed: u32 = 0,
 
-    const btn = key_of(0, "btn");
-    d.stamp(btn, .{ .x = 0, .y = 0, .w = 100, .h = 100 }, null, null);
-    _ = d.feed(.{ .press = .{ .at = .{ .x = 50, .y = 50 } } });
-    _ = d.feed(.{ .window_focus = false });
-    try testing.expect(rig.res.input.cancelled);
-    try testing.expect(!rig.res.input.window_focused);
+    fn build(self: *EscapeFixture, ui_ctx: *UiCtx) anyerror!Trees {
+        const root = try el.root(ui_ctx, "root");
+        const under = (try root.div("under"))
+            .with_layout(.top_left)
+            .with_size_px(.{ .fixed = 300 }, .{ .fixed = 300 });
+        ui_ctx.res.commands.registerEscape(under.node.key);
+        if (under.query().dismissed) self.under_dismissed += 1;
+        const over = (try root.div("over"))
+            .with_layout(.top_left)
+            .with_offset_px(50, 50)
+            .with_size_px(.{ .fixed = 100 }, .{ .fixed = 100 });
+        ui_ctx.res.commands.registerEscape(over.node.key);
+        if (over.query().dismissed) self.over_dismissed += 1;
+        return roots(ui_ctx, root.get());
+    }
+};
+
+test "replay: Escape reaches the topmost registered target as .dismissed" {
+    var rig: Rig = undefined;
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = EscapeFixture{};
+    var r = rig.replay(hostOf(EscapeFixture, &fx));
+    try r.idle(1);
+
+    try r.frame(&.{.{ .key_press = .{ .key = .escape } }});
+    try std.testing.expectEqual(@as(u32, 1), fx.over_dismissed);
+    try std.testing.expectEqual(@as(u32, 0), fx.under_dismissed);
+    // Dismissal is transient: the next frame sees nothing without a new press.
+    try r.idle(1);
+    try std.testing.expectEqual(@as(u32, 1), fx.over_dismissed);
+    // A repeat never dismisses.
+    try r.frame(&.{.{ .key_repeat = .{ .key = .escape } }});
+    try std.testing.expectEqual(@as(u32, 1), fx.over_dismissed);
+}
+
+/// A 100×100 scroll view holding ten 30px rows (336px of content with the 4px gaps).
+/// Rebuilt from the current `El`/node APIs plus the host scroll primitives (`ScrollState`,
+/// the wheel policy, and `drag.updateScrollThumb`) rather than a packaged widget: a viewport
+/// clips a `fit_children` content column, the wheel over the viewport advances the clamped
+/// offset at 24 px/tick, and the offset folds into `content.layout.scroll_y`.
+const ScrollFixture = struct {
+    offset: f32 = 0,
+
+    /// Wheel delta → px scrolled per tick — the host scroll policy the viewport reads.
+    const scroll_speed: f32 = 24.0;
+    const scrollbar_w: f32 = 6.0;
+
+    fn build(self: *ScrollFixture, ui_ctx: *UiCtx) anyerror!Trees {
+        const root = try el.root(ui_ctx, "root");
+        const outer = (try root.div("scroll"))
+            .with_layout(.relative)
+            .with_flow(.{ .dir = .row })
+            .with_size_px(.fit_children, .fit_children);
+
+        const viewport = (try outer.div("viewport"))
+            .with_layout(.relative)
+            .with_size_px(.{ .fixed = 100 }, .{ .fixed = 100 })
+            .with_overflow(.clip);
+
+        const content = (try viewport.div("content"))
+            .with_layout(.relative)
+            .with_flow(.{ .dir = .column })
+            .with_gap(4);
+        inline for (0..10) |i| {
+            _ = (try content.item("row", i))
+                .with_layout(.relative)
+                .with_size_px(.{ .fixed = 100 }, .{ .fixed = 30 });
+        }
+
+        // Clamp needs content height, read back from last frame's stamped rect; a geometry
+        // probe that must not take the hit.
+        const content_h = if (content.node.rect(ui_ctx)) |rc| rc.h else 0;
+        _ = content.pass_through().track();
+
+        const max_offset = @max(0.0, content_h - 100);
+        const state = outer.node.state(ui_ctx, UiState.ScrollState);
+        if (viewport.query().wheel and ui_ctx.res.input.pointer.wheel.y != 0) {
+            state.offset -= ui_ctx.res.input.pointer.wheel.y * scroll_speed; // wheel up → toward the top
+        }
+        state.offset = std.math.clamp(state.offset, 0, max_offset);
+
+        if (max_offset > 0) {
+            const track = (try outer.div("track"))
+                .with_layout(.relative)
+                .with_size_px(.{ .fixed = scrollbar_w }, .{ .fixed = 100 });
+            const thumb_h = @min(100.0, @max(16.0, 100.0 * 100.0 / content_h));
+            const thumb_travel = 100.0 - thumb_h;
+            const thumb = (try track.div("thumb"))
+                .with_layout(.relative)
+                .with_size_px(.{ .fixed = scrollbar_w }, .{ .fixed = thumb_h });
+            const thumb_q = thumb.query();
+            drag.updateScrollThumb(ui_ctx, state, thumb.node.key, thumb_q.pressed, max_offset, thumb_travel);
+        } else if (state.dragging) {
+            drag.cancelScrollThumb(ui_ctx, state);
+        }
+
+        content.node.layout.scroll_y = state.offset;
+        self.offset = state.offset;
+        return roots(ui_ctx, root.get());
+    }
+};
+
+test "replay: a wheel event over a scroll region scrolls it; elsewhere it does not" {
+    var rig: Rig = undefined;
+    rig.setUp(.none);
+    defer rig.tearDown();
+    var fx = ScrollFixture{};
+    var r = rig.replay(hostOf(ScrollFixture, &fx));
+    // Frame 1 stamps the content; frame 2 reads its height and knows it overflows.
+    try r.idle(2);
+    try std.testing.expectEqual(@as(f32, 0), fx.offset);
+
+    try r.frame(&.{.{ .wheel = .{ .x = 50, .y = 50, .dy = -1 } }}); // wheel down → scroll toward the bottom
+    try std.testing.expectEqual(@as(f32, 24), fx.offset);
+    try r.frame(&.{.{ .wheel = .{ .x = 50, .y = 50, .dy = -1 } }});
+    try std.testing.expectEqual(@as(f32, 48), fx.offset);
+
+    // A wheel over empty space routes to nothing; the offset holds.
+    try r.frame(&.{.{ .wheel = .{ .x = 500, .y = 500, .dy = -1 } }});
+    try std.testing.expectEqual(@as(f32, 48), fx.offset);
+
+    // Scrolling back past the top clamps at zero.
+    try r.frame(&.{.{ .wheel = .{ .x = 50, .y = 50, .dy = 5 } }});
+    try std.testing.expectEqual(@as(f32, 0), fx.offset);
 }

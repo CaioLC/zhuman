@@ -1,6 +1,6 @@
 //! `action_tile` template — the compact, grid-scale presentation of one action: the
-//! name on top, `-2  ⌒  +1-3f` beneath. This is the vocabulary the teaching card
-//! (`action_card`) taught, at 10–20-tiles-on-screen density: *position* carries meaning
+//! name on top, `-2  ⌒  +1-3f` beneath. This is the vocabulary the teaching
+//! presentation taught, at 10–20-tiles-on-screen density: *position* carries meaning
 //! (the first slot is the price — unitless when it's energy, lettered otherwise: Eat's
 //! `-1f`), the curve icon is the risk profile (see `action_info.kind_icon` — `fixed`'s
 //! spike reads as "certain"), and the yield letter speaks the header resource bar's

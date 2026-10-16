@@ -16,10 +16,6 @@ const Resources = ha.res.Resources;
 const fps = 60;
 const font_path = "assets/fonts/JetBrainsMonoNL-Regular.ttf";
 
-fn nsToUs(ns: u64) f64 {
-    return @as(f64, @floatFromInt(ns)) / std.time.ns_per_us;
-}
-
 const PointerIdentity = struct { kind: ui_client.PointerKind, id: ?u64 };
 
 fn modifiersFromSdl(mod: sdl.keycode.KeyModifier) ui_client.Modifiers {
@@ -79,239 +75,59 @@ fn pointerAt(app: *App, x: f32, y: f32) ui_client.InputPoint {
 fn routePointerPress(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
     // Right after a resize the stamped rects are the previous size's, so do not
     // begin an activation against them — a press this frame would target stale geometry.
-    if (app.geometry_stale) return;
-    const target = app.ui.markTarget(.pressed, position.x, position.y);
-    app.pointer_activation.press(target, kind, id, position);
+    if (app.driver.router.geometry_stale) return;
+    app.driver.router.pointerPress(kind, id, position);
 }
 
 fn routePointerMotion(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
-    app.pointer_activation.motion(kind, id, position);
-    if (app.pointer_activation.draggingKey()) |key| {
-        _ = app.ui.markKey(key, .dragging);
-    }
+    app.driver.router.pointerMotion(kind, id, position);
 }
 
 fn routePointerRelease(app: *App, kind: ui_client.PointerKind, id: ?u64, position: ui_client.InputPoint) void {
-    // While geometry is stale from a resize, cancel any in-flight gesture rather than
-    // routing a release/click to the previous frame's rects (the one-frame clickable ghost).
-    if (app.geometry_stale) {
-        cancelPointerGesture(app);
-        return;
-    }
-    routePointerMotion(app, kind, id, position);
-    _ = app.ui.markTarget(.released, position.x, position.y);
-    const target = app.ui.targetAt(position.x, position.y);
-    if (app.pointer_activation.release(target, kind, id, position)) |key| {
-        _ = app.ui.markKey(key, .clicked);
-    }
+    app.driver.router.pointerRelease(kind, id, position);
 }
 
 fn cancelPointerGesture(app: *App) void {
-    app.pointer_activation.cancel();
-    app.ui.cancelPointerCapture();
-}
-
-fn publishPointerVisualState(app: *App, input: *const ui_client.Input) void {
-    if (input.pointer.buttons.primary.held) {
-        if (app.pointer_activation.pressedKey()) |key| {
-            _ = app.ui.markKey(key, .held);
-        }
-    }
-    if (app.pointer_activation.draggingKey()) |key| {
-        _ = app.ui.markKey(key, .dragging);
-    }
-    if (app.ui.capturedPointerKey()) |key| {
-        app.ui.setFlag(key, .captured, true);
-    }
+    app.driver.router.cancelGesture();
 }
 
 // END CONFIGS
 
-const CommandRoute = struct {
-    handled: bool = false,
-    suppress_text: bool = false,
-};
+// ---- SDL platform seam for the router -------------------------------------------------
+// The one routing policy (`ui_client/route.zig`) reaches the clipboard and the end of the
+// platform text-input session through an injectable `route.Platform`. The desktop host binds
+// SDL to it; a headless test binds `route.Platform.none` or an in-memory stub. The window is
+// the only state the vtable needs, so it is the opaque `ctx`.
 
-/// The authoritative editor model for the currently focused text owner, or null when the
-/// focused control is not a registered text field. `main` only *routes* into this model;
-/// all editing rules live in `ui_client/editor.zig`.
-fn focusedEditor(app: *App) ?*ui_client.UiState.TextInputState {
-    const key = app.ui.focusedKey() orelse return null;
-    // The field registers which key holds its model: itself, or an always-built owner.
-    const editor_key = app.resources.commands.editorKeyOf(key) orelse return null;
-    const idx = app.ui.cache(editor_key, ui_client.UiState.TextInputState);
-    return app.ui.pool(ui_client.UiState.TextInputState).get(idx);
+fn sdlClipboardRead(ctx: ?*anyopaque, buf: []u8) ?[]const u8 {
+    _ = ctx;
+    if (!sdl.clipboard.hasText()) return null;
+    const clip = sdl.clipboard.getText() catch return null;
+    defer sdl.free(clip);
+    const n = @min(buf.len, clip.len);
+    @memcpy(buf[0..n], clip[0..n]);
+    return buf[0..n];
 }
 
-/// Mark one transient range command on the focused slider. The command registry is built from
-/// the prior UI frame, matching focus/text routing: a key is eligible only while its slider is
-/// still live and registered, so arrows cannot accidentally mutate an arbitrary focused node.
-fn markFocusedRange(app: *App, comptime flag: std.meta.FieldEnum(ui_client.UiCtx.Interaction)) bool {
-    const key = app.ui.focusedKey() orelse return false;
-    if (!app.resources.commands.isRangeOwner(key)) return false;
-    return app.ui.markKey(key, flag);
-}
-
-/// Copy the current selection to the SDL clipboard when both a selection and clipboard
-/// support exist. Returns whether the platform accepted the text. The editor slice is
-/// only valid until the next mutation, so it is NUL-terminated into a stack buffer first.
-fn copySelectionToClipboard(ed: *ui_client.UiState.TextInputState) bool {
-    if (!ed.hasSelection()) return false;
-    const sel = ed.selectionSlice();
-    var tmp: [ui_client.UiState.TextInputState.max_query_bytes + 1]u8 = undefined;
-    if (sel.len > tmp.len - 1) return false;
-    @memcpy(tmp[0..sel.len], sel);
-    tmp[sel.len] = 0;
-    sdl.clipboard.setText(tmp[0..sel.len :0]) catch return false;
+fn sdlClipboardWrite(ctx: ?*anyopaque, text: [:0]const u8) bool {
+    _ = ctx;
+    sdl.clipboard.setText(text) catch return false;
     return true;
 }
 
-fn routeCommand(app: *App, command: ui_client.Command) CommandRoute {
-    switch (command) {
-        .focus_next => return .{ .handled = app.ui.moveFocus(.next, true) },
-        .focus_previous => return .{ .handled = app.ui.moveFocus(.previous, true) },
-        .move_left => {
-            const moved = app.ui.moveFocusedRoving(.previous, true);
-            if (moved) {
-                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
-            }
-            return .{ .handled = moved or markFocusedRange(app, .decrement) };
-        },
-        .move_right => {
-            const moved = app.ui.moveFocusedRoving(.next, true);
-            if (moved) {
-                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
-            }
-            return .{ .handled = moved or markFocusedRange(app, .increment) };
-        },
-        .move_up => {
-            const moved = app.ui.moveFocusedRoving(.previous, true);
-            if (moved) {
-                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
-            }
-            return .{ .handled = moved or markFocusedRange(app, .increment) };
-        },
-        .move_down => {
-            const moved = app.ui.moveFocusedRoving(.next, true);
-            if (moved) {
-                if (app.ui.focusedKey()) |key| _ = app.ui.markKey(key, .clicked);
-            }
-            return .{ .handled = moved or markFocusedRange(app, .decrement) };
-        },
-        .page_up => return .{ .handled = markFocusedRange(app, .page_increment) },
-        .page_down => return .{ .handled = markFocusedRange(app, .page_decrement) },
-        .activate => {
-            const key = app.ui.focusedKey() orelse return .{};
-            return .{ .handled = app.ui.markKey(key, .clicked) };
-        },
-        .dismiss => {
-            if (app.ui.focusedKey()) |key| {
-                if (app.resources.commands.isTextOwner(key)) {
-                    app.ui.clearFocus();
-                    sdl.keyboard.stopTextInput(app.window) catch {};
-                    return .{ .handled = true };
-                }
-            }
-            const target = app.resources.commands.escapeTarget() orelse return .{};
-            return .{ .handled = app.ui.markKey(target, .dismissed) };
-        },
-        .focus_search => {
-            // An open modal owns focus. Do not let `/` move focus to a catalog field behind
-            // its trap; consume the shortcut until the topmost Escape owner closes.
-            if (app.resources.commands.escapeTarget() != null) return .{ .handled = true, .suppress_text = true };
-            const target = app.resources.commands.searchTarget() orelse return .{};
-            const handled = app.ui.requestFocus(target);
-            return .{ .handled = handled, .suppress_text = handled };
-        },
-        .delete_backward => {
-            const ed = focusedEditor(app) orelse return .{};
-            _ = ed.deleteBackward();
-            return .{ .handled = true };
-        },
-        .delete_forward => {
-            const ed = focusedEditor(app) orelse return .{};
-            _ = ed.deleteForward();
-            return .{ .handled = true };
-        },
-        .line_start => {
-            if (focusedEditor(app)) |ed| {
-                ed.home(false);
-                return .{ .handled = true };
-            }
-            return .{ .handled = markFocusedRange(app, .minimum) };
-        },
-        .line_end => {
-            if (focusedEditor(app)) |ed| {
-                ed.end(false);
-                return .{ .handled = true };
-            }
-            return .{ .handled = markFocusedRange(app, .maximum) };
-        },
-        .select_left => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.moveLeft(true);
-            return .{ .handled = true };
-        },
-        .select_right => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.moveRight(true);
-            return .{ .handled = true };
-        },
-        .select_line_start => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.home(true);
-            return .{ .handled = true };
-        },
-        .select_line_end => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.end(true);
-            return .{ .handled = true };
-        },
-        .select_all => {
-            const ed = focusedEditor(app) orelse return .{};
-            ed.selectAll();
-            return .{ .handled = true, .suppress_text = true };
-        },
-        .clipboard_copy => {
-            const ed = focusedEditor(app) orelse return .{};
-            _ = copySelectionToClipboard(ed);
-            // Handled by the focused editor regardless: Ctrl+C must never fall through to
-            // typing a 'c', even when there is nothing selected to copy.
-            return .{ .handled = true, .suppress_text = true };
-        },
-        .clipboard_cut => {
-            const ed = focusedEditor(app) orelse return .{};
-            if (copySelectionToClipboard(ed)) _ = ed.deleteBackward(); // delete-selection
-            return .{ .handled = true, .suppress_text = true };
-        },
-        .clipboard_paste => {
-            const ed = focusedEditor(app) orelse return .{};
-            if (sdl.clipboard.hasText()) {
-                if (sdl.clipboard.getText()) |clip| {
-                    defer sdl.free(clip);
-                    // The editor validates and refuses non-single-line / oversized text
-                    // as a whole; refusal is surfaced by its `refused` flag in the widget.
-                    _ = ed.insert(clip);
-                } else |_| {}
-            }
-            return .{ .handled = true, .suppress_text = true };
-        },
-        .clear_field => {
-            const ed = focusedEditor(app) orelse return .{};
-            _ = ed.clear();
-            return .{ .handled = true, .suppress_text = true };
-        },
-    }
+fn sdlStopTextInput(ctx: ?*anyopaque) void {
+    const window: *sdl.video.Window = @ptrCast(@alignCast(ctx.?));
+    sdl.keyboard.stopTextInput(window.*) catch {};
 }
 
-fn routeKeyboardCommands(app: *App, input: *const ui_client.Input) bool {
-    var suppress_text = false;
-    for (input.keyEvents()) |event| {
-        const command = ui_client.commandFromKeyEvent(event) orelse continue;
-        const routed = routeCommand(app, command);
-        suppress_text = suppress_text or routed.suppress_text;
-    }
-    return suppress_text;
+const sdl_platform_vtable: ui_client.RoutePlatform.VTable = .{
+    .clipboard_read = sdlClipboardRead,
+    .clipboard_write = sdlClipboardWrite,
+    .stop_text_input = sdlStopTextInput,
+};
+
+fn sdlPlatform(window: *sdl.video.Window) ui_client.RoutePlatform {
+    return .{ .ctx = window, .vtable = &sdl_platform_vtable };
 }
 
 const App = struct {
@@ -324,13 +140,15 @@ const App = struct {
     world: ha.world.World,
     frame_arena: std.heap.ArenaAllocator,
     ui: ui_client.UiCtx,
-    pointer_activation: ui_client.PointerActivation = .{},
+    /// The host frame driver — owns the one routing policy (`route.Router`) and runs the
+    /// per-frame UI phase sequence (`frame.Driver.step`). Bound to `&ui`/`&frame_arena` in
+    /// `setup`, after those fields have stable addresses.
+    driver: ui_client.FrameDriver = undefined,
     platform_cursors: ui_client.PlatformCursors,
-    ui_profiler: ui_client.FrameProfiler = .{},
-    /// Set when the window resizes, cleared after the frame re-stamps geometry.
-    /// While set, pointer activation is suppressed so a click cannot land on the previous
-    /// frame's now-stale stamped rects (the "one-frame clickable ghost").
-    geometry_stale: bool = false,
+    /// Development frame capture (`HA_UI_PROFILE`): five-pass timings paired with per-pool /
+    /// interaction / node state counts over one shared report window. Fed by the frame
+    /// `sample` hook; a no-op unless the env switch is set and info logging is compiled in.
+    ui_capture: ui_client.FrameCapture = .{},
     /// The `data/` files' modification times; a change reloads the roster between frames.
     data_watch: ha.reload.Watch = .{},
 
@@ -386,6 +204,11 @@ const App = struct {
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
+        // Bind the frame driver to this app's now-stable `ui`/`frame_arena`, with SDL bound to
+        // the one routing policy's platform seam (clipboard + text-input stop). The SDL loop
+        // routes each pointer event through `driver.router` as it arrives, and runs the rest of
+        // the per-frame lifecycle through `driver.step` (via host callbacks below).
+        self.driver = ui_client.FrameDriver.init(&self.ui, &self.frame_arena, sdlPlatform(&self.window));
     }
 
     fn deinit(self: *App) void {
@@ -467,7 +290,7 @@ pub fn main() !void {
                         wpos,
                         .{ .x = wheel.scroll_x, .y = wheel.scroll_y }, // scroll amount, not a coordinate
                     );
-                    app.ui.mark(.wheel, wpos.x, wpos.y);
+                    app.driver.router.wheel(wpos);
                 },
                 .finger_down, .finger_up, .finger_motion => |finger| {
                     // Finger coordinates are normalized 0..1; map to the **device-px** viewport
@@ -504,8 +327,9 @@ pub fn main() !void {
                 .window_focus_gained => input.setWindowFocus(true),
                 .window_focus_lost, .did_enter_background => {
                     input.setWindowFocus(false);
-                    cancelPointerGesture(&app);
-                    sdl.keyboard.stopTextInput(app.window) catch {};
+                    // Cancels the in-flight gesture AND ends the platform text-input session
+                    // through the router's bound SDL platform seam.
+                    app.driver.router.windowFocusLost();
                 },
                 // A render targets/device reset or loss invalidates every uploaded
                 // GPU texture (D3D/GPU device-lost). Bump the renderer generation so the
@@ -521,25 +345,17 @@ pub fn main() !void {
                 // rebuilds and re-stamps at the new size, when the flag is cleared. Any
                 // in-flight gesture is cancelled so it can't complete against stale geometry.
                 .window_resized, .window_pixel_size_changed => {
-                    app.geometry_stale = true;
-                    cancelPointerGesture(&app);
+                    app.driver.router.geometryChanged();
                 },
                 else => {},
             }
         }
 
-        publishPointerVisualState(&app, input);
-
-        const suppress_text = routeKeyboardCommands(&app, input);
-        if (!suppress_text) if (focusedEditor(&app)) |ed| {
-            const text = input.text();
-            if (text.len > 0) {
-                // The editor enforces UTF-8 / single-line admissibility and the explicit
-                // max query length, refusing oversized or incompatible text as a whole and
-                // raising its non-silent `refused` flag for the widget to surface.
-                _ = ed.insert(text);
-            }
-        };
+        // The per-event routing (pointer edges) ran as events arrived, above. The rest of
+        // the event stage — visual-state republish, keyboard commands, text, hover — is the
+        // frame driver's first phase (`Router.routeFrame` inside `driver.step`), run against
+        // the PREVIOUS frame's stamped geometry. The simulation below runs between the two and
+        // mutates nothing the step reads.
 
         // Update Stage
         // 1. update game resources. Host time always advances normally; simulation time alone
@@ -579,71 +395,67 @@ pub fn main() !void {
             ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         }
-        // 3. update ui
-        app.ui.mark(.hovering, input.pointer.position.x, input.pointer.position.y);
-        app.ui.beginFrame();
-        app.resources.cursor.beginFrame();
-        app.resources.commands.beginBuild();
-        app.resources.semantics.beginBuild(); // rebuild the semantic tree in paint order
-        _ = app.frame_arena.reset(.retain_capacity); // last frame's node tree dies here
-        const frame = try pages.build_ui(&app.ui, &app.world);
-        app.platform_cursors.apply(app.resources.cursor.requested);
-        var ui_sample: ui_client.FrameProfileSample = .{};
-        // Profile the solver's three internal passes per independent root, then stamp all
-        // roots as one aggregate pass. The normal set_global_pos entry remains clock-free.
-        for (frame) |t| {
-            const layout_sample = try t.set_global_pos_profiled(app.ui.arena);
-            ui_sample.add(layout_sample);
-        }
-        var ui_timer = try std.time.Timer.start();
-        for (frame) |t| {
-            ui_client.stamp_rects(&app.ui, t); // geometry + paint order for next event stage
-        }
-        ui_sample.stamping = ui_timer.read();
-        // Geometry has now been re-stamped at the current window size, so the next
-        // event stage can safely route pointer activation again — clear the resize guard.
-        app.geometry_stale = false;
 
-        // Render Stage
-        // window — cleared to the theme's own background, not a fixed color
-        const bg = app.resources.view.theme.bg;
-        try app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
-        try app.renderer.clear();
-        // ui — trees painted in list order, so later ones (overlays) land on top
-        ui_timer.reset();
-        for (frame) |t| ui_client.draw_tree(&app.ui, t);
-        ui_sample.drawing = ui_timer.read();
-        app.ui_profiler.record(ui_sample);
-        if (app.ui_profiler.takeIfReady(600)) |report| {
-            const avg = report.average;
-            const max = report.maximum;
-            const stamp_share: f64 = @as(f64, @floatFromInt(report.stampingPermille())) / 10.0;
-            std.log.info(
-                "ui five-pass {d}f avg us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}; stamp={d:.1}%",
-                .{ report.frames, nsToUs(avg.intrinsic), nsToUs(avg.relative), nsToUs(avg.placement), nsToUs(avg.stamping), nsToUs(avg.drawing), stamp_share },
-            );
-            std.log.info(
-                "ui five-pass max us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}",
-                .{ nsToUs(max.intrinsic), nsToUs(max.relative), nsToUs(max.placement), nsToUs(max.stamping), nsToUs(max.drawing) },
-            );
-        }
-        // present
-        try app.renderer.present();
-
-        app.ui.endFrame();
-        app.resources.commands.endBuild();
-        app.resources.semantics.endBuild(); // publish this frame's snapshot for the bridge
-        // The accessibility bridge consumes the just-published snapshot and drains
-        // the announcement channel to the active provider (a no-op sink on this build — no
-        // Windows UIA tree; see a11y.zig). Host-side only; the sim never sees it.
-        app.resources.a11y.poll(
-            app.resources.semantics.snapshot(),
-            app.resources.semantics.snapshotOverflow(),
-            app.resources.semantics.snapshotFieldRefused(),
-            &app.resources.announcements,
-        );
+        // UI + Render Stage: the canonical per-frame UI lifecycle, run by the frame driver.
+        // The host callbacks wrap page build, the cursor apply, the clear/present around the
+        // draw walk, and the five-pass + state sample. Everything else — route, begin, layout,
+        // stamp, draw, endFrame, registry/a11y publication — is the driver's fixed sequence.
+        var host_ctx = FrameHost{ .app = &app };
+        try app.driver.step(host_ctx.host());
     }
 }
+
+// ---- Frame driver host: the SDL/game glue around `frame.Driver.step` ------------------
+// `build` is the page build over the live world; `apply_cursor` the SDL cursor; `present`
+// the themed clear + renderer present around the draw walk; `sample` the development frame
+// capture that pairs the five-pass timings with state counts and logs on its window.
+
+const FrameHost = struct {
+    app: *App,
+
+    fn host(self: *FrameHost) ui_client.FrameHost {
+        return .{
+            .user = self,
+            .build = buildThunk,
+            .apply_cursor = applyCursorThunk,
+            .present = .{ .clear = clearThunk, .show = showThunk },
+            .sample = sampleThunk,
+        };
+    }
+
+    fn buildThunk(user: *anyopaque, ui_ctx: *ui_client.UiCtx) anyerror!ui_client.Trees {
+        const self: *FrameHost = @ptrCast(@alignCast(user));
+        return pages.build_ui(ui_ctx, &self.app.world);
+    }
+
+    fn applyCursorThunk(user: *anyopaque, kind: ui_client.CursorKind) void {
+        const self: *FrameHost = @ptrCast(@alignCast(user));
+        self.app.platform_cursors.apply(kind);
+    }
+
+    fn clearThunk(user: *anyopaque) anyerror!void {
+        const self: *FrameHost = @ptrCast(@alignCast(user));
+        // window — cleared to the theme's own background, not a fixed color
+        const bg = self.app.resources.view.theme.bg;
+        try self.app.renderer.setDrawColor(.{ .r = bg.r, .g = bg.g, .b = bg.b, .a = 255 });
+        try self.app.renderer.clear();
+    }
+
+    fn showThunk(user: *anyopaque) anyerror!void {
+        const self: *FrameHost = @ptrCast(@alignCast(user));
+        try self.app.renderer.present();
+    }
+
+    fn sampleThunk(user: *anyopaque, sample: ui_client.FrameProfileSample, ui_ctx: *ui_client.UiCtx, trees: ui_client.Trees) void {
+        const self: *FrameHost = @ptrCast(@alignCast(user));
+        // Development capture: the five-pass timings paired with per-pool / interaction /
+        // node state counts over one shared window. A no-op unless `HA_UI_PROFILE` is set and
+        // info logging is compiled in. The timing lines are preserved verbatim through the
+        // capture's `Report.log` (it emits the same five-pass avg/max lines plus state lines).
+        self.app.ui_capture.record(sample, ui_ctx, trees);
+        if (self.app.ui_capture.takeIfReady(600)) |report| report.log();
+    }
+};
 
 fn spawn_agent(world: *ha.world.World) ha.world.Entity {
     // Spawn from the components' authoritative default baselines (see `baselines.zig`)

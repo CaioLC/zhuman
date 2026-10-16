@@ -86,7 +86,7 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
         .with_style(.{ style.heading, size, Style{ .text = th.dim } });
     const val = (try box.text("v", s.value))
         .with_style(.{ style.heading, size, Style{ .text = valueColor(th, s.tone) } });
-    box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like resource_bar
+    box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like its label
     _ = lbl;
 }
 

@@ -66,7 +66,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*us
             .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the
-        // strip baseline-aligns wherever it sits (see `resource_bar`'s chip).
+        // strip baseline-aligns wherever it sits (the chip baseline-adopt pattern).
         chip.get().size.baseline = lbl.get().size.baseline_off();
     }
 
