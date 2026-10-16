@@ -1,15 +1,17 @@
-//! `journey` — **keyboard-only interaction journeys** (QA-14/15) driven through the scripted
-//! input harness (`replay.zig`). A journey is a multi-frame script of keyboard commands against a
-//! representative stamped control set, asserting that focus traversal, activation, roving
-//! movement, and dismissal reach every control and return focus correctly **without a pointer**.
+//! `journey` — **keyboard-only interaction journeys** (QA-14/15) driven through the shared
+//! host routing policy (`route.Router`). A journey is a multi-frame script of keyboard
+//! commands against a representative stamped control set, asserting that focus traversal,
+//! activation, roving movement, and dismissal reach every control and return focus correctly
+//! **without a pointer**.
 //!
 //! **Why a model, not the live page.** A production frame's node tree needs the platform font to
 //! measure text (see `test_ui.zig`), so a keyboard journey over the real page cannot run SDL-free.
 //! What a journey actually exercises is the host interaction state machine — the focus registry,
 //! the semantic-command mapping, and the engine's event stage — all of which are pure. So a
 //! journey stamps the controls the production screen registers (by the same stable keys and in the
-//! same Tab order) and scripts the keyboard over them. The fixtures in `pages/fixture.zig` seed the
-//! matching screen state for the eyeball/screenshot pass; this is the automated half.
+//! same Tab order) and scripts the keyboard over them through the one routing policy
+//! (`route.Router.routeCommand`) that production (`main.zig`/`frame.Driver`) and the full-frame
+//! headless `replay.Replay` also use — no routing logic is duplicated here.
 //!
 //! **The frame contract.** Focus traversal reads the *last completed* frame's registered order
 //! (the engine's double-buffered focus registry), so a journey step that changes which controls
@@ -19,7 +21,8 @@
 
 const std = @import("std");
 const input = @import("input.zig");
-const replay = @import("replay.zig");
+const command = @import("command.zig");
+const route = @import("route.zig");
 const cb = @import("ctx_binding.zig");
 const ui = @import("ui");
 
@@ -37,14 +40,39 @@ pub const Control = struct {
     rect: Rect = .{ .x = 0, .y = 0, .w = 10, .h = 10 },
 };
 
-/// A keyboard-journey scene: one `UiCtx` and `Driver`, with helpers that run the build→
-/// event-stage frame cadence so focus traversal always reads a completed frame's order.
+/// What one scripted key command did, derived from the shared router's effect so a test can
+/// assert routing without re-deriving it. The router returns only `handled`/`suppress_text`;
+/// `Scene` observes the focus/interaction change around the dispatch to classify it.
+pub const Outcome = struct {
+    command: command.Command,
+    /// A focus-moving command (`focus_next`/`focus_previous`/`focus_search`) that moved focus.
+    focus_moved: bool = false,
+    /// A roving-group move (`move_left/right/up/down`) that moved the roving focus.
+    roving_moved: bool = false,
+    /// An arrow/page/home/end command that fell through to the focused range owner (a slider)
+    /// and marked its flag, because no roving group claimed the move.
+    range_marked: bool = false,
+    /// `activate` (Enter/Space) that marked a focused control `clicked`.
+    activated: bool = false,
+    /// `dismiss` (Escape) that marked the registered escape owner `dismissed`.
+    dismissed: bool = false,
+};
+
+/// A keyboard-journey scene: one `UiCtx` and a `route.Router`, with helpers that run the
+/// build→event-stage frame cadence so focus traversal always reads a completed frame's order.
 pub const Scene = struct {
     ctx: *UiCtx,
-    driver: replay.Driver,
+    router: route.Router,
 
     pub fn init(ctx: *UiCtx) Scene {
-        return .{ .ctx = ctx, .driver = replay.Driver.init(ctx) };
+        return .{ .ctx = ctx, .router = route.Router.init(ctx, .none) };
+    }
+
+    /// Stamp a slot the way the post-layout `stamp_rects` walk would, so the event stage can
+    /// hit-test and bubble against it — the keyboard journey's by-hand layout.
+    fn stamp(self: *Scene, node_key: u64, rect: Rect) void {
+        _ = self.ctx.interactionOf(node_key); // a node has no slot until queried
+        _ = self.ctx.stampRect(node_key, rect, null, null);
     }
 
     /// Register and stamp a frame's controls, then end the frame to publish the focus order and
@@ -55,7 +83,7 @@ pub const Scene = struct {
         self.ctx.res.commands.beginBuild();
         for (controls) |c| {
             if (c.group) |g| self.ctx.registerRovingFocus(g, c.key, c.enabled) else self.ctx.registerFocus(c.key, c.enabled);
-            self.driver.stamp(c.key, c.rect, null, null);
+            self.stamp(c.key, c.rect);
         }
         if (escape_owner) |e| self.ctx.res.commands.registerEscape(e);
         self.ctx.res.commands.endBuild();
@@ -63,18 +91,43 @@ pub const Scene = struct {
         // The next frame's event stage will read this just-published order. Open the input frame
         // so a key can be scripted immediately.
         self.ctx.beginFrame();
-        for (controls) |c| self.driver.stamp(c.key, c.rect, null, null); // slots re-stamped this frame
-        self.driver.beginInput();
+        for (controls) |c| self.stamp(c.key, c.rect); // slots re-stamped this frame
+        self.ctx.res.input.beginFrame();
     }
 
     /// Press one key with modifiers and return the routed command outcome (null when the key
-    /// mapped to no command).
-    pub fn key(self: *Scene, kc: @import("sdl3").keycode.Keycode, mods: input.Modifiers) ?replay.CommandOutcome {
-        return self.driver.feed(.{ .key = .{ .key = kc, .action = .press, .modifiers = mods } });
+    /// mapped to no command). Dispatches through the shared `route.Router` — the same policy
+    /// production and the full-frame replay use.
+    pub fn key(self: *Scene, kc: @import("sdl3").keycode.Keycode, mods: input.Modifiers) ?Outcome {
+        self.ctx.res.input.recordKey(kc, .press, mods);
+        const cmd = command.fromKeyEvent(.{ .key = kc, .action = .press, .modifiers = mods }) orelse return null;
+        return self.dispatch(cmd);
+    }
+
+    /// Route one semantic command through the shared router and classify its effect for the
+    /// test's assertions by observing the focus/interaction change around the dispatch.
+    fn dispatch(self: *Scene, cmd: command.Command) Outcome {
+        var out: Outcome = .{ .command = cmd };
+        const focus_before = self.ctx.focusedKey();
+        const routed = self.router.routeCommand(cmd);
+        const focus_after = self.ctx.focusedKey();
+        const moved = focus_before != focus_after;
+        switch (cmd) {
+            .focus_next, .focus_previous, .focus_search => out.focus_moved = moved,
+            .move_left, .move_right, .move_up, .move_down => {
+                out.roving_moved = moved;
+                out.range_marked = !moved and routed.handled;
+            },
+            .page_up, .page_down => out.range_marked = routed.handled,
+            .activate => out.activated = routed.handled,
+            .dismiss => out.dismissed = routed.handled,
+            else => {},
+        }
+        return out;
     }
 
     /// Press Tab (optionally Shift+Tab) and return the outcome.
-    pub fn tab(self: *Scene, shift: bool) ?replay.CommandOutcome {
+    pub fn tab(self: *Scene, shift: bool) ?Outcome {
         return self.key(.tab, .{ .shift = shift });
     }
 
@@ -177,13 +230,13 @@ test "QA-14 eating rate: arrow keys drive the focused slider as a range owner" {
     rig.ctx.beginFrame();
     rig.ctx.res.commands.beginBuild();
     rig.ctx.registerFocus(eating, true);
-    scene.driver.stamp(eating, .{ .x = 0, .y = 0, .w = 100, .h = 20 }, null, null);
+    scene.stamp(eating, .{ .x = 0, .y = 0, .w = 100, .h = 20 });
     rig.ctx.res.commands.registerRange(eating);
     rig.ctx.res.commands.endBuild();
     rig.ctx.endFrame();
     rig.ctx.beginFrame();
-    scene.driver.stamp(eating, .{ .x = 0, .y = 0, .w = 100, .h = 20 }, null, null);
-    scene.driver.beginInput();
+    scene.stamp(eating, .{ .x = 0, .y = 0, .w = 100, .h = 20 });
+    rig.ctx.res.input.beginFrame();
     try testing.expect(rig.ctx.requestFocus(eating));
 
     // Right/Left arrow over a focused range owner (no roving group) marks the slider's
@@ -215,13 +268,14 @@ test "QA-15 Act II keyboard journey: search focus, tab the catalog controls, rov
     rig.ctx.registerFocus(sort, true);
     rig.ctx.registerRovingFocus(nav, tab_actions, true);
     rig.ctx.registerRovingFocus(nav, tab_build, true);
-    for ([_]u64{ search, sort, tab_actions, tab_build }) |k| scene.driver.stamp(k, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, null, null);
+    for ([_]u64{ search, sort, tab_actions, tab_build }) |k| scene.stamp(k, .{ .x = 0, .y = 0, .w = 10, .h = 10 });
+    // `editorKeyOf` indirection: the field owns its model, so editor = field key.
     rig.ctx.res.commands.registerText(search, search, true); // search_shortcut = true
     rig.ctx.res.commands.endBuild();
     rig.ctx.endFrame();
     rig.ctx.beginFrame();
-    for ([_]u64{ search, sort, tab_actions, tab_build }) |k| scene.driver.stamp(k, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, null, null);
-    scene.driver.beginInput();
+    for ([_]u64{ search, sort, tab_actions, tab_build }) |k| scene.stamp(k, .{ .x = 0, .y = 0, .w = 10, .h = 10 });
+    rig.ctx.res.input.beginFrame();
 
     // `/` focuses the search field from anywhere (the search shortcut).
     const slash = scene.key(.slash, .{}).?;

@@ -70,22 +70,48 @@ pub const Command = command.Command;
 pub const CommandRegistry = command.Registry;
 pub const commandFromKeyEvent = command.fromKeyEvent;
 
-// Scripted synthetic-input driver: the SDL-free lower half of the event loop
-// (pointer activation + semantic commands + the engine's `mark*` event stage), lifted into one
-// reusable harness so interaction state machines can be regression-tested and deterministic
-// fixtures can script gestures without SDL polling. See `replay.zig`.
+// Host input routing — the single policy that turns the frame input model into engine
+// interaction flags, focus moves, and editor mutations. SDL-free and injectable (clipboard
+// and text-input stop through `route.Platform`); the SDL loop and the headless replay drive
+// the same `Router`, so one routing policy serves both. See `route.zig`.
+pub const route = @import("./route.zig");
+pub const Router = route.Router;
+pub const RoutePlatform = route.Platform;
+pub const CommandRoute = route.CommandRoute;
+
+// The host frame driver — the per-frame UI phase sequence (route · begin · build · layout ·
+// stamp · draw · present · end) as one function the SDL loop (`main.zig`) and the headless
+// tests both call through `frame.Driver.step`. The simulation tick is not here; it runs
+// between the event stage and `step`. See `frame.zig`.
+pub const frame = @import("./frame.zig");
+pub const FrameDriver = frame.Driver;
+pub const FrameHost = frame.Host;
+pub const FramePresent = frame.Present;
+
+// Host-side frame capture — the development baseline (`HA_UI_PROFILE`) pairing the engine's
+// five-pass timings with per-pool/interaction/node state counts over one shared report
+// window. Integrated through the frame `sample` hook. See `profile.zig`.
+pub const profile = @import("./profile.zig");
+pub const FrameCapture = profile.FrameCapture;
+
+// Full-frame synthetic-input replay: a script of pointer/wheel/key/text/focus/resize events
+// fed through the same `Input.record*` entry points and `route.Router` the SDL loop uses,
+// then run through `frame.Driver` one headless frame at a time (built + laid out + stamped,
+// never painted). The regression surface for the interaction state machines and the frame
+// lifecycle. See `replay.zig`.
 pub const replay = @import("./replay.zig");
-pub const ReplayDriver = replay.Driver;
+pub const Replay = replay.Replay;
 pub const ReplayEvent = replay.Event;
-pub const ReplayCommandOutcome = replay.CommandOutcome;
+pub const MemoryPlatform = replay.MemoryPlatform;
 
 // Keyboard-only interaction journeys (QA-14/15): multi-frame keyboard scripts over a
-// representative stamped control set, built on the replay driver, asserting focus traversal,
-// activation, roving movement, and dismissal reach every control without a pointer. See
-// `journey.zig`.
+// representative stamped control set, driven through the shared `route.Router` policy,
+// asserting focus traversal, activation, roving movement, and dismissal reach every control
+// without a pointer. See `journey.zig`.
 pub const journey = @import("./journey.zig");
 pub const JourneyScene = journey.Scene;
 pub const JourneyControl = journey.Control;
+pub const JourneyOutcome = journey.Outcome;
 
 // Host-side semantic model (the platform bridge's source). All host-side;
 // the generic engine never sees it. See `semantics.zig`.
@@ -193,8 +219,12 @@ test {
     _ = cursor;
     _ = drag;
     _ = command;
+    _ = @import("./route.zig");
+    _ = @import("./frame.zig");
+    _ = @import("./profile.zig");
     _ = @import("./replay.zig");
     _ = @import("./journey.zig");
+    _ = @import("./frame_lifecycle_test.zig");
     _ = semantics;
     _ = a11y;
     _ = motion;
