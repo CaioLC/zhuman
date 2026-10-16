@@ -29,6 +29,7 @@ const Color = uic.Color;
 const cc = @import("../templates/catalog_controls.zig");
 const info = @import("../templates/action_info.zig");
 const build_list = @import("../templates/build_list.zig");
+const table = @import("../templates/table.zig");
 const fmt = @import("../fmt.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
@@ -232,38 +233,19 @@ fn inputsText(buf: []u8, rec: *const roster.Good) []const u8 {
     return w.buffered();
 }
 
-fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Color, right: bool) !void {
-    const box = try parent.div(id);
-    _ = box.with_size(.{ .fixed = width }, .fit_children);
-    const inner = try box.div("i");
-    _ = inner.with_layout(if (right) .center_right else .center_left);
-    _ = (try inner.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-        .with_style(.{ style.body, Style{ .text = color } });
-}
-
 const col_recipe: f32 = 150;
 const col_inputs: f32 = 110;
 const col_time: f32 = 54;
 const col_reach: f32 = 70;
 const col_state: f32 = 90;
 
-fn header_row(parent: El) !void {
-    const th = parent.ctx.res.view.theme;
-    const header = try parent.div("header");
-    _ = header.with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
-        .with_style(.{style.pad_sym(row_pad_x, 4)});
-    inline for (.{
-        .{ "RECIPE", col_recipe },
-        .{ "INPUTS", col_inputs },
-        .{ "TIME", col_time },
-        .{ "REACH", col_reach },
-        .{ "STATE", col_state },
-    }) |c| {
-        const box = try header.div(c[0]);
-        _ = box.with_size(.{ .fixed = c[1] }, .fit_children);
-        _ = (try box.text("t", c[0])).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.line2 }});
-    }
-}
+const lanes = [_]table.Lane{
+    .{ .id = "recipe", .label = "RECIPE", .w = col_recipe },
+    .{ .id = "inputs", .label = "INPUTS", .w = col_inputs },
+    .{ .id = "time", .label = "TIME", .w = col_time },
+    .{ .id = "reach", .label = "REACH", .w = col_reach },
+    .{ .id = "state", .label = "STATE", .w = col_state },
+};
 
 /// Build the browser into `parent` for agent `e`. Returns the catalog index of the recipe whose
 /// ready row was clicked this frame, else null — the caller begins the build.
@@ -295,7 +277,7 @@ pub fn recipe_browser(
 
     const rows = try outer.div("rows");
     _ = rows.with_flow(.{ .dir = .column });
-    try header_row(rows);
+    _ = try table.table_header(rows, "header", &lanes, row_gap, row_pad_x);
 
     if (shown.len == 0) {
         _ = (try rows.text("empty", "No recipe matches your search."))
@@ -307,9 +289,7 @@ pub fn recipe_browser(
     for (shown.idx[0..shown.len]) |i| {
         const ent = &list[i];
         // Keyed by the recipe's id, so focus follows it through a re-sort or filter.
-        const row = try rows.div(ent.rec.id);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
-            .with_style(.{style.pad_sym(row_pad_x, 5)});
+        const row = try table.table_row(rows, ent.rec.id, row_gap, row_pad_x, 5);
 
         // The same gate `capital.begin` applies; another unit of an owned recipe is a build too.
         const enabled = ent.kind != .building and ent.q.ready();
@@ -328,11 +308,11 @@ pub fn recipe_browser(
         const time_txt = std.fmt.bufPrint(&tbuf, "{d:.1}d", .{ent.hours / 24.0}) catch "?";
         const reach_txt = std.fmt.bufPrint(&rbuf, "{d:.0}%", .{std.math.clamp(ent.q.reach, 0, 1) * 100}) catch "?";
 
-        try cell(row, "recipe", col_recipe, ent.rec.name, chrome, false);
-        try cell(row, "inputs", col_inputs, inputsText(&ibuf, ent.rec), if (enabled) th.dim else chrome, false);
-        try cell(row, "time", col_time, time_txt, if (enabled) th.dim else chrome, false);
-        try cell(row, "reach", col_reach, reach_txt, if (enabled) th.dim else chrome, true);
-        try cell(row, "state", col_state, stateWord(ent.kind), stateColor(th, ent.kind), true);
+        try table.cell(row, "recipe", col_recipe, ent.rec.name, chrome, false);
+        try table.cell(row, "inputs", col_inputs, inputsText(&ibuf, ent.rec), if (enabled) th.dim else chrome, false);
+        try table.cell(row, "time", col_time, time_txt, if (enabled) th.dim else chrome, false);
+        try table.cell(row, "reach", col_reach, reach_txt, if (enabled) th.dim else chrome, true);
+        try table.cell(row, "state", col_state, stateWord(ent.kind), stateColor(th, ent.kind), true);
 
         if (enabled and q.clicked) activated = ent.gi;
     }
