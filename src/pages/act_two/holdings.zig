@@ -13,48 +13,21 @@
 
 const std = @import("std");
 const ha = @import("ha");
+const readout = @import("../templates/readout.zig");
+const fx = @import("./fixtures.zig");
 
 const comp = ha.comp;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 const uic = ha.ui_client;
 const el = uic.elements;
-const style = uic.style;
-const Style = style.Style;
 const El = el.El;
 const Color = uic.Color;
-
-const fx = @import("./fixtures.zig");
 
 const column_width: f32 = 240;
 const main_content_width: f32 = 214;
 const body_content_width: f32 = 220;
 const panel_gap: f32 = 12;
-
-fn sectionLabel(parent: El, id: []const u8, text: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
-    _ = (try parent.text(id, text)).with_style(.{Style{ .font = 11, .tracking = 0.07, .text = th.dim }});
-}
-
-fn line(parent: El, id: []const u8, left: []const u8, right: []const u8, right_color: Color) !void {
-    const th = parent.ctx.res.view.theme;
-    const row = try parent.div(id);
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try row.text("label", left)).with_style(.{ style.body, Style{ .text = th.fg } });
-    const tail = try row.div("tail");
-    _ = tail.with_layout(.center_right);
-    _ = (try tail.text("value", right)).with_style(.{Style{ .font = 11, .text = right_color }});
-}
-
-fn bodySentence(parent: El, id: []const u8, rec: fx.BodyRecord, value_color: Color) !void {
-    const th = parent.ctx.res.view.theme;
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try row.text("prefix", rec.prefix)).with_style(.{Style{ .font = 11, .text = th.dim }});
-    _ = (try row.text("value", rec.value)).with_style(.{Style{ .font = 11, .text = value_color }});
-    _ = (try row.text("suffix", rec.suffix)).with_style(.{Style{ .font = 11, .text = th.dim }});
-}
 
 /// Whether good `rec` is one the rail lists: of this act and owned.
 fn listed(rec: *const ha.roster.Good, count: u32) bool {
@@ -63,16 +36,9 @@ fn listed(rec: *const ha.roster.Good, count: u32) bool {
 
 fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     const th = parent.ctx.res.view.theme;
-    const panel = try parent.div("panel");
-    _ = panel.with_size(.{ .fixed = main_content_width }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{ Style{ .outline_color = th.line }, style.solid, style.pad_each(10, 16, 9, 10) });
+    const panel = try readout.readout_panel(parent, "panel", main_content_width, .{ .up = 10, .right = 16, .down = 9, .left = 10 });
 
     // Heading + typed-count summary.
-    const heading = try panel.div("heading");
-    _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
-    try sectionLabel(heading, "title", "HOLDINGS");
     const cat = &parent.ctx.res.catalog;
     const goods = world.get(e, comp.Goods);
     var kinds: usize = 0;
@@ -81,7 +47,7 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     }
     var count_buf: [32]u8 = undefined;
     const count = std.fmt.bufPrint(&count_buf, "{d} KINDS", .{kinds}) catch "HOLDINGS";
-    try sectionLabel(heading, "count", count);
+    _ = try readout.readout_heading(panel, "heading", "HOLDINGS", count);
     _ = try panel.spacer("heading_gap", 1, 8);
 
     const roster = try panel.div("roster");
@@ -94,16 +60,13 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
             var label_buf: [48]u8 = undefined;
             const label = if (n > 1) std.fmt.bufPrint(&label_buf, "{s} \u{00d7}{d}", .{ rec.name, n }) catch rec.name else rec.name;
             // Keyed by the good's id.
-            try line(roster, rec.id, label, rec.copy.short, th.dim);
+            try readout.kv_line(roster, rec.id, label, rec.copy.short, th.dim);
         }
     }
 
     // Divider + act-specific FLOWS (per-day margins; positive good / deficit danger).
-    _ = try panel.spacer("divider_top", 1, 9);
-    const divider = try panel.div("divider");
-    _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }});
-    _ = try panel.spacer("divider_bottom", 1, 7);
-    try sectionLabel(panel, "flows_title", "FLOWS / DAY");
+    try readout.divider(panel, "divider", 9, 7);
+    _ = try readout.section_label(panel, "flows_title", "FLOWS / DAY");
     _ = try panel.spacer("flows_gap", 1, 8);
 
     const flows = try panel.div("flows");
@@ -112,18 +75,15 @@ fn buildMainPanel(parent: El, world: *World, e: Entity) !El {
     for (fx.flows) |f| {
         // Keyed by the resource tag name
         const row_id = f.resource;
-        try line(flows, row_id, f.label, f.value, if (f.positive) th.good else th.danger);
+        try readout.kv_line(flows, row_id, f.label, f.value, if (f.positive) th.good else th.danger);
     }
     return panel;
 }
 
 fn buildBodyPanel(parent: El) !El {
     const th = parent.ctx.res.view.theme;
-    const panel = try parent.div("body");
-    _ = panel.with_size(.{ .fixed = body_content_width }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{ Style{ .outline_color = th.line }, style.solid, style.pad_each(9, 10, 9, 10) });
-    try sectionLabel(panel, "title", "BODY");
+    const panel = try readout.readout_panel(parent, "body", body_content_width, .{ .up = 9, .right = 10, .down = 9, .left = 10 });
+    _ = try readout.section_label(panel, "title", "BODY");
     _ = try panel.spacer("gap", 1, 6);
 
     const list = try panel.div("list");
@@ -131,7 +91,7 @@ fn buildBodyPanel(parent: El) !El {
         .with_flow(.{ .dir = .column }).with_gap(5);
     for (fx.body_projection) |rec| {
         // Keyed by what the sentence projects, not its wording.
-        try bodySentence(list, @tagName(rec.key), rec, if (rec.positive) th.good else th.warn);
+        try readout.sentence(list, @tagName(rec.key), rec.prefix, rec.value, rec.suffix, if (rec.positive) th.good else th.warn);
     }
     return panel;
 }
