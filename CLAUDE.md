@@ -99,9 +99,9 @@ index, so selection, focus, scroll anchors and cached textures follow the thing 
 re-sort or filter. `tools/boundary_check.sh` rejects a formatted loop id in a page or template.
 
 **Pages lay out; templates paint.** A page under `src/pages/` places nodes and composes the
-shelf; a styled or text node belongs in `src/pages/templates/` (`copy.zig` holds the prose
-leaves), because a style chosen in a page is art direction that drifts. `tools/boundary_check.sh`
-rejects a styled or text node in a page; the debug page and the mock showcase are exempt.
+shelf; only a template styles a node or places a text leaf. The rule and its reasons are in
+[`src/ui_client/README.md`](src/ui_client/README.md), *The four tiers*; `tools/boundary_check.sh`
+enforces it.
 
 **Verifying UI changes.** There is no synthetic-input path into SDL. Confirm visual work with
 a screenshot (PrintWindow) and, where a state is hard to reach, a temporarily flipped flag —

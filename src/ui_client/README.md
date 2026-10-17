@@ -18,6 +18,15 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 | Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `build_list`, `holdings`, … |
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
+**Screens lay out; templates paint.** A screen places nodes — `div`, `spacer`, `item`, the
+`with_size`/`with_flow`/`with_gap`/`with_layout` chain — and composes the shelf, and that is
+all it does with `El`. A styled node or a text leaf is a template's, down to the one-line
+readouts (`pages/templates/copy.zig`: the catalog summary, the empty-list message, a curtain's
+headline and lede), because a style chosen in a screen is art direction the shelf cannot see
+and the next screen copies or drifts from. `tools/boundary_check.sh` fails on `with_style` or a
+text node in any file under `src/pages/` outside `templates/`; the debug page (the template
+audit harness) and the mock showcase paint by design and are exempt.
+
 The foundation owns the **roles** a widget paints from; the game owns the **values**. So
 `text` and `svg` may default a node's ink to `res.view.theme.fg` without reaching upward —
 `Theme` is this layer's own type, with its own defaults.
