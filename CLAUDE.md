@@ -9,7 +9,7 @@ zig build run     # build and run
 zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build         # build only
-sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, and the engine imports nothing outside src/ui
+sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, and the engine imports nothing outside src/ui
 (cd src/ui && zig build test)   # the engine package on its own
 ```
 
@@ -97,6 +97,11 @@ in a non-public decl.
 recipe's id, the offer's quote id — never by its sorted position or filtered
 index, so selection, focus, scroll anchors and cached textures follow the thing through a
 re-sort or filter. `tools/boundary_check.sh` rejects a formatted loop id in a page or template.
+
+**Pages lay out; templates paint.** A page under `src/pages/` places nodes and composes the
+shelf; a styled or text node belongs in `src/pages/templates/` (`copy.zig` holds the prose
+leaves), because a style chosen in a page is art direction that drifts. `tools/boundary_check.sh`
+rejects a styled or text node in a page; the debug page and the mock showcase are exempt.
 
 **Verifying UI changes.** There is no synthetic-input path into SDL. Confirm visual work with
 a screenshot (PrintWindow) and, where a state is hard to reach, a temporarily flipped flag —

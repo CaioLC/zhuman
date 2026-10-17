@@ -23,6 +23,13 @@
 #   3. The engine's imports. `src/ui/` is a package of its own (`src/ui/build.zig.zon`); an
 #      import there of anything but `std`, `builtin` or its own files fails.
 #
+#   4. Pages lay out; only templates paint. A page (a file under `src/pages/` outside
+#      `templates/`) places nodes — `div`, `spacer`, `with_size`/`with_flow`/`with_gap`/
+#      `with_layout` — and composes the shelf; a styled or text node belongs to a template
+#      (`src/pages/templates/copy.zig` holds the prose leaves), because a style chosen in a
+#      page is art direction that drifts. The debug page and the mock showcase are exempt:
+#      the audit harness and the style eyeball page paint by design. Any hit fails the check.
+#
 # Run from anywhere: `sh tools/boundary_check.sh`. Exit 0 when clean, 1 on a failure.
 
 cd "$(dirname "$0")/.." || exit 2
@@ -34,6 +41,15 @@ hard='registerFocus\(|registerRovingFocus\(|publishControlState\(|(allocPrint|bu
 hits=$(grep -rnE "$hard" $scope --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//')
 if [ -n "$hits" ]; then
     echo "boundary: lifecycle wiring, formatted ids or key arithmetic in a page or template:"
+    echo "$hits"
+    status=1
+fi
+
+paint='\.with_style\(|\.text(_fit)?\('
+pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig -not -name mock.zig)
+hits=$(grep -nE "$paint" $pages | grep -vE '^[^:]+:[0-9]+:\s*//')
+if [ -n "$hits" ]; then
+    echo "boundary: a page paints (a styled or text node belongs to a template):"
     echo "$hits"
     status=1
 fi
