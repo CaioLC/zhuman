@@ -9,6 +9,19 @@
 //! `ScrollState` pattern), so it survives the frame-arena reset without touching
 //! `Resources`. A click lands before the chrome reads the selection, so the switch
 //! renders the same frame.
+//!
+//! **The view-switching contract** (both acts' surface nav, the trade dialog's BUY/SELL):
+//!
+//!   - **Exactly one tab is selected and the strip is one Tab stop.** Members register under
+//!     the strip's roving group, so Tab reaches "the tabs" once and the arrows move within them;
+//!     Enter/Space activate through the shared `.clicked` path.
+//!   - **Inactive views are not built, but their state persists.** The caller builds only the
+//!     active view's subtree, so nothing in a hidden view is focusable. A view's pooled state
+//!     (collapse, query/sort, the search editor) lives on an always-built owner and is passed
+//!     down as a state pointer, so the view restores exactly where it was
+//!     (`src/ui_client/README.md`, "Who owns a template's state").
+//!   - **A tab strip is never a shell region.** It renders into the nav row heading the surface
+//!     it switches (`act_one_surface`, the Act II page).
 
 const std = @import("std");
 const ha = @import("ha");

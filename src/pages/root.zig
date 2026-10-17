@@ -56,7 +56,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const a = player.get() orelse return try withMenu(ui_ctx, try p_gameover(ui_ctx, world));
     if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.catalog, .act_one)) return try withMenu(ui_ctx, try p_act_one_end(ui_ctx, world));
-    return try withMenu(ui_ctx, try p_act_one(ui_ctx, world));
+    return try withMenu(ui_ctx, try p_act_one(ui_ctx, world, .{}));
 }
 
 /// Append the session menu as the final/topmost root over whichever production or development
@@ -108,7 +108,7 @@ test {
     _ = @import("./debug_page.zig");
     _ = @import("./gameover.zig");
     _ = @import("./act_one_end.zig");
-    _ = @import("./mock.zig");
     _ = @import("./fixture.zig");
     _ = @import("./act_two/page.zig");
+    _ = @import("./act_one/holdings.zig");
 }

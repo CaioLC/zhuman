@@ -1,5 +1,5 @@
-//! `figure` template — the 3-line ASCII vitals figure (flavor), plus the glyph sets and
-//! the vigor→figure mapping. Each line is a content leaf (`el.text`) tinted by the color.
+//! `figure` template — the 3-line ASCII figure (flavor) and its one glyph set, the dead body
+//! the game-over screen shows. Each line is a content leaf (`el.text`) tinted by the color.
 
 const ha = @import("ha");
 
@@ -12,21 +12,11 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 pub const Figure = struct { l1: []const u8, l2: []const u8, l3: []const u8 };
-pub const fig_robust = Figure{ .l1 = "  \\o/", .l2 = "   |", .l3 = "  / \\" };
-pub const fig_ok = Figure{ .l1 = "   O", .l2 = "  /|\\", .l3 = "  / \\" };
-pub const fig_weary = Figure{ .l1 = "   o", .l2 = "  /|", .l3 = "  /" };
 pub const fig_dead = Figure{ .l1 = "   x", .l2 = "  -|-", .l3 = "  / \\" };
 
-/// Pick the figure for a 0..1 vigor fraction — spent slumps, rested stands.
-pub fn figure_glyphs(vigor_frac: f32) Figure {
-    if (vigor_frac < 0.25) return fig_weary;
-    if (vigor_frac > 0.6) return fig_robust;
-    return fig_ok;
-}
-
 /// Build the figure's 3 lines as a stacked column of tinted text leaves under `parent`.
-pub fn figure(parent: El, fig: Figure, color: Color) !void {
-    const col = try parent.div("fig");
+pub fn figure(parent: El, id: []const u8, fig: Figure, color: Color) !void {
+    const col = try parent.div(id);
     _ = col.with_flow(.{ .dir = .column });
 
     inline for (.{ "l1", "l2", "l3" }, .{ fig.l1, fig.l2, fig.l3 }) |lid, line| {

@@ -23,6 +23,7 @@ pub fn advance_clock(
 ) void {
     var it = q.iter();
     if (it.next() != null) sim.elapsed += time.dt;
+    sim.log.now = sim.elapsed; // lines pushed this frame carry the current game time
 }
 
 /// Spoil the larder toward zero at `spoils` units/second — food rots, so a surplus can't

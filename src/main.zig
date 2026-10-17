@@ -200,7 +200,7 @@ const App = struct {
         self.resources.motion = ui_client.resolveMotionFromEnv(allocator, ui_client.PlatformMotionProbe.instance());
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
-        self.resources.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
+        self.resources.sim.log.push(.dim, opening_line);
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -477,6 +477,21 @@ pub fn spawn_player(world: *ha.world.World) ha.world.Entity {
     const e = spawn_agent(world);
     world.add(e, tag.Player{});
     return e;
+}
+
+/// The opening line every run begins with.
+pub const opening_line = "You wake alone. Cold. Hungry.";
+
+/// Begin a fresh run: retire any living player (a settled actor is still alive at the Act I
+/// curtain, so spawning over them would leave two), spawn a new one, clear the run state
+/// (clock, log, teaching flag), unpause, and log the opening line. Speed survives a new run.
+pub fn start_over(world: *ha.world.World, res: *ha.res.Resources) void {
+    const living = ecs.MaybeSingle(.{ ha.world.Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+    if (living.get()) |entry| world.despawn(entry[0]);
+    res.playback.paused = false;
+    _ = spawn_player(world);
+    res.sim.reset();
+    res.sim.log.push(.dim, opening_line);
 }
 
 // The pages are game content outside the `ha` library; the executable module is their test

@@ -31,10 +31,12 @@ const Resources = ha.res.Resources;
 
 const p_playgame = @import("./play_game.zig").ui_playgame;
 const p_act_two = @import("./act_two/page.zig").ui_act_two;
+const p_gameover = @import("./gameover.zig").ui_gameover;
+const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 
 /// The screen a fixture seeds the shell onto. Act I is the live survival page; `act_two` renders
 /// the Act II shared-shell catalogs (fixture-driven until the Act II simulation model is wired).
-pub const Screen = enum { act_one, act_two };
+pub const Screen = enum { act_one, act_two, gameover, act_one_end };
 
 /// The passerby's visit state a fixture wants reachable. `absent` leaves the market strip
 /// dormant; `present` seeds a dealable encounter with a full satchel so the trade dialog can
@@ -78,7 +80,8 @@ pub const Spec = struct {
     /// A one-line description for the dev index / an unknown-name listing.
     about: []const u8,
     screen: Screen = .act_one,
-    /// The Act II view the fixture opens on: 0 ACTIONS, 1 BUILD, 2 STRUCTURE.
+    /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD, 2 GENERATORS; Act II:
+    /// 0 ACTIONS, 1 BUILD, 2 STRUCTURE.
     view: usize = 0,
     /// The deterministic logical window size. Feeds `view.compute`, so it fixes the responsive
     /// width class (`full`/`w760`/`w560`/`w440`) and the centered-terminal geometry. Defaults to
@@ -96,7 +99,12 @@ pub const Spec = struct {
     balances: Balances = .{},
     /// The Act II settlement the actor is seeded into, if the fixture is past the curtain.
     settlement: ?Settlement = null,
+    /// Event-log history, oldest first. Empty keeps the run's own log.
+    log: []const LogLine = &.{},
 };
+
+/// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
+pub const LogLine = struct { day: u32 = 1, hour: f32 = 0, tone: ha.log.Tone = .normal, text: []const u8 };
 
 /// One resource amount for a fixture's stocks.
 pub const Amount = struct { item: ha.roster.Resource, n: f32 };
@@ -154,8 +162,18 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_working",
-        .about = "Act I mid-run: representative holdings, materials toward Shelter, all five verbs.",
+        .about = "Act I mid-run: representative holdings, materials toward Shelter, all five verbs, a scrollable log.",
         .day = 19,
+        .log = &.{
+            .{ .day = 1, .hour = 0, .text = "You wake alone. Cold. Hungry." },
+            .{ .day = 1, .hour = 9, .text = "You return with 3 food." },
+            .{ .day = 3, .hour = 14.5, .text = "You finish a pair of Sandals." },
+            .{ .day = 6, .hour = 21, .tone = .warn, .text = "You feel weak." },
+            .{ .day = 11, .hour = 7.25, .text = "You return with 4 materials." },
+            .{ .day = 14, .hour = 16, .tone = .good, .text = "The Root cellar slows what the larder loses." },
+            .{ .day = 18, .hour = 11.75, .text = "You finish a second Hatchet. One is effect; one is stock." },
+            .{ .day = 19, .hour = 0, .text = "Someone is walking the shoreline. Their pack carries made goods." },
+        },
         .balances = .{
             .vigor = .{ .v = 14, .max = 15 },
             .food = 11.6,
@@ -170,6 +188,23 @@ pub const catalog = [_]Spec{
                 .{ .id = "spear", .n = 1 },
             },
         },
+    },
+    .{
+        .name = "act_one_build",
+        .about = "Act I BUILD at the reference size: the full recipe table, scrolling when it overflows.",
+        .day = 4,
+        .view = 1,
+        .balances = .{ .materials = 12 },
+    },
+    .{
+        .name = "gameover",
+        .about = "The game-over curtain: the dead figure and Start over.",
+        .screen = .gameover,
+    },
+    .{
+        .name = "act_one_end",
+        .about = "The Act I curtain's first beat, after the Shelter is raised.",
+        .screen = .act_one_end,
     },
     .{
         .name = "act_one_low_stock",
@@ -238,7 +273,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_build",
-        .about = "Act II shared shell on BUILD: the 50-recipe browser.",
+        .about = "Act II shared shell on BUILD: the shared BUILD pane over the 50 Act II recipes.",
         .screen = .act_two,
         .view = 1,
         .day = 112,
@@ -307,6 +342,17 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
             };
         },
     }
+
+    // Log: replace the run's history with the fixture's, so a long feed is reproducible.
+    if (spec.log.len > 0) {
+        res.sim.log = .{};
+        for (spec.log) |line| {
+            const day_start: f32 = @floatFromInt(line.day -| 1);
+            res.sim.log.now = day_start * res.config.secs_per_day + ha.res.hours_to_secs(line.hour, res.config.secs_per_day);
+            res.sim.log.push(line.tone, line.text);
+        }
+    }
+    res.sim.log.now = res.sim.elapsed;
 
     // Balances: write each requested component to its exact value, leaving the spawn baseline
     // for any field the spec left null. Owned goods are added only when the spec names a count.
@@ -393,8 +439,10 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     // the selection after, so the seeded screen stays navigable.
     const opening: ?usize = if (ctx.frame == 1) spec.view else null;
     return switch (spec.screen) {
-        .act_one => try p_playgame(ctx, world),
+        .act_one => try p_playgame(ctx, world, .{ .initial_view = opening }),
         .act_two => try p_act_two(ctx, world, .{ .initial_view = opening }),
+        .gameover => try p_gameover(ctx, world),
+        .act_one_end => try p_act_one_end(ctx, world),
     };
 }
 

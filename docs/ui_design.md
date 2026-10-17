@@ -60,8 +60,9 @@ Twenty unlocked verbs no longer fit as large cards. ACTIONS therefore uses one s
 with compact two-column rows. Each row remains one full button and carries name, readiness, energy,
 time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
-`*` use the same grammar as BUILD. The adjacent sort disclosure offers none/ready/time/energy/name
-and both directions. None restores authored order and disables Direction.
+`*` use the same grammar as BUILD. ACTIONS does not sort: verbs read in authored order. Every act
+uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs, the
+subtitle, and Act I's eating policy at the foot of the grid).
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it remains fixed below that collection. It is a `0..100` slider, not a set of named
@@ -99,19 +100,19 @@ tool, comfort, storage, transport and material; `state:<state>`/`is:<value>` ins
 state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` excludes, and
 `*` exposes the complete catalog. `/` focuses the field and Escape clears it.
 
-A blank query shows every eligible in-reach, unowned recipe after ordering; the current prototype
-fixture exposes nine. As soon as the player types, the query searches all 50 recipes, including owned
-and currently distant goods. That removes the need for visible FILTER, SHOW, built, preset, or
-syntax-help rows while keeping every recipe reachable.
+A blank query shows the act's complete shelf — owned, distant, prerequisite-short and
+research-gated recipes included, disabled rather than hidden — and typing only narrows it. Every
+act uses the same BUILD pane (`build_section`); only its content differs: which records are the
+act's recipes, the subtitle, and the milestone card. That removes the need for visible FILTER,
+SHOW, built, preset, or syntax-help rows while keeping every recipe reachable.
 
-The icon immediately beside search toggles one Notion-style second row with the search field's
-same width and 30 px height. Native selects choose **Sort by** none/reach/input cost/time/name
-and **Direction** ascending/descending. Choosing none restores catalog order, resets and disables
-Direction, and persists explicitly as `buildsort=none`. The row closes with the same icon or Escape
-and returns focus to the icon. Query, sort, direction and disclosure state are shareable through
-`buildq`, `buildsort`, `builddir`, and `buildsortopen=1`.
+**Sort from the column headers.** RECIPE (name), COST (order size), TIME and STATE (reach) are
+sortable: clicking one sorts on it in its natural direction — STATE nearest first, the others
+cheapest, quickest, A–Z — and clicking it again flips the direction. Only the column in force
+wears an arrow (`↑`/`↓`) and reads in `fg`. The header row is one Tab stop; arrows rove across its
+columns and Enter/Space sorts. The default is STATE ↓.
 
-The summary is count-only (`9 of 50 recipes shown` in the current default); balances already live in the header. A build
+The summary is count-only (`{shown} of {total} recipes shown`); balances already live in the header. A build
 in progress remains visible regardless of query and linked research updates recipe state without
 rebuilding the list. The removed explanatory footnote is not replaced: the browser and goal card
 must explain themselves.
@@ -124,9 +125,10 @@ search, Exchange and the event log fixed.
 
 **The log is part of ACTIONS, BUILD, and GENERATORS.** One four-line live event log occupies the terminal footer
 on both panes and keeps its place while their result collections scroll. Lines read newest
-first, the newest stamped `NOW` and painted at full tone while older lines dim a step; a gain
-reads in the `good` tone. The feed itself keeps far more than four lines, and a history view is
-the only place it scrolls. STRUCTURE alone hides it to
+first, each stamped with the game day and time it happened (`D19 11:45`); the newest is painted
+at full tone while older lines dim a step; a gain
+reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
+so it rests on the newest four and the wheel or scrollbar reaches older ones. STRUCTURE alone hides it to
 recover board height. Below 760 px the fixed-height workspace is released: ACTIONS, BUILD, and
 GENERATORS return to normal document scrolling, narrow BUILD drops lower-priority columns, and the log remains at the
 end of the document rather than creating nested touch scrollers.
@@ -185,10 +187,11 @@ copied constant.
 
 ## Playback controls
 
-The compact `> / >> / >>>` selector sits on the HUD's right and represents 1×/2×/3×. It comes
-after the run context and immediately before the far-right `PAUSE / RESUME` toggle. Speed is an
-accessible single-selection group with descriptive rate names; pause is an accessible checked
-toggle. Both persist across tabs, while a fresh run always resumes at the previously selected speed.
+The compact `<< {speed} >>` stepper sits on the HUD's right, after the run context and before
+`MENU`. Its one linear scale is PAUSE, 1×, 2×, 3×: the chevrons step it and dim at their bound, and
+the value cell is fixed-width so stepping never moves them. It is one accessible slider ("Simulation
+speed"): arrows step, Home pauses, End jumps to 3×; the chevrons are pointer targets, not extra Tab
+stops. Stepping up out of PAUSE lands on 1×. State persists across tabs and fresh runs.
 The multiplier applies only to simulation time: clock, spoilage, metabolism, work, passerby phases,
 and generator accumulation advance together. Pause skips that complete simulation stage without
 cancelling `Busy`, discarding generator progress, or changing the selected speed. Input, rendering,
@@ -197,7 +200,7 @@ transitions stay responsive while paused or at faster game speeds.
 
 ## Session menu
 
-`MENU` sits between speed and the far-right pause control. It opens a top-layer modal through the
+`MENU` sits at the far right, after the speed stepper. It opens a top-layer modal through the
 same focus trap, outside-click boundary, Escape dismissal, and opener restoration as trade. Opening
 temporarily pauses simulation and remembers whether it was already paused: Escape, ×, or an outside
 click restores that prior state, while `RESUME` explicitly unpauses. The menu exposes only speed,

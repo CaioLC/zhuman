@@ -29,6 +29,9 @@ pub const Entry = struct {
     buf: [max_len]u8 = undefined,
     len: usize = 0,
     tone: Tone = .normal,
+    /// Game-seconds elapsed when the line was pushed (`Log.now` at push time). The UI turns
+    /// it into a day + time-of-day stamp; the log itself knows nothing of day length.
+    at: f32 = 0,
     /// The message pushed here exceeded `max_len` and was refused whole: `buf`/`len` hold
     /// the `overflow_marker`, not a cut prefix. Surfaced so a reader knows the feed is
     /// lossy for this line rather than silently showing a severed message.
@@ -47,6 +50,9 @@ pub const Log = struct {
     entries: [capacity]Entry = [_]Entry{.{}} ** capacity,
     head: usize = 0, // next write slot (also the oldest, once full)
     count: usize = 0, // live entries, saturating at `capacity`
+    /// The run clock in game-seconds, kept current by `advance_clock`; every `push` stamps
+    /// it on the entry so call sites need not pass a time.
+    now: f32 = 0,
 
     /// Append a message with `tone`. The bytes are copied in **full** when they fit
     /// `max_len`, so the caller's buffer can be reused immediately after. A message past
@@ -62,6 +68,7 @@ pub const Log = struct {
         e.len = src.len;
         e.tone = tone;
         e.refused = !accepted;
+        e.at = self.now;
         self.head = (self.head + 1) % capacity;
         if (self.count < capacity) self.count += 1;
     }
@@ -153,6 +160,16 @@ test "log ring overwrites oldest and get(0) is newest after refusals" {
     log.push(.warn, &over);
     try testing.expect(log.get(0).refused);
     try testing.expectEqualStrings(overflow_marker, log.get(0).text());
+}
+
+test "log push stamps the current clock" {
+    var log: Log = .{};
+    log.now = 12.5;
+    log.push(.normal, "a");
+    log.now = 30;
+    log.push(.normal, "b");
+    try testing.expectEqual(@as(f32, 30), log.get(0).at);
+    try testing.expectEqual(@as(f32, 12.5), log.get(1).at);
 }
 
 test "log clear resets the feed" {

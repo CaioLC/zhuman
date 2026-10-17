@@ -2,7 +2,7 @@
 //! theme's `line2`), a body cell (body-size text fitted with an ellipsis into a box of exactly
 //! the lane's width, left- or right-aligned), and the header and body rows that lay the lanes
 //! out with one gap and one horizontal padding, so every row's fields line up down the list.
-//! `capital_row` (Act I BUILD) and the Act II recipe browser compose these.
+//! `capital_row` (the BUILD pane, every act) composes these.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -14,23 +14,49 @@ const Style = style.Style;
 const El = el.El;
 const Color = uic.Color;
 
-/// One lane: its node id, header label and width in logical px.
-pub const Lane = struct { id: []const u8, label: []const u8, w: f32 };
-
-/// The lanes plus the gaps between them, logical px — a row's content width.
-pub fn lanes_width(lanes: []const Lane, gap: f32) f32 {
-    var width: f32 = 0;
-    for (lanes) |l| width += l.w;
-    if (lanes.len > 1) width += @as(f32, @floatFromInt(lanes.len - 1)) * gap;
-    return width;
-}
-
 /// A column label over its lane.
 pub fn header_cell(parent: El, id: []const u8, width: f32, label: []const u8) !void {
     const th = parent.ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children);
     _ = (try box.text("t", label)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.line2 }});
+}
+
+/// The direction a sortable column is shown in: `none` for a column that is not the active
+/// sort, otherwise the arrow it wears.
+pub const SortShown = enum { none, ascending, descending };
+
+/// A **sortable** column label: the same tracked label as `header_cell`, but a control. The
+/// active sort column reads in `fg` with its arrow (`COST ↑` ascending, `COST ↓` descending);
+/// others stay `line2` and lift to accent on hover/focus. Members register under `group` (the
+/// header row's key), so the whole header is one Tab stop and the arrows rove across it.
+/// Returns the cell's stable key (for the group's member list) and whether it was clicked
+/// (pointer or Enter/Space) this frame; the caller owns what a click does to the sort.
+pub const SortCell = struct { key: u64, clicked: bool };
+
+pub fn sort_header_cell(parent: El, id: []const u8, width: f32, label: []const u8, shown: SortShown, group: u64) !SortCell {
+    const th = parent.ctx.res.view.theme;
+    const box = try parent.div(id);
+    _ = box.with_size(.{ .fixed = width }, .fit_children);
+    const q = box.control(.{
+        .name = label,
+        .role = .button,
+        .value = switch (shown) {
+            .none => "not sorted",
+            .ascending => "sorted ascending",
+            .descending => "sorted descending",
+        },
+        .roving_group = group,
+    });
+    var buf: [48]u8 = undefined;
+    const text = switch (shown) {
+        .none => label,
+        .ascending => std.fmt.bufPrint(&buf, "{s} \u{2191}", .{label}) catch label,
+        .descending => std.fmt.bufPrint(&buf, "{s} \u{2193}", .{label}) catch label,
+    };
+    const color = if (q.hovering or q.held or q.focused) th.acc else if (shown != .none) th.fg else th.line2;
+    _ = (try box.text("t", text)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = color }});
+    return .{ .key = box.get().key, .clicked = q.clicked };
 }
 
 /// A body cell: `text` in `color`, elided to the lane so a long value never knocks the
@@ -52,35 +78,4 @@ pub fn table_row(parent: El, id: []const u8, gap: f32, pad_x: f32, pad_y: f32) !
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(gap)
         .with_style(.{style.pad_sym(pad_x, pad_y)});
     return row;
-}
-
-/// The header row: one header cell per lane, 4px of vertical padding.
-pub fn table_header(parent: El, id: []const u8, lanes: []const Lane, gap: f32, pad_x: f32) !El {
-    const header = try table_row(parent, id, gap, pad_x, 4);
-    for (lanes) |l| try header_cell(header, l.id, l.w, l.label);
-    return header;
-}
-
-/// A row that is a control: the row, and the interaction it published this frame.
-pub const ControlRow = struct { el: El, q: uic.UiCtx.Interaction };
-
-/// A `table_row` that is one whole control — the caller's `opts` name it and gate it — with
-/// its outline lit in the accent while it holds focus and the theme's line otherwise. Cells
-/// are appended by the caller after this, as on any row.
-pub fn control_row(parent: El, id: []const u8, gap: f32, pad_x: f32, pad_y: f32, opts: uic.ControlOptions) !ControlRow {
-    const th = parent.ctx.res.view.theme;
-    const row = try table_row(parent, id, gap, pad_x, pad_y);
-    const q = row.control(opts);
-    _ = row.with_style(.{Style{ .outline_color = if (q.focused) th.acc else th.line }});
-    return .{ .el = row, .q = q };
-}
-
-test "a table's content width is its lanes and the gaps between them" {
-    const lanes = [_]Lane{
-        .{ .id = "a", .label = "A", .w = 100 },
-        .{ .id = "b", .label = "B", .w = 50 },
-        .{ .id = "c", .label = "C", .w = 25 },
-    };
-    try std.testing.expectEqual(@as(f32, 191), lanes_width(&lanes, 8));
-    try std.testing.expectEqual(@as(f32, 100), lanes_width(lanes[0..1], 8));
 }

@@ -7,9 +7,9 @@
 // —— Header readouts with no model behind them ——————————————————————————————————————————
 
 /// The settlement's population.
-pub const population = "48";
+pub const population: f32 = 48;
 /// The coin balance.
-pub const coin = "126";
+pub const coin: f32 = 126;
 
 // —— Coin Merchant (ACT2-14) ————————————————————————————————————————————————————————————
 // The merchant's finite lots. Buys cost Coin ("YOU PAY"); sells give goods/resources for Coin
@@ -62,9 +62,9 @@ pub const merchant_meta = "MERCHANT \u{00b7} 2 DAYS AT MARKET";
 
 /// Act-specific per-day flow margins (generated vs consumed). A positive flow is `good`, a
 /// deficit `danger` — the semantics the caller colors.
-pub const FlowRecord = struct { 
-    label: []const u8, 
-    value: []const u8, 
+pub const FlowRecord = struct {
+    label: []const u8,
+    value: []const u8,
     positive: bool,
     resource: []const u8, // Resource tag name for keying
 };

@@ -14,32 +14,25 @@ const uic = ha.ui_client;
 const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
+const act_one_holdings = @import("./act_one/holdings.zig");
+
+pub const Options = struct {
+    /// Open the work surface on this view (a fixture's first frame); null keeps the selection.
+    initial_view: ?usize = null,
+};
 
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
 /// while the dialog is open, so the dialog covers the screen by construction.
-pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
     // The reviewed Act-I composition is the normal live page from the first frame. `shell`
     // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
     // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD/GENERATORS surface.
-    const compact = ctx.res.view.metrics.width_class.atMost(.w560);
-    const page_pad: f32 = if (compact) ha.tokens.pad_page_compact else ha.tokens.pad_page;
-    const regions = try t.shell(ctx, .{
-        .id = "play",
-        .act = .act_one,
-        .page_pad = page_pad,
-        .section_gap = ha.tokens.gap.section,
-        .footer = true,
-    });
-    const header = regions.header;
-    const body = regions.body;
-
-    // Header data is formatted by the screen, then assembled with the run context by `header`.
+    const page = try t.act_page(ctx, .{ .id = "play", .act = .act_one });
+    const body = page.regions.body;
+    // Header stock data is passed raw, then assembled with the run context by `header`.
     // An empty stock slice keeps only the right-pinned runline when no live actor remains.
     var overlay: ?*Node = null; // the trade dialog's own overlay root, when open
     var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
-    var vbuf: [24]u8 = undefined;
-    var fbuf: [24]u8 = undefined;
-    var mnum: [16]u8 = undefined;
     var header_stocks: [3]t.Stock = undefined;
     var header_stock_count: usize = 0;
     const q = ecs.MaybeSingle(.{
@@ -49,48 +42,21 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         const e, const vigor, const food, const materials = a;
         // The stockline is a row of StockTokens whose order/membership is this act's
         // descriptor. Act I lists Vigor/Food/Materials; each token shows a two-letter abbrev
-        // (full label on hover/focus), tints danger on a low/zero value, and keeps a stable
-        // footprint (fixed cell) so a swap never shifts its neighbors. The values are formatted
-        // here (the token owns no domain math).
-        const vtxt = std.fmt.bufPrint(&vbuf, "{d:.0}/{d:.0}", .{ vigor.v, vigor.max }) catch "?";
-        const ftxt = std.fmt.bufPrint(&fbuf, "{d:.0}", .{food.v}) catch "?";
-        const mtxt = @import("./fmt.zig").fmt_num(&mnum, materials.v);
-        const vigor_tone: t.StockTone = switch (ctx.res.config.condition(vigor.v / vigor.max)) {
-            .alive => .normal,
-            .weary => .warn,
-            .spent => .danger,
-        };
+        // (full label on hover/focus), tints danger on a low/zero value, and owns compact versus
+        // detailed number formatting.
         header_stocks = .{
-            .{ .abbrev = "Vi", .full = "Vigor", .value = vtxt, .tone = vigor_tone },
-            .{ .abbrev = "Fo", .full = "Food", .value = ftxt, .tone = if (food.v <= 0) .danger else .normal },
-            .{ .abbrev = "Ma", .full = "Materials", .value = mtxt },
+            t.vigorStock(ctx, "Vi", vigor),
+            .{ .abbrev = "Fo", .full = "Food", .value = food.v, .tone = if (food.v <= 0) .danger else .normal },
+            .{ .abbrev = "Ma", .full = "Materials", .value = materials.v },
         };
         header_stock_count = header_stocks.len;
 
-        // Project live work state into the workspace's activity strip.
-        const busy = world.get(e, comp.Busy);
-        const act_state: t.ActivityState = if (busy) |b|
-            (if (actions.is_build(b.doing)) .building else .working)
-        else
-            .idle;
-        var activity_meta_buf: [24]u8 = undefined;
-        const activity_subject: []const u8 = if (busy) |b| actions.doing_label(&ctx.res.catalog, b.doing) else "no work in progress";
-        const activity_metadata: []const u8 = if (busy) |b| blk: {
-            if (actions.is_build(b.doing)) {
-                const days_left = b.remaining / ctx.res.config.secs_per_day;
-                break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.1}d left", .{days_left}) catch "?";
-            }
-            const hours_left = b.remaining * 24.0 / ctx.res.config.secs_per_day;
-            break :blk std.fmt.bufPrint(&activity_meta_buf, "{d:.0}h left", .{hours_left}) catch "?";
-        } else "ready";
-
         const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
-            .market_available = ctx.res.sim.encounter.dealable(),
-            .activity = .{
-                .state = act_state,
-                .subject = activity_subject,
-                .metadata = activity_metadata,
-                .last = act_state,
+            .holdings = try act_one_holdings.content(ctx, world, e),
+            .surface = .{
+                .market_available = ctx.res.sim.encounter.dealable(),
+                .initial_view = opts.initial_view,
+                .activity = try t.activityOf(ctx, world.get(e, comp.Busy)),
             },
         });
 
@@ -110,32 +76,13 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
-    // Assemble the complete HUD header — stocks left, run context right. Energy rate
-    // is omitted in Act I, and the compact branch drops the optional act label at ≤560.
-    const day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day));
-    _ = try t.header(header, "hud", .{
+    // The header (stocks left, run context right; Act I has no energy rate) and the log.
+    return page.finish(.{
         .stocks = header_stocks[0..header_stock_count],
-        .run = .{
-            .act_label = "Act I",
-            .day = day,
-            .compact = compact,
-        },
+        .act_label = "Act I",
+        .overlay = overlay,
     });
-
-    // --- footer: the event log, full width inside the shell's reserved 86px framed logger row.
-    // log_view authors in logical px; the content column in logical is the terminal's
-    // logical width minus the page padding.
-    if (regions.footer) |footer| {
-        const content_w_logical = ctx.res.view.metrics.terminal.w - 2 * page_pad;
-        try t.log_view(footer, "feed", &ctx.res.sim.log, content_w_logical, 4);
-    }
-
-    var roots: std.ArrayList(*Node) = .empty;
-    try roots.append(ctx.arena, regions.root.get());
-    if (overlay) |dialog| try roots.append(ctx.arena, dialog);
-    return roots.items;
 }
-
 const market = ha.market;
 const barter = ha.barter;
 const Ware = market.Ware;

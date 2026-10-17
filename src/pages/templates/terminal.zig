@@ -107,7 +107,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 //     └───────────────────────────────────────────────────────────────┘
 //
 // A tab strip is never a shell region: it is the first row of the surface it switches, in
-// both acts (`view_nav`).
+// both acts (`tabs`).
 //
 // **Overlay roots** (tooltip, modal) are deliberately *not* children of the terminal box —
 // they are their own top-layer roots the screen stamps after the shell so they float above

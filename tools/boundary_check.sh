@@ -27,8 +27,8 @@
 #      `templates/`) places nodes — `div`, `spacer`, `with_size`/`with_flow`/`with_gap`/
 #      `with_layout` — and composes the shelf; a styled or text node belongs to a template
 #      (`src/pages/templates/copy.zig` holds the prose leaves), because a style chosen in a
-#      page is art direction that drifts. The debug page and the mock showcase are exempt:
-#      the audit harness and the style eyeball page paint by design. Any hit fails the check.
+#      page is art direction that drifts. The debug page is exempt:
+#      the audit harness paints by design. Any hit fails the check.
 #
 # Run from anywhere: `sh tools/boundary_check.sh`. Exit 0 when clean, 1 on a failure.
 
@@ -46,7 +46,7 @@ if [ -n "$hits" ]; then
 fi
 
 paint='\.with_style\(|\.text(_fit)?\('
-pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig -not -name mock.zig)
+pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig)
 hits=$(grep -nE "$paint" $pages | grep -vE '^[^:]+:[0-9]+:\s*//')
 if [ -n "$hits" ]; then
     echo "boundary: a page paints (a styled or text node belongs to a template):"

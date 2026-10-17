@@ -20,7 +20,11 @@ const surface_mod = @import("./act_one_surface.zig");
 const expanded_gap: f32 = 22;
 const collapsed_gap: f32 = 12;
 
-pub const Options = surface_mod.Options;
+/// The work surface's options, plus the rail's content (each act projects its own).
+pub const Options = struct {
+    surface: surface_mod.Options,
+    holdings: holdings_mod.Content,
+};
 
 pub const Result = struct {
     el: El,
@@ -47,7 +51,7 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
         .label = "HOLDINGS",
     });
     if (built_rail.body) |body| {
-        _ = try holdings_mod.holdings(body, world, e, "holdings");
+        _ = try holdings_mod.holdings(body, "holdings", opts.holdings);
     }
 
     // The width and gap move together, matching `.page-grid.is-holdings-collapsed` rather than
@@ -59,7 +63,7 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
     const content = try workspace.div("content");
     _ = content.with_size(.grow, .{ .pct_of_parent = 1.0 })
         .with_overflow(.clip);
-    const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts);
+    const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts.surface);
 
     return .{ .el = workspace, .rail = built_rail, .surface = surface };
 }

@@ -40,6 +40,8 @@ pub const Options = struct {
     height: f32,
     /// Draw the viewport's hairline frame. A catalog region inside a surface goes without.
     framed: bool = true,
+    /// Vertical gap between content rows, logical px. A dense feed (the footer log) uses 0.
+    gap: f32 = content_gap,
 };
 
 pub const ScrollView = struct {
@@ -61,14 +63,18 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     const fill = opts.width <= 0;
     const fill_h = opts.height <= 0;
     const outer = try parent.div(id);
-    _ = outer.with_flow(.{ .dir = .row });
+    // Top-aligned: the default baseline cross-alignment would place the viewport by its
+    // content's first baseline and shift it against the track.
+    _ = outer.with_flow(.{ .dir = .row, .cross = .start });
     _ = outer.with_size(
         if (fill) .{ .pct_of_parent = 1.0 } else .fit_children,
         if (fill_h) .{ .pct_of_parent = 1.0 } else if (fill) .{ .fixed = opts.height } else .fit_children,
     );
 
     const viewport = try outer.div("viewport");
-    _ = viewport.with_overflow(.clip);
+    // Top-anchored column: the default row/baseline flow would align an overflowing content
+    // column by its baseline and start it part-way scrolled.
+    _ = viewport.with_overflow(.clip).with_flow(.{ .dir = .column, .cross = .start });
     if (opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.line2 }});
     _ = viewport.with_size(
         if (fill) .grow else .{ .fixed = opts.width },
@@ -76,7 +82,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     );
 
     const content = try viewport.div("content");
-    _ = content.with_flow(.{ .dir = .column }).with_gap(content_gap);
+    _ = content.with_flow(.{ .dir = .column }).with_gap(opts.gap);
     if (fill) _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     // The probe covers the viewport, so it must not take the hit; tracked so its rect resolves.
     const content_h = if (content.get().rect(ctx)) |r| r.h else 0;

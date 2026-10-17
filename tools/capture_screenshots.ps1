@@ -33,6 +33,9 @@ Set-Location $repoRoot
 $matrix = [ordered]@{
     "act_one_default"   = "QA-10 Act I ACTIONS, reference 900x820"
     "act_one_working"   = "QA-10 Act I BUILD/holdings mid-run"
+    "act_one_build"     = "QA-10 Act I BUILD recipe table, scroll on overflow"
+    "gameover"          = "Game-over curtain"
+    "act_one_end"       = "Act I curtain, first beat"
     "act_one_low_stock" = "QA-10 Act I low-stock / disabled states"
     "act_one_passerby"  = "QA-10 Act I Passerby trade (dialog openable)"
     "act_one_w760"      = "QA-10 Act I narrow layout, 760 width class"

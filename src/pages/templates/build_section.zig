@@ -1,6 +1,7 @@
-//! `build_section` — the complete Act I BUILD surface: heading/count, catalog controls,
-//! live summary, aligned recipe table, and Shelter milestone. Domain filtering, sorting, and
-//! build lifecycle remain in `build_list`; this template owns the section-level composition.
+//! `build_section` — the complete BUILD pane, the same on every act: heading/count, the search
+//! field, live summary, sortable recipe table, and the act's milestone. Only the content
+//! differs per act (`build_list.Shelf`). Domain filtering, sorting, and build lifecycle remain
+//! in `build_list`; this template owns the section-level composition.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -16,15 +17,24 @@ const El = el.El;
 const build_list_mod = @import("./build_list.zig");
 const row_mod = @import("./capital_row.zig");
 
+pub const Shelf = build_list_mod.Shelf;
+
 /// Build the section. `catalog` and `search_owner` pass through to `build_list`: the catalog
-/// state and the node holding the search editor when an always-built owner keeps them.
-pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, catalog: ?*uic.UiState.CatalogState, search_owner: ?El) !El {
+/// state and the node holding the search editor when an always-built owner keeps them;
+/// `scroll` likewise keeps the table's scroll offset across tab switches. `shelf` is the act's
+/// content (its recipes, subtitle, milestone, lane widths).
+///
+/// The section fills its parent's height, which must be definite: the heading, search,
+/// summary and column header stay put, and only the table's rows scroll — the milestone stays
+/// pinned below them.
+pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const width = row_mod.tableWidth(ctx);
+    const width = row_mod.tableWidth(ctx, shelf.widths);
 
     const section = try parent.div(id);
-    _ = section.with_size(.{ .fixed = width }, .fit_children)
+    // The table plus its reserved scroll gutter, so the track never covers a lane.
+    _ = section.with_size(.{ .fixed = width + row_mod.scroll_gutter }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
 
     const heading = try section.div("heading");
@@ -34,14 +44,14 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, catal
     _ = copy.with_flow(.{ .dir = .column, .cross = .start });
     _ = (try copy.text("title", "BUILD"))
         .with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try copy.text("subtitle", "Find the next useful recipe your own hands can raise."))
+    _ = (try copy.text("subtitle", shelf.subtitle))
         .with_style(.{Style{ .font = 11, .text = th.dim }});
 
     var count_buf: [24]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.authoredTotal(&ctx.res.catalog)}) catch "RECIPES";
+    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.authoredTotal(&ctx.res.catalog, shelf)}) catch "RECIPES";
     _ = (try heading.text("count", count))
         .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 
-    _ = try build_list_mod.build_list(section, world, e, "buildlist", catalog, search_owner);
+    _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, catalog, search_owner, scroll);
     return section;
 }

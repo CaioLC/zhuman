@@ -1,39 +1,28 @@
-//! The game-over screen builder (`src/pages/` game content), on the elements/templates
-//! stack: a dead figure, a line, and a "Start over" button that respawns the player and
-//! resets the run clock + log.
+//! The game-over screen builder (`src/pages/` game content): the shared `curtain` with the dead
+//! figure, one line, and "Start over", which begins a fresh run (`start_over`).
 
 const ha = @import("ha");
 const app = @import("../main.zig");
 
 const uic = ha.ui_client;
-const el = uic.elements;
 const World = ha.world.World;
 
 const t = @import("./templates/root.zig");
 
 pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
-    const th = ctx.res.view.theme;
-
-    // The game-over screen lives in the one terminal shell; it needs only the main
-    // body (no header/footer/rail), so it fills `regions.body` with its centered content.
+    // The game-over screen lives in the one terminal shell; it needs only the main body.
     const regions = try t.shell(ctx, .{
         .id = "over",
         .act = .act_one,
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
     });
-    const center = try regions.body.div("c_div");
-    _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
-
-    try t.figure(center, t.fig_dead, th.danger);
-    _ = try t.headline(center, "dead_text", "You perished, cold and starved."); // the only line on the screen
-
-    const restart = try t.button(center, "restart", "Start over", true);
-    if (restart.query().clicked) {
-        ctx.res.playback.paused = false;
-        _ = app.spawn_player(world);
-        ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
-        ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
-    }
+    const c = try t.curtain(regions.body, "c_div", .{
+        .figure = t.fig_dead,
+        .figure_color = ctx.res.view.theme.danger,
+        .line = "You perished, cold and starved.", // the only line on the screen
+        .button = "Start over",
+    });
+    if (c.clicked) app.start_over(world, ctx.res);
     return try uic.oneRoot(ctx.arena, regions.root.get());
 }

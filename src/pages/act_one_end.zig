@@ -11,13 +11,8 @@
 const ha = @import("ha");
 const app = @import("../main.zig");
 
-const comp = ha.comp;
-const tag = ha.tag;
-const ecs = ha.ecs;
 const uic = ha.ui_client;
-const el = uic.elements;
 const World = ha.world.World;
-const Entity = ha.world.Entity;
 const StepState = uic.UiState.StepState;
 
 const t = @import("./templates/root.zig");
@@ -45,33 +40,23 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
     });
-    const dialog = try t.panel(regions.body, "curtain", "ACT I");
-    _ = dialog.with_layout(.center);
-
-    const st = dialog.state(StepState);
+    // The beat persists on the body's own slot (the shell region is rebuilt every frame).
+    const st = regions.body.state(StepState);
     if (st.step >= beats.len) st.step = 0; // the script shrank across frames — stay valid
     const beat = beats[st.step];
 
-    // Stable keys across beats: the text nodes persist and re-source their content, the
-    // way every other rebuilt leaf does.
-    _ = try t.headline(dialog, "line", beat.line);
-    // The note wraps at the shelf's prose measure.
-    _ = try t.lede(dialog, "note", beat.note, t.prose_measure);
-
-    const go = try t.button(dialog, "go", beat.button, true);
-    if (go.query().clicked) {
+    const c = try t.curtain(regions.body, "curtain", .{
+        .title = "ACT I",
+        .line = beat.line,
+        .note = beat.note,
+        .button = beat.button,
+    });
+    if (c.clicked) {
         if (st.step + 1 < beats.len) {
             st.step += 1;
         } else {
-            // Nothing follows Act I yet, so the only way on is back to the start. The
-            // settled actor has to go first: unlike the game-over path, this player is
-            // still alive, and spawning over them would leave two.
-            const settled = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-            if (settled.get()) |entry| world.despawn(entry[0]);
-            ctx.res.playback.paused = false;
-            _ = app.spawn_player(world);
-            ctx.res.sim.reset(); // clock, log and the teaching flag all start over together
-            ctx.res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
+            // Nothing follows Act I yet, so the only way on is back to the start.
+            app.start_over(world, ctx.res);
             st.step = 0;
         }
     }

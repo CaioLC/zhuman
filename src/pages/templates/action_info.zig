@@ -1,6 +1,6 @@
 //! Shared read-side helpers over a verb's output lines — which line dominates (by mean),
 //! its display band, and the icon for its distribution shape. Used by the action
-//! presentations (`action_button`, `action_tile`) so they never drift on
+//! presentations (`action_tile` and the BUILD/generator rows) so they never drift on
 //! the pick.
 
 const ha = @import("ha");

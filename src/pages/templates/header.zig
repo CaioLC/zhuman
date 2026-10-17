@@ -1,6 +1,6 @@
 //! `header` — the complete HUD header assembly: current stocks on the left, run context plus
-//! chevron speed and pause controls on the right. It owns composition and placement only; callers supply
-//! formatted stock values and run data, while the child templates retain their behavior.
+//! the `<< {speed} >>` stepper and menu on the right. It owns composition and placement only;
+//! callers supply raw stock values and run data, while the child templates retain their behavior.
 
 const ha = @import("ha");
 const uic = ha.ui_client;
@@ -27,11 +27,10 @@ pub const Header = struct {
     stocks: El,
     run: El,
     menu: El,
-    pause: El,
 };
 
 /// Assemble the full-width HUD header as one intrinsic-height row. Stocks own the left; run
-/// context, chevron speed, menu, and pause share the right group in that order.
+/// context, the speed stepper (pause..3×), and the menu share the right group in that order.
 pub fn header(parent: El, id: []const u8, options: Options) !Header {
     const root = try parent.div(id);
     _ = root.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
@@ -42,9 +41,8 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     const right = try root.div("right");
     _ = right.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
     const run = try run_mod.runline(right, "run", options.run);
-    const speed: ?El = if (options.show_speed) try speed_mod.speed_controls(right, "speed") else null;
+    const speed: ?El = if (options.show_speed) try speed_mod.speed_stepper(right, "speed") else null;
     const menu = try speed_mod.menu_control(right, "menu");
-    const pause = try speed_mod.pause_control(right, "pause");
 
-    return .{ .el = root, .speed = speed, .stocks = stocks, .run = run, .menu = menu, .pause = pause };
+    return .{ .el = root, .speed = speed, .stocks = stocks, .run = run, .menu = menu };
 }

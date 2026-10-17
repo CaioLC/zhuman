@@ -69,8 +69,30 @@ pub const Playback = struct {
         };
     }
 
-    pub fn togglePaused(self: *Playback) void {
-        self.paused = !self.paused;
+    /// The header stepper's linear scale: pause, then 1×, 2×, 3×.
+    pub const max_level: u8 = 3;
+
+    /// Current stepper position: 0 while paused, otherwise the speed.
+    pub fn level(self: Playback) u8 {
+        return if (self.paused) 0 else self.speed;
+    }
+
+    /// Move to a stepper position, clamped to pause..3×. Pausing keeps the speed so the
+    /// menu's speed choice still reads; stepping up out of pause lands on 1×.
+    pub fn setLevel(self: *Playback, l: u8) void {
+        const clamped = @min(l, max_level);
+        if (clamped == 0) {
+            self.paused = true;
+        } else {
+            self.paused = false;
+            self.setSpeed(clamped);
+        }
+    }
+
+    /// Step the stepper one position slower (`-1`) or faster (`+1`), clamped at the ends.
+    pub fn step(self: *Playback, delta: i8) void {
+        const next = @as(i16, self.level()) + delta;
+        self.setLevel(@intCast(std.math.clamp(next, 0, max_level)));
     }
 
     pub fn multiplier(self: Playback) f32 {
@@ -334,6 +356,30 @@ pub const Resources = struct {
         return self.sim.prng.random();
     }
 };
+
+test "Playback stepper walks pause..3x and clamps at both ends" {
+    var p = Playback{};
+    try std.testing.expectEqual(@as(u8, 1), p.level());
+    p.step(-1);
+    try std.testing.expect(p.paused);
+    try std.testing.expectEqual(@as(u8, 0), p.level());
+    try std.testing.expectEqual(@as(f32, 0), p.multiplier());
+    p.step(-1); // already at pause
+    try std.testing.expectEqual(@as(u8, 0), p.level());
+    p.step(1);
+    try std.testing.expectEqual(@as(u8, 1), p.level());
+    try std.testing.expect(!p.paused);
+    p.setLevel(3);
+    p.step(1); // already at 3x
+    try std.testing.expectEqual(@as(u8, 3), p.level());
+    try std.testing.expectEqual(@as(f32, 3), p.multiplier());
+}
+
+test "Playback stepping up out of pause lands on 1x" {
+    var p = Playback{ .speed = 3, .paused = true };
+    p.step(1);
+    try std.testing.expectEqual(@as(u8, 1), p.level());
+}
 
 test "Config.clampMetabolism bounds the rate into [min, max]" {
     const cfg = Config{}; // min 0.5, max 2.0, default 1.0

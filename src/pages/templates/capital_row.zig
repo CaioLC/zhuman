@@ -31,14 +31,12 @@ const info = @import("./action_info.zig");
 const table = @import("./table.zig");
 
 /// The table's lanes, in order. The header and every row iterate this one array, so their
-/// lanes cannot drift apart. `w` is the lane width in logical px; `hidden_at` is the widest
-/// width class at which the lane is dropped — the lower-priority lanes go first as the
-/// terminal narrows. The widths fit the canonical 594px
-/// expanded Act-I content lane: 542px of cells, five 8px gaps, and 12px of row padding.
+/// lanes cannot drift apart. `hidden_at` is the widest width class at which the lane is
+/// dropped — the lower-priority lanes go first as the terminal narrows. Lane **widths** are the
+/// act's (`Widths`): the shelf decides how its content splits the lane.
 const Column = struct {
     id: []const u8,
     label: []const u8,
-    w: f32,
     hidden_at: ?uic.view.WidthClass = null,
 
     fn visible(self: Column, ctx: *UiCtx) bool {
@@ -47,55 +45,139 @@ const Column = struct {
     }
 };
 
-const Lane = enum(usize) { recipe, cost, time, effect, state, corner };
+pub const Lane = enum(usize) { recipe, cost, time, effect, state, corner };
+
+/// Room the BUILD scroll view keeps on the right for its track: the track itself plus a 2px
+/// breath, so the table never runs under the scrollbar (and never shifts when it appears).
+pub const scroll_gutter: f32 = @import("./scroll_view.zig").scrollbar_w + 2;
 
 const columns = [_]Column{
-    .{ .id = "recipe", .label = "RECIPE", .w = 118 },
-    .{ .id = "cost", .label = "COST", .w = 74 },
-    .{ .id = "time", .label = "TIME", .w = 42, .hidden_at = .w560 },
-    .{ .id = "effect", .label = "WHAT CHANGES", .w = 178, .hidden_at = .w440 },
-    .{ .id = "state", .label = "STATE", .w = 76 },
-    .{ .id = "corner", .label = "", .w = 54 },
+    .{ .id = "recipe", .label = "RECIPE" },
+    .{ .id = "cost", .label = "COST" },
+    .{ .id = "time", .label = "TIME", .hidden_at = .w560 },
+    .{ .id = "effect", .label = "WHAT CHANGES", .hidden_at = .w440 },
+    .{ .id = "state", .label = "STATE" },
+    .{ .id = "corner", .label = "" },
 };
 
 fn col(lane: Lane) Column {
     return columns[@intFromEnum(lane)];
 }
 
+/// One act's lane widths in logical px. Every act fills the canonical 594px expanded content
+/// lane (`lane_width`) less the BUILD view's always-reserved scroll gutter: the six cells, five
+/// 8px gaps and 12px of row padding (`laneTotal`). The defaults are Act I's — a slim COST for its
+/// one-material orders and a wide WHAT CHANGES; an act with longer orders (Act II's three
+/// materials) trades WHAT CHANGES width for COST.
+pub const Widths = struct {
+    recipe: f32 = 118,
+    cost: f32 = 74,
+    time: f32 = 42,
+    effect: f32 = 178 - scroll_gutter,
+    state: f32 = 76,
+    corner: f32 = 54,
+
+    pub fn of(self: Widths, lane: Lane) f32 {
+        return switch (lane) {
+            .recipe => self.recipe,
+            .cost => self.cost,
+            .time => self.time,
+            .effect => self.effect,
+            .state => self.state,
+            .corner => self.corner,
+        };
+    }
+
+    /// Every lane plus the gaps, row padding and scroll gutter: the content lane it fills.
+    pub fn laneTotal(self: Widths) f32 {
+        var cells: f32 = 0;
+        for (0..columns.len) |i| cells += self.of(@enumFromInt(i));
+        return cells + (columns.len - 1) * row_gap + 2 * row_pad_x + scroll_gutter;
+    }
+
+    /// Whether a build order of `chars` characters fits the COST lane without eliding. The
+    /// body font is monospace, about `glyph_w` px per character.
+    pub fn costFits(self: Widths, chars: usize) bool {
+        return @as(f32, @floatFromInt(chars)) * glyph_w <= self.cost;
+    }
+};
+
+/// The body font's advance per character, logical px (monospace) — the measure `costFits`
+/// holds a shelf's longest order to.
+const glyph_w: f32 = 8;
+
+/// The content lane every act's widths fill (see `Widths`).
+pub const lane_width: f32 = 594;
+
 const row_gap: f32 = 8;
 const row_pad_x: f32 = 6;
 
 /// The visible lanes plus the gaps between them, logical px.
-fn contentWidth(ctx: *UiCtx) f32 {
+fn contentWidth(ctx: *UiCtx, lw: Widths) f32 {
     var width: f32 = 0;
     var shown: f32 = 0;
-    for (columns) |c| {
+    for (columns, 0..) |c, i| {
         if (c.visible(ctx)) {
-            width += c.w;
+            width += lw.of(@enumFromInt(i));
             shown += 1;
         }
     }
     return width + (shown - 1) * row_gap;
 }
 
-pub fn tableWidth(ctx: *UiCtx) f32 {
-    return contentWidth(ctx) + row_pad_x * 2;
+pub fn tableWidth(ctx: *UiCtx, lw: Widths) f32 {
+    return contentWidth(ctx, lw) + row_pad_x * 2;
 }
+
+/// How the header sorts: the caller's sort key for each lane (in `columns` order; null for a
+/// lane that does not sort), the active key, and the direction in force.
+pub const HeaderSort = struct {
+    keys: [columns.len]?usize,
+    active: usize,
+    dir: table.SortShown,
+};
+
+pub const Header = struct {
+    el: El,
+    /// The sort key of the column header clicked this frame, if any.
+    clicked: ?usize,
+};
 
 /// Column labels aligned to the exact same responsive lanes as every capital row: the
-/// table's header row and cells, sized to the lanes visible at this width.
-pub fn capital_header(parent: El, id: []const u8) !El {
+/// table's header row and cells, sized to the lanes visible at this width. With `sort`, each
+/// sortable lane's label is a sort control wearing the active column's arrow, and the header
+/// row is their roving group (one Tab stop). `lw` is the act's lane widths.
+pub fn capital_header(parent: El, id: []const u8, lw: Widths, sort: ?HeaderSort) !Header {
     const ctx = parent.ctx;
     const header = try table.table_row(parent, id, row_gap, row_pad_x, 4);
-    _ = header.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children);
-    for (columns) |c| {
-        if (c.visible(ctx)) try table.header_cell(header, c.id, c.w, c.label);
+    _ = header.with_size(.{ .fixed = contentWidth(ctx, lw) }, .fit_children);
+    const group = header.get().key;
+    var clicked: ?usize = null;
+    var members: [columns.len]u64 = undefined;
+    var nmembers: usize = 0;
+    for (columns, 0..) |c, i| {
+        if (!c.visible(ctx)) continue;
+        const w = lw.of(@enumFromInt(i));
+        const key = if (sort) |s| s.keys[i] else null;
+        if (key) |k| {
+            const shown: table.SortShown = if (k == sort.?.active) sort.?.dir else .none;
+            const cell_r = try table.sort_header_cell(header, c.id, w, c.label, shown, group);
+            if (cell_r.clicked) clicked = k;
+            members[nmembers] = cell_r.key;
+            nmembers += 1;
+        } else {
+            try table.header_cell(header, c.id, w, c.label);
+        }
     }
-    return header;
+    if (nmembers > 0) {
+        ctx.res.semantics.publish(uic.semantic.describeGroup(group, "sort by column", members[0..nmembers]));
+    }
+    return .{ .el = header, .clicked = clicked };
 }
 
-/// What a row is showing, which is the one thing the flat grey never said.
-pub const Kind = enum { ready, reach, building, blocked, locked, owned };
+/// What a row is showing, which is the one thing the flat grey never said. `busy` is a recipe
+/// whose order is on hand but whose builder's hands are taken by other work.
+pub const Kind = enum { ready, busy, reach, building, blocked, locked, owned };
 
 pub const Row = struct { kind: Kind, reach: f32, clicked_build: bool, clicked_cancel: bool };
 
@@ -129,14 +211,54 @@ fn needsName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
     return "a tool";
 }
 
-/// `48m 2e` — the build order, then the energy.
-fn costText(buf: []u8, rec: *const roster.Good) []const u8 {
+/// The technology a research-gated recipe waits on, in the player's words.
+fn techName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
+    const t = rec.tech orelse return "research";
+    return if (cat.technology(t)) |tr| tr.name else t;
+}
+
+/// `36me 24fu 20mi` — the build order's once-lines, the COST cell's first line. "" when the
+/// recipe takes no materials.
+fn orderText(buf: []u8, rec: *const roster.Good) []const u8 {
     var cw = std.Io.Writer.fixed(buf);
+    var first = true;
     for (rec.input) |l| if (l.per == .once) {
-        cw.print("{d:.0}{s} ", .{ l.n, info.letterOf(l.item) }) catch {};
+        cw.print("{s}{d:.0}{s}", .{ if (first) "" else " ", l.n, info.letterOf(l.item) }) catch {};
+        first = false;
     };
-    cw.print("{d:.0}e", .{rec.requires.?.energy}) catch {};
     return cw.buffered();
+}
+
+/// `10e` — the energy, the COST cell's second line.
+fn energyText(buf: []u8, rec: *const roster.Good) []const u8 {
+    return std.fmt.bufPrint(buf, "{d:.0}e", .{rec.requires.?.energy}) catch "?";
+}
+
+/// The build order's length in characters — what an act's COST width must hold
+/// (`Widths.costFits`).
+pub fn orderChars(rec: *const roster.Good) usize {
+    var buf: [64]u8 = undefined;
+    return orderText(&buf, rec).len;
+}
+
+/// The COST cell: the order on the first line and the energy under it, small and dim — the
+/// same two-line shape as the name cell beside it, so a three-material Act II order fits
+/// without eliding and the row grows no taller.
+fn cost_cell(parent: El, id: []const u8, width: f32, rec: *const roster.Good, color: Color) !void {
+    const th = parent.ctx.res.view.theme;
+    const box = try parent.div(id);
+    _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+    var obuf: [48]u8 = undefined;
+    var ebuf: [12]u8 = undefined;
+    const order = orderText(&obuf, rec);
+    const energy = energyText(&ebuf, rec);
+    // An energy-only recipe reads its energy on the first line.
+    _ = (try box.text_fit("t", if (order.len > 0) order else energy, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        .with_style(.{ style.body, Style{ .text = color } });
+    if (order.len > 0) {
+        _ = (try box.text_fit("e", energy, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+            .with_style(.{ style.small, Style{ .text = th.dim } });
+    }
 }
 
 /// One row over a recipe's quote. `kind` decides the colors and what the last two columns
@@ -145,6 +267,7 @@ pub fn capital_row(
     parent: El,
     world: *World,
     e: Entity,
+    lw: Widths,
     q: capital.Quote,
     kind: Kind,
 ) !Row {
@@ -165,35 +288,34 @@ pub fn capital_row(
         .ready => if (ctl.held or ctl.hovering or ctl.focused) th.acc else th.fg,
         .building => th.fg,
         .owned => th.dim,
-        .reach, .blocked, .locked => th.dim,
+        .reach, .busy, .blocked, .locked => th.dim,
     };
     const faint: Color = if (kind == .ready or kind == .building) th.dim else th.line2;
 
     // The row's lanes are the header's: the same columns, widths and visibility.
-    _ = row.with_size(.{ .fixed = contentWidth(ctx) }, .fit_children)
+    _ = row.with_size(.{ .fixed = contentWidth(ctx, lw) }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
         .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + secondary type (crude vs manufactured — the row's type sub-label).
     const type_word = if (rec.tier == .crude) "crude" else "manufactured";
-    try name_cell(row, "nm", col(.recipe).w, rec.name, type_word, lit);
+    try name_cell(row, "nm", lw.of(.recipe), rec.name, type_word, lit);
 
-    var cbuf: [40]u8 = undefined;
-    try cell(row, "co", col(.cost).w, costText(&cbuf, rec), faint, false);
+    try cost_cell(row, "co", lw.of(.cost), rec, faint);
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
         const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
-        try cell(row, "dy", col(.time).w, days_txt, faint, false);
+        try cell(row, "dy", lw.of(.time), days_txt, faint, false);
     }
 
     if (col(.effect).visible(ctx)) {
-        try cell(row, "sa", col(.effect).w, rec.copy.effect, if (kind == .ready) th.fg else faint, false);
+        try cell(row, "sa", lw.of(.effect), rec.copy.effect, if (kind == .ready) th.fg else faint, false);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
     const state = try row.div("st");
-    _ = state.with_size(.{ .fixed = col(.state).w }, .fit_children);
+    _ = state.with_size(.{ .fixed = lw.of(.state) }, .fit_children);
     const state_in = try state.div("i");
     _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
@@ -202,10 +324,19 @@ pub fn capital_row(
             .with_style(.{ style.body, Style{ .text = th.acc } }),
         .owned => _ = (try state_in.text("owned", "owned"))
             .with_style(.{ style.body, Style{ .text = th.line2 } }),
+        // The order is on hand; only the hands are taken. Says so instead of a full meter.
+        .busy => _ = (try state_in.text("busy", "hands busy"))
+            .with_style(.{ style.body, Style{ .text = th.warn } }),
         .blocked => {
             var nbuf: [40]u8 = undefined;
-            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{needsName(cat, rec)}) catch "needs a tool";
-            _ = (try state_in.text("blocked", txt)).with_style(.{ style.body, Style{ .text = th.danger } });
+            // Waiting on research names the technology; otherwise the verb or tool it needs.
+            const wants = if (q.standing == .tech) techName(cat, rec) else needsName(cat, rec);
+            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
+            // A technology name can outrun the lane. A blocked row has no corner action, so the
+            // text may run on over that empty lane before it elides.
+            const room = lw.of(.state) + row_gap + lw.of(.corner);
+            _ = (try state_in.text_fit("blocked", txt, .{ .cell = .{ .mode = .ellipsis, .width = room } }))
+                .with_style(.{ style.body, Style{ .text = th.danger } });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
             .with_style(.{ style.body, Style{ .text = th.danger } }),
@@ -233,7 +364,7 @@ pub fn capital_row(
 
     // --- right-side action column: Build → / Build +1 / cancel -----------------------------
     const action = try row.div("ac");
-    _ = action.with_size(.{ .fixed = col(.corner).w }, .fit_children);
+    _ = action.with_size(.{ .fixed = lw.of(.corner) }, .fit_children);
     const action_in = try action.div("i");
     _ = action_in.with_layout(.center_right);
 
@@ -261,7 +392,7 @@ pub fn capital_row(
             cancelled = x.consume(.clicked);
             cancel_key = x.get().key;
         },
-        .reach, .blocked, .locked => {},
+        .reach, .busy, .blocked, .locked => {},
     }
 
     // The row controls its cancel sub-action when one exists. The sub-action's key is
@@ -333,19 +464,17 @@ test "reachSegments quantizes reach into thirds" {
     try std.testing.expectEqual(@as(usize, 3), reachSegments(1.5));
 }
 
-test "wide BUILD table fits the expanded Act I content lane" {
-    var cells: f32 = 0;
-    for (columns) |c| cells += c.w;
-    const content = cells + (columns.len - 1) * row_gap;
-    try std.testing.expectEqual(@as(f32, 582), content);
-    try std.testing.expectEqual(@as(f32, 594), content + 2 * row_pad_x);
+test "Act I's default lane widths fill the expanded content lane" {
+    try std.testing.expectEqual(lane_width, (Widths{}).laneTotal());
 }
 
-test "the cost text is the order then the energy" {
+test "the cost cell is the order, then the energy under it" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var buf: [40]u8 = undefined;
-    try std.testing.expectEqualStrings("10m 5e", costText(&buf, cat.good("spear").?));
+    try std.testing.expectEqualStrings("10m", orderText(&buf, cat.good("spear").?));
+    try std.testing.expectEqualStrings("5e", energyText(&buf, cat.good("spear").?));
+    try std.testing.expectEqualStrings("36me 24fu 20mi", orderText(&buf, cat.good("cold_store").?));
     try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
     try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
 }

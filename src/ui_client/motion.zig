@@ -10,7 +10,7 @@
 //! It deliberately does **not** touch determinate progress indicators (the action-tile
 //! underbar, the eating-policy slider position), the day/clock readouts, or any state/focus cue — those
 //! are *functional* and remain visible regardless of the policy. It only gates genuinely
-//! *decorative* time-varying visuals (today: the mock screen's heartbeat oscillation), and
+//! *decorative* time-varying visuals (none ships today), and
 //! provides the `snap` gate the tween registry routes every optional transition through.
 //!
 //! ## The platform preference (and its honest limitation)
@@ -64,8 +64,8 @@ pub const Policy = struct {
 
     /// A convenience gate for a scalar animation *phase* in `[0,1]` (e.g. the heartbeat's
     /// sine phase): when reduced motion is on, collapse to a caller-chosen constant `frozen`
-    /// so the visual holds still; otherwise pass the live `phase` through. Used by the mock
-    /// heartbeat; kept general for any phase-driven visual.
+    /// so the visual holds still; otherwise pass the live `phase` through. Kept general for
+    /// any phase-driven decorative visual.
     pub fn phase(self: Policy, live: f32, frozen: f32) f32 {
         return if (self.reduced_motion) frozen else live;
     }

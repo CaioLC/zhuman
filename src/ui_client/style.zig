@@ -96,7 +96,7 @@ pub const h3: Style = heading;
 /// Uppercase eyebrow / section label — 11px, UPPERCASE, +0.07em tracking.
 pub const eyebrow: Style = role(typ.eyebrow);
 
-// Legacy above-contract display sizes used by the mock showcase / Act curtain / capital
+// Legacy above-contract display sizes used by the Act curtain / capital
 // header. They are **not** part of the prototype body/small/heading contract; they inherit
 // the global tracking unless a fragment overrides it. Kept so those sites keep compiling.
 pub const h2: Style = .{ .font = 28, .tracking = typ.body.tracking_em };
@@ -229,13 +229,6 @@ pub fn chip(ctx: *UiCtx, node: *Node) Style {
     const edge = if (q.selected or q.hovering or q.focus_visible) t.acc else t.line;
     const ink = if (q.selected) t.acc else t.fg;
     return .{ .fill = t.panel, .outline_color = edge, .outline_width = 1, .text = ink };
-}
-
-/// A tag — a static (non-interactive) `line`-bordered label in `dim` ink: metadata, not a
-/// control. A fn fragment (not a plain value) so its colors come from the live theme.
-pub fn tag(ctx: *UiCtx, _: *Node) Style {
-    const t = ctx.res.view.theme;
-    return .{ .outline_color = t.line, .outline_width = 1, .text = t.dim };
 }
 
 // —— Semantic state text ————————————————————————————————————————————————————————————————

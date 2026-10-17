@@ -1,112 +1,15 @@
-//! `board_primitives` — the small, **generic** building blocks the STRUCTURE board
-//! (Act II) composes from: `tag`, `cost_list`, `legend`, `zoom_controls`, and `empty_state`.
-//! They are deliberately domain-free — every string is the caller's, so the technology/sector
-//! wording stays in the STRUCTURE screen and these templates never encode Act II vocabulary.
-//! They reuse the fragments (`style.tag`, `style.legend_dot`) so their look tracks the
-//! one theme.
+//! `board_primitives` — small, **generic** building blocks for board-like surfaces. Today that
+//! is `empty_state`, used by the Act II surface (STRUCTURE until the research board is drawn,
+//! and a settlement with no one in it). Domain-free: every string is the caller's. The
+//! STRUCTURE board's own vocabulary (tags, legend, zoom) is built with the board (BOARD-11).
 
-const std = @import("std");
 const ha = @import("ha");
 
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
-const UiCtx = uic.UiCtx;
 const El = el.El;
-
-/// A **tag** — a small `line`-bordered `dim` label (the `style.tag` fragment). Caller
-/// supplies the text; returns the tag `El`. Metadata chrome, not a control.
-pub fn tag(parent: El, id: []const u8, text: []const u8) !El {
-    const box = try parent.div(id);
-    _ = box.with_flow(.{ .dir = .row }).with_style(.{ style.tag, style.pad_sym(6, 1) });
-    _ = (try box.text("t", text)).with_style(.{ style.small, style.tag });
-    return box;
-}
-
-/// One cost item: a label and its amount (the caller formats both — no domain math).
-pub const Cost = struct { label: []const u8, amount: []const u8 };
-
-/// A **cost list** — a compact column of `{label}  {amount}` rows, right-aligned amounts, from
-/// a caller-supplied slice. Generic: the caller names the resources.
-pub fn cost_list(parent: El, id: []const u8, costs: []const Cost) !El {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
-    const col = try parent.div(id);
-    _ = col.with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.tight).with_size(.fit_children, .fit_children);
-    for (costs, 0..) |c, i| {
-        const row = try col.item("c", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.group)
-            .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-        _ = (try row.text("l", c.label)).with_style(.{ style.small, Style{ .text = th.dim } });
-        const tail = try row.div("r");
-        _ = tail.with_layout(.center_right);
-        _ = (try tail.text("a", c.amount)).with_style(.{ style.body, Style{ .text = th.fg } });
-    }
-    return col;
-}
-
-/// One legend entry: a resource hue (the `style.Resource`) and its caller label.
-pub const LegendItem = struct { resource: style.Resource, label: []const u8 };
-
-/// A **legend** — a row (or wrap) of `● {label}` entries, each dot filled with its resource
-/// hue via the `style.legend_dot` fragment (so the legend cites the resource, not a
-/// color). The labels are the caller's.
-pub fn legend(parent: El, id: []const u8, items: []const LegendItem) !El {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(ha.tokens.gap.group)
-        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    for (items, 0..) |item, i| {
-        const cell = try row.item("L", i);
-        _ = cell.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
-        const dot = try cell.div("d");
-        _ = dot.with_size(.{ .fixed = 8 }, .{ .fixed = 8 }).with_style(.{Style{ .fill = legendFill(ctx, item.resource) }});
-        _ = (try cell.text("t", item.label)).with_style(.{ style.small, Style{ .text = th.dim } });
-    }
-    return row;
-}
-
-/// Resolve a runtime `Resource` to its live hue from the frame's resource palette. Replaces the
-/// old approach of switching to a comptime `legend_dot` fragment — a runtime-selected fragment
-/// function cannot be a comptime value, so read the color directly here instead.
-fn legendFill(ctx: *UiCtx, r: style.Resource) uic.Color {
-    const res = ctx.res.view.resources;
-    return switch (r) {
-        .food => res.food,
-        .water => res.water,
-        .fuel => res.fuel,
-        .metal => res.metal,
-        .minerals => res.minerals,
-        .biomass => res.biomass,
-    };
-}
-
-/// **Zoom controls** — `−` / `reset` / `+` buttons for a board camera. Reports which was
-/// pressed this frame; the caller owns the zoom value (the control owns no camera math).
-pub const Zoom = enum { none, out, reset, in };
-
-fn zoom_button(parent: El, id: []const u8, label: []const u8) !bool {
-    const ctx = parent.ctx;
-    const box = try parent.div(id);
-    const q = box.control(.{ .name = label, .role = .button });
-    const s = style.resolve(ctx, box.get(), .{style.btn_primary});
-    if (s.outline_color) |c| box.get().render_data.outline = .{ .color = c };
-    _ = box.with_flow(.{ .dir = .row }).with_style(.{style.pad_sym(8, 2)});
-    _ = (try box.text("l", label)).with_style(.{style.btn_primary});
-    return q.clicked;
-}
-
-pub fn zoom_controls(parent: El, id: []const u8) !Zoom {
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
-    var z: Zoom = .none;
-    if (try zoom_button(row, "out", "\u{2212}")) z = .out; // −
-    if (try zoom_button(row, "reset", "reset")) z = .reset;
-    if (try zoom_button(row, "in", "+")) z = .in;
-    return z;
-}
 
 /// An **empty state** — a centered `message` with an optional dim `hint` beneath it, for a
 /// board/list with nothing to show. Generic copy from the caller.

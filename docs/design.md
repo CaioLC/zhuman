@@ -66,7 +66,7 @@ ordinal — never a global utility function.
   hatchet—in exchange for food and raw materials. Garden beds, wire snares, and medicinal
   herb beds accumulate independently of the body; the player collects each completed cycle for
   a small Vigor cost, and may pause an individual generator without losing progress. The HUD's
-  persistent PAUSE/RESUME and > / >> / >>> controls freeze or scale every simulation clock together
+  persistent `<< {speed} >>` stepper (PAUSE, 1×, 2×, 3×) freezes or scales every simulation clock together
   without cancelling work or accelerating input and interface motion. A session menu exposes only
   playback, reduced motion, resume, and quit; it does not expose economic tuning values.
   *Win condition:* the **Shelter**, a good that houses four. It is offered only to an actor who

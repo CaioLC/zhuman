@@ -25,7 +25,7 @@ readouts (`pages/templates/copy.zig`: the catalog summary, the empty-list messag
 headline and lede), because a style chosen in a screen is art direction the shelf cannot see
 and the next screen copies or drifts from. `tools/boundary_check.sh` fails on `with_style` or a
 text node in any file under `src/pages/` outside `templates/`; the debug page (the template
-audit harness) and the mock showcase paint by design and are exempt.
+audit harness) paints by design and are exempt.
 
 The foundation owns the **roles** a widget paints from; the game owns the **values**. So
 `text` and `svg` may default a node's ink to `res.view.theme.fg` without reaching upward —
@@ -372,8 +372,8 @@ a preference was read.
 **Inventory and the functional/decorative split:** the action-tile underbar and the
 eating-policy slider position are *functional determinate progress/simulation readouts* — they remain
 visible under reduced motion, unchanged. The one genuinely decorative clock-driven
-oscillation is `status.heartbeat_color` (used only on the dev `mock.zig` showcase); under
-reduced motion it freezes its sine phase to the `0.5` midpoint via `Policy.phase`. Optional
+oscillation goes through `Policy.phase` (no shipped screen draws one today); under
+reduced motion it freezes its sine phase to the `0.5` midpoint. Optional
 transitions go through the tween registry (below), which snaps them through the policy's
 **snap gate**, `Policy.snap(T, to, value)` — the end state `to` when reduced motion is on,
 the caller's interpolated `value` otherwise. `src/ui` stays motion-unaware.
@@ -565,9 +565,7 @@ tinted blit, so a tint's `a` (a dimmed icon, a translucent label) composites con
 rather than depending on a texture's creation default. The text compositor's render-target
 pass (`renderComposite`) snapshots and restores the draw blend mode, so it never disturbs
 this baseline. Colors carry alpha in their `a` byte (`Color` is SDL's `pixels.Color`), so a
-translucent aspect is authored, not a separate feature. The dev `mock.zig` showcase carries
-a "Blending" fixture — a translucent row-hover tint, a backdrop scrim over a bright block, a
-dimmed locked tile, and a stacked-band wash — that reads correctly only when blending is on.
+translucent aspect is authored, not a separate feature.
 
 **Crisp hairlines at scale.** A one-logical-pixel border, outline, focus ring, or
 rail must stay a crisp whole-device-pixel line at any DPI scale, or it anti-aliases into a
@@ -888,8 +886,8 @@ label. Only the *visible glyphs* are bounded:
 Both modes keep `overflow` **POD** (the fit is recomputed, never stored), so the pool contract
 is unchanged and the `cap = 256` **whole-refusal** is preserved — a refused string draws
 nothing and reserves the cell (or zero) box, cell or not. `.visible` + 0 is the unchanged
-fast/wrapped path. Integrated at two representative sites: `capital_row`'s name column
-(`.ellipsis` at its fixed column width) and `mock`'s heartbeat readout (`.clip` at 64px).
+fast/wrapped path. Integrated at representative sites such as `capital_row`'s name column
+(`.ellipsis` at its fixed column width) and the log's stamp column (`.clip`).
 
 ### Rotated collapsed-rail copy
 
