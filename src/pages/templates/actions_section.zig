@@ -160,13 +160,14 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
+    // The heading counts the verbs the actor holds — the same set the summary counts against.
+    var buf: [max_verbs]Entry = undefined;
+    const all = held(world, e, cat, ctx.res.config, shelf, &buf);
     var count_buf: [16]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{authoredTotal(cat, shelf)}) catch "VERBS";
+    const count = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
     _ = try browser.browser_heading(section, "heading", "ACTIONS", shelf.subtitle, count);
 
     const controls = try cc.catalog_controls(section, "actions_ctl", catalog_state, search_owner);
-    var buf: [max_verbs]Entry = undefined;
-    const all = held(world, e, cat, ctx.res.config, shelf, &buf);
     const shown = filter(all, controls.query_text);
 
     var sbuf: [40]u8 = undefined;

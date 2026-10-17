@@ -4,7 +4,8 @@
 //! never intrudes on the inspection area; clicking a name swaps which template is shown.
 //!
 //! Reached by setting the `HA_DEBUG_PAGE` environment variable to any truthy value before launch
-//! (`build_ui` routes here when it is set) — it is a developer tool, not a game screen, so it is
+//! (`build_ui` routes here when it is set); a value naming an entry (`HA_DEBUG_PAGE=tabs`) opens on it,
+//! which `tools/capture_templates.ps1` uses — it is a developer tool, not a game screen, so it is
 //! off unless explicitly requested and never affects the shipped routes.
 //!
 //! Adding a template to audit: add a name to `entries` and a `case` arm in `render_one`. Each arm
@@ -79,6 +80,14 @@ const entries = [_][]const u8{
     "copy",
 };
 
+/// The entry `HA_DEBUG_PAGE` names, if its value is one of `entries` (any other truthy value
+/// just opens the page on its first entry).
+fn requestedEntry(arena: std.mem.Allocator) ?usize {
+    const raw = std.process.getEnvVarOwned(arena, "HA_DEBUG_PAGE") catch return null;
+    for (entries, 0..) |name, i| if (eq(name, raw)) return i;
+    return null;
+}
+
 /// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
 /// root while that entry is open.
 pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
@@ -95,8 +104,18 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     // TabsState), so neither pointer is held across `render_one`: read before, re-acquired after.
     const active = blk: {
         const sel = root.state(uic.UiState.TabsState);
-        if (sel.active >= entries.len) sel.active = 0;
-        break :blk sel.active;
+        if (ctx.frame == 1) {
+            // `HA_DEBUG_PAGE=<entry>` opens on that entry (the capture script's way in).
+            if (requestedEntry(ctx.arena)) |i| {
+                sel.active = i;
+                const name = entries[i];
+                root.state(uic.UiState.TradeState).open = eq(name, "trade_dialog") or eq(name, "coin_merchant");
+                if (eq(name, "menu_dialog")) ctx.res.menu.show(&ctx.res.playback);
+            }
+        }
+        const s = root.state(uic.UiState.TabsState); // re-derive: the TradeState acquire is another pool
+        if (s.active >= entries.len) s.active = 0;
+        break :blk s.active;
     };
 
     // --- the inspection stage: top-left, small, the selected template only ------------------
@@ -263,8 +282,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // nav and context strips. Debug owns the three unlocking tools and stocks materials.
             fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            // The surface fills its parent's height (its views scroll inside), so the demo
+            // gives it a definite one, as the workspace's content lane does in production.
             const demo = try stage.div("surface_demo");
-            _ = demo.with_size(.{ .fixed = 652 }, .fit_children);
+            _ = demo.with_size(.{ .fixed = 652 }, .{ .fixed = 560 });
             _ = try t.act_one_surface(demo, world, a[0], "surface", .{
                 .activity = .{
                     .state = .working,
