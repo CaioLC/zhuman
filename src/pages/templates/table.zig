@@ -61,6 +61,20 @@ pub fn table_header(parent: El, id: []const u8, lanes: []const Lane, gap: f32, p
     return header;
 }
 
+/// A row that is a control: the row, and the interaction it published this frame.
+pub const ControlRow = struct { el: El, q: uic.UiCtx.Interaction };
+
+/// A `table_row` that is one whole control — the caller's `opts` name it and gate it — with
+/// its outline lit in the accent while it holds focus and the theme's line otherwise. Cells
+/// are appended by the caller after this, as on any row.
+pub fn control_row(parent: El, id: []const u8, gap: f32, pad_x: f32, pad_y: f32, opts: uic.ControlOptions) !ControlRow {
+    const th = parent.ctx.res.view.theme;
+    const row = try table_row(parent, id, gap, pad_x, pad_y);
+    const q = row.control(opts);
+    _ = row.with_style(.{Style{ .outline_color = if (q.focused) th.acc else th.line }});
+    return .{ .el = row, .q = q };
+}
+
 test "a table's content width is its lanes and the gaps between them" {
     const lanes = [_]Lane{
         .{ .id = "a", .label = "A", .w = 100 },

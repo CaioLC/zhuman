@@ -46,6 +46,7 @@ const board_primitives_mod = @import("./board_primitives.zig");
 const readout_mod = @import("./readout.zig");
 const table_mod = @import("./table.zig");
 const browser_mod = @import("./browser.zig");
+const copy_mod = @import("./copy.zig");
 
 // composites
 pub const button = button_mod.button;
@@ -157,6 +158,14 @@ pub const table_header_cell = table_mod.header_cell;
 pub const table_cell = table_mod.cell;
 pub const table_row = table_mod.table_row;
 pub const table_header = table_mod.table_header;
+pub const TableControlRow = table_mod.ControlRow;
+pub const table_control_row = table_mod.control_row;
+// Prose leaves
+pub const summary_line = copy_mod.summary_line;
+pub const empty_line = copy_mod.empty_line;
+pub const headline = copy_mod.headline;
+pub const lede = copy_mod.lede;
+pub const prose_measure = copy_mod.prose_measure;
 // Catalog browser chrome
 pub const browser_heading = browser_mod.browser_heading;
 pub const TileLanes = browser_mod.Lanes;
@@ -220,6 +229,7 @@ test {
     _ = readout_mod;
     _ = table_mod;
     _ = browser_mod;
+    _ = copy_mod;
     _ = @import("./actions_section.zig");
     _ = @import("./build_section.zig");
 }

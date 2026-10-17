@@ -74,6 +74,7 @@ const entries = [_][]const u8{
     "table",
     "browser_heading",
     "tile_lanes",
+    "copy",
 };
 
 /// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
@@ -474,7 +475,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         try t.table_cell(r1, "recipe", 150, "Reinforced Timber Frame", th.fg, false);
         try t.table_cell(r1, "inputs", 110, "12mi 4me", th.dim, false);
         try t.table_cell(r1, "state", 90, "ready", th.good, true);
-        const r2 = try t.table_row(demo, "r2", 8, 6, 5);
+        // The second row is a control: click or focus it to see the row's outline light.
+        const r2 = (try t.table_control_row(demo, "r2", 8, 6, 5, .{ .name = "Kiln", .role = .button })).el;
         try t.table_cell(r2, "recipe", 150, "Kiln", th.fg, false);
         try t.table_cell(r2, "inputs", 110, "30mi", th.dim, false);
         try t.table_cell(r2, "state", 90, "reach 60%", th.warn, true);
@@ -489,6 +491,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.button(grid.lanes[0], "a", "first tile, left lane", true);
         _ = try t.button(grid.lanes[1], "b", "second tile, right lane", true);
         _ = try t.button(grid.lanes[0], "c", "third tile, left again", true);
+    } else if (eq(name, "copy")) {
+        const demo = try stage.div("copy_demo");
+        _ = demo.with_flow(.{ .dir = .column }).with_gap(6);
+        _ = try t.headline(demo, "h", "Two others asked to move in.");
+        _ = try t.lede(demo, "l", "You are not alone here anymore. Act I ends, and the settlement begins with whoever walked in.", 320);
+        _ = try t.summary_line(demo, "s", "20 of 20 actions shown");
+        _ = try t.empty_line(demo, "e", "No action matches your search.");
     } else {
         _ = try stage.text("unknown", "(unknown template)");
     }
