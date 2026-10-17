@@ -23,13 +23,12 @@ const Entity = ha.world.Entity;
 
 const uic = ha.ui_client;
 const el = uic.elements;
-const style = uic.style;
-const Style = style.Style;
 const El = el.El;
 
 const tile_mod = @import("../templates/action_tile.zig");
 const cc = @import("../templates/catalog_controls.zig");
 const browser = @import("../templates/browser.zig");
+const copy = @import("../templates/copy.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
 
@@ -199,7 +198,6 @@ pub fn action_browser(
     search_owner: ?El,
 ) !?u16 {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     var buf: [max_verbs]Entry = undefined;
     const list = entries(world, e, &ctx.res.catalog, ctx.res.config, &buf);
@@ -219,7 +217,7 @@ pub fn action_browser(
 
     var sbuf: [40]u8 = undefined;
     const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} actions shown", .{ shown.len, list.len }) catch "?";
-    _ = (try outer.text("summary", summary)).with_style(.{ style.small, Style{ .text = th.dim } });
+    _ = try copy.summary_line(outer, "summary", summary);
 
     // Two-column compact grid (one column at the compact breakpoint).
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
@@ -227,7 +225,7 @@ pub fn action_browser(
 
     if (shown.len == 0) {
         const msg = if (list.len == 0) "No action is open yet. Build or research one." else "No action matches your search.";
-        _ = (try grid.grid.text("empty", msg)).with_style(.{ style.body, Style{ .text = th.line2 } });
+        _ = try copy.empty_line(grid.grid, "empty", msg);
         return null;
     }
 

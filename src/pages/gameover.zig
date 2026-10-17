@@ -7,8 +7,6 @@ const app = @import("../main.zig");
 
 const uic = ha.ui_client;
 const el = uic.elements;
-const style = uic.style;
-const Style = style.Style;
 const World = ha.world.World;
 
 const t = @import("./templates/root.zig");
@@ -28,8 +26,7 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
     _ = center.with_layout(.center).with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
 
     try t.figure(center, t.fig_dead, th.danger);
-    _ = (try center.text("dead_text", "You perished, cold and starved."))
-        .with_style(.{ style.h2, Style{ .text = th.fg } }); // the only line on the screen
+    _ = try t.headline(center, "dead_text", "You perished, cold and starved."); // the only line on the screen
 
     const restart = try t.button(center, "restart", "Start over", true);
     if (restart.query().clicked) {

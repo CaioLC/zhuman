@@ -21,8 +21,6 @@ const Entity = ha.world.Entity;
 
 const uic = ha.ui_client;
 const el = uic.elements;
-const style = uic.style;
-const Style = style.Style;
 const El = el.El;
 const Color = uic.Color;
 
@@ -30,6 +28,7 @@ const cc = @import("../templates/catalog_controls.zig");
 const info = @import("../templates/action_info.zig");
 const build_list = @import("../templates/build_list.zig");
 const table = @import("../templates/table.zig");
+const copy = @import("../templates/copy.zig");
 const fmt = @import("../fmt.zig");
 
 const Direction = uic.UiState.CatalogState.Direction;
@@ -273,15 +272,14 @@ pub fn recipe_browser(
 
     var sbuf: [40]u8 = undefined;
     const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ shown.len, authoredTotal(cat) }) catch "?";
-    _ = (try outer.text("summary", summary)).with_style(.{ style.small, Style{ .text = th.dim } });
+    _ = try copy.summary_line(outer, "summary", summary);
 
     const rows = try outer.div("rows");
     _ = rows.with_flow(.{ .dir = .column });
     _ = try table.table_header(rows, "header", &lanes, row_gap, row_pad_x);
 
     if (shown.len == 0) {
-        _ = (try rows.text("empty", "No recipe matches your search."))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
+        _ = try copy.empty_line(rows, "empty", "No recipe matches your search.");
         return null;
     }
 
@@ -289,18 +287,17 @@ pub fn recipe_browser(
     for (shown.idx[0..shown.len]) |i| {
         const ent = &list[i];
         // Keyed by the recipe's id, so focus follows it through a re-sort or filter.
-        const row = try table.table_row(rows, ent.rec.id, row_gap, row_pad_x, 5);
-
         // The same gate `capital.begin` applies; another unit of an owned recipe is a build too.
         const enabled = ent.kind != .building and ent.q.ready();
-        const q = row.control(.{ .enabled = enabled, .name = ent.rec.name, .role = .button });
+        const r = try table.control_row(rows, ent.rec.id, row_gap, row_pad_x, 5, .{ .enabled = enabled, .name = ent.rec.name, .role = .button });
+        const row = r.el;
+        const q = r.q;
         const chrome: Color = if (ent.kind == .building) th.fg else if (!enabled)
             th.dim
         else if (q.hovering or q.focused)
             th.acc
         else
             th.fg;
-        _ = row.with_style(.{Style{ .outline_color = if (q.focused) th.acc else th.line }});
 
         var ibuf: [48]u8 = undefined;
         var tbuf: [12]u8 = undefined;
