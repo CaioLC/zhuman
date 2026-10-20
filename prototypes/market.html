@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neighbours — Act II trade</title>
+<link rel="stylesheet" href="prototype.css">
+<style>
+.market { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; width: min(900px, 100vw); height: min(700px, 100vh); border: 1px solid var(--line); background: var(--bg); }
+
+.market-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; padding: 11px 15px 9px; border-bottom: 1px solid var(--line); }
+.market-title { margin: 0; color: var(--fg); font-size: var(--h3); font-weight: 400; letter-spacing: -0.04em; }
+.market-sub { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+
+.market-controls { display: flex; gap: 10px; align-items: center; padding: 9px 15px; border-bottom: 1px solid var(--line); }
+.market-search { flex: 1; min-width: 0; padding: 4px 7px; border: 1px solid var(--line-2); color: var(--fg); background: transparent; font-size: 12px; }
+.market-search::placeholder { color: var(--line-2); }
+.seg { display: flex; gap: 2px; align-items: baseline; }
+.seg-label { margin-right: 4px; color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.seg button { padding: 3px 7px; cursor: pointer; border: 1px solid transparent; color: var(--dim); background: transparent; font-size: 11px; }
+.seg button[aria-pressed="true"] { border-color: var(--line-2); color: var(--fg); }
+.seg button:hover { color: var(--fg); }
+.stall-open { flex: none; padding: 3px 8px; cursor: pointer; border: 1px solid var(--line-2); color: var(--dim); background: transparent; font-size: 10px; letter-spacing: 0.07em; }
+.stall-open:hover { border-color: var(--acc); color: var(--acc); }
+.stall-open[aria-pressed="true"] { border-color: var(--acc); color: var(--acc); background: var(--panel); }
+
+.market-body { display: grid; grid-template-columns: minmax(0, 1fr) 262px; min-height: 0; }
+.market-list { min-height: 0; overflow-y: auto; padding: 3px 0 8px; }
+
+/* small N: a person reads as a person */
+.person { display: grid; gap: 2px; width: 100%; padding: 8px 15px; cursor: pointer; border: 1px solid transparent; border-width: 1px 0; color: var(--fg); background: transparent; font: inherit; text-align: left; }
+.person:hover { background: var(--panel); }
+.person[aria-pressed="true"] { border-color: var(--line-2); background: var(--panel); }
+.person.is-you { border-color: var(--line-2); background: var(--panel); }
+.person.is-you .person-name { color: var(--acc); }
+.person-top { display: flex; gap: 8px; align-items: baseline; }
+.person-name { font-size: 13px; }
+.person[aria-pressed="true"] .person-name { color: var(--acc); }
+.person[data-match="false"] .person-name { color: var(--dim); }
+.person-trade { color: var(--dim); font-size: 10px; letter-spacing: 0.06em; }
+.person-match, .person-posts { margin-left: auto; font-size: 10px; letter-spacing: 0.06em; white-space: nowrap; }
+.person-match[data-match="true"] { color: var(--good); }
+.person-match[data-match="false"] { color: var(--line-2); }
+.person-posts { color: var(--dim); }
+.person-posts[data-live="false"] { color: var(--warn); }
+.person-line { overflow: hidden; color: var(--dim); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.person-line em { color: var(--fg); font-style: normal; }
+
+/* large N: the box is too small for a sentence, so it becomes notation */
+.good-row { display: grid; grid-template-columns: 11ch minmax(0, 1fr); gap: 2px 10px; align-items: baseline; width: 100%; padding: 7px 15px; cursor: pointer; border: 1px solid transparent; border-width: 1px 0; color: var(--fg); background: transparent; font: inherit; text-align: left; }
+.good-row:hover { background: var(--panel); }
+.good-row[aria-pressed="true"] { border-color: var(--line-2); background: var(--panel); }
+.good-name { font-size: 13px; letter-spacing: 0.04em; }
+.good-row[aria-pressed="true"] .good-name { color: var(--acc); }
+.good-stats { display: flex; gap: 7px; color: var(--dim); font-size: 11px; }
+.good-meta { grid-column: 2; display: flex; gap: 7px; color: var(--dim); font-size: 11px; }
+.good-stats b, .good-meta b { color: var(--fg); font-weight: 400; }
+.good-stats .sep, .good-meta .sep { color: var(--line-2); }
+.good-meta .noev { color: var(--line-2); }
+.good-mine { color: var(--good); }
+.list-empty { padding: 16px 15px; color: var(--dim); font-size: 11px; }
+
+/* the stall takes the wide pane: dozens of items need room, search and pages */
+.stall-head, .stall-row { display: grid; grid-template-columns: minmax(0, 1fr) 86px 86px 143px; gap: 10px; align-items: center; width: 100%; padding: 6px 15px; text-align: left; }
+.stall-head { padding-top: 9px; padding-bottom: 7px; color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.stall-row { border: 1px solid transparent; border-width: 1px 0; color: var(--fg); background: transparent; font: inherit; }
+.stall-row:hover { background: var(--panel); }
+.stall-row[data-posted="true"] { background: var(--panel); }
+.stall-item { display: grid; gap: 1px; min-width: 0; }
+.stall-name { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.stall-row[data-posted="true"] .stall-name { color: var(--acc); }
+.stall-row[data-posted="false"] .stall-name { color: var(--dim); }
+.stall-sub { overflow: hidden; color: var(--line-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.stall-takers { font-size: 10px; text-align: right; }
+.stall-takers[data-any="true"] { color: var(--good); }
+.stall-takers[data-any="false"] { color: var(--line-2); }
+.stall-takers[data-any="idle"] { color: var(--line-2); }
+
+
+/* the slip */
+.slip-who { color: var(--fg); font-size: 14px; }
+.slip-who small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; }
+.side { display: grid; gap: 4px; }
+.side-head { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.side-head span:last-child { color: var(--line-2); letter-spacing: -0.025em; }
+.line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: 12px; }
+.line-name { overflow: hidden; color: var(--fg); text-overflow: ellipsis; white-space: nowrap; }
+.line-name.is-zero { color: var(--line-2); }
+
+.verdict { padding: 7px 8px; border: 1px solid var(--line); font-size: 11px; }
+.verdict[data-kind="accept"] { border-color: var(--good); color: var(--good); }
+.verdict[data-kind="counter"] { border-color: var(--warn); color: var(--warn); }
+.verdict[data-kind="refuse"] { border-color: var(--danger); color: var(--danger); }
+.verdict[data-kind="idle"] { color: var(--dim); }
+
+.stall-warn { margin: 0; color: var(--danger); font-size: 10px; }
+.stall-tally { display: grid; gap: 3px; }
+.tally-row { display: flex; justify-content: space-between; font-size: 11px; }
+.tally-row span { color: var(--dim); }
+.tally-row b { color: var(--fg); font-weight: 400; }
+.tally-row b.over { color: var(--danger); }
+
+.market-foot { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; padding: 8px 15px; border-top: 1px solid var(--line); }
+.friction { margin: 0; color: var(--dim); font-size: 11px; }
+.friction strong { color: var(--warn); font-weight: 400; }
+.friction[data-severe="true"] strong { color: var(--danger); }
+
+.paginator { display: flex; flex: none; gap: 8px; align-items: baseline; }
+.page-range { color: var(--dim); font-size: 10px; letter-spacing: 0.06em; }
+.paginator button { min-width: 22px; padding: 2px 6px; cursor: pointer; border: 1px solid var(--line-2); color: var(--fg); background: transparent; font-size: 11px; line-height: 1.3; }
+.paginator button:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
+.paginator button:disabled { cursor: default; border-color: var(--line); color: var(--line-2); }
+.page-now { min-width: 6ch; color: var(--fg); font-size: 11px; text-align: center; }
+</style>
+</head>
+<body>
+
+<main class="market">
+  <div class="market-head">
+    <h1 class="market-title" id="market-title">Who will trade with you?</h1>
+    <span class="market-sub" id="market-sub"></span>
+  </div>
+
+  <div class="market-controls">
+    <input class="market-search" id="search" type="search" aria-label="Search">
+    <div class="seg" role="group" id="seg" aria-label="View"></div>
+    <button class="stall-open" type="button" id="open-stall" aria-pressed="false">YOUR STALL</button>
+  </div>
+
+  <div class="market-body">
+    <div class="market-list" id="list"></div>
+    <section class="slip" id="slip" aria-label="Detail" aria-live="polite"></section>
+  </div>
+
+  <div class="market-foot">
+    <p class="friction" id="friction"></p>
+    <div class="paginator" id="paginator"></div>
+  </div>
+</main>
+
+<script>
+/* ---------- deterministic world ---------- */
+let seed = 20261019;
+const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+const reseed = () => { seed = 20261019; };
+
+const FIRST = ['Mira','Tomas','Odd','Hesper','Juno','Caspar','Rhea','Bram','Linnea','Soren','Vesna','Edda','Mikal','Thora','Ansel','Petra','Dagny','Oren','Sable','Lior','Nessa','Garrick','Ilva','Roth','Maren','Kess','Dorn','Ayla','Bel','Harl','Sigrid','Vale','Noor','Tam','Ebba','Crane','Lusk','Ivo','Rowan','Astrid','Fen','Halla','Jory','Mette','Nils','Orla','Pell','Quill','Runa','Sten','Tove','Ulf','Vigg','Wren','Yara','Zev','Alder','Brisa','Cato','Dagmar','Eir','Frey','Gull','Hale','Inga','Joss','Kirn','Lark','Mads','Nura','Osk','Pia','Rask','Siv','Toril','Urd','Vanya','Welk','Yrsa','Zan'];
+const LAST = ['Halt','Vane','Orrick','Bray','Sund','Ferrow','Kell','Dace','Mord','Lahn','Virek','Ost','Crale','Benn','Ryne','Thall','Grimm','Woad','Esk','Varden','Holt','Marsh','Quill','Reed','Stave','Tarn','Ulver','Wick','Yarrow','Ashby','Blake','Corr','Dunn','Ember','Falk','Gale','Hollis','Idris','Joren','Kyne'];
+
+const RESOURCES = ['food', 'water', 'fuel', 'metal', 'minerals', 'biomass'];
+const CRAFTED = ['planks', 'charcoal', 'rope', 'pottery', 'bricks', 'nails', 'cloth', 'leather', 'baskets', 'salt', 'oil', 'glass', 'tools', 'thread'];
+const ITEMS = [...RESOURCES, ...CRAFTED];
+const BASE = {
+  food: 4, water: 3, fuel: 5, metal: 11, minerals: 7, biomass: 4,
+  planks: 6, charcoal: 3, rope: 5, pottery: 7, bricks: 4, nails: 9,
+  cloth: 8, leather: 12, baskets: 5, salt: 6, oil: 10, glass: 14, tools: 16, thread: 4,
+};
+
+const TRADES = [
+  { trade: 'forager',    makes: 'biomass',  buys: ['food', 'water'] },
+  { trade: 'fisher',     makes: 'food',     buys: ['biomass', 'fuel'] },
+  { trade: 'carrier',    makes: 'water',    buys: ['food', 'biomass'] },
+  { trade: 'woodcutter', makes: 'fuel',     buys: ['food', 'biomass', 'metal'] },
+  { trade: 'miner',      makes: 'minerals', buys: ['food', 'water', 'fuel'] },
+  { trade: 'smith',      makes: 'metal',    buys: ['minerals', 'fuel', 'food'] },
+];
+
+/* The player is a forager: biomass in surplus, short on food and water, plus odds and ends. */
+const player = {
+  trade: 'forager',
+  holds: { coin: 42, biomass: 48, food: 6, water: 2, fuel: 0, metal: 0, minerals: 0,
+           planks: 9, charcoal: 14, rope: 4, baskets: 6, cloth: 3, pottery: 2, salt: 5, thread: 7 },
+  /* The reserve lives on HOLDINGS; here we only read the spare it leaves. */
+  reserved: { biomass: 24, food: 6, water: 2, planks: 4, charcoal: 6, rope: 4, baskets: 2, cloth: 3, pottery: 0, salt: 2, thread: 3 },
+  posts: { sell: { biomass: { qty: 12, price: 4 }, charcoal: { qty: 5, price: 3 } },
+           buy: { food: { qty: 5, price: 5 }, water: { qty: 4, price: 3 } } },
+};
+const spare = g => Math.max(0, (player.holds[g] ?? 0) - (player.reserved[g] ?? 0));
+const postedSell = () => Object.entries(player.posts.sell).filter(([, p]) => p.qty > 0);
+const postedBuy = () => Object.entries(player.posts.buy).filter(([, p]) => p.qty > 0);
+const coinCommitted = () => postedBuy().reduce((t, [, p]) => t + p.qty * p.price, 0);
+
+let agents = [];
+function buildAgents(n) {
+  reseed();
+  agents = Array.from({ length: n }, (_, i) => {
+    const kind = TRADES[i % TRADES.length];
+    const sells = { [kind.makes]: 4 + Math.floor(rnd() * 14) };
+    for (let k = 0; k < 2; k += 1) {
+      if (rnd() < 0.5) { const g = CRAFTED[Math.floor(rnd() * CRAFTED.length)]; sells[g] = (sells[g] ?? 0) + 1 + Math.floor(rnd() * 7); }
+    }
+    const buys = kind.buys.map(g => ({ good: g, qty: 2 + Math.floor(rnd() * 8) }));
+    for (let k = 0; k < 2; k += 1) {
+      if (rnd() < 0.5) { const g = CRAFTED[Math.floor(rnd() * CRAFTED.length)]; if (!sells[g] && !buys.some(b => b.good === g)) buys.push({ good: g, qty: 1 + Math.floor(rnd() * 6) }); }
+    }
+    const ask = Object.fromEntries(Object.keys(sells).map(g => [g, Math.max(1, Math.round(BASE[g] * (0.75 + rnd() * 0.6)))]));
+    const bid = Object.fromEntries(buys.map(b => [b.good, Math.max(1, Math.round(BASE[b.good] * (0.8 + rnd() * 0.6)))]));
+    return { id: `a${i}`, name: `${FIRST[i % FIRST.length]} ${LAST[(i * 7 + Math.floor(i / FIRST.length)) % LAST.length]}`, trade: kind.trade, sells, buys, ask, bid, coin: 10 + Math.floor(rnd() * 40) };
+  });
+}
+
+/* Evidence, not a price table: ranges come from trades that happened. */
+let history = [];
+function seedHistory() {
+  reseed();
+  history = [];
+  agents.slice(0, Math.min(agents.length, 16)).forEach((a, i) => {
+    if (i % 3 === 2) return;
+    const g = Object.keys(a.sells)[0];
+    history.push({ good: g, coin: Math.max(1, Math.round(a.ask[g] * (0.85 + rnd() * 0.3))) });
+  });
+}
+function evidence(good) {
+  const seen = history.filter(h => h.good === good).map(h => h.coin);
+  if (!seen.length) return null;
+  return { lo: Math.min(...seen), hi: Math.max(...seen), last: seen[seen.length - 1] };
+}
+
+/* Who would take a post at that price — read off the agents' own bids and asks. */
+const buyersFor = (good, price) => agents.filter(a => a.buys.some(b => b.good === good) && a.bid[good] >= price).length;
+const sellersFor = (good, price) => agents.filter(a => a.sells[good] && a.ask[good] <= price).length;
+const offeredIn = good => agents.filter(a => a.sells[good]);
+
+/* ---------- state ---------- */
+const params = new URLSearchParams(location.search);
+const PER_PAGE = Number(params.get('per') || 8);
+let group = params.get('by') || '';
+let query = params.get('q') || '';
+let stallOpen = params.get('stall') === '1';
+let stallSide = params.get('side') === 'buy' ? 'buy' : 'sell';
+let stallQuery = '';
+let page = 0;
+let selectedId = null;
+let give = {};
+let take = {};
+
+const listEl = document.querySelector('#list');
+const slipEl = document.querySelector('#slip');
+const subEl = document.querySelector('#market-sub');
+const titleEl = document.querySelector('#market-title');
+const frictionEl = document.querySelector('#friction');
+const pagerEl = document.querySelector('#paginator');
+const searchEl = document.querySelector('#search');
+const segEl = document.querySelector('#seg');
+const stallButton = document.querySelector('#open-stall');
+
+const naturalGroup = () => (agents.length <= 12 ? 'person' : 'good');
+const activeGroup = () => group || naturalGroup();
+const title = s => s.charAt(0).toUpperCase() + s.slice(1);
+const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const sellList = a => Object.entries(a.sells).map(([g, q]) => `${title(g)} ×${q}`).join(', ');
+
+const matchFor = a => a.buys.filter(b => spare(b.good) > 0);
+const isMatch = a => matchFor(a).length > 0;
+
+/* ---------- query, same grammar as BUILD ---------- */
+function tokens(q) { return q.trim().toLowerCase().split(/\s+/).filter(Boolean); }
+
+function matchesQuery(agent) {
+  if (!query.trim()) return true;
+  return tokens(query).every(token => {
+    const neg = token.startsWith('-');
+    const t = neg ? token.slice(1) : token;
+    const [key, value] = t.includes(':') ? t.split(':') : [null, t];
+    let hit;
+    if (key === 'needs') hit = agent.buys.some(b => b.good.startsWith(value));
+    else if (key === 'has') hit = Object.keys(agent.sells).some(g => g.startsWith(value));
+    else if (key === 'trade') hit = agent.trade.startsWith(value);
+    else if (key === 'is') hit = value === 'match' ? isMatch(agent) : agent.trade.startsWith(value);
+    else hit = `${agent.name} ${agent.trade} ${Object.keys(agent.sells).join(' ')}`.toLowerCase().includes(value);
+    return neg ? !hit : hit;
+  });
+}
+
+/* The stall's own grammar: kind, whether it is posted, whether anyone would take it. */
+function itemMatchesQuery(good) {
+  if (!stallQuery.trim()) return true;
+  const post = player.posts[stallSide][good];
+  const kind = RESOURCES.includes(good) ? 'resource' : 'crafted';
+  return tokens(stallQuery).every(token => {
+    const neg = token.startsWith('-');
+    const t = neg ? token.slice(1) : token;
+    const [key, value] = t.includes(':') ? t.split(':') : [null, t];
+    let hit;
+    if (key === 'type' || key === 'kind') hit = kind.startsWith(value);
+    else if (key === 'is') hit = value === 'posted' ? Boolean(post?.qty) : value === 'idle' ? !post?.qty : kind.startsWith(value);
+    else hit = good.includes(value);
+    return neg ? !hit : hit;
+  });
+}
+
+/* ---------- the stall, in the wide pane ---------- */
+function stallItems() {
+  /* SELLING navigates your inventory; BUYING navigates what the market actually offers. */
+  const pool = stallSide === 'sell'
+    ? ITEMS.filter(g => (player.holds[g] ?? 0) > 0 || player.posts.sell[g])
+    : ITEMS.filter(g => offeredIn(g).length > 0 || player.posts.buy[g]);
+  return pool.filter(itemMatchesQuery);
+}
+
+function renderStallList(slice) {
+  const head = stallSide === 'sell'
+    ? '<span>ITEM</span><span style="text-align:center">POSTED</span><span style="text-align:center">PRICE</span><span style="text-align:right">WHO WOULD BUY</span>'
+    : '<span>ITEM</span><span style="text-align:center">WANTED</span><span style="text-align:center">PRICE</span><span style="text-align:right">WHO WOULD SELL</span>';
+
+  listEl.innerHTML = `<div class="stall-head">${head}</div>` + slice.map(good => {
+    const post = player.posts[stallSide][good] ?? { qty: 0, price: BASE[good] };
+    const cap = stallSide === 'sell' ? spare(good) : 99;
+    const takers = stallSide === 'sell' ? buyersFor(good, post.price) : sellersFor(good, post.price);
+    const sub = stallSide === 'sell'
+      ? `${spare(good)} spare of ${fmt(player.holds[good] ?? 0)} held`
+      : `${offeredIn(good).reduce((t, a) => t + a.sells[good], 0)} offered by ${offeredIn(good).length}`;
+    const verb = stallSide === 'sell' ? 'would buy' : 'would sell';
+    return `<div class="stall-row" data-posted="${post.qty > 0}">
+      <span class="stall-item"><span class="stall-name">${title(good)}</span><span class="stall-sub">${sub}</span></span>
+      <span class="stepper">
+        <button type="button" data-good="${good}" data-field="qty" data-step="-1" ${post.qty <= 0 ? 'disabled' : ''} aria-label="less ${good}">−</button>
+        <strong>${post.qty}</strong>
+        <button type="button" data-good="${good}" data-field="qty" data-step="1" ${post.qty >= cap ? 'disabled' : ''} aria-label="more ${good}">+</button>
+      </span>
+      <span class="stepper">
+        <button type="button" data-good="${good}" data-field="price" data-step="-1" ${post.price <= 1 ? 'disabled' : ''} aria-label="lower ${good} price">−</button>
+        <strong>${post.price}</strong>
+        <button type="button" data-good="${good}" data-field="price" data-step="1" aria-label="raise ${good} price">+</button>
+      </span>
+      <span class="stall-takers" data-any="${post.qty ? takers > 0 : 'idle'}">${post.qty ? `${takers} ${verb}` : 'not posted'}</span>
+    </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('[data-field]').forEach(b => b.addEventListener('click', () => {
+    const { good, field } = b.dataset;
+    const store = player.posts[stallSide];
+    const current = store[good] ?? { qty: 0, price: BASE[good] };
+    const cap = stallSide === 'sell' ? spare(good) : 99;
+    const next = { ...current };
+    if (field === 'qty') next.qty = Math.max(0, Math.min(cap, current.qty + Number(b.dataset.step)));
+    else next.price = Math.max(1, current.price + Number(b.dataset.step));
+    store[good] = next;
+    render();
+  }));
+}
+
+function renderStallSummary() {
+  const committed = coinCommitted();
+  const over = committed > player.holds.coin;
+  const sellUnits = postedSell().reduce((t, [, p]) => t + p.qty, 0);
+  const live = postedSell().length + postedBuy().length;
+  slipEl.innerHTML = `
+    <h3 class="column-heading">YOUR STALL</h3>
+    <div class="slip-who">${live} post${live === 1 ? '' : 's'} live<small>neighbours trade against these prices</small></div>
+    <div class="stall-tally">
+      <div class="tally-row"><span>SELLING</span><b>${postedSell().length} items · ${sellUnits} units</b></div>
+      <div class="tally-row"><span>BUYING</span><b class="${over ? 'over' : ''}">${postedBuy().length} items · ${committed} of ${player.holds.coin} coin</b></div>
+    </div>
+    ${over ? `<p class="stall-warn">Your buy orders commit ${committed} coin and you hold ${player.holds.coin}. The shortfall will not fill.</p>` : ''}
+    <div class="side">
+      <div class="side-head"><span>POSTED TO SELL</span><span>${postedSell().length}</span></div>
+      ${postedSell().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${p.price} coin</span></div>`).join('') || '<p class="slip-placeholder">Nothing posted to sell.</p>'}
+    </div>
+    <div class="side">
+      <div class="side-head"><span>POSTED TO BUY</span><span>${postedBuy().length}</span></div>
+      ${postedBuy().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${p.price} coin</span></div>`).join('') || '<p class="slip-placeholder">Nothing posted to buy.</p>'}
+    </div>`;
+}
+
+/* ---------- the market list ---------- */
+function youRow() {
+  const sells = postedSell().map(([g, p]) => `${title(g)} ×${p.qty} at ${p.price}`).join(', ');
+  const buys = postedBuy().map(([g, p]) => `${g} ×${p.qty} at ${p.price}`).join(', ');
+  const live = postedSell().length + postedBuy().length;
+  const line = live ? `Sells <em>${sells || 'nothing'}</em>. Buys ${buys || 'nothing'}.`
+                    : 'Nothing posted. Neighbours cannot trade with you.';
+  return `<button class="person is-you" type="button" data-you="1">
+    <span class="person-top">
+      <span class="person-name">You</span>
+      <span class="person-trade">${player.trade.toUpperCase()}</span>
+      <span class="person-posts" data-live="${live > 0}">${live ? `${live} POSTS LIVE` : 'NOTHING POSTED'}</span>
+    </span>
+    <span class="person-line">${line}</span>
+  </button>`;
+}
+
+function renderPeople(slice) {
+  listEl.innerHTML = youRow() + slice.map(a => {
+    const match = isMatch(a);
+    return `<button class="person" type="button" data-id="${a.id}" data-match="${match}" aria-pressed="${a.id === selectedId}">
+      <span class="person-top">
+        <span class="person-name">${a.name}</span>
+        <span class="person-trade">${a.trade.toUpperCase()}</span>
+        <span class="person-match" data-match="${match}">${match ? 'WANTS WHAT YOU HOLD' : 'nothing you hold'}</span>
+      </span>
+      <span class="person-line">Sells <em>${sellList(a)}</em>. Buys ${a.buys.map(b => b.good).join(', ')}.</span>
+    </button>`;
+  }).join('');
+}
+
+function goodRows(list) {
+  return ITEMS.map(good => {
+    const sellers = list.filter(a => a.sells[good]);
+    const buyers = list.filter(a => a.buys.some(b => b.good === good));
+    const mySell = player.posts.sell[good]?.qty ?? 0;
+    const myBuy = player.posts.buy[good]?.qty ?? 0;
+    return {
+      good,
+      sellers: sellers.length + (mySell ? 1 : 0),
+      buyers: buyers.length + (myBuy ? 1 : 0),
+      offered: sellers.reduce((t, a) => t + a.sells[good], 0) + mySell,
+      wanted: buyers.reduce((t, a) => t + a.buys.find(b => b.good === good).qty, 0) + myBuy,
+    };
+  }).filter(r => r.offered || r.wanted);
+}
+
+function renderGoods(slice) {
+  listEl.innerHTML = slice.map(r => {
+    const ev = evidence(r.good);
+    const mine = spare(r.good);
+    return `<button class="good-row" type="button" data-good="${r.good}" aria-pressed="${r.good === selectedId}">
+      <span class="good-name">${r.good.toUpperCase()}</span>
+      <span class="good-stats">
+        <span><b>${r.offered}</b> offered · ${r.sellers} selling</span><span class="sep">·</span>
+        <span><b>${r.wanted}</b> wanted · ${r.buyers} buying</span>
+      </span>
+      <span class="good-meta">
+        ${ev ? `<span><b>${ev.lo === ev.hi ? ev.lo : `${ev.lo}–${ev.hi}`}</b> coin · last ${ev.last}</span>` : '<span class="noev">not yet traded</span>'}
+        ${mine ? `<span class="sep">·</span><span class="good-mine">you spare ${mine}</span>` : ''}
+      </span>
+    </button>`;
+  }).join('');
+}
+
+/* ---------- frame ---------- */
+function renderControls() {
+  stallButton.setAttribute('aria-pressed', String(stallOpen));
+  if (stallOpen) {
+    titleEl.textContent = 'What will you post?';
+    searchEl.placeholder = 'search items  ·  type:crafted  is:posted';
+    searchEl.value = stallQuery;
+    segEl.innerHTML = `<span class="seg-label">SIDE</span>
+      <button type="button" data-side="sell" aria-selected="false">SELLING</button>
+      <button type="button" data-side="buy" aria-selected="false">BUYING</button>`;
+    segEl.querySelectorAll('[data-side]').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.side === stallSide));
+      b.addEventListener('click', () => { stallSide = b.dataset.side; page = 0; render(); });
+    });
+  } else {
+    titleEl.textContent = 'Who will trade with you?';
+    searchEl.placeholder = 'search  ·  needs:biomass  has:food  trade:fisher';
+    searchEl.value = query;
+    segEl.innerHTML = `<span class="seg-label">BY</span>
+      <button type="button" data-group="person">PERSON</button>
+      <button type="button" data-group="good">GOOD</button>`;
+    const mode = activeGroup();
+    segEl.querySelectorAll('[data-group]').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.group === mode));
+      b.addEventListener('click', () => { group = b.dataset.group; page = 0; render(); });
+    });
+  }
+}
+
+function render() {
+  renderControls();
+
+  const items = stallOpen ? stallItems()
+    : activeGroup() === 'person' ? agents.filter(matchesQuery) : goodRows(agents.filter(matchesQuery));
+  const pages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+  page = Math.min(Math.max(0, page), pages - 1);
+  const start = page * PER_PAGE;
+  const slice = items.slice(start, start + PER_PAGE);
+
+  if (stallOpen) {
+    subEl.textContent = `${items.length} item${items.length === 1 ? '' : 's'} · ${stallSide === 'sell' ? 'your inventory' : 'offered by neighbours'}`;
+    if (!items.length) listEl.innerHTML = '<p class="list-empty">No item matches that query.</p>';
+    else renderStallList(slice);
+    renderStallSummary();
+    frictionEl.innerHTML = `<strong>${postedSell().length + postedBuy().length}</strong> posts live · neighbours trade against them while you work.`;
+    frictionEl.dataset.severe = 'false';
+  } else {
+    const visible = agents.filter(matchesQuery);
+    const mode = activeGroup();
+    subEl.textContent = `${visible.length} of ${agents.length} neighbours · by ${mode}${group ? '' : ' (natural)'}`;
+    if (!items.length) listEl.innerHTML = '<p class="list-empty">Nothing matches that query.</p>';
+    else if (mode === 'person') renderPeople(slice);
+    else renderGoods(slice);
+    listEl.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => selectAgent(el.dataset.id)));
+    listEl.querySelectorAll('[data-good]').forEach(el => el.addEventListener('click', () => {
+      selectedId = selectedId === el.dataset.good ? null : el.dataset.good;
+      give = {}; take = {}; render();
+    }));
+    listEl.querySelectorAll('[data-you]').forEach(el => el.addEventListener('click', toggleStall));
+    renderSlip();
+    const idle = visible.filter(a => !isMatch(a)).length;
+    frictionEl.dataset.severe = String(visible.length && idle / visible.length >= 0.6);
+    frictionEl.innerHTML = `<strong>${idle} of ${visible.length}</strong> neighbours want nothing you hold spare.`;
+  }
+
+  renderPager(items.length, pages, start, slice.length);
+}
+
+function renderPager(total, pages, start, shown) {
+  pagerEl.innerHTML = `
+    <span class="page-range">${total ? `${start + 1}–${start + shown} of ${total}` : '0 of 0'}</span>
+    <button type="button" data-page="-1" ${page <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+    <span class="page-now">${page + 1} / ${pages}</span>
+    <button type="button" data-page="1" ${page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">›</button>`;
+  pagerEl.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => { page += Number(b.dataset.page); render(); }));
+}
+
+/* ---------- the deal ---------- */
+function selectAgent(id) {
+  if (selectedId === id) { selectedId = null; give = {}; take = {}; render(); return; }
+  selectedId = id;
+  const a = agents.find(x => x.id === id);
+  give = {}; take = {};
+  const m = matchFor(a)[0];
+  if (m) give[m.good] = Math.min(spare(m.good), m.qty);
+  const theirs = Object.keys(a.sells)[0];
+  take[theirs] = Math.min(a.sells[theirs], 4);
+  render();
+}
+
+function valueOf(bundle, agent) {
+  return Object.entries(bundle).reduce((t, [g, q]) => g === 'coin' ? t + q : t + q * (agent.bid[g] ?? agent.ask[g] ?? BASE[g]), 0);
+}
+
+function renderSlip() {
+  const agent = agents.find(a => a.id === selectedId);
+
+  if (!agent) {
+    const good = ITEMS.includes(selectedId) ? selectedId : null;
+    if (!good) { slipEl.innerHTML = '<h3 class="column-heading">THE DEAL</h3><p class="slip-placeholder">Pick a neighbour, or a good, on the left.</p>'; return; }
+    const sellers = agents.filter(a => a.sells[good]).sort((a, b) => a.ask[good] - b.ask[good]).slice(0, 4);
+    const buyers = agents.filter(a => a.buys.some(b => b.good === good)).sort((a, b) => b.bid[good] - a.bid[good]).slice(0, 4);
+    slipEl.innerHTML = `
+      <h3 class="column-heading">${good.toUpperCase()}</h3>
+      <div class="side">
+        <div class="side-head"><span>CHEAPEST SELLING</span><span>${sellers.length}</span></div>
+        ${sellers.map(a => `<div class="line"><span class="line-name" data-jump="${a.id}">${a.name} ×${a.sells[good]}</span><span>${a.ask[good]} coin</span></div>`).join('') || '<p class="slip-placeholder">Nobody is selling.</p>'}
+      </div>
+      <div class="side">
+        <div class="side-head"><span>PAYING MOST</span><span>${buyers.length}</span></div>
+        ${buyers.map(a => `<div class="line"><span class="line-name" data-jump="${a.id}">${a.name} wants ${a.buys.find(b => b.good === good).qty}</span><span>${a.bid[good]} coin</span></div>`).join('') || '<p class="slip-placeholder">Nobody is buying.</p>'}
+      </div>
+      <p class="slip-placeholder">Pick a name to open a deal.</p>`;
+    slipEl.querySelectorAll('[data-jump]').forEach(el => { el.style.cursor = 'pointer'; el.addEventListener('click', () => selectAgent(el.dataset.jump)); });
+    return;
+  }
+
+  const giveable = [...new Set([...agent.buys.map(b => b.good), 'coin'])].filter(g => (g === 'coin' ? player.holds.coin : spare(g)) > 0);
+  const takeable = [...Object.keys(agent.sells), 'coin'].filter(g => (g === 'coin' ? agent.coin : agent.sells[g]) > 0);
+  const capOf = (good, side) => side === 'give'
+    ? (good === 'coin' ? player.holds.coin : spare(good))
+    : (good === 'coin' ? agent.coin : agent.sells[good]);
+
+  const row = (good, bundle, side) => {
+    const q = bundle[good] ?? 0;
+    const cap = capOf(good, side);
+    return `<div class="line">
+      <span class="line-name ${q ? '' : 'is-zero'}">${title(good)}</span>
+      <span class="stepper">
+        <button type="button" data-side="${side}" data-good="${good}" data-step="-1" ${q <= 0 ? 'disabled' : ''} aria-label="less ${good}">−</button>
+        <strong>${q}</strong>
+        <button type="button" data-side="${side}" data-good="${good}" data-step="1" ${q >= cap ? 'disabled' : ''} aria-label="more ${good}">+</button>
+      </span>
+    </div>`;
+  };
+
+  const theirGain = valueOf(give, agent);
+  const theirCost = valueOf(take, agent);
+  const empty = !Object.values(give).some(Boolean) || !Object.values(take).some(Boolean);
+  const first = agent.name.split(' ')[0];
+  let verdict;
+  if (empty) verdict = { kind: 'idle', text: 'Put something on both sides.' };
+  else if (!matchFor(agent).length && !give.coin) verdict = { kind: 'refuse', text: `${first} buys ${agent.buys.map(b => b.good).join(' or ')} — nothing you have spare. Coin would still work.` };
+  else if (theirGain >= theirCost) verdict = { kind: 'accept', text: `${first} would take this.` };
+  else {
+    const g = Object.keys(give)[0] || agent.buys[0].good;
+    verdict = { kind: 'counter', text: `${first} would want about ${Math.ceil((theirCost - theirGain) / (agent.bid[g] ?? BASE[g]))} more ${g}.` };
+  }
+
+  const touched = [...new Set([...Object.keys(give), ...Object.keys(take)])].filter(g => give[g] || take[g]);
+  const after = touched.map(g => {
+    const before = player.holds[g] ?? 0;
+    const value = before - (give[g] ?? 0) + (take[g] ?? 0);
+    return `<div class="after-row"><span>${g.toUpperCase()}</span><span class="after-from">${fmt(before)}</span><span class="after-arrow">→</span><strong class="after-to" data-sign="${value < before ? 'down' : value > before ? 'up' : 'flat'}">${fmt(value)}</strong></div>`;
+  }).join('');
+
+  slipEl.innerHTML = `
+    <h3 class="column-heading">THE DEAL</h3>
+    <div class="slip-who">${agent.name}<small>${agent.trade} · buys ${agent.buys.map(b => `${b.good} ${b.qty}`).join(', ')}</small></div>
+    <div class="side">
+      <div class="side-head"><span>YOU GIVE</span><span>spare only</span></div>
+      ${giveable.map(g => row(g, give, 'give')).join('') || '<p class="slip-placeholder">Nothing spare they buy.</p>'}
+    </div>
+    <div class="side">
+      <div class="side-head"><span>YOU RECEIVE</span><span>theirs</span></div>
+      ${takeable.map(g => row(g, take, 'take')).join('')}
+    </div>
+    <p class="verdict" data-kind="${verdict.kind}">${verdict.text}</p>
+    ${touched.length ? `<div class="slip-after"><span class="after-head">AFTER</span>${after}</div>` : ''}
+    <button class="slip-action primary-action" type="button" id="propose" ${verdict.kind === 'accept' ? '' : 'disabled'}>PROPOSE →</button>`;
+
+  slipEl.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
+    const bundle = b.dataset.side === 'give' ? give : take;
+    bundle[b.dataset.good] = Math.max(0, Math.min(capOf(b.dataset.good, b.dataset.side), (bundle[b.dataset.good] ?? 0) + Number(b.dataset.step)));
+    renderSlip();
+  }));
+  const propose = slipEl.querySelector('#propose');
+  if (propose && verdict.kind === 'accept') propose.addEventListener('click', () => settle(agent));
+}
+
+function settle(agent) {
+  Object.entries(give).forEach(([g, q]) => {
+    player.holds[g] -= q;
+    if (g === 'coin') agent.coin += q;
+    else agent.buys.forEach(b => { if (b.good === g) b.qty = Math.max(0, b.qty - q); });
+  });
+  Object.entries(take).forEach(([g, q]) => {
+    player.holds[g] = (player.holds[g] ?? 0) + q;
+    if (g === 'coin') agent.coin -= q;
+    else { agent.sells[g] -= q; if (agent.sells[g] <= 0) delete agent.sells[g]; }
+  });
+  Object.keys(take).filter(g => g !== 'coin' && take[g]).forEach(g => history.push({ good: g, coin: Math.round(valueOf(give, agent) / take[g]) }));
+  give = {}; take = {};
+  render();
+}
+
+/* ---------- wiring ---------- */
+function toggleStall() { stallOpen = !stallOpen; page = 0; render(); }
+stallButton.addEventListener('click', toggleStall);
+searchEl.addEventListener('input', () => {
+  if (stallOpen) stallQuery = searchEl.value; else query = searchEl.value;
+  page = 0; render();
+});
+
+buildAgents(Number(params.get('n') || 24));
+seedHistory();
+const pick = params.get('pick');
+if (pick) { const a = agents.find(x => x.name.toLowerCase().startsWith(pick.toLowerCase())); if (a) selectAgent(a.id); else render(); }
+else render();
+</script>
+</body>
+</html>
