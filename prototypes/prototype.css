@@ -2792,3 +2792,33 @@ button:disabled {
 .after-to[data-short="true"] {
   color: var(--danger);
 }
+
+/* ---- the menu list and the settings panel ----
+   Shared by the title screen and the session menu: one definition, two entry points. */
+.wordmark { margin: 0; color: var(--fg); font-size: 46px; font-weight: 400; letter-spacing: -0.06em; line-height: 1; }
+.menu { display: grid; justify-items: start; gap: 1px; margin-top: 30px; }
+.menu-item { display: flex; gap: 14px; align-items: baseline; padding: 5px 0; cursor: pointer; border: 0; color: var(--dim); background: transparent; font: inherit; font-size: 17px; letter-spacing: -0.02em; }
+.menu-item:hover:not(:disabled), .menu-item:focus-visible { color: var(--fg); outline: none; }
+.menu-item:hover:not(:disabled) .menu-mark, .menu-item:focus-visible .menu-mark { color: var(--acc); }
+.menu-mark { width: 2ch; color: transparent; }
+.menu-item:disabled { cursor: default; color: #3f3d37; }
+.menu-why { color: #3f3d37; font-size: 10px; letter-spacing: 0.06em; }
+.panel-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+.panel-title { margin: 0; color: var(--fg); font-size: 26px; font-weight: 400; letter-spacing: -0.04em; }
+.panel-back { padding: 3px 8px; cursor: pointer; border: 1px solid var(--line-2); color: var(--dim); background: transparent; font-size: 10px; letter-spacing: 0.07em; }
+.panel-back:hover { border-color: var(--acc); color: var(--acc); }
+.panel-body { display: grid; gap: 15px; max-width: 540px; max-height: 420px; overflow-y: auto; padding-right: 6px; }
+.setting { display: grid; grid-template-columns: 13ch minmax(0, 1fr); gap: 12px; align-items: start; }
+.setting-label { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; padding-top: 4px; }
+.setting-field { display: grid; gap: 4px; min-width: 0; }
+.choices { display: flex; gap: 5px; flex-wrap: wrap; }
+.choices button { padding: 3px 9px; cursor: pointer; border: 1px solid var(--line); color: var(--dim); background: transparent; font-size: 11px; }
+.choices button:hover { border-color: var(--line-2); color: var(--fg); }
+.choices button[aria-pressed="true"] { border-color: var(--acc); color: var(--acc); }
+.setting-note { color: var(--line-2); font-size: 10px; }
+.setting-note b { color: var(--dim); font-weight: 400; }
+.level { display: grid; grid-template-columns: minmax(0, 1fr) 5ch; gap: 10px; align-items: center; }
+.level .eating-slider { width: 100%; }
+.level output { color: var(--fg); font-size: 11px; text-align: right; }
+.toggle { display: flex; gap: 8px; align-items: center; cursor: pointer; color: var(--dim); font-size: 11px; }
+.toggle input { accent-color: var(--acc); }
