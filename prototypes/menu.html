@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session menu</title>
+<link rel="stylesheet" href="prototype.css">
+<style>
+/* The frozen HUD under the menu. Pause is a freeze of the same screen, so this does
+   not animate — it is the act, receded, exactly as the palette fade leaves it. */
+.frozen { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; width: min(900px, 100vw); height: min(700px, 100vh); margin: auto; overflow: hidden; border: 1px solid var(--line); background: var(--bg); color: var(--line-2); }
+.frozen-top { display: flex; gap: 14px; align-items: baseline; justify-content: space-between; padding: 11px 15px; border-bottom: 1px solid var(--line); font-size: 11px; }
+.frozen-strip { display: flex; gap: 10px; align-items: baseline; padding: 7px 15px; border-bottom: 1px solid var(--line); font-size: 11px; }
+.frozen-strip .tail { margin-left: auto; letter-spacing: 0.06em; }
+.frozen-main { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 15px; padding: 12px 15px; font-size: 11px; }
+.frozen-tiles { display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: 7px; }
+.frozen-tile { display: grid; gap: 3px; padding: 7px 9px; border: 1px solid #1a1915; }
+.frozen-tile b { color: #4a4841; font-size: 12px; font-weight: 400; }
+.frozen-tile span { color: #343229; font-size: 10px; }
+.frozen-rail { display: grid; align-content: start; gap: 3px; font-size: 10px; }
+.frozen-rail .head { display: flex; justify-content: space-between; padding-bottom: 4px; border-bottom: 1px solid #1c1b17; color: #413f39; letter-spacing: 0.07em; }
+.frozen-rail .row { display: flex; justify-content: space-between; gap: 8px; }
+.frozen-foot { display: grid; gap: 2px; padding: 10px 15px; border-top: 1px solid var(--line); font-size: 11px; }
+.frozen-foot span { color: #343229; }
+
+.menu-dialog { width: min(620px, calc(100vw - 28px)); }
+.menu-dialog .dialog-shell { max-height: min(560px, calc(100vh - 28px)); }
+.menu-dialog .dialog-body { padding: 14px 15px 16px; }
+.menu-dialog .panel-head { justify-content: flex-end; margin-bottom: 11px; }
+.menu-dialog .dialog-body:focus, .menu-dialog .dialog-body:focus-visible { outline: none; }
+/* The menu list is the shared one; inside a modal it sits a little tighter. */
+.menu-dialog .menu { margin-top: 0; }
+.menu-dialog .menu-item { font-size: 16px; }
+
+.slots { display: grid; gap: 5px; }
+.slot { display: grid; grid-template-columns: 8ch minmax(0, 1fr) auto; gap: 11px; align-items: baseline; width: 100%; padding: 8px 9px; cursor: pointer; border: 1px solid var(--line); color: var(--fg); background: transparent; font: inherit; text-align: left; }
+.slot:hover:not(:disabled) { border-color: var(--line-2); background: var(--panel); }
+.slot:disabled { cursor: default; color: var(--line-2); }
+.slot-id { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.slot-what { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.slot:disabled .slot-what { color: var(--line-2); }
+.slot-when { color: var(--line-2); font-size: 10px; }
+.slot-act { color: var(--acc); font-size: 10px; letter-spacing: 0.07em; }
+.slot:disabled .slot-act { color: var(--line-2); }
+
+.confirm-copy { margin: 0 0 14px; max-width: 52ch; color: var(--fg); font-size: 12px; line-height: 1.5; }
+.confirm-copy b { color: var(--warn); font-weight: 400; }
+.confirm-row { display: flex; gap: 9px; }
+.danger-action { padding: 5px 9px; cursor: pointer; border: 1px solid var(--danger); color: var(--danger); background: transparent; }
+.danger-action:hover { color: var(--fg); background: #2a1512; }
+</style>
+</head>
+<body>
+
+<div class="frozen" aria-hidden="true">
+  <div class="frozen-top">
+    <span>VI: 13/15  PO: 7  CO: 42  FO: 23  WA: 6  FU: 4  ME: 2  MI: 9  BI: 30</span>
+    <span>Act II · Day 43</span>
+  </div>
+  <div class="frozen-strip">
+    <span>● CARAVAN</span><span>9 lots · salt, oil, nails, cloth, glass, tools</span>
+    <span class="tail">TRADE →</span>
+  </div>
+  <div class="frozen-main">
+    <div class="frozen-tiles">
+      <div class="frozen-tile"><b>Forage</b><span>−2e · 4h · +3–5 biomass</span></div>
+      <div class="frozen-tile"><b>Split wood</b><span>−3e · 6h · +2–4 fuel</span></div>
+      <div class="frozen-tile"><b>Fish</b><span>−2e · 5h · +2–5 food</span></div>
+      <div class="frozen-tile"><b>Draw water</b><span>−1e · 3h · +4–6 water</span></div>
+    </div>
+    <div class="frozen-rail">
+      <span class="head"><span>HOLDINGS</span><span>8 KINDS, 41</span></span>
+      <span class="row"><span>Charcoal ×14</span><span>trade stock</span></span>
+      <span class="row"><span>Planks ×8</span><span>trade stock</span></span>
+      <span class="row"><span>Baskets ×6</span><span>trade stock</span></span>
+      <span class="row"><span>Sandals ×2</span><span>forage costs less</span></span>
+      <span class="row"><span>Root cellar ×1</span><span>food keeps 2×</span></span>
+    </div>
+  </div>
+  <div class="frozen-foot">
+    <span>20:09  The garden bed is ready to collect.</span>
+    <span>19:38  Mira Halt took 6 Biomass at 4 coin.</span>
+  </div>
+</div>
+
+<dialog class="terminal-dialog menu-dialog" id="menu-dialog" aria-labelledby="menu-title">
+  <div class="dialog-shell">
+    <header class="dialog-header">
+      <div>
+        <div class="dialog-kicker" id="menu-kicker">PAUSED · ACT II · DAY 43</div>
+        <h2 class="dialog-title" id="menu-title">Paused</h2>
+      </div>
+      <button class="dialog-close" type="button" data-go="resume" aria-label="Resume">&times;</button>
+    </header>
+    <div class="dialog-body" id="menu-body" tabindex="-1"></div>
+    <footer class="dialog-footer">
+      <span class="dialog-note" id="menu-note"></span>
+    </footer>
+  </div>
+</dialog>
+
+<script>
+/* Three slots, so saving is a choice rather than a single overwritten file. */
+const SLOTS = [
+  { id: 1, act: 'Act II', day: 43, people: 7, when: 'today · 19:08' },
+  { id: 2, act: 'Act I',  day: 12, people: 1, when: '18 Oct · 22:41' },
+  { id: 3, empty: true },
+];
+
+const settings = { difficulty: 'temperate', music: 60, effects: 75, scale: '100', contrast: 'normal', window: '1600' };
+const DIFFICULTIES = [
+  { key: 'abundant',  name: 'ABUNDANT',  cost: 0.8,  yield: 1.25, note: 'The valley is generous. Mistakes are survivable.' },
+  { key: 'temperate', name: 'TEMPERATE', cost: 1.0,  yield: 1.0,  note: 'The valley as it is.' },
+  { key: 'harsh',     name: 'HARSH',     cost: 1.25, yield: 0.8,  note: 'Everything takes longer and gives less.' },
+  { key: 'barren',    name: 'BARREN',    cost: 1.5,  yield: 0.65, note: 'You will not build everything. Choose.' },
+];
+
+let screen = 'menu';
+let flash = '';
+const bodyEl = document.querySelector('#menu-body');
+const titleEl = document.querySelector('#menu-title');
+const noteEl = document.querySelector('#menu-note');
+
+const describe = s => s.empty ? 'empty' : `${s.act} · Day ${s.day} · ${s.people} ${s.people === 1 ? 'person' : 'people'}`;
+
+function renderMenu() {
+  titleEl.textContent = 'Paused';
+  noteEl.textContent = flash || 'Escape resumes. The simulation is frozen while this is open.';
+  bodyEl.innerHTML = `<nav class="menu">
+    <button class="menu-item" type="button" data-go="resume"><span class="menu-mark">›</span>Continue</button>
+    <button class="menu-item" type="button" data-go="save"><span class="menu-mark">›</span>Save</button>
+    <button class="menu-item" type="button" data-go="load"><span class="menu-mark">›</span>Load</button>
+    <button class="menu-item" type="button" data-go="settings"><span class="menu-mark">›</span>Settings</button>
+    <button class="menu-item" type="button" data-go="quit"><span class="menu-mark">›</span>Quit to menu</button>
+  </nav>`;
+  wire();
+}
+
+function renderSlots(mode) {
+  const saving = mode === 'save';
+  titleEl.textContent = saving ? 'Save' : 'Load';
+  noteEl.textContent = saving
+    ? 'Saving writes the settlement as it stands at this moment.'
+    : 'Loading discards the settlement in progress.';
+  bodyEl.innerHTML = `
+    <div class="panel-head"><button class="panel-back" type="button" data-go="menu">BACK</button></div>
+    <div class="slots">
+      ${SLOTS.map(s => `<button class="slot" type="button" data-slot="${s.id}" ${!saving && s.empty ? 'disabled' : ''}>
+        <span class="slot-id">SLOT ${s.id}</span>
+        <span class="slot-what">${describe(s)}</span>
+        <span class="slot-act">${saving ? (s.empty ? 'SAVE HERE' : 'OVERWRITE') : (s.empty ? '' : 'LOAD')}</span>
+      </button>`).join('')}
+    </div>`;
+  bodyEl.querySelectorAll('[data-slot]').forEach(b => b.addEventListener('click', () => {
+    const slot = SLOTS.find(s => s.id === Number(b.dataset.slot));
+    if (saving) {
+      Object.assign(slot, { empty: false, act: 'Act II', day: 43, people: 7, when: 'today · 20:09' });
+      flash = `Saved to slot ${slot.id}.`;
+    } else {
+      flash = `Loaded slot ${slot.id}.`;
+    }
+    screen = 'menu';
+    render();
+  }));
+  wire();
+}
+
+function renderSettings() {
+  const d = DIFFICULTIES.find(x => x.key === settings.difficulty);
+  titleEl.textContent = 'Settings';
+  noteEl.textContent = 'Difficulty applies from the next day onward.';
+  bodyEl.innerHTML = `
+    <div class="panel-head"><button class="panel-back" type="button" data-go="menu">BACK</button></div>
+    <div class="panel-body">
+      <div class="setting">
+        <span class="setting-label">DIFFICULTY</span>
+        <span class="setting-field">
+          <span class="choices">${DIFFICULTIES.map(x => `<button type="button" data-diff="${x.key}" aria-pressed="${x.key === settings.difficulty}">${x.name}</button>`).join('')}</span>
+          <span class="setting-note">${d.note} Inputs cost <b>×${d.cost.toFixed(2)}</b>, yields return <b>×${d.yield.toFixed(2)}</b>.</span>
+        </span>
+      </div>
+      <div class="setting"><span class="setting-label">MUSIC</span><span class="setting-field"><span class="level">
+        <input class="eating-slider" type="range" min="0" max="100" value="${settings.music}" data-level="music" aria-label="Music volume" style="--ration-position: ${settings.music}%">
+        <output>${settings.music}%</output></span></span></div>
+      <div class="setting"><span class="setting-label">EFFECTS</span><span class="setting-field"><span class="level">
+        <input class="eating-slider" type="range" min="0" max="100" value="${settings.effects}" data-level="effects" aria-label="Effects volume" style="--ration-position: ${settings.effects}%">
+        <output>${settings.effects}%</output></span></span></div>
+      <div class="setting">
+        <span class="setting-label">UI SCALE</span>
+        <span class="setting-field"><span class="choices">${['90', '100', '110', '125'].map(v => `<button type="button" data-scale="${v}" aria-pressed="${v === settings.scale}">${v}%</button>`).join('')}</span></span>
+      </div>
+      <div class="setting">
+        <span class="setting-label">CONTRAST</span>
+        <span class="setting-field"><span class="choices">${[['normal', 'NORMAL'], ['high', 'HIGH']].map(([v, l]) => `<button type="button" data-contrast="${v}" aria-pressed="${v === settings.contrast}">${l}</button>`).join('')}</span></span>
+      </div>
+      <div class="setting">
+        <span class="setting-label">WINDOW</span>
+        <span class="setting-field"><span class="choices">${[['1280', '1280×720'], ['1600', '1600×900'], ['1920', '1920×1080'], ['full', 'FULLSCREEN']].map(([v, l]) => `<button type="button" data-window="${v}" aria-pressed="${v === settings.window}">${l}</button>`).join('')}</span></span>
+      </div>
+    </div>`;
+  bodyEl.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { settings.difficulty = b.dataset.diff; renderSettings(); }));
+  bodyEl.querySelectorAll('[data-scale]').forEach(b => b.addEventListener('click', () => { settings.scale = b.dataset.scale; renderSettings(); }));
+  bodyEl.querySelectorAll('[data-contrast]').forEach(b => b.addEventListener('click', () => { settings.contrast = b.dataset.contrast; renderSettings(); }));
+  bodyEl.querySelectorAll('[data-window]').forEach(b => b.addEventListener('click', () => { settings.window = b.dataset.window; renderSettings(); }));
+  bodyEl.querySelectorAll('[data-level]').forEach(r => r.addEventListener('input', () => {
+    settings[r.dataset.level] = Number(r.value);
+    r.style.setProperty('--ration-position', `${r.value}%`);
+    r.parentElement.querySelector('output').textContent = `${r.value}%`;
+  }));
+  wire();
+}
+
+/* Leaving is the one destructive thing here, so it is the one thing that asks. */
+function renderQuit() {
+  const last = SLOTS.filter(s => !s.empty).sort((a, b) => b.day - a.day)[0];
+  titleEl.textContent = 'Quit to menu';
+  noteEl.textContent = '';
+  bodyEl.innerHTML = `
+    <p class="confirm-copy">The settlement stands at <b>Act II · Day 43</b>. Your most recent
+      save is slot ${last.id}, ${describe(last)} — everything since then is lost.</p>
+    <div class="confirm-row">
+      <button class="danger-action" type="button" data-go="confirm-quit">QUIT TO MENU</button>
+      <button class="secondary-action" type="button" data-go="save">SAVE FIRST</button>
+      <button class="secondary-action" type="button" data-go="menu">CANCEL</button>
+    </div>`;
+  wire();
+}
+
+function wire() {
+  bodyEl.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+}
+
+function go(where) {
+  if (where === 'resume' || where === 'confirm-quit') return; /* the shell owns these */
+  flash = where === 'menu' ? '' : flash;
+  screen = where;
+  render();
+}
+
+function render() {
+  if (screen === 'save' || screen === 'load') renderSlots(screen);
+  else if (screen === 'settings') renderSettings();
+  else if (screen === 'quit') renderQuit();
+  else renderMenu();
+  flash = '';
+}
+
+document.querySelectorAll('header [data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  if (screen !== 'menu') { screen = 'menu'; render(); }
+});
+
+screen = new URLSearchParams(location.search).get('screen') || 'menu';
+render();
+document.querySelector('#menu-dialog').showModal();
+bodyEl.focus();
+</script>
+</body>
+</html>
