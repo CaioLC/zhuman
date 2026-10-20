@@ -33,16 +33,16 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 
 | Fixture name | QA | What it shows | Prototype reference |
 |---|---|---|---|
-| `act_one_default`   | QA-10 | Act I ACTIONS, reference 900×820 | `prototypes/act-i.html`, `act-i-final-actions.png` |
-| `act_one_working`   | QA-10 | Act I BUILD + holdings mid-run | `act-i-final-build.png`, `act-i-final-building.png` |
-| `act_one_low_stock` | QA-10 | low-stock / disabled states (danger tones) | `act-i-final-actions.png` |
-| `act_one_passerby`  | QA-10 | Passerby present; trade dialog openable | `trade-screen.png` |
+| `act_one_default`   | QA-10 | Act I ACTIONS, reference 900×820 | `prototypes/act-i.html`, `legacy/act-i-final-actions.png` |
+| `act_one_working`   | QA-10 | Act I BUILD + holdings mid-run | `legacy/act-i-final-build.png`, `legacy/act-i-final-building.png` |
+| `act_one_low_stock` | QA-10 | low-stock / disabled states (danger tones) | `legacy/act-i-final-actions.png` |
+| `act_one_passerby`  | QA-10 | Passerby present; trade dialog openable | `legacy/trade-screen.png` |
 | `act_one_w760`      | QA-10 | narrow layout, 760 width class | `act-i.html` ≤760 media query |
 | `act_one_w560`      | QA-10 | narrow layout, 560 width class | `act-i.html` ≤560 media query |
 | `act_one_w440`      | QA-10 | narrow layout, 440 width class | `act-i.html` ≤440 media query |
 | `act_one_hidpi`     | QA-13 | reference width at 2× DPI | `act-i.html` (crispness, not layout) |
-| `act_two_actions`   | QA-11 | Act II shell ACTIONS / catalog | `act-ii.html`, `act-ii-focus-actions.png` |
-| `act_two_build`     | QA-11 | Act II shell BUILD / recipe catalog | `act-ii-focus-build.png` |
+| `act_two_actions`   | QA-11 | Act II shell ACTIONS / catalog | `act-ii.html`, `legacy/act-ii-focus-actions.png` |
+| `act_two_build`     | QA-11 | Act II shell BUILD / recipe catalog | `legacy/act-ii-focus-build.png` |
 | `act_two_w560`      | QA-11 | Act II narrow, 560 width class | `act-ii.html` ≤560 media query |
 
 QA-12 (STRUCTURE board) and the remaining QA-13 overlays (modal backdrop/clipping, long-offer

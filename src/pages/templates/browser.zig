@@ -12,18 +12,20 @@ const style = uic.style;
 const Style = style.Style;
 const El = el.El;
 
-/// The heading over a browser: `title` and `subtitle` stacked on the left, `count` as an
-/// eyebrow on the right.
+/// The heading over a browser: `title` with `count` as an eyebrow on its right, sharing the
+/// title's baseline (the prototype's `.surface-heading`), and `subtitle` under both. The
+/// heading fills its parent's width, so the count sits at the parent's right edge.
 pub fn browser_heading(parent: El, id: []const u8, title: []const u8, subtitle: []const u8, count: []const u8) !El {
     const th = parent.ctx.res.view.theme;
     const heading = try parent.div(id);
     _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
-    const copy = try heading.div("copy");
-    _ = copy.with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try copy.text("title", title)).with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try copy.text("subtitle", subtitle)).with_style(.{Style{ .font = 11, .text = th.dim }});
-    _ = (try heading.text("count", count)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+        .with_flow(.{ .dir = .column, .cross = .start });
+    const top = try heading.div("top");
+    _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(12);
+    _ = (try top.text("title", title)).with_style(.{ style.h3, Style{ .text = th.fg } });
+    _ = (try top.text("count", count)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = (try heading.text("subtitle", subtitle)).with_style(.{Style{ .font = 11, .text = th.dim }});
     return heading;
 }
 

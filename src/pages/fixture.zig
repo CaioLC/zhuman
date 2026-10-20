@@ -61,8 +61,8 @@ pub const Balances = struct {
     vigor: ?struct { v: f32, max: f32 } = null,
     /// Larder units. Null keeps the thin perishable spawn larder.
     food: ?f32 = null,
-    /// Stockpiled generic materials. Null keeps the empty spawn stockpile.
-    materials: ?f32 = null,
+    /// Stockpiled Biomass (displayed as Materials in Act I). Null keeps the empty stockpile.
+    biomass: ?f32 = null,
     /// Metabolism rate multiplier (eating policy). Null keeps the normal rate.
     metabolism: ?f32 = null,
     /// Owned goods by record id. What they grant and modify follows from the catalog through
@@ -177,7 +177,7 @@ pub const catalog = [_]Spec{
         .balances = .{
             .vigor = .{ .v = 14, .max = 15 },
             .food = 11.6,
-            .materials = 31,
+            .biomass = 31,
             .goods = &.{
                 .{ .id = "sandals", .n = 2 },
                 .{ .id = "hatchet", .n = 2 },
@@ -194,7 +194,7 @@ pub const catalog = [_]Spec{
         .about = "Act I BUILD at the reference size: the full recipe table, scrolling when it overflows.",
         .day = 4,
         .view = 1,
-        .balances = .{ .materials = 12 },
+        .balances = .{ .biomass = 12 },
     },
     .{
         .name = "gameover",
@@ -213,7 +213,7 @@ pub const catalog = [_]Spec{
         .balances = .{
             .vigor = .{ .v = 1.5, .max = 10 },
             .food = 0,
-            .materials = 0,
+            .biomass = 0,
         },
     },
     .{
@@ -223,7 +223,7 @@ pub const catalog = [_]Spec{
         .encounter = .present,
         .balances = .{
             .food = 11.6,
-            .materials = 31,
+            .biomass = 31,
             .goods = &.{
                 .{ .id = "sandals", .n = 2 },
                 .{ .id = "hatchet", .n = 2 },
@@ -238,7 +238,7 @@ pub const catalog = [_]Spec{
         .window_w = 760,
         .window_h = 900,
         .day = 19,
-        .balances = .{ .food = 11.6, .materials = 31, .goods = &five_verbs },
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
         .name = "act_one_w560",
@@ -246,7 +246,7 @@ pub const catalog = [_]Spec{
         .window_w = 560,
         .window_h = 900,
         .day = 19,
-        .balances = .{ .food = 11.6, .materials = 31, .goods = &five_verbs },
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
         .name = "act_one_w440",
@@ -254,14 +254,14 @@ pub const catalog = [_]Spec{
         .window_w = 440,
         .window_h = 900,
         .day = 19,
-        .balances = .{ .food = 11.6, .materials = 31, .goods = &five_verbs },
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
         .name = "act_one_hidpi",
         .about = "Act I at the reference width, 2x DPI: hit geometry and text cells at high-DPI.",
         .pixel_density = 2,
         .day = 19,
-        .balances = .{ .food = 11.6, .materials = 31, .goods = &five_verbs },
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
         .name = "act_two_actions",
@@ -366,8 +366,8 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     if (b.food) |f| {
         if (world.get(player, comp.InventoryFood)) |food| food.v = f;
     }
-    if (b.materials) |mat| {
-        if (world.get(player, comp.InventoryMaterial)) |stock| stock.v = mat;
+    if (b.biomass) |mat| {
+        if (world.get(player, comp.InventoryBiomass)) |stock| stock.v = mat;
     }
     if (b.metabolism) |rate| {
         if (world.get(player, comp.Metabolism)) |met| met.rate = res.config.clampMetabolism(rate);
@@ -521,7 +521,7 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     try testing.expect(vigor.v > 0);
     try testing.expect(vigor.max >= 15); // At least the fixture's max, possibly more from health bonuses
     try testing.expectApproxEqAbs(@as(f32, 11.6), rig.world.get(e, comp.InventoryFood).?.v, 1e-4);
-    try testing.expectEqual(@as(f32, 31), rig.world.get(e, comp.InventoryMaterial).?.v);
+    try testing.expectEqual(@as(f32, 31), rig.world.get(e, comp.InventoryBiomass).?.v);
 
     // Check goods counts through Goods component
     const goods = rig.world.get(e, comp.Goods).?;
@@ -574,7 +574,7 @@ test "the default fixture leaves the spawn baseline untouched" {
     // No balances named → rested spawn vigor (10/10), the thin larder, empty stockpile.
     try testing.expectEqual(ha.baselines.vigor_ceiling, rig.world.get(e, comp.Vigor).?.v);
     try testing.expectEqual(ha.baselines.food_units, rig.world.get(e, comp.InventoryFood).?.v);
-    try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryMaterial).?.v);
+    try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
     // No goods specified → should have empty goods component
     const goods = rig.world.get(e, comp.Goods).?;
     const sandals_gi = rig.res.catalog.goodIndex("sandals").?;
@@ -592,7 +592,7 @@ test "the passerby fixture seeds a dealable encounter with a full satchel" {
     try testing.expect(rig.res.sim.encounter.dealable());
     const sched = market.Schedule{};
     try testing.expectEqual(sched.satchel[@intFromEnum(market.Ware.food)], rig.res.sim.encounter.stockOf(.food));
-    try testing.expectEqual(sched.satchel[@intFromEnum(market.Ware.materials)], rig.res.sim.encounter.stockOf(.materials));
+    try testing.expectEqual(sched.satchel[@intFromEnum(market.Ware.biomass)], rig.res.sim.encounter.stockOf(.biomass));
 }
 
 test "the low-stock fixture reaches a danger-toned scarcity state" {
@@ -606,7 +606,7 @@ test "the low-stock fixture reaches a danger-toned scarcity state" {
     // Weary/spent band and an empty larder — the danger tones the screenshot matrix wants.
     try testing.expect(vigor.v / vigor.max <= rig.res.config.weary_frac);
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryFood).?.v);
-    try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryMaterial).?.v);
+    try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
 }
 
 test "seeding is deterministic: the same spec yields identical state twice" {
@@ -627,7 +627,7 @@ test "seeding is deterministic: the same spec yields identical state twice" {
         b.world.get(b.player, comp.Vigor).?.v,
     );
     try testing.expectEqual(
-        a.world.get(a.player, comp.InventoryMaterial).?.v,
-        b.world.get(b.player, comp.InventoryMaterial).?.v,
+        a.world.get(a.player, comp.InventoryBiomass).?.v,
+        b.world.get(b.player, comp.InventoryBiomass).?.v,
     );
 }

@@ -465,7 +465,7 @@ fn spawn_agent(world: *ha.world.World) ha.world.Entity {
     return world.spawn(.{
         comp.Vigor{}, // rested at the ceiling (10/10)
         comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
-        comp.InventoryMaterial{ .v = 0 }, // nothing stockpiled yet
+        comp.InventoryBiomass{ .v = 0 }, // nothing stockpiled yet
         comp.Metabolism{}, // eats continuously from the first breath (normal rate)
         comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
         comp.Generators{}, // collectable capital accumulates independently of the body's work

@@ -9,7 +9,8 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-pub const default_width: f32 = 684;
+/// The trade dialog width — the prototype's `.terminal-dialog` (760px).
+pub const default_width: f32 = 760;
 
 pub const Modal = struct {
     root: *uic.Node,
@@ -27,7 +28,7 @@ pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8, width: f32) !Modal 
     const box = shell.box;
     _ = box.with_size(.{ .fixed = width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{Style{ .fill = th.bg, .outline_color = th.warn }});
+        .with_style(.{Style{ .fill = th.bg, .outline_color = th.acc }});
     return .{ .root = shell.root.get(), .box = box, .width = width, .first_open = shell.first_open, .opener = shell.opener };
 }
 

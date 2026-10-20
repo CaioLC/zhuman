@@ -262,7 +262,7 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
     const msg = std.fmt.bufPrint(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
         lowerName(rec.name, &nbuf),
         salvaged,
-        if (first) |item| ha.actions.itemWord(cat, item) else "units",
+        if (first) |item| ha.actions.itemWord(cat, item, ha.migration.actOf(w, e)) else "units",
     }) catch "You gave up on the build.";
     res.sim.log.push(.warn, msg);
     return true;
@@ -405,7 +405,7 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
         var wrote = false;
         for (receipt.slice()) |d| {
             if (wrote) wr.writeAll(", ") catch {};
-            wr.print("{d:.1} {s}", .{ d.amount, ha.actions.itemWord(cat, d.item) }) catch {};
+            wr.print("{d:.1} {s}", .{ d.amount, ha.actions.itemWord(cat, d.item, ha.migration.actOf(w, e)) }) catch {};
             wrote = true;
         }
         if (restored > 0) {
@@ -441,7 +441,7 @@ fn spawn_test_agent(w: *World, materials: f32) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0.05 },
-        comp.InventoryMaterial{ .v = materials },
+        comp.InventoryBiomass{ .v = materials },
         comp.Goods{},
         comp.Granted{},
     });
@@ -472,7 +472,7 @@ test "build pays upfront and starts the work; finish owns the spear and grants t
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear"));
     try testing.expect(!heldVerb(&w, e, cat, "hunt"));
     try testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
-    try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // spent to 0
+    try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v); // spent to 0
     const b = w.get(e, comp.Busy).?;
     try testing.expect(b.isBuild(rod));
     try testing.expectEqual(res_mod.hours_to_secs(price.hours, res.config.secs_per_day), b.total);
@@ -494,16 +494,16 @@ test "begin refuses when unaffordable or busy; the quote says why" {
     const e = spawn_test_agent(&w, order - 1); // one material short
 
     try testing.expectEqual(Standing.short, quote(&w, e, cat, rod).?.standing);
-    try testing.expectEqualStrings("materials", quote(&w, e, cat, rod).?.short.?.item);
+    try testing.expectEqualStrings("biomass", quote(&w, e, cat, rod).?.short.?.item);
     begin(&w, e, &res, rod);
     try testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
 
-    w.get(e, comp.InventoryMaterial).?.v = order + 12;
+    w.get(e, comp.InventoryBiomass).?.v = order + 12;
     begin(&w, e, &res, rod); // starts the build
     try testing.expectEqual(Standing.busy, quote(&w, e, cat, rod).?.standing);
     begin(&w, e, &res, rod); // busy — must refuse, not double-pay
-    try testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v); // paid once
+    try testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v); // paid once
 
     w.remove(e, comp.Busy);
     finish(&w, e, &res, rod);
@@ -562,7 +562,7 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
     try testing.expectEqual(Standing.needs, quote(&w, e, cat, gloves).?.standing);
     begin(&w, e, &res, gloves);
     try testing.expect(!w.has(e, comp.Busy)); // refused, not a panic
-    try testing.expectEqual(@as(f32, 100), w.get(e, comp.InventoryMaterial).?.v); // unpaid
+    try testing.expectEqual(@as(f32, 100), w.get(e, comp.InventoryBiomass).?.v); // unpaid
 
     acquire(&w, e, &res, hatchet, 1);
     try testing.expect(heldVerb(&w, e, cat, "chop_wood"));
@@ -583,7 +583,7 @@ test "a generator accumulates without moving resources and settles only when col
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = 0.2 }, // exactly one two-day cycle of upkeep
+        comp.InventoryBiomass{ .v = 0.2 }, // exactly one two-day cycle of upkeep
         comp.Goods{},
         comp.Generators{},
         comp.Granted{},
@@ -592,7 +592,7 @@ test "a generator accumulates without moving resources and settles only when col
     w.get(e, comp.Goods).?.count[garden] = 1;
 
     run_generators(&w, &res); // halfway through a 48h cycle
-    try testing.expectApproxEqAbs(@as(f32, 0.2), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0.2), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
     try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
 
@@ -600,7 +600,7 @@ test "a generator accumulates without moving resources and settles only when col
     try testing.expect(generator_quote(&w, e, &res.catalog, res.config, garden).?.ready());
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
     try testing.expect(collect_generator(&w, e, &res, garden));
-    try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v, 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
     try testing.expect(w.get(e, comp.InventoryFood).?.v > 0);
     try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
 }
@@ -611,7 +611,7 @@ fn spawn_settler(w: *World, cat: *const Catalog) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15, max is irrelevant
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the finalized 12
-        comp.InventoryMaterial{ .v = 100 }, // >= the finalized 60 price
+        comp.InventoryBiomass{ .v = 100 }, // >= the finalized 60 price
         comp.Goods{},
         comp.Granted{},
     });
@@ -637,7 +637,7 @@ test "the shelter is offered only once its standing conditions are met" {
     begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
     try testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 16 - 12 energy
-    try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryMaterial).?.v); // 100 - 60
+    try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v); // 100 - 60
 
     // Vigor fell below the absolute 15 mid-build — the work is already paid for, so it stands.
     try testing.expect(!unlockMet(&w, e, cat, shelter));
@@ -696,7 +696,7 @@ test "a recipe that names a technology waits on the board" {
         ,
         .goods =
         \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "materials", .n = 2.0 } }, .tech = "kilns" } }
+        \\     .input = .{ .{ .item = "biomass", .n = 2.0 } }, .tech = "kilns" } }
         ,
         .technologies =
         \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
@@ -707,7 +707,7 @@ test "a recipe that names a technology waits on the board" {
     const cat = &res.catalog;
     const oven = cat.goodIndex("oven").?;
     const kilns = cat.techIndex("kilns").?;
-    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryMaterial{ .v = 2 }, comp.Goods{}, comp.Granted{} });
+    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryBiomass{ .v = 2 }, comp.Goods{}, comp.Granted{} });
 
     // No board at all: nothing is researched.
     try testing.expectEqual(Standing.tech, quote(&w, e, cat, oven).?.standing);
@@ -744,13 +744,13 @@ test "cancel salvages half the build order, frees the body, and grants nothing" 
     const e = spawn_test_agent(&w, order);
 
     begin(&w, e, &res, rod);
-    try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryMaterial).?.v); // paid in full
+    try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v); // paid in full
 
     try testing.expect(cancel_build(&w, e, &res));
     try testing.expect(!w.has(e, comp.Busy)); // the body is free again
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear")); // and owns nothing for the trouble
     try testing.expect(!heldVerb(&w, e, cat, "hunt"));
-    try testing.expectApproxEqAbs(order * res.config.cancel_refund, w.get(e, comp.InventoryMaterial).?.v, 1e-5);
+    try testing.expectApproxEqAbs(order * res.config.cancel_refund, w.get(e, comp.InventoryBiomass).?.v, 1e-5);
     try testing.expectEqualStrings("You gave up on the spear. Salvaged 5 materials.", res.sim.log.get(0).text());
     // The energy is gone with the hours — cancelling is an exit, not an undo.
     try testing.expectEqual(10 - price.energy, w.get(e, comp.Vigor).?.v);
@@ -767,7 +767,7 @@ test "cancel refuses on labor, and on an idle body" {
     w.add(e, comp.Busy{ .doing = .{ .labor = res.catalog.actionIndex("forage").? }, .total = 10, .remaining = 4, .quality = 1 });
     try testing.expect(!cancel_build(&w, e, &res)); // `Busy` covers labor too
     try testing.expect(w.has(e, comp.Busy)); // still foraging
-    try testing.expectEqual(@as(f32, 5), w.get(e, comp.InventoryMaterial).?.v);
+    try testing.expectEqual(@as(f32, 5), w.get(e, comp.InventoryBiomass).?.v);
 }
 
 test "a bought tool supersedes the built one; selling it restores the next-best rank" {

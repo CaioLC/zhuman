@@ -337,6 +337,6 @@ test "match: is: matches either state or type" {
 test "match: combined fields AND together" {
     const row = TestRow{ .name = "Fish", .type_v = "labor", .out_v = "food", .reachable = true };
     try std.testing.expect(matches(&parse("type:labor out:food state:in-reach"), row));
-    try std.testing.expect(!matches(&parse("type:labor out:materials"), row)); // out mismatch
+    try std.testing.expect(!matches(&parse("type:labor out:biomass"), row)); // out mismatch
     try std.testing.expect(matches(&parse("fish -type:tool"), row)); // free hit + negated miss
 }

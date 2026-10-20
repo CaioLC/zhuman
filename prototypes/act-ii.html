@@ -20,15 +20,15 @@
         <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MI</span><span class="lbl-full">MINERALS</span>:</span> <span class="stock-value low" data-resource-balance="minerals">0</span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">BI</span><span class="lbl-full">BIOMASS</span>:</span> <span class="stock-value" data-resource-balance="biomass">30</span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">CO</span><span class="lbl-full">COIN</span>:</span> <span class="stock-value accent" data-coin-balance>42</span></span>
-      </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span></div>
+      </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span><span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span><button class="menu-button" type="button" aria-label="Open menu">MENU</button></div>
     </header>
 
     <div class="page-grid" id="page-grid">
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
-        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Holdings" hidden><span aria-hidden="true">›</span><span class="restore-label">HOLDINGS</span></button>
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
 
         <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
-          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>8 kinds, 22</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Holdings">‹</button></span></h2>
+          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>8 kinds, 22</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
           <ul class="holdings-list">
             <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
             <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
@@ -40,21 +40,27 @@
             <li class="holding-row"><span>Metal stock</span><span>scarce</span></li>
           </ul>
           <hr class="holdings-divider">
-          <h3 class="block-heading">MARGINS</h3>
+          <h3 class="block-heading">FLOWS / DAY</h3>
           <ul class="margin-list">
-            <li class="margin-row"><span>Forage</span><span class="positive">2.0e → 1.7e</span></li>
-            <li class="margin-row"><span>Split wood</span><span class="positive">2.5e → 2.0e</span></li>
-            <li class="margin-row"><span>Food spoilage</span><span class="positive">0.05 → 0.03/day</span></li>
-            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
-            <li class="margin-row"><span>Biomass work</span><span class="positive">time ×0.80</span></li>
+            <li class="margin-row"><span>Food</span><span class="positive">+6/day</span></li>
+            <li class="margin-row"><span>Water</span><span class="danger">−3/day</span></li>
+            <li class="margin-row"><span>Fuel</span><span class="positive">+2/day</span></li>
+            <li class="margin-row"><span>Coin</span><span class="positive">+4/day</span></li>
           </ul>
         </section>
 
         <section class="panel side-note" aria-label="Current body policy and recovery">
           <span class="eyebrow">BODY</span><br>
-          Eating <strong id="body-policy-label">normal</strong>.<br>
-          Food lasts <strong id="food-coverage">10.3d</strong>.<br>
-          Full vigor in <strong id="vigor-recovery">0.4d</strong>.
+          Population <strong class="positive" id="body-population">7</strong> under one roof.<br>
+          Larder feeds all for <strong class="positive" id="food-coverage">10.3d</strong>.<br>
+          Water runs short in <strong class="warn" id="water-runway">3.0d</strong>.<br>
+          Vigor across the hall: <strong class="warn" id="hall-vigor">weary</strong>.
+        </section>
+
+        <section class="policy-tile" aria-labelledby="eating-policy-title">
+          <div class="policy-head"><h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
+          <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
+          <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
         </section>
       </aside>
 
@@ -79,17 +85,12 @@
 
         <section class="catalog-view action-view" id="view-actions" role="tabpanel" aria-labelledby="tab-actions">
           <div class="surface-heading action-heading">
-            <div><h1>ACTIONS</h1><p>What will this body do now?</p></div>
+            <div><h1>ACTIONS</h1><p>What will the settlement do now?</p></div>
             <span class="eyebrow" id="action-catalog-count">20 verbs</span>
           </div>
 
           <div class="build-query-bar action-query-bar">
-            <label class="build-query-field" for="action-query"><span class="build-query-icon" aria-hidden="true">⌕</span><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food in:biomass state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
-            <button class="build-sort-toggle" id="action-sort-toggle" type="button" aria-expanded="false" aria-controls="action-sort-panel" aria-label="Sort actions" title="Sort actions"><span aria-hidden="true">⇅</span></button>
-          </div>
-          <div class="build-sort-panel action-sort-panel" id="action-sort-panel" role="group" aria-label="Action sorting" hidden>
-            <label class="build-sort-control" for="action-sort-kind"><span>Sort by</span><select id="action-sort-kind"><option value="none">None</option><option value="ready">Ready</option><option value="time">Time</option><option value="energy">Energy</option><option value="name">Name</option></select></label>
-            <label class="build-sort-control" for="action-sort-direction"><span>Direction</span><select id="action-sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+            <label class="build-query-field" for="action-query"><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
           </div>
 
           <div class="build-summary action-summary" id="action-summary" aria-live="polite">20 of 20 actions shown</div>
@@ -97,11 +98,6 @@
             <div class="action-grid" id="action-rows"></div>
           </div>
 
-          <section class="policy-tile action-policy" aria-labelledby="eating-policy-title">
-            <div class="policy-head"><h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
-            <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
-            <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
-          </section>
         </section>
 
         <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
@@ -111,17 +107,12 @@
           </div>
 
           <div class="build-query-bar">
-            <label class="build-query-field" for="build-query"><span class="build-query-icon" aria-hidden="true">⌕</span><input id="build-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search recipes · type:generator in:biomass out:food" aria-label="Search and filter recipes"><kbd aria-hidden="true">/</kbd></label>
-            <button class="build-sort-toggle" id="build-sort-toggle" type="button" aria-expanded="false" aria-controls="build-sort-panel" aria-label="Sort recipes" title="Sort recipes"><span aria-hidden="true">⇅</span></button>
-          </div>
-          <div class="build-sort-panel" id="build-sort-panel" role="group" aria-label="Recipe sorting" hidden>
-            <label class="build-sort-control" for="build-sort-kind"><span>Sort by</span><select id="build-sort-kind"><option value="none">None</option><option value="reach">Reach</option><option value="inputs">Cost</option><option value="time">Time</option><option value="name">Name</option></select></label>
-            <label class="build-sort-control" for="build-sort-direction"><span>Direction</span><select id="build-sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+            <label class="build-query-field" for="build-query"><input id="build-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search recipes · type:tool out:food state:ready" aria-label="Search and filter recipes"><kbd aria-hidden="true">/</kbd></label>
           </div>
 
           <div class="build-summary" id="build-summary" aria-live="polite">9 of 50 recipes shown</div>
           <div class="catalog-scroll build-table" id="build-table" tabindex="0" aria-label="Buildable recipes; scroll for more">
-            <div class="build-header" aria-hidden="true"><span>recipe</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
+            <div class="build-header" id="build-header" role="group" aria-label="Sort by column"><button class="sort-header" type="button" data-sort="name">recipe</button><button class="sort-header" type="button" data-sort="inputs">cost</button><button class="sort-header" type="button" data-sort="time">time</button><span>what changes</span><button class="sort-header" type="button" data-sort="state">state</button><span></span></div>
             <div id="build-rows"></div>
           </div>
 
@@ -170,10 +161,10 @@
     </div>
 
     <footer class="screen-footer" id="event-log" aria-label="Event log" aria-live="polite">
-      <div class="log-line"><span class="time">19:08</span><span>A merchant is taking orders beside the east path.</span></div>
-      <div class="log-line"><span class="time">18:22</span><span>The carpenter bench still lacks Biomass and Metal.</span></div>
-      <div class="log-line"><span class="time">17:04</span><span>Seven people now share the settlement's stores.</span></div>
-      <div class="log-line"><span class="time">16:11</span><span>You return with 4 Biomass.</span></div>
+      <div class="log-line"><span class="time">D43 19:08</span><span>A merchant is taking orders beside the east path.</span></div>
+      <div class="log-line"><span class="time">D43 18:22</span><span>The carpenter bench still lacks Biomass and Metal.</span></div>
+      <div class="log-line"><span class="time">D43 17:04</span><span>Seven people now share the settlement's stores.</span></div>
+      <div class="log-line"><span class="time">D43 16:11</span><span>You return with 4 Biomass.</span></div>
     </footer>
   </main>
 
@@ -192,7 +183,7 @@
           <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Biomass" data-cost="Biomass ×6" data-coins="5" data-receive="5 coin" data-effect="Six units leave your Biomass stock as one market lot." data-stock="3" data-resource="biomass" data-quantity="6" hidden><span>Biomass ×6<small>merchant pays 5 coin</small></span><span class="stock-count">×3</span></button>
           <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Planks" data-cost="Planks ×4" data-coins="6" data-receive="6 coin" data-effect="Four finished planks leave your Holdings as one lot." data-stock="2" hidden><span>Planks ×4<small>merchant pays 6 coin</small></span><span class="stock-count">×2</span></button>
           <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-coins="7" data-receive="7 coin" data-effect="A spare pair is sold first; your equipped Sandals keep their Forage margin." data-stock="2" hidden><span>Sandals ×1<small>merchant pays 7 coin</small></span><span class="stock-count">×2</span></button>
-        </div></section>        <section class="trade-preview" aria-label="Merchant trade preview"><div class="preview-line"><span id="preview-give-label">YOU PAY</span><strong id="preview-give">5 coin</strong></div><div class="trade-arrow" aria-hidden="true">⇄</div><div class="preview-line"><span id="preview-receive-label">YOU RECEIVE</span><strong id="preview-receive">Water +6</strong></div><div class="preview-effect" id="preview-effect">Six units enter your Water stock. Local production is not required.</div></section>
+        </div></section>        <section class="trade-preview" aria-label="Merchant trade preview"><div class="preview-line"><span id="preview-give-label">YOU PAY</span><strong id="preview-give">5 coin</strong></div><div class="trade-arrow" aria-hidden="true">↔</div><div class="preview-line"><span id="preview-receive-label">YOU RECEIVE</span><strong id="preview-receive">Water +6</strong></div><div class="preview-effect" id="preview-effect">Six units enter your Water stock. Local production is not required.</div></section>
         <section class="trade-column" aria-labelledby="your-stock-title"><h3 class="column-heading" id="your-stock-title">YOU HOLD</h3><ul class="inventory-list"><li class="inventory-row"><span>Coin</span><strong class="accent" data-coin-balance>42</strong></li><li class="inventory-row"><span>Food</span><strong data-resource-balance="food">23</strong></li><li class="inventory-row"><span>Water</span><strong data-resource-balance="water">0</strong></li><li class="inventory-row"><span>Fuel</span><strong data-resource-balance="fuel">0</strong></li><li class="inventory-row"><span>Metal</span><strong data-resource-balance="metal">0</strong></li><li class="inventory-row"><span>Minerals</span><strong data-resource-balance="minerals">0</strong></li><li class="inventory-row"><span>Biomass</span><strong data-resource-balance="biomass">30</strong></li></ul><p class="side-note">The price is final for this lot. Coin and stock settle together.</p></section>      </div></div>
       <footer class="dialog-footer"><span class="dialog-note" id="market-dialog-note">Coin prices · finite stock · limited market time. Later lots may be repriced.</span><div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">BUY →</button></div></footer>
     </form>
@@ -208,6 +199,7 @@
       };
       const eventLog = document.querySelector('#event-log');
       const prototypeParams = new URLSearchParams(location.search);
+      let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
       const requestedPopulation = prototypeParams.get('population');
       const seededPopulation = requestedPopulation === null ? Number.NaN : Number(requestedPopulation);
       const population = Number.isFinite(seededPopulation) ? Math.max(0, Math.floor(seededPopulation)) : 7;
@@ -280,6 +272,30 @@
       addEventListener('hashchange', () => setView(location.hash.slice(1), false));
       setView(location.hash.slice(1) || 'actions', false);
 
+      // Header speed stepper over pause, 1×, 2×, 3× (the game's `speed_stepper`).
+      const speedStepper = document.querySelector('#speed-stepper');
+      const speedLevel = document.querySelector('#speed-level');
+      const speedLabels = ['PAUSE', '1×', '2×', '3×'];
+      const speedNames = ['Paused', '1× speed', '2× speed', '3× speed'];
+      let speed = 1;
+      function setSpeed(level) {
+        speed = Math.max(0, Math.min(3, level));
+        speedLevel.textContent = speedLabels[speed];
+        speedLevel.classList.toggle('is-paused', speed === 0);
+        speedStepper.setAttribute('aria-valuenow', String(speed));
+        speedStepper.setAttribute('aria-valuetext', speedNames[speed]);
+        speedStepper.querySelector('[data-speed-step="-1"]').disabled = speed === 0;
+        speedStepper.querySelector('[data-speed-step="1"]').disabled = speed === 3;
+      }
+      speedStepper.querySelectorAll('[data-speed-step]').forEach(button => button.addEventListener('click', () => setSpeed(speed + Number(button.dataset.speedStep))));
+      speedStepper.addEventListener('keydown', event => {
+        const steps = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 };
+        if (event.key in steps) { event.preventDefault(); setSpeed(speed + steps[event.key]); }
+        if (event.key === 'Home') { event.preventDefault(); setSpeed(0); }
+        if (event.key === 'End') { event.preventDefault(); setSpeed(3); }
+      });
+      setSpeed(1);
+
       const actionCatalog = [
         { name: 'Forage', type: 'gather', energy: 1.7, time: 4, duration: '4h', inputs: [], outputs: ['food'], yield: '+1–3f', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
         { name: 'Scavenge', type: 'gather', energy: 2.0, time: 5, duration: '5h', inputs: [], outputs: ['biomass', 'minerals'], yield: '+0–7b', distribution: 'exponential', state: 'ready', stateCopy: 'ready' },
@@ -302,20 +318,9 @@
         { name: 'Weave cloth', type: 'craft', energy: 2.2, time: 6, duration: '6h', inputs: ['biomass'], outputs: ['comfort'], yield: '+1 cloth', distribution: 'normal', state: 'short', stateCopy: 'short fiber' },
         { name: 'Treat illness', type: 'care', energy: 1.5, time: 5, duration: '5h', inputs: ['food', 'water'], outputs: ['comfort'], yield: 'recovery +', distribution: 'exponential', state: 'short', stateCopy: 'short herbs' }
       ];
-      const actionSorts = ['none', 'ready', 'time', 'energy', 'name'];
-      const actionDirections = ['asc', 'desc'];
-      const actionControls = {
-        query: prototypeParams.get('actionq') || '',
-        sort: actionSorts.includes(prototypeParams.get('actionsort')) ? prototypeParams.get('actionsort') : 'none',
-        direction: actionDirections.includes(prototypeParams.get('actiondir')) ? prototypeParams.get('actiondir') : 'desc',
-        sortOpen: prototypeParams.get('actionsortopen') === '1'
-      };
-      if (actionControls.sort === 'none') actionControls.direction = 'desc';
+      // Verbs read in authored order (no sorting, as in the game); search only narrows them.
+      const actionControls = { query: prototypeParams.get('actionq') || '' };
       const actionQuery = document.querySelector('#action-query');
-      const actionSortToggle = document.querySelector('#action-sort-toggle');
-      const actionSortPanel = document.querySelector('#action-sort-panel');
-      const actionSortKind = document.querySelector('#action-sort-kind');
-      const actionSortDirection = document.querySelector('#action-sort-direction');
       const actionResults = document.querySelector('#action-results');
       const actionHost = document.querySelector('#action-rows');
       const actionSummary = document.querySelector('#action-summary');
@@ -330,7 +335,7 @@
         row.dataset.duration = action.duration;
         row.dataset.state = action.state;
         row.disabled = action.state !== 'ready';
-        row.innerHTML = `<span class="action-head"><span class="action-name">${escapeActionMarkup(action.name)}</span><span class="action-state">${escapeActionMarkup(action.stateCopy)}</span></span><span class="action-metrics"><span>−${action.energy}e · ${escapeActionMarkup(action.duration)}</span><img class="dist-icon" src="../assets/svg/dist_${action.distribution}.svg" alt="${distributionLabels[action.distribution]}"><span class="yield">${escapeActionMarkup(action.yield)}</span></span>`;
+        row.innerHTML = `<span class="action-name">${escapeActionMarkup(action.name)}</span><span class="action-metrics"><span>−${action.energy}e · ${escapeActionMarkup(action.duration)}</span><img class="dist-icon" src="../assets/svg/dist_${action.distribution}.svg" alt="${distributionLabels[action.distribution]}"><span class="yield">${escapeActionMarkup(action.yield)}</span></span>`;
         actionHost.append(row);
         return { action, row };
       });
@@ -372,54 +377,20 @@
         });
       }
 
-      function syncActionSortControls() {
-        actionSortKind.value = actionControls.sort;
-        actionSortDirection.value = actionControls.direction;
-        actionSortDirection.disabled = actionControls.sort === 'none';
-        actionSortToggle.setAttribute('aria-expanded', String(actionControls.sortOpen));
-        actionSortPanel.hidden = !actionControls.sortOpen;
-      }
-
       function syncActionUrl() {
         const nextUrl = new URL(location.href);
         if (actionControls.query.trim()) nextUrl.searchParams.set('actionq', actionControls.query.trim());
         else nextUrl.searchParams.delete('actionq');
-        if (actionControls.sort !== 'none') nextUrl.searchParams.set('actionsort', actionControls.sort);
-        else nextUrl.searchParams.delete('actionsort');
-        if (actionControls.sort !== 'none' && actionControls.direction !== 'desc') nextUrl.searchParams.set('actiondir', actionControls.direction);
-        else nextUrl.searchParams.delete('actiondir');
-        if (actionControls.sortOpen) nextUrl.searchParams.set('actionsortopen', '1');
-        else nextUrl.searchParams.delete('actionsortopen');
         history.replaceState(null, '', nextUrl);
       }
 
-      function setActionSortPanel(open, updateUrl = true) {
-        actionControls.sortOpen = Boolean(open);
-        syncActionSortControls();
-        if (updateUrl) syncActionUrl();
-      }
-
       function applyActionView(updateUrl = false) {
-        const ordered = [...actionRows];
-        if (actionControls.sort !== 'none') {
-          ordered.sort((a, b) => {
-            let comparison = 0;
-            if (actionControls.sort === 'ready') comparison = Number(a.action.state === 'ready') - Number(b.action.state === 'ready');
-            else if (actionControls.sort === 'time') comparison = a.action.time - b.action.time;
-            else if (actionControls.sort === 'energy') comparison = a.action.energy - b.action.energy;
-            else comparison = a.action.name.localeCompare(b.action.name);
-            if (actionControls.direction === 'desc') comparison *= -1;
-            return comparison || a.action.name.localeCompare(b.action.name);
-          });
-        }
-        ordered.forEach(({ row }) => actionHost.append(row));
         let visible = 0;
         actionRows.forEach(({ action, row }) => {
           row.hidden = !matchesActionQuery(action);
           if (!row.hidden) visible += 1;
         });
         actionSummary.textContent = `${visible} of ${actionCatalog.length} actions shown`;
-        syncActionSortControls();
         if (updateUrl) { actionResults.scrollTop = 0; syncActionUrl(); }
       }
 
@@ -430,20 +401,6 @@
           actionQuery.value = '';
           actionControls.query = '';
           applyActionView(true);
-        }
-      });
-      actionSortToggle.addEventListener('click', () => setActionSortPanel(!actionControls.sortOpen));
-      actionSortKind.addEventListener('change', () => {
-        actionControls.sort = actionSortKind.value;
-        if (actionControls.sort === 'none') actionControls.direction = 'desc';
-        applyActionView(true);
-      });
-      actionSortDirection.addEventListener('change', () => { actionControls.direction = actionSortDirection.value; applyActionView(true); });
-      actionSortPanel.addEventListener('keydown', event => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setActionSortPanel(false);
-          actionSortToggle.focus();
         }
       });
       addEventListener('keydown', event => {
@@ -458,25 +415,13 @@
         actions: actionCatalog,
         controls: actionControls,
         setQuery(value) { actionQuery.value = String(value); actionControls.query = actionQuery.value; applyActionView(true); },
-        setSort(kind, direction = actionControls.direction) {
-          const normalizedKind = kind == null || kind === '' ? 'none' : String(kind);
-          if (!actionSorts.includes(normalizedKind)) return false;
-          if (normalizedKind !== 'none' && !actionDirections.includes(direction)) return false;
-          actionControls.sort = normalizedKind;
-          actionControls.direction = normalizedKind === 'none' ? 'desc' : direction;
-          applyActionView(true);
-          return true;
-        },
-        clearSort() { actionControls.sort = 'none'; actionControls.direction = 'desc'; applyActionView(true); return true; },
-        setSortOpen: open => setActionSortPanel(open),
         visibleNames: () => [...actionHost.querySelectorAll('.action-tile:not([hidden])')].map(row => row.dataset.action)
       };
 
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
-      const bodyPolicyLabel = document.querySelector('#body-policy-label');
       const foodCoverage = document.querySelector('#food-coverage');
-      const vigorRecovery = document.querySelector('#vigor-recovery');
+      document.querySelector('#body-population').textContent = String(population);
       const eatingWords = [
         { max: 12, word: 'meager' },
         { max: 28, word: 'lean' },
@@ -494,13 +439,10 @@
         const word = eatingWords.find(entry => value <= entry.max).word;
         const rate = 0.5 * Math.pow(4, value / 100);
         const coverage = bodyConfig.baseCoverage / rate;
-        const recovery = bodyConfig.baseRecovery / rate;
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
-        bodyPolicyLabel.textContent = word;
         foodCoverage.textContent = `${coverage.toFixed(1)}d`;
-        vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
       }
 
       const seededEating = prototypeParams.get('eating');
@@ -530,8 +472,8 @@
 
       const buildRecipes = [
         { name: 'Garden bed', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '8 biomass 4e', inputCost: 8, time: 0.7, effect: 'grows Food on its own', state: 'ready', reach: 1, stateCopy: 'ready' },
-        { name: 'Ropewalk', type: 'generator', inputs: ['biomass'], outputs: ['rope'], cost: '14 biomass 3e', inputCost: 14, time: 0.8, effect: 'turns Biomass into rope', state: 'locked', reach: 1, tech: 'Loom & ropewalk' },
-        { name: 'Fishing net', type: 'tool', inputs: ['biomass'], outputs: ['food'], cost: '12 biomass 2e', inputCost: 12, time: 1.2, effect: 'raises fish yield', state: 'locked', reach: 1, tech: 'Net fishery' },
+        { name: 'Ropewalk', type: 'generator', inputs: ['biomass'], outputs: ['rope'], cost: '14 biomass 3e', inputCost: 14, time: 0.8, effect: 'turns Biomass into rope', state: 'blocked', reach: 1, tech: 'Loom & ropewalk' },
+        { name: 'Fishing net', type: 'tool', inputs: ['biomass'], outputs: ['food'], cost: '12 biomass 2e', inputCost: 12, time: 1.2, effect: 'raises fish yield', state: 'blocked', reach: 1, tech: 'Net fishery' },
         { name: 'Cut stone', type: 'material', inputs: ['minerals'], outputs: ['minerals'], cost: '12 minerals 4e', inputCost: 12, time: 1.1, effect: 'worked stone stock', state: 'reach', reach: 0.75, stateCopy: '9/12 minerals' },
         { name: 'Carpenter bench', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['tools'], cost: '24 biomass 2 metal 3e', inputCost: 26, time: 2.4, effect: 'complex wood capital', state: 'reach', reach: 0.65, stateCopy: '18/24 biomass · 1/2 metal' },
         { name: 'Forge', type: 'generator', inputs: ['minerals', 'biomass', 'metal'], outputs: ['metal'], cost: '10 minerals 8 biomass 4 metal 4e', inputCost: 22, time: 2.3, effect: 'metalworking site', state: 'reach', reach: 0.35, stateCopy: 'short 1 mineral · 3 metal' },
@@ -539,64 +481,64 @@
         { name: 'Hand tools', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['tools'], cost: '10 metal 8 biomass 2e', inputCost: 18, time: 1.4, effect: 'general work takes less time', state: 'reach', reach: 0.42, stateCopy: 'short 10 metal' },
         { name: 'Water cistern', type: 'storage', inputs: ['minerals', 'metal'], outputs: ['water'], cost: '24 minerals 6 metal 4e', inputCost: 30, time: 2.0, effect: 'buffers Water supply', state: 'reach', reach: 0.30, stateCopy: 'short 24 minerals · 6 metal' },
         { name: 'Cart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '24 biomass 8 metal 4e', inputCost: 32, time: 2.2, effect: 'moves local goods faster', state: 'reach', reach: 0.28, stateCopy: 'short 8 metal' },
-        { name: 'Granary', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '20 biomass 16 minerals 5e', inputCost: 36, time: 2.8, effect: 'stores Food at settlement scale', state: 'locked', reach: 0.25, tech: 'Granary' },
-        { name: 'Irrigation pump', type: 'generator', inputs: ['metal', 'biomass'], outputs: ['water'], cost: '28 metal 16 biomass 6e', inputCost: 44, time: 3.4, effect: 'moves Water without river access', state: 'locked', reach: 0.22, tech: 'Pumping station' },
-        { name: 'Grain mill', type: 'generator', inputs: ['biomass', 'metal', 'minerals'], outputs: ['food'], cost: '20 biomass 16 metal 12 minerals 7e', inputCost: 48, time: 3.5, effect: 'multiplies prepared Food output', state: 'locked', reach: 0.20, tech: 'Food processing' },
-        { name: 'Steam engine', type: 'generator', inputs: ['metal', 'fuel', 'water'], outputs: ['power'], cost: '28 metal 18 fuel 10 water 8e', inputCost: 56, time: 5.2, effect: 'turns Fuel and Water into power', state: 'locked', reach: 0.18, tech: 'Steam engine' },
-        { name: 'River barge', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '42 biomass 16 metal 6e', inputCost: 58, time: 4.8, effect: 'moves bulk goods by Water', state: 'locked', reach: 0.17, tech: 'Fishing boats' },
-        { name: 'Brick press', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '32 minerals 10 fuel 5e', inputCost: 42, time: 3.1, effect: 'standardizes structural brick', state: 'locked', reach: 0.16, tech: 'Brickworks' },
-        { name: 'Glass pane', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '30 minerals 16 fuel 6e', inputCost: 46, time: 3.6, effect: 'weatherproofs lit interiors', state: 'locked', reach: 0.14, tech: 'Glassblowing' },
-        { name: 'Work clothes', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '24 biomass 3e', inputCost: 24, time: 1.7, effect: 'reduces exposure and strain', state: 'locked', reach: 0.12, tech: 'Loom & ropewalk' },
-        { name: 'Bathhouse', type: 'comfort', inputs: ['minerals', 'water', 'fuel'], outputs: ['comfort'], cost: '28 minerals 14 water 10 fuel 8e', inputCost: 52, time: 4.0, effect: 'raises shared health and comfort', state: 'locked', reach: 0.10, tech: 'Sanitation' },
-        { name: 'Plough team', type: 'tool', inputs: ['biomass', 'metal', 'food'], outputs: ['food'], cost: '18 biomass 12 metal 8 food 6e', inputCost: 38, time: 2.9, effect: 'raises field Food yield', state: 'locked', reach: 0.08, tech: 'Animal husbandry' },
+        { name: 'Granary', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '20 biomass 16 minerals 5e', inputCost: 36, time: 2.8, effect: 'stores Food at settlement scale', state: 'blocked', reach: 0.25, tech: 'Granary' },
+        { name: 'Irrigation pump', type: 'generator', inputs: ['metal', 'biomass'], outputs: ['water'], cost: '28 metal 16 biomass 6e', inputCost: 44, time: 3.4, effect: 'moves Water without river access', state: 'blocked', reach: 0.22, tech: 'Pumping station' },
+        { name: 'Grain mill', type: 'generator', inputs: ['biomass', 'metal', 'minerals'], outputs: ['food'], cost: '20 biomass 16 metal 12 minerals 7e', inputCost: 48, time: 3.5, effect: 'multiplies prepared Food output', state: 'blocked', reach: 0.20, tech: 'Food processing' },
+        { name: 'Steam engine', type: 'generator', inputs: ['metal', 'fuel', 'water'], outputs: ['power'], cost: '28 metal 18 fuel 10 water 8e', inputCost: 56, time: 5.2, effect: 'turns Fuel and Water into power', state: 'blocked', reach: 0.18, tech: 'Steam engine' },
+        { name: 'River barge', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '42 biomass 16 metal 6e', inputCost: 58, time: 4.8, effect: 'moves bulk goods by Water', state: 'blocked', reach: 0.17, tech: 'Fishing boats' },
+        { name: 'Brick press', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '32 minerals 10 fuel 5e', inputCost: 42, time: 3.1, effect: 'standardizes structural brick', state: 'blocked', reach: 0.16, tech: 'Brickworks' },
+        { name: 'Glass pane', type: 'material', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '30 minerals 16 fuel 6e', inputCost: 46, time: 3.6, effect: 'weatherproofs lit interiors', state: 'blocked', reach: 0.14, tech: 'Glassblowing' },
+        { name: 'Work clothes', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '24 biomass 3e', inputCost: 24, time: 1.7, effect: 'reduces exposure and strain', state: 'blocked', reach: 0.12, tech: 'Loom & ropewalk' },
+        { name: 'Bathhouse', type: 'comfort', inputs: ['minerals', 'water', 'fuel'], outputs: ['comfort'], cost: '28 minerals 14 water 10 fuel 8e', inputCost: 52, time: 4.0, effect: 'raises shared health and comfort', state: 'blocked', reach: 0.10, tech: 'Sanitation' },
+        { name: 'Plough team', type: 'tool', inputs: ['biomass', 'metal', 'food'], outputs: ['food'], cost: '18 biomass 12 metal 8 food 6e', inputCost: 38, time: 2.9, effect: 'raises field Food yield', state: 'blocked', reach: 0.08, tech: 'Animal husbandry' },
         { name: 'Handcart', type: 'transport', inputs: ['biomass', 'metal'], outputs: ['transport'], cost: '16 biomass 4 metal 3e', inputCost: 20, time: 1.5, effect: 'moves hand-carried loads farther', state: 'reach', reach: 0.58, stateCopy: 'short 4 metal' },
-        { name: 'Smokehouse', type: 'storage', inputs: ['biomass', 'fuel'], outputs: ['food'], cost: '20 biomass 8 fuel 4e', inputCost: 28, time: 2.1, effect: 'preserves meat and fish', state: 'locked', reach: 0.55, tech: 'Food preservation' },
-        { name: 'Well bucket', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['water'], cost: '12 biomass 2 metal 2e', inputCost: 14, time: 0.9, effect: 'raises Water drawing yield', state: 'locked', reach: 0.52, tech: 'Spring well' },
-        { name: 'Clay crock', type: 'storage', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '14 minerals 4 fuel 2e', inputCost: 18, time: 1.0, effect: 'stores prepared Food in sealed lots', state: 'locked', reach: 0.50, tech: 'Pottery' },
-        { name: 'Saw pit', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['biomass'], cost: '20 biomass 6 metal 4e', inputCost: 26, time: 2.0, effect: 'turns timber into regular boards', state: 'locked', reach: 0.48, tech: 'Sawmill' },
-        { name: 'Timber wall', type: 'material', inputs: ['biomass'], outputs: ['comfort'], cost: '34 biomass 5e', inputCost: 34, time: 2.7, effect: 'shelters a larger common boundary', state: 'locked', reach: 0.46, tech: 'Timber framing' },
-        { name: 'Lime kiln', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '26 minerals 12 fuel 5e', inputCost: 38, time: 3.0, effect: 'produces mortar and whitewash', state: 'locked', reach: 0.44, tech: 'Lime burning' },
-        { name: 'Weaver frame', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['comfort'], cost: '22 biomass 4 metal 4e', inputCost: 26, time: 2.2, effect: 'turns fiber into regular cloth', state: 'locked', reach: 0.41, tech: 'Loom & ropewalk' },
-        { name: 'Bakery oven', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '24 minerals 10 fuel 5e', inputCost: 34, time: 2.8, effect: 'bakes Food in settlement batches', state: 'locked', reach: 0.39, tech: 'Food processing' },
-        { name: 'Apiary', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '26 biomass 4e', inputCost: 26, time: 2.4, effect: 'adds honey and wax yield', state: 'locked', reach: 0.37, tech: 'Apiculture' },
-        { name: 'Tannery', type: 'material', inputs: ['water', 'biomass'], outputs: ['comfort'], cost: '18 water 24 biomass 6e', inputCost: 42, time: 3.3, effect: 'turns hides into durable leather', state: 'locked', reach: 0.34, tech: 'Tanning' },
-        { name: 'Sail loft', type: 'tool', inputs: ['biomass'], outputs: ['transport'], cost: '36 biomass 6e', inputCost: 36, time: 3.2, effect: 'equips boats for longer routes', state: 'locked', reach: 0.32, tech: 'Fishing boats' },
-        { name: 'Waterwheel', type: 'generator', inputs: ['biomass', 'metal'], outputs: ['power'], cost: '42 biomass 12 metal 7e', inputCost: 54, time: 4.1, effect: 'turns stream flow into shaft power', state: 'locked', reach: 0.30, tech: 'Water power' },
-        { name: 'Canal lock', type: 'transport', inputs: ['minerals', 'biomass', 'metal'], outputs: ['transport'], cost: '48 minerals 28 biomass 14 metal 9e', inputCost: 90, time: 6.0, effect: 'moves barges between water levels', state: 'locked', reach: 0.27, tech: 'Canal engineering' },
-        { name: 'Warehouse', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['storage'], cost: '44 biomass 32 minerals 8e', inputCost: 76, time: 5.0, effect: 'consolidates settlement trade stock', state: 'locked', reach: 0.25, tech: 'Warehousing' },
-        { name: 'Seed drill', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['food'], cost: '22 metal 18 biomass 6e', inputCost: 40, time: 3.4, effect: 'reduces seed and planting labor', state: 'locked', reach: 0.23, tech: 'Seed drill' },
-        { name: 'Printing press', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['comfort'], cost: '30 metal 24 biomass 8e', inputCost: 54, time: 4.6, effect: 'duplicates records and instructions', state: 'locked', reach: 0.21, tech: 'Printing press' },
-        { name: 'Infirmary', type: 'comfort', inputs: ['biomass', 'minerals', 'water'], outputs: ['comfort'], cost: '34 biomass 24 minerals 12 water 8e', inputCost: 70, time: 4.5, effect: 'concentrates care and recovery', state: 'locked', reach: 0.20, tech: 'Sanitation' },
-        { name: 'Street lamp', type: 'comfort', inputs: ['metal', 'fuel'], outputs: ['comfort'], cost: '18 metal 14 fuel 5e', inputCost: 32, time: 2.7, effect: 'extends safe movement after dark', state: 'locked', reach: 0.19, tech: 'Gas lighting' },
-        { name: 'Brewery', type: 'comfort', inputs: ['food', 'water', 'fuel'], outputs: ['comfort'], cost: '22 food 18 water 12 fuel 7e', inputCost: 52, time: 4.0, effect: 'turns grain into a storable drink', state: 'locked', reach: 0.18, tech: 'Brewing' },
-        { name: 'Foundry', type: 'generator', inputs: ['minerals', 'metal', 'fuel'], outputs: ['metal'], cost: '40 minerals 24 metal 20 fuel 10e', inputCost: 84, time: 6.2, effect: 'casts repeatable Metal components', state: 'locked', reach: 0.17, tech: 'Foundry' },
-        { name: 'Machine shop', type: 'tool', inputs: ['metal', 'fuel'], outputs: ['tools'], cost: '46 metal 18 fuel 11e', inputCost: 64, time: 6.5, effect: 'makes interchangeable machine parts', state: 'locked', reach: 0.16, tech: 'Machine tools' },
-        { name: 'Rail cart', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '38 metal 22 biomass 9e', inputCost: 60, time: 5.4, effect: 'moves heavy lots on fixed rails', state: 'locked', reach: 0.15, tech: 'Rail transport' },
-        { name: 'Telegraph station', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '34 metal 20 biomass 9e', inputCost: 54, time: 5.0, effect: 'coordinates distant market messages', state: 'locked', reach: 0.14, tech: 'Telegraphy' },
-        { name: 'Pump house', type: 'generator', inputs: ['metal', 'fuel', 'minerals'], outputs: ['water'], cost: '32 metal 20 fuel 18 minerals 9e', inputCost: 70, time: 5.1, effect: 'pressurizes Water for a district', state: 'locked', reach: 0.13, tech: 'Pumping station' },
-        { name: 'Cold store', type: 'storage', inputs: ['metal', 'fuel', 'minerals'], outputs: ['food'], cost: '36 metal 24 fuel 20 minerals 10e', inputCost: 80, time: 5.8, effect: 'slows Food loss at market scale', state: 'locked', reach: 0.12, tech: 'Refrigeration' },
-        { name: 'Assembly hall', type: 'comfort', inputs: ['biomass', 'minerals'], outputs: ['comfort'], cost: '52 biomass 38 minerals 10e', inputCost: 90, time: 6.0, effect: 'gives collective decisions a place', state: 'locked', reach: 0.11, tech: 'Civic administration' },
-        { name: 'Cement mixer', type: 'material', inputs: ['minerals', 'metal', 'fuel'], outputs: ['minerals'], cost: '42 minerals 18 metal 12 fuel 9e', inputCost: 72, time: 4.9, effect: 'mixes structural cement consistently', state: 'locked', reach: 0.10, tech: 'Portland cement' },
+        { name: 'Smokehouse', type: 'storage', inputs: ['biomass', 'fuel'], outputs: ['food'], cost: '20 biomass 8 fuel 4e', inputCost: 28, time: 2.1, effect: 'preserves meat and fish', state: 'blocked', reach: 0.55, tech: 'Food preservation' },
+        { name: 'Well bucket', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['water'], cost: '12 biomass 2 metal 2e', inputCost: 14, time: 0.9, effect: 'raises Water drawing yield', state: 'blocked', reach: 0.52, tech: 'Spring well' },
+        { name: 'Clay crock', type: 'storage', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '14 minerals 4 fuel 2e', inputCost: 18, time: 1.0, effect: 'stores prepared Food in sealed lots', state: 'blocked', reach: 0.50, tech: 'Pottery' },
+        { name: 'Saw pit', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['biomass'], cost: '20 biomass 6 metal 4e', inputCost: 26, time: 2.0, effect: 'turns timber into regular boards', state: 'blocked', reach: 0.48, tech: 'Sawmill' },
+        { name: 'Timber wall', type: 'material', inputs: ['biomass'], outputs: ['comfort'], cost: '34 biomass 5e', inputCost: 34, time: 2.7, effect: 'shelters a larger common boundary', state: 'blocked', reach: 0.46, tech: 'Timber framing' },
+        { name: 'Lime kiln', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['minerals'], cost: '26 minerals 12 fuel 5e', inputCost: 38, time: 3.0, effect: 'produces mortar and whitewash', state: 'blocked', reach: 0.44, tech: 'Lime burning' },
+        { name: 'Weaver frame', type: 'tool', inputs: ['biomass', 'metal'], outputs: ['comfort'], cost: '22 biomass 4 metal 4e', inputCost: 26, time: 2.2, effect: 'turns fiber into regular cloth', state: 'blocked', reach: 0.41, tech: 'Loom & ropewalk' },
+        { name: 'Bakery oven', type: 'generator', inputs: ['minerals', 'fuel'], outputs: ['food'], cost: '24 minerals 10 fuel 5e', inputCost: 34, time: 2.8, effect: 'bakes Food in settlement batches', state: 'blocked', reach: 0.39, tech: 'Food processing' },
+        { name: 'Apiary', type: 'generator', inputs: ['biomass'], outputs: ['food'], cost: '26 biomass 4e', inputCost: 26, time: 2.4, effect: 'adds honey and wax yield', state: 'blocked', reach: 0.37, tech: 'Apiculture' },
+        { name: 'Tannery', type: 'material', inputs: ['water', 'biomass'], outputs: ['comfort'], cost: '18 water 24 biomass 6e', inputCost: 42, time: 3.3, effect: 'turns hides into durable leather', state: 'blocked', reach: 0.34, tech: 'Tanning' },
+        { name: 'Sail loft', type: 'tool', inputs: ['biomass'], outputs: ['transport'], cost: '36 biomass 6e', inputCost: 36, time: 3.2, effect: 'equips boats for longer routes', state: 'blocked', reach: 0.32, tech: 'Fishing boats' },
+        { name: 'Waterwheel', type: 'generator', inputs: ['biomass', 'metal'], outputs: ['power'], cost: '42 biomass 12 metal 7e', inputCost: 54, time: 4.1, effect: 'turns stream flow into shaft power', state: 'blocked', reach: 0.30, tech: 'Water power' },
+        { name: 'Canal lock', type: 'transport', inputs: ['minerals', 'biomass', 'metal'], outputs: ['transport'], cost: '48 minerals 28 biomass 14 metal 9e', inputCost: 90, time: 6.0, effect: 'moves barges between water levels', state: 'blocked', reach: 0.27, tech: 'Canal engineering' },
+        { name: 'Warehouse', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['storage'], cost: '44 biomass 32 minerals 8e', inputCost: 76, time: 5.0, effect: 'consolidates settlement trade stock', state: 'blocked', reach: 0.25, tech: 'Warehousing' },
+        { name: 'Seed drill', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['food'], cost: '22 metal 18 biomass 6e', inputCost: 40, time: 3.4, effect: 'reduces seed and planting labor', state: 'blocked', reach: 0.23, tech: 'Seed drill' },
+        { name: 'Printing press', type: 'tool', inputs: ['metal', 'biomass'], outputs: ['comfort'], cost: '30 metal 24 biomass 8e', inputCost: 54, time: 4.6, effect: 'duplicates records and instructions', state: 'blocked', reach: 0.21, tech: 'Printing press' },
+        { name: 'Infirmary', type: 'comfort', inputs: ['biomass', 'minerals', 'water'], outputs: ['comfort'], cost: '34 biomass 24 minerals 12 water 8e', inputCost: 70, time: 4.5, effect: 'concentrates care and recovery', state: 'blocked', reach: 0.20, tech: 'Sanitation' },
+        { name: 'Street lamp', type: 'comfort', inputs: ['metal', 'fuel'], outputs: ['comfort'], cost: '18 metal 14 fuel 5e', inputCost: 32, time: 2.7, effect: 'extends safe movement after dark', state: 'blocked', reach: 0.19, tech: 'Gas lighting' },
+        { name: 'Brewery', type: 'comfort', inputs: ['food', 'water', 'fuel'], outputs: ['comfort'], cost: '22 food 18 water 12 fuel 7e', inputCost: 52, time: 4.0, effect: 'turns grain into a storable drink', state: 'blocked', reach: 0.18, tech: 'Brewing' },
+        { name: 'Foundry', type: 'generator', inputs: ['minerals', 'metal', 'fuel'], outputs: ['metal'], cost: '40 minerals 24 metal 20 fuel 10e', inputCost: 84, time: 6.2, effect: 'casts repeatable Metal components', state: 'blocked', reach: 0.17, tech: 'Foundry' },
+        { name: 'Machine shop', type: 'tool', inputs: ['metal', 'fuel'], outputs: ['tools'], cost: '46 metal 18 fuel 11e', inputCost: 64, time: 6.5, effect: 'makes interchangeable machine parts', state: 'blocked', reach: 0.16, tech: 'Machine tools' },
+        { name: 'Rail cart', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '38 metal 22 biomass 9e', inputCost: 60, time: 5.4, effect: 'moves heavy lots on fixed rails', state: 'blocked', reach: 0.15, tech: 'Rail transport' },
+        { name: 'Telegraph station', type: 'transport', inputs: ['metal', 'biomass'], outputs: ['transport'], cost: '34 metal 20 biomass 9e', inputCost: 54, time: 5.0, effect: 'coordinates distant market messages', state: 'blocked', reach: 0.14, tech: 'Telegraphy' },
+        { name: 'Pump house', type: 'generator', inputs: ['metal', 'fuel', 'minerals'], outputs: ['water'], cost: '32 metal 20 fuel 18 minerals 9e', inputCost: 70, time: 5.1, effect: 'pressurizes Water for a district', state: 'blocked', reach: 0.13, tech: 'Pumping station' },
+        { name: 'Cold store', type: 'storage', inputs: ['metal', 'fuel', 'minerals'], outputs: ['food'], cost: '36 metal 24 fuel 20 minerals 10e', inputCost: 80, time: 5.8, effect: 'slows Food loss at market scale', state: 'blocked', reach: 0.12, tech: 'Refrigeration' },
+        { name: 'Assembly hall', type: 'comfort', inputs: ['biomass', 'minerals'], outputs: ['comfort'], cost: '52 biomass 38 minerals 10e', inputCost: 90, time: 6.0, effect: 'gives collective decisions a place', state: 'blocked', reach: 0.11, tech: 'Civic administration' },
+        { name: 'Cement mixer', type: 'material', inputs: ['minerals', 'metal', 'fuel'], outputs: ['minerals'], cost: '42 minerals 18 metal 12 fuel 9e', inputCost: 72, time: 4.9, effect: 'mixes structural cement consistently', state: 'blocked', reach: 0.10, tech: 'Portland cement' },
         { name: 'Leaf bed', type: 'comfort', inputs: ['biomass'], outputs: ['comfort'], cost: '8 biomass 2e', inputCost: 8, time: 0.4, effect: 'raises vigor ceiling', state: 'owned', reach: 1, owned: 1 },
         { name: 'Root cellar', type: 'storage', inputs: ['biomass', 'minerals'], outputs: ['food'], cost: '8 biomass 10 minerals 4e', inputCost: 18, time: 1.4, effect: 'keeps Food twice as long', state: 'owned', reach: 1, owned: 1 }
       ];
-      const validBuildSorts = ['none', 'reach', 'inputs', 'time', 'name'];
+      // Column-header sorting (the game's `nextSort`): a new column opens in its natural
+      // direction — STATE nearest-first, the rest cheapest/quickest/A–Z — and clicking the
+      // column in force flips it.
+      const validBuildSorts = ['state', 'inputs', 'time', 'name'];
       const validBuildDirections = ['asc', 'desc'];
+      const naturalDirection = sort => sort === 'state' ? 'desc' : 'asc';
+      const seededSort = validBuildSorts.includes(prototypeParams.get('buildsort')) ? prototypeParams.get('buildsort') : 'state';
       const controls = {
-        sort: validBuildSorts.includes(prototypeParams.get('buildsort')) ? prototypeParams.get('buildsort') : 'reach',
-        direction: validBuildDirections.includes(prototypeParams.get('builddir')) ? prototypeParams.get('builddir') : 'desc',
-        query: prototypeParams.get('buildq') || '',
-        sortOpen: prototypeParams.get('buildsortopen') === '1'
+        sort: seededSort,
+        direction: validBuildDirections.includes(prototypeParams.get('builddir')) ? prototypeParams.get('builddir') : naturalDirection(seededSort),
+        query: prototypeParams.get('buildq') || ''
       };
-      if (controls.sort === 'none') controls.direction = 'desc';
       const rowHost = document.querySelector('#build-rows');
       const buildTable = document.querySelector('#build-table');
       const summary = document.querySelector('#build-summary');
       const buildQuery = document.querySelector('#build-query');
-      const buildSortToggle = document.querySelector('#build-sort-toggle');
-      const buildSortPanel = document.querySelector('#build-sort-panel');
-      const buildSortKind = document.querySelector('#build-sort-kind');
-      const buildSortDirection = document.querySelector('#build-sort-direction');
+      const buildSortHeaders = [...document.querySelectorAll('#build-header [data-sort]')];
       const markupEscapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
       const escapeMarkup = value => String(value).replace(/[&<>"']/g, character => markupEscapes[character]);
       const recipeByRow = new Map();
@@ -610,6 +552,7 @@
       function recipeStateMarkup(recipe) {
         if (recipe.state === 'ready') return '<span class="state-copy state-ready">ready</span>';
         if (recipe.state === 'owned') return `<span class="state-copy">owned ×${recipe.owned || 1}</span>`;
+        if (recipe.state === 'blocked') return `<span class="state-copy state-blocked">needs ${escapeMarkup(recipe.tech)}</span>`;
         return `${reachMeter(recipe.reach)}<span class="state-copy">${escapeMarkup(recipe.stateCopy || 'out of reach')}</span>`;
       }
 
@@ -699,49 +642,41 @@
       }
 
       function syncBuildSortControls() {
-        buildSortKind.value = controls.sort;
-        buildSortDirection.value = controls.direction;
-        buildSortDirection.disabled = controls.sort === 'none';
-        buildSortToggle.setAttribute('aria-expanded', String(controls.sortOpen));
-        buildSortPanel.hidden = !controls.sortOpen;
+        buildSortHeaders.forEach(header => {
+          if (header.dataset.sort === controls.sort) header.setAttribute('aria-sort', controls.direction === 'asc' ? 'ascending' : 'descending');
+          else header.removeAttribute('aria-sort');
+        });
       }
 
       function syncBuildUrl() {
         const nextUrl = new URL(location.href);
         if (controls.query.trim()) nextUrl.searchParams.set('buildq', controls.query.trim());
         else nextUrl.searchParams.delete('buildq');
-        if (controls.sort !== 'reach') nextUrl.searchParams.set('buildsort', controls.sort);
+        if (controls.sort !== 'state') nextUrl.searchParams.set('buildsort', controls.sort);
         else nextUrl.searchParams.delete('buildsort');
-        if (controls.sort !== 'none' && controls.direction !== 'desc') nextUrl.searchParams.set('builddir', controls.direction);
+        if (controls.direction !== naturalDirection(controls.sort)) nextUrl.searchParams.set('builddir', controls.direction);
         else nextUrl.searchParams.delete('builddir');
-        if (controls.sortOpen) nextUrl.searchParams.set('buildsortopen', '1');
-        else nextUrl.searchParams.delete('buildsortopen');
         nextUrl.searchParams.delete('buildshow');
         nextUrl.searchParams.delete('built');
         history.replaceState(null, '', nextUrl);
       }
 
-      function setBuildSortPanel(open, updateUrl = true) {
-        controls.sortOpen = Boolean(open);
-        syncBuildSortControls();
-        if (updateUrl) syncBuildUrl();
-      }
+      // How near a state is to "build it now": ready, in reach (nearest first), owned, locked.
+      const stateRank = { ready: 5, reach: 3, owned: 2, blocked: 1 };
 
       function applyBuildView(updateUrl = false) {
         const ordered = [...rows];
-        if (controls.sort !== 'none') {
-          ordered.sort((a, b) => {
-            const first = recipeByRow.get(a);
-            const second = recipeByRow.get(b);
-            let comparison = 0;
-            if (controls.sort === 'inputs') comparison = first.inputCost - second.inputCost;
-            else if (controls.sort === 'time') comparison = first.time - second.time;
-            else if (controls.sort === 'name') comparison = first.name.localeCompare(second.name);
-            else comparison = first.reach - second.reach;
-            if (controls.direction === 'desc') comparison *= -1;
-            return comparison || first.name.localeCompare(second.name);
-          });
-        }
+        ordered.sort((a, b) => {
+          const first = recipeByRow.get(a);
+          const second = recipeByRow.get(b);
+          let comparison = 0;
+          if (controls.sort === 'inputs') comparison = first.inputCost - second.inputCost;
+          else if (controls.sort === 'time') comparison = first.time - second.time;
+          else if (controls.sort === 'name') comparison = first.name.localeCompare(second.name);
+          else comparison = ((stateRank[first.state] ?? 0) - (stateRank[second.state] ?? 0)) || (first.reach - second.reach);
+          if (controls.direction === 'desc') comparison *= -1;
+          return comparison || first.name.localeCompare(second.name);
+        });
         if (buildingRow) {
           const buildingIndex = ordered.indexOf(buildingRow);
           if (buildingIndex > 0) ordered.unshift(...ordered.splice(buildingIndex, 1));
@@ -749,18 +684,12 @@
         ordered.forEach(row => rowHost.append(row));
 
         const hasQuery = Boolean(controls.query.trim());
-        const defaultRows = new Set(ordered.filter(row => {
-          const recipe = recipeByRow.get(row);
-          const state = row.dataset.state;
-          return state !== 'owned' && (state === 'ready' || (state === 'reach' && recipe.reach >= 0.5));
-        }));
         let visible = 0;
         rows.forEach(row => {
           const recipe = recipeByRow.get(row);
           const always = row === buildingRow;
-          const locked = row.dataset.state === 'locked';
-          const queryVisible = matchesBuildQuery(recipe, row);
-          row.hidden = locked ? !always : !(always || (hasQuery ? queryVisible : defaultRows.has(row)));
+          // The blank shelf is every recipe of the act; a query only narrows it.
+          row.hidden = !(always || !hasQuery || matchesBuildQuery(recipe, row));
           if (!row.hidden) visible += 1;
         });
         summary.textContent = `${visible} of ${rows.length} recipes shown`;
@@ -777,23 +706,12 @@
           applyBuildView(true);
         }
       });
-      buildSortToggle.addEventListener('click', () => setBuildSortPanel(!controls.sortOpen));
-      buildSortKind.addEventListener('change', () => {
-        controls.sort = buildSortKind.value;
-        if (controls.sort === 'none') controls.direction = 'desc';
+      buildSortHeaders.forEach(header => header.addEventListener('click', () => {
+        const clicked = header.dataset.sort;
+        if (clicked === controls.sort) controls.direction = controls.direction === 'desc' ? 'asc' : 'desc';
+        else { controls.sort = clicked; controls.direction = naturalDirection(clicked); }
         applyBuildView(true);
-      });
-      buildSortDirection.addEventListener('change', () => {
-        controls.direction = buildSortDirection.value;
-        applyBuildView(true);
-      });
-      buildSortPanel.addEventListener('keydown', event => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setBuildSortPanel(false);
-          buildSortToggle.focus();
-        }
-      });
+      }));
       addEventListener('keydown', event => {
         const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
         if (activeView === 'build' && event.key === '/' && !editable && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -849,8 +767,8 @@
       window.setPrototypeRecipeUnlocked = (name, unlocked) => {
         const recipe = buildRecipes.find(candidate => candidate.name === name);
         if (!recipe?.tech) return false;
-        const wasLocked = recipe.state === 'locked';
-        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'locked';
+        const wasLocked = recipe.state === 'blocked';
+        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'blocked';
         renderRecipeState(recipe);
         applyBuildView();
         if (unlocked && wasLocked) window.addPrototypeLog?.(`A new recipe is within reach: ${recipe.name}.`);
@@ -941,7 +859,7 @@
           exchangeAction.textContent = 'RAISE EXCHANGE →';
           exchangeAction.disabled = false;
         } else if (current.unlocked) {
-          exchangeReadiness.textContent = 'recipe unlocked · inputs short';
+          exchangeReadiness.textContent = 'inputs short';
           exchangeDetail.textContent = `needs ${current.deficits.map(deficit => `${deficit.amount} ${deficit.resource}`).join(' · ')}`;
           exchangeAction.textContent = 'NEEDS INPUTS';
           exchangeAction.disabled = true;
@@ -999,24 +917,15 @@
         recipes: buildRecipes,
         controls,
         setQuery(value) { buildQuery.value = String(value); controls.query = buildQuery.value; applyBuildView(true); },
-        setSort(kind, direction = controls.direction) {
-          const normalizedKind = kind == null || kind === '' ? 'none' : String(kind);
-          if (!validBuildSorts.includes(normalizedKind)) return false;
-          if (normalizedKind !== 'none' && !validBuildDirections.includes(direction)) return false;
-          controls.sort = normalizedKind;
-          controls.direction = normalizedKind === 'none' ? 'desc' : direction;
+        setSort(kind, direction) {
+          if (!validBuildSorts.includes(kind)) return false;
+          controls.sort = kind;
+          controls.direction = validBuildDirections.includes(direction) ? direction : naturalDirection(kind);
           applyBuildView(true);
           return true;
         },
-        clearSort() {
-          controls.sort = 'none';
-          controls.direction = 'desc';
-          applyBuildView(true);
-          return true;
-        },
-        setSortOpen: open => setBuildSortPanel(open),
         activeQuery: () => controls.query,
-        sortState: () => ({ kind: controls.sort, direction: controls.direction, open: controls.sortOpen }),
+        sortState: () => ({ kind: controls.sort, direction: controls.direction }),
         visibleNames: () => [...rowHost.querySelectorAll('.build-row:not([hidden])')].map(row => row.dataset.name),
         begin: name => beginPrototypeBuild(rows.find(row => row.dataset.name === name)),
         cancel: cancelPrototypeBuild,
@@ -1083,8 +992,10 @@
       function addLog(message) {
         const lines = [...document.querySelectorAll('.screen-footer .log-line')];
         if (!lines.length) return;
+        logMinutes += 7;
+        const stamp = `D43 ${String(Math.floor(logMinutes / 60) % 24).padStart(2, '0')}:${String(logMinutes % 60).padStart(2, '0')}`;
         for (let i = lines.length - 1; i > 0; i -= 1) lines[i].innerHTML = lines[i - 1].innerHTML;
-        lines[0].innerHTML = `<span class="time">NOW</span><span>${message}</span>`;
+        lines[0].innerHTML = `<span class="time">${stamp}</span><span>${message}</span>`;
       }
       window.addPrototypeLog = addLog;
 

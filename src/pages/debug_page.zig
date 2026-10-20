@@ -166,6 +166,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
 fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
     const ctx = stage.ctx;
     const th = ctx.res.view.theme;
+    const act: u8 = 1;
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
 
     if (eq(name, "button")) {
@@ -177,23 +178,27 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "figure")) {
         try t.figure(stage, "dead", t.fig_dead, th.danger);
     } else if (eq(name, "stock_token")) {
-        try t.stock_token(stage, "tok", .{ .abbrev = "Fo", .full = "Food", .value = 3.6, .tone = .warn });
+        try t.stock_token(stage, "tok", .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .warn });
     } else if (eq(name, "stockline")) {
         const stocks = [_]t.Stock{
-            .{ .abbrev = "Vi", .full = "Vigor", .value = 10, .max = 10 },
-            .{ .abbrev = "Fo", .full = "Food", .value = 3.6, .tone = .danger },
-            .{ .abbrev = "Ma", .full = "Materials", .value = 24 },
+            .{ .abbrev = "VI", .full = "Vigor", .value = 10, .max = 10 },
+            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
+            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 24 },
         };
         _ = try t.stockline(stage, "sl", &stocks, false);
     } else if (eq(name, "runline")) {
-        _ = try t.runline(stage, "run", .{ .act_label = "Act I", .day = 3 });
+        // Act I (no energy flow) above Act II (the `⚡ +gen/−consumed` rate).
+        const col = try stage.div("runs");
+        _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+        _ = try t.runline(col, "run", .{ .act_label = "Act I", .day = 3 });
+        _ = try t.runline(col, "run2", .{ .gen = 12, .consumed = 9, .act_label = "Act II", .day = 43 });
     } else if (eq(name, "header")) {
         const demo = try stage.div("header_demo");
         _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
         const stocks = [_]t.Stock{
-            .{ .abbrev = "Vi", .full = "Vigor", .value = 10, .max = 10 },
-            .{ .abbrev = "Fo", .full = "Food", .value = 3.6, .tone = .danger },
-            .{ .abbrev = "Ma", .full = "Materials", .value = 24 },
+            .{ .abbrev = "VI", .full = "Vigor", .value = 10, .max = 10 },
+            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
+            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 24 },
         };
         _ = try t.header(demo, "hud", .{
             .stocks = &stocks,
@@ -219,7 +224,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         // interactive instance can be inspected in both states via its own toggle.
         const demo = try stage.div("rail_demo");
         _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 300 });
-        const r = try t.rail(demo, .{ .id = "rail", .label = "HOLDINGS" });
+        const r = try t.rail(demo, .{ .id = "rail", .label = "HOUSEHOLD" });
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
     } else if (eq(name, "holdings")) {
         if (player.get()) |a| {
@@ -239,7 +244,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
 
             const demo = try stage.div("holdings_demo");
             _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
-            const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOLDINGS" });
+            const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOUSEHOLD" });
             if (r.body) |body| _ = try t.holdings(body, "content", try act_one_holdings.content(ctx, world, a[0]));
         } else {
             _ = try stage.text("na", "(needs a live player)");
@@ -247,8 +252,17 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
             const forage = ctx.res.catalog.actionIndex("forage").?;
-            if (try t.action_tile(stage, world, a[0], forage, "at")) |tl| {
-                if (tl.clicked) actions.begin(world, a[0], ctx.res, forage);
+            // Both densities, sized as their sections size them: Act I's regular grid tile
+            // above Act II's compact catalog tile.
+            const col = try stage.div("densities");
+            _ = col.with_size(.{ .fixed = 300 }, .fit_children)
+                .with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+            inline for (.{ .{ "at", t.ActionDensity.regular }, .{ "atc", t.ActionDensity.compact } }) |d| {
+                if (try t.action_tile(col, world, a[0], forage, d[0], d[1])) |tl| {
+                    _ = tl.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = t.actionTileHeight(d[1]) })
+                        .with_flow(.{ .dir = .column, .main = .center });
+                    if (tl.clicked) actions.begin(world, a[0], ctx.res, forage);
+                }
             }
         } else {
             _ = try stage.text("na", "(needs a live player)");
@@ -268,7 +282,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
-            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
             // The pane fills a definite height and scrolls only its table.
             const demo = try stage.div("build_demo");
             _ = demo.with_size(.fit_children, .{ .fixed = 560 });
@@ -281,7 +295,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // One interactive composition only: both authored sections switch beneath the same
             // nav and context strips. Debug owns the three unlocking tools and stocks materials.
             fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
             // The surface fills its parent's height (its views scroll inside), so the demo
             // gives it a definite one, as the workspace's content lane does in production.
             const demo = try stage.div("surface_demo");
@@ -303,7 +317,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // unlocked verbs; production remains entirely progression-driven.
             // The verbs come with their tools: the hatchet, a rod and snares unlock three more.
             fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
 
             const demo = try stage.div("workspace_demo");
             _ = demo.with_size(.{ .fixed = 926 }, .{ .fixed = 700 });
@@ -325,7 +339,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // Debug-only grants make the authored five-verb/holdings state visible; production
             // continues to derive every stock, unlock, activity, and log line from live state.
             fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryMaterial)) |stock| stock.v = 31;
+            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
             if (world.get(a[0], comp.InventoryFood)) |food| food.v = 11.6;
             if (world.get(a[0], comp.Vigor)) |vigor| {
                 vigor.max = 15;
@@ -344,9 +358,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 .footer = true,
             });
             const stocks = [_]t.Stock{
-                .{ .abbrev = "Vi", .full = "Vigor", .value = 14, .max = 15 },
-                .{ .abbrev = "Fo", .full = "Food", .value = 11.6 },
-                .{ .abbrev = "Ma", .full = "Materials", .value = 31 },
+                .{ .abbrev = "VI", .full = "Vigor", .value = 14, .max = 15 },
+                .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 11.6 },
+                .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 31 },
             };
             _ = try t.header(regions.header, "hud", .{
                 .stocks = &stocks,
@@ -364,7 +378,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             if (workspace.surface.market_action.consume(.clicked)) audit_trade.open = true;
 
             var feed: ha.log.Log = .{};
-            feed.push(.normal, "You return with 4 materials.");
+            feed.push(.normal, try std.fmt.allocPrint(ctx.arena, "You return with 4 {s}.", .{ha.roster.Resource.biomass.wordIn(act)}));
             feed.push(.good, "The Root cellar slows what the larder loses.");
             feed.push(.normal, "You finish a second Hatchet. One is effect; one is stock.");
             feed.push(.normal, "Someone is walking the shoreline. Their pack carries made goods.");
@@ -392,27 +406,32 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             _ = try stage.text("na", "(needs a live player)");
         }
     } else if (eq(name, "catalog_controls")) {
-        _ = try t.catalog_controls(stage, "cc", null, null);
+        // The field spans its parent, so the audit gives it a catalog-sized width.
+        const demo = try stage.div("cc_demo");
+        _ = demo.with_size(.{ .fixed = 560 }, .fit_children);
+        _ = try t.catalog_controls(demo, "cc", t.recipes_placeholder, null, null);
     } else if (eq(name, "milestone_goal")) {
         const demo = try stage.div("milestone_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        var resource_label_buf: [16]u8 = undefined;
+        const resource_label = std.ascii.upperString(&resource_label_buf, ha.roster.Resource.biomass.labelIn(act));
         const requirements = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "14/15" },
             .{ .label = "FOOD", .value = "11.6/12" },
             .{ .label = "RECIPES", .value = "4/5" },
-            .{ .label = "MATERIALS", .value = "31/60" },
+            .{ .label = resource_label, .value = "31/60" },
         };
         _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
             .title = "Shelter",
-            .summary = "materials 31/60",
-            .readiness = "not ready \u{00B7} 1 condition",
+            .summary = try std.fmt.allocPrint(ctx.arena, "{s} 31/60", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .readiness = "locked \u{00B7} 1 condition",
             .kicker = "A PLACE FOR OTHERS",
             .cost = "60m 6e \u{00B7} 6.0d",
             .copy = "a roof with room for four. you're not alone anymore.",
             .requirements = &requirements,
-            .explanation = "Hold 60 materials with a settled body and four kinds of goods.",
-            .action = "NOT READY",
+            .explanation = try std.fmt.allocPrint(ctx.arena, "Hold 60 {s} with a settled body and four kinds of goods.", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .action = "LOCKED",
         });
     } else if (eq(name, "market_strip")) {
         const demo = try stage.div("market_demo");
@@ -472,7 +491,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const demo = try stage.div("a2h_demo");
             _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
-            _ = try t.holdings(demo, "content", try act_two_holdings.content(ctx, world, a[0]));
+            // As the Act II rail composes it: Holdings/BODY, then the eating policy.
+            const column = try t.holdings(demo, "content", try act_two_holdings.content(ctx, world, a[0]));
+            _ = try t.eating_policy(column, "eating_policy", 50, true);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -482,7 +503,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const demo = try stage.div("a2a_demo");
             _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
-            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?" }, null, null);
+            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -556,19 +577,22 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
 /// page. `audit_trade` lives on the debug root, so dismissal persists after the overlay disappears.
 fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node {
     if (!audit_trade.open) return null;
+    const act: u8 = 1;
 
+    const food_word = ha.roster.Resource.food.wordIn(act);
+    const biomass_word = ha.roster.Resource.biomass.wordIn(act);
     const buys = [_]t.TradeOffer{
-        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = "2 food + 8 materials", .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
-        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = "2 food + 6 materials", .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
-        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = "8 materials", .receive = "Preserved food +10", .stock = 2 },
+        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = try std.fmt.allocPrint(ctx.arena, "2 {s} + 8 {s}", .{ food_word, biomass_word }), .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
+        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = try std.fmt.allocPrint(ctx.arena, "2 {s} + 6 {s}", .{ food_word, biomass_word }), .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
+        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = try std.fmt.allocPrint(ctx.arena, "8 {s}", .{biomass_word}), .receive = "Preserved food +10", .stock = 2 },
     };
     const sells = [_]t.TradeOffer{
-        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = "6 food + 5 materials", .effect = "The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." },
-        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = "9 food + 8 materials", .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
+        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = try std.fmt.allocPrint(ctx.arena, "6 {s} + 5 {s}", .{ food_word, biomass_word }), .effect = try std.fmt.allocPrint(ctx.arena, "The first pair earns the most. Their next Sandals offer falls to 3 {s} + 2 {s}.", .{ food_word, biomass_word }) },
+        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = try std.fmt.allocPrint(ctx.arena, "9 {s} + 8 {s}", .{ food_word, biomass_word }), .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
     };
     const holdings = [_]t.TradeHolding{
-        .{ .label = "Food", .value = "11.6" },
-        .{ .label = "Materials", .value = "31" },
+        .{ .label = ha.roster.Resource.food.labelIn(act), .value = "11.6" },
+        .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = "31" },
         .{ .label = "Sandals", .value = "\u{00d7}2" },
         .{ .label = "Hatchet", .value = "\u{00d7}2" },
         .{ .label = "Root cellar", .value = "\u{00d7}1" },

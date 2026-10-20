@@ -119,7 +119,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
     {
         var buf: [64]u8 = undefined;
-        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb));
+        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb, ha.migration.actOf(w, e)));
     }
 
     const total = res_mod.hours_to_secs(q.verb.requires.hours, res.config.secs_per_day);
@@ -139,7 +139,7 @@ pub fn finish(w: *World, e: Entity, res: *Resources, ai: u16, quality: f32) void
     };
     const receipt = ledger.draw(w, e, cat, v.output.slice(), res.random(), quality, 1);
     var buf: [96]u8 = undefined;
-    const msg = receiptText(&buf, cat, receipt);
+    const msg = receiptText(&buf, cat, receipt, ha.migration.actOf(w, e));
     res.sim.log.push(if (std.mem.eql(u8, msg, nothing_text)) .dim else .normal, msg);
 }
 
@@ -162,15 +162,15 @@ pub fn is_build(d: comp.Busy.Doing) bool {
 const nothing_text = "You gathered nothing.";
 
 /// The display word for an item in a sentence: a resource's tag name, a good's name.
-pub fn itemWord(cat: *const Catalog, id: []const u8) []const u8 {
-    if (Catalog.resource(id)) |r| return @tagName(r);
+pub fn itemWord(cat: *const Catalog, id: []const u8, act: u8) []const u8 {
+    if (Catalog.resource(id)) |r| return r.wordIn(act);
     if (cat.good(id)) |g| return g.name;
     return id;
 }
 
 /// "You gathered 3 food and 2 materials." Amounts are rounded the way the HUD displays
 /// them; a rounded-to-zero draw reads as the miss it felt like.
-fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt) []const u8 {
+fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) []const u8 {
     var n: usize = 0;
     for (r.slice()) |d| if (@round(d.amount) > 0) {
         n += 1;
@@ -183,7 +183,7 @@ fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt) []const u8 {
         const amt = @round(d.amount);
         if (amt <= 0) continue;
         if (i > 0) wr.writeAll(if (i + 1 == n) " and " else ", ") catch {};
-        wr.print("{d:.0} {s}", .{ amt, itemWord(cat, d.item) }) catch {};
+        wr.print("{d:.0} {s}", .{ amt, itemWord(cat, d.item, act) }) catch {};
         i += 1;
     }
     wr.writeAll(".") catch {};
@@ -191,14 +191,14 @@ fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt) []const u8 {
 }
 
 /// "You spend 1.7e 1m to begin." — the energy, then every input line.
-fn paymentText(buf: []u8, cat: *const Catalog, v: effects.Verb) []const u8 {
+fn paymentText(buf: []u8, cat: *const Catalog, v: effects.Verb, act: u8) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     wr.print("You spend {d:.1}e", .{v.requires.energy}) catch {};
     for (v.input.slice()) |l| {
         if (Catalog.resource(l.item)) |r| {
-            wr.print(" {d:.0}{s}", .{ l.n, r.letter() }) catch {};
+            wr.print(" {d:.0}{s}", .{ l.n, r.letterIn(act) }) catch {};
         } else {
-            wr.print(" {d:.0} {s}", .{ l.n, itemWord(cat, l.item) }) catch {};
+            wr.print(" {d:.0} {s}", .{ l.n, itemWord(cat, l.item, act) }) catch {};
         }
     }
     wr.writeAll(" to begin.") catch {};
@@ -224,7 +224,7 @@ fn spawn_agent(w: *World, vigor: f32, materials: f32) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = vigor, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = materials },
+        comp.InventoryBiomass{ .v = materials },
         comp.Goods{},
         comp.Granted{},
     });
@@ -270,10 +270,10 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
     w.get(e, comp.Goods).?.count[cat.goodIndex("spear").?] = 1;
     const q = quote(&w, e, cat, res.config, traps).?;
     try testing.expectEqual(Standing.short, q.standing);
-    try testing.expectEqualStrings("materials", q.short.?.item);
+    try testing.expectEqualStrings("biomass", q.short.?.item);
     try testing.expectEqual(@as(f32, 1.0), q.quality);
 
-    w.get(e, comp.InventoryMaterial).?.v = 1; // exactly the bait — spendable to 0
+    w.get(e, comp.InventoryBiomass).?.v = 1; // exactly the bait — spendable to 0
     try testing.expect(quote(&w, e, cat, res.config, traps).?.ready());
     w.get(e, comp.Vigor).?.v = 1.0; // exactly the price — strict gate refuses
     try testing.expectEqual(Standing.energy, quote(&w, e, cat, res.config, traps).?.standing);
@@ -330,7 +330,7 @@ test "an input is paid at begin and named in the payment line" {
     w.get(e, comp.Goods).?.count[res.catalog.goodIndex("spear").?] = 1;
     const traps = res.catalog.actionIndex("hunt").?;
     begin(&w, e, &res, traps);
-    try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryMaterial).?.v); // the hunting supply
+    try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryBiomass).?.v); // the hunting supply
     try testing.expectEqualStrings("You spend 4.0e 1m to begin.", res.sim.log.get(0).text());
 }
 
@@ -352,13 +352,14 @@ test "the receipt names what landed, in line order" {
     var buf: [96]u8 = undefined;
     var r = ledger.Receipt{};
     r.items[0] = .{ .item = "food", .amount = 2.6 };
-    r.items[1] = .{ .item = "materials", .amount = 0.2 }; // rounds to nothing
+    r.items[1] = .{ .item = "biomass", .amount = 0.2 }; // rounds to nothing
     r.len = 2;
-    try testing.expectEqualStrings("You gathered 3 food.", receiptText(&buf, &cat, r));
+    try testing.expectEqualStrings("You gathered 3 food.", receiptText(&buf, &cat, r, 1));
     r.items[1].amount = 1.5;
-    try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r));
+    try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r, 1));
+    try testing.expectEqualStrings("You gathered 3 food and 2 biomass.", receiptText(&buf, &cat, r, 2));
     r.len = 0;
-    try testing.expectEqualStrings(nothing_text, receiptText(&buf, &cat, r));
+    try testing.expectEqualStrings(nothing_text, receiptText(&buf, &cat, r, 1));
 }
 
 test "a verb that names a technology is held once that technology is researched" {

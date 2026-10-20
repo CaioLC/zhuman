@@ -216,9 +216,9 @@ test "stock amounts handle negatives and non-finite values" {
 test "stock readout appends max when set" {
     var buf: [64]u8 = undefined;
     const x = std.testing.expectEqualStrings;
-    const vigor = Stock{ .abbrev = "Vi", .full = "Vigor", .value = 14.25, .max = 15 };
+    const vigor = Stock{ .abbrev = "VI", .full = "Vigor", .value = 14.25, .max = 15 };
     try x("14/15", formatStock(&buf, vigor, false));
     try x("14.2/15", formatStock(&buf, vigor, true));
-    const food = Stock{ .abbrev = "Fo", .full = "Food", .value = 4 };
+    const food = Stock{ .abbrev = ha.roster.Resource.food.abbrevIn(1), .full = ha.roster.Resource.food.labelIn(1), .value = 4 };
     try x("4", formatStock(&buf, food, false));
 }

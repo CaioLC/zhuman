@@ -234,7 +234,7 @@ test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = 0 },
+        comp.InventoryBiomass{ .v = 0 },
         comp.Goods{},
         comp.Granted{},
         comp.Busy{ .doing = .{ .labor = forage }, .total = res_mod.hours_to_secs(4, res.config.secs_per_day), .remaining = res_mod.hours_to_secs(4, res.config.secs_per_day), .quality = 1 },

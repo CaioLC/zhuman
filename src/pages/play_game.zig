@@ -36,18 +36,19 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
     var header_stocks: [3]t.Stock = undefined;
     var header_stock_count: usize = 0;
     const q = ecs.MaybeSingle(.{
-        Entity, comp.Vigor, comp.InventoryFood, comp.InventoryMaterial, ecs.With(tag.Player),
+        Entity, comp.Vigor, comp.InventoryFood, comp.InventoryBiomass, ecs.With(tag.Player),
     }){ .world = world };
     if (q.get()) |a| {
-        const e, const vigor, const food, const materials = a;
+        const e, const vigor, const food, const biomass = a;
+        const act = ha.migration.actOf(world, e);
         // The stockline is a row of StockTokens whose order/membership is this act's
         // descriptor. Act I lists Vigor/Food/Materials; each token shows a two-letter abbrev
         // (full label on hover/focus), tints danger on a low/zero value, and owns compact versus
         // detailed number formatting.
         header_stocks = .{
-            t.vigorStock(ctx, "Vi", vigor),
-            .{ .abbrev = "Fo", .full = "Food", .value = food.v, .tone = if (food.v <= 0) .danger else .normal },
-            .{ .abbrev = "Ma", .full = "Materials", .value = materials.v },
+            t.vigorStock(ctx, "VI", vigor),
+            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = food.v, .tone = if (food.v <= 0) .danger else .normal },
+            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = biomass.v },
         };
         header_stock_count = header_stocks.len;
 
@@ -92,34 +93,34 @@ const Ware = market.Ware;
 const BackedOffer = struct { offer: t.TradeOffer, quote: market.Quote };
 
 /// Format a bundle side into a short `NfF`, `NmM`, or tool-name string for the dialog.
-fn wareLabel(w: Ware) []const u8 {
+fn wareLabel(act: u8, w: Ware) []const u8 {
     return switch (w) {
-        .food => "food",
-        .materials => "materials",
+        .food => ha.roster.Resource.food.wordIn(act),
+        .biomass => ha.roster.Resource.biomass.wordIn(act),
         .fish_hook => "a fishing rod",
         .whetstone => "a hatchet",
     };
 }
 
-fn bundleLabel(buf: []u8, b: *const market.Bundle) []const u8 {
+fn bundleLabel(act: u8, buf: []u8, b: *const market.Bundle) []const u8 {
     // A single-line summary of the bundle's lines: "2 food, 4m", or "a hand axe".
     var w: usize = 0;
     for (b.slice(), 0..) |line, i| {
-        const sep = if (i == 0) "" else ", ";
+        const sep = if (i == 0) "" else " + ";
         const piece = switch (line.item) {
-            .food => std.fmt.bufPrint(buf[w..], "{s}{d:.0} food", .{ sep, line.qty }) catch "",
-            .materials => std.fmt.bufPrint(buf[w..], "{s}{d:.0}m", .{ sep, line.qty }) catch "",
-            else => std.fmt.bufPrint(buf[w..], "{s}{s}", .{ sep, wareLabel(line.item) }) catch "",
+            .food => std.fmt.bufPrint(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.food.wordIn(act) }) catch "",
+            .biomass => std.fmt.bufPrint(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.biomass.wordIn(act) }) catch "",
+            else => std.fmt.bufPrint(buf[w..], "{s}{s}", .{ sep, wareLabel(act, line.item) }) catch "",
         };
         w += piece.len;
     }
     return buf[0..w];
 }
 
-fn wareTradeName(w: Ware) []const u8 {
+fn wareTradeName(act: u8, w: Ware) []const u8 {
     return switch (w) {
         .food => "Preserved food",
-        .materials => "Materials",
+        .biomass => ha.roster.Resource.biomass.labelIn(act),
         .fish_hook => "Fishing rod",
         .whetstone => "Hatchet",
     };
@@ -128,7 +129,7 @@ fn wareTradeName(w: Ware) []const u8 {
 fn wareTradeDetail(w: Ware) []const u8 {
     return switch (w) {
         .food => "provisions \u{00b7} keeps well",
-        .materials => "useful stock",
+        .biomass => "useful stock",
         .fish_hook => "unlocks Fish",
         .whetstone => "unlocks Split wood",
     };
@@ -140,16 +141,17 @@ fn wareTradeDetail(w: Ware) []const u8 {
 fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
     const ts = ts_opt orelse return null;
     if (!ts.open) return null;
+    const act = ha.migration.actOf(world, e);
 
     const enc = &ctx.res.sim.encounter;
     const food = world.get(e, comp.InventoryFood).?;
-    const stock = world.get(e, comp.InventoryMaterial).?;
+    const stock = world.get(e, comp.InventoryBiomass).?;
 
     // --- buy offers: what the passerby will hand over from the satchel --------------------
     var buys = std.ArrayList(BackedOffer).empty;
     var gbuf = try ctx.arena.alloc(u8, 512);
     var gw: usize = 0;
-    inline for (.{ Ware.food, Ware.materials, Ware.fish_hook, Ware.whetstone }) |ware| {
+    inline for (.{ Ware.food, Ware.biomass, Ware.fish_hook, Ware.whetstone }) |ware| {
         const have = enc.stockOf(ware);
         if (have > 0) {
             // A simple posted buy price: the passerby wants Materials (bulk) or Food+Materials
@@ -158,35 +160,35 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             var q = market.Quote{ .id = @as(u32, @intFromEnum(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
             switch (ware) {
                 .food => {
-                    q.give = market.Bundle.one(.materials, 2);
+                    q.give = market.Bundle.one(.biomass, 2);
                     q.receive = market.Bundle.one(.food, 1);
                 },
-                .materials => {
+                .biomass => {
                     q.give = market.Bundle.one(.food, 1);
-                    q.receive = market.Bundle.one(.materials, 3);
+                    q.receive = market.Bundle.one(.biomass, 3);
                 },
                 .fish_hook => {
                     var g = market.Bundle{};
                     g.add(.food, 2);
-                    g.add(.materials, 8);
+                    g.add(.biomass, 8);
                     q.give = g;
                     q.receive = market.Bundle.one(.fish_hook, 1);
                 },
                 .whetstone => {
                     var g = market.Bundle{};
                     g.add(.food, 2);
-                    g.add(.materials, 6);
+                    g.add(.biomass, 6);
                     q.give = g;
                     q.receive = market.Bundle.one(.whetstone, 1);
                 },
             }
-            const give_s = bundleLabel(gbuf[gw..], &q.give);
+            const give_s = bundleLabel(act, gbuf[gw..], &q.give);
             gw += give_s.len;
-            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
             gw += recv_s.len;
             const refusal = q.refusal(enc, food.v, stock.v);
             try buys.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
+                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
                 .quote = q,
             });
         }
@@ -196,17 +198,17 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     var sells = std.ArrayList(BackedOffer).empty;
     // Surplus resources (a token "sell 1 unit" at the first-unit value; the schedule teaches the
     // decline via `next_unit`, shown in the effect line).
-    inline for (.{ Ware.food, Ware.materials }) |ware| {
+    inline for (.{ Ware.food, Ware.biomass }) |ware| {
         const held: f32 = if (ware == .food) food.v else stock.v;
         if (held >= 1) {
             const q = market.sell_quote(ware, 0, 100 + @as(u32, @intFromEnum(ware)), enc.id);
-            const give_s = bundleLabel(gbuf[gw..], &q.give);
+            const give_s = bundleLabel(act, gbuf[gw..], &q.give);
             gw += give_s.len;
-            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
             gw += recv_s.len;
-            const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}m", .{q.next_unit orelse 0});
+            const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}{s}", .{ q.next_unit orelse 0, ha.roster.Resource.biomass.letterIn(act) });
             try sells.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
+                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
                 .quote = q,
             });
         }
@@ -219,11 +221,11 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         const owned: u32 = if (goods) |g| g.count[gi] else 0;
         if (owned > 0) {
             const q = market.sell_quote(ware, 0, 200 + @as(u32, @intFromEnum(ware)), enc.id);
-            const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(ware)});
-            const recv_s = bundleLabel(gbuf[gw..], &q.receive);
+            const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(act, ware)});
+            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
             gw += recv_s.len;
             try sells.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = @intCast(@min(owned, std.math.maxInt(u16))) },
+                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = @intCast(@min(owned, std.math.maxInt(u16))) },
                 .quote = q,
             });
         }
@@ -243,8 +245,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     var food_buf: [24]u8 = undefined;
     var material_buf: [24]u8 = undefined;
     var holding_views = std.ArrayList(t.TradeHolding).empty;
-    try holding_views.append(ctx.arena, .{ .label = "Food", .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
-    try holding_views.append(ctx.arena, .{ .label = "Materials", .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
+    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.food.labelIn(act), .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
+    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
     // The manufactured unlockers the passerby's deal turns on, plus one common crude holding.
     for ([_][]const u8{ "sandals", "hatchet", "fish_rod" }) |gid| {
         const gi = cat.goodIndex(gid) orelse continue;

@@ -24,7 +24,6 @@ const Resource = roster.Resource;
 pub fn Stock(comptime r: Resource) ?type {
     return switch (r) {
         .food => comp.InventoryFood,
-        .materials => comp.InventoryMaterial,
         .biomass => comp.InventoryBiomass,
         .water => comp.InventoryWater,
         .fuel => comp.InventoryFuel,
@@ -149,9 +148,9 @@ fn fixture() !Catalog {
 
 test "a resource line reads and moves the inventory component; a missing stock holds nothing" {
     var w = World.init();
-    const e = w.spawn(.{ comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0 }, comp.InventoryMaterial{ .v = 2 } });
+    const e = w.spawn(.{ comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 2 } });
     try testing.expectEqual(@as(f32, 3), balance(&w, e, .food));
-    try testing.expectEqual(@as(f32, 2), balance(&w, e, .materials));
+    try testing.expectEqual(@as(f32, 2), balance(&w, e, .biomass));
     try testing.expectEqual(@as(f32, 0), balance(&w, e, .water)); // no component yet
     try testing.expect(move(&w, e, .food, 1.5));
     try testing.expectEqual(@as(f32, 4.5), balance(&w, e, .food));
@@ -165,18 +164,18 @@ test "short names the first unpayable line; an item may be spent to exactly zero
     var cat = try fixture();
     defer cat.deinit();
     var w = World.init();
-    const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryMaterial{ .v = 5 } });
+    const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 5 } });
     const lines = [_]Line{
-        .{ .item = "materials", .n = 5 },
+        .{ .item = "biomass", .n = 5 },
         .{ .item = "food", .n = 1 },
     };
     const s = short(&w, e, &cat, &lines, 1).?;
     try testing.expectEqualStrings("food", s.item); // materials are exactly affordable
     try testing.expect(short(&w, e, &cat, lines[0..1], 1) == null);
     pay(&w, e, &cat, lines[0..1], 1);
-    try testing.expectEqual(@as(f32, 0), balance(&w, e, .materials));
+    try testing.expectEqual(@as(f32, 0), balance(&w, e, .biomass));
     // Scaled: a tenth of a day's upkeep.
-    const upkeep = [_]Line{.{ .item = "materials", .n = 1, .per = .day }};
+    const upkeep = [_]Line{.{ .item = "biomass", .n = 1, .per = .day }};
     try testing.expect(short(&w, e, &cat, &upkeep, 0.1) != null);
 }
 
@@ -199,15 +198,15 @@ test "draw samples each line at quality and scale and reports what landed" {
     defer cat.deinit();
     var w = World.init();
     var prng = std.Random.DefaultPrng.init(5);
-    const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryMaterial{ .v = 0 } });
+    const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 0 } });
     const lines = [_]Line{
         .{ .item = "food", .n = 4 }, // fixed: exact
-        .{ .item = "materials", .n = 2, .kind = .uniform },
+        .{ .item = "biomass", .n = 2, .kind = .uniform },
     };
     const r = draw(&w, e, &cat, &lines, prng.random(), 0.5, 1);
     try testing.expectEqual(@as(usize, 2), r.slice().len);
     try testing.expectEqual(@as(f32, 2), r.slice()[0].amount); // 4 × 0.5 quality
     try testing.expectEqual(@as(f32, 2), balance(&w, e, .food));
-    try testing.expect(balance(&w, e, .materials) > 0);
-    try testing.expectEqualStrings("materials", r.slice()[1].item);
+    try testing.expect(balance(&w, e, .biomass) > 0);
+    try testing.expectEqualStrings("biomass", r.slice()[1].item);
 }

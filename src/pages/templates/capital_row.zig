@@ -188,7 +188,7 @@ const cell = table.cell;
 /// width, so a long good name is elided (`Reinforced Timber Fra…`) instead of stretching the
 /// row and knocking every downstream column out of its lane. The box and hit geometry stay
 /// the allocated `width`; only the visible glyphs are bounded. A **secondary type** sub-label
-/// rides under the name in dim/small — the crude/manufactured tier word.
+/// rides under the name in dim/small — the recipe's kind (`recipeType`).
 fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary: []const u8, color: Color) !void {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
@@ -217,48 +217,63 @@ fn techName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
     return if (cat.technology(t)) |tr| tr.name else t;
 }
 
-/// `36me 24fu 20mi` — the build order's once-lines, the COST cell's first line. "" when the
+/// `36me 24fu 20mi` — the build order's once-lines, the COST cell's lead. "" when the
 /// recipe takes no materials.
-fn orderText(buf: []u8, rec: *const roster.Good) []const u8 {
+fn orderText(act: u8, buf: []u8, rec: *const roster.Good) []const u8 {
     var cw = std.Io.Writer.fixed(buf);
     var first = true;
     for (rec.input) |l| if (l.per == .once) {
-        cw.print("{s}{d:.0}{s}", .{ if (first) "" else " ", l.n, info.letterOf(l.item) }) catch {};
+        cw.print("{s}{d:.0}{s}", .{ if (first) "" else " ", l.n, info.letterOf(act, l.item) }) catch {};
         first = false;
     };
     return cw.buffered();
 }
 
-/// `10e` — the energy, the COST cell's second line.
+/// `10e` — the energy, the COST cell's tail.
 fn energyText(buf: []u8, rec: *const roster.Good) []const u8 {
     return std.fmt.bufPrint(buf, "{d:.0}e", .{rec.requires.?.energy}) catch "?";
 }
 
 /// The build order's length in characters — what an act's COST width must hold
 /// (`Widths.costFits`).
-pub fn orderChars(rec: *const roster.Good) usize {
+pub fn orderChars(act: u8, rec: *const roster.Good) usize {
     var buf: [64]u8 = undefined;
-    return orderText(&buf, rec).len;
+    return orderText(act, &buf, rec).len;
 }
 
-/// The COST cell: the order on the first line and the energy under it, small and dim — the
-/// same two-line shape as the name cell beside it, so a three-material Act II order fits
-/// without eliding and the row grows no taller.
-fn cost_cell(parent: El, id: []const u8, width: f32, rec: *const roster.Good, color: Color) !void {
-    const th = parent.ctx.res.view.theme;
-    const box = try parent.div(id);
-    _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+/// The COST cell: the order then its energy on one line (`12m 4e`, the prototype's
+/// `.recipe-cost`), elided at the lane width when a long Act II order outruns it.
+fn cost_cell(parent: El, id: []const u8, width: f32, act: u8, rec: *const roster.Good, color: Color) !void {
     var obuf: [48]u8 = undefined;
     var ebuf: [12]u8 = undefined;
-    const order = orderText(&obuf, rec);
+    var lbuf: [64]u8 = undefined;
+    const order = orderText(act, &obuf, rec);
     const energy = energyText(&ebuf, rec);
-    // An energy-only recipe reads its energy on the first line.
-    _ = (try box.text_fit("t", if (order.len > 0) order else energy, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-        .with_style(.{ style.body, Style{ .text = color } });
-    if (order.len > 0) {
-        _ = (try box.text_fit("e", energy, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-            .with_style(.{ style.small, Style{ .text = th.dim } });
-    }
+    const line = if (order.len > 0)
+        std.fmt.bufPrint(&lbuf, "{s} {s}", .{ order, energy }) catch order
+    else
+        energy;
+    try cell(parent, id, width, line, color, false);
+}
+
+/// The word a recipe's row names its kind with, under the name and for `type:` — what the
+/// good *does*, read from its record: a generator accumulates, a shelter houses, storage keeps
+/// food, comfort raises the vigor ceiling, a material is a product made for other orders, and
+/// a tool grants or tunes a verb.
+pub fn recipeType(rec: *const roster.Good) []const u8 {
+    if (rec.generator != null) return "generator";
+    if (rec.capacity > 0) return "shelter";
+    for (rec.effects) |fx| switch (fx) {
+        .spoil_scale, .food_quality => return "storage",
+        else => {},
+    };
+    for (rec.effects) |fx| switch (fx) {
+        .vigor_ceiling => return "comfort",
+        else => {},
+    };
+    for (rec.output) |l| if (l.per == .once) return "material";
+    if (rec.effects.len > 0) return "tool";
+    return "good";
 }
 
 /// One row over a recipe's quote. `kind` decides the colors and what the last two columns
@@ -275,6 +290,7 @@ pub fn capital_row(
     const th = ctx.res.view.theme;
     const cat = &ctx.res.catalog;
     const rec = q.rec;
+    const act = ha.migration.actOf(world, e);
 
     // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded
     // roster that moves it to another index.
@@ -297,11 +313,10 @@ pub fn capital_row(
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
         .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
-    // Name + secondary type (crude vs manufactured — the row's type sub-label).
-    const type_word = if (rec.tier == .crude) "crude" else "manufactured";
-    try name_cell(row, "nm", lw.of(.recipe), rec.name, type_word, lit);
+    // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
+    try name_cell(row, "nm", lw.of(.recipe), rec.name, recipeType(rec), lit);
 
-    try cost_cell(row, "co", lw.of(.cost), rec, faint);
+    try cost_cell(row, "co", lw.of(.cost), act, rec, faint);
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
@@ -354,11 +369,11 @@ pub fn capital_row(
             var txt: []const u8 = "";
             for (rec.input) |l| {
                 if (l.per != .once) continue;
-                txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(l.item) }) catch "?";
+                txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(act, l.item) }) catch "?";
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
-            _ = (try state_in.text("materials", txt)).with_style(.{ style.body, Style{ .text = faint } });
+            _ = (try state_in.text("biomass", txt)).with_style(.{ style.body, Style{ .text = faint } });
         },
     }
 
@@ -468,13 +483,22 @@ test "Act I's default lane widths fill the expanded content lane" {
     try std.testing.expectEqual(lane_width, (Widths{}).laneTotal());
 }
 
-test "the cost cell is the order, then the energy under it" {
+test "the cost cell is the order, then the energy" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var buf: [40]u8 = undefined;
-    try std.testing.expectEqualStrings("10m", orderText(&buf, cat.good("spear").?));
+    try std.testing.expectEqualStrings("10m", orderText(1, &buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("5e", energyText(&buf, cat.good("spear").?));
-    try std.testing.expectEqualStrings("36me 24fu 20mi", orderText(&buf, cat.good("cold_store").?));
+    try std.testing.expectEqualStrings("36me 24fu 20mi", orderText(2, &buf, cat.good("cold_store").?));
     try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
     try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
+}
+
+test "recipeType reads what the good does" {
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    try std.testing.expectEqualStrings("generator", recipeType(cat.good("garden_bed").?));
+    try std.testing.expectEqualStrings("storage", recipeType(cat.good("root_cellar").?));
+    try std.testing.expectEqualStrings("comfort", recipeType(cat.good("leaf_bed").?));
+    try std.testing.expectEqualStrings("tool", recipeType(cat.good("sandals").?));
 }

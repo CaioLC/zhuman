@@ -17,6 +17,8 @@ const ha = @import("ha");
 const uic = ha.ui_client;
 const el = uic.elements;
 const El = el.El;
+const style = uic.style;
+const Style = style.Style;
 const CatalogState = uic.UiState.CatalogState;
 const Direction = CatalogState.Direction;
 
@@ -29,19 +31,33 @@ pub const Catalog = struct {
     state: *CatalogState,
 };
 
+/// The field's placeholders: the query syntax each catalog answers.
+pub const actions_placeholder = "Search actions \u{00B7} out:food state:ready";
+pub const recipes_placeholder = "Search recipes \u{00B7} type:tool out:food state:ready";
+
 /// Build the search field into `parent`. The catalog state is `state` when the caller passes
 /// one (an always-built owner's slot, so a hidden catalog keeps it), else the bar's own slot;
 /// likewise the search editor lives on `search_owner` when given.
-pub fn catalog_controls(parent: El, id: []const u8, state: ?*CatalogState, search_owner: ?El) !Catalog {
+pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, state: ?*CatalogState, search_owner: ?El) !Catalog {
     const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center })
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     const st = state orelse bar.state(CatalogState);
 
-    const field = try uic.text_input(bar, "search", "Search…", 200, search_owner);
+    // The field spans the catalog's width (the prototype's `.build-query-field`), so the
+    // placeholder can teach the query syntax (`out:food state:ready`).
+    const field = try uic.text_input(bar, "search", placeholder, 200, search_owner);
+    _ = field.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     const field_key = field.get().key;
     const editor = (search_owner orelse field).state(uic.UiState.TextInputState);
+    // The `/` shortcut hint at the field's right edge while it is empty and unfocused (the
+    // prototype's `<kbd>/</kbd>`); the clear `✕` takes that corner once there is text.
+    if (editor.len == 0 and !ctx.isFocused(field_key)) {
+        _ = (try field.text("kbd", "/")).with_layout(.center_right)
+            .with_style(.{ style.pad_sym(6, 0), Style{ .text = th.line2 } });
+    }
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty): the dismiss is routed to the focused field.
     if (ctx.isFocused(field_key) and editor.len > 0 and field.query().dismissed) {

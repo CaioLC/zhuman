@@ -48,7 +48,7 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
     _ = rail_lane.with_size(.fit_children, .{ .pct_of_parent = 1.0 });
     const built_rail = try rail_mod.rail(rail_lane, .{
         .id = "holdings_rail",
-        .label = "HOLDINGS",
+        .label = "HOUSEHOLD",
     });
     if (built_rail.body) |body| {
         _ = try holdings_mod.holdings(body, "holdings", opts.holdings);

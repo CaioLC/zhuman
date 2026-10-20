@@ -191,7 +191,7 @@ fn fixture() !Catalog {
 }
 
 fn spawnAgent(w: *World) Entity {
-    return w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryMaterial{}, comp.Goods{}, comp.Granted{} });
+    return w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryBiomass{}, comp.Goods{}, comp.Granted{} });
 }
 
 /// Own one more of good `id`, settling the body and larder as the build path does.
@@ -401,12 +401,12 @@ test "a scale on an absent line is nothing to scale; an add inserts the line" {
         .input = .{},
         .output = Lines.of(&.{.{ .item = "food", .n = 2, .kind = .normal, .sd = 0.5 }}),
     };
-    tweak(&v, .{ .target = "x", .stat = .{ .output = "materials" }, .by = 3 }, .scale);
+    tweak(&v, .{ .target = "x", .stat = .{ .output = "biomass" }, .by = 3 }, .scale);
     try testing.expectEqual(@as(u8, 1), v.output.len);
     tweak(&v, .{ .target = "x", .stat = .{ .output = "food" }, .by = 3 }, .scale);
     try testing.expectEqual(@as(f32, 6), v.output.items[0].n);
     try testing.expectEqual(@as(f32, 1.5), v.output.items[0].sd); // shape preserved
-    tweak(&v, .{ .target = "x", .stat = .{ .input = "materials" }, .by = 1 }, .add);
+    tweak(&v, .{ .target = "x", .stat = .{ .input = "biomass" }, .by = 1 }, .add);
     try testing.expectEqual(@as(u8, 1), v.input.len);
     try testing.expectEqual(@as(f32, 1), v.input.items[0].n);
     try testing.expectEqual(ha.dist.Kind.fixed, v.input.items[0].kind);

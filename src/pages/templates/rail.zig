@@ -1,4 +1,5 @@
-//! `rail` — the **collapsible Holdings/BODY side rail**. Fills the shell's
+//! `rail` — the **collapsible HOUSEHOLD side rail** (Holdings, BODY and, in Act II, the eating
+//! policy; its restore label reads `HOUSEHOLD`). Fills the shell's
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
 //! content (Holdings in Act I, BODY in Act II), or a narrow collapsed strip (width
 //! `tokens.rail.collapsed`, 36) showing a **vertical restore affordance** — a chevron above the

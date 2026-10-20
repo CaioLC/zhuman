@@ -49,8 +49,8 @@
         .requires = .{ .energy = 2.0, .hours = 8.0 },
         .generator = .{ .energy = 1.0, .hours = 24.0, .label = "Check traps" },
         .input = .{
-            .{ .item = "materials", .n = 5.0 },
-            .{ .item = "materials", .n = 1.0, .per = .day },
+            .{ .item = "biomass", .n = 5.0 },
+            .{ .item = "biomass", .n = 1.0, .per = .day },
         },
         .output = .{
             .{ .item = "food", .n = 3.0, .kind = .poisson, .per = .day },
@@ -66,7 +66,7 @@
         .name = "Spear",
         .tier = .crude,
         .requires = .{ .energy = 5.0, .hours = 6.0 },
-        .input = .{.{ .item = "materials", .n = 10.0 }},
+        .input = .{.{ .item = "biomass", .n = 10.0 }},
         .effects = .{
             .{ .grant = "hunt" },
         },
@@ -82,7 +82,7 @@
         .name = "Sandals",
         .tier = .crude,
         .requires = .{ .energy = 1.0, .hours = 6.0 },
-        .input = .{.{ .item = "materials", .n = 3.0 }},
+        .input = .{.{ .item = "biomass", .n = 3.0 }},
         .effects = .{
             .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.85 } },
         },
@@ -97,7 +97,7 @@
         .name = "Work gloves",
         .tier = .manufactured,
         .requires = .{ .energy = 1.0, .hours = 50.0 },
-        .input = .{.{ .item = "materials", .n = 24.0 }},
+        .input = .{.{ .item = "biomass", .n = 24.0 }},
         .needs = .{"chop_wood"},
         .effects = .{
             .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.75 } },
@@ -113,7 +113,7 @@
         .name = "Bicycle",
         .tier = .manufactured,
         .requires = .{ .energy = 2.0, .hours = 140.0 },
-        .input = .{.{ .item = "materials", .n = 280.0 }},
+        .input = .{.{ .item = "biomass", .n = 280.0 }},
         .effects = .{
             .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.6 } },
             .{ .scale = .{ .target = "scavenge", .stat = .energy, .by = 0.6 } },
@@ -129,7 +129,7 @@
         .name = "Cookpot",
         .tier = .manufactured,
         .requires = .{ .energy = 2.0, .hours = 80.0 },
-        .input = .{.{ .item = "materials", .n = 56.0 }},
+        .input = .{.{ .item = "biomass", .n = 56.0 }},
         .effects = .{
             .{ .food_quality = 1 },
         },
@@ -144,7 +144,7 @@
         .name = "Root cellar",
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 12.0 },
-        .input = .{.{ .item = "materials", .n = 10.0 }},
+        .input = .{.{ .item = "biomass", .n = 10.0 }},
         .effects = .{
             .{ .spoil_scale = 0.5 },
         },
@@ -161,12 +161,12 @@
         .name = "Chainsaw",
         .tier = .manufactured,
         .requires = .{ .energy = 3.0, .hours = 300.0 },
-        .input = .{.{ .item = "materials", .n = 480.0 }},
+        .input = .{.{ .item = "biomass", .n = 480.0 }},
         .needs = .{"chop_wood"},
         .effects = .{
             .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.3 } },
-            .{ .add = .{ .target = "chop_wood", .stat = .{ .input = "materials" }, .by = 1.0 } },
-            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "materials" }, .by = 2.5 } },
+            .{ .add = .{ .target = "chop_wood", .stat = .{ .input = "biomass" }, .by = 1.0 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "biomass" }, .by = 2.5 } },
         },
         .copy = .{
             .effect = "fuel does the work, not you",
@@ -181,7 +181,7 @@
         .name = "Leaf bed",
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 10.0 },
-        .input = .{.{ .item = "materials", .n = 8.0 }},
+        .input = .{.{ .item = "biomass", .n = 8.0 }},
         .effects = .{
             .{ .vigor_ceiling = 1.0 },
         },
@@ -196,7 +196,7 @@
         .name = "Rope Bag",
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 8.0 },
-        .input = .{.{ .item = "materials", .n = 15.0 }},
+        .input = .{.{ .item = "biomass", .n = 15.0 }},
         .effects = .{
             .{ .vigor_ceiling = 1.0 },
         },
@@ -212,7 +212,7 @@
         .name = "Medicinal herb bed",
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 12.0 },
-        .input = .{.{ .item = "materials", .n = 10.0 }},
+        .input = .{.{ .item = "biomass", .n = 10.0 }},
         .generator = .{ .energy = 0.25, .hours = 48.0, .vigor = 1.5 },
         .copy = .{
             .effect = "readies a small vigor remedy",
@@ -229,8 +229,8 @@
         .requires = .{ .energy = 8.0, .hours = 16.0 },
         .generator = .{ .energy = 0.5, .hours = 48.0 },
         .input = .{
-            .{ .item = "materials", .n = 8.0 },
-            .{ .item = "materials", .n = 0.1, .per = .day },
+            .{ .item = "biomass", .n = 8.0 },
+            .{ .item = "biomass", .n = 0.1, .per = .day },
         },
         .output = .{
             .{ .item = "food", .n = 0.5, .kind = .uniform, .per = .day },
@@ -248,8 +248,8 @@
         .requires = .{ .energy = 3.0, .hours = 200.0 },
         .generator = .{ .energy = 0.5, .hours = 24.0 },
         .input = .{
-            .{ .item = "materials", .n = 144.0 },
-            .{ .item = "materials", .n = 0.3, .per = .day },
+            .{ .item = "biomass", .n = 144.0 },
+            .{ .item = "biomass", .n = 0.3, .per = .day },
         },
         .output = .{
             .{ .item = "food", .n = 2.5, .kind = .poisson, .per = .day },
@@ -269,7 +269,7 @@
         .name = "Shelter",
         .tier = .crude,
         .requires = .{ .energy = 12.0, .hours = 144.0 },
-        .input = .{.{ .item = "materials", .n = 60.0 }},
+        .input = .{.{ .item = "biomass", .n = 60.0 }},
         .unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
         .capacity = 4,
         .milestone = .act_one,
@@ -305,7 +305,7 @@
         .effects = .{
             .{ .grant = "chop_wood" },
             .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.7 } },
-            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "materials" }, .by = 1.4 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = "biomass" }, .by = 1.4 } },
         },
         .copy = .{
             .effect = "splitting wood costs less and yields more",

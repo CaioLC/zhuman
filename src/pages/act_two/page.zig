@@ -6,7 +6,7 @@
 //! and the surface's three-view nav — ACTIONS / BUILD / STRUCTURE. The Merchant and Activity
 //! strips appear on ACTIONS and BUILD and are suppressed on STRUCTURE (the research board owns
 //! the surface there), yet their state is never lost because it lives in the page, not the
-//! strips. Holdings/BODY ride the shell rail; the event log rides the shell footer.
+//! strips. Holdings/BODY and the eating policy ride the shell rail; the event log rides the shell footer.
 //!
 //! The page reads the player. Its stocks fill the stockline, its goods the holdings, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
@@ -43,6 +43,8 @@ const fx = @import("./fixtures.zig");
 const actions_shelf = t.ActionsShelf{
     .act = 2,
     .subtitle = "What will the settlement do now?",
+    // Twenty-odd verbs: the compact tile keeps the catalog scannable above the fold.
+    .density = .compact,
 };
 /// Act II's BUILD content — the same pane as Act I's: the settlement's recipes of every tier.
 /// The act authors no milestone card yet (the Exchange, ACT2-17). Its orders run to three
@@ -51,6 +53,8 @@ const build_shelf = t.BuildShelf{
     .act = 2,
     .subtitle = "Find the next recipe the settlement can raise.",
     .widths = .{ .cost = 112, .effect = 140 - t.build_scroll_gutter },
+    // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
+    .carry_owned = true,
 };
 const a2_holdings = @import("./holdings.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
@@ -59,13 +63,13 @@ const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "STRUCTURE" };
 
 /// The stocks the stockline reads from the ledger, in its order after Vigor.
-const ledger_stocks = [_]struct { r: ha.roster.Resource, abbrev: []const u8, full: []const u8 }{
-    .{ .r = .food, .abbrev = "FO", .full = "Food" },
-    .{ .r = .water, .abbrev = "WA", .full = "Water" },
-    .{ .r = .fuel, .abbrev = "FU", .full = "Fuel" },
-    .{ .r = .metal, .abbrev = "ME", .full = "Metal" },
-    .{ .r = .minerals, .abbrev = "MI", .full = "Minerals" },
-    .{ .r = .biomass, .abbrev = "BI", .full = "Biomass" },
+const ledger_stocks = [_]ha.roster.Resource{
+    .food,
+    .water,
+    .fuel,
+    .metal,
+    .minerals,
+    .biomass,
 };
 
 /// What a caller may ask of the page beyond the world.
@@ -94,24 +98,19 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         const vigor = world.get(e, comp.Vigor).?;
         stocks[n] = t.vigorStock(ctx, "VI", vigor);
         n += 1;
-        for (ledger_stocks) |s| {
-            const amount = ledger.balance(world, e, s.r);
+        for (ledger_stocks) |resource| {
+            const amount = ledger.balance(world, e, resource);
             stocks[n] = .{
-                .abbrev = s.abbrev,
-                .full = s.full,
+                .abbrev = resource.abbrevIn(2),
+                .full = resource.labelIn(2),
                 .value = amount,
                 .tone = if (amount <= 0) .danger else .normal,
             };
             n += 1;
         }
     }
-    stocks[n] = .{ .abbrev = "CO", .full = "Coin", .value = fx.coin };
+    stocks[n] = .{ .abbrev = ha.roster.Resource.coin.abbrevIn(2), .full = ha.roster.Resource.coin.labelIn(2), .value = fx.coin };
     n += 1;
-
-    // --- the rail: Act II Holdings/BODY ------------------------------------------------------
-    if (regions.rail) |rail| {
-        if (agent) |e| _ = try t.holdings(rail, "a2_holdings", try a2_holdings.content(ctx, world, e));
-    }
 
     // The merchant dialog's open/mode/selection persists on an always-built node, surviving
     // view switches (STRUCTURE hides the strip, never the deal).
@@ -129,6 +128,28 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     });
     if (s.market_action) |m| {
         if (m.query().clicked) trade_owner.state(uic.UiState.TradeState).open = true;
+    }
+
+    // --- the rail: Holdings/BODY, then the eating policy, collapsing together -----------------
+    // The policy rides under BODY (whose projections it moves) rather than in the action grid,
+    // where it would be lost among twenty-odd verbs. Each view keys its own rail, so ACTIONS and
+    // BUILD remember their collapse separately; STRUCTURE collapses on every entry.
+    if (regions.rail) |rail_region| {
+        const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_structure" };
+        const r = try t.rail(rail_region, .{
+            .id = rail_ids[@min(s.active, rail_ids.len - 1)],
+            .label = "HOUSEHOLD",
+            .force_collapsed = s.active == 2,
+        });
+        if (r.body) |body| if (agent) |e| {
+            const column = try t.holdings(body, "a2_holdings", try a2_holdings.content(ctx, world, e));
+            if (world.get(e, comp.Metabolism)) |met| {
+                const value = try t.eating_policy(column, "eating_policy", ha.eating.valueFromRate(met.rate), true);
+                met.rate = ha.eating.rate(value);
+            } else {
+                _ = try t.eating_policy(column, "eating_policy", 50, false);
+            }
+        };
     }
 
     if (agent) |e| switch (s.active) {

@@ -15,7 +15,8 @@
             .{ .item = "food", .n = 1.8, .kind = .normal },
         },
     },
-    // Scavenge: pick through the derelict edge of town. The day-one materials verb —
+    // Scavenge: pick through the derelict edge of town. The day-one Biomass verb (shown as
+    // Materials in Act I) —
     // exponential on both sides: mostly scraps, occasionally a jackpot find, and sometimes
     // a forgotten can of food. This is what bootstraps the first tool.
     .{
@@ -25,17 +26,17 @@
         .requires = .{ .energy = 2.0, .hours = 5.0 },
         .output = .{
             .{ .item = "food", .n = 0.3, .kind = .exponential },
-            .{ .item = "materials", .n = 2.5, .kind = .exponential },
+            .{ .item = "biomass", .n = 2.5, .kind = .exponential },
         },
     },
     // Split wood: unlocked by the hatchet — you cannot split logs bare-handed. Steady
-    // materials; uniform, an even spread rather than a bell.
+    // Biomass (displayed as Materials in Act I); uniform, an even spread rather than a bell.
     .{
         .id = "chop_wood",
         .name = "Split wood",
         .requires = .{ .energy = 5.0, .hours = 5.0 },
         .output = .{
-            .{ .item = "materials", .n = 5.0, .kind = .uniform },
+            .{ .item = "biomass", .n = 5.0, .kind = .uniform },
         },
     },
     // Fish: unlocked by the fishing rod. Better mean than Forage but poisson-lumpy — feast
@@ -56,7 +57,7 @@
         .on_surface = false,
         .requires = .{ .energy = 1.0, .hours = 2.0 },
         .input = .{
-            .{ .item = "materials", .n = 1.0 },
+            .{ .item = "biomass", .n = 1.0 },
         },
         .output = .{
             .{ .item = "food", .n = 3.0, .kind = .poisson },
@@ -69,7 +70,7 @@
         .name = "Hunt",
         .requires = .{ .energy = 4.0, .hours = 8.0 },
         .input = .{
-            .{ .item = "materials", .n = 1.0 },
+            .{ .item = "biomass", .n = 1.0 },
         },
         .output = .{
             .{ .item = "food", .n = 6.0, .kind = .poisson },
@@ -78,7 +79,7 @@
 
     // —— Act II population-scale actions (act = 2) ——————————————————————————————————————
     // The twenty verbs the settlement works at scale. The first five mirror the Act I labor
-    // in the Act II resource space (generic Materials gives way to Biomass at the curtain);
+    // in the Act II resource space (the same Biomass stock sheds its Materials cover);
     // the rest are the broader production the research board opens. A verb is held through
     // the good that grants it (the firepit, the spring well, the forge) or through `tech`, the
     // technology that establishes it, once researched. Items name only the `Resource` enum —

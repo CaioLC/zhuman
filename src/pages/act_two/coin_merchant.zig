@@ -60,10 +60,10 @@ pub fn coin_merchant(ctx: *UiCtx, id: []const u8, ts: *TradeState) !Result {
 
     // The settlement's live Coin balance plus a few typed holdings — the YOU HOLD column.
     const holdings = [_]t.TradeHolding{
-        .{ .label = "Coin", .value = "126" },
-        .{ .label = "Biomass", .value = "31" },
-        .{ .label = "Minerals", .value = "3" },
-        .{ .label = "Fuel", .value = "14" },
+        .{ .label = ha.roster.Resource.coin.labelIn(2), .value = "126" },
+        .{ .label = ha.roster.Resource.biomass.labelIn(2), .value = "31" },
+        .{ .label = ha.roster.Resource.minerals.labelIn(2), .value = "3" },
+        .{ .label = ha.roster.Resource.fuel.labelIn(2), .value = "14" },
         .{ .label = "Tools", .value = "\u{00d7}6" },
     };
 

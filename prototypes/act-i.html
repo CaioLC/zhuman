@@ -18,22 +18,25 @@
         <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MA</span><span class="lbl-full">MATERIALS</span>:</span> <span class="stock-value">31</span></span>
       </div>
       <div class="runline">
-        <span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+0</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span>
         <span>Act I · <strong>Day 19</strong></span>
+        <span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span>
+        <button class="menu-button" type="button" aria-label="Open menu">MENU</button>
       </div>
     </header>
 
     <div class="page-grid" id="page-grid">
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
-        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Holdings" hidden><span aria-hidden="true">›</span><span class="restore-label">HOLDINGS</span></button>
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
 
         <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
-          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>4 kinds, 6</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Holdings">‹</button></span></h2>
+          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>6 kinds, 8</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
           <ul class="holdings-list">
             <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
             <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
             <li class="holding-row"><span>Leaf bed</span><span>vigor ceiling +1</span></li>
             <li class="holding-row"><span>Hatchet ×2</span><span>can split wood</span></li>
+            <li class="holding-row"><span>Wire snares</span><span>traps game</span></li>
+            <li class="holding-row"><span>Garden bed</span><span>grows food</span></li>
           </ul>
           <hr class="holdings-divider">
           <h3 class="block-heading">MARGINS</h3>
@@ -57,7 +60,7 @@
         <nav class="surface-nav" aria-label="Act I surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
-
+          <button class="tab" id="tab-generators" type="button" role="tab" aria-selected="false" aria-controls="view-generators" data-view="generators">GENERATORS</button>
         </nav>
 
         <div class="merchant-strip" role="status">
@@ -78,11 +81,16 @@
               <h1>ACTIONS</h1>
               <p>What will this body do now?</p>
             </div>
-            <span class="eyebrow">5 verbs</span>
+            <span class="eyebrow" id="action-catalog-count">4 verbs</span>
           </div>
 
-          <div class="action-grid" aria-label="Available actions">
-            <button class="action-tile" type="button" data-action="Forage" data-duration="4h">
+          <div class="build-query-bar">
+            <label class="build-query-field" for="action-query"><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
+          </div>
+          <div class="build-summary" id="action-summary" aria-live="polite">4 of 4 actions shown</div>
+
+          <div class="action-grid" id="action-rows" aria-label="Available actions">
+            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="food" data-action="Forage" data-duration="4h">
               <span class="action-name">Forage</span>
               <span class="action-metrics">
                 <span>−1.7e · 4h</span>
@@ -91,7 +99,7 @@
               </span>
             </button>
 
-            <button class="action-tile" type="button" data-action="Scavenge" data-duration="5h">
+            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="materials" data-action="Scavenge" data-duration="5h">
               <span class="action-name">Scavenge</span>
               <span class="action-metrics">
                 <span>−2e · 5h</span>
@@ -100,7 +108,7 @@
               </span>
             </button>
 
-            <button class="action-tile" type="button" data-action="Split wood" data-duration="5h">
+            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="materials" data-action="Split wood" data-duration="5h">
               <span class="action-name">Split wood</span>
               <span class="action-metrics">
                 <span>−2.5e · 5h</span>
@@ -109,21 +117,12 @@
               </span>
             </button>
 
-            <button class="action-tile" type="button" data-action="Fish" data-duration="6h">
+            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="food" data-action="Fish" data-duration="6h">
               <span class="action-name">Fish</span>
               <span class="action-metrics">
                 <span>−2e · 6h</span>
                 <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
                 <span class="yield">+2–5f</span>
-              </span>
-            </button>
-
-            <button class="action-tile" type="button" data-action="Check traps" data-duration="2h">
-              <span class="action-name">Check traps</span>
-              <span class="action-metrics">
-                <span>−1e −1m · 2h</span>
-                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
-                <span class="yield">+1–4f</span>
               </span>
             </button>
 
@@ -135,8 +134,42 @@
               <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
               <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
             </section>
+            <p class="empty-copy" id="action-empty" hidden>No action matches your search.</p>
           </div>
 
+        </section>
+
+        <section id="view-generators" role="tabpanel" aria-labelledby="tab-generators" hidden>
+          <div class="surface-heading">
+            <div>
+              <h1>GENERATORS</h1>
+              <p>Let time accumulate, then collect without stopping your work.</p>
+            </div>
+            <span class="eyebrow">2 owned</span>
+          </div>
+
+          <div class="action-grid" aria-label="Owned generators">
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Check traps" aria-disabled="true">
+              <span class="action-name">Check traps</span>
+              <span class="action-state">accumulating</span>
+              <span class="action-metrics">
+                <span>−1e −1m · 24h</span>
+                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
+                <span class="yield">+1–5f</span>
+              </span>
+              <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Check traps generator">● ON</button></div>
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Garden bed" aria-disabled="true">
+              <span class="action-name">Garden bed</span>
+              <span class="action-state">accumulating</span>
+              <span class="action-metrics">
+                <span>−0.5e −0.2m · 48h</span>
+                <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
+                <span class="yield">+0–1f</span>
+              </span>
+              <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Garden bed generator">● ON</button></div>
+          </div>
         </section>
 
         <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
@@ -146,29 +179,24 @@
           </div>
 
           <div class="build-query-bar">
-            <label class="build-query-field" for="build-query"><span class="build-query-icon" aria-hidden="true">⌕</span><input id="build-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search recipes · type:tool out:food state:ready" aria-label="Search and filter recipes"><kbd aria-hidden="true">/</kbd></label>
-            <button class="build-sort-toggle" id="build-sort-toggle" type="button" aria-expanded="false" aria-controls="build-sort-panel" aria-label="Sort recipes" title="Sort recipes"><span aria-hidden="true">⇅</span></button>
-          </div>
-          <div class="build-sort-panel" id="build-sort-panel" role="group" aria-label="Recipe sorting" hidden>
-            <label class="build-sort-control" for="build-sort-kind"><span>Sort by</span><select id="build-sort-kind"><option value="none">None</option><option value="reach">Reach</option><option value="inputs">Cost</option><option value="time">Time</option><option value="name">Name</option></select></label>
-            <label class="build-sort-control" for="build-sort-direction"><span>Direction</span><select id="build-sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+            <label class="build-query-field" for="build-query"><input id="build-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search recipes · type:tool out:food state:ready" aria-label="Search and filter recipes"><kbd aria-hidden="true">/</kbd></label>
           </div>
 
           <div class="build-summary" id="build-summary" aria-live="polite">4 of 6 recipes shown</div>
           <div class="catalog-scroll build-table" id="build-table" tabindex="0" aria-label="Buildable recipes; scroll for more">
-            <div class="build-header" aria-hidden="true"><span>recipe</span><span>cost</span><span>time</span><span>what changes</span><span>state</span><span></span></div>
+            <div class="build-header" id="build-header" role="group" aria-label="Sort by column"><button class="sort-header" type="button" data-sort="name">recipe</button><button class="sort-header" type="button" data-sort="inputs">cost</button><button class="sort-header" type="button" data-sort="time">time</button><span>what changes</span><button class="sort-header" type="button" data-sort="state">state</button><span></span></div>
             <div id="build-rows"></div>
           </div>
 
           <section class="milestone-goal shelter-goal" id="shelter-goal" aria-labelledby="shelter-title" data-state="locked" data-open="false">
             <div class="milestone-bar">
-              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">not ready · 1 condition</span><span class="milestone-compact" id="shelter-compact">materials 31/60</span><span class="milestone-more">details ↓</span></button>
-              <button class="primary-action" id="raise-shelter" type="button" disabled>NOT READY</button>
+              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">locked · 2 conditions</span><span class="milestone-compact" id="shelter-compact">materials 31/60</span><span class="milestone-more">details ↓</span></button>
+              <button class="primary-action" id="raise-shelter" type="button" disabled>LOCKED</button>
             </div>
             <div class="milestone-details" id="shelter-details" hidden>
               <div class="milestone-detail-head"><span class="milestone-kicker">A PLACE FOR OTHERS</span><span class="milestone-cost">60m 6e · 6.0d</span></div>
               <p id="shelter-copy">a roof with room for four. you're not alone anymore.</p>
-              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/15</strong></span><span>FOOD <strong id="shelter-food">11.6/12</strong></span><span>RECIPES <strong id="shelter-recipes">4/5</strong></span><span>MATERIALS <strong id="shelter-materials">31/60</strong></span></div>
+              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/15</strong></span><span>FOOD <strong id="shelter-food">11.6/12</strong></span><span>RECIPES <strong id="shelter-recipes">6/5</strong></span><span>MATERIALS <strong id="shelter-materials">31/60</strong></span></div>
               <div class="milestone-action-row"><span id="shelter-detail">Hold 60 materials with a settled body and four kinds of goods.</span></div>
             </div>
           </section>
@@ -177,10 +205,10 @@
     </div>
 
     <footer class="screen-footer" id="event-log" aria-label="Event log" aria-live="polite">
-      <div class="log-line"><span class="time">19:08</span><span>Someone is walking the shoreline. Their pack carries made goods.</span></div>
-      <div class="log-line"><span class="time">18:22</span><span>You finish a second Hatchet. One is effect; one is stock.</span></div>
-      <div class="log-line"><span class="time">17:04</span><span>The Root cellar slows what the larder loses.</span></div>
-      <div class="log-line"><span class="time">16:11</span><span>You return with 4 materials.</span></div>
+      <div class="log-line"><span class="time">D19 19:08</span><span>Someone is walking the shoreline. Their pack carries made goods.</span></div>
+      <div class="log-line"><span class="time">D19 18:22</span><span>You finish a second Hatchet. One is effect; one is stock.</span></div>
+      <div class="log-line"><span class="time">D19 17:04</span><span>The Root cellar slows what the larder loses.</span></div>
+      <div class="log-line"><span class="time">D19 16:11</span><span>You return with 4 materials.</span></div>
     </footer>
   </main>
 
@@ -209,7 +237,7 @@
 
           <section class="trade-preview" aria-label="Trade preview">
             <div class="preview-line"><span>YOU GIVE</span><strong id="preview-give">12 food + 16 materials</strong></div>
-            <div class="trade-arrow" aria-hidden="true">⇄</div>
+            <div class="trade-arrow" aria-hidden="true">↔</div>
             <div class="preview-line"><span>YOU RECEIVE</span><strong id="preview-receive">Fishing net ×1</strong></div>
             <div class="preview-effect" id="preview-effect">Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.</div>
           </section>
@@ -240,9 +268,11 @@
       const tabs = [...document.querySelectorAll('[data-view]')];
       const views = {
         actions: document.querySelector('#view-actions'),
-        build: document.querySelector('#view-build')
+        build: document.querySelector('#view-build'),
+        generators: document.querySelector('#view-generators')
       };
       const prototypeParams = new URLSearchParams(location.search);
+      let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
 
       const pageGrid = document.querySelector('#page-grid');
       const collapseHoldings = document.querySelector('#holdings-collapse');
@@ -250,7 +280,8 @@
       const requestedHoldingsState = prototypeParams.get('holdings');
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
-        build: requestedHoldingsState === 'collapsed'
+        build: requestedHoldingsState === 'collapsed',
+        generators: requestedHoldingsState === 'collapsed'
       };
       let activeView = null;
       let holdingsCollapsed = false;
@@ -283,6 +314,70 @@
       tabs.forEach(tab => tab.addEventListener('click', () => setView(tab.dataset.view)));
       addEventListener('hashchange', () => setView(location.hash.slice(1), false));
       setView(location.hash.slice(1) || 'actions', false);
+
+      // Header speed stepper over pause, 1×, 2×, 3× (the game's `speed_stepper`).
+      const speedStepper = document.querySelector('#speed-stepper');
+      const speedLevel = document.querySelector('#speed-level');
+      const speedLabels = ['PAUSE', '1×', '2×', '3×'];
+      const speedNames = ['Paused', '1× speed', '2× speed', '3× speed'];
+      let speed = 1;
+      function setSpeed(level) {
+        speed = Math.max(0, Math.min(3, level));
+        speedLevel.textContent = speedLabels[speed];
+        speedLevel.classList.toggle('is-paused', speed === 0);
+        speedStepper.setAttribute('aria-valuenow', String(speed));
+        speedStepper.setAttribute('aria-valuetext', speedNames[speed]);
+        speedStepper.querySelector('[data-speed-step="-1"]').disabled = speed === 0;
+        speedStepper.querySelector('[data-speed-step="1"]').disabled = speed === 3;
+      }
+      speedStepper.querySelectorAll('[data-speed-step]').forEach(button => button.addEventListener('click', () => setSpeed(speed + Number(button.dataset.speedStep))));
+      speedStepper.addEventListener('keydown', event => {
+        const steps = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 };
+        if (event.key in steps) { event.preventDefault(); setSpeed(speed + steps[event.key]); }
+        if (event.key === 'Home') { event.preventDefault(); setSpeed(0); }
+        if (event.key === 'End') { event.preventDefault(); setSpeed(3); }
+      });
+      setSpeed(1);
+
+      // ACTIONS search: the shared query language over the held verbs (no sorting).
+      const actionQuery = document.querySelector('#action-query');
+      const actionTiles = [...document.querySelectorAll('#action-rows [data-action]')];
+      const actionSummary = document.querySelector('#action-summary');
+      const actionEmpty = document.querySelector('#action-empty');
+      function actionMatches(tile, rawTerm) {
+        let term = rawTerm.toLowerCase();
+        let excluded = false;
+        if (term.startsWith('-') && term.length > 1) { excluded = true; term = term.slice(1); }
+        const separator = term.indexOf(':');
+        const field = separator > 0 ? term.slice(0, separator) : '';
+        const value = separator > 0 ? term.slice(separator + 1) : term;
+        const fields = { in: tile.dataset.in, out: tile.dataset.out, state: tile.dataset.state };
+        const haystack = field ? fields[field] : tile.dataset.action;
+        const matched = value === '*' || Boolean(haystack && value.split(',').some(option => haystack.toLowerCase().includes(option)));
+        return excluded ? !matched : matched;
+      }
+      function applyActionQuery() {
+        const terms = actionQuery.value.trim().split(/\s+/).filter(Boolean);
+        let visible = 0;
+        actionTiles.forEach(tile => {
+          tile.hidden = !terms.every(term => actionMatches(tile, term));
+          if (!tile.hidden) visible += 1;
+        });
+        actionEmpty.hidden = visible > 0;
+        actionSummary.textContent = `${visible} of ${actionTiles.length} actions shown`;
+      }
+      actionQuery.addEventListener('input', applyActionQuery);
+      actionQuery.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && actionQuery.value) { event.preventDefault(); actionQuery.value = ''; applyActionQuery(); }
+      });
+      addEventListener('keydown', event => {
+        const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
+        if (!views.actions.hidden && event.key === '/' && !editable && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          actionQuery.focus();
+        }
+      });
+      applyActionQuery();
 
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
@@ -342,32 +437,34 @@
 
       const materialsOnHand = 31;
       const buildRecipes = [
-        { name: 'Garden bed', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '12m 4e', inputCost: 12, time: 0.7, effect: 'grows food on its own', state: 'ready', reach: 1 },
-        { name: 'Wire snares', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '10m 3e', inputCost: 10, time: 0.5, effect: 'you can check traps', state: 'ready', reach: 1 },
+        { name: 'Garden bed', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '12m 4e', inputCost: 12, time: 0.7, effect: 'grows food on its own', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Wire snares', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '10m 3e', inputCost: 10, time: 0.5, effect: 'readies game to collect', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Spear', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '10m 5e', inputCost: 10, time: 0.3, effect: 'you can hunt', state: 'ready', reach: 1 },
+        { name: 'Rope bag', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '15m 3e', inputCost: 15, time: 0.3, effect: '+1 vigor ceiling', state: 'ready', reach: 1 },
         { name: 'Fishing rod', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '48m 2e', inputCost: 48, time: 4.2, effect: 'you can fish', state: 'reach', reach: 0.65, stateCopy: '31/48m' },
         { name: 'Cookpot', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '40m 2e', inputCost: 40, time: 2.1, effect: 'food restores more vigor', state: 'reach', reach: 0.78, stateCopy: '31/40m' },
-        { name: 'Work gloves', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '48m 1e', inputCost: 48, time: 2.1, effect: 'splitting wood costs less', state: 'locked', reach: 0.64, tech: 'Split wood', stateCopy: '31/48m' },
-        { name: 'Chainsaw', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '96m 3e', inputCost: 96, time: 5.0, effect: 'wood costs fuel, not muscle', state: 'locked', reach: 0.32, tech: 'Split wood', stateCopy: '31/96m' },
+        { name: 'Work gloves', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '48m 1e', inputCost: 48, time: 2.1, effect: 'splitting wood costs less', state: 'blocked', reach: 0.64, tech: 'Split wood', stateCopy: '31/48m' },
+        { name: 'Chainsaw', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '96m 3e', inputCost: 96, time: 5.0, effect: 'wood costs fuel, not muscle', state: 'blocked', reach: 0.32, tech: 'Split wood', stateCopy: '31/96m' },
         { name: 'Leaf bed', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '8m 2e', inputCost: 8, time: 0.4, effect: 'vigor ceiling rises', state: 'owned', reach: 1, owned: 1 },
         { name: 'Root cellar', type: 'storage', inputs: ['materials'], outputs: ['food'], cost: '10m 4e', inputCost: 10, time: 0.5, effect: 'food keeps twice as long', state: 'owned', reach: 1, owned: 1 }
       ];
-      const validBuildSorts = ['none', 'reach', 'inputs', 'time', 'name'];
+      // Column-header sorting (the game's `nextSort`): a new column opens in its natural
+      // direction — STATE nearest-first, the rest cheapest/quickest/A–Z — and clicking the
+      // column in force flips it.
+      const validBuildSorts = ['state', 'inputs', 'time', 'name'];
       const validBuildDirections = ['asc', 'desc'];
+      const naturalDirection = sort => sort === 'state' ? 'desc' : 'asc';
+      const seededSort = validBuildSorts.includes(prototypeParams.get('buildsort')) ? prototypeParams.get('buildsort') : 'state';
       const controls = {
-        sort: validBuildSorts.includes(prototypeParams.get('buildsort')) ? prototypeParams.get('buildsort') : 'reach',
-        direction: validBuildDirections.includes(prototypeParams.get('builddir')) ? prototypeParams.get('builddir') : 'desc',
-        query: prototypeParams.get('buildq') || '',
-        sortOpen: prototypeParams.get('buildsortopen') === '1'
+        sort: seededSort,
+        direction: validBuildDirections.includes(prototypeParams.get('builddir')) ? prototypeParams.get('builddir') : naturalDirection(seededSort),
+        query: prototypeParams.get('buildq') || ''
       };
-      if (controls.sort === 'none') controls.direction = 'desc';
       const rowHost = document.querySelector('#build-rows');
       const buildTable = document.querySelector('#build-table');
       const summary = document.querySelector('#build-summary');
       const buildQuery = document.querySelector('#build-query');
-      const buildSortToggle = document.querySelector('#build-sort-toggle');
-      const buildSortPanel = document.querySelector('#build-sort-panel');
-      const buildSortKind = document.querySelector('#build-sort-kind');
-      const buildSortDirection = document.querySelector('#build-sort-direction');
+      const buildSortHeaders = [...document.querySelectorAll('#build-header [data-sort]')];
       const markupEscapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
       const escapeMarkup = value => String(value).replace(/[&<>"']/g, character => markupEscapes[character]);
       const recipeByRow = new Map();
@@ -381,6 +478,7 @@
       function recipeStateMarkup(recipe) {
         if (recipe.state === 'ready') return '<span class="state-copy state-ready">ready</span>';
         if (recipe.state === 'owned') return `<span class="state-copy">owned ×${recipe.owned || 1}</span>`;
+        if (recipe.state === 'blocked') return `<span class="state-copy state-blocked">needs ${escapeMarkup(recipe.tech)}</span>`;
         return `${reachMeter(recipe.reach)}<span class="state-copy">${escapeMarkup(recipe.stateCopy || 'out of reach')}</span>`;
       }
 
@@ -469,47 +567,39 @@
       }
 
       function syncBuildSortControls() {
-        buildSortKind.value = controls.sort;
-        buildSortDirection.value = controls.direction;
-        buildSortDirection.disabled = controls.sort === 'none';
-        buildSortToggle.setAttribute('aria-expanded', String(controls.sortOpen));
-        buildSortPanel.hidden = !controls.sortOpen;
+        buildSortHeaders.forEach(header => {
+          if (header.dataset.sort === controls.sort) header.setAttribute('aria-sort', controls.direction === 'asc' ? 'ascending' : 'descending');
+          else header.removeAttribute('aria-sort');
+        });
       }
 
       function syncBuildUrl() {
         const nextUrl = new URL(location.href);
         if (controls.query.trim()) nextUrl.searchParams.set('buildq', controls.query.trim());
         else nextUrl.searchParams.delete('buildq');
-        if (controls.sort !== 'reach') nextUrl.searchParams.set('buildsort', controls.sort);
+        if (controls.sort !== 'state') nextUrl.searchParams.set('buildsort', controls.sort);
         else nextUrl.searchParams.delete('buildsort');
-        if (controls.sort !== 'none' && controls.direction !== 'desc') nextUrl.searchParams.set('builddir', controls.direction);
+        if (controls.direction !== naturalDirection(controls.sort)) nextUrl.searchParams.set('builddir', controls.direction);
         else nextUrl.searchParams.delete('builddir');
-        if (controls.sortOpen) nextUrl.searchParams.set('buildsortopen', '1');
-        else nextUrl.searchParams.delete('buildsortopen');
         history.replaceState(null, '', nextUrl);
       }
 
-      function setBuildSortPanel(open, updateUrl = true) {
-        controls.sortOpen = Boolean(open);
-        syncBuildSortControls();
-        if (updateUrl) syncBuildUrl();
-      }
+      // How near a state is to "build it now": ready, in reach (nearest first), owned, locked.
+      const stateRank = { ready: 5, reach: 3, owned: 2, blocked: 1 };
 
       function applyBuildView(updateUrl = false) {
         const ordered = [...rows];
-        if (controls.sort !== 'none') {
-          ordered.sort((a, b) => {
-            const first = recipeByRow.get(a);
-            const second = recipeByRow.get(b);
-            let comparison = 0;
-            if (controls.sort === 'inputs') comparison = first.inputCost - second.inputCost;
-            else if (controls.sort === 'time') comparison = first.time - second.time;
-            else if (controls.sort === 'name') comparison = first.name.localeCompare(second.name);
-            else comparison = first.reach - second.reach;
-            if (controls.direction === 'desc') comparison *= -1;
-            return comparison || first.name.localeCompare(second.name);
-          });
-        }
+        ordered.sort((a, b) => {
+          const first = recipeByRow.get(a);
+          const second = recipeByRow.get(b);
+          let comparison = 0;
+          if (controls.sort === 'inputs') comparison = first.inputCost - second.inputCost;
+          else if (controls.sort === 'time') comparison = first.time - second.time;
+          else if (controls.sort === 'name') comparison = first.name.localeCompare(second.name);
+          else comparison = (stateRank[first.state] - stateRank[second.state]) || (first.reach - second.reach);
+          if (controls.direction === 'desc') comparison *= -1;
+          return comparison || first.name.localeCompare(second.name);
+        });
         if (buildingRow) {
           const buildingIndex = ordered.indexOf(buildingRow);
           if (buildingIndex > 0) ordered.unshift(...ordered.splice(buildingIndex, 1));
@@ -517,18 +607,12 @@
         ordered.forEach(row => rowHost.append(row));
 
         const hasQuery = Boolean(controls.query.trim());
-        const defaultRows = new Set(ordered.filter(row => {
-          const recipe = recipeByRow.get(row);
-          const state = row.dataset.state;
-          return state !== 'owned' && (state === 'ready' || (state === 'reach' && recipe.reach >= 0.5));
-        }));
         let visible = 0;
         rows.forEach(row => {
           const recipe = recipeByRow.get(row);
           const always = row === buildingRow;
-          const locked = row.dataset.state === 'locked';
-          const queryVisible = matchesBuildQuery(recipe, row);
-          row.hidden = locked ? !always : !(always || (hasQuery ? queryVisible : defaultRows.has(row)));
+          // The blank shelf is every recipe of the act; a query only narrows it.
+          row.hidden = !(always || !hasQuery || matchesBuildQuery(recipe, row));
           if (!row.hidden) visible += 1;
         });
         summary.textContent = `${visible} of ${rows.length} recipes shown`;
@@ -545,23 +629,12 @@
           applyBuildView(true);
         }
       });
-      buildSortToggle.addEventListener('click', () => setBuildSortPanel(!controls.sortOpen));
-      buildSortKind.addEventListener('change', () => {
-        controls.sort = buildSortKind.value;
-        if (controls.sort === 'none') controls.direction = 'desc';
+      buildSortHeaders.forEach(header => header.addEventListener('click', () => {
+        const clicked = header.dataset.sort;
+        if (clicked === controls.sort) controls.direction = controls.direction === 'desc' ? 'asc' : 'desc';
+        else { controls.sort = clicked; controls.direction = naturalDirection(clicked); }
         applyBuildView(true);
-      });
-      buildSortDirection.addEventListener('change', () => {
-        controls.direction = buildSortDirection.value;
-        applyBuildView(true);
-      });
-      buildSortPanel.addEventListener('keydown', event => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setBuildSortPanel(false);
-          buildSortToggle.focus();
-        }
-      });
+      }));
       addEventListener('keydown', event => {
         const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
         if (!views.build.hidden && event.key === '/' && !editable && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -617,8 +690,8 @@
       window.setPrototypeRecipeUnlocked = (name, unlocked) => {
         const recipe = buildRecipes.find(candidate => candidate.name === name);
         if (!recipe?.tech) return false;
-        const wasLocked = recipe.state === 'locked';
-        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'locked';
+        const wasLocked = recipe.state === 'blocked';
+        recipe.state = unlocked ? (recipe.reach >= 1 ? 'ready' : 'reach') : 'blocked';
         renderRecipeState(recipe);
         applyBuildView();
         if (unlocked && wasLocked) addLog(`A new recipe is within reach: ${recipe.name}.`);
@@ -649,9 +722,60 @@
       shelterToggle.addEventListener('click', () => { shelterOpen = !shelterOpen; syncShelterDisclosure(true); });
       syncShelterDisclosure();
 
+      // The Shelter recomputes from the body's stocks, as the game's card does every frame:
+      // locked until the standing conditions hold (vigor, larder, kinds of goods owned), then
+      // inputs short until the order is on hand, then ready to raise.
+      const shelterStock = window.prototypeStock = {
+        vigor: Number(prototypeParams.get('vigor') ?? 14),
+        food: Number(prototypeParams.get('food') ?? 11.6),
+        materials: Number(prototypeParams.get('materials') ?? 31)
+      };
+      const shelterNeeds = { vigor: 15, food: 12, kinds: 5, materials: 60 };
+      const shelterAction = document.querySelector('#raise-shelter');
+      function refreshShelter() {
+        const kinds = document.querySelectorAll('.holdings-list .holding-row').length;
+        const met = {
+          vigor: shelterStock.vigor >= shelterNeeds.vigor,
+          food: shelterStock.food >= shelterNeeds.food,
+          kinds: kinds >= shelterNeeds.kinds,
+          materials: shelterStock.materials >= shelterNeeds.materials
+        };
+        const unmet = Number(!met.vigor) + Number(!met.food) + Number(!met.kinds);
+        const state = unmet > 0 ? 'locked' : met.materials ? 'ready' : 'unfunded';
+        shelterGoal.dataset.state = state;
+        shelterGoal.classList.toggle('is-ready', state === 'ready');
+        const values = {
+          vigor: `${shelterStock.vigor}/${shelterNeeds.vigor}`,
+          food: `${shelterStock.food}/${shelterNeeds.food}`,
+          recipes: `${kinds}/${shelterNeeds.kinds}`,
+          materials: `${shelterStock.materials}/${shelterNeeds.materials}`
+        };
+        Object.entries(values).forEach(([key, text]) => {
+          const output = document.querySelector(`#shelter-${key}`);
+          output.textContent = text;
+          output.classList.toggle('is-met', key === 'recipes' ? met.kinds : met[key]);
+        });
+        document.querySelector('#shelter-compact').textContent = `materials ${shelterStock.materials}/${shelterNeeds.materials}`;
+        document.querySelector('#shelter-readiness').textContent = state === 'locked'
+          ? `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`
+          : state === 'unfunded' ? 'inputs short' : 'ready to raise';
+        shelterAction.textContent = state === 'locked' ? 'LOCKED' : state === 'unfunded' ? 'NEEDS INPUTS' : 'RAISE SHELTER →';
+        shelterAction.disabled = state !== 'ready';
+      }
+      window.refreshPrototypeShelter = refreshShelter;
+      refreshShelter();
+
+      // GENERATORS: the ON/OFF switch pauses accumulation and keeps the progress made.
+      document.querySelectorAll('.generator-toggle').forEach(toggle => toggle.addEventListener('click', () => {
+        const on = toggle.getAttribute('aria-checked') !== 'true';
+        toggle.setAttribute('aria-checked', String(on));
+        toggle.textContent = on ? '● ON' : '○ OFF';
+        toggle.closest('.generator-cell').querySelector('.action-state').textContent = on ? 'accumulating' : 'off';
+      }));
+
       const seededActivity = prototypeParams.get('activity');
       if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
-      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Garden bed'));
+      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Spear'));
 
       const dialog = document.querySelector('#merchant-dialog');
       const offers = [...document.querySelectorAll('.offer-button')];
@@ -693,9 +817,11 @@
       });
 
       function addLog(message) {
+        logMinutes += 7;
+        const stamp = `D19 ${String(Math.floor(logMinutes / 60) % 24).padStart(2, '0')}:${String(logMinutes % 60).padStart(2, '0')}`;
         const lines = [...document.querySelectorAll('.screen-footer .log-line')];
         for (let i = lines.length - 1; i > 0; i -= 1) lines[i].innerHTML = lines[i - 1].innerHTML;
-        lines[0].innerHTML = `<span class="time">NOW</span><span>${message}</span>`;
+        lines[0].innerHTML = `<span class="time">${stamp}</span><span>${message}</span>`;
       }
 
       if (prototypeParams.get('modal') === 'merchant') requestAnimationFrame(() => dialog.showModal());

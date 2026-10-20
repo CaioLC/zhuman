@@ -32,7 +32,7 @@ const Quote = market.Quote;
 /// realized Materials moved (for a sell, what was paid), so the caller/UI can confirm the number.
 pub const Result = struct {
     refusal: market.Refusal,
-    materials_moved: f32 = 0,
+    biomass_moved: f32 = 0,
 
     pub fn ok(self: Result) bool {
         return self.refusal == .none;
@@ -44,7 +44,7 @@ pub const Result = struct {
 /// carry the manufactured Act I unlockers: Fishing rod and Hatchet.
 pub fn goodOf(w: Ware) ?[]const u8 {
     return switch (w) {
-        .food, .materials => null,
+        .food, .biomass => null,
         .fish_hook => "fish_rod",
         .whetstone => "hatchet",
     };
@@ -68,7 +68,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
     const enc = &res.sim.encounter;
     const cat = &res.catalog;
     const food = w.get(e, comp.InventoryFood).?;
-    const stock = w.get(e, comp.InventoryMaterial).?;
+    const stock = w.get(e, comp.InventoryBiomass).?;
 
     // --- revalidate (all-or-nothing gate) ---------------------------------------------------
     const r = q.refusal(enc, food.v, stock.v);
@@ -83,15 +83,15 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
     }
 
     // --- apply (both bundles move, or neither — we are past every gate now) ------------------
-    var materials_moved: f32 = 0;
+    var biomass_moved: f32 = 0;
 
     // Give side leaves the player.
     for (q.give.slice()) |line| {
         switch (line.item) {
             .food => food.v -= line.qty,
-            .materials => {
+            .biomass => {
                 stock.v -= line.qty;
-                materials_moved += line.qty;
+                biomass_moved += line.qty;
             },
             .fish_hook, .whetstone => {
                 // Selling a good: its effect leaves with the last unit, spares first.
@@ -107,9 +107,9 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
     for (q.receive.slice()) |line| {
         switch (line.item) {
             .food => food.v += line.qty,
-            .materials => {
+            .biomass => {
                 stock.v += line.qty;
-                materials_moved += line.qty;
+                biomass_moved += line.qty;
             },
             .fish_hook, .whetstone => {
                 // Buying a good: own it and its effect lands once (a repeat is stock, not a second
@@ -125,11 +125,11 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
     var buf: [96]u8 = undefined;
     const msg = switch (q.direction) {
         .buy => std.fmt.bufPrint(&buf, "You trade with the passerby.", .{}) catch "You trade.",
-        .sell => std.fmt.bufPrint(&buf, "You sell to the passerby for {d:.0} materials.", .{materials_moved}) catch "You sell.",
+        .sell => std.fmt.bufPrint(&buf, "You sell to the passerby for {d:.0} {s}.", .{ biomass_moved, ha.roster.Resource.biomass.wordIn(ha.migration.actOf(w, e)) }) catch "You sell.",
     };
     res.sim.log.push(.good, msg);
 
-    return .{ .refusal = .none, .materials_moved = materials_moved };
+    return .{ .refusal = .none, .biomass_moved = biomass_moved };
 }
 
 // ============================ Tests =====================================================
@@ -154,7 +154,7 @@ fn spawn_trader(w: *World) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 6, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = 12 },
+        comp.InventoryBiomass{ .v = 12 },
         comp.Goods{},
         comp.Granted{},
     });
@@ -178,7 +178,7 @@ test "a buy moves both bundles atomically and decrements the satchel" {
         .give = blk: {
             var g = market.Bundle{};
             g.add(.food, 2);
-            g.add(.materials, 4);
+            g.add(.biomass, 4);
             break :blk g;
         },
         .receive = market.Bundle.one(.fish_hook, 1),
@@ -189,7 +189,7 @@ test "a buy moves both bundles atomically and decrements the satchel" {
     try testing.expect(r.ok());
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
-    try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12-4
+    try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 12-4
     // Receive side arrived + its effect (the fishing verb) applied once.
     try testing.expect(capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expect(held(&w, e, &res, "fish"));
@@ -212,13 +212,13 @@ test "a sell releases the good, credits materials, and passes it to the passerby
         .rev = 1,
         .direction = .sell,
         .give = market.Bundle.one(.whetstone, 1), // the hand-axe family
-        .receive = market.Bundle.one(.materials, 5),
+        .receive = market.Bundle.one(.biomass, 5),
     };
 
     const r = resolve(&w, e, &res, &q);
     try testing.expect(r.ok());
-    try testing.expectApproxEqAbs(@as(f32, 5), r.materials_moved, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // 12+5
+    try testing.expectApproxEqAbs(@as(f32, 5), r.biomass_moved, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 12+5
     // The good left and its verb with it (no lower rank owned, so the verb goes).
     try testing.expect(!capital.owns(&w, e, &res.catalog, "hatchet"));
     try testing.expect(!held(&w, e, &res, "chop_wood"));
@@ -239,21 +239,21 @@ test "every refusal path rolls back — nothing moves" {
         .direction = .buy,
         .give = blk: {
             var g = market.Bundle{};
-            g.add(.materials, 999); // more than the player holds
+            g.add(.biomass, 999); // more than the player holds
             break :blk g;
         },
         .receive = market.Bundle.one(.fish_hook, 1),
     };
 
     // Unaffordable → nothing changes.
-    const before_mat = w.get(e, comp.InventoryMaterial).?.v;
+    const before_mat = w.get(e, comp.InventoryBiomass).?.v;
     try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q).refusal);
-    try testing.expectEqual(before_mat, w.get(e, comp.InventoryMaterial).?.v);
+    try testing.expectEqual(before_mat, w.get(e, comp.InventoryBiomass).?.v);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
     // Affordable but stale (a different passerby now) → still nothing.
-    q.give = market.Bundle.one(.materials, 2);
+    q.give = market.Bundle.one(.biomass, 2);
     res.sim.encounter.id = 2;
     try testing.expectEqual(market.Refusal.stale, resolve(&w, e, &res, &q).refusal);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
@@ -277,8 +277,8 @@ test "selling a good you do not own is refused, not a panic" {
         .rev = 1,
         .direction = .sell,
         .give = market.Bundle.one(.whetstone, 1),
-        .receive = market.Bundle.one(.materials, 5),
+        .receive = market.Bundle.one(.biomass, 5),
     };
     try testing.expectEqual(market.Refusal.sold_out, resolve(&w, e, &res, &q).refusal);
-    try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryMaterial).?.v, 1e-5); // unchanged
+    try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // unchanged
 }

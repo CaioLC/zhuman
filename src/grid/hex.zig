@@ -1,8 +1,8 @@
 //! `grid/hex` — the **pure** pointy-top axial hex math for the Act II STRUCTURE board.
 //!
-//! This module is deliberately free of every UI, render, and game import: it names no
-//! `Theme`, no `Resource` palette, no ECS, no SDL. It knows only `std`. The board's geometry
-//! lives here as plain functions on plain coordinate types so it can be unit-tested without a
+//! This module is deliberately free of UI, render, ECS, and SDL imports. It uses `std` plus the
+//! roster's `Resource` naming cover so board wedge codes cannot drift from the rest of Act II.
+//! The board's geometry lives here as plain functions on plain coordinate types so it can be unit-tested without a
 //! renderer or a clock, and so the rendering layer reads positions from it rather than
 //! re-deriving them. Screen placement is a one-way transform *out* of this module; nothing
 //! flows back in. Classification is done from exact axial coordinates, never from a rounded
@@ -19,6 +19,7 @@
 //!       `y = cy + 1.5 * s * r`
 
 const std = @import("std");
+const roster = @import("../roster.zig");
 
 // ============================ Coordinate types =============================
 
@@ -88,14 +89,15 @@ pub const Wedge = enum(u3) {
     /// The two-letter stable code from §2 (`FO`, `WA`, `FU`, `ME`, `MI`, `BI`). Single
     /// initials would make Food/Fuel and Metal/Minerals ambiguous.
     pub fn code(w: Wedge) []const u8 {
-        return switch (w) {
-            .food => "FO",
-            .water => "WA",
-            .fuel => "FU",
-            .metal => "ME",
-            .minerals => "MI",
-            .biomass => "BI",
+        const resource: roster.Resource = switch (w) {
+            .food => .food,
+            .water => .water,
+            .fuel => .fuel,
+            .metal => .metal,
+            .minerals => .minerals,
+            .biomass => .biomass,
         };
+        return resource.abbrevIn(2);
     }
 
     /// The next wedge clockwise (mod 6) — the partner that closes a hybrid edge.

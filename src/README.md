@@ -22,9 +22,9 @@ The resource model separates survival from accounting:
   fraction `v/max` also scales an action's output quality, so a tired actor produces less.
 - **Food** (`comp.InventoryFood { v, quality, spoils }`) is a perishable larder — produced by
   labor, consumed continuously by the metabolism, and always spoiling.
-- **Materials** (`comp.InventoryMaterial { v }`) is the fungible durable stockpile: the early
-  score, and the currency capital is built from. One bucket on purpose — typed materials wait
-  for the market.
+- **Biomass** (`comp.InventoryBiomass { v }`) is the fungible durable stockpile in every act:
+  Act I UI and log prose cover its official name as **Materials**, while Act II shows Biomass.
+  The curtain carries the same balance unchanged; typed resources join it rather than replacing it.
 
 **Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
 every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local

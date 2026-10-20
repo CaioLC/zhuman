@@ -16,6 +16,7 @@ const El = el.El;
 
 const build_list_mod = @import("./build_list.zig");
 const row_mod = @import("./capital_row.zig");
+const browser_mod = @import("./browser.zig");
 
 pub const Shelf = build_list_mod.Shelf;
 
@@ -29,7 +30,6 @@ pub const Shelf = build_list_mod.Shelf;
 /// pinned below them.
 pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const width = row_mod.tableWidth(ctx, shelf.widths);
 
     const section = try parent.div(id);
@@ -37,20 +37,11 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
     _ = section.with_size(.{ .fixed = width + row_mod.scroll_gutter }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
 
-    const heading = try section.div("heading");
-    _ = heading.with_size(.{ .fixed = width }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(12);
-    const copy = try heading.div("copy");
-    _ = copy.with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try copy.text("title", "BUILD"))
-        .with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try copy.text("subtitle", shelf.subtitle))
-        .with_style(.{Style{ .font = 11, .text = th.dim }});
-
     var count_buf: [24]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.authoredTotal(&ctx.res.catalog, shelf)}) catch "RECIPES";
-    _ = (try heading.text("count", count))
-        .with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
+    const heading_box = try section.div("heading_box");
+    _ = heading_box.with_size(.{ .fixed = width }, .fit_children);
+    _ = try browser_mod.browser_heading(heading_box, "heading", "BUILD", shelf.subtitle, count);
 
     _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, catalog, search_owner, scroll);
     return section;

@@ -1,7 +1,7 @@
 //! `generator_section` — owned collectable capital as action-like tiles.
 //!
 //! Generators mature on simulation time without occupying `Busy`. A ready tile collects its
-//! complete cycle immediately; the lower-left ON/OFF control pauses accumulation while preserving
+//! complete cycle immediately; the lower-right ON/OFF control pauses accumulation while preserving
 //! progress. All readiness, cost, output, and progress comes from `capital.generator_quote`.
 
 const std = @import("std");
@@ -19,10 +19,10 @@ const Style = style.Style;
 const El = uic.elements.El;
 
 const action_tile = @import("./action_tile.zig");
+const browser = @import("./browser.zig");
 const info = @import("./action_info.zig");
 const fmt = @import("../fmt.zig");
 
-const tile_height: f32 = 96;
 const section_gap: f32 = 12;
 const grid_gap: f32 = 10;
 
@@ -39,14 +39,14 @@ fn ownedCount(world: *World, e: Entity, cat: *const roster.Catalog) usize {
     return count;
 }
 
-fn cycleCost(buf: []u8, q: capital.GeneratorQuote) []const u8 {
+fn cycleCost(act: u8, buf: []u8, q: capital.GeneratorQuote) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     var ebuf: [8]u8 = undefined;
-    wr.print("-{s}e", .{fmt.fmt_amount(&ebuf, q.spec.energy)}) catch {};
+    wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, q.spec.energy)}) catch {};
     for (q.rec.input) |line| {
         if (line.per != .day) continue;
         var nbuf: [8]u8 = undefined;
-        wr.print(" -{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n * q.cycle_days), info.letterOf(line.item) }) catch {};
+        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n * q.cycle_days), info.letterOf(act, line.item) }) catch {};
     }
     return wr.buffered();
 }
@@ -56,7 +56,7 @@ const Yield = struct {
     text: []const u8,
 };
 
-fn cycleYield(buf: []u8, q: capital.GeneratorQuote) Yield {
+fn cycleYield(act: u8, buf: []u8, q: capital.GeneratorQuote) Yield {
     var best: ?roster.Line = null;
     var best_mean: f32 = -1;
     for (q.rec.output) |line| {
@@ -72,9 +72,9 @@ fn cycleYield(buf: []u8, q: capital.GeneratorQuote) Yield {
         const lo = @round(stats.p10 * q.cycle_days);
         const hi = @round(stats.p90 * q.cycle_days);
         const text = if (lo == hi)
-            std.fmt.bufPrint(buf, "+{d:.0}{s}", .{ hi, info.letterOf(line.item) }) catch "+?"
+            std.fmt.bufPrint(buf, "+{d:.0}{s}", .{ hi, info.letterOf(act, line.item) }) catch "+?"
         else
-            std.fmt.bufPrint(buf, "+{d:.0}-{d:.0}{s}", .{ lo, hi, info.letterOf(line.item) }) catch "+?";
+            std.fmt.bufPrint(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, info.letterOf(act, line.item) }) catch "+?";
         return .{ .kind = line.kind, .text = text };
     }
     return .{ .text = std.fmt.bufPrint(buf, "+{d:.1}v", .{q.spec.vigor}) catch "+?v" };
@@ -90,7 +90,7 @@ fn stateWord(q: capital.GeneratorQuote) []const u8 {
     };
 }
 
-fn generatorTile(parent: El, world: *World, e: Entity, gi: u16) !void {
+fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.catalog;
     const q = capital.generator_quote(world, e, cat, ctx.res.config, gi) orelse return;
@@ -99,7 +99,7 @@ fn generatorTile(parent: El, world: *World, e: Entity, gi: u16) !void {
     var duration_buf: [12]u8 = undefined;
     var yield_buf: [20]u8 = undefined;
     const duration = std.fmt.bufPrint(&duration_buf, "{d:.0}h", .{q.spec.hours}) catch "?";
-    const yield = cycleYield(&yield_buf, q);
+    const yield = cycleYield(act, &yield_buf, q);
     const progress: ?f32 = if (q.standing == .charging) q.fraction() else null;
     const display_name = if (q.spec.label.len > 0) q.spec.label else q.rec.name;
     const tile = try action_tile.tile(
@@ -107,21 +107,25 @@ fn generatorTile(parent: El, world: *World, e: Entity, gi: u16) !void {
         q.rec.id,
         display_name,
         stateWord(q),
-        cycleCost(&cost_buf, q),
+        cycleCost(act, &cost_buf, q),
         duration,
         yield.kind,
         yield.text,
         q.ready(),
         progress,
+        .regular,
     );
-    _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_height });
+    _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
-    // Nested control, placed after the tile's content so it occupies the lower-left corner.
-    // Pointer hit testing selects this topmost child rather than also collecting the parent tile.
+    // Nested control, anchored out of flow in the lower-right corner so it never grows the tile.
+    // Right/bottom padding mirror the tile's inner padding (12 x 6, with the box's 1px bottom
+    // inset), aligning the label with the content edge. Pointer hit testing selects this topmost
+    // child rather than also collecting the parent tile.
     const toggle = try tile.el.div("toggle");
-    _ = toggle.with_size(.fit_children, .fit_children)
+    _ = toggle.with_layout(.bottom_right)
+        .with_size(.fit_children, .fit_children)
         .with_flow(.{ .dir = .row })
-        .with_style(.{style.pad_each(12, 5, 5, 6)});
+        .with_style(.{style.pad_each(12, 12, 5, 6)});
     if (toggle.query().clicked) capital.toggle_generator(world, e, cat, gi);
     const is_on = !world.get(e, comp.Generators).?.off[gi];
     const tq = toggle.control(.{
@@ -143,22 +147,15 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !
     const cat = &ctx.res.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     const count = ownedCount(world, e, cat);
+    const act = ha.migration.actOf(world, e);
 
     const section = try parent.div(id);
     _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
-    const heading = try section.div("heading");
-    _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(12);
-    const copy = try heading.div("copy");
-    _ = copy.with_flow(.{ .dir = .column, .cross = .start });
-    _ = (try copy.text("title", "GENERATORS")).with_style(.{ style.h3, Style{ .text = th.fg } });
-    _ = (try copy.text("subtitle", "Let time accumulate, then collect without stopping your work."))
-        .with_style(.{Style{ .font = 11, .text = th.dim }});
     var count_buf: [24]u8 = undefined;
     const count_text = std.fmt.bufPrint(&count_buf, "{d} OWNED", .{count}) catch "OWNED";
-    _ = (try heading.text("count", count_text)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = try browser.browser_heading(section, "heading", "GENERATORS", "Let time accumulate, then collect without stopping your work.", count_text);
 
     if (count == 0) {
         _ = (try section.text("empty", "Build a generator to begin accumulating."))
@@ -184,7 +181,7 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !
     var lane: usize = 0;
     for (cat.goods, 0..) |rec, gi| {
         if (!isActOneGenerator(rec) or goods.count[gi] == 0) continue;
-        try generatorTile(lanes[lane % 2], world, e, @intCast(gi));
+        try generatorTile(lanes[lane % 2], world, e, act, @intCast(gi));
         lane += 1;
     }
     return section;

@@ -102,12 +102,18 @@ Header (kicker + title + close) · direction tabs · body grid
 
 ## 4. Actions surface
 
-- **[decided]** Act I stays a static 5-tile grid. Act II is the searchable/sortable catalog
-  (search bar, sort panel, `in:/out:/type:/state:` query syntax). Act I does not need this.
+- **[decided]** Both acts use the same ACTIONS catalog: heading + count, a search field
+  (`Search actions · out:food state:ready`, `/` focuses it), `{n} of {m} actions shown`, and
+  the tiles in authored order. **No sorting** for actions. Act I's grid is regular density
+  (82px tiles) with the eating policy in the right lane; Act II's is **compact** (52px tiles,
+  6px gaps) and its eating policy rides the **rail under BODY**, out of the long catalog.
+- **[decided]** Act I has a third tab, **GENERATORS**: owned generators as action-like tiles
+  with a state line, an accumulation underbar and an ON/OFF switch in the lower-right corner.
 - **[proposal, item 8]** Normalize the **action tile** to Act II's format in both acts:
   - Metrics string: `−{energy}e · {duration}` (middot separator).
-  - Optional `action-state` sub-line, rendered only when a state copy exists. Act I tiles
-    (all "ready") omit it. Same `renderActionTile()` contract.
+  - One left-aligned metrics run: `−{energy}e {inputs} · {duration} {curve} +{lo}–{hi}{unit}`
+    (true minus sign, en dash ranges). No READY/state badge on action tiles: an unaffordable
+    tile is dimmed instead. Generators keep their state line (`accumulating`, `off`…).
 - **[decided, item 9]** Yields reference the act's resource model: Act I materials
   (`+3–5m`), Act II biomass (`+3–5b`). Same numbers where the recipe is the same.
 - Distribution icons: shared `distributionLabels` map for `alt` text in both acts (keep
@@ -117,14 +123,21 @@ Header (kicker + title + close) · direction tabs · body grid
 
 ## 5. Build surface
 
-- **[decided, item 11]** Adopt **Act II's BUILD** everywhere: search box + sort dropdown
-  panel. Drop Act I's chip filters (SORT/SHOW chips, "□ built" toggle).
-- **[decided, item 14]** **Remove the "blocked" state entirely.**
-  - Recipes/actions the player cannot possibly do are **not shown**.
-  - Recipe states reduce to: `ready`, `reach` (in-reach, short on inputs), `owned`.
-  - When a prerequisite becomes satisfied, the recipe **appears** and the **event log**
+- **[decided, item 11]** Adopt **Act II's BUILD** everywhere: a full-width search box
+  (`Search recipes · type:tool out:food state:ready`) and **sortable column headers**
+  (RECIPE, COST, TIME, STATE; a new column opens in its natural direction — STATE nearest
+  first, the rest ascending — and a second click flips it). No sort panel, no chip filters.
+  The COST cell is one line (`12m 4e`).
+- **[decided, item 14 — revised]** The blank BUILD shelf lists **every recipe of the act**,
+  so the player sees the whole catalog; a query only narrows it.
+  - Recipe states: `ready`, `reach` (short on inputs; meter + `31/48m`), `owned`
+    (`Build +1`: another unit is stock to sell, its effect does not compound), and
+    `blocked` (`needs {tech or tool}` in danger, no corner action).
+  - STATE sorts ready → reach → owned → blocked; a build in progress pins on top.
+  - When a prerequisite is satisfied, the row turns buildable and the **event log**
     announces it, e.g. `A new recipe is within reach: Fishing net.`
-  - Removes Act I's "needs Split wood" and Act II's "needs {Tech}" rows.
+  - Act II's shelf also carries the Act I goods the settlement owns, unless Act II
+    authors a recipe of the same name.
 - **[decided, item 14]** Rename **"good" → "recipe"** throughout (headings, counts, summary).
 - **[proposal, item 13]** Normalize row schema to Act II's data-generated model:
   - Rows generated from a recipe object (no hand-written HTML).
@@ -151,8 +164,9 @@ Header (kicker + title + close) · direction tabs · body grid
   - **Requirements row**: same markup; act-specific tokens.
     - Act I: `VIGOR · FOOD · RECIPES · MATERIALS`.
     - Act II: `RING4 · PEOPLE · BIOMASS · MINERALS · METAL`.
-  - **[proposal]** Promote Act I Shelter from **static to live** (recompute readiness on
-    resource change), matching Act II, so both behave identically.
+  - **[decided]** Both cards are **live**: readiness recomputes from the stocks.
+  - Copy (both): locked → `locked · {n} condition(s)` / CTA `LOCKED`; unfunded →
+    `inputs short` / `NEEDS INPUTS`; ready → `ready to raise` / `RAISE {NAME} →`.
 
 ---
 
@@ -163,7 +177,16 @@ Header (kicker + title + close) · direction tabs · body grid
 
 ---
 
-## 8. Holdings side rail
+## 8. Household side rail
+
+- **[decided]** The rail is the **HOUSEHOLD**: the economic unit's holdings, its flows, the
+  body that lives on them and how it consumes. The collapsed restore label reads `HOUSEHOLD`
+  in both acts (one person in Act I, the settlement in Act II); the inner panel keeps its
+  `HOLDINGS` heading.
+- **[decided]** Act I: HOLDINGS + MARGINS, BODY (eating, food lasts, full vigor); the eating
+  policy rides the action grid. Act II: HOLDINGS + `FLOWS / DAY`, the settlement's BODY
+  (population, larder, water, hall vigor) and the **eating policy at the foot of the rail**,
+  aligned to the panels and collapsing with them.
 
 - **[proposal, item 17]** Adopt Act II's **per-view collapse memory**
   (`holdingsCollapsedByView`) as the shared model. Act I (single view) degenerates to the
@@ -182,8 +205,7 @@ Header (kicker + title + close) · direction tabs · body grid
   with the same `addLog(message)` contract.
 - Act II additionally hides the log on the STRUCTURE tab; Act I has no such logic but keeps
   the identical id and API.
-- **[decided, item 14]** The log is the channel for "recipe/action unlocked" announcements
-  now that "blocked" rows are gone.
+- **[decided, item 14]** The log is the channel for "recipe/action unlocked" announcements.
 
 ---
 
@@ -221,7 +243,7 @@ Header (kicker + title + close) · direction tabs · body grid
 | 11 | build filters | decided | adopt Act II BUILD |
 | 12 | summary wording | proposal | `{n} of {m} recipes shown` |
 | 13 | row schema | proposal | Act II data-generated schema both acts |
-| 14 | blocked state | decided | remove; hide undoable; log unlocks; "recipe" |
+| 14 | blocked state | decided (revised) | show every recipe; `needs {tech}` rows; log unlocks; "recipe" |
 | 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible |
 | 16 | no STRUCTURE in Act I | decided | keep |
 | 17 | holdings collapse | proposal/decided | per-view memory; STRUCTURE forces collapse |

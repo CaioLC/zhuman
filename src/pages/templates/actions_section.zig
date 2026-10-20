@@ -28,9 +28,10 @@ const cc = @import("./catalog_controls.zig");
 const browser = @import("./browser.zig");
 const copy = @import("./copy.zig");
 
-const tile_content_height: f32 = 81; // 82px outer height including action_tile's 1px inset
 const section_gap: f32 = 12;
 const grid_gap: f32 = 10;
+/// The compact catalog packs its tiles tighter (the prototype's `.act-two .action-grid`).
+const compact_grid_gap: f32 = 6;
 /// The most verbs one frame lists.
 const max_verbs = 64;
 
@@ -40,6 +41,8 @@ pub const Shelf = struct {
     subtitle: []const u8,
     /// Act I's body eats by a standing policy; its slider rides at the foot of the grid.
     eating_policy: bool = false,
+    /// The tiles' type scale: Act II's long catalog lists its verbs compact.
+    density: action_tile_mod.Density = .regular,
 
     /// Whether a verb record is one of this shelf's: on the surface and of this act.
     pub fn holds(self: Shelf, rec: *const roster.Action) bool {
@@ -167,7 +170,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     const count = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
     _ = try browser.browser_heading(section, "heading", "ACTIONS", shelf.subtitle, count);
 
-    const controls = try cc.catalog_controls(section, "actions_ctl", catalog_state, search_owner);
+    const controls = try cc.catalog_controls(section, "actions_ctl", cc.actions_placeholder, catalog_state, search_owner);
     const shown = filter(all, controls.query_text);
 
     var sbuf: [40]u8 = undefined;
@@ -175,15 +178,15 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     _ = try copy.summary_line(section, "summary", summary);
 
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
-    const grid = try browser.tile_lanes(section, "grid", compact, grid_gap);
+    const grid = try browser.tile_lanes(section, "grid", compact, if (shelf.density == .compact) compact_grid_gap else grid_gap);
     if (shown.len == 0) {
         const msg = if (all.len == 0) "No action is open yet. Build or research one." else "No action matches your search.";
         _ = try copy.empty_line(grid.grid, "empty", msg);
     }
     // Keyed by the verb's id, so focus follows it as the query changes.
     for (shown, 0..) |ent, pos| {
-        if (try action_tile_mod.action_tile(grid.lanes[pos % 2], world, e, ent.ai, ent.rec.id)) |tl| {
-            _ = tl.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_content_height })
+        if (try action_tile_mod.action_tile(grid.lanes[pos % 2], world, e, ent.ai, ent.rec.id, shelf.density)) |tl| {
+            _ = tl.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_tile_mod.height(shelf.density) })
                 .with_flow(.{ .dir = .column, .main = .center });
             if (tl.clicked) actions.begin(world, e, ctx.res, ent.ai);
         }
@@ -202,7 +205,7 @@ fn settler(w: *World, cat: *const roster.Catalog) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 15, .max = 15 },
         comp.InventoryFood{ .v = 20, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = 30 },
+        comp.InventoryBiomass{ .v = 30 },
         comp.Goods{},
         comp.Granted{},
     });
@@ -270,5 +273,7 @@ test "in: and out: match the verb's lines; state: its standing" {
 }
 
 test "actions tiles keep their height" {
-    try testing.expectEqual(@as(f32, 81), tile_content_height);
+    // 82px / 52px outer, including the tile's 1px bottom inset.
+    try testing.expectEqual(@as(f32, 81), action_tile_mod.height(.regular));
+    try testing.expectEqual(@as(f32, 51), action_tile_mod.height(.compact));
 }

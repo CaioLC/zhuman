@@ -4,25 +4,17 @@
 //! (`World.add`/`get`/`has`/`remove`) over the components in `components.zig`, the same way
 //! `capital.zig` composes build steps — no `src/ui/` or `src/ui_client/` architecture is touched.
 //!
-//! The curtain rules (from `docs/roadmap.md` "Non-negotiable product invariants" and
-//! `docs/hex_tech_board_spec.md`):
+//! The curtain rules:
 //!
-//!  1. **Food carries unchanged.** The larder is identical across the curtain — migration never
-//!     reads or writes `InventoryFood`.
-//!  2. **Unspent generic Materials → Biomass, `1:1`.** The whole `InventoryMaterial.v` becomes
-//!     `InventoryBiomass.v`; the exchange rate is exactly one, and the parity test below holds
-//!     every recipe the two acts share by name to equal Act I material and Act II biomass costs.
-//!  3. **Generic Materials leaves active accounting.** After migration the `InventoryMaterial`
-//!     component is removed — it "cannot be earned or spent in Act II".
-//!  4. **Goods/counts/effects are preserved.** Goods are counts on `comp.Goods`, and what they
-//!     grant derives from those counts (`effects.zig`); migration touches neither, so two fishing
-//!     rods and the Fish verb they grant cross unchanged. (A test asserts this.)
-//!  5. **Seed Foraging/Woodcutting Researched; the other four ring-1 techs Available.** Act I
-//!     already established the personal-scale foundations of Forage and Split wood, so their
-//!     ring-1 counterparts start Researched rather than unlocking a verb a second time.
-//!  6. **Run exactly once.** A `Migrated` stamp is written; a second call is a no-op. This is the
-//!     idempotence `ACT1-18` asks to unit-test, and the version field is the save-version
-//!     boundary a future migration step keys off.
+//!  1. **Food and Biomass carry unchanged.** Both balances already exist in Act I; only Biomass's
+//!     display name changes from Materials to Biomass after the stamp is applied.
+//!  2. **Open the remaining Act II stocks at zero.** Water, Fuel, Metal, and Minerals are added
+//!     only when absent, so the first Act II yield has somewhere to land.
+//!  3. **Goods/counts/effects are preserved.** Migration touches none of them.
+//!  4. **Seed research.** Foraging/Woodcutting begin Researched and the other authored initial
+//!     states are copied into one `Research` component when absent.
+//!  5. **Run exactly once.** A versioned `Migrated` stamp makes the operation idempotent and is
+//!     also the authority used by `actOf` for act-aware display names.
 //!
 //! Population/capacity/market initialization "exactly once" is noted as a migration
 //! responsibility by `ACT1-18`, but its home is the Act II population system
@@ -46,11 +38,6 @@ const Entity = world.Entity;
 /// without re-running the steps it already has. The first (and current) schema is `1`.
 pub const current_version: u32 = 1;
 
-/// The `1:1` Materials→Biomass rate. Named rather than inlined so the parity test can reference
-/// the exact constant it depends on — a change here is a change to the invariant, not a silent
-/// re-tuning.
-pub const materials_to_biomass: f32 = 1.0;
-
 /// The Act II stocks besides Biomass, opened empty at the curtain.
 const act_two_stocks = .{ comp.InventoryWater, comp.InventoryFuel, comp.InventoryMetal, comp.InventoryMinerals };
 
@@ -59,13 +46,17 @@ pub fn is_migrated(w: *World, e: Entity) bool {
     return w.has(e, comp.Migrated);
 }
 
+/// The act whose names should be shown for `e`: the migration stamp lifts the Biomass cover.
+pub fn actOf(w: *World, e: Entity) u8 {
+    return if (w.has(e, comp.Migrated)) 2 else 1;
+}
+
 /// Carry `e` from Act I to Act II. Idempotent: if the agent already carries a `Migrated` stamp at
 /// `current_version`, this returns immediately having changed nothing — so calling it twice (or on
 /// an already-Act-II agent) is safe, which is the `ACT1-18` idempotence requirement. On the first
 /// call it:
 ///
-///  - converts the whole unspent `InventoryMaterial` balance to a new `InventoryBiomass` at `1:1`
-///    and removes `InventoryMaterial` from accounting;
+///  - carries the existing `InventoryBiomass` balance unchanged (or adds it empty if missing);
 ///  - opens the other Act II stocks (water, fuel, metal, minerals) at zero;
 ///  - leaves `InventoryFood` and `comp.Goods` untouched, so every good, its count, and what it
 ///    grants cross unchanged;
@@ -81,23 +72,14 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const ha.roster.Catalog) b
         if (stamp.version >= current_version) return false;
         // A future save-version step would run here (older stamp → bring forward). With only
         // schema 1 today, reaching this branch means the stamp is from a pre-release build; bring
-        // it to current without re-converting a balance that no longer exists.
+        // it to current without touching the already-carried balance.
         stamp.version = current_version;
         return true;
     }
 
-    // 1 + 2 + 3. Materials → Biomass, 1:1, then Materials leaves accounting. Guard on presence so
-    // an agent that somehow lacks the Act I balance still migrates (carrying 0 biomass) rather
-    // than panicking.
-    const carried: f32 = if (w.get(e, comp.InventoryMaterial)) |m| m.v else 0;
-    if (!w.has(e, comp.InventoryBiomass)) {
-        w.add(e, comp.InventoryBiomass{ .v = carried * materials_to_biomass });
-    } else {
-        // Defensive: if a biomass balance already exists (it should not pre-migration), add into
-        // it rather than clobbering, so no stock is silently destroyed.
-        w.get(e, comp.InventoryBiomass).?.v += carried * materials_to_biomass;
-    }
-    if (w.has(e, comp.InventoryMaterial)) w.remove(e, comp.InventoryMaterial);
+    // Biomass is already an Act I stock. Carry its balance unchanged, adding an empty stock only
+    // for defensive compatibility with an agent that somehow lacks it.
+    if (!w.has(e, comp.InventoryBiomass)) w.add(e, comp.InventoryBiomass{});
     // The other Act II stocks open at zero, so the first yield of water or metal lands.
     inline for (act_two_stocks) |Stock| {
         if (!w.has(e, Stock)) w.add(e, Stock{});
@@ -137,32 +119,29 @@ fn spawn_act_one_agent(w: *World, materials: f32) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 8, .max = 10 },
         comp.InventoryFood{ .v = 7, .quality = 2, .spoils = 0.03 },
-        comp.InventoryMaterial{ .v = materials },
+        comp.InventoryBiomass{ .v = materials },
         comp.Goods{}, // Required for catalog ownership
         comp.Granted{}, // Required for effects
     });
     return e;
 }
 
-test "migration converts Materials to Biomass 1:1 and drops Materials from accounting" {
+test "migration carries biomass unchanged across the curtain" {
     var w = World.init();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 42);
 
-    try std.testing.expect(!is_migrated(&w, e));
-    const did = migrate_to_act_two(&w, e, &cat);
-    try std.testing.expect(did);
+    try std.testing.expectEqual(@as(u8, 1), actOf(&w, e));
+    const before = w.get(e, comp.InventoryBiomass).?.v;
+    try std.testing.expect(migrate_to_act_two(&w, e, &cat));
 
-    // Biomass equals the unspent Materials, exactly 1:1; generic Materials is gone.
-    try std.testing.expect(w.has(e, comp.InventoryBiomass));
-    try std.testing.expectEqual(@as(f32, 42), w.get(e, comp.InventoryBiomass).?.v);
-    try std.testing.expect(!w.has(e, comp.InventoryMaterial));
+    try std.testing.expectEqual(before, w.get(e, comp.InventoryBiomass).?.v);
+    try std.testing.expectEqual(@as(u8, 2), actOf(&w, e));
     // The other Act II stocks are open and empty, so the ledger can pay into them.
     inline for (act_two_stocks) |Stock| try std.testing.expectEqual(@as(f32, 0), w.get(e, Stock).?.v);
     try std.testing.expect(ha.ledger.move(&w, e, .water, 4));
     try std.testing.expectEqual(@as(f32, 4), ha.ledger.balance(&w, e, .water));
-    try std.testing.expect(is_migrated(&w, e));
     try std.testing.expectEqual(current_version, w.get(e, comp.Migrated).?.version);
 }
 
@@ -239,10 +218,10 @@ test "migration is idempotent: a second call changes nothing" {
     try std.testing.expect(migrate_to_act_two(&w, e, &cat)); // first: performs it
     const biomass_after_first = w.get(e, comp.InventoryBiomass).?.v;
 
-    // Second call: no-op. Biomass is not re-added, Materials stays gone, version unchanged.
+    // Second call: no-op. Biomass and version remain unchanged.
     try std.testing.expect(!migrate_to_act_two(&w, e, &cat));
     try std.testing.expectEqual(biomass_after_first, w.get(e, comp.InventoryBiomass).?.v);
-    try std.testing.expect(!w.has(e, comp.InventoryMaterial));
+    try std.testing.expect(w.has(e, comp.InventoryBiomass));
     try std.testing.expectEqual(current_version, w.get(e, comp.Migrated).?.version);
 
     // And a third call, for good measure — still stable (no biomass drift, no board reseed).
@@ -260,7 +239,7 @@ test "an older save-version stamp is brought forward without re-converting a bal
         comp.Goods{}, // Required for catalog
         comp.Granted{}, // Required for effects
     });
-    // No InventoryMaterial exists; the version-boundary branch must bring the stamp forward
+    // No InventoryBiomass exists; the version-boundary branch must bring the stamp forward
     // without touching the balance.
     try std.testing.expect(migrate_to_act_two(&w, e, &cat));
     try std.testing.expectEqual(current_version, w.get(e, comp.Migrated).?.version);
@@ -304,9 +283,9 @@ fn qty(lines: []const ha.roster.Line, item: []const u8, per: ha.roster.Cadence) 
     return n;
 }
 
-test "cross-act cost parity: a recipe of both acts costs in biomass what it cost in materials" {
-    // The curtain converts unspent materials to biomass at `materials_to_biomass`, so a recipe
-    // the two acts share by name prices each cadence identically on either side of it.
+test "cross-act cost parity: same-named recipes have equal biomass costs" {
+    // Biomass is the authored item in both acts, so a recipe shared by name must price each
+    // cadence identically on either side of the curtain.
     var cat = try ha.roster.load(std.testing.allocator, ha.roster.shipped, null);
     defer cat.deinit();
     var pairs: usize = 0;
@@ -315,9 +294,9 @@ test "cross-act cost parity: a recipe of both acts costs in biomass what it cost
         for (cat.goods) |two| {
             if (two.act != 2 or !std.mem.eql(u8, one.name, two.name)) continue;
             for ([_]ha.roster.Cadence{ .once, .day }) |per| {
-                const materials = qty(one.input, "materials", per);
-                if (materials == 0) continue;
-                try std.testing.expectEqual(materials * materials_to_biomass, qty(two.input, "biomass", per));
+                const biomass = qty(one.input, "biomass", per);
+                if (biomass == 0) continue;
+                try std.testing.expectEqual(biomass, qty(two.input, "biomass", per));
                 pairs += 1;
             }
         }

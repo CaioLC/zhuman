@@ -32,7 +32,7 @@ pub const Phase = enum { absent, approaching, present, departed };
 /// Food, generic Materials, and a couple of small tools — but named so the typed bundles
 /// and the tool families have stable slots to fill. The `count`-per-slot lives in
 /// `Encounter.stock`, indexed by `@intFromEnum`.
-pub const Ware = enum { food, materials, fish_hook, whetstone };
+pub const Ware = enum { food, biomass, fish_hook, whetstone };
 pub const ware_count = @typeInfo(Ware).@"enum".fields.len;
 
 /// The authoritative encounter. Held on `Sim`; ticked once per frame from the clock.
@@ -88,7 +88,7 @@ pub const Schedule = struct {
     satchel: [ware_count]u16 = blk: {
         var s = [_]u16{0} ** ware_count;
         s[@intFromEnum(Ware.food)] = 8;
-        s[@intFromEnum(Ware.materials)] = 20;
+        s[@intFromEnum(Ware.biomass)] = 20;
         s[@intFromEnum(Ware.fish_hook)] = 1;
         s[@intFromEnum(Ware.whetstone)] = 1;
         break :blk s;
@@ -242,21 +242,21 @@ pub const Quote = struct {
     next_unit: ?f32 = null,
 
     /// Whether this quote is takeable against a live encounter and the player's holdings.
-    /// `enc_id` is the current encounter identity; `food`/`materials` the player's holdings; a
+    /// `enc_id` is the current encounter identity; `food`/`biomass` the player's holdings; a
     /// sell also needs the player to own the good, which the caller checks (component ownership is
     /// outside this leaf module). Returns the specific `Refusal`.
-    pub fn refusal(self: *const Quote, enc: *const Encounter, food: f32, materials: f32) Refusal {
+    pub fn refusal(self: *const Quote, enc: *const Encounter, food: f32, biomass: f32) Refusal {
         if (!enc.dealable()) return .departed;
         if (self.rev != enc.id) return .stale;
         if (self.stock == 0) return .sold_out;
-        // Affordability: the player must hold every Food/Materials line on the give side.
+        // Affordability: the player must hold every Food/Biomass line on the give side.
         if (self.give.qtyOf(.food) > food) return .unaffordable;
-        if (self.give.qtyOf(.materials) > materials) return .unaffordable;
+        if (self.give.qtyOf(.biomass) > biomass) return .unaffordable;
         return .none;
     }
 
-    pub fn takeable(self: *const Quote, enc: *const Encounter, food: f32, materials: f32) bool {
-        return self.refusal(enc, food, materials) == .none;
+    pub fn takeable(self: *const Quote, enc: *const Encounter, food: f32, biomass: f32) bool {
+        return self.refusal(enc, food, biomass) == .none;
     }
 };
 
@@ -280,7 +280,7 @@ pub fn sell_value(ware: Ware, n: u32) f32 {
         // Surplus food: the passerby is glad of the first, indifferent to the tenth.
         .food => .{ 2.5, 0.75, 0.5 },
         // Surplus materials are common; they decay faster to a low floor.
-        .materials => .{ 1.5, 0.6, 0.25 },
+        .biomass => .{ 1.5, 0.6, 0.25 },
         // A tool: the first fetches real value, a duplicate almost nothing.
         .fish_hook => .{ 8.0, 0.3, 1.0 },
         .whetstone => .{ 6.0, 0.3, 1.0 },
@@ -299,7 +299,7 @@ pub fn sell_quote(ware: Ware, already_sold: u32, id: u32, rev: u32) Quote {
         .rev = rev,
         .direction = .sell,
         .give = Bundle.one(ware, 1),
-        .receive = Bundle.one(.materials, this_unit),
+        .receive = Bundle.one(.biomass, this_unit),
         .next_unit = sell_value(ware, already_sold + 1),
     };
 }
@@ -324,7 +324,7 @@ test "encounter walks absent → approaching → present → departed → absent
     try testing.expectEqual(Phase.present, enc.phase);
     try testing.expectEqual(@as(u32, 1), enc.id);
     try testing.expect(enc.dealable());
-    try testing.expectEqual(@as(u16, 20), enc.stockOf(.materials));
+    try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass));
     try testing.expectEqual(@as(usize, 1), log.count); // exactly the arrival line
 
     // Burn the linger window → departed (a second log).
@@ -336,7 +336,7 @@ test "encounter walks absent → approaching → present → departed → absent
     // Burn the depart beat → absent (satchel cleared, no new log).
     _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, &log);
     try testing.expectEqual(Phase.absent, enc.phase);
-    try testing.expectEqual(@as(u16, 0), enc.stockOf(.materials));
+    try testing.expectEqual(@as(u16, 0), enc.stockOf(.biomass));
     try testing.expectEqual(@as(usize, 2), log.count);
 }
 
@@ -351,15 +351,15 @@ test "each visit bumps a stable identity and refills the satchel" {
     try testing.expectEqual(@as(u32, 1), enc.id);
 
     // Spend some stock this visit, then complete the cycle back to a second arrival.
-    enc.take(.materials, 5);
-    try testing.expectEqual(@as(u16, 15), enc.stockOf(.materials));
+    enc.take(.biomass, 5);
+    try testing.expectEqual(@as(u16, 15), enc.stockOf(.biomass));
     _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, &log); // → departed
     _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, &log); // → absent
     _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day, &log); // → approaching
     _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, &log); // → present (id 2)
 
     try testing.expectEqual(@as(u32, 2), enc.id); // a *different* passerby
-    try testing.expectEqual(@as(u16, 20), enc.stockOf(.materials)); // the satchel refilled
+    try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass)); // the satchel refilled
 }
 
 test "dealability is present-only and independent of any day/tab" {
@@ -385,10 +385,10 @@ test "take saturates at zero and give adds to the satchel" {
 test "bundle carries typed lines and reports quantities" {
     var b = Bundle{};
     b.add(.food, 2.5);
-    b.add(.materials, 6);
+    b.add(.biomass, 6);
     try testing.expectEqual(@as(usize, 2), b.len);
     try testing.expectApproxEqAbs(@as(f32, 2.5), b.qtyOf(.food), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 6), b.qtyOf(.materials), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 6), b.qtyOf(.biomass), 1e-6);
     try testing.expectEqual(@as(f32, 0), b.qtyOf(.fish_hook)); // absent ⇒ 0
     // The one-item convenience form.
     const w = Bundle.one(.whetstone, 1);
@@ -397,7 +397,7 @@ test "bundle carries typed lines and reports quantities" {
 
 test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and takeable" {
     var enc = Encounter{ .phase = .present, .id = 3 };
-    enc.stock[@intFromEnum(Ware.materials)] = 10;
+    enc.stock[@intFromEnum(Ware.biomass)] = 10;
 
     // A buy: give 2 food + 4 materials, receive a fish hook, captured at the live revision.
     var q = Quote{
@@ -407,7 +407,7 @@ test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and t
         .give = blk: {
             var g = Bundle{};
             g.add(.food, 2);
-            g.add(.materials, 4);
+            g.add(.biomass, 4);
             break :blk g;
         },
         .receive = Bundle.one(.fish_hook, 1),
@@ -436,7 +436,7 @@ test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and t
 }
 
 test "sell value declines monotonically to a positive floor" {
-    inline for ([_]Ware{ .food, .materials, .fish_hook, .whetstone }) |ware| {
+    inline for ([_]Ware{ .food, .biomass, .fish_hook, .whetstone }) |ware| {
         var prev = sell_value(ware, 0);
         try testing.expect(prev > 0); // the first unit always pays something
         var n: u32 = 1;
@@ -458,7 +458,7 @@ test "sell_quote exposes the next unit's diminished value before confirmation" {
     try testing.expectEqual(Direction.sell, q.direction);
     try testing.expectEqual(@as(u32, 3), q.rev);
     // This unit is the 0-th value; next_unit is the 1st — strictly lower.
-    try testing.expectApproxEqAbs(sell_value(.food, 0), q.receive.qtyOf(.materials), 1e-5);
-    try testing.expect(q.next_unit.? < q.receive.qtyOf(.materials));
+    try testing.expectApproxEqAbs(sell_value(.food, 0), q.receive.qtyOf(.biomass), 1e-5);
+    try testing.expect(q.next_unit.? < q.receive.qtyOf(.biomass));
     try testing.expectApproxEqAbs(sell_value(.food, 1), q.next_unit.?, 1e-5);
 }

@@ -26,7 +26,7 @@ pub const InventoryFood = struct {
     spoils: f32 = 0.05,
 };
 
-pub const InventoryMaterial = struct {
+pub const InventoryBiomass = struct {
     v: f32 = 0,
 };
 
@@ -69,16 +69,10 @@ pub const Research = struct {
     }
 };
 
-// -- Act II stocks: opened at the curtain, never before ------------------------------------
-// The Act I → II migration (`migration.zig`) is the one writer that creates these: Act II keeps
-// Food and Vigor, turns unspent generic Materials into Biomass `1:1`, and opens the other
-// resources a line can name at zero, so a yield always has somewhere to land. Each is a plain
-// balance in the `InventoryMaterial` shape, reached through `ledger.Stock`.
-
-/// Biomass, the Act II resource generic Materials becomes at the curtain.
-pub const InventoryBiomass = struct {
-    v: f32 = 0,
-};
+// -- Additional Act II stocks: opened at the curtain, never before --------------------------
+// Biomass already exists in Act I (displayed there through the Materials cover). Migration
+// carries that balance unchanged and opens the remaining resource stocks at zero. Each is a
+// plain balance in the `InventoryBiomass` shape, reached through `ledger.Stock`.
 
 pub const InventoryWater = struct {
     v: f32 = 0,
@@ -98,7 +92,7 @@ pub const InventoryMinerals = struct {
 
 /// **Migration version stamp** — the versioned marker the Act I → II migration writes onto an
 /// agent the one time it runs. Its presence is what makes the migration idempotent: a second
-/// call sees the stamp and returns without re-converting Materials or re-seeding research. The
+/// call sees the stamp and returns without reopening stocks or re-seeding research. The
 /// `version` field is the save-version boundary — a migration authored for an older save shape
 /// can read it and decide whether a further step is owed. Act I agents do not carry it; owning
 /// it *is* "this agent has crossed the curtain".

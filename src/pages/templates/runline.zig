@@ -2,7 +2,7 @@
 //! (generated − consumed), the **act label**, and the **day**. A compact readout, not a
 //! control. Act I has no stored energy flow (energy is the price of actions, paid from vigor),
 //! so it passes `gen = consumed = 0` and only the act/day segments show; Act II passes its real
-//! generated/consumed rates and the `+{gen}/−{consumed}` segment appears. The caller supplies
+//! generated/consumed rates and the `⚡ +{gen}/−{consumed}` segment appears. The caller supplies
 //! all values (the runline owns no domain math); segments are dim context except the day, which
 //! stays `fg` as the functional counter (`compact` drops the optional act label).
 
@@ -36,13 +36,21 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
     const row = try parent.div(id);
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
 
-    // Energy rate segment — only when there is a flow (Act II). `+gen −consumed` in dim.
+    // Energy rate segment — only when there is a flow (Act II): `⚡ +gen/−consumed`, the
+    // prototype's `.energy-rate` — dim bolt and slash, generated in `acc`, consumed in `warn`.
+    // It is a rate, not a stockpile, so it never takes the stockline's `LABEL: value` form.
     if (run.gen != 0 or run.consumed != 0) {
-        const etxt = std.fmt.bufPrint(&buf, "+{d:.1} \u{2212}{d:.1} energy", .{ run.gen, run.consumed }) catch "";
-        _ = (try row.text("energy", etxt))
-            .with_style(.{ style.heading, Style{ .text = th.dim } });
-        _ = (try row.text("e_sep", "\u{00B7}"))
-            .with_style(.{ style.heading, Style{ .text = th.dim } });
+        const energy = try row.div("energy");
+        _ = energy.with_flow(.{ .dir = .row, .cross = .center }).with_gap(3)
+            .with_style(.{style.pad_each(0, 12 - ha.tokens.gap.inline_, 0, 0)}); // 12px before the act label
+        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ style.heading, Style{ .text = th.dim } });
+        var gbuf: [16]u8 = undefined;
+        var cbuf: [16]u8 = undefined;
+        const gen_txt = std.fmt.bufPrint(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
+        const use_txt = std.fmt.bufPrint(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
+        _ = (try energy.text("gen", gen_txt)).with_style(.{ style.heading, Style{ .text = th.acc } });
+        _ = (try energy.text("slash", "/")).with_style(.{ style.heading, Style{ .text = th.dim } });
+        _ = (try energy.text("use", use_txt)).with_style(.{ style.heading, Style{ .text = th.warn } });
     }
 
     // Act label — optional context, dropped when compact; the middot follows it.

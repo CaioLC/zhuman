@@ -30,6 +30,19 @@ const icon_px: f32 = 14;
 
 pub const Tile = struct { el: El, clicked: bool };
 
+/// The tile's type scale. `regular` is Act I's grid (h3 name, body metrics, 82px); `compact`
+/// is Act II's long catalog (body name, 10px metrics, 52px) — the prototype's `.act-two .action-tile`,
+/// so twenty verbs fit without scrolling past the fold. Anatomy, chrome and states are shared.
+pub const Density = enum { regular, compact };
+
+/// The outer tile height (border included) per density; callers size the box to it.
+pub fn height(density: Density) f32 {
+    return switch (density) {
+        .regular => 81,
+        .compact => 51,
+    };
+}
+
 /// An enabled action is an ordinary focus target. Once activation turns it into a running
 /// progress readout, retain it only while it already owns focus; moving away removes the inert
 /// tile from traversal on the next frame.
@@ -55,10 +68,14 @@ pub fn tile(
     yield_txt: []const u8,
     can: bool,
     progress: ?f32,
+    density: Density,
 ) !Tile {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const running = progress != null;
+    const compact = density == .compact;
+    const name_role: Style = if (compact) style.body else style.h3;
+    const metric_role: Style = if (compact) Style{ .font = 10 } else style.body;
 
     const box = try parent.div(id);
     // Affordability/running remains authoritative here; the lifecycle publishes it. The tile's
@@ -89,11 +106,11 @@ pub fn tile(
 
     const inner = try box.div("inner");
     _ = inner.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2)
-        .with_style(.{style.pad_sym(12, 6)});
+        .with_style(.{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
 
     const lit = can or running; // dimmed tiles flatten everything onto the chrome
 
-    _ = (try inner.text("name", name)).with_style(.{ style.h3, Style{ .text = chrome } });
+    _ = (try inner.text("name", name)).with_style(.{ name_role, Style{ .text = chrome } });
 
     // An optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.
@@ -109,21 +126,21 @@ pub fn tile(
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
 
     _ = (try row.text("cost", cost_txt))
-        .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
+        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
     // The middot joins the price segment and the duration, so additional input costs
     // stay in the price segment *before* the middot.
     _ = (try row.text("mid", "\u{00B7}"))
-        .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
+        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
     _ = (try row.text("dur", duration_txt))
-        .with_style(.{ style.body, Style{ .text = if (lit) th.dim else chrome } });
+        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
 
     // Recolor the icon raster's ink through the style fold's `tint` field rather
     // than poking `render_data.svg` — same last-fragment-wins path as every other look.
-    _ = (try row.svg("kind", info.kind_icon(kind), icon_px))
+    _ = (try row.svg("kind", info.kind_icon(kind), if (compact) icon_px - 2 else icon_px))
         .with_style(.{Style{ .tint = if (lit) th.dim else chrome }});
 
     _ = (try row.text("yield", yield_txt))
-        .with_style(.{ style.body, Style{ .text = if (lit) th.fg else chrome } });
+        .with_style(.{ metric_role, Style{ .text = if (lit) th.fg else chrome } });
 
     // The underbar: full tile width × progress, sized from LAST frame's rect (this frame
     // isn't laid out yet — the prior-frame pattern). Anchored, so it never resizes the tile.
@@ -151,9 +168,11 @@ pub fn action_tile(
     e: Entity,
     ai: u16,
     id: []const u8,
+    density: Density,
 ) !?Tile {
     const ctx = parent.ctx;
     const cat = &ctx.res.catalog;
+    const act = ha.migration.actOf(world, e);
     const q = ha.actions.quote(world, e, cat, ctx.res.config, ai) orelse return null;
     const rec = cat.actions[ai];
     // One body, one act: any work in progress disables every tile; the one being
@@ -173,11 +192,11 @@ pub fn action_tile(
     var cw = std.Io.Writer.fixed(&cbuf);
     {
         var ebuf: [8]u8 = undefined;
-        cw.print("-{s}e", .{fmt.fmt_amount(&ebuf, q.verb.requires.energy)}) catch {};
+        cw.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, q.verb.requires.energy)}) catch {};
     }
     for (q.verb.input.slice()) |l| {
         var nbuf: [8]u8 = undefined;
-        cw.print(" -{s}{s}", .{ fmt.fmt_amount(&nbuf, l.n), info.letterOf(l.item) }) catch {};
+        cw.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, l.n), info.letterOf(act, l.item) }) catch {};
     }
     const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
@@ -194,17 +213,17 @@ pub fn action_tile(
     var ybuf: [16]u8 = undefined;
     var kind: ha.dist.Kind = .fixed;
     var yield_txt: []const u8 = "+0";
-    if (info.dominant(cat, q.verb.output.slice())) |dom| {
+    if (info.dominant(act, cat, q.verb.output.slice())) |dom| {
         kind = dom.kind;
         const lo = @round(dom.band.p10 * q.quality);
         const hi = @round(dom.band.p90 * q.quality);
         yield_txt = if (lo == hi)
             std.fmt.bufPrint(&ybuf, "+{d:.0}{s}", .{ hi, dom.letter }) catch "?"
         else
-            std.fmt.bufPrint(&ybuf, "+{d:.0}-{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
+            std.fmt.bufPrint(&ybuf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
     }
 
-    return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress);
+    return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress, density);
 }
 
 test "running action retains existing focus without becoming a new tab stop" {

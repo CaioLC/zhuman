@@ -70,6 +70,11 @@ pub const Shelf = struct {
     milestone: ?MilestoneCopy = null,
     /// How the act splits the table's lane (`capital_row.Widths`); the default is Act I's.
     widths: row_mod.Widths = .{},
+    /// Whether goods the agent already owns from an earlier act stay on the shelf. Anything can
+    /// be built again (a second unit is stock to sell, its effect does not compound), so Act II
+    /// keeps the Act I goods the settlement carried — unless the act authors its own recipe of
+    /// the same name, which then stands for it.
+    carry_owned: bool = false,
 
     /// Whether a record is one of this shelf's recipes: buildable, of this act, of an allowed
     /// tier, and not a milestone (which is the goal, not a row).
@@ -86,11 +91,36 @@ pub fn authoredTotal(cat: *const roster.Catalog, shelf: Shelf) usize {
     return n;
 }
 
+/// Whether the act authors a recipe named `name` (an earlier act's good of that name is then
+/// shadowed by it rather than listed twice).
+fn authorsName(cat: *const roster.Catalog, shelf: Shelf, name: []const u8) bool {
+    for (cat.goods) |*g| if (shelf.holds(g) and std.mem.eql(u8, g.name, name)) return true;
+    return false;
+}
+
+/// Whether good `gi` is on agent `e`'s shelf: one of the act's recipes, or — with
+/// `carry_owned` — a buildable earlier-act good the agent owns that the act does not shadow.
+pub fn onShelf(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, gi: usize) bool {
+    const rec = &cat.goods[gi];
+    if (shelf.holds(rec)) return true;
+    if (!shelf.carry_owned or !rec.buildable or rec.milestone != null or rec.act >= shelf.act) return false;
+    const goods = world.get(e, comp.Goods) orelse return false;
+    return goods.count[gi] > 0 and !authorsName(cat, shelf, rec.name);
+}
+
+/// The shelf's total for agent `e`: the authored recipes plus the carried goods it owns —
+/// the heading's count and the summary's denominator.
+pub fn shelfTotal(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
+    var n: usize = 0;
+    for (cat.goods, 0..) |_, gi| n += @intFromBool(onShelf(world, e, cat, shelf, gi));
+    return n;
+}
+
 /// The first of the shelf's recipes whose build order would elide in the act's COST lane, or
 /// null when every one fits — what each act's own test holds its `widths` to.
 pub fn costOverflow(cat: *const roster.Catalog, shelf: Shelf) ?*const roster.Good {
     for (cat.goods) |*g| {
-        if (shelf.holds(g) and !shelf.widths.costFits(row_mod.orderChars(g))) return g;
+        if (shelf.holds(g) and !shelf.widths.costFits(row_mod.orderChars(shelf.act, g))) return g;
     }
     return null;
 }
@@ -134,6 +164,11 @@ pub const Entry = struct {
     name: []const u8,
     type_word: []const u8,
     state_word: []const u8,
+    /// The items the build order spends and the recipe yields, space-separated, for `in:`/`out:`.
+    in_buf: [64]u8 = undefined,
+    in_len: usize = 0,
+    out_buf: [64]u8 = undefined,
+    out_len: usize = 0,
     /// The name of the technology the recipe waits on, "" when none.
     tech: []const u8,
 };
@@ -146,6 +181,8 @@ const RecipeRow = struct {
         return switch (f) {
             .type => self.e.type_word,
             .state => self.e.state_word,
+            .in => self.e.in_buf[0..self.e.in_len],
+            .out => self.e.out_buf[0..self.e.out_len],
             .tech => self.e.tech,
             else => "",
         };
@@ -171,9 +208,14 @@ fn stateWord(kind: Kind) []const u8 {
     };
 }
 
-/// The tier word a recipe answers `type:` with.
-pub fn tierWord(rec: *const roster.Good) []const u8 {
-    return if (rec.tier == .crude) "crude" else "manufactured";
+/// The items of `lines`, space-separated, into `out`; returns the length written.
+fn joinItems(out: []u8, lines: []const roster.Line) usize {
+    var w = std.Io.Writer.fixed(out);
+    for (lines, 0..) |l, i| {
+        if (i > 0) w.writeByte(' ') catch break;
+        w.writeAll(l.item) catch break;
+    }
+    return w.buffered().len;
 }
 
 /// The units in a build order, for the COST sort.
@@ -207,20 +249,27 @@ pub fn collect(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shel
     const busy = world.get(e, comp.Busy);
     var n: usize = 0;
     for (cat.goods, 0..) |*rec, i| {
-        if (!shelf.holds(rec)) continue;
+        if (!onShelf(world, e, cat, shelf, i)) continue;
         if (n == buf.len) break;
         const gi: u16 = @intCast(i);
         const quote = capital.quote(world, e, cat, gi) orelse continue;
         const kind = kindOf(quote, busy != null and busy.?.isBuild(gi));
-        const ent = Entry{
+        var ent = Entry{
             .q = quote,
             .kind = kind,
             .inputs = orderTotal(rec),
             .hours = rec.requires.?.hours,
             .name = rec.name,
-            .type_word = tierWord(rec),
+            .type_word = row_mod.recipeType(rec),
             .state_word = stateWord(kind),
             .tech = if (rec.tech) |t| (if (cat.technology(t)) |tr| tr.name else t) else "",
+        };
+        ent.in_len = joinItems(&ent.in_buf, rec.input);
+        // A recipe with no product lines yields itself; `out:` then reads its effect copy.
+        ent.out_len = if (rec.output.len > 0) joinItems(&ent.out_buf, rec.output) else blk: {
+            const n_copy = @min(rec.copy.effect.len, ent.out_buf.len);
+            @memcpy(ent.out_buf[0..n_copy], rec.copy.effect[0..n_copy]);
+            break :blk n_copy;
         };
         // The blank view is the complete shelf and a query only narrows it.
         if (kind == .building or blank or query.matches(&q, RecipeRow{ .e = &ent })) {
@@ -283,7 +332,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
         .with_flow(.{ .dir = .column }).with_gap(6);
 
     // --- the controls bar: search only; the table's column headers sort -------------------
-    const controls = try cc.catalog_controls(outer, "build_ctl", catalog_state, search_owner);
+    const controls = try cc.catalog_controls(outer, "build_ctl", cc.recipes_placeholder, catalog_state, search_owner);
     const blank = controls.query_text.len == 0;
 
     var buf: [roster.max_goods]Entry = undefined;
@@ -292,7 +341,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // --- summary + aligned, sortable table header ------------------------------------------
     // Built before sorting so a header click re-sorts this same frame.
     var sbuf: [40]u8 = undefined;
-    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ entries.len, authoredTotal(cat, shelf) }) catch "?";
+    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ entries.len, shelfTotal(world, e, cat, shelf) }) catch "?";
     _ = (try outer.text("summary", summary))
         .with_style(.{ style.small, Style{ .text = th.dim } });
 
@@ -333,7 +382,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     const rows = sv.content;
 
     if (entries.len == 0) {
-        const msg = if (blank) "Nothing is within reach yet. Gather materials." else "No recipe matches your search.";
+        const msg = if (blank) try std.fmt.allocPrint(ctx.arena, "Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
         _ = (try rows.text("empty", msg))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     }
@@ -386,7 +435,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     const cost_txt = blk: {
         var cw = std.Io.Writer.fixed(&cbuf);
         for (rec.input) |l| if (l.per == .once) {
-            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(l.item) }) catch {};
+            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(ha.migration.actOf(world, e), l.item) }) catch {};
         };
         cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 }) catch {};
         break :blk cw.buffered();
@@ -416,20 +465,30 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     for (rec.input) |l| {
         if (l.per != .once) continue;
         const have = ledger.held(world, e, cat, l);
-        const word = ha.actions.itemWord(cat, l.item);
+        const word = ha.actions.itemWord(cat, l.item, ha.migration.actOf(world, e));
         const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
         requirements[nreq] = .{ .label = label, .value = std.fmt.bufPrint(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
         nreq += 1;
         if (li == 0) compact = std.fmt.bufPrint(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, l.n }) catch word;
         li += 1;
     }
+    // Locked counts the standing conditions still unmet (`locked · 1 condition`), as the
+    // Exchange card does.
+    const unmet: u32 = @as(u32, @intFromBool(!vigor_met)) + @intFromBool(!food_met) + @intFromBool(!recipes_met);
+    var ready_buf: [32]u8 = undefined;
     const readiness = switch (state) {
-        .locked => "not ready",
+        .locked => std.fmt.bufPrint(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
         .unfunded => "inputs short",
         .ready => "ready to raise",
         .done => unreachable,
     };
-    const action = if (state == .ready) words.action else "NOT READY";
+    // The CTA names the state it waits on (the Exchange card's `LOCKED`), then the act's verb.
+    const action = switch (state) {
+        .locked => "LOCKED",
+        .unfunded => "NEEDS INPUTS",
+        .ready => words.action,
+        .done => unreachable,
+    };
 
     const m = try milestone_mod.milestone_goal(parent, id, .{
         .state = state,
@@ -479,7 +538,7 @@ fn settler(w: *World, cat: *const roster.Catalog, biomass: f32, minerals: f32) E
     const e = w.spawn(.{
         comp.Vigor{ .v = 15, .max = 15 },
         comp.InventoryFood{ .v = 20, .quality = 1, .spoils = 0 },
-        comp.InventoryMaterial{ .v = biomass },
+        comp.InventoryBiomass{ .v = biomass },
         comp.Goods{},
         comp.Granted{},
     });
@@ -497,6 +556,28 @@ test "Act II: the blank shelf is every authored recipe, research-gated rows incl
     var buf: [roster.max_goods]Entry = undefined;
     const list = collect(&w, e, &cat, act_two_test, "", &buf);
     try testing.expectEqual(@as(usize, 50), list.len);
+}
+
+test "Act II carries owned Act I goods onto its shelf, unless it authors a recipe of that name" {
+    var w = World.init();
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const e = settler(&w, &cat, 0, 0);
+    const carrying = Shelf{ .act = 2, .subtitle = "", .carry_owned = true };
+    const goods = w.get(e, comp.Goods).?;
+    goods.count[cat.goodIndex("leaf_bed").?] = 1; // no Act II recipe of that name
+    goods.count[cat.goodIndex("garden_bed").?] = 1; // shadowed by Act II's Garden bed
+    try testing.expect(onShelf(&w, e, &cat, carrying, cat.goodIndex("leaf_bed").?));
+    try testing.expect(!onShelf(&w, e, &cat, carrying, cat.goodIndex("garden_bed").?));
+    try testing.expect(!onShelf(&w, e, &cat, act_two_test, cat.goodIndex("leaf_bed").?));
+    try testing.expectEqual(authoredTotal(&cat, carrying) + 1, shelfTotal(&w, e, &cat, carrying));
+    var buf: [roster.max_goods]Entry = undefined;
+    const list = collect(&w, e, &cat, carrying, "", &buf);
+    var found: ?Kind = null;
+    for (list) |ent| if (std.mem.eql(u8, ent.name, "Leaf bed")) {
+        found = ent.kind;
+    };
+    try testing.expectEqual(@as(?Kind, .owned), found);
 }
 
 test "Act II: tech: finds recipes by technology; a build in progress pins first under every sort" {

@@ -28,7 +28,6 @@ const Allocator = std.mem.Allocator;
 /// part of the content contract.
 pub const Resource = enum {
     food,
-    materials,
     biomass,
     water,
     fuel,
@@ -36,21 +35,19 @@ pub const Resource = enum {
     minerals,
     coin,
 
-    /// The first act the stock exists in. Act I is Food and generic Materials; the rest arrive
-    /// at the curtain.
+    /// Food and Biomass exist from Act I; the display cover calls Biomass "Materials" until
+    /// the curtain.
     pub fn act(self: Resource) u8 {
         return switch (self) {
-            .food, .materials => 1,
+            .food, .biomass => 1,
             else => 2,
         };
     }
 
-    /// The one- or two-letter unit the runline and the log write after an amount.
-    pub fn letter(self: Resource) []const u8 {
+    pub fn letterIn(self: Resource, shown_act: u8) []const u8 {
         return switch (self) {
             .food => "f",
-            .materials => "m",
-            .biomass => "b",
+            .biomass => if (shown_act <= 1) "m" else "b",
             .water => "w",
             .fuel => "fu",
             .metal => "me",
@@ -58,7 +55,60 @@ pub const Resource = enum {
             .coin => "c",
         };
     }
+
+    pub fn wordIn(self: Resource, shown_act: u8) []const u8 {
+        if (self == .biomass) return if (shown_act <= 1) "materials" else "biomass";
+        return @tagName(self);
+    }
+
+    pub fn labelIn(self: Resource, shown_act: u8) []const u8 {
+        return switch (self) {
+            .food => "Food",
+            .biomass => if (shown_act <= 1) "Materials" else "Biomass",
+            .water => "Water",
+            .fuel => "Fuel",
+            .metal => "Metal",
+            .minerals => "Minerals",
+            .coin => "Coin",
+        };
+    }
+
+    pub fn abbrevIn(self: Resource, shown_act: u8) []const u8 {
+        return switch (self) {
+            .food => "FO",
+            .biomass => if (shown_act <= 1) "MA" else "BI",
+            .water => "WA",
+            .fuel => "FU",
+            .metal => "ME",
+            .minerals => "MI",
+            .coin => "CO",
+        };
+    }
 };
+
+test "resource naming cover changes only biomass at the curtain" {
+    try std.testing.expectEqual(@as(u8, 1), Resource.biomass.act());
+    try std.testing.expectEqualStrings("m", Resource.biomass.letterIn(1));
+    try std.testing.expectEqualStrings("materials", Resource.biomass.wordIn(1));
+    try std.testing.expectEqualStrings("Materials", Resource.biomass.labelIn(1));
+    try std.testing.expectEqualStrings("MA", Resource.biomass.abbrevIn(1));
+    try std.testing.expectEqualStrings("b", Resource.biomass.letterIn(2));
+    try std.testing.expectEqualStrings("biomass", Resource.biomass.wordIn(2));
+    try std.testing.expectEqualStrings("Biomass", Resource.biomass.labelIn(2));
+    try std.testing.expectEqualStrings("BI", Resource.biomass.abbrevIn(2));
+
+    inline for ([_]Resource{ .food, .water, .fuel, .metal, .minerals, .coin }) |r| {
+        try std.testing.expectEqualStrings(r.letterIn(1), r.letterIn(2));
+        try std.testing.expectEqualStrings(r.wordIn(1), r.wordIn(2));
+        try std.testing.expectEqualStrings(r.labelIn(1), r.labelIn(2));
+        try std.testing.expectEqualStrings(r.abbrevIn(1), r.abbrevIn(2));
+    }
+}
+
+test "materials is not a catalog resource id" {
+    try std.testing.expect(Catalog.resource("materials") == null);
+    try std.testing.expectEqual(Resource.biomass, Catalog.resource("biomass").?);
+}
 
 /// When a line settles. `once` is paid at begin (an input) or lands at completion (an
 /// output); `day` is an authored per-day rate on a generator and is realized as one complete,
@@ -795,7 +845,7 @@ const ok_actions =
 const ok_goods =
     \\.{
     \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-    \\       .input = .{ .{ .item = "materials", .n = 1.0 } }, .effects = .{ .{ .grant = "fish" } } },
+    \\       .input = .{ .{ .item = "biomass", .n = 1.0 } }, .effects = .{ .{ .grant = "fish" } } },
     \\}
 ;
 
@@ -853,7 +903,7 @@ test "lines name real items of the record's own act" {
     , ok_goods, .later_act);
     try expectRule(
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "materials", .n = 1.0, .kind = .normal } } } }
+        \\     .input = .{ .{ .item = "biomass", .n = 1.0, .kind = .normal } } } }
     , ok_goods, .bad_number);
     try expectRule(
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
@@ -914,7 +964,7 @@ test "goods keep their shape" {
 test "a lot of an intermediate is its own once-output" {
     var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods = 
         \\.{ .{ .id = "charcoal", .name = "Charcoal", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "materials", .n = 6.0 } }, .output = .{ .{ .item = "charcoal", .n = 4.0 } } } }
+        \\     .input = .{ .{ .item = "biomass", .n = 6.0 } }, .output = .{ .{ .item = "charcoal", .n = 4.0 } } } }
     }, null);
     defer cat.deinit();
     try testing.expectEqual(@as(f32, 4.0), cat.good("charcoal").?.output[0].n);

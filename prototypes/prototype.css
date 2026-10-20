@@ -231,6 +231,53 @@ button:disabled {
   font-weight: 400;
 }
 
+/* The header's playback controls (the game's `speed_stepper` and `menu_control`): a
+   `<< 1× >>` stepper over pause..3×, then MENU. */
+.speed-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.speed-stepper button,
+.menu-button {
+  padding: 2px 3px;
+  cursor: pointer;
+  border: 0;
+  color: var(--dim);
+  background: transparent;
+  font: 10px var(--font);
+}
+
+.speed-stepper button:hover:not(:disabled),
+.menu-button:hover,
+.menu-button:focus-visible {
+  color: var(--acc);
+}
+
+.speed-stepper button:disabled {
+  cursor: default;
+  color: var(--line-2);
+}
+
+.speed-stepper output {
+  min-width: 36px;
+  color: var(--fg);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.speed-stepper output.is-paused {
+  color: var(--warn);
+}
+
+.menu-button {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
 .energy-rate {
   display: inline-flex;
   align-items: baseline;
@@ -475,6 +522,11 @@ button:disabled {
   color: var(--acc);
 }
 
+/* A deficit flow (Act II's `Water −3/day`) reads in danger, as the game's FLOWS do. */
+.margin-row .danger {
+  color: var(--danger);
+}
+
 .holdings-divider {
   margin: 9px 0 7px;
   border: 0;
@@ -663,20 +715,19 @@ button:disabled {
 }
 
 .action-metrics {
-  display: grid;
-  grid-template-columns: auto 35px minmax(0, 1fr);
+  display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--body);
+  white-space: nowrap;
 }
 
 .action-metrics .yield {
   overflow: hidden;
   color: var(--fg);
-  text-align: right;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .unavailable .action-metrics,
@@ -686,9 +737,24 @@ button:disabled {
 
 .dist-icon {
   display: block;
-  width: 16px;
-  height: 16px;
+  flex: none;
+  width: 14px;
+  height: 14px;
   opacity: 0.58;
+}
+
+/* A catalog with nothing to show says so in the grid (the game's `empty_line`). */
+.empty-copy {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--line-2);
+  font-size: var(--body);
+  text-align: right;
+}
+
+/* The game rides the policy in the grid's right lane, under the tiles there. */
+.action-grid > .policy-tile {
+  grid-column: 2;
 }
 
 .policy-tile {
@@ -774,6 +840,81 @@ button:disabled {
   font-size: 9px;
 }
 
+/* BODY values carry the game's semantic tones (`holdings` Sentence.tone). */
+.side-note strong.positive {
+  color: var(--good);
+}
+
+.side-note strong.warn {
+  color: var(--warn);
+}
+
+/* Act II: the eating policy rides the rail under BODY, out of the long action catalog. It
+   shares the panels' right margin, so all three edges line up, and collapses with them. */
+.side-rail .policy-tile {
+  flex: none;
+  margin-right: 10px;
+}
+
+.page-grid.is-holdings-collapsed .side-rail .policy-tile {
+  display: none;
+}
+
+/* Act I GENERATORS: action-like tiles with an ON/OFF toggle in the lower-right corner and
+   the accumulation underbar along the bottom edge (the game's `generator_section`). */
+.generator-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.generator-tile {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  cursor: default;
+}
+
+.generator-tile:hover {
+  border-color: var(--fg);
+  color: var(--fg);
+}
+
+.generator-tile .action-state {
+  display: block;
+  margin: -4px 0 4px;
+  color: var(--acc);
+  font-size: 11px;
+}
+
+.generator-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  color: var(--good);
+  background: transparent;
+  font: 11px var(--font);
+}
+
+.generator-toggle[aria-checked="false"] {
+  color: var(--dim);
+}
+
+.generator-toggle:hover,
+.generator-toggle:focus-visible {
+  color: var(--acc);
+}
+
+.generator-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--acc);
+}
+
 
 .build-heading {
   margin-bottom: 7px;
@@ -788,24 +929,18 @@ button:disabled {
 
 .build-query-field {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   flex: 1;
   min-width: 0;
   height: 30px;
   border: 1px solid var(--line-2);
-  background: #11131880;
+  background: transparent;
 }
 
 .build-query-field:focus-within {
   border-color: var(--dim);
   box-shadow: inset 2px 0 0 var(--acc);
-}
-
-.build-query-icon {
-  padding-left: 8px;
-  color: var(--line-2);
-  font-size: 13px;
 }
 
 .build-query-field input {
@@ -817,11 +952,11 @@ button:disabled {
   outline: 0;
   color: var(--fg);
   background: transparent;
-  font: 10px var(--font);
+  font: var(--body) var(--font);
 }
 
 .build-query-field input::placeholder {
-  color: var(--line-2);
+  color: var(--dim);
 }
 
 .build-query-field kbd {
@@ -830,78 +965,6 @@ button:disabled {
   border: 1px solid var(--line);
   color: var(--line-2);
   font: 9px var(--font);
-}
-
-.build-sort-toggle {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  min-width: 36px;
-  height: 30px;
-  padding: 0;
-  cursor: pointer;
-  border: 1px solid var(--line-2);
-  color: var(--dim);
-  background: transparent;
-  font: 14px var(--font);
-}
-
-.build-sort-toggle:hover,
-.build-sort-toggle:focus-visible,
-.build-sort-toggle[aria-expanded="true"] {
-  border-color: var(--acc);
-  color: var(--acc);
-  outline: 0;
-}
-
-.build-sort-panel {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: calc(100% - 42px);
-  height: 30px;
-  margin: -2px 0 8px;
-  padding: 2px 6px;
-  border: 1px solid var(--line);
-  background: #11131880;
-}
-
-.build-sort-panel[hidden] {
-  display: none;
-}
-
-.build-sort-control {
-  display: grid;
-  grid-template-columns: auto minmax(112px, 1fr);
-  align-items: center;
-  gap: 7px;
-  color: var(--line-2);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.build-sort-control select {
-  height: 24px;
-  padding: 2px 24px 2px 7px;
-  border: 1px solid var(--line-2);
-  border-radius: 0;
-  outline: 0;
-  color: var(--fg);
-  background: var(--bg);
-  font: 10px var(--font);
-}
-
-.build-sort-control select:disabled {
-  border-color: var(--line);
-  color: var(--line-2);
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.build-sort-control select:hover:not(:disabled),
-.build-sort-control select:focus-visible {
-  border-color: var(--acc);
 }
 
 .build-controls {
@@ -984,6 +1047,41 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* Sortable column headers (the game's `sort_header_cell`): the label is the control; the
+   active column wears its arrow in fg, the others stay line-2 until hovered. */
+.sort-header {
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  color: var(--line-2);
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: inherit;
+  white-space: nowrap;
+}
+
+.sort-header[aria-sort="ascending"],
+.sort-header[aria-sort="descending"] {
+  color: var(--fg);
+}
+
+.sort-header[aria-sort="ascending"]::after {
+  content: " \2191";
+}
+
+.sort-header[aria-sort="descending"]::after {
+  content: " \2193";
+}
+
+.sort-header:hover,
+.sort-header:focus-visible {
+  color: var(--acc);
+}
+
 .build-row {
   position: relative;
   min-height: 42px;
@@ -1032,6 +1130,14 @@ button:disabled {
   letter-spacing: 0.06em;
   text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* A recipe waiting on research or a tool says which, in danger, and takes no corner action. */
+.build-row .state-blocked {
+  overflow: hidden;
+  color: var(--danger);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1432,6 +1538,32 @@ button:disabled {
   color: var(--good);
 }
 
+/* Act I BUILD, as the game's `build_section`: the section fills the surface, only the table's
+   rows scroll, and the Shelter card stays pinned below them. ACTIONS keeps scrolling whole. */
+.act-one .surface {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.act-one #view-build {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.act-one #view-build .build-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.act-one #view-build .milestone-goal {
+  flex: none;
+}
+
 /* Scalable Act II catalog workspaces. The terminal log remains its third grid row. */
 .act-two .surface {
   display: grid;
@@ -1482,57 +1614,20 @@ button:disabled {
   padding: 6px 8px 5px;
 }
 
-.act-two .action-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  margin-bottom: 5px;
-}
-
 .act-two .action-name {
   min-width: 0;
-  margin: 0;
+  margin: 0 0 3px;
   font-size: 14px;
 }
 
-.act-two .action-state {
-  overflow: hidden;
-  color: var(--acc);
-  font-size: 8px;
-  letter-spacing: 0.05em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.act-two .action-tile.unavailable .action-state {
-  color: var(--danger);
-}
-
 .act-two .action-metrics {
-  grid-template-columns: minmax(0, 1fr) 18px minmax(54px, auto);
-  gap: 5px;
-  font-size: 9px;
+  gap: 6px;
+  font-size: 10px;
 }
 
 .act-two .dist-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.act-two .action-policy {
-  flex: none;
-  min-height: 58px;
-  margin-top: 8px;
-  padding: 5px 9px 4px;
-  grid-template-rows: auto 15px auto;
-  gap: 2px;
-}
-
-.act-two .action-policy .eating-slider {
-  height: 15px;
+  width: 12px;
+  height: 12px;
 }
 
 .act-two .screen-footer {
@@ -2603,27 +2698,12 @@ button:disabled {
     max-height: none;
   }
 
-  .act-two .action-policy {
-    margin-top: 10px;
-  }
-
   .act-two .build-header {
     position: static;
   }
 }
 
 @media (max-width: 560px) {
-  .act-two .build-sort-panel {
-    gap: 6px;
-    padding-right: 4px;
-    padding-left: 4px;
-  }
-
-  .act-two .build-sort-control {
-    grid-template-columns: auto minmax(80px, 1fr);
-    gap: 4px;
-  }
-
   .act-two .exchange-bar {
     grid-template-columns: 1fr;
     gap: 4px;

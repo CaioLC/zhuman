@@ -12,27 +12,27 @@ pub const Dominant = struct {
     /// The resource's letter — the header resource bar's one-letter vocabulary — or, for a
     /// good, its id.
     letter: []const u8,
-    /// "food"/"materials" — the teaching card's spelled-out form.
+    /// "food"/"biomass" — the teaching card's spelled-out form.
     word: []const u8,
 };
 
 /// The dominant once-output of a verb's effective terms, by mean — the one a compact
 /// presentation shows. Null when the verb yields nothing at completion.
-pub fn dominant(cat: *const roster.Catalog, output: []const roster.Line) ?Dominant {
+pub fn dominant(act: u8, cat: *const roster.Catalog, output: []const roster.Line) ?Dominant {
     var best: ?Dominant = null;
     for (output) |l| {
         if (l.per != .once) continue;
         const band = ha.dist.stats(l.asDist());
         if (best == null or band.mean > best.?.band.mean) {
-            best = .{ .band = band, .kind = l.kind, .letter = letterOf(l.item), .word = ha.actions.itemWord(cat, l.item) };
+            best = .{ .band = band, .kind = l.kind, .letter = letterOf(act, l.item), .word = ha.actions.itemWord(cat, l.item, act) };
         }
     }
     return best;
 }
 
 /// The letter an amount of `item` is written with: a resource's, or the id of a good.
-pub fn letterOf(item: []const u8) []const u8 {
-    if (roster.Catalog.resource(item)) |r| return r.letter();
+pub fn letterOf(act: u8, item: []const u8) []const u8 {
+    if (roster.Catalog.resource(item)) |r| return r.letterIn(act);
     return item;
 }
 
