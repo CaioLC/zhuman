@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade — redesign</title>
+<link rel="stylesheet" href="prototype.css">
+<style>
+/* ---- review harness only; not part of the design ---- */
+.proto-switch { position: fixed; top: 10px; left: 12px; z-index: 5; display: flex; gap: 6px; align-items: baseline; color: var(--line-2); font-size: 10px; letter-spacing: 0.08em; }
+.proto-switch button { padding: 2px 7px; cursor: pointer; border: 1px solid var(--line); color: var(--dim); background: transparent; font-size: 10px; }
+.proto-switch button[aria-pressed="true"] { border-color: var(--line-2); color: var(--fg); }
+
+/* ---- the trade dialog ---- */
+.trade-dialog { width: min(820px, calc(100vw - 28px)); }
+.trade-dialog .dialog-shell { max-height: min(620px, calc(100vh - 28px)); }
+.dialog-kicker em { color: var(--warn); font-style: normal; }
+
+/* A fixed body height: the dialog stays open across trades, so it must not resize as rows sell out. */
+.trade-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; min-height: 330px; }
+
+/* the ledger */
+.ledger { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ledger:focus, .ledger:focus-visible { outline: none; }
+.ledger-head,
+.ledger-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 151px; gap: 9px; align-items: center; width: 100%; padding: 6px 15px; text-align: left; }
+.ledger-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-top: 10px; padding-bottom: 7px; color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.ledger-rows { min-height: 0; overflow-y: auto; padding-bottom: 10px; }
+.ledger-rows > div { min-width: 0; }
+.ledger-row { cursor: pointer; border: 1px solid transparent; border-width: 1px 0; color: var(--fg); background: transparent; font: inherit; }
+.ledger-row:hover { background: var(--panel); }
+.ledger-row[aria-pressed="true"] { border-color: var(--line-2); background: var(--panel); }
+.ledger-row[aria-pressed="true"] .row-lot { color: var(--acc); }
+.ledger-row[data-refused="true"] { color: var(--line-2); }
+.ledger-row[data-refused="true"] .row-lot { color: var(--dim); }
+.dialog-tabs { align-items: center; }
+.ledger-search { flex: 1; min-width: 0; margin-left: 6px; padding: 3px 7px; border: 1px solid var(--line-2); color: var(--fg); background: transparent; font-size: 11px; }
+.ledger-search::placeholder { color: var(--line-2); }
+.row-item { display: grid; gap: 1px; min-width: 0; }
+.row-sub { overflow: hidden; color: var(--line-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.paginator { display: flex; gap: 7px; align-items: baseline; margin-right: 4px; }
+.page-range { color: var(--dim); font-size: 10px; letter-spacing: 0.06em; }
+.paginator button { min-width: 22px; padding: 2px 6px; cursor: pointer; border: 1px solid var(--line-2); color: var(--fg); background: transparent; font-size: 11px; line-height: 1.3; }
+.paginator button:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
+.paginator button:disabled { cursor: default; border-color: var(--line); color: var(--line-2); }
+.page-now { min-width: 6ch; color: var(--fg); font-size: 11px; text-align: center; }
+.row-lot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.row-price { color: var(--fg); font-size: 12px; white-space: nowrap; }
+.ledger-row[data-refused="true"] .row-price { color: var(--line-2); }
+.row-effect { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
+.row-corner { color: var(--dim); font-size: 10px; text-align: right; }
+.row-corner[data-kind="refusal"] { color: var(--danger); }
+.ledger-empty { padding: 14px 15px; color: var(--dim); font-size: 11px; }
+
+/* the slip */
+.slip-lot { color: var(--fg); font-size: 14px; }
+.slip-lot small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; }
+
+.slip-qty .stepper { justify-self: start; }
+.slip-qty { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-block: 1px solid var(--line); }
+.slip-qty-label { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.slip-max { color: var(--dim); font-size: 10px; text-align: right; }
+
+.slip-terms { display: grid; gap: 7px; margin: 0; }
+.slip-term { display: grid; gap: 2px; }
+.slip-term dt { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.slip-term dd { margin: 0; color: var(--fg); font-size: 13px; }
+
+
+.slip-consequence { margin: 0; color: var(--acc); font-size: 10px; }
+.slip-refusal { margin: 0; color: var(--danger); font-size: 11px; }
+
+/* the footer carries what the visit has cost so far */
+.visit-ledger { display: flex; gap: 9px; align-items: baseline; color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
+.visit-ledger strong { color: var(--fg); font-weight: 400; letter-spacing: -0.025em; }
+.visit-ledger em { color: var(--line-2); font-style: normal; letter-spacing: -0.025em; }
+.visit-delta[data-sign="down"] { color: var(--warn); }
+.visit-delta[data-sign="up"] { color: var(--good); }
+
+@keyframes settle-flash { from { color: var(--warn); } }
+.is-settled { animation: settle-flash 700ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .is-settled { animation: none; } }
+
+@media (max-width: 760px) {
+  .trade-body { grid-template-columns: minmax(0, 1fr); }
+  .ledger-head { display: none; }
+  .ledger-row { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 9px; }
+  .row-corner { grid-column: 1 / -1; text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<dialog class="terminal-dialog trade-dialog" id="trade-dialog" aria-labelledby="trade-title">
+  <div class="proto-switch">
+    <span>ACT</span>
+    <button type="button" data-act="i" aria-pressed="false">I · PASSERBY</button>
+    <button type="button" data-act="ii" aria-pressed="true">II · MERCHANT</button>
+  </div>
+  <form class="dialog-shell" method="dialog">
+    <header class="dialog-header">
+      <div>
+        <div class="dialog-kicker" id="trade-kicker"></div>
+        <h2 class="dialog-title" id="trade-title">What will you trade?</h2>
+      </div>
+      <button class="dialog-close" type="submit" value="cancel" aria-label="Close">&times;</button>
+    </header>
+
+    <div class="dialog-tabs" role="tablist" aria-label="Trade direction">
+      <button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL</button>
+      <input class="ledger-search" id="ledger-search" type="search" placeholder="search lots" aria-label="Search lots" hidden>
+    </div>
+
+    <div class="trade-body">
+      <section class="ledger" id="ledger" tabindex="-1" aria-label="Offers">
+        <div class="ledger-rows" id="ledger-rows">
+          <div class="ledger-head" id="ledger-head" aria-hidden="true"></div>
+          <div id="ledger-body"></div>
+        </div>
+      </section>
+      <section class="slip" id="slip" aria-label="The deal" aria-live="polite"></section>
+    </div>
+
+    <footer class="dialog-footer">
+      <span class="visit-ledger" id="visit-ledger"></span>
+      <div class="dialog-actions">
+        <div class="paginator" id="paginator" hidden></div>
+        <button class="secondary-action" type="submit" value="cancel">LEAVE</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+
+<script>
+const ACTS = {
+  i: {
+    kicker: 'PASSERBY · <em>1.8 DAYS</em> LEFT',
+    heads: {
+      buy:  { lot: 'THEY OFFER', price: 'YOU GIVE',  corner: 'STOCK' },
+      sell: { lot: 'YOU OFFER',  price: 'THEY GIVE', corner: 'YOU HOLD' },
+    },
+    give: { buy: 'YOU GIVE', sell: 'YOU GIVE' },
+    cta:  { buy: 'TRADE →',  sell: 'TRADE →' },
+    stocks: ['food', 'materials'],
+    abbrev: { food: 'f', materials: 'm' },
+    order: ['food', 'materials', 'fishing rod', 'hand axe', 'sandals', 'hatchet'],
+    balances: { food: 11.6, materials: 31, 'fishing rod': 0, 'hand axe': 0, sandals: 2, hatchet: 2 },
+    offers: [
+      { id: 'rod',       mode: 'buy',  lot: 'Fishing rod ×1',    effect: 'unlocks Fish',        price: { food: 2, materials: 8 },  receive: { 'fishing rod': 1 }, stock: 1, consequence: 'Fishing becomes available while you own it.' },
+      { id: 'axe',       mode: 'buy',  lot: 'Hand axe ×1',       effect: 'splitting costs less', price: { food: 6, materials: 40 }, receive: { 'hand axe': 1 },    stock: 1, consequence: 'Replaces Hatchet margins: Split wood takes 20% less energy.' },
+      { id: 'preserved', mode: 'buy',  lot: 'Preserved food ×10', effect: 'keeps well',          price: { materials: 8 },           receive: { food: 10 },         stock: 2 },
+      { id: 'sandals-s', mode: 'sell', lot: 'Sandals ×1',        effect: 'your spare stock',    price: { sandals: 1 },             receive: { food: 6, materials: 5 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
+      { id: 'hatchet-s', mode: 'sell', lot: 'Hatchet ×1',        effect: 'your spare stock',    price: { hatchet: 1 },             receive: { food: 9, materials: 8 } },
+      { id: 'mat-s',     mode: 'sell', lot: 'Materials ×10',     effect: 'raw stock',           price: { materials: 10 },          receive: { food: 3 } },
+      { id: 'rod-s',     mode: 'sell', lot: 'Fishing rod ×1',    effect: 'they would take one', price: { 'fishing rod': 1 },       receive: { food: 7, materials: 6 } },
+    ],
+  },
+  ii: {
+    kicker: 'CARAVAN · MARKET OPEN <em>2.4 DAYS</em>',
+    heads: {
+      buy:  { lot: 'THEY OFFER', price: 'PRICE',    corner: 'STOCK' },
+      sell: { lot: 'YOU OFFER',  price: 'THEY PAY', corner: 'YOU HOLD' },
+    },
+    give: { buy: 'YOU PAY', sell: 'YOU GIVE' },
+    cta:  { buy: 'BUY →',   sell: 'SELL →' },
+    stocks: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'biomass'],
+    abbrev: {},
+    order: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'biomass', 'salt', 'oil', 'glass', 'tools', 'leather', 'nails', 'cloth', 'seed grain', 'planks', 'charcoal', 'pottery', 'baskets', 'rope', 'sandals', 'fishing net', 'carpenter bench'],
+    balances: { coin: 42, food: 23, water: 0, fuel: 0, metal: 0, minerals: 0, biomass: 30,
+                salt: 0, oil: 0, glass: 0, tools: 0, leather: 0, nails: 0, cloth: 0, 'seed grain': 0,
+                planks: 8, charcoal: 14, pottery: 2, baskets: 6, rope: 4, sandals: 2,
+                'fishing net': 0, 'carpenter bench': 0 },
+    offers: [
+      { id: 'water',   mode: 'buy', lot: 'Water ×6',           effect: 'typed resource',          price: { coin: 5 },  receive: { water: 6 },    stock: 3 },
+      { id: 'mineral', mode: 'buy', lot: 'Minerals ×5',        effect: 'typed resource',          price: { coin: 7 },  receive: { minerals: 5 }, stock: 2 },
+      { id: 'fuel',    mode: 'buy', lot: 'Fuel ×4',            effect: 'typed resource',          price: { coin: 8 },  receive: { fuel: 4 },     stock: 2 },
+      { id: 'metal',   mode: 'buy', lot: 'Metal ×3',           effect: 'typed resource',          price: { coin: 12 }, receive: { metal: 3 },    stock: 2 },
+      { id: 'salt',    mode: 'buy', lot: 'Salt ×4',            effect: 'keeps food from spoiling', price: { coin: 9 },  receive: { salt: 4 },     stock: 3 },
+      { id: 'oil',     mode: 'buy', lot: 'Oil ×3',             effect: 'burns clean and long',    price: { coin: 14 }, receive: { oil: 3 },      stock: 2 },
+      { id: 'nails',   mode: 'buy', lot: 'Nails ×12',          effect: 'drawn iron, by the dozen', price: { coin: 11 }, receive: { nails: 12 },   stock: 3 },
+      { id: 'cloth',   mode: 'buy', lot: 'Cloth ×4',           effect: 'woven on a wide loom',    price: { coin: 13 }, receive: { cloth: 4 },    stock: 2 },
+      { id: 'leather', mode: 'buy', lot: 'Leather ×3',         effect: 'tanned downriver',        price: { coin: 16 }, receive: { leather: 3 },  stock: 2 },
+      { id: 'seed',    mode: 'buy', lot: 'Seed grain ×8',      effect: 'stock from a warmer valley', price: { coin: 10 }, receive: { 'seed grain': 8 }, stock: 2 },
+      { id: 'glass',   mode: 'buy', lot: 'Glass ×2',           effect: 'no kiln here can make it', price: { coin: 22 }, receive: { glass: 2 },    stock: 1 },
+      { id: 'tools',   mode: 'buy', lot: 'Tools ×1',           effect: 'forged beyond the valley', price: { coin: 26 }, receive: { tools: 1 },    stock: 2 },
+      { id: 'net',     mode: 'buy', lot: 'Fishing net ×1',     effect: 'better Fish tool',        price: { coin: 18 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.' },
+      { id: 'bench',   mode: 'buy', lot: 'Carpenter bench ×1', effect: 'finished capital',        price: { coin: 60 }, receive: { 'carpenter bench': 1 }, stock: 1 },
+      { id: 'bio-s',   mode: 'sell', lot: 'Biomass ×6',   effect: 'leaves your stock',  price: { biomass: 6 },  receive: { coin: 5 } },
+      { id: 'food-s',  mode: 'sell', lot: 'Food ×8',      effect: 'leaves your larder', price: { food: 8 },     receive: { coin: 4 } },
+      { id: 'char-s',  mode: 'sell', lot: 'Charcoal ×10', effect: 'burned down the ridge', price: { charcoal: 10 }, receive: { coin: 7 } },
+      { id: 'plank-s', mode: 'sell', lot: 'Planks ×4',    effect: 'finished stock',     price: { planks: 4 },   receive: { coin: 6 } },
+      { id: 'pot-s',   mode: 'sell', lot: 'Pottery ×2',   effect: 'fired in the village', price: { pottery: 2 }, receive: { coin: 9 } },
+      { id: 'bask-s',  mode: 'sell', lot: 'Baskets ×4',   effect: 'woven from reed',    price: { baskets: 4 },  receive: { coin: 6 } },
+      { id: 'rope-s',  mode: 'sell', lot: 'Rope ×3',      effect: 'twisted fibre',      price: { rope: 3 },     receive: { coin: 8 } },
+      { id: 'sand-s',  mode: 'sell', lot: 'Sandals ×1',   effect: 'your spare stock',   price: { sandals: 1 },  receive: { coin: 7 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
+      { id: 'metal-s', mode: 'sell', lot: 'Metal ×3',     effect: 'they would take it', price: { metal: 3 },    receive: { coin: 9 } },
+    ],
+  },
+};
+
+const params = new URLSearchParams(location.search);
+let actKey = params.get('act') === 'i' ? 'i' : 'ii';
+let act = ACTS[actKey];
+let mode = params.get('mode') === 'sell' ? 'sell' : 'buy';
+let selectedId = null;
+let qty = 1;
+let visit = {};
+let justSettled = false;
+const seedQty = Number(params.get('qty') || 0);
+const PER_PAGE = Number(params.get('per') || 7);
+let query = params.get('q') || '';
+let page = 0;
+const seedSettle = Number(params.get('settle') || 0);
+
+const dialog = document.querySelector('#trade-dialog');
+const kickerEl = document.querySelector('#trade-kicker');
+const headEl = document.querySelector('#ledger-head');
+const rowsEl = document.querySelector('#ledger-body');
+const slipEl = document.querySelector('#slip');
+const visitEl = document.querySelector('#visit-ledger');
+const searchEl = document.querySelector('#ledger-search');
+const pagerEl = document.querySelector('#paginator');
+
+/* ---------- formatting ---------- */
+const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const title = k => k.charAt(0).toUpperCase() + k.slice(1);
+const isStock = k => act.stocks.includes(k);
+
+function fmtShort(bundle) {
+  return Object.entries(bundle).map(([k, n]) => {
+    if (k === 'coin') return `${fmt(n)} coin`;
+    if (act.abbrev[k]) return `${fmt(n)}${act.abbrev[k]}`;
+    return `${title(k)} ×${fmt(n)}`;
+  }).join(' ');
+}
+
+function fmtLong(bundle, direction) {
+  return Object.entries(bundle).map(([k, n]) => {
+    if (!isStock(k)) return `${title(k)} ×${fmt(n)}`;
+    if (k === 'coin') return `${fmt(n)} coin`;
+    return direction === 'receive' ? `${title(k)} +${fmt(n)}` : `${fmt(n)} ${k}`;
+  }).join(' + ');
+}
+
+/* ---------- derivation: every state below is computed, never authored ---------- */
+function affordableLots(offer) {
+  return Object.entries(offer.price).reduce(
+    (least, [k, n]) => Math.min(least, Math.floor((act.balances[k] ?? 0) / n)),
+    Infinity,
+  );
+}
+
+function maxLots(offer) {
+  const held = affordableLots(offer);
+  return offer.mode === 'buy' ? Math.min(offer.stock ?? 0, held) : held;
+}
+
+function shortfall(offer) {
+  return Object.entries(offer.price)
+    .filter(([k, n]) => (act.balances[k] ?? 0) < n)
+    .map(([k, n]) => ({ key: k, amount: n - (act.balances[k] ?? 0) }));
+}
+
+/* A quote that cannot be taken says which of the three reasons it is. */
+function refusal(offer) {
+  if (offer.mode === 'buy' && (offer.stock ?? 0) <= 0) return { short: 'sold out', long: 'This lot is gone. The counterparty has no more.' };
+  const missing = shortfall(offer);
+  if (!missing.length) return null;
+  if (offer.mode === 'sell') {
+    const k = missing[0].key;
+    return { short: `you hold ${fmt(act.balances[k] ?? 0)}`, long: `You hold ${fmt(act.balances[k] ?? 0)} ${k}; this lot needs ${fmt(offer.price[k])}.` };
+  }
+  const words = missing.map(m => `${fmt(m.amount)} more ${m.key}`).join(' and ');
+  return { short: `needs ${fmt(missing[0].amount)} more ${missing[0].key}`, long: `You need ${words} before you can take this.` };
+}
+
+/* Plain text searches the lot, its effect and its price; `is:` inspects state. */
+function matchesQuery(offer) {
+  if (!query.trim()) return true;
+  const counterpart = offer.mode === 'buy' ? offer.price : offer.receive;
+  const hay = `${offer.lot} ${offer.effect} ${fmtShort(counterpart)}`.toLowerCase();
+  return query.trim().toLowerCase().split(/\s+/).every(token => {
+    const neg = token.startsWith('-');
+    const t = neg ? token.slice(1) : token;
+    const [key, value] = t.includes(':') ? t.split(':') : [null, t];
+    const hit = key === 'is'
+      ? (value === 'available' ? !refusal(offer) : value === 'refused' ? Boolean(refusal(offer)) : hay.includes(value))
+      : hay.includes(value);
+    return neg ? !hit : hit;
+  });
+}
+
+const visibleOffers = () => act.offers.filter(o => o.mode === mode && matchesQuery(o));
+const offerById = id => act.offers.find(o => o.id === id);
+
+/* ---------- render ---------- */
+function renderLedger() {
+  const head = act.heads[mode];
+  headEl.innerHTML = `<span>${head.lot}</span><span>${head.price}</span><span style="text-align:right">${head.corner}</span>`;
+
+  const list = visibleOffers();
+  const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+  page = Math.min(Math.max(0, page), pages - 1);
+  const start = page * PER_PAGE;
+  const slice = list.slice(start, start + PER_PAGE);
+
+  /* Act I's passerby carries a handful of lots and needs neither control. */
+  const busy = act.offers.filter(o => o.mode === mode).length > PER_PAGE;
+  searchEl.hidden = !busy && !query;
+  renderPager(list.length, pages, start, slice.length, busy);
+
+  if (!list.length) {
+    rowsEl.innerHTML = `<p class="ledger-empty">${query ? 'No lot matches that search.' : 'Nothing to offer in this direction.'}</p>`;
+    return;
+  }
+
+  rowsEl.innerHTML = slice.map(offer => {
+    const refused = refusal(offer);
+    /* The price column always carries the counterpart: what they want, or what they give. */
+    const counterpart = offer.mode === 'buy' ? offer.price : offer.receive;
+    /* The sub-line is derived: what you already hold of the good this lot moves. */
+    const subject = Object.keys(offer.mode === 'buy' ? offer.receive : offer.price)[0];
+    const held = act.balances[subject] ?? 0;
+    const corner = refused
+      ? `<span class="row-corner" data-kind="refusal">${refused.short}</span>`
+      : `<span class="row-corner">×${maxLots(offer)}</span>`;
+    return `<button class="ledger-row" type="button" data-id="${offer.id}"
+        aria-pressed="${offer.id === selectedId}" data-refused="${Boolean(refused)}">
+        <span class="row-item">
+          <span class="row-lot">${offer.lot}</span>
+          <span class="row-sub">${offer.effect} · you hold ${fmt(held)} ${subject}</span>
+        </span>
+        <span class="row-price">${fmtShort(counterpart)}</span>
+        ${corner}
+      </button>`;
+  }).join('');
+
+  rowsEl.querySelectorAll('.ledger-row').forEach(row => {
+    row.addEventListener('click', () => { select(row.dataset.id); });
+  });
+}
+
+function renderPager(total, pages, start, shown, busy) {
+  pagerEl.hidden = !busy;
+  if (!busy) return;
+  pagerEl.innerHTML = `
+    <span class="page-range">${total ? `${start + 1}–${start + shown} of ${total}` : '0 of 0'}</span>
+    <button type="button" data-page="-1" ${page <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+    <span class="page-now">${page + 1} / ${pages}</span>
+    <button type="button" data-page="1" ${page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">›</button>`;
+  pagerEl.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => { page += Number(b.dataset.page); renderLedger(); }));
+}
+
+function scale(bundle, n) {
+  return Object.fromEntries(Object.entries(bundle).map(([k, v]) => [k, v * n]));
+}
+
+function renderSlip() {
+  const offer = offerById(selectedId);
+  if (!offer) {
+    slipEl.innerHTML = '<h3 class="column-heading">THE DEAL</h3><p class="slip-placeholder">Pick a lot on the left.</p>';
+    return;
+  }
+
+  const refused = refusal(offer);
+  const max = maxLots(offer);
+  const give = scale(offer.price, qty);
+  const get = scale(offer.receive, qty);
+
+  /* Before → after, on only the stocks this deal touches. */
+  const touched = act.order.filter(k => k in offer.price || k in offer.receive);
+  const after = touched.map(k => {
+    const before = act.balances[k] ?? 0;
+    const value = before - (give[k] ?? 0) + (get[k] ?? 0);
+    const sign = value < before ? 'down' : value > before ? 'up' : 'flat';
+    return `<div class="after-row">
+      <span>${k.toUpperCase()}</span>
+      <span class="after-from">${fmt(before)}</span>
+      <span class="after-arrow">→</span>
+      <strong class="after-to ${justSettled ? 'is-settled' : ''}" data-sign="${sign}" data-short="${value < 0}">${fmt(value)}</strong>
+    </div>`;
+  }).join('');
+
+  slipEl.innerHTML = `
+    <h3 class="column-heading">THE DEAL</h3>
+    <div class="slip-lot">${offer.lot}<small>${offer.effect}</small></div>
+    ${refused ? '' : `
+      <div class="slip-qty">
+        <span class="slip-qty-label">LOTS</span>
+        <div class="stepper">
+          <button type="button" data-step="-1" ${qty <= 1 ? 'disabled' : ''} aria-label="One lot fewer">−</button>
+          <strong aria-live="polite">${qty}</strong>
+          <button type="button" data-step="1" ${qty >= max ? 'disabled' : ''} aria-label="One lot more">+</button>
+        </div>
+        <span class="slip-max">of ${max}</span>
+      </div>
+      <dl class="slip-terms">
+        <div class="slip-term"><dt>${act.give[mode]}</dt><dd>${fmtLong(give, 'give')}</dd></div>
+        <div class="slip-term"><dt>YOU RECEIVE</dt><dd>${fmtLong(get, 'receive')}</dd></div>
+      </dl>
+      <div class="slip-after">
+        <span class="after-head">AFTER</span>
+        ${after}
+      </div>
+    `}
+    ${refused ? `<p class="slip-refusal">${refused.long}</p>` : ''}
+    ${offer.consequence && !refused ? `<p class="slip-consequence">${offer.consequence}</p>` : ''}
+    <button class="primary-action slip-action" type="button" id="settle" ${refused ? 'disabled' : ''}>${refused ? 'CANNOT TRADE' : act.cta[mode]}</button>
+  `;
+
+  slipEl.querySelectorAll('[data-step]').forEach(button => {
+    button.addEventListener('click', () => {
+      qty = Math.min(max, Math.max(1, qty + Number(button.dataset.step)));
+      justSettled = false;
+      renderSlip();
+    });
+  });
+  const settleButton = slipEl.querySelector('#settle');
+  if (settleButton && !refused) settleButton.addEventListener('click', settle);
+}
+
+function renderVisit() {
+  const entries = act.order.filter(k => visit[k]).map(k => {
+    const n = visit[k];
+    return `<span class="visit-delta" data-sign="${n < 0 ? 'down' : 'up'}">${n < 0 ? '−' : '+'}${fmt(Math.abs(n))} ${k}</span>`;
+  });
+  visitEl.innerHTML = entries.length
+    ? `THIS VISIT <strong>${entries.join(' · ')}</strong>`
+    : 'THIS VISIT <em>nothing traded yet</em>';
+}
+
+function render() {
+  kickerEl.innerHTML = act.kicker;
+  renderLedger();
+  renderSlip();
+  renderVisit();
+  justSettled = false;
+}
+
+/* ---------- behaviour ---------- */
+function select(id) {
+  if (selectedId === id) { selectedId = null; renderLedger(); renderSlip(); return; }
+  selectedId = id;
+  qty = Math.max(1, Math.min(1, maxLots(offerById(id))));
+  justSettled = false;
+  renderLedger();
+  renderSlip();
+}
+
+/* Settling does not close the dialog: the counter stays open and the numbers move. */
+function settle() {
+  const offer = offerById(selectedId);
+  if (!offer || refusal(offer) || qty < 1) return;
+  const give = scale(offer.price, qty);
+  const get = scale(offer.receive, qty);
+
+  Object.entries(give).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) - n; visit[k] = (visit[k] ?? 0) - n; });
+  Object.entries(get).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) + n; visit[k] = (visit[k] ?? 0) + n; });
+  if (offer.mode === 'buy') offer.stock -= qty;
+
+  qty = Math.max(1, Math.min(qty, maxLots(offer)));
+  justSettled = true;
+  renderLedger();
+  renderSlip();
+  renderVisit();
+  justSettled = false;
+}
+
+function setMode(next) {
+  mode = next;
+  document.querySelectorAll('[data-trade-mode]').forEach(tab => tab.setAttribute('aria-selected', String(tab.dataset.tradeMode === mode)));
+  const first = visibleOffers().find(o => !refusal(o)) || visibleOffers()[0];
+  selectedId = first ? first.id : null;
+  qty = 1;
+  page = 0;
+  render();
+}
+
+document.querySelectorAll('[data-trade-mode]').forEach(tab => {
+  tab.addEventListener('click', () => setMode(tab.dataset.tradeMode));
+});
+searchEl.addEventListener('input', () => { query = searchEl.value; page = 0; renderLedger(); });
+
+document.querySelectorAll('[data-act]').forEach(button => {
+  button.addEventListener('click', () => {
+    actKey = button.dataset.act;
+    act = ACTS[actKey];
+    visit = {};
+    document.querySelectorAll('[data-act]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    setMode('buy');
+  });
+});
+
+document.querySelectorAll('[data-act]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.act === actKey)));
+searchEl.value = query;
+setMode(mode);
+for (let i = 0; i < seedSettle; i += 1) settle();
+if (seedQty) { qty = Math.min(seedQty, maxLots(offerById(selectedId))); renderSlip(); }
+dialog.showModal();
+/* Open on the offers, not on the close control. */
+document.querySelector('#ledger').focus();
+</script>
+</body>
+</html>
