@@ -2669,3 +2669,126 @@ button:disabled {
     display: none;
   }
 }
+
+/* ---- the deal slip ----
+   Shared by the trade dialog (passerby, caravan) and the neighbours view. The
+   containers differ by act; this atom — quantity, give/receive, before→after,
+   atomic confirm — does not. */
+.slip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 15px 13px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+}
+
+.slip-placeholder {
+  margin: 0;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.slip-action {
+  margin-top: auto;
+  padding: 7px 8px;
+}
+
+.slip-action:disabled {
+  cursor: default;
+  border-color: var(--line);
+  color: var(--line-2);
+}
+
+.stepper {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.stepper button {
+  width: 20px;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  color: var(--fg);
+  background: transparent;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.stepper button:hover:not(:disabled) {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+
+.stepper button:disabled {
+  cursor: default;
+  border-color: var(--line);
+  color: var(--line-2);
+}
+
+.stepper strong {
+  min-width: 3ch;
+  padding: 2px 0;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.slip-after {
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.after-head {
+  margin-bottom: 2px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+}
+
+.after-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 1.5ch auto;
+  gap: 5px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.after-row span:first-child {
+  overflow: hidden;
+  color: var(--dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.after-from,
+.after-arrow {
+  color: var(--line-2);
+}
+
+.after-arrow {
+  text-align: center;
+}
+
+.after-to {
+  color: var(--fg);
+  font-weight: 400;
+}
+
+.after-to[data-sign="down"] {
+  color: var(--warn);
+}
+
+.after-to[data-sign="up"] {
+  color: var(--good);
+}
+
+.after-to[data-short="true"] {
+  color: var(--danger);
+}
