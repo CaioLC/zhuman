@@ -9,7 +9,7 @@
 #   1. Hard failures. Protocol knowledge that has one home now and no legitimate use in a
 #      page or template: the control lifecycle ritual (register focus, publish control state),
 #      loop ids formatted from an index (a format string made only of `{d}`/`{s}` and id
-#      characters, under `allocPrint` or `bufPrint`), and structural key arithmetic. Any hit
+#      characters, under an allocator's or `std.mem`'s `print`, or the deprecated `allocPrint`/`bufPrint`), and structural key arithmetic. Any hit
 #      fails the check.
 #
 #   2. Inventory. Geometry read-back, pass-through probes, device-pixel sizing, semantic and
@@ -37,7 +37,7 @@ cd "$(dirname "$0")/.." || exit 2
 status=0
 scope="src/pages src/ui_client/modal.zig src/ui_client/tooltip.zig src/ui_client/text_input.zig"
 
-hard='registerFocus\(|registerRovingFocus\(|publishControlState\(|(allocPrint|bufPrint)\([^"]*"([a-z_]|\{[sd]\})*\{d\}([a-z_]|\{[sd]\})*"|ha\.ui\.key(_i)?\(|retainState\('
+hard='registerFocus\(|registerRovingFocus\(|publishControlState\(|(allocPrint|bufPrint|mem\.print|arena\.print|\ba\.print)\([^"]*"([a-z_]|\{[sd]\})*\{d\}([a-z_]|\{[sd]\})*"|ha\.ui\.key(_i)?\(|retainState\('
 hits=$(grep -rnE "$hard" $scope --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//')
 if [ -n "$hits" ]; then
     echo "boundary: lifecycle wiring, formatted ids or key arithmetic in a page or template:"
