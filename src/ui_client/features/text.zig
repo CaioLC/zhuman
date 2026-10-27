@@ -335,7 +335,7 @@ fn cacheInputs(u: *UiCtx, st: *const State, fmt: []const u8) text_cache.Inputs {
         .px = st.px,
         .font_id = text_cache.default_font_id,
         .tracking = st.tracking,
-        .overflow = @intFromEnum(st.overflow),
+        .overflow = @backingInt(st.overflow),
         .overflow_width = st.overflow_width,
         .wrap_width = st.wrap_width,
         .generation = u.res.platform.generation,

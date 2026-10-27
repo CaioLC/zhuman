@@ -103,7 +103,7 @@ pub fn modal_body(parent: El, width: f32, buy_give: []const u8, sell_give: []con
         _ = copy.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
         _ = (try copy.text("name", name)).with_style(.{ style.body, Style{ .text = if (enabled) th.fg else th.dim } });
         _ = (try copy.text("detail", detail)).with_style(.{Style{ .font = 9, .text = if (enabled) th.line2 else th.danger }});
-        _ = (try row.text("count", try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{offer.stock})))
+        _ = (try row.text("count", try ctx.arena.print("\u{00d7}{d}", .{offer.stock})))
             .with_style(.{Style{ .font = 10, .text = th.dim }});
     }
 

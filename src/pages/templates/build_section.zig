@@ -38,7 +38,7 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
 
     var count_buf: [24]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
+    const count = std.mem.print(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
     const heading_box = try section.div("heading_box");
     _ = heading_box.with_size(.{ .fixed = width }, .fit_children);
     _ = try browser_mod.browser_heading(heading_box, "heading", "BUILD", shelf.subtitle, count);

@@ -76,14 +76,14 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
         const sel = state.selectionRange();
         if (state.hasSelection()) {
             // …selected…  → wrap the selected run in guillemets, caret side implicit.
-            break :blk std.fmt.bufPrint(&buf, "{s}\u{00AB}{s}\u{00BB}{s}", .{
+            break :blk std.mem.print(&buf, "{s}\u{00AB}{s}\u{00BB}{s}", .{
                 state.buf[0..sel.start],
                 state.buf[sel.start..sel.end],
                 state.buf[sel.end..state.len],
             }) catch state.text();
         }
         // No selection: a caret bar at the caret byte offset.
-        break :blk std.fmt.bufPrint(&buf, "{s}|{s}", .{
+        break :blk std.mem.print(&buf, "{s}|{s}", .{
             state.buf[0..state.caret],
             state.buf[state.caret..state.len],
         }) catch state.text();

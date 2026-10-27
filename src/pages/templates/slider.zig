@@ -107,7 +107,7 @@ pub fn slider(parent: El, opts: Options) !Slider {
     }
 
     var value_buf: [32]u8 = undefined;
-    const value_text = std.fmt.bufPrint(&value_buf, "{d:.2}", .{value}) catch "?";
+    const value_text = std.mem.print(&value_buf, "{d:.2}", .{value}) catch "?";
     const published = control.control(.{
         .enabled = opts.enabled,
         .name = opts.label,

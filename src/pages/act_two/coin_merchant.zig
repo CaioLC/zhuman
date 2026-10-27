@@ -98,9 +98,9 @@ test "coin merchant exposes the finite BUY and SELL lots" {
 
 test "BUY lots pay Coin; SELL lots receive Coin" {
     for (fx.merchant_buys) |lot| {
-        try std.testing.expect(std.mem.indexOf(u8, lot.give, "Coin") != null); // YOU PAY coin
+        try std.testing.expect(std.mem.find(u8, lot.give, "Coin") != null); // YOU PAY coin
     }
     for (fx.merchant_sells) |lot| {
-        try std.testing.expect(std.mem.indexOf(u8, lot.receive, "Coin") != null); // earn coin
+        try std.testing.expect(std.mem.find(u8, lot.receive, "Coin") != null); // earn coin
     }
 }

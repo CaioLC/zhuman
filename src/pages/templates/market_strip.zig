@@ -220,7 +220,7 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
             .building => "Building",
             .idle => unreachable,
         };
-        const msg = std.fmt.bufPrint(&buf, "{s} {s}", .{ verb, subject }) catch subject;
+        const msg = std.mem.print(&buf, "{s} {s}", .{ verb, subject }) catch subject;
         _ = ctx.res.announcements.announce(msg);
     }
     return state;

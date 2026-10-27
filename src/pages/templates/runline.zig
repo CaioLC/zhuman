@@ -46,8 +46,8 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
         _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ style.heading, Style{ .text = th.dim } });
         var gbuf: [16]u8 = undefined;
         var cbuf: [16]u8 = undefined;
-        const gen_txt = std.fmt.bufPrint(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
-        const use_txt = std.fmt.bufPrint(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
+        const gen_txt = std.mem.print(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
+        const use_txt = std.mem.print(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
         _ = (try energy.text("gen", gen_txt)).with_style(.{ style.heading, Style{ .text = th.acc } });
         _ = (try energy.text("slash", "/")).with_style(.{ style.heading, Style{ .text = th.dim } });
         _ = (try energy.text("use", use_txt)).with_style(.{ style.heading, Style{ .text = th.warn } });
@@ -55,13 +55,13 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
 
     // Act label — optional context, dropped when compact; the middot follows it.
     if (!run.compact) {
-        const atxt = std.fmt.bufPrint(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
+        const atxt = std.mem.print(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
         _ = (try row.text("act", atxt))
             .with_style(.{ style.heading, Style{ .text = th.dim } });
     }
 
     // Day — the functional counter, always shown, in fg.
-    const dtxt = std.fmt.bufPrint(&buf, "Day {d}", .{run.day}) catch "?";
+    const dtxt = std.mem.print(&buf, "Day {d}", .{run.day}) catch "?";
     _ = (try row.text("day", dtxt))
         .with_style(.{ style.heading, Style{ .text = th.fg } });
 

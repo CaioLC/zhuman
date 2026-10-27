@@ -109,7 +109,7 @@ fn formatStock(buf: []u8, s: Stock, detailed: bool) []const u8 {
     const m = s.max orelse return formatAmount(buf, s.value, detailed);
     var vbuf: [32]u8 = undefined;
     var mbuf: [32]u8 = undefined;
-    return std.fmt.bufPrint(buf, "{s}/{s}", .{
+    return std.mem.print(buf, "{s}/{s}", .{
         formatAmount(&vbuf, s.value, detailed),
         formatAmount(&mbuf, m, detailed),
     }) catch "?";
@@ -137,7 +137,7 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
 
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
-    const label_txt = std.fmt.bufPrint(&buf, "{s}:", .{label}) catch label;
+    const label_txt = std.mem.print(&buf, "{s}:", .{label}) catch label;
     const size: Style = if (compact and !reveal) .{ .font = compact_font } else .{};
     const lbl = (try box.text("l", label_txt))
         .with_style(.{ style.heading, size, Style{ .text = th.dim } });

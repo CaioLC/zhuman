@@ -167,14 +167,14 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     var buf: [max_verbs]Entry = undefined;
     const all = held(world, e, cat, ctx.res.config, shelf, &buf);
     var count_buf: [16]u8 = undefined;
-    const count = std.fmt.bufPrint(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
+    const count = std.mem.print(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
     _ = try browser.browser_heading(section, "heading", "ACTIONS", shelf.subtitle, count);
 
     const controls = try cc.catalog_controls(section, "actions_ctl", cc.actions_placeholder, catalog_state, search_owner);
     const shown = filter(all, controls.query_text);
 
     var sbuf: [40]u8 = undefined;
-    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} actions shown", .{ shown.len, all.len }) catch "?";
+    const summary = std.mem.print(&sbuf, "{d} of {d} actions shown", .{ shown.len, all.len }) catch "?";
     _ = try copy.summary_line(section, "summary", summary);
 
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
@@ -260,12 +260,12 @@ test "in: and out: match the verb's lines; state: its standing" {
     @memcpy(work[0..n], buf[0..n]);
     const water = filter(work[0..n], "out:water");
     try testing.expect(water.len > 0 and water.len < n);
-    for (water) |ent| try testing.expect(std.mem.indexOf(u8, ent.outs(), "water") != null);
+    for (water) |ent| try testing.expect(std.mem.find(u8, ent.outs(), "water") != null);
 
     @memcpy(work[0..n], buf[0..n]);
     const fuel_in = filter(work[0..n], "in:fuel");
     try testing.expect(fuel_in.len > 0);
-    for (fuel_in) |ent| try testing.expect(std.mem.indexOf(u8, ent.ins(), "fuel") != null);
+    for (fuel_in) |ent| try testing.expect(std.mem.find(u8, ent.ins(), "fuel") != null);
 
     // The settlement holds no fuel yet, so nothing that burns it can begin.
     @memcpy(work[0..n], buf[0..n]);

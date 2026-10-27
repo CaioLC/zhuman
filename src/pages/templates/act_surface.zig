@@ -49,9 +49,9 @@ pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy) !Activity {
         .state = state,
         .subject = actions.doing_label(&ctx.res.catalog, b.doing),
         .metadata = if (build)
-            try std.fmt.allocPrint(ctx.arena, "{d:.1}d left", .{b.remaining / spd})
+            try ctx.arena.print("{d:.1}d left", .{b.remaining / spd})
         else
-            try std.fmt.allocPrint(ctx.arena, "{d:.0}h left", .{b.remaining * 24.0 / spd}),
+            try ctx.arena.print("{d:.0}h left", .{b.remaining * 24.0 / spd}),
         .last = state,
     };
 }

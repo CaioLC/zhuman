@@ -296,7 +296,7 @@ const RecordingProvider = struct {
     }
     fn mapRole(_: *anyopaque, role: semantics.Role) u32 {
         // A deterministic, non-zero mapping so a test can tell it apart from the noop's 0.
-        return @as(u32, @intCast(@intFromEnum(role))) + 1000;
+        return @as(u32, @intCast(@backingInt(role))) + 1000;
     }
     fn raiseFocus(ctx: *anyopaque, key: u64) void {
         const self: *RecordingProvider = @ptrCast(@alignCast(ctx));
@@ -504,7 +504,7 @@ test "provider seam maps roles to a platform id when a real provider is installe
     try testing.expect(!bridge.elementFromKey(8));
 
     // mapRole flows through to the provider's non-zero mapping (vs. the noop's 0).
-    try testing.expectEqual(@as(u32, 1000) + @as(u32, @intFromEnum(semantics.Role.button)), bridge.mapRole(.button));
+    try testing.expectEqual(@as(u32, 1000) + @as(u32, @backingInt(semantics.Role.button)), bridge.mapRole(.button));
 
     // raiseFocus flows through and is recorded.
     bridge.raiseFocus(9);

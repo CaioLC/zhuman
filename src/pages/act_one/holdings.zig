@@ -38,7 +38,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
             const n = goods.count[gi];
             if (n == 0) continue;
             units += n;
-            const label = if (n > 1) try std.fmt.allocPrint(a, "{s} \u{00d7}{d}", .{ rec.name, n }) else rec.name;
+            const label = if (n > 1) try a.print("{s} \u{00d7}{d}", .{ rec.name, n }) else rec.name;
             try owned.append(a, .{ .key = rec.id, .label = label, .value = rec.copy.short });
         }
     }
@@ -54,7 +54,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
             try margins.append(a, .{
                 .key = rec.id,
                 .label = rec.name,
-                .value = try std.fmt.allocPrint(a, "{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }),
+                .value = try a.print("{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }),
                 .tone = if (live.requires.energy < base) .good else .danger,
             });
         }
@@ -64,31 +64,31 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         if (food.quality != q0) try margins.append(a, .{
             .key = "quality",
             .label = "Food quality",
-            .value = try std.fmt.allocPrint(a, "{d} \u{2192} {d}", .{ q0, food.quality }),
+            .value = try a.print("{d} \u{2192} {d}", .{ q0, food.quality }),
             .tone = if (food.quality > q0) .good else .danger,
         });
         const s0 = ha.baselines.food_spoils;
         try margins.append(a, .{
             .key = "spoilage",
             .label = "Food spoilage",
-            .value = try std.fmt.allocPrint(a, "{d:.2} \u{2192} {d:.2}/day", .{ s0, food.spoils }),
+            .value = try a.print("{d:.2} \u{2192} {d:.2}/day", .{ s0, food.spoils }),
             .tone = if (food.spoils < s0) .good else if (food.spoils > s0) .danger else .dim,
         });
     }
     if (world.get(e, comp.Vigor)) |vigor| try margins.append(a, .{
         .key = "vigor",
         .label = "Vigor ceiling",
-        .value = try std.fmt.allocPrint(a, "{d:.0}", .{vigor.max}),
+        .value = try a.print("{d:.0}", .{vigor.max}),
     });
     const spares = spareUnits(world, e, cat);
     try margins.append(a, .{
         .key = "trade",
         .label = "Trade stock",
-        .value = try std.fmt.allocPrint(a, "{d} spare {s}", .{ spares, if (spares == 1) "unit" else "units" }),
+        .value = try a.print("{d} spare {s}", .{ spares, if (spares == 1) "unit" else "units" }),
     });
 
     var c = t.HoldingsContent{
-        .count = try std.fmt.allocPrint(a, "{d} KINDS, {d}", .{ owned.items.len, units }),
+        .count = try a.print("{d} KINDS, {d}", .{ owned.items.len, units }),
         .roster = owned.items,
         .section_title = "MARGINS",
         .section = margins.items,
@@ -114,7 +114,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         try body.append(a, .{
             .key = "coverage",
             .prefix = "Food lasts ",
-            .value = try std.fmt.allocPrint(a, "{d:.1}d", .{days}),
+            .value = try a.print("{d:.1}d", .{days}),
             .suffix = ".",
             .tone = if (days < 2) .danger else .fg,
         });
@@ -133,8 +133,8 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         .at_ceiling => Sentence{ .key = "recovery", .prefix = "Vigor is ", .value = "full", .suffix = ".", .tone = .good },
         .no_food => Sentence{ .key = "recovery", .prefix = "Recovery: ", .value = "starving", .suffix = ".", .tone = .danger },
         .no_quality => Sentence{ .key = "recovery", .prefix = "Recovery: ", .value = "no vigor", .suffix = ".", .tone = .danger },
-        .partial => |p| Sentence{ .key = "recovery", .prefix = "Can recover ", .value = try std.fmt.allocPrint(a, "+{d:.0} vigor", .{p.restored}), .suffix = ".", .tone = .warn },
-        .recovering => |r| Sentence{ .key = "recovery", .prefix = "Full vigor in ", .value = try std.fmt.allocPrint(a, "{d:.1}d", .{r.days}), .suffix = "." },
+        .partial => |p| Sentence{ .key = "recovery", .prefix = "Can recover ", .value = try a.print("+{d:.0} vigor", .{p.restored}), .suffix = ".", .tone = .warn },
+        .recovering => |r| Sentence{ .key = "recovery", .prefix = "Full vigor in ", .value = try a.print("{d:.1}d", .{r.days}), .suffix = "." },
     });
     c.body = body.items;
     return c;

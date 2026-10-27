@@ -188,7 +188,7 @@ pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
         // A repeat build is stock, not a second effect: count it and say so.
         var nbuf: [48]u8 = undefined;
         var buf: [80]u8 = undefined;
-        const msg = std.fmt.bufPrint(&buf, "Another {s}. You have {d}.", .{ lowerName(rec.name, &nbuf), goods.count[gi] }) catch "You made another.";
+        const msg = std.mem.print(&buf, "Another {s}. You have {d}.", .{ lowerName(rec.name, &nbuf), goods.count[gi] }) catch "You made another.";
         res.sim.log.push(.good, msg);
         return;
     }
@@ -229,7 +229,7 @@ pub fn break_one(w: *World, e: Entity, res: *Resources, gi: u16) void {
     if (release(w, e, res, gi, 1) == 0) return;
     var nbuf: [48]u8 = undefined;
     var buf: [64]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, "Your {s} broke.", .{lowerName(res.catalog.goods[gi].name, &nbuf)}) catch "Something of yours broke.";
+    const msg = std.mem.print(&buf, "Your {s} broke.", .{lowerName(res.catalog.goods[gi].name, &nbuf)}) catch "Something of yours broke.";
     res.sim.log.push(.warn, msg);
 }
 
@@ -259,7 +259,7 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
     w.remove(e, comp.Busy);
     var nbuf: [48]u8 = undefined;
     var buf: [96]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
+    const msg = std.mem.print(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
         lowerName(rec.name, &nbuf),
         salvaged,
         if (first) |item| ha.actions.itemWord(cat, item, ha.migration.actOf(w, e)) else "units",

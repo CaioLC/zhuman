@@ -186,9 +186,9 @@ pub fn Node(comptime RenderData: type) type {
                 const c = chain[i];
                 const sep: []const u8 = if (written > 0) "/" else "";
                 const seg = if (c.index) |idx|
-                    std.fmt.bufPrint(buf[written..], "{s}{s}[{d}]", .{ sep, c.id, idx }) catch break
+                    std.mem.print(buf[written..], "{s}{s}[{d}]", .{ sep, c.id, idx }) catch break
                 else
-                    std.fmt.bufPrint(buf[written..], "{s}{s}", .{ sep, c.id }) catch break;
+                    std.mem.print(buf[written..], "{s}{s}", .{ sep, c.id }) catch break;
                 written += seg.len;
             }
             return buf[0..written];
@@ -711,7 +711,7 @@ test "wrap breaks the run into cross-stacked lines" {
     const kids = [_]*TestNode{ undefined, undefined, undefined };
     var buf = kids;
     for (&buf, 0..) |*slot, i| {
-        const kid = try std.fmt.allocPrint(a, "k{d}", .{i});
+        const kid = try a.print("k{d}", .{i});
         const k = try TestNode.create(a, kid);
         _ = k.with_size(Size.initFixed(40, 10));
         _ = k.with_layout(.relative, null);
@@ -740,7 +740,7 @@ test "a fit_children height counts every wrapped line, not just the first" {
     _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true });
     root.layout.gap = 4;
     for (0..3) |i| {
-        const kid = try std.fmt.allocPrint(a, "k{d}", .{i});
+        const kid = try a.print("k{d}", .{i});
         const k = try TestNode.create(a, kid);
         _ = k.with_size(Size.initFixed(40, 10));
         _ = k.with_layout(.relative, null);
@@ -762,7 +762,7 @@ test "a wrapping fit falls back to one line when the main extent is indefinite" 
     _ = root.with_size(Size.init(.fit_children, .fit_children));
     _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true });
     for (0..3) |i| {
-        const kid = try std.fmt.allocPrint(a, "k{d}", .{i});
+        const kid = try a.print("k{d}", .{i});
         const k = try TestNode.create(a, kid);
         _ = k.with_size(Size.initFixed(40, 10));
         _ = k.with_layout(.relative, null);

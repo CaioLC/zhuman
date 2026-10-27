@@ -61,7 +61,7 @@ const columns = [_]Column{
 };
 
 fn col(lane: Lane) Column {
-    return columns[@intFromEnum(lane)];
+    return columns[@backingInt(lane)];
 }
 
 /// One act's lane widths in logical px. Every act fills the canonical 594px expanded content
@@ -91,7 +91,7 @@ pub const Widths = struct {
     /// Every lane plus the gaps, row padding and scroll gutter: the content lane it fills.
     pub fn laneTotal(self: Widths) f32 {
         var cells: f32 = 0;
-        for (0..columns.len) |i| cells += self.of(@enumFromInt(i));
+        for (0..columns.len) |i| cells += self.of(@fromBackingInt(@intCast(i)));
         return cells + (columns.len - 1) * row_gap + 2 * row_pad_x + scroll_gutter;
     }
 
@@ -118,7 +118,7 @@ fn contentWidth(ctx: *UiCtx, lw: Widths) f32 {
     var shown: f32 = 0;
     for (columns, 0..) |c, i| {
         if (c.visible(ctx)) {
-            width += lw.of(@enumFromInt(i));
+            width += lw.of(@fromBackingInt(@intCast(i)));
             shown += 1;
         }
     }
@@ -157,7 +157,7 @@ pub fn capital_header(parent: El, id: []const u8, lw: Widths, sort: ?HeaderSort)
     var nmembers: usize = 0;
     for (columns, 0..) |c, i| {
         if (!c.visible(ctx)) continue;
-        const w = lw.of(@enumFromInt(i));
+        const w = lw.of(@fromBackingInt(@intCast(i)));
         const key = if (sort) |s| s.keys[i] else null;
         if (key) |k| {
             const shown: table.SortShown = if (k == sort.?.active) sort.?.dir else .none;
@@ -231,7 +231,7 @@ fn orderText(act: u8, buf: []u8, rec: *const roster.Good) []const u8 {
 
 /// `10e` — the energy, the COST cell's tail.
 fn energyText(buf: []u8, rec: *const roster.Good) []const u8 {
-    return std.fmt.bufPrint(buf, "{d:.0}e", .{rec.requires.?.energy}) catch "?";
+    return std.mem.print(buf, "{d:.0}e", .{rec.requires.?.energy}) catch "?";
 }
 
 /// The build order's length in characters — what an act's COST width must hold
@@ -250,7 +250,7 @@ fn cost_cell(parent: El, id: []const u8, width: f32, act: u8, rec: *const roster
     const order = orderText(act, &obuf, rec);
     const energy = energyText(&ebuf, rec);
     const line = if (order.len > 0)
-        std.fmt.bufPrint(&lbuf, "{s} {s}", .{ order, energy }) catch order
+        std.mem.print(&lbuf, "{s} {s}", .{ order, energy }) catch order
     else
         energy;
     try cell(parent, id, width, line, color, false);
@@ -320,7 +320,7 @@ pub fn capital_row(
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
-        const days_txt = std.fmt.bufPrint(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
+        const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
         try cell(row, "dy", lw.of(.time), days_txt, faint, false);
     }
 
@@ -346,7 +346,7 @@ pub fn capital_row(
             var nbuf: [40]u8 = undefined;
             // Waiting on research names the technology; otherwise the verb or tool it needs.
             const wants = if (q.standing == .tech) techName(cat, rec) else needsName(cat, rec);
-            const txt = std.fmt.bufPrint(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
+            const txt = std.mem.print(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
             // A technology name can outrun the lane. A blocked row has no corner action, so the
             // text may run on over that empty lane before it elides.
             const room = lw.of(.state) + row_gap + lw.of(.corner);
@@ -359,7 +359,7 @@ pub fn capital_row(
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
             const left = busy.remaining / ctx.res.config.secs_per_day;
-            const txt = std.fmt.bufPrint(&bbuf, "{d:.1}d left", .{left}) catch "?";
+            const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
             _ = (try state_in.text("time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
         },
@@ -369,7 +369,7 @@ pub fn capital_row(
             var txt: []const u8 = "";
             for (rec.input) |l| {
                 if (l.per != .once) continue;
-                txt = std.fmt.bufPrint(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(act, l.item) }) catch "?";
+                txt = std.mem.print(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(act, l.item) }) catch "?";
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);

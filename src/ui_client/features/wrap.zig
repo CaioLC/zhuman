@@ -102,7 +102,7 @@ pub fn wrapLines(
     // `\n` is always a hard break and a `\n\n` contributes a genuine empty line.
     var para_start: usize = 0;
     while (true) {
-        const nl = std.mem.indexOfScalarPos(u8, text, para_start, '\n');
+        const nl = std.mem.findScalarPos(u8, text, para_start, '\n');
         const para_end = nl orelse text.len;
         if (!wrapParagraph(text, para_start, para_end, max_w, measure, Ctx, ctx, emit)) return;
         if (nl == null) break;

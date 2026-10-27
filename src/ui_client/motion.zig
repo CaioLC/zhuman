@@ -175,7 +175,7 @@ const SPI_GETCLIENTAREAANIMATION: u32 = 0x1042;
 
 // Declared only on Windows; links against `user32`, already linked by the vendored SDL C
 // build (kernel32/user32/gdi32/winmm/imm32), so no `build.zig` change is needed.
-const win32 = if (builtin.os.tag == .windows) struct {
+const win32 = if (builtin.target.os.tag == .windows) struct {
     // BOOL SystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni);
     extern "user32" fn SystemParametersInfoW(
         uiAction: u32,
@@ -188,7 +188,7 @@ const win32 = if (builtin.os.tag == .windows) struct {
 /// The real platform query. On Windows, ask the OS once; on any failure treat it as "no
 /// opinion" (`null`) rather than guessing. On non-Windows, `null` (no platform notion).
 pub fn queryPlatformReducedMotion() ?bool {
-    if (builtin.os.tag != .windows) return null;
+    if (builtin.target.os.tag != .windows) return null;
 
     var enabled: i32 = 1; // BOOL out-param; default to "animations enabled" if the call no-ops.
     const ok = win32.SystemParametersInfoW(
@@ -280,7 +280,7 @@ test "nullProbe reports no platform opinion" {
 }
 
 test "non-Windows platform query is a deterministic null (motion allowed via fallback)" {
-    if (builtin.os.tag != .windows) {
+    if (builtin.target.os.tag != .windows) {
         try testing.expectEqual(@as(?bool, null), queryPlatformReducedMotion());
         try testing.expect(!resolve(null, PlatformProbe.instance()).reduced_motion);
     }

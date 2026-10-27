@@ -8,8 +8,8 @@ const std = @import("std");
 /// the ACTIONS metric style. Rounds to a tenth to avoid float noise.
 pub fn fmt_amount(buf: []u8, n: f32) []const u8 {
     const tenths = @round(n * 10);
-    if (@mod(tenths, 10) == 0) return std.fmt.bufPrint(buf, "{d:.0}", .{tenths / 10}) catch "?";
-    return std.fmt.bufPrint(buf, "{d:.1}", .{tenths / 10}) catch "?";
+    if (@mod(tenths, 10) == 0) return std.mem.print(buf, "{d:.0}", .{tenths / 10}) catch "?";
+    return std.mem.print(buf, "{d:.1}", .{tenths / 10}) catch "?";
 }
 
 test "fmt_amount: one decimal only when fractional" {

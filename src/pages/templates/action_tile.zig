@@ -87,7 +87,7 @@ pub fn tile(
     const was_focused = ctx.isFocused(box.get().key);
     var pbuf: [8]u8 = undefined;
     const value: []const u8 = if (progress) |p|
-        std.fmt.bufPrint(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?"
+        std.mem.print(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?"
     else
         ha.dist.kindLabel(kind);
     const q = box.control(.{
@@ -200,7 +200,7 @@ pub fn action_tile(
     }
     const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
-    const duration_txt = std.fmt.bufPrint(&dbuf, "{d:.0}h", .{q.verb.requires.hours}) catch "?";
+    const duration_txt = std.mem.print(&dbuf, "{d:.0}h", .{q.verb.requires.hours}) catch "?";
 
     // The prototype action tile always keeps the same two-line anatomy: name, then metrics.
     // Running state is already communicated by the ActivityStrip and the tile's progress
@@ -218,9 +218,9 @@ pub fn action_tile(
         const lo = @round(dom.band.p10 * q.quality);
         const hi = @round(dom.band.p90 * q.quality);
         yield_txt = if (lo == hi)
-            std.fmt.bufPrint(&ybuf, "+{d:.0}{s}", .{ hi, dom.letter }) catch "?"
+            std.mem.print(&ybuf, "+{d:.0}{s}", .{ hi, dom.letter }) catch "?"
         else
-            std.fmt.bufPrint(&ybuf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
+            std.mem.print(&ybuf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
     }
 
     return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress, density);

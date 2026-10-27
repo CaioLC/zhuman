@@ -70,7 +70,7 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     });
 
     var output_buf: [48]u8 = undefined;
-    const output = std.fmt.bufPrint(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
+    const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
     _ = (try head.text("value", output)).with_style(.{
         Style{ .font = 10, .text = if (enabled) th.acc else th.dim },
     });
@@ -85,7 +85,7 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     // Replace the generic numeric semantic value published by `slider` with the prototype's
     // richer aria-valuetext. Duplicate-key publication updates in place, preserving order.
     var aria_buf: [64]u8 = undefined;
-    const aria = std.fmt.bufPrint(&aria_buf, "{s}, {d:.2} times normal", .{ word, rate }) catch word;
+    const aria = std.mem.print(&aria_buf, "{s}, {d:.2} times normal", .{ word, rate }) catch word;
     ctx.res.semantics.publish(uic.semantic.describeSlider(
         range.el.get().key,
         "Eating policy",

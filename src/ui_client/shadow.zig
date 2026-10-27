@@ -98,7 +98,7 @@ pub fn drop(parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32, spec: Sp
     var buf: [max_layers]Layer = undefined;
     const ls = layers(spec, &buf);
     for (ls, 0..) |l, i| {
-        const key = try std.fmt.allocPrint(ctx.arena, "{s}_sh{d}", .{ id, i });
+        const key = try ctx.arena.print("{s}_sh{d}", .{ id, i });
         const node = try parent.div(key);
         _ = node.with_layout(.top_left)
             .with_offset(x - l.spread + l.dx, y - l.spread + l.dy)

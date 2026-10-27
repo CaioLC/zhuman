@@ -591,8 +591,8 @@ test "the passerby fixture seeds a dealable encounter with a full satchel" {
     }
     try testing.expect(rig.res.sim.encounter.dealable());
     const sched = market.Schedule{};
-    try testing.expectEqual(sched.satchel[@intFromEnum(market.Ware.food)], rig.res.sim.encounter.stockOf(.food));
-    try testing.expectEqual(sched.satchel[@intFromEnum(market.Ware.biomass)], rig.res.sim.encounter.stockOf(.biomass));
+    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.food)], rig.res.sim.encounter.stockOf(.food));
+    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.biomass)], rig.res.sim.encounter.stockOf(.biomass));
 }
 
 test "the low-stock fixture reaches a danger-toned scarcity state" {

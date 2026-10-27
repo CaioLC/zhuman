@@ -93,7 +93,7 @@ fn refuse(res: *Resources, err: roster.Error, diag: *const roster.Diagnostics) v
         error.Invalid => std.log.warn("roster reload: {s}", .{diag.message()}),
     }
     var buf: [96]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, "The data did not load ({s}); the old roster stays.", .{diag.file.path()}) catch
+    const msg = std.mem.print(&buf, "The data did not load ({s}); the old roster stays.", .{diag.file.path()}) catch
         "The data did not load; the old roster stays.";
     res.sim.log.push(.danger, msg);
 }
@@ -317,7 +317,7 @@ test "a bad file keeps the catalog and logs why" {
     reloadDir(testing.io, &res, &w, tmp.dir);
     try testing.expectEqual(@as(usize, 3), res.catalog.goods.len); // the old roster stays
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
-    try testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "data/goods.zon") != null);
+    try testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "data/goods.zon") != null);
 }
 
 test "a directory overrides the files it holds and falls back for the rest" {

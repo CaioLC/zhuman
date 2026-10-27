@@ -201,7 +201,7 @@ pub fn track_reach(
                 res.sim.reach_seen[gi] = true;
                 var nbuf: [48]u8 = undefined;
                 var buf: [96]u8 = undefined;
-                const msg = std.fmt.bufPrint(&buf, "A new recipe is within reach: {s}.", .{capital.lowerName(rec.name, &nbuf)}) catch "A new recipe is within reach.";
+                const msg = std.mem.print(&buf, "A new recipe is within reach: {s}.", .{capital.lowerName(rec.name, &nbuf)}) catch "A new recipe is within reach.";
                 res.sim.log.push(.good, msg);
             } else if (!met) {
                 // The prerequisite went away (tool broke) — allow a fresh announcement if it
@@ -323,7 +323,7 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
     try std.testing.expectEqual(@import("./log.zig").Tone.good, res.sim.log.get(0).tone);
     // The message names the good and uses the exact copy.
-    try std.testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "within reach") != null);
+    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
 
     // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.
     ecs.run(&w, &res, track_reach);
@@ -362,5 +362,5 @@ test "track_reach announces this act's recipes only" {
     ecs.run(&w, &res, track_reach);
     // The hook (this act) is announced; the weir (the next act) is not.
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
-    try std.testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "hook") != null);
+    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "hook") != null);
 }

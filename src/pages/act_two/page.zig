@@ -174,7 +174,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         if (i < lots.len) {
             var buf: [64]u8 = undefined;
             const verb = if (merchant.mode == 0) "buy" else "sell";
-            const msg = std.fmt.bufPrint(&buf, "You {s} {s} from the merchant.", .{ verb, lots[i].name }) catch "You trade.";
+            const msg = std.mem.print(&buf, "You {s} {s} from the merchant.", .{ verb, lots[i].name }) catch "You trade.";
             ctx.res.sim.log.push(.good, msg);
         }
     }

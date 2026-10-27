@@ -36,7 +36,7 @@ fn axial(c: roster.Coord) Axial {
     return .{ .q = c.q, .r = c.r };
 }
 
-/// A held balance of the research resources, indexed by `@intFromEnum(Resource)`. Used to test
+/// A held balance of the research resources, indexed by `@backingInt(Resource)`. Used to test
 /// affordability and to apply an atomic research deduction. The six research currencies (Food,
 /// Water, Fuel, Metal, Minerals, Biomass) are the only ones a cost ever names; Coin and generic
 /// Materials have slots here but are never a research price (§7).
@@ -46,15 +46,15 @@ pub const Balances = struct {
     const res_count = @typeInfo(Resource).@"enum".field_names.len;
 
     pub fn get(self: Balances, r: Resource) u32 {
-        return self.amounts[@intFromEnum(r)];
+        return self.amounts[@backingInt(r)];
     }
 
     pub fn set(self: *Balances, r: Resource, v: u32) void {
-        self.amounts[@intFromEnum(r)] = v;
+        self.amounts[@backingInt(r)] = v;
     }
 
     pub fn add(self: *Balances, r: Resource, v: u32) void {
-        self.amounts[@intFromEnum(r)] += v;
+        self.amounts[@backingInt(r)] += v;
     }
 };
 
@@ -199,7 +199,7 @@ pub fn research(cat: *const Catalog, board: *Research, index: usize, bal: *Balan
     // Atomic deduction — affordability was proven above, so no entry underflows.
     for (tech.cost) |line| {
         const r = lineResource(line.item).?;
-        bal.amounts[@intFromEnum(r)] -= lineAmount(line.n);
+        bal.amounts[@backingInt(r)] -= lineAmount(line.n);
     }
     board.state[index] = .researched;
     promoteOutwardNeighbors(cat, board, index);

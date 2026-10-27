@@ -31,7 +31,7 @@ pub const Phase = enum { absent, approaching, present, departed };
 /// The kinds of thing a passerby's satchel can hold in Act I. Deliberately coarse — Act I trades
 /// Food, generic Materials, and a couple of small tools — but named so the typed bundles
 /// and the tool families have stable slots to fill. The `count`-per-slot lives in
-/// `Encounter.stock`, indexed by `@intFromEnum`.
+/// `Encounter.stock`, indexed by `@backingInt`.
 pub const Ware = enum { food, biomass, fish_hook, whetstone };
 pub const ware_count = @typeInfo(Ware).@"enum".field_names.len;
 
@@ -55,19 +55,19 @@ pub const Encounter = struct {
 
     /// Units of `w` still in the satchel this visit.
     pub fn stockOf(self: *const Encounter, w: Ware) u16 {
-        return self.stock[@intFromEnum(w)];
+        return self.stock[@backingInt(w)];
     }
 
     /// Take `n` units of `w` from the satchel (a completed buy). Saturates at 0 — the caller
     /// revalidates stock first, so this is the mechanical decrement.
     pub fn take(self: *Encounter, w: Ware, n: u16) void {
-        const i = @intFromEnum(w);
+        const i = @backingInt(w);
         self.stock[i] -= @min(self.stock[i], n);
     }
 
     /// Add `n` units of `w` to the satchel (a completed sell — the passerby now carries it).
     pub fn give(self: *Encounter, w: Ware, n: u16) void {
-        self.stock[@intFromEnum(w)] += n;
+        self.stock[@backingInt(w)] += n;
     }
 };
 
@@ -83,14 +83,14 @@ pub const Schedule = struct {
     linger_days: f32 = 2.0,
     /// The brief beat after leaving before the gap resets (departed → absent).
     depart_days: f32 = 0.15,
-    /// A fresh satchel, per `Ware` (indexed by `@intFromEnum`): food, materials, fish_hook,
+    /// A fresh satchel, per `Ware` (indexed by `@backingInt`): food, materials, fish_hook,
     /// whetstone. Finite and modest — the passerby is a trickle, not a shop.
     satchel: [ware_count]u16 = blk: {
         var s: [ware_count]u16 = @splat(0);
-        s[@intFromEnum(Ware.food)] = 8;
-        s[@intFromEnum(Ware.biomass)] = 20;
-        s[@intFromEnum(Ware.fish_hook)] = 1;
-        s[@intFromEnum(Ware.whetstone)] = 1;
+        s[@backingInt(Ware.food)] = 8;
+        s[@backingInt(Ware.biomass)] = 20;
+        s[@backingInt(Ware.fish_hook)] = 1;
+        s[@backingInt(Ware.whetstone)] = 1;
         break :blk s;
     },
 };
@@ -375,7 +375,7 @@ test "dealability is present-only and independent of any day/tab" {
 
 test "take saturates at zero and give adds to the satchel" {
     var enc = Encounter{};
-    enc.stock[@intFromEnum(Ware.food)] = 3;
+    enc.stock[@backingInt(Ware.food)] = 3;
     enc.take(.food, 5); // more than held
     try testing.expectEqual(@as(u16, 0), enc.stockOf(.food));
     enc.give(.food, 4);
@@ -397,7 +397,7 @@ test "bundle carries typed lines and reports quantities" {
 
 test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and takeable" {
     var enc = Encounter{ .phase = .present, .id = 3 };
-    enc.stock[@intFromEnum(Ware.biomass)] = 10;
+    enc.stock[@backingInt(Ware.biomass)] = 10;
 
     // A buy: give 2 food + 4 materials, receive a fish hook, captured at the live revision.
     var q = Quote{

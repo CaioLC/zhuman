@@ -102,16 +102,16 @@ pub const Wedge = enum(u3) {
 
     /// The next wedge clockwise (mod 6) — the partner that closes a hybrid edge.
     pub fn next(w: Wedge) Wedge {
-        return @enumFromInt((@intFromEnum(w) + 1) % 6);
+        return @fromBackingInt(@intCast((@backingInt(w) + 1) % 6));
     }
 
     /// The previous wedge clockwise (mod 6).
     pub fn prev(w: Wedge) Wedge {
-        return @enumFromInt((@intFromEnum(w) + 5) % 6);
+        return @fromBackingInt(@intCast((@backingInt(w) + 5) % 6));
     }
 };
 
-/// The six wedge direction vectors in order, indexed by `@intFromEnum(Wedge)`. A pure corner
+/// The six wedge direction vectors in order, indexed by `@backingInt(Wedge)`. A pure corner
 /// hex at ring `n` for wedge `w` is `dir[w] * n`. These are the §2 direction vectors.
 pub const directions = [6]Axial{
     .{ .q = 1, .r = 0 }, // 0 Food     — 0°   (right)
@@ -124,7 +124,7 @@ pub const directions = [6]Axial{
 
 /// The direction vector for a wedge.
 pub fn dir(w: Wedge) Axial {
-    return directions[@intFromEnum(w)];
+    return directions[@backingInt(w)];
 }
 
 // ============================ Distance / ring =============================
@@ -231,7 +231,7 @@ pub fn classify(a: Axial) Kind {
     // Corners first: a pure hex is exactly `dir[w] * n` for one wedge.
     for (0..6) |w| {
         const corner = directions[w].scale(ni);
-        if (a.eql(corner)) return .{ .pure = .{ .wedge = @enumFromInt(w) } };
+        if (a.eql(corner)) return .{ .pure = .{ .wedge = @fromBackingInt(@intCast(w)) } };
     }
 
     // Otherwise it is an edge hex. Find the wedge `w` whose edge toward `w+1` contains it.
@@ -247,7 +247,7 @@ pub fn classify(a: Axial) Kind {
                 // Verify both axes reconstruct the coordinate exactly.
                 const reconstructed = corner_w.add(edge_vec.scale(@intCast(k)));
                 if (a.eql(reconstructed))
-                    return .{ .hybrid = .{ .wedge = @enumFromInt(w), .k = k } };
+                    return .{ .hybrid = .{ .wedge = @fromBackingInt(@intCast(w)), .k = k } };
             }
         }
     }
@@ -387,7 +387,7 @@ test "classify: ring 0 is the foundation" {
 
 test "classify: the six ring-1 corners are pure, one per wedge in order" {
     inline for (0..6) |w| {
-        const wedge: Wedge = @enumFromInt(w);
+        const wedge: Wedge = @fromBackingInt(@intCast(w));
         const k = classify(dir(wedge));
         try testing.expect(k == .pure);
         try testing.expectEqual(wedge, k.pure.wedge);

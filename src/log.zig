@@ -146,13 +146,13 @@ test "log ring overwrites oldest and get(0) is newest after refusals" {
     var i: usize = 0;
     while (i < capacity + 3) : (i += 1) {
         var b: [16]u8 = undefined;
-        const msg = std.fmt.bufPrint(&b, "n{d}", .{i}) catch unreachable;
+        const msg = std.mem.print(&b, "n{d}", .{i}) catch unreachable;
         log.push(.normal, msg);
     }
     try testing.expectEqual(capacity, log.count); // saturated
     // Newest is the last pushed; oldest surviving is (count) back.
     var newest: [16]u8 = undefined;
-    const newest_msg = std.fmt.bufPrint(&newest, "n{d}", .{capacity + 2}) catch unreachable;
+    const newest_msg = std.mem.print(&newest, "n{d}", .{capacity + 2}) catch unreachable;
     try testing.expectEqualStrings(newest_msg, log.get(0).text());
     // A refused push still advances the ring and is the new newest (as the marker).
     var over: [max_len + 1]u8 = undefined;

@@ -51,8 +51,8 @@ pub fn sort_header_cell(parent: El, id: []const u8, width: f32, label: []const u
     var buf: [48]u8 = undefined;
     const text = switch (shown) {
         .none => label,
-        .ascending => std.fmt.bufPrint(&buf, "{s} \u{2191}", .{label}) catch label,
-        .descending => std.fmt.bufPrint(&buf, "{s} \u{2193}", .{label}) catch label,
+        .ascending => std.mem.print(&buf, "{s} \u{2191}", .{label}) catch label,
+        .descending => std.mem.print(&buf, "{s} \u{2193}", .{label}) catch label,
     };
     const color = if (q.hovering or q.held or q.focused) th.acc else if (shown != .none) th.fg else th.line2;
     _ = (try box.text("t", text)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = color }});

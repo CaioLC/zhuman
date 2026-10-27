@@ -35,7 +35,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         for (cat.goods, 0..) |*rec, gi| {
             const n = g.count[gi];
             if (!listed(rec, n)) continue;
-            const label = if (n > 1) try std.fmt.allocPrint(a, "{s} \u{00d7}{d}", .{ rec.name, n }) else rec.name;
+            const label = if (n > 1) try a.print("{s} \u{00d7}{d}", .{ rec.name, n }) else rec.name;
             try owned.append(a, .{ .key = rec.id, .label = label, .value = rec.copy.short });
         }
     }
@@ -47,7 +47,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     for (fx.body_projection, body) |b, *s| s.* = .{ .key = @tagName(b.key), .prefix = b.prefix, .value = b.value, .suffix = b.suffix, .tone = if (b.positive) .good else .warn };
 
     return .{
-        .count = try std.fmt.allocPrint(a, "{d} KINDS", .{owned.items.len}),
+        .count = try a.print("{d} KINDS", .{owned.items.len}),
         .roster = owned.items,
         .empty_roster = "nothing established yet",
         .section_title = "FLOWS / DAY",

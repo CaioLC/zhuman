@@ -124,8 +124,8 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
 
     var buf: [96]u8 = undefined;
     const msg = switch (q.direction) {
-        .buy => std.fmt.bufPrint(&buf, "You trade with the passerby.", .{}) catch "You trade.",
-        .sell => std.fmt.bufPrint(&buf, "You sell to the passerby for {d:.0} {s}.", .{ biomass_moved, ha.roster.Resource.biomass.wordIn(ha.migration.actOf(w, e)) }) catch "You sell.",
+        .buy => std.mem.print(&buf, "You trade with the passerby.", .{}) catch "You trade.",
+        .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ biomass_moved, ha.roster.Resource.biomass.wordIn(ha.migration.actOf(w, e)) }) catch "You sell.",
     };
     res.sim.log.push(.good, msg);
 

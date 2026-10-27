@@ -20,7 +20,7 @@ pub fn modal_header(parent: El, width: f32, kicker_text: []const u8, meta: []con
         .with_style(.{style.pad_each(13, 15, 10, 15)});
     const heading = try header.div("heading");
     _ = heading.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
-    const kicker = try std.fmt.allocPrint(ctx.arena, "{s} \u{00b7} {s}", .{ kicker_text, meta });
+    const kicker = try ctx.arena.print("{s} \u{00b7} {s}", .{ kicker_text, meta });
     _ = (try heading.text("kicker", kicker)).with_style(.{ style.small, Style{ .font = 10, .tracking = 0.08, .text = th.warn } });
     _ = (try heading.text("title", title)).with_style(.{ style.heading, Style{ .text = th.fg } });
 

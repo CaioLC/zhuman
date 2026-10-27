@@ -57,7 +57,7 @@ pub const WidthClass = enum {
     /// stacked breakpoint ("apply this at ≤560 and everything narrower"). Since the enum is
     /// ordered widest→narrowest, "at most `other`'s width" is "ordinal ≥ other's ordinal".
     pub fn atMost(self: WidthClass, other: WidthClass) bool {
-        return @intFromEnum(self) >= @intFromEnum(other);
+        return @backingInt(self) >= @backingInt(other);
     }
 
     /// True when the layout is the full framed/centered terminal (wider than 760).

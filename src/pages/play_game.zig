@@ -108,9 +108,9 @@ fn bundleLabel(act: u8, buf: []u8, b: *const market.Bundle) []const u8 {
     for (b.slice(), 0..) |line, i| {
         const sep = if (i == 0) "" else " + ";
         const piece = switch (line.item) {
-            .food => std.fmt.bufPrint(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.food.wordIn(act) }) catch "",
-            .biomass => std.fmt.bufPrint(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.biomass.wordIn(act) }) catch "",
-            else => std.fmt.bufPrint(buf[w..], "{s}{s}", .{ sep, wareLabel(act, line.item) }) catch "",
+            .food => std.mem.print(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.food.wordIn(act) }) catch "",
+            .biomass => std.mem.print(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.biomass.wordIn(act) }) catch "",
+            else => std.mem.print(buf[w..], "{s}{s}", .{ sep, wareLabel(act, line.item) }) catch "",
         };
         w += piece.len;
     }
@@ -157,7 +157,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
             // A simple posted buy price: the passerby wants Materials (bulk) or Food+Materials
             // (tools) for what it carries. Kept modest; the sell side is where diminishing value
             // is taught.
-            var q = market.Quote{ .id = @as(u32, @intFromEnum(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
+            var q = market.Quote{ .id = @as(u32, @backingInt(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
             switch (ware) {
                 .food => {
                     q.give = market.Bundle.one(.biomass, 2);
@@ -201,12 +201,12 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     inline for (.{ Ware.food, Ware.biomass }) |ware| {
         const held: f32 = if (ware == .food) food.v else stock.v;
         if (held >= 1) {
-            const q = market.sell_quote(ware, 0, 100 + @as(u32, @intFromEnum(ware)), enc.id);
+            const q = market.sell_quote(ware, 0, 100 + @as(u32, @backingInt(ware)), enc.id);
             const give_s = bundleLabel(act, gbuf[gw..], &q.give);
             gw += give_s.len;
             const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
             gw += recv_s.len;
-            const eff = try std.fmt.allocPrint(ctx.arena, "next unit: {d:.1}{s}", .{ q.next_unit orelse 0, ha.roster.Resource.biomass.letterIn(act) });
+            const eff = try ctx.arena.print("next unit: {d:.1}{s}", .{ q.next_unit orelse 0, ha.roster.Resource.biomass.letterIn(act) });
             try sells.append(ctx.arena, .{
                 .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
                 .quote = q,
@@ -220,8 +220,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         const gi = cat.goodIndex(barter.goodOf(ware).?) orelse continue;
         const owned: u32 = if (goods) |g| g.count[gi] else 0;
         if (owned > 0) {
-            const q = market.sell_quote(ware, 0, 200 + @as(u32, @intFromEnum(ware)), enc.id);
-            const give_s = try std.fmt.allocPrint(ctx.arena, "{s}", .{wareLabel(act, ware)});
+            const q = market.sell_quote(ware, 0, 200 + @as(u32, @backingInt(ware)), enc.id);
+            const give_s = try ctx.arena.print("{s}", .{wareLabel(act, ware)});
             const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
             gw += recv_s.len;
             try sells.append(ctx.arena, .{
@@ -241,18 +241,18 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     // Live header metadata and structured YOU HOLD rows.
     var meta_buf: [32]u8 = undefined;
     const days_left = enc.remaining / ctx.res.config.secs_per_day;
-    const meta = std.fmt.bufPrint(&meta_buf, "{d:.1} DAYS LEFT", .{days_left}) catch "DAYS LEFT";
+    const meta = std.mem.print(&meta_buf, "{d:.1} DAYS LEFT", .{days_left}) catch "DAYS LEFT";
     var food_buf: [24]u8 = undefined;
     var material_buf: [24]u8 = undefined;
     var holding_views = std.ArrayList(t.TradeHolding).empty;
-    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.food.labelIn(act), .value = std.fmt.bufPrint(&food_buf, "{d:.1}", .{food.v}) catch "?" });
-    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = std.fmt.bufPrint(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
+    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.food.labelIn(act), .value = std.mem.print(&food_buf, "{d:.1}", .{food.v}) catch "?" });
+    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = std.mem.print(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
     // The manufactured unlockers the passerby's deal turns on, plus one common crude holding.
     for ([_][]const u8{ "sandals", "hatchet", "fish_rod" }) |gid| {
         const gi = cat.goodIndex(gid) orelse continue;
         const owned: u32 = if (goods) |g| g.count[gi] else 0;
         if (owned > 0) {
-            try holding_views.append(ctx.arena, .{ .label = cat.goods[gi].name, .value = try std.fmt.allocPrint(ctx.arena, "\u{00d7}{d}", .{owned}) });
+            try holding_views.append(ctx.arena, .{ .label = cat.goods[gi].name, .value = try ctx.arena.print("\u{00d7}{d}", .{owned}) });
         }
     }
 

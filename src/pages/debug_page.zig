@@ -378,7 +378,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             if (workspace.surface.market_action.consume(.clicked)) audit_trade.open = true;
 
             var feed: ha.log.Log = .{};
-            feed.push(.normal, try std.fmt.allocPrint(ctx.arena, "You return with 4 {s}.", .{ha.roster.Resource.biomass.wordIn(act)}));
+            feed.push(.normal, try ctx.arena.print("You return with 4 {s}.", .{ha.roster.Resource.biomass.wordIn(act)}));
             feed.push(.good, "The Root cellar slows what the larder loses.");
             feed.push(.normal, "You finish a second Hatchet. One is effect; one is stock.");
             feed.push(.normal, "Someone is walking the shoreline. Their pack carries made goods.");
@@ -424,13 +424,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
             .title = "Shelter",
-            .summary = try std.fmt.allocPrint(ctx.arena, "{s} 31/60", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .summary = try ctx.arena.print("{s} 31/60", .{ha.roster.Resource.biomass.wordIn(act)}),
             .readiness = "locked \u{00B7} 1 condition",
             .kicker = "A PLACE FOR OTHERS",
             .cost = "60m 6e \u{00B7} 6.0d",
             .copy = "a roof with room for four. you're not alone anymore.",
             .requirements = &requirements,
-            .explanation = try std.fmt.allocPrint(ctx.arena, "Hold 60 {s} with a settled body and four kinds of goods.", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .explanation = try ctx.arena.print("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.roster.Resource.biomass.wordIn(act)}),
             .action = "LOCKED",
         });
     } else if (eq(name, "market_strip")) {
@@ -459,7 +459,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         const sv = try t.scroll_view(stage, "sv", .{ .width = 300, .height = 140 }, null);
         for (0..20) |i| {
             var buf: [24]u8 = undefined;
-            _ = try (try sv.content.item("row", i)).text("t", std.fmt.bufPrint(&buf, "row {d}", .{i}) catch "row");
+            _ = try (try sv.content.item("row", i)).text("t", std.mem.print(&buf, "row {d}", .{i}) catch "row");
         }
     } else if (eq(name, "sort_header")) {
         // A sortable header row as BUILD's table builds it: click a label to sort, again to flip.
@@ -582,13 +582,13 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     const food_word = ha.roster.Resource.food.wordIn(act);
     const biomass_word = ha.roster.Resource.biomass.wordIn(act);
     const buys = [_]t.TradeOffer{
-        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = try std.fmt.allocPrint(ctx.arena, "2 {s} + 8 {s}", .{ food_word, biomass_word }), .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
-        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = try std.fmt.allocPrint(ctx.arena, "2 {s} + 6 {s}", .{ food_word, biomass_word }), .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
-        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = try std.fmt.allocPrint(ctx.arena, "8 {s}", .{biomass_word}), .receive = "Preserved food +10", .stock = 2 },
+        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = try ctx.arena.print("2 {s} + 8 {s}", .{ food_word, biomass_word }), .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
+        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = try ctx.arena.print("2 {s} + 6 {s}", .{ food_word, biomass_word }), .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
+        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = try ctx.arena.print("8 {s}", .{biomass_word}), .receive = "Preserved food +10", .stock = 2 },
     };
     const sells = [_]t.TradeOffer{
-        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = try std.fmt.allocPrint(ctx.arena, "6 {s} + 5 {s}", .{ food_word, biomass_word }), .effect = try std.fmt.allocPrint(ctx.arena, "The first pair earns the most. Their next Sandals offer falls to 3 {s} + 2 {s}.", .{ food_word, biomass_word }) },
-        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = try std.fmt.allocPrint(ctx.arena, "9 {s} + 8 {s}", .{ food_word, biomass_word }), .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
+        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = try ctx.arena.print("6 {s} + 5 {s}", .{ food_word, biomass_word }), .effect = try ctx.arena.print("The first pair earns the most. Their next Sandals offer falls to 3 {s} + 2 {s}.", .{ food_word, biomass_word }) },
+        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = try ctx.arena.print("9 {s} + 8 {s}", .{ food_word, biomass_word }), .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
     };
     const holdings = [_]t.TradeHolding{
         .{ .label = ha.roster.Resource.food.labelIn(act), .value = "11.6" },

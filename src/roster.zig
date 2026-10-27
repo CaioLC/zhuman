@@ -720,7 +720,7 @@ const Validator = struct {
             }
         }
         if (g.milestone) |m| {
-            const i = @intFromEnum(m);
+            const i = @backingInt(m);
             if (claimed[i]) return self.fail(.goods, .milestone_twice, g.id, @tagName(m));
             claimed[i] = true;
         }

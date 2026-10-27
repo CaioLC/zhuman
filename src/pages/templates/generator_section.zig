@@ -72,12 +72,12 @@ fn cycleYield(act: u8, buf: []u8, q: capital.GeneratorQuote) Yield {
         const lo = @round(stats.p10 * q.cycle_days);
         const hi = @round(stats.p90 * q.cycle_days);
         const text = if (lo == hi)
-            std.fmt.bufPrint(buf, "+{d:.0}{s}", .{ hi, info.letterOf(act, line.item) }) catch "+?"
+            std.mem.print(buf, "+{d:.0}{s}", .{ hi, info.letterOf(act, line.item) }) catch "+?"
         else
-            std.fmt.bufPrint(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, info.letterOf(act, line.item) }) catch "+?";
+            std.mem.print(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, info.letterOf(act, line.item) }) catch "+?";
         return .{ .kind = line.kind, .text = text };
     }
-    return .{ .text = std.fmt.bufPrint(buf, "+{d:.1}v", .{q.spec.vigor}) catch "+?v" };
+    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{q.spec.vigor}) catch "+?v" };
 }
 
 fn stateWord(q: capital.GeneratorQuote) []const u8 {
@@ -98,7 +98,7 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16) !void {
     var cost_buf: [40]u8 = undefined;
     var duration_buf: [12]u8 = undefined;
     var yield_buf: [20]u8 = undefined;
-    const duration = std.fmt.bufPrint(&duration_buf, "{d:.0}h", .{q.spec.hours}) catch "?";
+    const duration = std.mem.print(&duration_buf, "{d:.0}h", .{q.spec.hours}) catch "?";
     const yield = cycleYield(act, &yield_buf, q);
     const progress: ?f32 = if (q.standing == .charging) q.fraction() else null;
     const display_name = if (q.spec.label.len > 0) q.spec.label else q.rec.name;
@@ -154,7 +154,7 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
     var count_buf: [24]u8 = undefined;
-    const count_text = std.fmt.bufPrint(&count_buf, "{d} OWNED", .{count}) catch "OWNED";
+    const count_text = std.mem.print(&count_buf, "{d} OWNED", .{count}) catch "OWNED";
     _ = try browser.browser_heading(section, "heading", "GENERATORS", "Let time accumulate, then collect without stopping your work.", count_text);
 
     if (count == 0) {

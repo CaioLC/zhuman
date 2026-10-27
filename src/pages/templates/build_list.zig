@@ -341,7 +341,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // --- summary + aligned, sortable table header ------------------------------------------
     // Built before sorting so a header click re-sorts this same frame.
     var sbuf: [40]u8 = undefined;
-    const summary = std.fmt.bufPrint(&sbuf, "{d} of {d} recipes shown", .{ entries.len, shelfTotal(world, e, cat, shelf) }) catch "?";
+    const summary = std.mem.print(&sbuf, "{d} of {d} recipes shown", .{ entries.len, shelfTotal(world, e, cat, shelf) }) catch "?";
     _ = (try outer.text("summary", summary))
         .with_style(.{ style.small, Style{ .text = th.dim } });
 
@@ -349,21 +349,21 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // natural direction, so the blank list opens on STATE ↓ (nearest first).
     const st = controls.state;
     if (st.sort >= sort_count) st.sort = 0;
-    const cur_sort: Sort = @enumFromInt(st.sort);
+    const cur_sort: Sort = @fromBackingInt(@intCast(st.sort));
     const cur_dir: Direction = if (st.dir != .none) st.dir else naturalDir(cur_sort);
     // The column header stays put above the scrolling rows.
     const header = try capital_header(outer, "header", shelf.widths, .{
-        .keys = .{ @intFromEnum(Sort.name), @intFromEnum(Sort.inputs), @intFromEnum(Sort.time), null, @intFromEnum(Sort.state), null },
+        .keys = .{ @backingInt(Sort.name), @backingInt(Sort.inputs), @backingInt(Sort.time), null, @backingInt(Sort.state), null },
         .active = st.sort,
         .dir = if (cur_dir == .descending) .descending else .ascending,
     });
     var eff_sort = cur_sort;
     var eff_dir = cur_dir;
     if (header.clicked) |k| {
-        const next = cc.nextSort(st.sort, cur_dir, k, naturalDir(@enumFromInt(k)));
+        const next = cc.nextSort(st.sort, cur_dir, k, naturalDir(@fromBackingInt(@intCast(k))));
         st.sort = next.sort;
         st.dir = next.dir;
-        eff_sort = @enumFromInt(next.sort);
+        eff_sort = @fromBackingInt(@intCast(next.sort));
         eff_dir = next.dir;
     }
     sortEntries(entries, eff_sort, eff_dir);
@@ -382,7 +382,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     const rows = sv.content;
 
     if (entries.len == 0) {
-        const msg = if (blank) try std.fmt.allocPrint(ctx.arena, "Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
+        const msg = if (blank) try ctx.arena.print("Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
         _ = (try rows.text("empty", msg))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
     }
@@ -454,11 +454,11 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     var order_labels: [roster.max_lines][24]u8 = undefined;
     var requirements: [3 + roster.max_lines]milestone_mod.Requirement = undefined;
     var nreq: usize = 0;
-    requirements[nreq] = .{ .label = "VIGOR", .value = std.fmt.bufPrint(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
+    requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "FOOD", .value = std.fmt.bufPrint(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = food_met };
+    requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = food_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "RECIPES", .value = std.fmt.bufPrint(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met };
+    requirements[nreq] = .{ .label = "RECIPES", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met };
     nreq += 1;
     var compact: []const u8 = "";
     var li: usize = 0;
@@ -467,9 +467,9 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
         const have = ledger.held(world, e, cat, l);
         const word = ha.actions.itemWord(cat, l.item, ha.migration.actOf(world, e));
         const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
-        requirements[nreq] = .{ .label = label, .value = std.fmt.bufPrint(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
+        requirements[nreq] = .{ .label = label, .value = std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
         nreq += 1;
-        if (li == 0) compact = std.fmt.bufPrint(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, l.n }) catch word;
+        if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, l.n }) catch word;
         li += 1;
     }
     // Locked counts the standing conditions still unmet (`locked · 1 condition`), as the
@@ -477,7 +477,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     const unmet: u32 = @as(u32, @intFromBool(!vigor_met)) + @intFromBool(!food_met) + @intFromBool(!recipes_met);
     var ready_buf: [32]u8 = undefined;
     const readiness = switch (state) {
-        .locked => std.fmt.bufPrint(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
+        .locked => std.mem.print(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
         .unfunded => "inputs short",
         .ready => "ready to raise",
         .done => unreachable,

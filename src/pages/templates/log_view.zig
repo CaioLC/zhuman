@@ -48,7 +48,7 @@ fn timeStamp(buf: []u8, at: f32, secs_per_day: f32) []const u8 {
     const total_min: u64 = @intFromFloat(@floor(@max(0, at) / secs_per_day * 24 * 60 + 1e-3));
     const day = total_min / (24 * 60) + 1;
     const min_of_day = total_min % (24 * 60);
-    return std.fmt.bufPrint(buf, "D{d} {d:0>2}:{d:0>2}", .{ day, min_of_day / 60, min_of_day % 60 }) catch "";
+    return std.mem.print(buf, "D{d} {d:0>2}:{d:0>2}", .{ day, min_of_day / 60, min_of_day % 60 }) catch "";
 }
 
 /// The stamp column width in logical px: a widest-case stamp measured in the stamp font, so
