@@ -131,7 +131,11 @@ fn sdlPlatform(window: *sdl.video.Window) ui_client.RoutePlatform {
 }
 
 const App = struct {
-    gpa: std.heap.GeneralPurposeAllocator(.{}),
+    /// The process's I/O, allocator and environment, from `main`'s `std.process.Init`, which
+    /// owns them for the life of the program.
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    environ: *const std.process.Environ.Map,
     window: sdl.video.Window,
     renderer: sdl.render.Renderer,
     frame_capper: sdl.extras.FramerateCapper(f32),
@@ -152,8 +156,7 @@ const App = struct {
     /// The `data/` files' modification times; a change reloads the roster between frames.
     data_watch: ha.reload.Watch = .{},
 
-    fn init() !App {
-        const gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    fn init(process: std.process.Init) !App {
         try sdl.init(.{ .video = true, .events = true });
         try sdl.ttf.init();
         // Sized to the BUILD panel, which is the tallest screen: five shelves of tiles whose
@@ -176,7 +179,9 @@ const App = struct {
         // pre-walk draw share the same known baseline.
         renderer.setDrawBlendMode(.blend) catch {};
         return .{
-            .gpa = gpa,
+            .io = process.io,
+            .gpa = process.gpa,
+            .environ = process.environ_map,
             .window = window,
             .renderer = renderer,
             .frame_capper = frame_capper,
@@ -189,15 +194,16 @@ const App = struct {
         };
     }
 
-    fn setup(self: *App, allocator: std.mem.Allocator) !void {
+    fn setup(self: *App) !void {
+        const allocator = self.gpa;
         self.font = try ha.font.Fonts.init(allocator, font_path, ui_client.style.default_font);
-        self.resources = try Resources.init(allocator, &self.font, &self.renderer, self.window);
+        self.resources = try Resources.init(allocator, self.io, self.environ, &self.font, &self.renderer, self.window);
         // Resolve the reduced-motion policy ONCE here: an explicit
         // `HA_REDUCED_MOTION` override wins, else the platform probe (Windows
         // `SPI_GETCLIENTAREAANIMATION`; deterministic `false` elsewhere), else a `false`
         // fallback. No per-frame OS call — `build_ui` only projects this onto
         // `view.reduced_motion` each frame.
-        self.resources.motion = ui_client.resolveMotionFromEnv(allocator, ui_client.PlatformMotionProbe.instance());
+        self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
         self.resources.sim.log.push(.dim, opening_line);
@@ -208,7 +214,7 @@ const App = struct {
         // the one routing policy's platform seam (clipboard + text-input stop). The SDL loop
         // routes each pointer event through `driver.router` as it arrives, and runs the rest of
         // the per-frame lifecycle through `driver.step` (via host callbacks below).
-        self.driver = ui_client.FrameDriver.init(&self.ui, &self.frame_arena, sdlPlatform(&self.window));
+        self.driver = ui_client.FrameDriver.init(&self.ui, &self.frame_arena, self.io, sdlPlatform(&self.window));
     }
 
     fn deinit(self: *App) void {
@@ -222,14 +228,13 @@ const App = struct {
         self.window.deinit();
         sdl.ttf.quit();
         sdl.quit(.{ .video = true, .events = true });
-        _ = self.gpa.deinit();
     }
 };
 
-pub fn main() !void {
-    var app = try App.init();
+pub fn main(process: std.process.Init) !void {
+    var app = try App.init(process);
     defer app.deinit();
-    try app.setup(app.gpa.allocator());
+    try app.setup();
 
     while (!app.resources.menu.quit_requested) {
         // Event Stage
@@ -365,7 +370,7 @@ pub fn main() !void {
         app.resources.time.dt = app.resources.playback.simulationDelta(real_dt);
         // A changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
-        if (app.data_watch.poll(real_dt)) ha.reload.reload(&app.resources, &app.world);
+        if (app.data_watch.poll(app.io, real_dt)) ha.reload.reload(app.io, &app.resources, &app.world);
         // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at

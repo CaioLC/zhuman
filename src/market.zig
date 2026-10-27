@@ -33,7 +33,7 @@ pub const Phase = enum { absent, approaching, present, departed };
 /// and the tool families have stable slots to fill. The `count`-per-slot lives in
 /// `Encounter.stock`, indexed by `@intFromEnum`.
 pub const Ware = enum { food, biomass, fish_hook, whetstone };
-pub const ware_count = @typeInfo(Ware).@"enum".fields.len;
+pub const ware_count = @typeInfo(Ware).@"enum".field_names.len;
 
 /// The authoritative encounter. Held on `Sim`; ticked once per frame from the clock.
 pub const Encounter = struct {
@@ -45,7 +45,7 @@ pub const Encounter = struct {
     remaining: f32 = 0,
     /// The current visit's finite satchel — units of each `Ware` still available. Refilled on
     /// arrival, decremented by trades, never regenerated until the next arrival.
-    stock: [ware_count]u16 = [_]u16{0} ** ware_count,
+    stock: [ware_count]u16 = @splat(0),
 
     /// Whether a deal can be opened right now — only while the passerby is actually present.
     /// The UI gates the TRADE action on this; tab visibility never enters into it.
@@ -86,7 +86,7 @@ pub const Schedule = struct {
     /// A fresh satchel, per `Ware` (indexed by `@intFromEnum`): food, materials, fish_hook,
     /// whetstone. Finite and modest — the passerby is a trickle, not a shop.
     satchel: [ware_count]u16 = blk: {
-        var s = [_]u16{0} ** ware_count;
+        var s: [ware_count]u16 = @splat(0);
         s[@intFromEnum(Ware.food)] = 8;
         s[@intFromEnum(Ware.biomass)] = 20;
         s[@intFromEnum(Ware.fish_hook)] = 1;
@@ -135,7 +135,7 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Lo
             // Back to the quiet gap.
             enc.phase = .absent;
             enc.remaining = sched.gap_days * spd;
-            enc.stock = [_]u16{0} ** ware_count; // nothing to trade while absent
+            enc.stock = @splat(0); // nothing to trade while absent
             return .none;
         },
     };

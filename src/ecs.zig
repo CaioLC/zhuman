@@ -68,9 +68,8 @@ fn parseParams(comptime params: anytype) ParamSpec {
     var withouts: []const type = &.{};
     var entry_order: []const EntryItem = &.{};
 
-    const fields = @typeInfo(@TypeOf(params)).@"struct".fields;
-    inline for (fields) |f| {
-        const T = @field(params, f.name);
+    inline for (@typeInfo(@TypeOf(params)).@"struct".field_names) |name| {
+        const T = @field(params, name);
         if (T == Entity) {
             // Bevy-style `Entity` query item — yields the id, not a component ptr, and
             // doesn't drive iteration (it's not a storage). Checked before @hasDecl,
@@ -110,23 +109,9 @@ fn EntryType(comptime spec: ParamSpec) type {
     if (items.len == 1) {
         return entryFieldType(items[0]);
     }
-    var fields: [items.len]std.builtin.Type.StructField = undefined;
-    for (items, 0..) |it, i| {
-        const FT = entryFieldType(it);
-        fields[i] = .{
-            .name = std.fmt.comptimePrint("{}", .{i}),
-            .type = FT,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(FT),
-        };
-    }
-    return @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .fields = &fields,
-        .decls = &.{},
-        .is_tuple = true,
-    } });
+    var types: [items.len]type = undefined;
+    for (items, 0..) |it, i| types[i] = entryFieldType(it);
+    return @Tuple(&types);
 }
 
 fn buildEntry(
@@ -163,7 +148,7 @@ fn buildEntry(
 /// Iterate every entity matching `params`. `next()` yields a tuple of `*T` in declaration
 /// order (plus `Entity` and `?*T` for `Maybe`), built at comptime by `EntryType`.
 ///
-/// A note for editors: that tuple is `@Type`-constructed, which no language server
+/// A note for editors: that tuple is `@Tuple`-constructed, which no language server
 /// evaluates, so a destructure of it resolves to nothing. Annotating the bindings
 /// (`const vigor: *comp.Vigor, … = entry;`) restores completion and costs only the line.
 /// This is a tooling limit, not a design one — declaring `params` as a concrete
@@ -282,8 +267,8 @@ pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {
     const Fn = @TypeOf(sys);
     const fn_info = @typeInfo(Fn).@"fn";
     var args: std.meta.ArgsTuple(Fn) = undefined;
-    inline for (fn_info.params, 0..) |p, i| {
-        args[i] = extract(p.type.?, world, res);
+    inline for (fn_info.param_types, 0..) |PT, i| {
+        args[i] = extract(PT.?, world, res);
     }
     @call(.auto, sys, args);
 }
@@ -302,10 +287,13 @@ pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {
 ///  - **distinct types.** Two fields of the same type make `*T` ambiguous; the `comptime`
 ///    block below turns that into a build error instead of a silent bind to whichever
 ///    field comes first.
+const Group = struct { name: [:0]const u8, type: type };
+
 const groups = blk: {
-    var out: []const std.builtin.Type.StructField = &.{};
-    for (std.meta.fields(Resources)) |f| {
-        if (@typeInfo(f.type) == .@"struct") out = out ++ [_]std.builtin.Type.StructField{f};
+    const info = @typeInfo(Resources).@"struct";
+    var out: []const Group = &.{};
+    for (info.field_names, info.field_types) |name, T| {
+        if (@typeInfo(T) == .@"struct") out = out ++ [_]Group{.{ .name = name, .type = T }};
     }
     break :blk out;
 };

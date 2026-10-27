@@ -64,9 +64,21 @@ pub const Driver = struct {
     /// The frame arena behind `ui.arena`; reset once per frame before the build.
     arena: *std.heap.ArenaAllocator,
     router: route.Router,
+    /// The host's I/O; its monotonic clock times the five passes.
+    io: std.Io,
 
-    pub fn init(ui_ctx: *UiCtx, arena: *std.heap.ArenaAllocator, platform: route.Platform) Driver {
-        return .{ .ui = ui_ctx, .arena = arena, .router = route.Router.init(ui_ctx, platform) };
+    pub fn init(ui_ctx: *UiCtx, arena: *std.heap.ArenaAllocator, io: std.Io, platform: route.Platform) Driver {
+        return .{ .ui = ui_ctx, .arena = arena, .io = io, .router = route.Router.init(ui_ctx, platform) };
+    }
+
+    /// The engine's profiling clock over `io`'s monotonic (`awake`) clock.
+    fn awakeClock(self: *const Driver) ui.FrameClock {
+        return .{ .ctx = &self.io, .nowFn = ioNow };
+    }
+
+    fn ioNow(ctx: *const anyopaque) u64 {
+        const io: *const std.Io = @ptrCast(@alignCast(ctx));
+        return @intCast(std.Io.Timestamp.now(io.*, .awake).toNanoseconds());
     }
 
     /// Run one frame. The caller has already reset the input model's edges, recorded this
@@ -93,22 +105,23 @@ pub const Driver = struct {
         // stamp every root as one aggregate pass — geometry plus paint order for the next
         // event stage. The normal `set_global_pos` entry remains clock-free.
         var sample: Sample = .{};
+        const clock = self.awakeClock();
         for (trees) |t| {
-            const layout_sample = try t.set_global_pos_profiled(u.arena);
+            const layout_sample = try t.set_global_pos_profiled(u.arena, clock);
             sample.add(layout_sample);
         }
-        var timer = try std.time.Timer.start();
+        const stamp_start = clock.now();
         for (trees) |t| ui.stamp_rects(u, t);
-        sample.stamping = timer.read();
+        sample.stamping = clock.now() -| stamp_start;
         // Geometry is re-stamped at the current size: the resize guard may lift.
         self.router.geometryStamped();
 
         // Draw: trees in list order, so later ones (overlays) land on top.
         if (host.present) |present| {
             try present.clear(host.user);
-            timer.reset();
+            const draw_start = clock.now();
             for (trees) |t| draw.draw_tree(u, t);
-            sample.drawing = timer.read();
+            sample.drawing = clock.now() -| draw_start;
         }
         if (host.sample) |emit| emit(host.user, sample, u, trees);
         if (host.present) |present| try present.show(host.user);

@@ -286,7 +286,7 @@ const FakeFont = struct {
 /// Collect wrapped lines as owned strings for assertion.
 const Collector = struct {
     src: []const u8,
-    lines: std.ArrayListUnmanaged([]const u8) = .{},
+    lines: std.ArrayList([]const u8) = .empty,
     alloc: std.mem.Allocator,
     limit: usize = std.math.maxInt(usize),
 
@@ -369,8 +369,7 @@ test "wrap: a single word longer than the width hard-breaks on codepoint boundar
 test "wrap: UTF-8 multibyte word never splits mid-codepoint" {
     // Four snowmen (U+2603, 3 bytes each = 12 bytes). width 7 fits two snowmen (6 bytes),
     // never 7 (which would cut the third snowman's 3-byte sequence in the middle).
-    const snowman = "\u{2603}";
-    const src = snowman ** 4;
+    const src = "\u{2603}\u{2603}\u{2603}\u{2603}";
     var c = try collect(testing.allocator, src, 7);
     defer c.lines.deinit(testing.allocator);
     for (c.lines.items) |ln| {
@@ -378,8 +377,8 @@ test "wrap: UTF-8 multibyte word never splits mid-codepoint" {
     }
     // 12 bytes at 2 snowmen (6 bytes) per line → 2 lines.
     try testing.expectEqual(@as(usize, 2), c.lines.items.len);
-    try testing.expectEqualStrings(snowman ** 2, c.lines.items[0]);
-    try testing.expectEqualStrings(snowman ** 2, c.lines.items[1]);
+    try testing.expectEqualStrings("\u{2603}\u{2603}", c.lines.items[0]);
+    try testing.expectEqualStrings("\u{2603}\u{2603}", c.lines.items[1]);
 }
 
 test "wrap: leading/trailing/multiple spaces collapse at breaks" {
@@ -424,7 +423,7 @@ test "wrap: tiny positive width terminates and emits at least one codepoint per 
     // width 1 with a multibyte snowman: prefixBytes floors to 1 byte < 3, so the fallback
     // must still advance one whole codepoint per line rather than loop forever.
     const snowman = "\u{2603}";
-    const src = snowman ** 3;
+    const src = "\u{2603}\u{2603}\u{2603}";
     var c = try collect(testing.allocator, src, 1);
     defer c.lines.deinit(testing.allocator);
     try testing.expectEqual(@as(usize, 3), c.lines.items.len);
@@ -487,8 +486,7 @@ test "ellipsisFit: one pixel less than full → elides on a codepoint boundary, 
 test "ellipsisFit: multibyte prefix never splits a codepoint" {
     // Snowman U+2603 is 3 bytes. Five of them = 15 bytes; cell 8, ellipsis_w 2 → budget 6 →
     // exactly two snowmen (6 bytes), never a mid-sequence 7th byte.
-    const snowman = "\u{2603}";
-    const src = snowman ** 5;
+    const src = "\u{2603}\u{2603}\u{2603}\u{2603}\u{2603}";
     const r = fit(src, 8, 2);
     try testing.expect(r.elided);
     try testing.expectEqual(@as(usize, 6), r.prefix_len); // two whole snowmen

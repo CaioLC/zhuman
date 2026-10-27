@@ -23,7 +23,7 @@
 //! reflect temporary changes), and it links against `user32` — already linked by the
 //! vendored SDL C build — with no `build.zig` change and no per-frame OS call.
 //!
-//! SDL exposes no cross-platform reduced-motion abstraction (`zig-sdl3` 0.1.6 has only mouse
+//! SDL exposes no cross-platform reduced-motion abstraction (`zig-sdl3` 0.2.3 has only mouse
 //! hints and a light/dark theme query), so there is nothing portable to build on. On every
 //! non-Windows target the platform probe returns a deterministic `false` (motion allowed) —
 //! recorded honestly rather than pretending a preference was read.
@@ -216,21 +216,12 @@ pub fn resolve(override: ?bool, probe: Probe) Policy {
     return .{ .reduced_motion = false };
 }
 
-/// The init-time convenience used by the host: read the env override once (allocation-free
-/// via a fixed stack buffer), then `resolve` against the given probe. Never panics on a
-/// missing/oversized/garbage value — those simply become "no override". `allocator` is used
-/// only transiently to read the env var and is not retained.
-pub fn resolveFromEnv(allocator: std.mem.Allocator, probe: Probe) Policy {
-    const override = readEnvOverride(allocator);
+/// The init-time convenience used by the host: read the env override once from `environ`,
+/// then `resolve` against the given probe. Never panics on a missing/garbage value — those
+/// simply become "no override". Allocation-free; nothing is retained.
+pub fn resolveFromEnv(environ: *const std.process.Environ.Map, probe: Probe) Policy {
+    const override = if (environ.get(env_var_name)) |raw| parseOverride(raw) else null;
     return resolve(override, probe);
-}
-
-/// Read `HA_REDUCED_MOTION` and parse it, or `null` if unset/unreadable/unrecognized. The
-/// value is read into owned memory, parsed, and freed before returning — nothing is retained.
-fn readEnvOverride(allocator: std.mem.Allocator) ?bool {
-    const raw = std.process.getEnvVarOwned(allocator, env_var_name) catch return null;
-    defer allocator.free(raw);
-    return parseOverride(raw);
 }
 
 // --- Tests ------------------------------------------------------------------------------
@@ -315,12 +306,22 @@ test "phase gate: freezes an oscillation to a constant under reduced motion" {
 }
 
 test "resolveFromEnv falls back to the probe when the env var is unset/garbage" {
-    // The test environment does not set HA_REDUCED_MOTION, so the probe decides.
-    var reduced = FixedProbe{ .value = true };
-    try testing.expect(resolveFromEnv(testing.allocator, reduced.probe()).reduced_motion);
+    var env = std.process.Environ.Map.init(testing.allocator);
+    defer env.deinit();
 
+    // Unset: the probe decides.
+    var reduced = FixedProbe{ .value = true };
+    try testing.expect(resolveFromEnv(&env, reduced.probe()).reduced_motion);
     var allowed = FixedProbe{ .value = false };
-    try testing.expect(!resolveFromEnv(testing.allocator, allowed.probe()).reduced_motion);
+    try testing.expect(!resolveFromEnv(&env, allowed.probe()).reduced_motion);
+
+    // Garbage: still the probe.
+    try env.put(env_var_name, "sometimes");
+    try testing.expect(resolveFromEnv(&env, reduced.probe()).reduced_motion);
+
+    // A recognized value overrides the probe.
+    try env.put(env_var_name, "1");
+    try testing.expect(resolveFromEnv(&env, allowed.probe()).reduced_motion);
 }
 
 test "default Policy is motion-allowed" {

@@ -50,7 +50,7 @@ pub const Buttons = struct {
     }
 
     fn beginFrame(self: *Buttons) void {
-        inline for (@typeInfo(Buttons).@"struct".fields) |field| @field(self, field.name).beginFrame();
+        inline for (@typeInfo(Buttons).@"struct".field_names) |name| @field(self, name).beginFrame();
     }
 };
 
@@ -187,8 +187,8 @@ pub const Input = struct {
     /// Cancel all held input, synthesizing release edges/events where capacity permits.
     pub fn cancel(self: *Input) void {
         self.cancelled = true;
-        inline for (@typeInfo(Buttons).@"struct".fields) |field| {
-            const button = &@field(self.pointer.buttons, field.name);
+        inline for (@typeInfo(Buttons).@"struct".field_names) |name| {
+            const button = &@field(self.pointer.buttons, name);
             if (button.held) button.released = true;
             button.held = false;
         }

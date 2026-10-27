@@ -30,14 +30,14 @@ pub const env_var_name = "HA_UI_PROFILE";
 pub const compiled_in = std.log.logEnabled(.info, .default);
 
 /// How many `UiState` pools the registry declares — one per `pub const` type.
-pub const pool_count = @typeInfo(cb.UiState).@"struct".decls.len;
+pub const pool_count = @typeInfo(cb.UiState).@"struct".decl_names.len;
 
 /// The registered pool names, in registry order — the order `Pools` lays its fields out in,
 /// which is the order every per-pool array here is indexed by.
 pub const pool_names: [pool_count][]const u8 = blk: {
-    const decls = @typeInfo(cb.UiState).@"struct".decls;
+    const decls = @typeInfo(cb.UiState).@"struct".decl_names;
     var names: [decls.len][]const u8 = undefined;
-    for (decls, 0..) |d, i| names[i] = d.name;
+    for (decls, 0..) |name, i| names[i] = name;
     break :blk names;
 };
 
@@ -81,17 +81,17 @@ pub fn StateStats(comptime n: usize) type {
             /// Interaction slot storage, holes included.
             interaction_slots: u64 = 0,
             /// Per pool: slots touched this frame.
-            pool_live: [n]u64 = [_]u64{0} ** n,
+            pool_live: [n]u64 = @splat(0),
             /// Per pool: slot storage, holes included.
-            pool_slots: [n]u64 = [_]u64{0} ** n,
+            pool_slots: [n]u64 = @splat(0),
         };
 
         frames: u64 = 0,
         nodes: Stat = .{},
         interaction_live: Stat = .{},
         interaction_slots: Stat = .{},
-        pool_live: [n]Stat = [_]Stat{.{}} ** n,
-        pool_slots: [n]Stat = [_]Stat{.{}} ** n,
+        pool_live: [n]Stat = @splat(.{}),
+        pool_slots: [n]Stat = @splat(.{}),
 
         pub fn record(self: *Self, s: Sample) void {
             self.frames +|= 1;
@@ -138,21 +138,18 @@ pub fn sample(ctx: *cb.UiCtx, trees: []const *cb.Node) HostSample {
     s.nodes = countNodes(trees);
     s.interaction_live = countLive(ctx.interactions.slots.items, ctx.frame);
     s.interaction_slots = ctx.interactions.slots.items.len;
-    inline for (@typeInfo(@TypeOf(ctx.pools)).@"struct".fields, 0..) |f, i| {
-        comptime std.debug.assert(std.mem.eql(u8, f.name, pool_names[i]));
-        const p = &@field(ctx.pools, f.name);
+    inline for (@typeInfo(@TypeOf(ctx.pools)).@"struct".field_names, 0..) |name, i| {
+        comptime std.debug.assert(std.mem.eql(u8, name, pool_names[i]));
+        const p = &@field(ctx.pools, name);
         s.pool_live[i] = countLive(p.slots.items, ctx.frame);
         s.pool_slots[i] = p.slots.items.len;
     }
     return s;
 }
 
-/// Whether `HA_UI_PROFILE` asks for the capture. The value is read into owned memory, parsed,
-/// and freed before returning; nothing is retained.
-pub fn requestedFromEnv(allocator: std.mem.Allocator) bool {
-    const raw = std.process.getEnvVarOwned(allocator, env_var_name) catch return false;
-    defer allocator.free(raw);
-    return motion.parseOverride(raw) orelse false;
+/// Whether an `HA_UI_PROFILE` value (null when unset) asks for the capture.
+pub fn requestedFromEnv(raw: ?[]const u8) bool {
+    return motion.parseOverride(raw orelse return false) orelse false;
 }
 
 /// The host loop's capture: timings and state counts over one shared window.
@@ -202,7 +199,7 @@ pub const FrameCapture = struct {
     /// from `ctx` and `trees`. A no-op when the capture is compiled out or not requested.
     pub fn record(self: *FrameCapture, timings: ui.FrameProfileSample, ctx: *cb.UiCtx, trees: []const *cb.Node) void {
         if (comptime !compiled_in) return;
-        if (!self.isEnabled(ctx.gpa)) return;
+        if (!self.isEnabled(ctx.res)) return;
         self.timings.record(timings);
         self.state.record(sample(ctx, trees));
     }
@@ -215,9 +212,9 @@ pub const FrameCapture = struct {
         return .{ .timings = timings, .state = state };
     }
 
-    fn isEnabled(self: *FrameCapture, allocator: std.mem.Allocator) bool {
+    fn isEnabled(self: *FrameCapture, res: *const @import("../res.zig").Resources) bool {
         if (self.enabled) |on| return on;
-        const on = requestedFromEnv(allocator);
+        const on = requestedFromEnv(res.env(env_var_name));
         self.enabled = on;
         return on;
     }

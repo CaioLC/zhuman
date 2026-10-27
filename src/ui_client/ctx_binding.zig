@@ -822,7 +822,7 @@ test "TextState refuses long multibyte UTF-8 whole, never cutting a codepoint" {
     try std.testing.expectEqual(@as(usize, 0), st.len);
     try std.testing.expect(st.text() == null);
     // A multibyte string that *fits* is stored intact, byte-for-byte.
-    const short = snowman ** 4; // 12 bytes, well within cap
+    const short = "\u{2603}\u{2603}\u{2603}\u{2603}"; // 12 bytes, well within cap
     try std.testing.expect(st.update(short));
     try std.testing.expect(std.unicode.utf8ValidateSlice(st.text().?));
     try std.testing.expectEqualStrings(short, st.text().?);

@@ -72,7 +72,7 @@ pub const Registry = struct {
         tween: Tween = .{ .from = 0, .to = 0, .duration = 0 },
     };
 
-    slots: [cap]Slot = [_]Slot{.{}} ** cap,
+    slots: [cap]Slot = @splat(.{}),
     policy: motion.Policy = .{},
 
     /// Install the reduced-motion policy (projected from `Resources.motion` once per frame,

@@ -148,7 +148,7 @@ pub fn Node(comptime RenderData: type) type {
             child.rekey(self.key); // re-derive child + its whole subtree off our key
             // Two siblings with one key would share every pooled slot (text, interaction,
             // state) and silently alias. In safe modes that is a visible failure with the path.
-            if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+            if (builtin.mode == .debug or builtin.mode == .safe) {
                 if (self.duplicateSibling(child)) |twin| {
                     var buf: [512]u8 = undefined;
                     std.debug.panic(
@@ -217,7 +217,7 @@ pub fn Node(comptime RenderData: type) type {
             switch (@typeInfo(@TypeOf(item))) {
                 .optional => if (item) |v| try collect(list, allocator, v),
                 .pointer => try list.append(allocator, item), // a single `*Self` root
-                .@"struct" => |s| inline for (s.fields) |f| try collect(list, allocator, @field(item, f.name)),
+                .@"struct" => |s| inline for (s.field_names) |name| try collect(list, allocator, @field(item, name)),
                 else => @compileError("collect: unsupported UI tree shape " ++ @typeName(@TypeOf(item))),
             }
         }
@@ -245,9 +245,10 @@ pub fn Node(comptime RenderData: type) type {
             try features.set_global_pos(self, alloc);
         }
 
-        /// Diagnostic solve returning exact timings for the three internal layout passes.
-        pub fn set_global_pos_profiled(self: *Self, alloc: Allocator) !@import("profile.zig").Sample {
-            return features.set_global_pos_profiled(self, alloc);
+        /// Diagnostic solve returning exact timings for the three internal layout passes,
+        /// read from the host's monotonic `clock`.
+        pub fn set_global_pos_profiled(self: *Self, alloc: Allocator, clock: @import("profile.zig").Clock) !@import("profile.zig").Sample {
+            return features.set_global_pos_profiled(self, alloc, clock);
         }
 
         /// This node's interaction state this frame (read-through: allocates/keeps
@@ -343,6 +344,30 @@ fn stamp_walk(u: anytype, node: anytype, clip: ?geometry.Rect, parent_key: ?u64)
 /// A concrete `Node` for tests — the render descriptor is irrelevant to
 /// layout/traversal, so an empty struct suffices.
 const TestNode = Node(struct {});
+
+test "profiled solve times each pass from the host clock" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var root = try TestNode.create(allocator, "root");
+    _ = root.with_size(Size.initFixed(800, 600));
+    _ = root.with_layout(.top_left, null);
+
+    // Each reading advances 10ns, so every pass measures exactly one tick.
+    const Ticker = struct {
+        var t: u64 = 0;
+        fn now(_: *const anyopaque) u64 {
+            t += 10;
+            return t;
+        }
+    };
+    const clock: @import("profile.zig").Clock = .{ .ctx = &Ticker.t, .nowFn = Ticker.now };
+    const s = try root.set_global_pos_profiled(allocator, clock);
+    try std.testing.expectEqual(@as(u64, 10), s.intrinsic);
+    try std.testing.expectEqual(@as(u64, 10), s.relative);
+    try std.testing.expectEqual(@as(u64, 10), s.placement);
+}
 
 test "node tree layout" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

@@ -317,8 +317,8 @@ pub fn legend_dot(comptime which: Resource) fn (*UiCtx, *Node) Style {
 
 /// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold.
 fn merge(out: *Style, frag: Style) void {
-    inline for (std.meta.fields(Style)) |f| {
-        if (@field(frag, f.name)) |v| @field(out, f.name) = v;
+    inline for (@typeInfo(Style).@"struct".field_names) |name| {
+        if (@field(frag, name)) |v| @field(out, name) = v;
     }
 }
 
@@ -341,7 +341,7 @@ fn fold(ctx: *UiCtx, node: *Node, out: *Style, frag: anytype) void {
         else
             @compileError("style fragment: unexpected pointer " ++ @typeName(T)),
         .@"struct" => |s| if (s.is_tuple) {
-            inline for (s.fields) |f| fold(ctx, node, out, @field(frag, f.name));
+            inline for (s.field_names) |name| fold(ctx, node, out, @field(frag, name));
         } else @compileError("style fragment must be `Style` or a tuple of fragments; got " ++ @typeName(T)),
         else => @compileError("unsupported style fragment: " ++ @typeName(T)),
     }

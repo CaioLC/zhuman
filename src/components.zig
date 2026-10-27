@@ -34,15 +34,15 @@ pub const InventoryBiomass = struct {
 /// (`roster.zig`); zero is not owned. Only ownership carries an effect — a second pair of
 /// sandals is stock — so what the goods *do* is derived, never stored here (`effects.zig`).
 pub const Goods = struct {
-    count: [roster.max_goods]u32 = [_]u32{0} ** roster.max_goods,
+    count: [roster.max_goods]u32 = @splat(0),
 };
 
 /// Passive progress and on/off state for owned collectable generators, keyed by catalog good
 /// index. `off` defaults false so a newly acquired generator starts accumulating immediately;
 /// toggling off preserves `progress` and consumes nothing.
 pub const Generators = struct {
-    progress: [roster.max_goods]f32 = [_]f32{0} ** roster.max_goods,
-    off: [roster.max_goods]bool = [_]bool{false} ** roster.max_goods,
+    progress: [roster.max_goods]f32 = @splat(0),
+    off: [roster.max_goods]bool = @splat(false),
 };
 
 /// What the owned goods currently contribute to the body and the larder, so those
@@ -59,7 +59,7 @@ pub const Granted = struct {
 /// promotes and establishes from there, and a recipe that names a `tech` is offered only once
 /// it reads `researched` here (`capital.quote`).
 pub const Research = struct {
-    state: [roster.max_techs]roster.TechState = [_]roster.TechState{.locked} ** roster.max_techs,
+    state: [roster.max_techs]roster.TechState = @splat(.locked),
 
     /// The board as the act opens: every tile at its authored initial state.
     pub fn entry(cat: *const roster.Catalog) Research {

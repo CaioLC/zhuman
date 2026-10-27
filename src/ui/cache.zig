@@ -132,30 +132,21 @@ pub fn Pool(comptime T: type) type {
 /// Comptime-generate a struct holding one `Pool(T)` per type declared in `ns`.
 /// Mirrors `world.Storages`. The owning `Ctx` looks pools up by element type.
 pub fn Pools(comptime ns: type) type {
-    const decls = @typeInfo(ns).@"struct".decls;
-    var fields: [decls.len]std.builtin.Type.StructField = undefined;
-    for (decls, 0..) |d, i| {
-        const v = @field(ns, d.name);
+    const names = @typeInfo(ns).@"struct".decl_names;
+    var types: [names.len]type = undefined;
+    var attrs: [names.len]std.lang.Type.Struct.FieldAttributes = undefined;
+    for (names, 0..) |name, i| {
+        const v = @field(ns, name);
         if (@TypeOf(v) != type) {
-            @compileError("only type declarations allowed in UI state ns (offending decl: " ++ d.name ++ ")");
+            @compileError("only type declarations allowed in UI state ns (offending decl: " ++ name ++ ")");
         }
         const T: type = v;
         const FT = Pool(T);
         const default_val: FT = .{};
-        fields[i] = .{
-            .name = d.name,
-            .type = FT,
-            .default_value_ptr = &default_val,
-            .is_comptime = false,
-            .alignment = @alignOf(FT),
-        };
+        types[i] = FT;
+        attrs[i] = .{ .default_value_ptr = &default_val };
     }
-    return @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .fields = &fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    return @Struct(.auto, null, names, &types, &attrs);
 }
 
 test "acquire is stable per key and preserves written values" {

@@ -224,7 +224,7 @@ pub const Sim = struct {
     /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
     /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
     /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
-    reach_seen: [rostermod.max_goods]bool = [_]bool{false} ** rostermod.max_goods,
+    reach_seen: [rostermod.max_goods]bool = @splat(false),
 
     /// **The Passerby encounter** — the run's one Act I counterparty as a clock-driven
     /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite
@@ -297,7 +297,7 @@ pub const Resources = struct {
     /// Host-side accessibility bridge: consumes the published `semantics` snapshot
     /// and drains `announcements` to the active platform provider each frame. Default provider
     /// is the inert `NoopProvider` — this build ships no Windows UIA screen-reader tree
-    /// (`zig-sdl3` 0.1.6 exposes no `WM_GETOBJECT` hook), and the bridge's capability report
+    /// (`zig-sdl3` 0.2.3 exposes no `WM_GETOBJECT` hook), and the bridge's capability report
     /// says so honestly. All platform policy stays host-side; no simulation system touches it.
     a11y: @import("./ui_client/a11y.zig").Bridge =
         @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
@@ -326,11 +326,14 @@ pub const Resources = struct {
     /// system reads it as `*const roster.Catalog`. Defaults to no records, so a rig that builds
     /// `Resources` by hand and never reads the roster needs nothing.
     catalog: rostermod.Catalog = rostermod.Catalog.empty,
+    /// The process environment, owned by `main`'s `std.process.Init` and outliving every
+    /// frame. Read through `env`; null (every variable unset) in a rig built by hand.
+    environ: ?*const std.process.Environ.Map = null,
 
-    pub fn init(gpa: std.mem.Allocator, f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
+    pub fn init(gpa: std.mem.Allocator, io: std.Io, environ: *const std.process.Environ.Map, f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
         // A broken `data/` file does not stop the game: it starts on the shipped copy and says why.
         var diag = rostermod.Diagnostics{};
-        var catalog = rostermod.loadData(gpa, &diag) catch |err| blk: {
+        var catalog = rostermod.loadData(gpa, io, &diag) catch |err| blk: {
             if (err == error.OutOfMemory) return err;
             std.log.err("data/ did not load, starting on the shipped roster: {s}", .{diag.message()});
             break :blk try rostermod.load(gpa, rostermod.shipped, null);
@@ -338,11 +341,20 @@ pub const Resources = struct {
         errdefer catalog.deinit();
         const tex = try sdl.image.loadTexture(r.*, "assets/hello.png");
         const icons = try sdl.image.loadTexture(r.*, "assets/icons.png");
+        var seed: u64 = undefined;
+        io.random(std.mem.asBytes(&seed));
         return .{
             .platform = .{ .font = f, .renderer = r, .window = w, .tex = tex, .icons = icons },
-            .sim = .{ .prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp())) },
+            .sim = .{ .prng = std.Random.DefaultPrng.init(seed) },
             .catalog = catalog,
+            .environ = environ,
         };
+    }
+
+    /// The value of the environment variable `name`, or null when it is unset.
+    pub fn env(self: *const Resources, name: []const u8) ?[]const u8 {
+        const map = self.environ orelse return null;
+        return map.get(name);
     }
 
     pub fn deinit(self: *Resources) void {

@@ -118,7 +118,7 @@ const Harness = struct {
             .driver = undefined,
         };
         h.ui = UiCtx.init(&h.res, std.testing.allocator, h.arena.allocator());
-        h.driver = frame_mod.Driver.init(&h.ui, &h.arena, .none);
+        h.driver = frame_mod.Driver.init(&h.ui, &h.arena, std.testing.io, .none);
         return h;
     }
 

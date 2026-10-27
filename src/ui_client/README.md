@@ -262,7 +262,7 @@ accepted edit. `command.zig` maps Shift+Left/Right/Home/End to the selection var
 one-shot Ctrl+A/C/X/V to select-all/copy/cut/paste (Alt cancels the accelerator so plain
 typing is never intercepted). `main.zig` only *routes*: SDL text bytes go through `insert`;
 caret/selection/delete commands drive the focused registered owner's model; and the SDL
-0.15.2 clipboard (`clipboard.hasText`/`getText` + `free`/`setText`) is bridged for
+clipboard (`clipboard.hasText`/`getText` + `free`/`setText`) is bridged for
 copy/cut/paste, with paste passing through the same whole-text validation. `text_input`
 reads the model to render placeholder, a caret bar or guillemet-bracketed selection,
 focus-visible chrome, a `danger` outline while `refused`, and a pointer "✕" clear
@@ -338,7 +338,7 @@ bridge, `src/ui`, or the semantics source changing.
 `keyboard`/`visible_focus`/`non_color_state`/`live_region_plumbing` are `true`, and
 `screen_reader_export` is **`false`**. This build
 exports no live screen-reader tree because a UIA provider must hook the SDL-owned window's
-`WndProc` to answer `WM_GETOBJECT`, and `zig-sdl3` 0.1.6 does not implement
+`WndProc` to answer `WM_GETOBJECT`, and `zig-sdl3` 0.2.3 does not implement
 `SDL_SetWindowsMessageHook` (only the X11 hook exists); hand-rolled subclassing or forking
 the vendored binding are the risky, policy-leaking dependencies this layer forbids. Genuine
 HTML/ARIA parity is therefore unavailable and is not claimed. All Windows/platform policy

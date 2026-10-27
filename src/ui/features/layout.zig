@@ -213,18 +213,20 @@ pub fn set_global_pos(node: anytype, alloc: Allocator) anyerror!void {
 const Axis = enum { x, y };
 
 /// Diagnostic variant of `set_global_pos`: identical solve, with nanosecond durations
-/// for the intrinsic, parent-relative/grow, and placement passes. The normal entrypoint
-/// remains clock-free and callback-free.
-pub fn set_global_pos_profiled(node: anytype, alloc: Allocator) anyerror!@import("../profile.zig").Sample {
-    var timer = try std.time.Timer.start();
+/// for the intrinsic, parent-relative/grow, and placement passes, read from the host's
+/// `clock`. The normal entrypoint remains clock-free and callback-free.
+pub fn set_global_pos_profiled(node: anytype, alloc: Allocator, clock: Clock) anyerror!@import("../profile.zig").Sample {
+    const start = clock.now();
     recalculate_size(node);
-    const intrinsic = timer.lap();
+    const sized = clock.now();
     resolve_pct(node, true, true, 0, 0);
-    const relative = timer.lap();
+    const resolved = clock.now();
     try place(node, alloc, null);
-    const placement = timer.lap();
-    return .{ .intrinsic = intrinsic, .relative = relative, .placement = placement };
+    const placed = clock.now();
+    return .{ .intrinsic = sized -| start, .relative = resolved -| sized, .placement = placed -| resolved };
 }
+
+const Clock = @import("../profile.zig").Clock;
 
 /// The main (flow) axis of a parent's children: x for a row, y for a column. `fit_children`
 /// sums child extents along this axis and maxes them across it.

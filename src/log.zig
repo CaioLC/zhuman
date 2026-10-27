@@ -47,7 +47,7 @@ pub const Entry = struct {
 /// A fixed-capacity ring buffer of log entries. `push` writes at `head` and advances it,
 /// overwriting the oldest once full; `get(0)` is the newest. Reset with `clear` on a new run.
 pub const Log = struct {
-    entries: [capacity]Entry = [_]Entry{.{}} ** capacity,
+    entries: [capacity]Entry = @splat(.{}),
     head: usize = 0, // next write slot (also the oldest, once full)
     count: usize = 0, // live entries, saturating at `capacity`
     /// The run clock in game-seconds, kept current by `advance_clock`; every `push` stamps
@@ -135,10 +135,10 @@ test "log push refuses long multibyte UTF-8 whole, never cutting a codepoint" {
     try testing.expect(e.refused);
     try testing.expectEqualStrings(overflow_marker, e.text());
     // A multibyte message that fits is stored intact and stays valid UTF-8.
-    log.push(.normal, snowman ** 4);
+    log.push(.normal, "\u{2603}\u{2603}\u{2603}\u{2603}");
     try testing.expect(!log.get(0).refused);
     try testing.expect(std.unicode.utf8ValidateSlice(log.get(0).text()));
-    try testing.expectEqualStrings(snowman ** 4, log.get(0).text());
+    try testing.expectEqualStrings("\u{2603}\u{2603}\u{2603}\u{2603}", log.get(0).text());
 }
 
 test "log ring overwrites oldest and get(0) is newest after refusals" {

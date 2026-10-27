@@ -44,12 +44,12 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // Every page returns its roots in draw order (a dialog's root after the shell it covers).
     // The game is the normal route. The template audit harness remains available as an explicit
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
-    if (debugRequested(ui_ctx.arena)) return try withMenu(ui_ctx, try p_debug(ui_ctx, world));
+    if (debugRequested(ui_ctx.res)) return try withMenu(ui_ctx, try p_debug(ui_ctx, world));
 
     // The deterministic fixture harness: `HA_FIXTURE=<name>` seeds one named screen state and
     // renders it through the production page. A developer opt-in like the debug page; off unless
     // the variable is set and non-empty. See `fixture.zig`.
-    if (fixtureRequested(ui_ctx.arena)) |name| return try withMenu(ui_ctx, try fixture.build_fixture(ui_ctx, world, name));
+    if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, try fixture.build_fixture(ui_ctx, world, name));
 
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I curtain,
     // since owning the good that ends the act is the win condition; otherwise the live page.
@@ -82,10 +82,9 @@ fn withMenu(ctx: *uic.UiCtx, roots: uic.Trees) !uic.Trees {
 }
 
 /// Whether to route to the template-audit harness instead of the game. Debug mode is off by
-/// default; any non-empty value other than `0` or `false` explicitly enables it. The value is
-/// read into the frame arena and not retained.
-fn debugRequested(arena: std.mem.Allocator) bool {
-    const raw = std.process.getEnvVarOwned(arena, "HA_DEBUG_PAGE") catch return false;
+/// default; any non-empty value other than `0` or `false` explicitly enables it.
+fn debugRequested(res: *const ha.res.Resources) bool {
+    const raw = res.env("HA_DEBUG_PAGE") orelse return false;
     if (raw.len == 0) return false;
     if (std.mem.eql(u8, raw, "0")) return false;
     if (std.ascii.eqlIgnoreCase(raw, "false")) return false;
@@ -93,10 +92,10 @@ fn debugRequested(arena: std.mem.Allocator) bool {
 }
 
 /// The requested fixture name from `HA_FIXTURE`, or null when the variable is unset or empty.
-/// The name is copied into the frame arena (valid for this build) and routed by
-/// `fixture.build_fixture`, which falls back to the first catalog entry for an unknown name.
-fn fixtureRequested(arena: std.mem.Allocator) ?[]const u8 {
-    const raw = std.process.getEnvVarOwned(arena, "HA_FIXTURE") catch return null;
+/// The name is borrowed from the process environment and routed by `fixture.build_fixture`,
+/// which falls back to the first catalog entry for an unknown name.
+fn fixtureRequested(res: *const ha.res.Resources) ?[]const u8 {
+    const raw = res.env("HA_FIXTURE") orelse return null;
     if (raw.len == 0) return null;
     return raw;
 }

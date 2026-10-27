@@ -610,24 +610,22 @@ test "the low-stock fixture reaches a danger-toned scarcity state" {
 }
 
 test "seeding is deterministic: the same spec yields identical state twice" {
+    // One rig at a time: a rig is ~1.8 MB (the `World`'s sparse sets), and two live at once
+    // plus `seedRig`'s by-value return overflow the test thread's stack.
+    const Observed = struct { elapsed: f32, vigor: f32, biomass: f32 };
     const spec = find("act_one_working").?;
-    var a = try seedRig(spec);
-    defer {
-        a.world.deinit();
-        a.res.catalog.deinit();
+    var seen: [2]Observed = undefined;
+    for (&seen) |*o| {
+        var rig = try seedRig(spec);
+        defer {
+            rig.world.deinit();
+            rig.res.catalog.deinit();
+        }
+        o.* = .{
+            .elapsed = rig.res.sim.elapsed,
+            .vigor = rig.world.get(rig.player, comp.Vigor).?.v,
+            .biomass = rig.world.get(rig.player, comp.InventoryBiomass).?.v,
+        };
     }
-    var b = try seedRig(spec);
-    defer {
-        b.world.deinit();
-        b.res.catalog.deinit();
-    }
-    try testing.expectEqual(a.res.sim.elapsed, b.res.sim.elapsed);
-    try testing.expectEqual(
-        a.world.get(a.player, comp.Vigor).?.v,
-        b.world.get(b.player, comp.Vigor).?.v,
-    );
-    try testing.expectEqual(
-        a.world.get(a.player, comp.InventoryBiomass).?.v,
-        b.world.get(b.player, comp.InventoryBiomass).?.v,
-    );
+    try testing.expectEqual(seen[0], seen[1]);
 }

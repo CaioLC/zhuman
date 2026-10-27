@@ -31,11 +31,11 @@ const Entity = world.Entity;
 const Resources = res_mod.Resources;
 const Catalog = roster.Catalog;
 
-const files = @typeInfo(roster.File).@"enum".fields;
+const file_names = @typeInfo(roster.File).@"enum".field_names;
 
 /// The modification times of the data files, looked at on a timer.
 pub const Watch = struct {
-    stamps: [files.len]i128 = @splat(0),
+    stamps: [file_names.len]i128 = @splat(0),
     primed: bool = false,
     wait: f32 = 0,
 
@@ -45,22 +45,22 @@ pub const Watch = struct {
     /// Whether a data file appeared, changed or went away since the last look. Looks at most
     /// every `period` seconds of `dt`; the first look only records what is there, since the
     /// startup load already read it.
-    pub fn poll(self: *Watch, dt: f32) bool {
+    pub fn poll(self: *Watch, io: std.Io, dt: f32) bool {
         self.wait -= dt;
         if (self.wait > 0) return false;
         self.wait = period;
-        var dir = std.fs.cwd().openDir(roster.data_dir, .{}) catch return self.look(null);
-        defer dir.close();
-        return self.look(dir);
+        var dir = std.Io.Dir.cwd().openDir(io, roster.data_dir, .{}) catch return self.look(io, null);
+        defer dir.close(io);
+        return self.look(io, dir);
     }
 
     /// Record the files' times in `dir` (none when null); true when they differ from the last.
-    pub fn look(self: *Watch, dir: ?std.fs.Dir) bool {
-        var now: [files.len]i128 = @splat(0);
+    pub fn look(self: *Watch, io: std.Io, dir: ?std.Io.Dir) bool {
+        var now: [file_names.len]i128 = @splat(0);
         if (dir) |d| {
-            inline for (files, 0..) |f, i| {
-                const file: roster.File = @enumFromInt(f.value);
-                if (d.statFile(std.fs.path.basename(file.path()))) |st| now[i] = st.mtime else |_| {}
+            inline for (file_names, 0..) |name, i| {
+                const file: roster.File = @field(roster.File, name);
+                if (d.statFile(io, std.fs.path.basename(file.path()), .{})) |st| now[i] = st.mtime.nanoseconds else |_| {}
             }
         }
         const differs = self.primed and !std.mem.eql(i128, &now, &self.stamps);
@@ -72,17 +72,17 @@ pub const Watch = struct {
 
 /// Re-read `data/` (the shipped files where it has none) and swap the result in, or keep the
 /// catalog and log why.
-pub fn reload(res: *Resources, w: *World) void {
+pub fn reload(io: std.Io, res: *Resources, w: *World) void {
     var diag = roster.Diagnostics{};
-    const next = roster.loadData(res.catalog.arena.child_allocator, &diag) catch |err| return refuse(res, err, &diag);
+    const next = roster.loadData(res.catalog.arena.child_allocator, io, &diag) catch |err| return refuse(res, err, &diag);
     swap(res, w, next);
     res.sim.log.push(.dim, "The roster reloaded from data/.");
 }
 
 /// `reload` from a given directory.
-pub fn reloadDir(res: *Resources, w: *World, dir: std.fs.Dir) void {
+pub fn reloadDir(io: std.Io, res: *Resources, w: *World, dir: std.Io.Dir) void {
     var diag = roster.Diagnostics{};
-    const next = roster.loadDir(res.catalog.arena.child_allocator, dir, &diag) catch |err| return refuse(res, err, &diag);
+    const next = roster.loadDir(res.catalog.arena.child_allocator, io, dir, &diag) catch |err| return refuse(res, err, &diag);
     swap(res, w, next);
     res.sim.log.push(.dim, "The roster reloaded from data/.");
 }
@@ -177,7 +177,7 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
 
     // The reach seen-set follows its ids.
     {
-        var seen = [_]bool{false} ** roster.max_goods;
+        var seen: [roster.max_goods]bool = @splat(false);
         for (old.goods, 0..) |g, gi| {
             if (!res.sim.reach_seen[gi]) continue;
             if (cat.goodIndex(g.id)) |ni| seen[ni] = true;
@@ -298,7 +298,7 @@ test "a record the new files drop takes its count and its work with it" {
     w.add(e, comp.Busy{ .doing = .{ .build = a.goodIndex("bed").? }, .total = 1, .remaining = 1, .quality = 1 });
 
     // The bed is gone from the new goods.
-    swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_a, .goods = 
+    swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_a, .goods =
         \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } } }
     , .technologies = techs_a }, null));
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max); // its ceiling went with it
@@ -312,9 +312,9 @@ test "a bad file keeps the catalog and logs why" {
     defer res.catalog.deinit();
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "goods.zon", .data = ".{ .{ .id = \"Rod\" } }" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "goods.zon", .data = ".{ .{ .id = \"Rod\" } }" });
 
-    reloadDir(&res, &w, tmp.dir);
+    reloadDir(testing.io, &res, &w, tmp.dir);
     try testing.expectEqual(@as(usize, 3), res.catalog.goods.len); // the old roster stays
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try testing.expect(std.mem.indexOf(u8, res.sim.log.get(0).text(), "data/goods.zon") != null);
@@ -327,10 +327,10 @@ test "a directory overrides the files it holds and falls back for the rest" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     // Only the goods file is overridden: one recipe. The verbs and tiles are the shipped ones.
-    try tmp.dir.writeFile(.{ .sub_path = "goods.zon", .data = 
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "goods.zon", .data =
         \\.{ .{ .id = "hatchet", .name = "Hatchet", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "chop_wood" } } } }
     });
-    reloadDir(&res, &w, tmp.dir);
+    reloadDir(testing.io, &res, &w, tmp.dir);
     try testing.expectEqual(@as(usize, 1), res.catalog.goods.len);
     try testing.expect(res.catalog.action("chop_wood") != null); // from the shipped verbs
     try testing.expect(res.catalog.technologies.len > 0);
@@ -339,15 +339,18 @@ test "a directory overrides the files it holds and falls back for the rest" {
 test "the watch reports a change only after its first look, and only when a time moves" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "goods.zon", .data = ".{}" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "goods.zon", .data = ".{}" });
     var watch = Watch{};
-    try testing.expect(!watch.look(tmp.dir)); // the first look records
-    try testing.expect(!watch.look(tmp.dir)); // nothing moved
-    var f = try tmp.dir.openFile("goods.zon", .{ .mode = .read_write });
-    defer f.close();
-    try f.updateTimes(0, std.time.ns_per_s * 1_000_000_000);
-    try testing.expect(watch.look(tmp.dir));
-    try testing.expect(!watch.look(tmp.dir));
-    try tmp.dir.deleteFile("goods.zon");
-    try testing.expect(watch.look(tmp.dir)); // a file going away is a change too
+    try testing.expect(!watch.look(testing.io, tmp.dir)); // the first look records
+    try testing.expect(!watch.look(testing.io, tmp.dir)); // nothing moved
+    var f = try tmp.dir.openFile(testing.io, "goods.zon", .{ .mode = .read_write });
+    try f.setTimestamps(testing.io, .{
+        .access_timestamp = .{ .new = .fromNanoseconds(0) },
+        .modify_timestamp = .{ .new = .fromNanoseconds(std.time.ns_per_s * 1_000_000_000) },
+    });
+    f.close(testing.io);
+    try testing.expect(watch.look(testing.io, tmp.dir));
+    try testing.expect(!watch.look(testing.io, tmp.dir));
+    try tmp.dir.deleteFile(testing.io, "goods.zon");
+    try testing.expect(watch.look(testing.io, tmp.dir)); // a file going away is a change too
 }

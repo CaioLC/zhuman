@@ -446,16 +446,16 @@ const max_file_bytes = 4 << 20;
 /// each file it lacks falls back to the shipped one. A file that exists but cannot be read
 /// fails the load like a parse error, with the reason in `diag`. The bytes read are freed
 /// before returning; the catalog owns copies of every string it keeps.
-pub fn loadDir(gpa: Allocator, dir: std.fs.Dir, diag: ?*Diagnostics) Error!Catalog {
-    const files = @typeInfo(File).@"enum".fields;
+pub fn loadDir(gpa: Allocator, io: std.Io, dir: std.Io.Dir, diag: ?*Diagnostics) Error!Catalog {
+    const names = @typeInfo(File).@"enum".field_names;
     var src = shipped;
-    var owned: [files.len]?[:0]u8 = @splat(null);
+    var owned: [names.len]?[:0]u8 = @splat(null);
     defer for (owned) |o| if (o) |bytes| gpa.free(bytes);
-    inline for (files, 0..) |field, i| {
-        const file: File = @enumFromInt(field.value);
-        if (dir.readFileAllocOptions(gpa, std.fs.path.basename(file.path()), max_file_bytes, null, .of(u8), 0)) |bytes| {
+    inline for (names, 0..) |name, i| {
+        const file: File = @field(File, name);
+        if (dir.readFileAllocOptions(io, std.fs.path.basename(file.path()), gpa, .limited(max_file_bytes), .of(u8), 0)) |bytes| {
             owned[i] = bytes;
-            @field(src, field.name) = bytes;
+            @field(src, name) = bytes;
         } else |err| switch (err) {
             error.FileNotFound => {},
             error.OutOfMemory => return error.OutOfMemory,
@@ -469,10 +469,10 @@ pub fn loadDir(gpa: Allocator, dir: std.fs.Dir, diag: ?*Diagnostics) Error!Catal
 }
 
 /// Load from `data_dir` when the working directory has one, else the shipped copy.
-pub fn loadData(gpa: Allocator, diag: ?*Diagnostics) Error!Catalog {
-    var dir = std.fs.cwd().openDir(data_dir, .{}) catch return load(gpa, shipped, diag);
-    defer dir.close();
-    return loadDir(gpa, dir, diag);
+pub fn loadData(gpa: Allocator, io: std.Io, diag: ?*Diagnostics) Error!Catalog {
+    var dir = std.Io.Dir.cwd().openDir(io, data_dir, .{}) catch return load(gpa, shipped, diag);
+    defer dir.close(io);
+    return loadDir(gpa, io, dir, diag);
 }
 
 /// The shape and cross-reference rules a loaded roster must satisfy.
@@ -554,17 +554,31 @@ pub fn load(gpa: Allocator, src: Sources, diag: ?*Diagnostics) Error!Catalog {
     return .{ .arena = arena, .actions = actions, .goods = goods, .technologies = technologies };
 }
 
+/// `a` is the catalog's arena: it owns the parsed records and the parser's diagnostics, so
+/// it doubles as the parser's scratch allocator and nothing needs freeing here.
 fn parseFile(comptime T: type, a: Allocator, file: File, source: [:0]const u8, diag: ?*Diagnostics) Error!T {
-    var zd: std.zon.parse.Diagnostics = .{};
-    defer zd.deinit(a);
-    return std.zon.parse.fromSlice(T, a, source, &zd, .{ .free_on_error = false }) catch |err| switch (err) {
+    var zd: std.zon.parse.Diagnostics = undefined;
+    return std.zon.parse.fromSlice(T, .{ .gpa = a, .arena = a, .source = source, .diagnostics = &zd }) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.ParseZon => {
-            if (diag) |d| d.set(file, null, "{f}", .{zd});
+            if (diag) |d| d.set(file, null, "{f}", .{ZonErrors{ .errors = zd.errors }});
             return error.Invalid;
         },
     };
 }
+
+/// The parser's errors as `line:col: error: msg` lines. `Diagnostics.set` already leads with
+/// the file's path, so this omits the per-line path `std.zon.parse.Diagnostics.fmt` adds.
+const ZonErrors = struct {
+    errors: []const std.zon.parse.Diagnostics.Error,
+
+    pub fn format(self: ZonErrors, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        for (self.errors) |e| {
+            try w.print("{d}:{d}: error: {s}\n", .{ e.loc.line + 1, e.loc.column + 1, e.msg });
+            for (e.notes) |n| try w.print("{d}:{d}: note: {s}\n", .{ n.loc.line + 1, n.loc.column + 1, n.msg });
+        }
+    }
+};
 
 const Validator = struct {
     actions: []const Action,
@@ -580,7 +594,7 @@ const Validator = struct {
     fn run(self: *Validator) Error!void {
         try self.ids();
         for (self.actions) |a| try self.checkAction(a);
-        var claimed = [_]bool{false} ** @typeInfo(Milestone).@"enum".fields.len;
+        var claimed: [@typeInfo(Milestone).@"enum".field_names.len]bool = @splat(false);
         for (self.goods, 0..) |g, gi| try self.checkGood(g, gi, &claimed);
         for (self.technologies, 0..) |t, ti| try self.checkTech(t, ti);
         try self.checkCapacity();
@@ -962,7 +976,7 @@ test "goods keep their shape" {
 }
 
 test "a lot of an intermediate is its own once-output" {
-    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods = 
+    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods =
         \\.{ .{ .id = "charcoal", .name = "Charcoal", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .input = .{ .{ .item = "biomass", .n = 6.0 } }, .output = .{ .{ .item = "charcoal", .n = 4.0 } } } }
     }, null);
@@ -992,7 +1006,7 @@ fn expectTechRule(goods_src: [:0]const u8, techs_src: [:0]const u8, rule: Rule) 
 }
 
 test "a recipe names a technology that exists, of its own act or earlier" {
-    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods = 
+    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods =
         \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .tech = "kilns" } }
     , .technologies = ok_techs }, null);
@@ -1012,18 +1026,18 @@ test "a recipe names a technology that exists, of its own act or earlier" {
 }
 
 test "a verb names a technology that exists, of its own act or earlier" {
-    var cat = try load(testing.allocator, .{ .actions = 
+    var cat = try load(testing.allocator, .{ .actions =
         \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, null);
     defer cat.deinit();
     try testing.expectEqualStrings("kilns", cat.action("fire").?.tech.?);
 
     var d = Diagnostics{};
-    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions = 
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
         \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "glass", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.unknown_tech, d.rule.?);
-    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions = 
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
         \\.{ .{ .id = "fire", .name = "Fire", .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.later_act, d.rule.?);

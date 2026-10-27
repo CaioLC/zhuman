@@ -41,9 +41,9 @@ fn axial(c: roster.Coord) Axial {
 /// Water, Fuel, Metal, Minerals, Biomass) are the only ones a cost ever names; Coin and generic
 /// Materials have slots here but are never a research price (§7).
 pub const Balances = struct {
-    amounts: [res_count]u32 = [_]u32{0} ** res_count,
+    amounts: [res_count]u32 = @splat(0),
 
-    const res_count = @typeInfo(Resource).@"enum".fields.len;
+    const res_count = @typeInfo(Resource).@"enum".field_names.len;
 
     pub fn get(self: Balances, r: Resource) u32 {
         return self.amounts[@intFromEnum(r)];
@@ -317,7 +317,7 @@ test "researching Spring well opens exactly its outward neighbor, nothing unrela
     var r = entry(&cat);
     var bal = openingBalances();
     // Capture the Locked set before.
-    var locked_before = [_]bool{false} ** roster.max_techs;
+    var locked_before: [roster.max_techs]bool = @splat(false);
     for (0..cat.technologies.len) |i| locked_before[i] = (r.state[i] == .locked);
 
     const idx = indexOf(&cat, "spring_well"); // (0,1) Water ring 1

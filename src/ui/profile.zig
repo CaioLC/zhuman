@@ -1,5 +1,17 @@
 const std = @import("std");
 
+/// A monotonic nanosecond clock supplied by the host. The profiled layout solve reads it
+/// between passes, so the engine times itself without naming an OS or I/O API, and a test
+/// can hand it a fake.
+pub const Clock = struct {
+    ctx: *const anyopaque,
+    nowFn: *const fn (ctx: *const anyopaque) u64,
+
+    pub fn now(self: Clock) u64 {
+        return self.nowFn(self.ctx);
+    }
+};
+
 /// Nanoseconds spent in the five UI passes relevant to stamping decisions.
 pub const Sample = struct {
     intrinsic: u64 = 0,
@@ -9,15 +21,15 @@ pub const Sample = struct {
     drawing: u64 = 0,
 
     pub fn add(self: *Sample, other: Sample) void {
-        inline for (@typeInfo(Sample).@"struct".fields) |field| {
-            @field(self, field.name) +|= @field(other, field.name);
+        inline for (@typeInfo(Sample).@"struct".field_names) |name| {
+            @field(self, name) +|= @field(other, name);
         }
     }
 
     pub fn total(self: Sample) u64 {
         var result: u64 = 0;
-        inline for (@typeInfo(Sample).@"struct".fields) |field| {
-            result +|= @field(self, field.name);
+        inline for (@typeInfo(Sample).@"struct".field_names) |name| {
+            result +|= @field(self, name);
         }
         return result;
     }
@@ -47,8 +59,8 @@ pub const FrameProfiler = struct {
     pub fn record(self: *FrameProfiler, sample: Sample) void {
         self.frames +|= 1;
         self.total.add(sample);
-        inline for (@typeInfo(Sample).@"struct".fields) |field| {
-            @field(self.maximum, field.name) = @max(@field(self.maximum, field.name), @field(sample, field.name));
+        inline for (@typeInfo(Sample).@"struct".field_names) |name| {
+            @field(self.maximum, name) = @max(@field(self.maximum, name), @field(sample, name));
         }
     }
 
@@ -59,8 +71,8 @@ pub const FrameProfiler = struct {
     pub fn snapshot(self: FrameProfiler) ?Report {
         if (self.frames == 0) return null;
         var average: Sample = .{};
-        inline for (@typeInfo(Sample).@"struct".fields) |field| {
-            @field(average, field.name) = @field(self.total, field.name) / self.frames;
+        inline for (@typeInfo(Sample).@"struct".field_names) |name| {
+            @field(average, name) = @field(self.total, name) / self.frames;
         }
         return .{ .frames = self.frames, .total = self.total, .average = average, .maximum = self.maximum };
     }

@@ -479,6 +479,8 @@ where height depends on the resolved width. We don't do that yet.)
 relative/percentage/grow resolution, placement, stamping, and drawing. The normal
 `set_global_pos` remains clock-free and callback-free; its explicit diagnostic sibling
 `set_global_pos_profiled` times the same three internal calls and returns a `Sample`.
+It reads time from a `profile.Clock` (`ui.FrameClock`) the host passes in, a monotonic
+nanosecond callback, so the engine names no OS or I/O API and a test can supply a fake.
 The host owns stamping/drawing clocks, combines every root into one frame sample, and
 records it. Reports contain per-pass averages and maxima plus stamping's share of the
 measured total; totals use saturating arithmetic and each report window resets cleanly.

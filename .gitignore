@@ -1,5 +1,6 @@
 /zig-out
 /.zig-cache
+/zig-pkg
 
 # Per-developer Claude Code overrides (permissions, local env).
 .claude/settings.local.json

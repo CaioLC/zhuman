@@ -213,7 +213,7 @@ fn verbOf(w: *World, e: Entity, cat: *const Catalog, id: []const u8) ?Verb {
 /// What an agent can do and how its body stands: every Act I verb's terms, the vigor and the
 /// larder.
 const Snapshot = struct {
-    verbs: [8]?Verb = [_]?Verb{null} ** 8,
+    verbs: [8]?Verb = @splat(null),
     max: f32,
     v: f32,
     quality: u8,

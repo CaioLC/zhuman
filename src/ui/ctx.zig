@@ -109,8 +109,8 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         }
 
         pub fn deinit(self: *Self) void {
-            inline for (@typeInfo(PoolsT).@"struct".fields) |f| {
-                @field(self.pools, f.name).deinit(self.gpa);
+            inline for (@typeInfo(PoolsT).@"struct".field_names) |name| {
+                @field(self.pools, name).deinit(self.gpa);
             }
             self.interactions.deinit(self.gpa);
             self.order.deinit(self.gpa);
@@ -119,8 +119,9 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
 
         /// The pool for state type `T` (must be registered in `StateNs`).
         pub fn pool(self: *Self, comptime T: type) *cache_mod.Pool(T) {
-            inline for (@typeInfo(PoolsT).@"struct".fields) |f| {
-                if (f.type == cache_mod.Pool(T)) return &@field(self.pools, f.name);
+            const info = @typeInfo(PoolsT).@"struct";
+            inline for (info.field_names, info.field_types) |name, FT| {
+                if (FT == cache_mod.Pool(T)) return &@field(self.pools, name);
             }
             @compileError("no UI pool registered for " ++ @typeName(T));
         }
@@ -418,8 +419,8 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         }
 
         pub fn endFrame(self: *Self) void {
-            inline for (@typeInfo(PoolsT).@"struct".fields) |f| {
-                @field(self.pools, f.name).prune(self.gpa, self.frame) catch {};
+            inline for (@typeInfo(PoolsT).@"struct".field_names) |name| {
+                @field(self.pools, name).prune(self.gpa, self.frame) catch {};
             }
             self.interactions.prune(self.gpa, self.frame) catch {};
             if (self.pointer_capture) |key| {

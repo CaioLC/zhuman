@@ -25,7 +25,7 @@
     .fingerprint = 0x530d3ee9cb2a60de, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.17.0",
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .sdl3 = .{
-            .url = "git+https://codeberg.org/7Games/zig-sdl3?ref=master#eefd1b86205ed4fbc5f5274b5ba34aa97798d693",
-            .hash = "sdl3-0.1.6-NmT1Q8kQJgCrbdH9Z3ZmLo5uJ1et3oxhfYazrNTtfsgv",
+            .url = "git+https://codeberg.org/7Games/zig-sdl3?ref=v0.2.3#666331118c8f7d8a03ea633d79a343c34dc32b84",
+            .hash = "sdl3-0.2.3-NmT1Q1QDKgACd5t_PNSG08lcOCX25qaRYZjUmXPTVBY_",
         },
         // The UI engine: a package of its own inside this tree.
         .ui = .{ .path = "src/ui" },

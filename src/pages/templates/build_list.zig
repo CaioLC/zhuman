@@ -129,7 +129,7 @@ pub fn costOverflow(cat: *const roster.Catalog, shelf: Shelf) ?*const roster.Goo
 /// units, TIME by hours, RECIPE by name. STATE is the default (index 0), so the blank list opens
 /// on what you can build now, nearest first.
 pub const Sort = enum(usize) { state = 0, inputs = 1, time = 2, name = 3 };
-const sort_count = @typeInfo(Sort).@"enum".fields.len;
+const sort_count = @typeInfo(Sort).@"enum".field_names.len;
 
 /// How near a state is to "build it now" — the STATE sort's groups, highest first when
 /// descending: ready, then in reach (ordered by reach inside the group), owned, blocked on a
@@ -616,7 +616,7 @@ test "sortEntries: STATE groups by state (ready, reach, owned, blocked, locked) 
     var buf: [roster.max_goods]Entry = undefined;
     const list = collect(&w, e, &cat, act_two_test, "", &buf);
 
-    var seen = [_]bool{false} ** 6;
+    var seen: [6]bool = @splat(false);
     for (list) |ent| seen[stateRank(ent.kind)] = true;
     try testing.expect(seen[stateRank(.owned)] and seen[stateRank(.blocked)]);
     try testing.expect(seen[stateRank(.ready)] or seen[stateRank(.reach)]);

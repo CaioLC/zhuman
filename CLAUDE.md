@@ -17,7 +17,7 @@ sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geom
 `main.zig`, `systems.zig` and `src/pages/`. All three targets are expected green; if one is
 not, say so rather than working around it.
 
-Requires Zig 0.15.2+. SDL3 and SDL3_TTF are fetched via `build.zig.zon`.
+Requires Zig 0.17.0+. SDL3 and SDL3_TTF are fetched via `build.zig.zon`.
 
 ## What this is
 

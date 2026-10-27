@@ -362,7 +362,7 @@ test "neighbors: six distinct ring-1 steps, each at distance 1" {
 
 test "ringHexes: ring n has exactly 6n hexes, each on ring n, all distinct" {
     for (0..5) |n| {
-        var list = std.ArrayList(Axial){};
+        var list: std.ArrayList(Axial) = .empty;
         defer list.deinit(testing.allocator);
         try ringHexes(testing.allocator, @intCast(n), &list);
         try testing.expectEqual(ringCount(@intCast(n)), @as(u32, @intCast(list.items.len)));
@@ -373,7 +373,7 @@ test "ringHexes: ring n has exactly 6n hexes, each on ring n, all distinct" {
 }
 
 test "disk: rings 0..4 total exactly 61 logical hexes, all distinct" {
-    var list = std.ArrayList(Axial){};
+    var list: std.ArrayList(Axial) = .empty;
     defer list.deinit(testing.allocator);
     try disk(testing.allocator, 4, &list);
     try testing.expectEqual(@as(usize, 61), list.items.len);
@@ -424,7 +424,7 @@ test "classify: ring-3 Food–Water edge distinguishes k=1 and k=2 by lean" {
 
 test "classify: every ring-n hex is 6 pure corners + 6(n-1) hybrids" {
     for (1..5) |n| {
-        var list = std.ArrayList(Axial){};
+        var list: std.ArrayList(Axial) = .empty;
         defer list.deinit(testing.allocator);
         try ringHexes(testing.allocator, @intCast(n), &list);
         var pures: u32 = 0;

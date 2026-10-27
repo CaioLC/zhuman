@@ -223,7 +223,7 @@ const Rig = struct {
         self.res = headlessResources();
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         self.ui = UiCtx.init(&self.res, std.testing.allocator, self.arena.allocator());
-        self.driver = frame_mod.Driver.init(&self.ui, &self.arena, platform);
+        self.driver = frame_mod.Driver.init(&self.ui, &self.arena, std.testing.io, platform);
     }
 
     fn tearDown(self: *Rig) void {

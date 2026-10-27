@@ -6,7 +6,6 @@
 const std = @import("std");
 const Resource = @import("ha").roster.Resource;
 
-
 // —— Header readouts with no model behind them ——————————————————————————————————————————
 
 /// The settlement's population.

@@ -82,8 +82,8 @@ const entries = [_][]const u8{
 
 /// The entry `HA_DEBUG_PAGE` names, if its value is one of `entries` (any other truthy value
 /// just opens the page on its first entry).
-fn requestedEntry(arena: std.mem.Allocator) ?usize {
-    const raw = std.process.getEnvVarOwned(arena, "HA_DEBUG_PAGE") catch return null;
+fn requestedEntry(res: *const ha.res.Resources) ?usize {
+    const raw = res.env("HA_DEBUG_PAGE") orelse return null;
     for (entries, 0..) |name, i| if (eq(name, raw)) return i;
     return null;
 }
@@ -106,7 +106,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
         const sel = root.state(uic.UiState.TabsState);
         if (ctx.frame == 1) {
             // `HA_DEBUG_PAGE=<entry>` opens on that entry (the capture script's way in).
-            if (requestedEntry(ctx.arena)) |i| {
+            if (requestedEntry(ctx.res)) |i| {
                 sel.active = i;
                 const name = entries[i];
                 root.state(uic.UiState.TradeState).open = eq(name, "trade_dialog") or eq(name, "coin_merchant");

@@ -145,7 +145,7 @@ than degrading to `?*T`, because the caller is expected to have already qualifie
 `With`/`Without` are a compile error there, since there is no set to filter.
 
 **Annotate a multi-fetch destructure.** `it.next()` returns a comptime-built tuple, and no
-language server evaluates `@Type`-constructed types — so `const vigor, const food = entry;`
+language server evaluates `@Tuple`-constructed types — so `const vigor, const food = entry;`
 leaves an editor with nothing to offer on `vigor.`. Writing the types restores it:
 
 ```zig

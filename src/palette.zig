@@ -53,7 +53,7 @@ pub const resources = ResourceColors{};
 
 test "the palette overrides every default role" {
     const base: Theme = .{};
-    inline for (@typeInfo(Theme).@"struct".fields) |f| {
-        try std.testing.expect(!std.meta.eql(@field(base, f.name), @field(theme, f.name)));
+    inline for (@typeInfo(Theme).@"struct".field_names) |name| {
+        try std.testing.expect(!std.meta.eql(@field(base, name), @field(theme, name)));
     }
 }

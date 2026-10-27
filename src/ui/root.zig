@@ -13,6 +13,7 @@ pub const FocusDirection = focus.Direction;
 pub const FrameProfileSample = profile.Sample;
 pub const FrameProfileReport = profile.Report;
 pub const FrameProfiler = profile.FrameProfiler;
+pub const FrameClock = profile.Clock;
 
 pub const Ctx = @import("./ctx.zig").Ctx;
 pub const HitTestFn = @import("./ctx.zig").HitTestFn;

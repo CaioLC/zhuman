@@ -9,7 +9,7 @@ pub fn SparseSet(comptime T: type) type {
 
         dense_ids: [MAX_ENTITIES]Entity = undefined,
         dense_values: [MAX_ENTITIES]T = undefined,
-        sparse: [MAX_ENTITIES]?u32 = [_]?u32{null} ** MAX_ENTITIES,
+        sparse: [MAX_ENTITIES]?u32 = @splat(null),
         len: u32 = 0,
 
         pub fn add(self: *Self, e: Entity, v: T) void {
@@ -44,29 +44,18 @@ pub fn SparseSet(comptime T: type) type {
 }
 
 fn Storages(comptime ns: type) type {
-    const decls = @typeInfo(ns).@"struct".decls;
-    var fields: [decls.len]std.builtin.Type.StructField = undefined;
-    for (decls, 0..) |d, i| {
-        const v = @field(ns, d.name);
+    const names = @typeInfo(ns).@"struct".decl_names;
+    var types: [names.len]type = undefined;
+    for (names, 0..) |name, i| {
+        const v = @field(ns, name);
         if (@TypeOf(v) != type) {
-            @compileError("only type declarations allowed in " ++ @typeName(ns) ++ " (offending decl: " ++ d.name ++ ")");
+            @compileError("only type declarations allowed in " ++ @typeName(ns) ++ " (offending decl: " ++ name ++ ")");
         }
         const T: type = v;
-        const FT = SparseSet(T);
-        fields[i] = .{
-            .name = d.name,
-            .type = FT,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(FT),
-        };
+        types[i] = SparseSet(T);
     }
-    return @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .fields = &fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    const attrs: [names.len]std.lang.Type.Struct.FieldAttributes = @splat(.{});
+    return @Struct(.auto, null, names, &types, &attrs);
 }
 
 pub const World = struct {
@@ -77,11 +66,11 @@ pub const World = struct {
     pub fn init() World {
         var w: World = undefined;
         w.next_id = 0;
-        inline for (@typeInfo(@TypeOf(w.components)).@"struct".fields) |f| {
-            @field(w.components, f.name) = .{};
+        inline for (@typeInfo(@TypeOf(w.components)).@"struct".field_names) |name| {
+            @field(w.components, name) = .{};
         }
-        inline for (@typeInfo(@TypeOf(w.tags)).@"struct".fields) |f| {
-            @field(w.tags, f.name) = .{};
+        inline for (@typeInfo(@TypeOf(w.tags)).@"struct".field_names) |name| {
+            @field(w.tags, name) = .{};
         }
         return w;
     }
@@ -96,8 +85,8 @@ pub const World = struct {
     pub fn spawn(self: *World, bundle: anytype) Entity {
         const e = self.next_id;
         self.next_id += 1;
-        inline for (std.meta.fields(@TypeOf(bundle))) |f| {
-            const item = @field(bundle, f.name);
+        inline for (@typeInfo(@TypeOf(bundle)).@"struct".field_names) |name| {
+            const item = @field(bundle, name);
             if (@TypeOf(item) == type) {
                 self.add(e, item{}); // bare tag type → its zero-sized instance
             } else {
@@ -108,11 +97,13 @@ pub const World = struct {
     }
 
     pub fn storageOf(self: *World, comptime T: type) *SparseSet(T) {
-        inline for (@typeInfo(@TypeOf(self.components)).@"struct".fields) |f| {
-            if (f.type == SparseSet(T)) return &@field(self.components, f.name);
+        const comps = @typeInfo(@TypeOf(self.components)).@"struct";
+        inline for (comps.field_names, comps.field_types) |name, FT| {
+            if (FT == SparseSet(T)) return &@field(self.components, name);
         }
-        inline for (@typeInfo(@TypeOf(self.tags)).@"struct".fields) |f| {
-            if (f.type == SparseSet(T)) return &@field(self.tags, f.name);
+        const tags = @typeInfo(@TypeOf(self.tags)).@"struct";
+        inline for (tags.field_names, tags.field_types) |name, FT| {
+            if (FT == SparseSet(T)) return &@field(self.tags, name);
         }
         @compileError("no storage registered for " ++ @typeName(T));
     }
@@ -136,11 +127,11 @@ pub const World = struct {
     /// Remove `e` from every component and tag storage (each `remove` no-ops if `e`
     /// isn't in that storage). The entity id is not recycled — `next_id` only climbs.
     pub fn despawn(self: *World, e: Entity) void {
-        inline for (@typeInfo(@TypeOf(self.components)).@"struct".fields) |f| {
-            @field(self.components, f.name).remove(e);
+        inline for (@typeInfo(@TypeOf(self.components)).@"struct".field_names) |name| {
+            @field(self.components, name).remove(e);
         }
-        inline for (@typeInfo(@TypeOf(self.tags)).@"struct".fields) |f| {
-            @field(self.tags, f.name).remove(e);
+        inline for (@typeInfo(@TypeOf(self.tags)).@"struct".field_names) |name| {
+            @field(self.tags, name).remove(e);
         }
     }
 };

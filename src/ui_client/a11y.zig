@@ -15,7 +15,7 @@
 //!
 //! A live Windows UI Automation tree would require a UIA provider that answers the
 //! `WM_GETOBJECT` window message. Receiving that message means intercepting the SDL-owned
-//! window's `WndProc` — and `zig-sdl3` 0.1.6 does **not** expose `SDL_SetWindowsMessageHook`
+//! window's `WndProc` — and `zig-sdl3` 0.2.3 does **not** expose `SDL_SetWindowsMessageHook`
 //! (it is commented out in the binding's `system.zig`, which implements only the X11 event
 //! hook). The only ways to get `WM_GETOBJECT` would be hand-rolled `WndProc` subclassing on
 //! the native `HWND` or forking the vendored SDL binding, and both are exactly the risky,
@@ -76,7 +76,7 @@ pub const Capabilities = struct {
     /// Polite/assertive announcements are queued and drained to the provider sink.
     live_region_plumbing: bool = true,
     /// A screen reader can read the semantic tree via a platform provider. **False** on this
-    /// build: `zig-sdl3` 0.1.6 exposes no `WM_GETOBJECT` hook, so no live UIA tree exists.
+    /// build: `zig-sdl3` 0.2.3 exposes no `WM_GETOBJECT` hook, so no live UIA tree exists.
     screen_reader_export: bool = false,
 };
 
