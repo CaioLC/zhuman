@@ -274,7 +274,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             const demo = try stage.div("actions_demo");
             _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
-            _ = try t.actions_section(demo, world, a[0], "actions", @import("./templates/act_one_surface.zig").actions_shelf, null, null);
+            _ = try t.actions_section(demo, world, a[0], "actions", @import("./templates/act_one_surface.zig").actions_shelf, null, null, null);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -483,7 +483,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             fixtureGoods(world, a[0], ctx, &.{ .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
             const demo = try stage.div("gen_demo");
             _ = demo.with_size(.{ .fixed = 594 }, .fit_children);
-            _ = try t.generator_section(demo, world, a[0], "gens");
+            _ = try t.generator_section(demo, world, a[0], "gens", .{ .through_act = 1 });
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -491,9 +491,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const demo = try stage.div("a2h_demo");
             _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
-            // As the Act II rail composes it: Holdings/BODY, then the eating policy.
-            const column = try t.holdings(demo, "content", try act_two_holdings.content(ctx, world, a[0]));
-            _ = try t.eating_policy(column, "eating_policy", 50, true);
+            // As the Act II rail composes it: the Household column with the eating policy.
+            _ = try t.household(demo, world, a[0], "content", try act_two_holdings.content(ctx, world, a[0]));
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }
@@ -503,7 +502,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const demo = try stage.div("a2a_demo");
             _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
-            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null);
+            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null, null);
         } else {
             _ = try stage.text("na", "(needs a live player)");
         }

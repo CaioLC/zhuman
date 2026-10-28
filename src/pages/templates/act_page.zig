@@ -37,6 +37,9 @@ pub const Finish = struct {
     /// Per-unit energy generated and consumed; zero hides the runline's energy segment.
     gen: f32 = 0,
     consumed: f32 = 0,
+    /// The framed event log under the page grid. A focus view drops it, and the grid takes
+    /// its height.
+    log: bool = true,
     /// A dialog's own overlay root, drawn after the shell.
     overlay: ?*Node = null,
 };
@@ -62,8 +65,11 @@ pub const ActPage = struct {
                 .compact = self.compact,
             },
         });
-        // log_view authors in logical px: the terminal's logical width less the page padding.
-        if (self.regions.footer) |footer| {
+        // The footer is the content column's last row, so it is built here, after the body,
+        // once the page knows whether the active view keeps the log. log_view authors in
+        // logical px: the terminal's logical width less the page padding.
+        if (f.log) {
+            const footer = try terminal_mod.footer_band(self.regions.content, self.page_pad);
             try log_view_mod.log_view(footer, "feed", &ctx.res.sim.log, ctx.res.view.metrics.terminal.w - 2 * self.page_pad, 4);
         }
         var roots: std.ArrayList(*Node) = .empty;
@@ -83,7 +89,8 @@ pub fn act_page(ctx: *UiCtx, opts: Options) !ActPage {
         .page_pad = page_pad,
         .section_gap = ha.tokens.gap.section,
         .rail = opts.rail,
-        .footer = true,
+        // `finish` appends the footer last, when the page knows whether its view keeps it.
+        .footer = false,
     });
     return .{ .ctx = ctx, .regions = regions, .compact = compact, .page_pad = page_pad };
 }

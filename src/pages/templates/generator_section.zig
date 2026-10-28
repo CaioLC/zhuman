@@ -1,4 +1,5 @@
-//! `generator_section` — owned collectable capital as action-like tiles.
+//! `generator_section` — owned collectable capital as action-like tiles, the same GENERATORS
+//! view in every act (`Shelf`: which acts' generators, the tile density).
 //!
 //! Generators mature on simulation time without occupying `Busy`. A ready tile collects its
 //! complete cycle immediately; the lower-right ON/OFF control pauses accumulation while preserving
@@ -25,16 +26,27 @@ const fmt = @import("../fmt.zig");
 
 const section_gap: f32 = 12;
 const grid_gap: f32 = 10;
+/// The compact shelf packs its tiles tighter, as Act II's catalog does.
+const compact_grid_gap: f32 = 6;
 
-fn isActOneGenerator(rec: roster.Good) bool {
-    return rec.act <= 1 and rec.generator != null;
-}
+/// One act's GENERATORS content. Act I lists its own generators; Act II lists the union of
+/// both acts' (the settlement keeps what the household built), at the act's compact density.
+pub const Shelf = struct {
+    /// The latest act whose generators the shelf lists.
+    through_act: u8,
+    density: action_tile.Density = .regular,
+    subtitle: []const u8 = "Let time accumulate, then collect without stopping your work.",
 
-fn ownedCount(world: *World, e: Entity, cat: *const roster.Catalog) usize {
+    fn holds(self: Shelf, rec: roster.Good) bool {
+        return rec.act <= self.through_act and rec.generator != null;
+    }
+};
+
+fn ownedCount(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
     const goods = world.get(e, comp.Goods) orelse return 0;
     var count: usize = 0;
     for (cat.goods, 0..) |rec, gi| {
-        if (isActOneGenerator(rec) and goods.count[gi] > 0) count += 1;
+        if (shelf.holds(rec) and goods.count[gi] > 0) count += 1;
     }
     return count;
 }
@@ -90,7 +102,7 @@ fn stateWord(q: capital.GeneratorQuote) []const u8 {
     };
 }
 
-fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16) !void {
+fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.catalog;
     const q = capital.generator_quote(world, e, cat, ctx.res.config, gi) orelse return;
@@ -113,19 +125,19 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16) !void {
         yield.text,
         q.ready(),
         progress,
-        .regular,
+        density,
     );
     _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
     // Nested control, anchored out of flow in the lower-right corner so it never grows the tile.
-    // Right/bottom padding mirror the tile's inner padding (12 x 6, with the box's 1px bottom
-    // inset), aligning the label with the content edge. Pointer hit testing selects this topmost
-    // child rather than also collecting the parent tile.
+    // Right/bottom padding mirror the tile's inner padding (12 x 6 regular, 8 x 5 compact, with
+    // the box's 1px bottom inset), aligning the label with the content edge. Pointer hit testing
+    // selects this topmost child rather than also collecting the parent tile.
     const toggle = try tile.el.div("toggle");
     _ = toggle.with_layout(.bottom_right)
         .with_size(.fit_children, .fit_children)
         .with_flow(.{ .dir = .row })
-        .with_style(.{style.pad_each(12, 12, 5, 6)});
+        .with_style(.{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
     if (toggle.query().clicked) capital.toggle_generator(world, e, cat, gi);
     const is_on = !world.get(e, comp.Generators).?.off[gi];
     const tq = toggle.control(.{
@@ -140,14 +152,15 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16) !void {
     if (tile.clicked) _ = capital.collect_generator(world, e, ctx.res, gi);
 }
 
-/// Build the Act I generator shelf in authored good order.
-pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !El {
+/// Build the act's generator shelf in authored good order.
+pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const cat = &ctx.res.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
-    const count = ownedCount(world, e, cat);
+    const count = ownedCount(world, e, cat, shelf);
     const act = ha.migration.actOf(world, e);
+    const gap = if (shelf.density == .compact) compact_grid_gap else grid_gap;
 
     const section = try parent.div(id);
     _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
@@ -155,7 +168,7 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !
 
     var count_buf: [24]u8 = undefined;
     const count_text = std.mem.print(&count_buf, "{d} OWNED", .{count}) catch "OWNED";
-    _ = try browser.browser_heading(section, "heading", "GENERATORS", "Let time accumulate, then collect without stopping your work.", count_text);
+    _ = try browser.browser_heading(section, "heading", "GENERATORS", shelf.subtitle, count_text);
 
     if (count == 0) {
         _ = (try section.text("empty", "Build a generator to begin accumulating."))
@@ -166,22 +179,22 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8) !
     const grid = try section.div("grid");
     _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     const lanes: [2]El = if (compact) blk: {
-        _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(grid_gap);
+        _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(gap);
         break :blk .{ grid, grid };
     } else blk: {
-        _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(grid_gap);
+        _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(gap);
         const left = try grid.div("left");
-        _ = left.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(grid_gap);
+        _ = left.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(gap);
         const right = try grid.div("right");
-        _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(grid_gap);
+        _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(gap);
         break :blk .{ left, right };
     };
 
     const goods = world.get(e, comp.Goods).?;
     var lane: usize = 0;
     for (cat.goods, 0..) |rec, gi| {
-        if (!isActOneGenerator(rec) or goods.count[gi] == 0) continue;
-        try generatorTile(lanes[lane % 2], world, e, act, @intCast(gi));
+        if (!shelf.holds(rec) or goods.count[gi] == 0) continue;
+        try generatorTile(lanes[lane % 2], world, e, act, @intCast(gi), shelf.density);
         lane += 1;
     }
     return section;

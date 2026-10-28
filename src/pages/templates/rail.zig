@@ -1,7 +1,7 @@
-//! `rail` — the **collapsible HOUSEHOLD side rail** (Holdings, BODY and, in Act II, the eating
-//! policy; its restore label reads `HOUSEHOLD`). Fills the shell's
+//! `rail` — the **collapsible HOUSEHOLD side rail** (holdings, BODY and the eating policy, in
+//! every act; its restore label reads `HOUSEHOLD`). Fills the shell's
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
-//! content (Holdings in Act I, BODY in Act II), or a narrow collapsed strip (width
+//! the `household` column, or a narrow collapsed strip (width
 //! `tokens.rail.collapsed`, 36) showing a **vertical restore affordance** — a chevron above the
 //! rail's label set 90° counter-clockwise (the `.vertical` text fit), reading bottom-to-top.
 //!
@@ -9,8 +9,8 @@
 //! `RailState` pool (survives the frame-arena rebuild by `node.key`). One stable toggle control
 //! owns interaction in both states: the expanded 24×26 collapse button becomes the collapsed
 //! 36×124 restore button, while its label, focus, and hit target follow the same state each
-//! frame. Distinct rails carry distinct ids, so the **ACTIONS and BUILD rails keep separate
-//! collapse memories** for free; the **STRUCTURE rail** passes `force_collapsed`, which
+//! frame. Distinct rails carry distinct ids, so **each view's rail keeps its own collapse
+//! memory** for free; a **focus view's rail** (RESEARCH, MARKET) passes `force_collapsed`, which
 //! overwrites *its own* state to collapsed every entry while leaving the other keys untouched.
 //!
 //! **The width animates (120ms, host tween).** The rail asks the host tween registry to

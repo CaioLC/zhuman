@@ -81,7 +81,7 @@ pub const Spec = struct {
     about: []const u8,
     screen: Screen = .act_one,
     /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD, 2 GENERATORS; Act II:
-    /// 0 ACTIONS, 1 BUILD, 2 STRUCTURE.
+    /// 0 ACTIONS, 1 BUILD, 2 GENERATORS, 3 RESEARCH, 4 MARKET.
     view: usize = 0,
     /// The deterministic logical window size. Feeds `view.compute`, so it fixes the responsive
     /// width class (`full`/`w760`/`w560`/`w440`) and the centered-terminal geometry. Defaults to
@@ -153,6 +153,22 @@ const settlement_balances = Balances{
         .{ .id = "spring_well", .n = 1 },
         .{ .id = "forge", .n = 1 },
         .{ .id = "lean_to", .n = 1 },
+    },
+};
+
+/// The settlement with generators from both acts: the household's snares and garden bed carried
+/// across the curtain, and the settlement's own garden bed.
+const settlement_generator_balances = Balances{
+    .vigor = .{ .v = 6, .max = 15 },
+    .food = 22,
+    .goods = &.{
+        .{ .id = "firepit", .n = 1 },
+        .{ .id = "spring_well", .n = 1 },
+        .{ .id = "forge", .n = 1 },
+        .{ .id = "lean_to", .n = 1 },
+        .{ .id = "wire_snares", .n = 1 },
+        .{ .id = "garden_bed", .n = 1 },
+        .{ .id = "garden_bed_two", .n = 1 },
     },
 };
 
@@ -344,8 +360,35 @@ pub const catalog = [_]Spec{
         .name = "act_two_research",
         .about = "Act II RESEARCH: the focus view, Household forced collapsed, strips and log hidden.",
         .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_generators",
+        .about = "Act II GENERATORS: both acts' generators the settlement owns, compact.",
+        .screen = .act_two,
         .view = 2,
         .day = 112,
+        .balances = settlement_generator_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_market",
+        .about = "Act II MARKET: the neighbours focus view.",
+        .screen = .act_two,
+        .view = 4,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_collapsed",
+        .about = "Act II ACTIONS with the Household rail collapsed.",
+        .screen = .act_two,
+        .day = 112,
+        .holdings_collapsed = true,
         .balances = settlement_balances,
         .settlement = settlement,
     },

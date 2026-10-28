@@ -1,6 +1,6 @@
 //! `act_surface` — the right-hand work surface every act shares: the view tabs heading it, the
 //! market and activity strips under them, and the active view filling what remains. Only the
-//! content differs per act (`Options`: the tab labels, which view hides the strips, the market
+//! content differs per act (`Options`: the tab labels, which views are focus views, the market
 //! venue, the activity); the caller builds the active view into the returned `view`.
 //!
 //! **Per-view state.** Each view gets an always-built zero-size owner holding its
@@ -28,7 +28,7 @@ const nav_height: f32 = 29;
 const market_to_activity: f32 = 6;
 const activity_to_section: f32 = 14;
 /// The most views a surface carries.
-pub const max_views = 4;
+pub const max_views = 5;
 
 /// What the activity strip shows: the actor's work state, its subject, and time left.
 pub const Activity = struct {
@@ -59,8 +59,9 @@ pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy) !Activity {
 pub const Options = struct {
     /// The view tabs, in order. At most `max_views`.
     labels: []const []const u8,
-    /// The view that suppresses the strips (Act II's STRUCTURE); null shows them on every view.
-    bare_view: ?usize = null,
+    /// The focus views (Act II's RESEARCH and MARKET): each owns the whole surface, so the
+    /// strips are suppressed there, and the page drops its log (`Result.focus`).
+    focus_views: []const usize = &.{},
     market: market_strip_mod.MarketKind,
     market_available: bool = true,
     activity: Activity,
@@ -73,7 +74,9 @@ pub const Options = struct {
 pub const Result = struct {
     el: El,
     active: usize,
-    /// The market strip's trailing action, or null on the bare view. The caller owns what a
+    /// Whether the active view is a focus view: no strips here, and no log on the page.
+    focus: bool,
+    /// The market strip's trailing action, or null on a focus view. The caller owns what a
     /// click opens.
     market_action: ?El,
     /// The area the active view fills: the surface's remaining height, definite.
@@ -117,8 +120,9 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     surface.state(uic.UiState.TabsState).active = tabs.active; // existing slot: no growth
     _ = try surface.spacer("nav_gap", 1, opts.nav_gap);
 
+    const focus = std.mem.findScalar(usize, opts.focus_views, tabs.active) != null;
     var market_action: ?El = null;
-    if (opts.bare_view != tabs.active) {
+    if (!focus) {
         market_action = try market_strip_mod.market_strip(surface, "market", opts.market, opts.market_available);
         _ = try surface.spacer("market_gap", 1, market_to_activity);
         const a = opts.activity;
@@ -132,6 +136,7 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     return .{
         .el = surface,
         .active = tabs.active,
+        .focus = focus,
         .market_action = market_action,
         .view = view,
         .owner = owner,

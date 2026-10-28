@@ -1,5 +1,6 @@
 //! `act_two/holdings` — Act II's content for the shared `holdings` rail template (ACT2-15):
-//! the settlement's owned Act II goods with their short copy, the per-day FLOWS (generation vs
+//! every good the settlement owns (Act I's carried across the curtain beside Act II's) with its
+//! short copy, the per-day FLOWS (generation vs
 //! consumption; a positive flow `good`, a deficit `danger`), and **population-relevant** BODY
 //! projections (how long the larder feeds everyone, when water runs short, the hall's
 //! aggregate vigor). No decorative durability/maintenance meters: those systems do not exist.
@@ -20,9 +21,10 @@ const t = @import("../templates/root.zig");
 const Line = t.HoldingsLine;
 const Sentence = t.HoldingsSentence;
 
-/// Whether good `rec` is one the rail lists: of this act and owned.
-fn listed(rec: *const ha.roster.Good, count: u32) bool {
-    return rec.act == 2 and count > 0;
+/// Whether good `rec` is one the rail lists: owned. The settlement keeps what the household
+/// built in Act I, so its goods list beside the Act II capital.
+fn listed(count: u32) bool {
+    return count > 0;
 }
 
 /// Project agent `e`'s settlement into the rail's content for this frame.
@@ -31,10 +33,12 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const cat = &ctx.res.catalog;
 
     var owned: std.ArrayList(Line) = .empty;
+    var units: u32 = 0;
     if (world.get(e, comp.Goods)) |g| {
         for (cat.goods, 0..) |*rec, gi| {
             const n = g.count[gi];
-            if (!listed(rec, n)) continue;
+            if (!listed(n)) continue;
+            units += n;
             const label = if (n > 1) try a.print("{s} \u{00d7}{d}", .{ rec.name, n }) else rec.name;
             try owned.append(a, .{ .key = rec.id, .label = label, .value = rec.copy.short });
         }
@@ -47,7 +51,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     for (fx.body_projection, body) |b, *s| s.* = .{ .key = @tagName(b.key), .prefix = b.prefix, .value = b.value, .suffix = b.suffix, .tone = if (b.positive) .good else .warn };
 
     return .{
-        .count = try a.print("{d} KINDS", .{owned.items.len}),
+        .count = try a.print("{d} KINDS, {d}", .{ owned.items.len, units }),
         .roster = owned.items,
         .empty_roster = "nothing established yet",
         .section_title = "FLOWS / DAY",

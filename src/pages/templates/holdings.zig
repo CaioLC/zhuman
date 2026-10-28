@@ -72,10 +72,16 @@ fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
     for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, toneColor(th, l.tone));
 }
 
+/// The heading's right inset inside the panel's content box (`.panel-heading`'s 16px), which
+/// keeps the count clear of the rail's collapse control at the panel's upper-right corner.
+const heading_inset: f32 = 16;
+
 fn mainPanel(parent: El, c: Content) !void {
     const th = parent.ctx.res.view.theme;
     const panel = try readout.readout_panel(parent, "panel", main_content_width, main_pad);
-    _ = try readout.readout_heading(panel, "heading", "HOLDINGS", c.count);
+    const heading_box = try panel.div("heading_box");
+    _ = heading_box.with_size(.{ .fixed = main_content_width - heading_inset }, .fit_children);
+    _ = try readout.readout_heading(heading_box, "heading", "HOLDINGS", c.count);
     _ = try panel.spacer("heading_gap", 1, 8);
     if (c.roster.len == 0) {
         _ = (try panel.text("none", c.empty_roster))

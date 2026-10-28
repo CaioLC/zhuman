@@ -1,7 +1,8 @@
-//! `act_one_workspace` — the complete Act I page-grid composition: a persistent, collapsible
-//! tabbed ACTIONS/BUILD/GENERATORS surface. The rail owns its collapse
-//! memory and width tween; this outer composition synchronizes the inter-column gap with the
-//! same 120ms policy (22px expanded, 12px collapsed) and keeps one surface alive across both.
+//! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
+//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD/GENERATORS
+//! surface. Each view keys its own rail, so each remembers its collapse; the rail owns its
+//! width tween, and this outer composition synchronizes the inter-column gap with the same
+//! 120ms policy (22px expanded, 12px collapsed) and keeps one surface alive across all three.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -15,6 +16,7 @@ const El = el.El;
 
 const rail_mod = @import("./rail.zig");
 const holdings_mod = @import("./holdings.zig");
+const household_mod = @import("./household.zig");
 const surface_mod = @import("./act_one_surface.zig");
 
 const expanded_gap: f32 = 22;
@@ -46,15 +48,25 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
         .with_flow(.{ .dir = .row, .cross = .start })
         .with_overflow(.clip);
 
+    // The rail lane comes first in the row, but its rail is built after the surface: each view
+    // keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse separately,
+    // and the active view is known only once the surface's tabs are built.
     const rail_lane = try workspace.div("rail");
     _ = rail_lane.with_size(.fit_children, .{ .pct_of_parent = 1.0 });
+
+    const content = try workspace.div("content");
+    _ = content.with_size(.grow, .{ .pct_of_parent = 1.0 })
+        .with_overflow(.clip);
+    const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts.surface);
+
+    const rail_ids = [_][]const u8{ "rail_actions", "rail_build", "rail_generators" };
     const built_rail = try rail_mod.rail(rail_lane, .{
-        .id = "holdings_rail",
+        .id = rail_ids[@min(surface.active, rail_ids.len - 1)],
         .label = "HOUSEHOLD",
         .initial_collapsed = opts.initial_collapsed,
     });
     if (built_rail.body) |body| {
-        _ = try holdings_mod.holdings(body, "holdings", opts.holdings);
+        _ = try household_mod.household(body, world, e, "holdings", opts.holdings);
     }
 
     // The width and gap move together, matching `.page-grid.is-holdings-collapsed` rather than
@@ -62,11 +74,6 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
     const gap_target = targetGap(built_rail.collapsed);
     ctx.res.tween.retarget(workspace.get().key, gap_target, ha.tokens.dur_rail_s);
     _ = workspace.with_gap(ctx.res.tween.value(workspace.get().key, gap_target));
-
-    const content = try workspace.div("content");
-    _ = content.with_size(.grow, .{ .pct_of_parent = 1.0 })
-        .with_overflow(.clip);
-    const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts.surface);
 
     return .{ .el = workspace, .rail = built_rail, .surface = surface };
 }

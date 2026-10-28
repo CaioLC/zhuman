@@ -141,6 +141,8 @@ pub const Act = enum { act_one, act_two };
 /// screen `if (regions.rail) |rail| …`s only the regions it asked for.
 pub const Regions = struct {
     root: El,
+    /// The content column the rows live in; `footer_band` appends the log footer to it.
+    content: El,
     /// The thin top strip (stocks left, run context right). Always present.
     header: El,
     /// The main view surface — the screen's primary content, grows to fill. Always present.
@@ -183,8 +185,6 @@ fn footerBandHeight(page_pad: f32) f32 {
 /// `shell` uses the terminal content box; the debug shelf uses this seam to audit one complete
 /// 900×820 page without creating a second root or duplicating the region geometry.
 pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
-    const ctx = root.ctx;
-    const th = ctx.res.view.theme;
     _ = content.with_layout(.top_left)
         .with_flow(.{ .dir = .column });
 
@@ -242,31 +242,11 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     // previous absolute child did not subtract itself from the growing grid, allowing workspace
     // content to run underneath the log. The returned handle is the frame's 80px content lane;
     // callers continue to render the authoritative live Log through `log_view`.
-    const footer = if (opts.footer) blk: {
-        const band = try content.div("shell_footer_band");
-        _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(opts.page_pad) })
-            .with_flow(.{ .dir = .column });
-        const row = try band.div("row");
-        _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
-            .with_flow(.{ .dir = .row, .cross = .start });
-        _ = try row.spacer("lead", opts.page_pad, 1);
-        const frame = try row.div("frame");
-        _ = frame.with_size(.grow, .{ .fixed = footer_height })
-            .with_flow(.{ .dir = .column })
-            .with_overflow(.clip)
-            .with_style(.{Style{ .outline_color = th.line2 }});
-        _ = try frame.spacer("top", 1, footer_pad_top);
-        const f = try frame.div("shell_footer");
-        _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
-            .with_overflow(.clip);
-        _ = try frame.spacer("bottom", 1, footer_pad_bottom);
-        _ = try row.spacer("tail", opts.page_pad, 1);
-        _ = try band.spacer("margin", 1, opts.page_pad);
-        break :blk f;
-    } else null;
+    const footer = if (opts.footer) try footer_band(content, opts.page_pad) else null;
 
     return .{
         .root = root,
+        .content = content,
         .header = header,
         .body = body,
         .rail = rail,
@@ -274,6 +254,33 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .activity = activity,
         .footer = footer,
     };
+}
+
+/// Append the framed log footer to a shell's `content` column and return its content lane. It
+/// must be the column's last row: a page that builds it late (after its body, once it knows
+/// the active view) leaves it off on a focus view, and the page grid takes the height back.
+pub fn footer_band(content: El, page_pad: f32) !El {
+    const th = content.ctx.res.view.theme;
+    const band = try content.div("shell_footer_band");
+    _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(page_pad) })
+        .with_flow(.{ .dir = .column });
+    const row = try band.div("row");
+    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
+        .with_flow(.{ .dir = .row, .cross = .start });
+    _ = try row.spacer("lead", page_pad, 1);
+    const frame = try row.div("frame");
+    _ = frame.with_size(.grow, .{ .fixed = footer_height })
+        .with_flow(.{ .dir = .column })
+        .with_overflow(.clip)
+        .with_style(.{Style{ .outline_color = th.line2 }});
+    _ = try frame.spacer("top", 1, footer_pad_top);
+    const f = try frame.div("shell_footer");
+    _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+        .with_overflow(.clip);
+    _ = try frame.spacer("bottom", 1, footer_pad_bottom);
+    _ = try row.spacer("tail", page_pad, 1);
+    _ = try band.spacer("margin", 1, page_pad);
+    return f;
 }
 
 /// Build the terminal shell **and** its region skeleton, returning the region handles the

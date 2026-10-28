@@ -51,6 +51,9 @@ $matrix = [ordered]@{
     "act_one_menu"      = "Session menu open"
     "act_two_research"  = "Act II RESEARCH focus view"
     "act_two_trade"     = "Act II merchant trade dialog open"
+    "act_two_generators" = "Act II GENERATORS over both acts' generators"
+    "act_two_market"    = "Act II MARKET focus view"
+    "act_two_collapsed" = "Act II Household rail collapsed"
 }
 
 if (-not (Test-Path $Exe)) {

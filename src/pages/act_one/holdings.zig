@@ -1,6 +1,6 @@
 //! `act_one/holdings` — Act I's content for the shared `holdings` rail template: the owned-good
 //! roster, the MARGINS the goods have moved (verb energy, food quality and spoilage, the vigor
-//! ceiling, trade stock), and the BODY projection (eating policy, larder coverage, recovery).
+//! ceiling, trade stock), and the BODY projection (larder coverage, recovery).
 //! Pure projection over live state into the frame arena; it builds no nodes.
 
 const std = @import("std");
@@ -103,8 +103,8 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const food = world.get(e, comp.InventoryFood) orelse return c;
     const vigor = world.get(e, comp.Vigor) orelse return c;
     var body: std.ArrayList(Sentence) = .empty;
+    // The eating policy reads its own word under BODY, so the body names only what it moves.
     const rate = ctx.res.config.clampMetabolism(met.rate);
-    try body.append(a, .{ .key = "policy", .prefix = "Eating ", .value = ha.eating.word(ha.eating.valueFromRate(rate)), .suffix = "." });
 
     const net = ha.systems.net_food_drawdown(met.base_rate, rate, 0);
     if (net <= 0.001) {

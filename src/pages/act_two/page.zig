@@ -3,10 +3,11 @@
 //!
 //! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, WA, FU,
 //! ME, MI, BI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
-//! and the surface's three-view nav — ACTIONS / BUILD / STRUCTURE. The Merchant and Activity
-//! strips appear on ACTIONS and BUILD and are suppressed on STRUCTURE (the research board owns
-//! the surface there), yet their state is never lost because it lives in the page, not the
-//! strips. Holdings/BODY and the eating policy ride the shell rail; the event log rides the shell footer.
+//! and the surface's five-view nav — ACTIONS / BUILD / GENERATORS / RESEARCH / MARKET. RESEARCH
+//! and MARKET are focus views: the Merchant and Activity strips and the event log step aside
+//! there and the Household collapses, yet the strips' state is never lost because it lives in
+//! the page, not the strips. The Household column (holdings, BODY, the eating policy) rides the
+//! shell rail; the event log rides the shell footer.
 //!
 //! The page reads the player. Its stocks fill the stockline, its goods the holdings, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
@@ -51,16 +52,28 @@ const actions_shelf = t.ActionsShelf{
 /// materials (`36me 24fu 20mi`), so its COST lane is wide and WHAT CHANGES gives the width up.
 const build_shelf = t.BuildShelf{
     .act = 2,
-    .subtitle = "Find the next recipe the settlement can raise.",
+    .subtitle = "Find the next useful recipe across a growing settlement catalog.",
     .widths = .{ .cost = 112, .effect = 140 - t.build_scroll_gutter },
     // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
     .carry_owned = true,
 };
+/// Act II's GENERATORS content — the same view as Act I's, over both acts' generators: the
+/// settlement keeps what the household planted. Compact, like the action catalog.
+const generator_shelf = t.GeneratorShelf{
+    .through_act = 2,
+    .density = .compact,
+    .subtitle = "Let time accumulate, then collect without stopping the work.",
+};
 const a2_holdings = @import("./holdings.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 
-/// The surface's views. STRUCTURE (index 2) suppresses the strips.
-const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "STRUCTURE" };
+/// The surface's views, in tab order.
+pub const View = enum(usize) { actions, build, generators, research, market };
+const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "GENERATORS", "RESEARCH", "MARKET" };
+/// RESEARCH and MARKET own the whole surface: no strips, no log, the Household collapsed.
+const focus_views = [_]usize{ @intFromEnum(View.research), @intFromEnum(View.market) };
+/// Each view keys its own rail, so each remembers its collapse.
+const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_generators", "a2_rail_research", "a2_rail_market" };
 
 /// The stocks the stockline reads from the ledger, in its order after Vigor.
 const ledger_stocks = [_]ha.roster.Resource{
@@ -74,8 +87,8 @@ const ledger_stocks = [_]ha.roster.Resource{
 
 /// What a caller may ask of the page beyond the world.
 pub const Options = struct {
-    /// The view to open on (0 ACTIONS, 1 BUILD, 2 STRUCTURE), applied on the frame it is set;
-    /// the tabs own the selection on every other frame.
+    /// The view to open on (a `View`'s index), applied on the frame it is set; the tabs own
+    /// the selection on every other frame.
     initial_view: ?usize = null,
     /// Collapse the Household rail on this frame (a fixture's first frame); null leaves it.
     initial_collapsed: ?bool = null,
@@ -117,14 +130,14 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     n += 1;
 
     // The merchant dialog's open/mode/selection persists on an always-built node, surviving
-    // view switches (STRUCTURE hides the strip, never the deal).
+    // view switches (a focus view hides the strip, never the deal).
     const trade_owner = try regions.body.div("a2_trade_state");
     _ = trade_owner.with_size(.{ .fixed = 0 }, .{ .fixed = 0 });
 
     // --- the body: the shared act surface, then the active view ----------------------------
     const s = try t.act_surface(regions.body, "a2_surface", .{
         .labels = &view_labels,
-        .bare_view = 2, // STRUCTURE owns the whole surface
+        .focus_views = &focus_views,
         .market = .merchant,
         .activity = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null),
         .nav_gap = 8, // `.act-two .surface-nav`
@@ -134,40 +147,32 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         if (m.query().clicked or opts.open_trade) trade_owner.state(uic.UiState.TradeState).open = true;
     }
 
-    // --- the rail: Holdings/BODY, then the eating policy, collapsing together -----------------
-    // The policy rides under BODY (whose projections it moves) rather than in the action grid,
-    // where it would be lost among twenty-odd verbs. Each view keys its own rail, so ACTIONS and
-    // BUILD remember their collapse separately; STRUCTURE collapses on every entry.
+    // --- the rail: the Household column, collapsing with it ---------------------------------
+    // Each view keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse
+    // separately; a focus view collapses on every entry without touching those memories.
     if (regions.rail) |rail_region| {
-        const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_structure" };
         const r = try t.rail(rail_region, .{
             .id = rail_ids[@min(s.active, rail_ids.len - 1)],
             .label = "HOUSEHOLD",
-            .force_collapsed = s.active == 2,
+            .force_collapsed = s.focus,
             .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {
-            const column = try t.holdings(body, "a2_holdings", try a2_holdings.content(ctx, world, e));
-            if (world.get(e, comp.Metabolism)) |met| {
-                const value = try t.eating_policy(column, "eating_policy", ha.eating.valueFromRate(met.rate), true);
-                met.rate = ha.eating.rate(value);
-            } else {
-                _ = try t.eating_policy(column, "eating_policy", 50, false);
-            }
+            _ = try t.household(body, world, e, "a2_holdings", try a2_holdings.content(ctx, world, e));
         };
     }
 
-    if (agent) |e| switch (s.active) {
-        0 => {
-            const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
-            _ = try t.actions_section(scroll.content, world, e, "a2_actions", actions_shelf, s.catalog, s.owner);
-        },
+    if (agent) |e| switch (@as(View, @enumFromInt(s.active))) {
+        // ACTIONS fills the view: its heading, search and summary stay put, only the tiles scroll.
+        .actions => _ = try t.actions_section(s.view, world, e, "a2_actions", actions_shelf, s.catalog, s.owner, s.scroll),
         // BUILD is the shared pane: it fills the view and scrolls only its table.
-        1 => _ = try t.build_section(s.view, world, e, "a2_build", build_shelf, s.catalog, s.owner, s.scroll),
-        else => {
-            // STRUCTURE: the strips are suppressed here; the research board is not drawn yet.
-            _ = try t.empty_state(s.view, "a2_structure", "STRUCTURE board", "The research board is not drawn yet.");
+        .build => _ = try t.build_section(s.view, world, e, "a2_build", build_shelf, s.catalog, s.owner, s.scroll),
+        .generators => {
+            const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
+            _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
+        .research => _ = try t.empty_state(s.view, "a2_research", "RESEARCH board", "The research board is not drawn yet."),
+        .market => _ = try t.empty_state(s.view, "a2_market", "MARKET", "The neighbours view is not drawn yet."),
     } else {
         _ = try t.empty_state(s.view, "a2_nobody", "No settlement", "There is no one here to act.");
     }
@@ -190,6 +195,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .act_label = "Act II",
         .gen = fx.energy_gen,
         .consumed = fx.energy_consumed,
+        .log = !s.focus,
         .overlay = merchant.root,
     });
 }

@@ -20,12 +20,14 @@ const generator_section_mod = @import("./generator_section.zig");
 
 const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "GENERATORS" };
 
-/// Act I's ACTIONS content: one body's verbs, with the eating policy at the foot of the grid.
+/// Act I's ACTIONS content: one body's verbs. Its eating policy rides the Household rail.
 pub const actions_shelf = actions_section_mod.Shelf{
     .act = 1,
     .subtitle = "What will this body do now?",
-    .eating_policy = true,
 };
+
+/// Act I's GENERATORS content: the body's own generators, at the regular density.
+pub const generator_shelf = generator_section_mod.Shelf{ .through_act = 1 };
 
 /// Act I's BUILD content: personal crafting (the crude tier) and the Shelter that ends the act.
 pub const build_shelf = build_section_mod.Shelf{
@@ -74,12 +76,12 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     switch (s.active) {
         0 => {
             const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
-            _ = try actions_section_mod.actions_section(scroll.content, world, e, "actions_section", actions_shelf, s.catalog, s.owner);
+            _ = try actions_section_mod.actions_section(scroll.content, world, e, "actions_section", actions_shelf, s.catalog, s.owner, null);
         },
         1 => _ = try build_section_mod.build_section(s.view, world, e, "buildsection", build_shelf, s.catalog, s.owner, s.scroll),
         2 => {
             const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
-            _ = try generator_section_mod.generator_section(scroll.content, world, e, "generator_section");
+            _ = try generator_section_mod.generator_section(scroll.content, world, e, "generator_section", generator_shelf);
         },
         else => unreachable,
     }

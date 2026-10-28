@@ -1,8 +1,7 @@
 //! `actions_section` — the ACTIONS pane, the same template on every act: the heading with the
 //! act's verb count, one search field, a count-only summary, and the held verbs as
 //! `action_tile`s in two growing columns (one at the compact breakpoint). Only the content
-//! differs per act (`Shelf`: which verbs, the subtitle, whether the eating policy rides in the
-//! grid); the behavior is one.
+//! differs per act (`Shelf`: which verbs, the subtitle, the density); the behavior is one.
 //!
 //! **No sorting.** Verbs read in authored order. A blank query lists every held verb, the ones
 //! that cannot begin now dimmed; the shared `query` parser answers `in:`/`out:` from a verb's
@@ -23,7 +22,7 @@ const el = uic.elements;
 const El = el.El;
 
 const action_tile_mod = @import("./action_tile.zig");
-const eating_policy_mod = @import("./eating_policy.zig");
+const scroll_view_mod = @import("./scroll_view.zig");
 const cc = @import("./catalog_controls.zig");
 const browser = @import("./browser.zig");
 const copy = @import("./copy.zig");
@@ -39,8 +38,6 @@ const max_verbs = 64;
 pub const Shelf = struct {
     act: u8,
     subtitle: []const u8,
-    /// Act I's body eats by a standing policy; its slider rides at the foot of the grid.
-    eating_policy: bool = false,
     /// The tiles' type scale: Act II's long catalog lists its verbs compact.
     density: action_tile_mod.Density = .regular,
 
@@ -144,23 +141,18 @@ pub fn filter(list: []Entry, query_text: []const u8) []Entry {
     return list[0..n];
 }
 
-fn placePolicy(parent: El, world: *World, e: Entity) !void {
-    if (world.get(e, comp.Metabolism)) |met| {
-        const value = try eating_policy_mod.eating_policy(parent, "eating_policy", ha.eating.valueFromRate(met.rate), true);
-        met.rate = ha.eating.rate(value);
-    } else {
-        _ = try eating_policy_mod.eating_policy(parent, "eating_policy", 50, false);
-    }
-}
-
 /// Build the pane for agent `e`. A ready tile's click begins its verb. `catalog_state` and
 /// `search_owner` keep the query on an always-built owner when given.
-pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El) !El {
+///
+/// With `scroll` the pane fills its parent's height, which must be definite: the heading,
+/// search and summary stay put and only the tiles scroll (Act II's long catalog). Without it
+/// the pane is content-high and the caller scrolls it whole (Act I's short roster).
+pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     const cat = &ctx.res.catalog;
 
     const section = try parent.div(id);
-    _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+    _ = section.with_size(.{ .pct_of_parent = 1.0 }, if (scroll != null) .{ .pct_of_parent = 1.0 } else .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
     // The heading counts the verbs the actor holds — the same set the summary counts against.
@@ -178,7 +170,15 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     _ = try copy.summary_line(section, "summary", summary);
 
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
-    const grid = try browser.tile_lanes(section, "grid", compact, if (shelf.density == .compact) compact_grid_gap else grid_gap);
+    // The tiles' host: the pane itself, or a scroll viewport filling the height left under
+    // the summary.
+    const host = if (scroll) |st| blk: {
+        const area = try section.div("results");
+        _ = area.with_size(.{ .pct_of_parent = 1.0 }, .grow);
+        const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false }, st);
+        break :blk sv.content;
+    } else section;
+    const grid = try browser.tile_lanes(host, "grid", compact, if (shelf.density == .compact) compact_grid_gap else grid_gap);
     if (shown.len == 0) {
         const msg = if (all.len == 0) "No action is open yet. Build or research one." else "No action matches your search.";
         _ = try copy.empty_line(grid.grid, "empty", msg);
@@ -191,7 +191,6 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
             if (tl.clicked) actions.begin(world, e, ctx.res, ent.ai);
         }
     }
-    if (shelf.eating_policy) try placePolicy(grid.lanes[1], world, e);
     return section;
 }
 

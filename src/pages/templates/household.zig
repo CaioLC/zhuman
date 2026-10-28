@@ -1,0 +1,27 @@
+//! `household` — the rail's whole column, the same in every act: HOLDINGS and BODY from the
+//! act's `Content`, then the eating policy at their foot, aligned to the panels. The policy is
+//! not a verb, so it lives with the body whose projections it moves rather than in the action
+//! catalog; it collapses with the rail because the rail only builds this while expanded.
+
+const ha = @import("ha");
+
+const comp = ha.comp;
+const World = ha.world.World;
+const Entity = ha.world.Entity;
+const El = ha.ui_client.elements.El;
+
+const holdings_mod = @import("./holdings.zig");
+const eating_policy_mod = @import("./eating_policy.zig");
+
+/// Build the column for agent `e` and write the slider's value back to its metabolism rate.
+/// An agent with no metabolism shows the policy disabled at normal.
+pub fn household(parent: El, world: *World, e: Entity, id: []const u8, content: holdings_mod.Content) !El {
+    const column = try holdings_mod.holdings(parent, id, content);
+    if (world.get(e, comp.Metabolism)) |met| {
+        const value = try eating_policy_mod.eating_policy(column, "eating_policy", ha.eating.valueFromRate(met.rate), true);
+        met.rate = ha.eating.rate(value);
+    } else {
+        _ = try eating_policy_mod.eating_policy(column, "eating_policy", 50, false);
+    }
+    return column;
+}

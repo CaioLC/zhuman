@@ -20,8 +20,8 @@ const pad_x: f32 = 10;
 const pad_top: f32 = 9;
 const pad_bottom: f32 = 8;
 
-/// Build the Act I policy tile at the full width of its action-grid column. The returned
-/// policy value is live; callers map it to their persisted metabolism rate.
+/// Build the policy tile at the full width of its parent (the Household rail's column, under
+/// BODY). The returned policy value is live; callers map it to their persisted metabolism rate.
 pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
