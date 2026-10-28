@@ -19,6 +19,7 @@ const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
 const fixture = @import("./fixture.zig");
+const act_two_fixtures = @import("./act_two/fixtures.zig");
 const t = @import("./templates/root.zig");
 
 /// Returns a flattened list of *Nodes for the render stage
@@ -37,41 +38,66 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
         const win = ui_ctx.res.platform.window;
         const lw, const lh = win.getSize() catch .{ @as(usize, @intFromFloat(uic.view.ref_w)), @as(usize, @intFromFloat(uic.view.ref_h)) };
         const density = win.getPixelDensity() catch 1;
-        const m = uic.view.compute(@floatFromInt(lw), @floatFromInt(lh), density);
+        const m = uic.view.computeZoomed(@floatFromInt(lw), @floatFromInt(lh), density, ui_ctx.res.settings.ui_scale.factor());
         ui_ctx.res.view.metrics = m;
         ui_ctx.res.view.scale = m.dpi_scale;
     }
     // Every page returns its roots in draw order (a dialog's root after the shell it covers).
     // The game is the normal route. The template audit harness remains available as an explicit
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
-    if (debugRequested(ui_ctx.res)) return try withMenu(ui_ctx, try p_debug(ui_ctx, world));
+    if (debugRequested(ui_ctx.res)) return try withMenu(ui_ctx, world, try p_debug(ui_ctx, world));
 
     // The deterministic fixture harness: `HA_FIXTURE=<name>` seeds one named screen state and
     // renders it through the production page. A developer opt-in like the debug page; off unless
     // the variable is set and non-empty. See `fixture.zig`.
-    if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, try fixture.build_fixture(ui_ctx, world, name));
+    if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, world, try fixture.build_fixture(ui_ctx, world, name));
 
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I curtain,
     // since owning the good that ends the act is the win condition; otherwise the live page.
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const a = player.get() orelse return try withMenu(ui_ctx, try p_gameover(ui_ctx, world));
-    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.catalog, .act_one)) return try withMenu(ui_ctx, try p_act_one_end(ui_ctx, world));
-    return try withMenu(ui_ctx, try p_act_one(ui_ctx, world, .{}));
+    const a = player.get() orelse return try withMenu(ui_ctx, world, try p_gameover(ui_ctx, world));
+    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
+    return try withMenu(ui_ctx, world, try p_act_one(ui_ctx, world, .{}));
+}
+
+/// What the session menu says about the run behind it: the act, the day, and how many people.
+fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
+    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+    const act: u8 = if (player.get()) |a| ha.migration.actOf(world, a[0]) else 1;
+    return .{
+        .act = act,
+        .day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day)),
+        // Population has no model yet (ACT2-01): Act II reads its fixture.
+        .people = if (act >= 2) @intFromFloat(act_two_fixtures.population) else 1,
+    };
+}
+
+/// Apply the window setting the menu changed: a windowed size, or fullscreen.
+fn applyWindow(ctx: *uic.UiCtx) void {
+    const choice = ctx.res.settings.window orelse return;
+    const win = ctx.res.platform.window;
+    if (choice.size()) |s| {
+        win.setFullscreen(false) catch {};
+        win.setSize(s.w, s.h) catch {};
+    } else {
+        win.setFullscreen(true) catch {};
+    }
 }
 
 /// Append the session menu as the final/topmost root over whichever production or development
 /// page was built. A header click can open it in this same frame; its modal shell owns focus,
-/// outside-click capture, Escape dismissal, and opener restoration.
-fn withMenu(ctx: *uic.UiCtx, roots: uic.Trees) !uic.Trees {
+/// Escape, and opener restoration.
+fn withMenu(ctx: *uic.UiCtx, world: *World, roots: uic.Trees) !uic.Trees {
     if (!ctx.res.menu.open) return roots;
 
-    const menu = try t.menu_dialog(ctx, "session_menu");
+    const menu = try t.menu_dialog(ctx, "session_menu", session(ctx, world));
+    if (menu.changed.window) applyWindow(ctx);
     if (menu.quit) {
+        // Quit to menu lands on the title screen once it exists (PORT-04); until then, exit.
+        ctx.res.menu.open = false;
         ctx.res.menu.quit_requested = true;
     } else if (menu.resumed) {
         ctx.res.menu.resumeGame(&ctx.res.playback);
-    } else if (menu.dismissed) {
-        ctx.res.menu.dismiss(&ctx.res.playback);
     }
     if (!ctx.res.menu.open) return roots;
 

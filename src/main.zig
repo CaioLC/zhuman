@@ -63,11 +63,12 @@ fn syncMouseButtons(input: *ui_client.Input, state: sdl.mouse.ButtonFlags) void 
 
 /// Scale an incoming SDL pointer coordinate (window/logical space) into the UI's **device-px**
 /// layout space: the layout, hit geometry, and drag math live in device pixels
-/// (logical × DPI), while SDL delivers mouse/finger coordinates in window coordinates, so every
-/// coordinate is multiplied by the frame's `dpi_scale` at this one seam before it reaches the
-/// input model or hit-testing. At DPI 1 this is identity (today's behavior).
+/// (window coordinates × pixel density), while SDL delivers mouse/finger coordinates in window
+/// coordinates, so every coordinate is multiplied by the frame's `pointer_scale` at this one
+/// seam before it reaches the input model or hit-testing. A UI scale changes the logical space,
+/// not this factor. At DPI 1 this is identity.
 fn pointerAt(app: *App, x: f32, y: f32) ui_client.InputPoint {
-    const s = app.resources.view.metrics.dpi_scale;
+    const s = app.resources.view.metrics.pointer_scale;
     const k = if (s > 0) s else 1;
     return .{ .x = x * k, .y = y * k };
 }

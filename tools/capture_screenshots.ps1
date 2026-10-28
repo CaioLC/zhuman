@@ -54,6 +54,9 @@ $matrix = [ordered]@{
     "act_two_generators" = "Act II GENERATORS over both acts' generators"
     "act_two_market"    = "Act II MARKET focus view"
     "act_two_collapsed" = "Act II Household rail collapsed"
+    "menu_save"         = "Session menu: save slots"
+    "menu_settings"     = "Session menu: settings panel"
+    "menu_quit"         = "Session menu: quit confirmation"
 }
 
 if (-not (Test-Path $Exe)) {

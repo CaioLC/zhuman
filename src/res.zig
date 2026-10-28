@@ -106,16 +106,22 @@ pub const Playback = struct {
 
 /// Session-local menu lifecycle and host quit request. Opening the menu pauses simulation and
 /// remembers whether it was already paused; dismissing restores that prior state, while RESUME
-/// explicitly unpauses. These preferences are intentionally not written to disk.
+/// explicitly unpauses. `screen` is the menu's sub-screen and `flash` the one-shot note a
+/// save or load leaves on the menu screen; both reset on every open.
 pub const MenuState = struct {
     open: bool = false,
     restore_paused: bool = false,
     quit_requested: bool = false,
+    screen: MenuScreen = .menu,
+    flash_buf: [40]u8 = @splat(0),
+    flash_len: u8 = 0,
 
     pub fn show(self: *MenuState, playback: *Playback) void {
         if (self.open) return;
         self.restore_paused = playback.paused;
         self.open = true;
+        self.screen = .menu;
+        self.flash_len = 0;
         playback.paused = true;
     }
 
@@ -128,6 +134,114 @@ pub const MenuState = struct {
         self.open = false;
         playback.paused = false;
         self.restore_paused = false;
+    }
+
+    /// The one-shot note, if a save or load left one.
+    pub fn flash(self: *const MenuState) ?[]const u8 {
+        return if (self.flash_len == 0) null else self.flash_buf[0..self.flash_len];
+    }
+
+    /// Leave a one-shot note for the menu screen (cut to the buffer).
+    pub fn setFlash(self: *MenuState, text: []const u8) void {
+        const n = @min(text.len, self.flash_buf.len);
+        @memcpy(self.flash_buf[0..n], text[0..n]);
+        self.flash_len = @intCast(n);
+    }
+};
+
+/// The session menu's screens (`menu.html`).
+pub const MenuScreen = enum { menu, save, load, settings, quit };
+
+/// The player's settings, shared by the title screen and the session menu. Held for the
+/// session. Window size, fullscreen and UI scale act on the host; difficulty, the two volumes
+/// and contrast are held but have no effect until their systems exist (roadmap PORT-03).
+pub const Settings = struct {
+    pub const Difficulty = enum {
+        abundant,
+        temperate,
+        harsh,
+        barren,
+
+        /// Input cost and yield multipliers the difficulty names (not yet applied).
+        pub fn cost(self: Difficulty) f32 {
+            return switch (self) {
+                .abundant => 0.8,
+                .temperate => 1.0,
+                .harsh => 1.25,
+                .barren => 1.5,
+            };
+        }
+        pub fn yield(self: Difficulty) f32 {
+            return switch (self) {
+                .abundant => 1.25,
+                .temperate => 1.0,
+                .harsh => 0.8,
+                .barren => 0.65,
+            };
+        }
+    };
+    pub const UiScale = enum {
+        p90,
+        p100,
+        p110,
+        p125,
+
+        pub fn factor(self: UiScale) f32 {
+            return switch (self) {
+                .p90 => 0.9,
+                .p100 => 1.0,
+                .p110 => 1.1,
+                .p125 => 1.25,
+            };
+        }
+    };
+    pub const Contrast = enum { normal, high };
+    pub const Window = enum {
+        w1280,
+        w1600,
+        w1920,
+        fullscreen,
+
+        /// The windowed size, or null for fullscreen.
+        pub fn size(self: Window) ?struct { w: u32, h: u32 } {
+            return switch (self) {
+                .w1280 => .{ .w = 1280, .h = 720 },
+                .w1600 => .{ .w = 1600, .h = 900 },
+                .w1920 => .{ .w = 1920, .h = 1080 },
+                .fullscreen => null,
+            };
+        }
+    };
+
+    difficulty: Difficulty = .temperate,
+    music: f32 = 60,
+    effects: f32 = 75,
+    ui_scale: UiScale = .p100,
+    contrast: Contrast = .normal,
+    /// The window choice; null until the player picks one (the launch window is its own size).
+    window: ?Window = null,
+};
+
+/// Stubbed save slots: what a save would hold, kept for the session only. Saving records the
+/// settlement's description; loading restores nothing yet (no persistence exists).
+pub const SaveSlots = struct {
+    pub const count = 3;
+    pub const Slot = struct {
+        filled: bool = false,
+        act: u8 = 1,
+        day: u32 = 1,
+        people: u32 = 1,
+    };
+    slots: [count]Slot = @splat(.{}),
+
+    /// The filled slot with the latest day, if any.
+    pub fn latest(self: *const SaveSlots) ?usize {
+        var best: ?usize = null;
+        for (self.slots, 0..) |s, i| {
+            if (!s.filled) continue;
+            if (best == null or s.day > self.slots[best.?].day) best = i;
+        }
+        return best;
     }
 };
 
@@ -318,6 +432,8 @@ pub const Resources = struct {
     time: Time = .{},
     playback: Playback = .{},
     menu: MenuState = .{},
+    settings: Settings = .{},
+    saves: SaveSlots = .{},
     sim: Sim,
     config: Config = .{},
     view: View = .{},

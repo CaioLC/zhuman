@@ -107,6 +107,8 @@ pub const Spec = struct {
     trade_open: bool = false,
     /// Open on the first frame with the session menu showing.
     menu_open: bool = false,
+    /// The menu's screen when `menu_open` (save, load, settings, quit).
+    menu_screen: ha.res.MenuScreen = .menu,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -357,6 +359,32 @@ pub const catalog = [_]Spec{
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
+        .name = "menu_save",
+        .about = "The session menu's save screen: three slots.",
+        .day = 19,
+        .menu_open = true,
+        .menu_screen = .save,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "menu_settings",
+        .about = "The session menu's settings panel.",
+        .day = 19,
+        .menu_open = true,
+        .menu_screen = .settings,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "menu_quit",
+        .about = "The session menu's quit confirmation.",
+        .screen = .act_two,
+        .day = 43,
+        .menu_open = true,
+        .menu_screen = .quit,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
         .name = "act_two_research",
         .about = "Act II RESEARCH: the focus view, Household forced collapsed, strips and log hidden.",
         .screen = .act_two,
@@ -552,7 +580,10 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     const opening: ?usize = if (first) spec.view else null;
     const collapsed: ?bool = if (first and spec.holdings_collapsed) true else null;
     const open_trade = first and spec.trade_open;
-    if (first and spec.menu_open) ctx.res.menu.show(&ctx.res.playback);
+    if (first and spec.menu_open) {
+        ctx.res.menu.show(&ctx.res.playback);
+        ctx.res.menu.screen = spec.menu_screen;
+    }
     return switch (spec.screen) {
         .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
         .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),

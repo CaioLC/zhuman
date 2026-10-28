@@ -79,6 +79,10 @@ pub const ViewMetrics = struct {
     logical_h: f32 = ref_h,
     /// Device pixels per logical pixel (crispness factor). `View.scale` is set from this.
     dpi_scale: f32 = 1,
+    /// Device pixels per **window coordinate**: the factor a pointer coordinate takes into the
+    /// layout's device-px space. The pixel density alone; equal to `dpi_scale` unless a UI
+    /// scale has zoomed the logical space (`computeZoomed`).
+    pointer_scale: f32 = 1,
     /// The terminal rect in logical px: capped at the reference and centered when framed,
     /// else the full window.
     terminal: ui.Rect = .{ .x = 0, .y = 0, .w = ref_w, .h = ref_h },
@@ -122,9 +126,22 @@ pub fn compute(logical_w: f32, logical_h: f32, pixel_density: f32) ViewMetrics {
         .logical_w = lw,
         .logical_h = lh,
         .dpi_scale = density,
+        .pointer_scale = density,
         .terminal = terminal,
         .width_class = class,
     };
+}
+
+/// `compute` with a UI scale (the settings' 90–125%): the logical space shrinks by `zoom` and
+/// every logical px draws `zoom` times larger, so the whole interface scales together, the
+/// width class included, as browser zoom does. The drawable size is unchanged, and a pointer
+/// still maps through the pixel density alone.
+pub fn computeZoomed(window_w: f32, window_h: f32, pixel_density: f32, zoom: f32) ViewMetrics {
+    const z = if (zoom > 0) zoom else 1;
+    const density = if (pixel_density > 0) pixel_density else 1;
+    var m = compute(window_w / z, window_h / z, density * z);
+    m.pointer_scale = density;
+    return m;
 }
 
 // --- The one logical→device scaling helper ------------------------------------
@@ -214,4 +231,17 @@ test "compute: a fractional high-DPI density is preserved for the crispness scal
     const m = compute(900, 820, 1.5);
     try testing.expectApproxEqAbs(@as(f32, 1.5), m.dpi_scale, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 1350), m.px_w, 1e-4);
+}
+
+test "computeZoomed: a UI scale shrinks the logical space and keeps the drawable and pointer factor" {
+    const m = computeZoomed(900, 820, 1, 1.25);
+    try testing.expectEqual(@as(f32, 720), m.logical_w);
+    try testing.expectEqual(@as(f32, 1.25), m.dpi_scale);
+    try testing.expectEqual(@as(f32, 1), m.pointer_scale);
+    try testing.expectApproxEqAbs(@as(f32, 900), m.px_w, 1e-3);
+    // The zoomed logical width drops below the 760 breakpoint, as browser zoom would.
+    try testing.expectEqual(WidthClass.w760, m.width_class);
+    // At 100% it is `compute`.
+    const same = computeZoomed(900, 820, 2, 1);
+    try testing.expectEqual(compute(900, 820, 2), same);
 }
