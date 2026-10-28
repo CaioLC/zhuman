@@ -114,6 +114,8 @@ pub const Spec = struct {
     /// The title screen's screen and the attract loop's pinned time (`screen = .title`).
     title_screen: ha.res.TitleScreen = .menu,
     attract_s: f32 = 6,
+    /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 4`).
+    market: ?uic.UiState.MarketState = null,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -427,12 +429,51 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_market",
-        .about = "Act II MARKET: the neighbours focus view.",
+        .about = "Act II MARKET: the neighbours focus view, by good (24 neighbours).",
         .screen = .act_two,
         .view = 4,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
+    },
+    .{
+        .name = "market_people",
+        .about = "MARKET by person, with a neighbour's deal open on the slip.",
+        .screen = .act_two,
+        .view = 4,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .market = .{ .group = 1, .pick_kind = 1, .pick = 0, .take = blk: {
+            var take: [13]u16 = @splat(0);
+            take[5] = 2;
+            take[12] = 0;
+            break :blk take;
+        }, .give = blk: {
+            var give: [13]u16 = @splat(0);
+            give[12] = 8;
+            break :blk give;
+        } },
+    },
+    .{
+        .name = "market_good",
+        .about = "MARKET by good, with a good's cheapest sellers and best buyers on the slip.",
+        .screen = .act_two,
+        .view = 4,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .market = .{ .group = 2, .pick_kind = 2, .pick = 0 },
+    },
+    .{
+        .name = "market_stall",
+        .about = "MARKET's stall: the player's posts and who would take them.",
+        .screen = .act_two,
+        .view = 4,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .market = .{ .stall = true },
     },
     .{
         .name = "act_two_collapsed",
@@ -610,7 +651,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     }
     return switch (spec.screen) {
         .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
-        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
+        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
         .title => blk: {

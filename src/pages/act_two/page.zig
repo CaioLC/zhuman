@@ -94,6 +94,8 @@ pub const Options = struct {
     initial_collapsed: ?bool = null,
     /// Open the merchant dialog on this frame (a fixture's first frame).
     open_trade: bool = false,
+    /// Seed the MARKET view's state on this frame (a fixture's first frame).
+    market: ?uic.UiState.MarketState = null,
 };
 
 /// Build the Act II page. Returns its roots in draw order: the shell, then the merchant dialog's
@@ -176,7 +178,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
         .research => _ = try t.empty_state(s.view, "a2_research", "RESEARCH board", "The research board is not drawn yet."),
-        .market => _ = try t.empty_state(s.view, "a2_market", "MARKET", "The neighbours view is not drawn yet."),
+        .market => try market(ctx, world, e, s, opts.market),
     } else {
         _ = try t.empty_state(s.view, "a2_nobody", "No settlement", "There is no one here to act.");
     }
@@ -199,6 +201,62 @@ test {
     _ = @import("./fixtures.zig");
     _ = @import("./coin_merchant.zig");
     _ = @import("./holdings.zig");
+}
+
+const nb = ha.neighbours;
+
+/// What the settlement keeps back from trade (the reserve HOLDINGS will own): a larder floor, a
+/// little water, and some biomass to build with. A stub until the reserve exists.
+const reserve = blk: {
+    var r: [nb.item_count]f32 = @splat(0);
+    r[0] = 6;
+    r[1] = 2;
+    r[5] = 10;
+    break :blk r;
+};
+
+fn heldItem(world: *World, e: Entity, cat: *const ha.roster.Catalog, i: usize) f32 {
+    const item = ledger.item(cat, nb.items[i]) orelse return 0;
+    return switch (item) {
+        .resource => |r| ledger.balance(world, e, r),
+        .good => |gi| if (world.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
+    };
+}
+
+/// Move `n` of item `i` into (or, negative, out of) the agent's holdings.
+fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) void {
+    const item = ledger.item(&res.catalog, nb.items[i]) orelse return;
+    switch (item) {
+        .resource => |r| _ = ledger.move(world, e, r, n),
+        .good => |gi| {
+            const units: u32 = @intFromFloat(@abs(n));
+            if (n > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
+        },
+    }
+}
+
+/// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the
+/// player's real stocks and goods.
+fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
+    const m = &ctx.res.sim.neighbours;
+    if (!m.seeded) m.seed(24);
+    var player = t.MarketPlayer{ .trade = "forager", .held = undefined, .reserved = undefined, .coin = ledger.balance(world, e, .coin) };
+    for (0..nb.item_count) |i| {
+        player.held[i] = heldItem(world, e, &ctx.res.catalog, i);
+        player.reserved[i] = @min(player.held[i], reserve[i]);
+    }
+    const st = s.owner.state(uic.UiState.MarketState);
+    if (initial) |seed| st.* = seed;
+    const stall_owner = try s.owner.div("stall_query");
+    const r = try t.market_view(s.view, "a2_market", m, st, player, s.owner, stall_owner);
+    if (r.settled) |deal| {
+        for (0..nb.item_count) |i| {
+            if (deal.give[i] > 0) moveItem(world, e, ctx.res, i, -@as(f32, @floatFromInt(deal.give[i])));
+            if (deal.take[i] > 0) moveItem(world, e, ctx.res, i, @floatFromInt(deal.take[i]));
+        }
+        _ = ledger.move(world, e, .coin, @as(f32, @floatFromInt(deal.take[nb.coin])) - @as(f32, @floatFromInt(deal.give[nb.coin])));
+        ctx.res.sim.log.push(.good, "A neighbour takes your deal. Both sides settle.");
+    }
 }
 
 test "Act II's BUILD widths fill the lane and hold every Act II build order unelided" {

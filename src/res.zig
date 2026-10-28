@@ -360,6 +360,11 @@ pub const Sim = struct {
     /// day); the UI reads it. Cleared by `reset` for a fresh run.
     encounter: marketmod.Encounter = .{},
 
+    /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this
+    /// deterministic stand-in until the population and market model exist (ACT2-01..09).
+    /// Seeded on first use; cleared by `reset` for a fresh run.
+    neighbours: @import("./neighbours.zig").Market = .{},
+
     /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would
     /// make every run replay the first one's luck.
     pub fn reset(self: *Sim) void {

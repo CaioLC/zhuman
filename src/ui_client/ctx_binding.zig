@@ -268,6 +268,20 @@ pub const UiState = struct {
         taken: [32]u16 = @splat(0),
         visit: [16]f32 = @splat(0),
     };
+    /// The MARKET view's state, on the view's always-built owner so it survives a tab switch:
+    /// the grouping (0 natural, 1 by person, 2 by good), the stall and its side (0 selling,
+    /// 1 buying), the page, the pick (0 none, 1 a neighbour, 2 a good, with its index), and the
+    /// deal being composed on the slip (what the player gives and takes, by item, coin last).
+    pub const MarketState = struct {
+        group: u8 = 0,
+        stall: bool = false,
+        side: u8 = 0,
+        page: u32 = 0,
+        pick_kind: u8 = 0,
+        pick: u8 = 0,
+        give: [13]u16 = @splat(0),
+        take: [13]u16 = @splat(0),
+    };
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`
     /// snapped to `step`; the caller maps that to a rate. Both the pointer drag and the

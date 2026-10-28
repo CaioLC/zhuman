@@ -60,6 +60,9 @@ $matrix = [ordered]@{
     "title"             = "Title screen"
     "title_settings"    = "Title screen: settings"
     "title_credits"     = "Title screen: credits"
+    "market_people"     = "MARKET by person, a deal open"
+    "market_good"       = "MARKET by good, a good picked"
+    "market_stall"      = "MARKET stall"
 }
 
 if (-not (Test-Path $Exe)) {

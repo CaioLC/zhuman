@@ -1,0 +1,820 @@
+//! `market_view` — Act II's MARKET tab, the neighbours (`market.html`). A view, not a dialog,
+//! and its primitive is a person, not a good. With few neighbours the list reads as people in
+//! sentences; with many it collapses to goods in notation, each with a price range drawn only
+//! from trades that happened. A deal composes both sides on the deal slip and is judged in the
+//! counterparty's own valuation. YOUR STALL posts sells and buys at the player's own prices,
+//! and each post says how many would take it.
+//!
+//! The neighbours are `ha.neighbours` (a stub until the population and market model exist);
+//! the player's holdings arrive as numbers. The view edits the neighbour book (posts, a
+//! settled deal) and reports a settled deal so the page moves the player's real stocks.
+
+const std = @import("std");
+const ha = @import("ha");
+const uic = ha.ui_client;
+const style = uic.style;
+const Style = style.Style;
+const El = uic.elements.El;
+const nb = ha.neighbours;
+const MarketState = uic.UiState.MarketState;
+
+const stepper_mod = @import("./quantity_stepper.zig");
+const paginator_mod = @import("./paginator.zig");
+const book_mod = @import("./trade_book.zig");
+
+comptime {
+    std.debug.assert(@typeInfo(@FieldType(MarketState, "give")).array.len == nb.bundle_len);
+}
+
+const pad_x: f32 = 15;
+const slip_w: f32 = 262;
+const slip_inner: f32 = slip_w - 2 * pad_x;
+const per_page: usize = 8;
+/// Up to this many neighbours, the list reads as people; beyond it, as goods.
+const natural_people: usize = 12;
+
+/// The player's side, as numbers by item (`nb.items`), plus coin.
+pub const Player = struct {
+    trade: []const u8,
+    held: [nb.item_count]f32,
+    reserved: [nb.item_count]f32,
+    coin: f32,
+
+    pub fn spare(self: Player, i: usize) f32 {
+        return @max(0, self.held[i] - self.reserved[i]);
+    }
+    fn spares(self: Player) [nb.item_count]f32 {
+        var out: [nb.item_count]f32 = undefined;
+        for (&out, 0..) |*s, i| s.* = self.spare(i);
+        return out;
+    }
+};
+
+pub const Settled = struct {
+    give: [nb.bundle_len]u16,
+    take: [nb.bundle_len]u16,
+};
+
+pub const Result = struct {
+    /// A deal the neighbour accepted this frame; the page moves the player's side.
+    settled: ?Settled = null,
+};
+
+const Group = enum { person, good };
+
+fn activeGroup(st: *const MarketState, n: usize) Group {
+    return switch (st.group) {
+        1 => .person,
+        2 => .good,
+        else => if (n <= natural_people) .person else .good,
+    };
+}
+
+/// The player's word for item `i` (`food`, `cut stone`).
+fn word(ctx: *uic.UiCtx, i: usize) ![]const u8 {
+    const cat = &ctx.res.catalog;
+    if (ha.roster.Catalog.resource(nb.items[i])) |r| return r.wordIn(2);
+    if (cat.good(nb.items[i])) |g| return std.ascii.allocLowerString(ctx.arena, g.name);
+    return nb.items[i];
+}
+
+fn hrule(parent: El, id: []const u8) !void {
+    _ = (try parent.div(id)).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
+        .with_style(.{Style{ .fill = parent.ctx.res.view.theme.line }});
+}
+
+/// A full-width list row whose 15px insets are flow lanes: `outer` is the interactive box (a
+/// `pct` width plus padding would overrun the list here), `inner` the content column.
+fn listRow(parent: El, id: []const u8, index: ?usize, pad_y: f32) !struct { outer: El, inner: El } {
+    const outer = if (index) |i| try parent.item(id, i) else try parent.div(id);
+    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{style.pad_each(pad_y, 0, pad_y, 0)});
+    _ = try outer.spacer("lead", pad_x, 1);
+    const inner = try outer.div("inner");
+    _ = inner.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
+    _ = try outer.spacer("tail", pad_x, 1);
+    return .{ .outer = outer, .inner = inner };
+}
+
+/// A padded full-width band (insets as flow lanes). Returns the inner row.
+fn band(parent: El, id: []const u8, up: f32, down: f32) !El {
+    const b = try parent.div(id);
+    _ = b.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center })
+        .with_style(.{style.pad_each(up, 0, down, 0)});
+    _ = try b.spacer("lead", pad_x, 1);
+    const inner = try b.div("inner");
+    _ = inner.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    _ = try b.spacer("tail", pad_x, 1);
+    return inner;
+}
+
+/// One run of inline text pieces: `(text, color)` in a row. A `fill` run takes its parent's
+/// width and clips at its edge (a person's one-line sentence); otherwise it fits its text.
+fn runFit(parent: El, id: []const u8, font: f32, fill: bool, pieces: []const struct { []const u8, uic.Color }) !void {
+    const row = try parent.div(id);
+    _ = row.with_size(if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center }).with_overflow(.clip);
+    for (pieces, 0..) |p, i| {
+        _ = (try (try row.item("p", i)).text("t", p[0])).with_style(.{Style{ .font = font, .text = p[1] }});
+    }
+}
+
+fn run(parent: El, id: []const u8, font: f32, pieces: []const struct { []const u8, uic.Color }) !void {
+    return runFit(parent, id, font, true, pieces);
+}
+
+/// A `.seg` button. Returns its click.
+fn segButton(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
+    const th = parent.ctx.res.view.theme;
+    const b = try parent.div(id);
+    _ = b.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
+    const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
+    const hot = q.hovering or q.focused;
+    _ = b.with_style(.{Style{ .outline_color = if (pressed) th.line2 else th.bg }});
+    _ = (try b.text("t", label)).with_style(.{ Style{ .font = 11, .text = if (pressed or hot) th.fg else th.dim }, style.pad_sym(7, 3) });
+    return q.clicked;
+}
+
+// ---- the query, the same grammar as BUILD ------------------------------------------------
+
+fn agentMatches(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8, spares: [nb.item_count]f32, query: []const u8) !bool {
+    if (std.mem.trim(u8, query, " ").len == 0) return true;
+    var it = std.mem.tokenizeScalar(u8, query, ' ');
+    while (it.next()) |raw| {
+        const token = try std.ascii.allocLowerString(ctx.arena, raw);
+        const neg = token.len > 1 and token[0] == '-';
+        const t = if (neg) token[1..] else token;
+        const colon = std.mem.findScalar(u8, t, ':');
+        const key = if (colon) |c| t[0..c] else "";
+        const value = if (colon) |c| t[c + 1 ..] else t;
+        const hit = blk: {
+            if (std.mem.eql(u8, key, "needs")) {
+                for (0..nb.item_count) |i| if (a.buys[i] > 0 and std.mem.startsWith(u8, words[i], value)) break :blk true;
+                break :blk false;
+            }
+            if (std.mem.eql(u8, key, "has")) {
+                for (0..nb.item_count) |i| if (a.sells[i] > 0 and std.mem.startsWith(u8, words[i], value)) break :blk true;
+                break :blk false;
+            }
+            if (std.mem.eql(u8, key, "trade")) break :blk std.mem.startsWith(u8, @tagName(a.trade), value);
+            if (std.mem.eql(u8, key, "is")) {
+                if (std.mem.eql(u8, value, "match")) break :blk nb.wantsAny(a, spares);
+                break :blk std.mem.startsWith(u8, @tagName(a.trade), value);
+            }
+            var hay: std.ArrayList(u8) = .empty;
+            try hay.appendSlice(ctx.arena, try std.ascii.allocLowerString(ctx.arena, a.firstName()));
+            try hay.append(ctx.arena, ' ');
+            try hay.appendSlice(ctx.arena, try std.ascii.allocLowerString(ctx.arena, a.lastName()));
+            try hay.append(ctx.arena, ' ');
+            try hay.appendSlice(ctx.arena, @tagName(a.trade));
+            for (0..nb.item_count) |i| if (a.sells[i] > 0) {
+                try hay.append(ctx.arena, ' ');
+                try hay.appendSlice(ctx.arena, words[i]);
+            };
+            break :blk std.mem.find(u8, hay.items, value) != null;
+        };
+        if (hit == neg) return false;
+    }
+    return true;
+}
+
+fn stallMatches(ctx: *uic.UiCtx, i: usize, words: []const []const u8, post: nb.Post, query: []const u8) !bool {
+    if (std.mem.trim(u8, query, " ").len == 0) return true;
+    const kind = if (i < nb.first_crafted) "resource" else "crafted";
+    var it = std.mem.tokenizeScalar(u8, query, ' ');
+    while (it.next()) |raw| {
+        const token = try std.ascii.allocLowerString(ctx.arena, raw);
+        const neg = token.len > 1 and token[0] == '-';
+        const t = if (neg) token[1..] else token;
+        const colon = std.mem.findScalar(u8, t, ':');
+        const key = if (colon) |c| t[0..c] else "";
+        const value = if (colon) |c| t[c + 1 ..] else t;
+        const hit = if (std.mem.eql(u8, key, "type") or std.mem.eql(u8, key, "kind"))
+            std.mem.startsWith(u8, kind, value)
+        else if (std.mem.eql(u8, key, "is"))
+            (if (std.mem.eql(u8, value, "posted")) post.qty > 0 else if (std.mem.eql(u8, value, "idle")) post.qty == 0 else std.mem.startsWith(u8, kind, value))
+        else
+            std.mem.find(u8, words[i], value) != null;
+        if (hit == neg) return false;
+    }
+    return true;
+}
+
+// ---- the list ---------------------------------------------------------------------------
+
+fn sellSummary(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (0..nb.item_count) |i| if (a.sells[i] > 0) {
+        if (out.items.len > 0) try out.appendSlice(ctx.arena, ", ");
+        try out.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d}", .{ try book_mod.title(ctx.arena, words[i]), a.sells[i] }));
+    };
+    return out.items;
+}
+
+fn buyWords(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8, with_qty: bool) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (0..nb.item_count) |i| if (a.buys[i] > 0) {
+        if (out.items.len > 0) try out.appendSlice(ctx.arena, ", ");
+        try out.appendSlice(ctx.arena, if (with_qty) try ctx.arena.print("{s} {d}", .{ words[i], a.buys[i] }) else words[i]);
+    };
+    return out.items;
+}
+
+/// The pinned You row: the player's live posts. Returns its click (it opens the stall).
+fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8) !bool {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const lr = try listRow(parent, "you", null, 8);
+    const row = lr.inner;
+    _ = lr.outer.with_style(.{Style{ .fill = th.panel, .outline_color = th.line2 }});
+    const q = lr.outer.control(.{ .name = "Your stall", .role = .button });
+    var live: u32 = 0;
+    var sells: std.ArrayList(u8) = .empty;
+    var buys: std.ArrayList(u8) = .empty;
+    for (0..nb.item_count) |i| {
+        if (m.sell_posts[i].qty > 0) {
+            live += 1;
+            if (sells.items.len > 0) try sells.appendSlice(ctx.arena, ", ");
+            try sells.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d} at {d}", .{ try book_mod.title(ctx.arena, words[i]), m.sell_posts[i].qty, m.sell_posts[i].price }));
+        }
+        if (m.buy_posts[i].qty > 0) {
+            live += 1;
+            if (buys.items.len > 0) try buys.appendSlice(ctx.arena, ", ");
+            try buys.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d} at {d}", .{ words[i], m.buy_posts[i].qty, m.buy_posts[i].price }));
+        }
+    }
+    const top = try row.div("top");
+    _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
+    _ = (try top.text("name", "You")).with_style(.{Style{ .font = 13, .text = th.acc }});
+    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, p.trade))).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = th.dim }});
+    const right = try top.div("right");
+    _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    const posts = if (live > 0) try ctx.arena.print("{d} POSTS LIVE", .{live}) else "NOTHING POSTED";
+    _ = (try right.text("posts", posts)).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = if (live > 0) th.dim else th.warn }});
+    if (live > 0) {
+        try run(row, "line", 11, &.{
+            .{ "Sells ", th.dim },
+            .{ if (sells.items.len > 0) sells.items else "nothing", th.fg },
+            .{ ". Buys ", th.dim },
+            .{ if (buys.items.len > 0) buys.items else "nothing", th.dim },
+            .{ ".", th.dim },
+        });
+    } else {
+        try run(row, "line", 11, &.{.{ "Nothing posted. Neighbours cannot trade with you.", th.dim }});
+    }
+    return q.clicked;
+}
+
+fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_count]f32, words: []const []const u8) !bool {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const match = nb.wantsAny(a, spares);
+    const lr = try listRow(parent, "person", i, 8);
+    const row = lr.inner;
+    const name = try ctx.arena.print("{s} {s}", .{ a.firstName(), a.lastName() });
+    const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen });
+    const hot = q.hovering or q.focused;
+    _ = lr.outer.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (hot) th.panel else th.bg }});
+    const top = try row.div("top");
+    _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
+    _ = (try top.text("name", name)).with_style(.{Style{ .font = 13, .text = if (chosen) th.acc else if (!match) th.dim else th.fg }});
+    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, @tagName(a.trade)))).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = th.dim }});
+    const right = try top.div("right");
+    _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    _ = (try right.text("match", if (match) "WANTS WHAT YOU HOLD" else "nothing you hold"))
+        .with_style(.{Style{ .font = 10, .tracking = 0.06, .text = if (match) th.good else th.line2 }});
+    try run(row, "line", 11, &.{
+        .{ "Sells ", th.dim },
+        .{ try sellSummary(ctx, a, words), th.fg },
+        .{ try ctx.arena.print(". Buys {s}.", .{try buyWords(ctx, a, words, false)}), th.dim },
+    });
+    return q.clicked;
+}
+
+fn goodRow(parent: El, m: *const nb.Market, i: usize, chosen: bool, p: Player, words: []const []const u8) !bool {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    const lr = try listRow(parent, "good", i, 7);
+    const row = lr.inner;
+    _ = row.with_flow(.{ .dir = .row, .cross = .start }).with_gap(10);
+    const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen });
+    const hot = q.hovering or q.focused;
+    _ = lr.outer.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (hot) th.panel else th.bg }});
+    _ = (try row.text_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell = .{ .mode = .clip, .width = 11 * 8.6 } }))
+        .with_style(.{Style{ .font = 13, .tracking = 0.04, .text = if (chosen) th.acc else th.fg }});
+    const col = try row.div("col");
+    _ = col.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
+    const off = m.offered(i);
+    const want = m.wanted(i);
+    const my_sell = m.sell_posts[i].qty;
+    const my_buy = m.buy_posts[i].qty;
+    try run(col, "stats", 11, &.{
+        .{ try a.print("{}", .{off.units + my_sell}), th.fg },
+        .{ try a.print(" offered \u{00b7} {d} selling", .{off.by + @intFromBool(my_sell > 0)}), th.dim },
+        .{ "  \u{00b7}  ", th.line2 },
+        .{ try a.print("{}", .{want.units + my_buy}), th.fg },
+        .{ try a.print(" wanted \u{00b7} {d} buying", .{want.by + @intFromBool(my_buy > 0)}), th.dim },
+    });
+    const mine = p.spare(i);
+    if (m.evidence(i)) |ev| {
+        const range = if (ev.lo == ev.hi) try a.print("{}", .{ev.lo}) else try a.print("{}\u{2013}{}", .{ ev.lo, ev.hi });
+        if (mine >= 1) {
+            try run(col, "meta", 11, &.{ .{ range, th.fg }, .{ try a.print(" coin \u{00b7} last {d}", .{ev.last}), th.dim }, .{ "  \u{00b7}  ", th.line2 }, .{ try a.print("you spare {d:.0}", .{mine}), th.good } });
+        } else {
+            try run(col, "meta", 11, &.{ .{ range, th.fg }, .{ try a.print(" coin \u{00b7} last {d}", .{ev.last}), th.dim } });
+        }
+    } else if (mine >= 1) {
+        try run(col, "meta", 11, &.{ .{ "not yet traded", th.line2 }, .{ "  \u{00b7}  ", th.line2 }, .{ try a.print("you spare {d:.0}", .{mine}), th.good } });
+    } else {
+        try run(col, "meta", 11, &.{.{ "not yet traded", th.line2 }});
+    }
+    return q.clicked;
+}
+
+/// The stall's table head (`.stall-head`).
+fn stallHead(parent: El, selling: bool) !void {
+    const th = parent.ctx.res.view.theme;
+    const lr = try listRow(parent, "stall_head", null, 0);
+    _ = lr.outer.with_style(.{style.pad_each(9, 0, 7, 0)});
+    const row = lr.inner;
+    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
+    const item = try row.div("item");
+    _ = item.with_size(.grow, .fit_children);
+    _ = (try item.text("t", "ITEM")).with_style(.{s});
+    inline for (.{ .{ "qty", if (selling) "POSTED" else "WANTED", 86 }, .{ "price", "PRICE", 86 } }) |c| {
+        const cell = try row.div(c[0]);
+        _ = cell.with_size(.{ .fixed = c[2] }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+        _ = (try cell.text("t", c[1])).with_style(.{s});
+    }
+    const who = try row.div("who");
+    _ = who.with_size(.{ .fixed = 143 }, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    _ = (try who.text("t", if (selling) "WHO WOULD BUY" else "WHO WOULD SELL")).with_style(.{s});
+}
+
+fn stallRow(parent: El, m: *nb.Market, i: usize, selling: bool, p: Player, words: []const []const u8) !void {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    const post = if (selling) &m.sell_posts[i] else &m.buy_posts[i];
+    if (post.price == 0) post.price = nb.base[i];
+    const lr = try listRow(parent, "stall", i, 6);
+    _ = lr.outer.with_style(.{Style{ .fill = if (post.qty > 0) th.panel else th.bg }});
+    const row = lr.inner;
+    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    const item = try row.div("item");
+    _ = item.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
+    _ = (try item.text("name", try book_mod.title(a, words[i]))).with_style(.{Style{ .font = 13, .text = if (post.qty > 0) th.acc else th.dim }});
+    const sub = if (selling)
+        try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] })
+    else blk: {
+        const off = m.offered(i);
+        break :blk try a.print("{d} offered by {d}", .{ off.units, off.by });
+    };
+    _ = (try item.text("sub", sub)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+    const cap: u32 = if (selling) @intFromFloat(@floor(p.spare(i))) else 99;
+    const qty_cell = try row.div("qty");
+    _ = qty_cell.with_size(.{ .fixed = 86 }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+    post.qty = @intCast(try stepper_mod.quantity_stepper(qty_cell, "stepper", post.qty, 0, cap, .{ .less = "Fewer", .more = "More" }));
+    const price_cell = try row.div("price");
+    _ = price_cell.with_size(.{ .fixed = 86 }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+    post.price = @intCast(try stepper_mod.quantity_stepper(price_cell, "stepper", post.price, 1, 99, .{ .less = "Lower price", .more = "Raise price" }));
+    const takers = if (selling) m.buyersFor(i, post.price) else m.sellersFor(i, post.price);
+    const who = try row.div("who");
+    _ = who.with_size(.{ .fixed = 143 }, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    const text = if (post.qty == 0) "not posted" else try a.print("{d} {s}", .{ takers, if (selling) "would buy" else "would sell" });
+    _ = (try who.text("t", text)).with_style(.{Style{ .font = 10, .text = if (post.qty > 0 and takers > 0) th.good else th.line2 }});
+}
+
+// ---- the slip -----------------------------------------------------------------------------
+
+fn slipHeading(parent: El, text: []const u8) !void {
+    const th = parent.ctx.res.view.theme;
+    _ = (try parent.text("heading", text)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+}
+
+fn placeholder(parent: El, id: []const u8, text: []const u8) !void {
+    const th = parent.ctx.res.view.theme;
+    _ = (try parent.text_fit(id, text, .{ .wrap = slip_inner })).with_style(.{Style{ .font = 11, .text = th.dim }});
+}
+
+fn sideHead(parent: El, left: []const u8, right: []const u8) !void {
+    const th = parent.ctx.res.view.theme;
+    const row = try parent.div("side_head");
+    _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between });
+    _ = (try row.text("l", left)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+    _ = (try row.text("r", right)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+}
+
+/// A `.line`: a name, then a value or a stepper. Returns the name's click.
+fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bool) !bool {
+    const th = parent.ctx.res.view.theme;
+    const row = try parent.item("line", i);
+    _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(6);
+    var clicked = false;
+    const n = try row.div("name");
+    if (clickable) {
+        const q = n.control(.{ .name = name, .role = .button });
+        clicked = q.clicked;
+        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .text = if (q.hovering or q.focused) th.acc else th.fg }});
+    } else {
+        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .text = th.fg }});
+    }
+    _ = (try row.text("v", value)).with_style(.{Style{ .font = 12, .text = th.fg }});
+    return clicked;
+}
+
+fn goodSlip(slip: El, m: *const nb.Market, i: usize, st: *MarketState, words: []const []const u8) !void {
+    const ctx = slip.ctx;
+    const a = ctx.arena;
+    try slipHeading(slip, try std.ascii.allocUpperString(a, words[i]));
+    // The four cheapest selling and the four paying most; a name opens a deal with them.
+    var sellers: std.ArrayList(usize) = .empty;
+    var buyers: std.ArrayList(usize) = .empty;
+    for (m.people(), 0..) |p, k| {
+        if (p.sells[i] > 0) try sellers.append(a, k);
+        if (p.buys[i] > 0) try buyers.append(a, k);
+    }
+    const people = m.people();
+    sortBy(sellers.items, people, i, true);
+    sortBy(buyers.items, people, i, false);
+    inline for (.{ .{ "sell", "CHEAPEST SELLING", true }, .{ "buy", "PAYING MOST", false } }) |side| {
+        const list = if (side[2]) sellers.items else buyers.items;
+        const box = try slip.div(side[0]);
+        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        try sideHead(box, side[1], try a.print("{}", .{list.len}));
+        if (list.len == 0) try placeholder(box, "none", if (side[2]) "Nobody is selling." else "Nobody is buying.");
+        for (list[0..@min(4, list.len)], 0..) |k, j| {
+            const p = people[k];
+            const name = if (side[2])
+                try a.print("{s} {s} \u{00d7}{d}", .{ p.firstName(), p.lastName(), p.sells[i] })
+            else
+                try a.print("{s} {s} wants {d}", .{ p.firstName(), p.lastName(), p.buys[i] });
+            const price = try a.print("{d} coin", .{if (side[2]) p.ask[i] else p.bid[i]});
+            if (try line(box, j, name, price, true)) pickAgent(st, m, k, null);
+        }
+    }
+    try placeholder(slip, "hint", "Pick a name to open a deal.");
+}
+
+fn sortBy(list: []usize, people: []const nb.Agent, item: usize, ascending_ask: bool) void {
+    const Ctx = struct { ps: []const nb.Agent, item: usize, asc: bool };
+    std.mem.sort(usize, list, Ctx{ .ps = people, .item = item, .asc = ascending_ask }, struct {
+        fn lt(c: Ctx, x: usize, y: usize) bool {
+            return if (c.asc) c.ps[x].ask[c.item] < c.ps[y].ask[c.item] else c.ps[x].bid[c.item] > c.ps[y].bid[c.item];
+        }
+    }.lt);
+}
+
+/// Open a deal with neighbour `k`: what it wants that the player has spare (when `seed` is
+/// given), against its first good, the way the prototype seeds the slip.
+fn pickAgent(st: *MarketState, m: *const nb.Market, k: usize, seed: ?Player) void {
+    st.pick_kind = 1;
+    st.pick = @intCast(k);
+    st.give = @splat(0);
+    st.take = @splat(0);
+    const a = m.agents[k];
+    if (seed) |p| {
+        for (0..nb.item_count) |i| if (a.buys[i] > 0 and p.spare(i) >= 1) {
+            st.give[i] = @intCast(@min(@as(u32, @intFromFloat(@floor(p.spare(i)))), a.buys[i]));
+            break;
+        };
+    }
+    for (0..nb.item_count) |i| if (a.sells[i] > 0) {
+        st.take[i] = @min(a.sells[i], 4);
+        break;
+    };
+}
+
+fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, words: []const []const u8) !?Settled {
+    const ctx = slip.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    const agent = m.agents[k];
+    try slipHeading(slip, "THE DEAL");
+    const who = try slip.div("who");
+    _ = who.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    _ = (try who.text("name", try a.print("{s} {s}", .{ agent.firstName(), agent.lastName() }))).with_style(.{Style{ .font = 14, .text = th.fg }});
+    _ = (try who.text_fit("small", try a.print("{s} \u{00b7} buys {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true) }), .{ .wrap = slip_inner }))
+        .with_style(.{Style{ .font = 10, .text = th.dim }});
+
+    // YOU GIVE (spare only): what it buys that the player has spare, and coin.
+    inline for (.{ .{ "give", "YOU GIVE", "spare only" }, .{ "take", "YOU RECEIVE", "theirs" } }) |side| {
+        const giving = comptime std.mem.eql(u8, side[0], "give");
+        const box = try slip.div(side[0]);
+        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        try sideHead(box, side[1], side[2]);
+        var any = false;
+        for (0..nb.bundle_len) |i| {
+            const is_coin = i == nb.coin;
+            const cap: u32 = if (giving)
+                (if (is_coin) @intFromFloat(@floor(p.coin)) else if (agent.buys[i] > 0) @intFromFloat(@floor(p.spare(i))) else 0)
+            else
+                (if (is_coin) agent.coin else agent.sells[i]);
+            if (cap == 0) continue;
+            any = true;
+            const bundle = if (giving) &st.give else &st.take;
+            const row = try box.item("line", i);
+            _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(6);
+            const name = if (is_coin) "Coin" else try book_mod.title(a, words[i]);
+            _ = (try row.text("n", name)).with_style(.{Style{ .font = 12, .text = if (bundle[i] > 0) th.fg else th.line2 }});
+            bundle[i] = @intCast(try stepper_mod.quantity_stepper(row, "stepper", bundle[i], 0, cap, .{ .less = "Less", .more = "More" }));
+        }
+        if (!any) try placeholder(box, "none", if (giving) "Nothing spare they buy." else "Nothing to receive.");
+    }
+
+    // The verdict, in the neighbour's own valuation.
+    const v = nb.verdict(agent, st.give, st.take, p.spares());
+    const first = agent.firstName();
+    const text: []const u8, const color: uic.Color, const line_color: uic.Color = switch (v) {
+        .idle => .{ "Put something on both sides.", th.dim, th.line },
+        .refuse => .{ try a.print("{s} buys {s} \u{2014} nothing you have spare. Coin would still work.", .{ first, try buyWords(ctx, agent, words, false) }), th.danger, th.danger },
+        .accept => .{ try a.print("{s} would take this.", .{first}), th.good, th.good },
+        .counter => |c| .{ try a.print("{s} would want about {d} more {s}.", .{ first, c.more, words[c.item] }), th.warn, th.warn },
+    };
+    const box = try slip.div("verdict");
+    _ = box.with_size(.{ .fixed = slip_inner - 16 }, .fit_children)
+        .with_style(.{ Style{ .outline_color = line_color }, style.pad_sym(8, 7) });
+    _ = (try box.text_fit("t", text, .{ .wrap = slip_inner - 16 })).with_style(.{Style{ .font = 11, .text = color }});
+
+    // AFTER: before → after on what the deal touches.
+    var rows = false;
+    for (0..nb.bundle_len) |i| rows = rows or st.give[i] > 0 or st.take[i] > 0;
+    if (rows) {
+        const after = try slip.div("after");
+        _ = after.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+        _ = (try after.div("rule")).with_size(.{ .fixed = slip_inner }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }});
+        _ = (try after.text("head", "AFTER")).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+        for (0..nb.bundle_len) |i| {
+            if (st.give[i] == 0 and st.take[i] == 0) continue;
+            const before: f32 = if (i == nb.coin) p.coin else p.held[i];
+            const value = before - @as(f32, @floatFromInt(st.give[i])) + @as(f32, @floatFromInt(st.take[i]));
+            const r = try after.item("row", i);
+            _ = r.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(5);
+            const key = try r.div("key");
+            _ = key.with_size(.grow, .fit_children);
+            _ = (try key.text("k", try std.ascii.allocUpperString(a, if (i == nb.coin) "coin" else words[i]))).with_style(.{Style{ .font = 12, .tracking = 0.04, .text = th.dim }});
+            _ = (try r.text("from", try book_mod.fmtNum(a, before))).with_style(.{Style{ .font = 12, .text = th.line2 }});
+            _ = (try r.text("arrow", "\u{2192}")).with_style(.{Style{ .font = 12, .text = th.line2 }});
+            _ = (try r.text("to", try book_mod.fmtNum(a, value))).with_style(.{Style{ .font = 12, .text = if (value < before) th.warn else if (value > before) th.good else th.fg }});
+        }
+    }
+
+    _ = (try slip.div("push")).with_size(.{ .fixed = 1 }, .grow);
+    const accept = v == .accept;
+    const b = try slip.div("propose");
+    _ = b.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+    const q = b.control(.{ .enabled = accept, .name = "Propose", .role = .button });
+    const lit = accept and (q.hovering or q.focused or q.held);
+    _ = b.with_style(.{Style{ .outline_color = if (!accept) th.line else if (lit) th.acc else th.fg }});
+    _ = (try b.text("t", "PROPOSE \u{2192}")).with_style(.{ style.body, Style{ .text = if (!accept) th.line2 else if (lit) th.acc else th.fg }, style.pad_sym(8, 7) });
+    if (accept and q.clicked) {
+        const deal = Settled{ .give = st.give, .take = st.take };
+        m.settle(k, st.give, st.take);
+        st.give = @splat(0);
+        st.take = @splat(0);
+        return deal;
+    }
+    return null;
+}
+
+fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8) !void {
+    const ctx = slip.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    try slipHeading(slip, "YOUR STALL");
+    var live: u32 = 0;
+    var sell_items: u32 = 0;
+    var sell_units: u32 = 0;
+    var buy_items: u32 = 0;
+    var committed: u32 = 0;
+    for (0..nb.item_count) |i| {
+        if (m.sell_posts[i].qty > 0) {
+            sell_items += 1;
+            sell_units += m.sell_posts[i].qty;
+        }
+        if (m.buy_posts[i].qty > 0) {
+            buy_items += 1;
+            committed += @as(u32, m.buy_posts[i].qty) * m.buy_posts[i].price;
+        }
+    }
+    live = sell_items + buy_items;
+    const over = @as(f32, @floatFromInt(committed)) > p.coin;
+    const who = try slip.div("who");
+    _ = who.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    _ = (try who.text("n", try a.print("{d} post{s} live", .{ live, if (live == 1) "" else "s" }))).with_style(.{Style{ .font = 14, .text = th.fg }});
+    _ = (try who.text("s", "neighbours trade against these prices")).with_style(.{Style{ .font = 10, .text = th.dim }});
+    const tally = try slip.div("tally");
+    _ = tally.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    inline for (.{ .{ "sell", "SELLING", false }, .{ "buy", "BUYING", true } }) |r| {
+        const row = try tally.div(r[0]);
+        _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between });
+        _ = (try row.text("l", r[1])).with_style(.{Style{ .font = 11, .text = th.dim }});
+        const value = if (r[2]) try a.print("{d} items \u{00b7} {d} of {d:.0} coin", .{ buy_items, committed, p.coin }) else try a.print("{d} items \u{00b7} {d} units", .{ sell_items, sell_units });
+        _ = (try row.text("v", value)).with_style(.{Style{ .font = 11, .text = if (r[2] and over) th.danger else th.fg }});
+    }
+    if (over) {
+        _ = (try slip.text_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .{ .wrap = slip_inner }))
+            .with_style(.{Style{ .font = 10, .text = th.danger }});
+    }
+    inline for (.{ .{ "posted_sell", "POSTED TO SELL", true }, .{ "posted_buy", "POSTED TO BUY", false } }) |side| {
+        const posts = if (side[2]) &m.sell_posts else &m.buy_posts;
+        const box = try slip.div(side[0]);
+        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        var count: u32 = 0;
+        for (posts) |post| count += @intFromBool(post.qty > 0);
+        try sideHead(box, side[1], try a.print("{}", .{count}));
+        if (count == 0) try placeholder(box, "none", if (side[2]) "Nothing posted to sell." else "Nothing posted to buy.");
+        for (posts, 0..) |post, i| {
+            if (post.qty == 0) continue;
+            _ = try line(box, i, try a.print("{s} \u{00d7}{d}", .{ try book_mod.title(a, words[i]), post.qty }), try a.print("{d} coin", .{post.price}), false);
+        }
+    }
+}
+
+// ---- the view -----------------------------------------------------------------------------
+
+/// Build the MARKET view filling `parent` (whose height must be definite). `query` and
+/// `stall_query` are the two search editors' owners (kept on always-built nodes).
+pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, p: Player, query_owner: El, stall_owner: El) !Result {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    var result: Result = .{};
+
+    var words: [nb.item_count][]const u8 = undefined;
+    for (&words, 0..) |*w, i| w.* = try word(ctx, i);
+    const spares = p.spares();
+
+    const view = try parent.div(id);
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
+        .with_flow(.{ .dir = .column, .cross = .start })
+        .with_style(.{Style{ .outline_color = th.line }});
+
+    // --- head --------------------------------------------------------------------------------
+    const head = try band(view, "head", 11, 9);
+    _ = head.with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
+    _ = (try head.text("title", if (st.stall) "What will you post?" else "Who will trade with you?"))
+        .with_style(.{ style.heading, Style{ .text = th.fg } });
+    const sub_slot = try head.div("sub");
+    try hrule(view, "head_rule");
+
+    // --- controls ----------------------------------------------------------------------------
+    const controls = try band(view, "controls", 9, 9);
+    const owner = if (st.stall) stall_owner else query_owner;
+    const field = try uic.text_input(controls, if (st.stall) "stall_search" else "search", if (st.stall) "search items  \u{00b7}  type:crafted  is:posted" else "search  \u{00b7}  needs:biomass  has:food  trade:fisher", 80, owner);
+    _ = field.with_size(.grow, .fit_children);
+    const query = owner.state(uic.UiState.TextInputState).text();
+    const seg = try controls.div("seg");
+    _ = seg.with_flow(.{ .dir = .row, .cross = .center }).with_gap(2);
+    const mode = activeGroup(st, m.n);
+    if (st.stall) {
+        _ = (try seg.text("label", "SIDE")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = th.dim }, style.pad_each(0, 4, 0, 0) });
+        if (try segButton(seg, "selling", "SELLING", st.side == 0)) {
+            st.side = 0;
+            st.page = 0;
+        }
+        if (try segButton(seg, "buying", "BUYING", st.side == 1)) {
+            st.side = 1;
+            st.page = 0;
+        }
+    } else {
+        _ = (try seg.text("label", "BY")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = th.dim }, style.pad_each(0, 4, 0, 0) });
+        if (try segButton(seg, "person", "PERSON", mode == .person)) {
+            st.group = 1;
+            st.page = 0;
+        }
+        if (try segButton(seg, "good", "GOOD", mode == .good)) {
+            st.group = 2;
+            st.page = 0;
+        }
+    }
+    const stall_button = try controls.div("stall");
+    _ = stall_button.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
+    const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall });
+    const lit = st.stall or sq.hovering or sq.focused;
+    _ = stall_button.with_style(.{Style{ .outline_color = if (lit) th.acc else th.line2, .fill = if (st.stall) th.panel else th.bg }});
+    _ = (try stall_button.text("t", "YOUR STALL")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = if (lit) th.acc else th.dim }, style.pad_sym(8, 3) });
+    var toggle_stall = sq.clicked;
+    try hrule(view, "controls_rule");
+
+    // --- body: the list | the slip -----------------------------------------------------------
+    const body = try view.div("body");
+    _ = body.with_size(.{ .pct_of_parent = 1.0 }, .grow).with_flow(.{ .dir = .row, .cross = .start });
+    const list = try body.div("list");
+    _ = list.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start })
+        .with_style(.{style.pad_each(3, 0, 8, 0)});
+    _ = (try body.div("divider")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
+    // The slip's 10/15/13 insets are flow lanes, so its foot (PROPOSE) stays inside the body.
+    const slip_box = try body.div("slip_box");
+    _ = slip_box.with_size(.{ .fixed = slip_w }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column });
+    _ = try slip_box.spacer("top", 1, 10);
+    const slip_row = try slip_box.div("row");
+    _ = slip_row.with_size(.{ .fixed = slip_w }, .grow).with_flow(.{ .dir = .row });
+    _ = try slip_row.spacer("lead", pad_x, 1);
+    const slip = try slip_row.div("slip");
+    _ = slip.with_size(.{ .fixed = slip_inner }, .{ .pct_of_parent = 1.0 })
+        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+    _ = try slip_box.spacer("bottom", 1, 13);
+
+    // The rows the active list holds, before paging.
+    var total: usize = 0;
+    var visible_people: usize = 0;
+    var idle_people: usize = 0;
+    var rows: std.ArrayList(usize) = .empty;
+    if (st.stall) {
+        const selling = st.side == 0;
+        for (0..nb.item_count) |i| {
+            const post = if (selling) m.sell_posts[i] else m.buy_posts[i];
+            const in_pool = if (selling) p.held[i] >= 1 or post.qty > 0 else m.offered(i).by > 0 or post.qty > 0;
+            if (in_pool and try stallMatches(ctx, i, &words, post, query)) try rows.append(a, i);
+        }
+    } else {
+        for (m.people(), 0..) |agent, k| {
+            if (!try agentMatches(ctx, agent, &words, spares, query)) continue;
+            visible_people += 1;
+            if (!nb.wantsAny(agent, spares)) idle_people += 1;
+            if (mode == .person) try rows.append(a, k);
+        }
+        if (mode == .good) {
+            for (0..nb.item_count) |i| {
+                const off = m.offered(i);
+                const want = m.wanted(i);
+                if (off.units + want.units + m.sell_posts[i].qty + m.buy_posts[i].qty > 0) try rows.append(a, i);
+            }
+        }
+    }
+    total = rows.items.len;
+    const n_pages = paginator_mod.pages(total, per_page);
+    if (st.page >= n_pages) st.page = @intCast(n_pages - 1);
+    const start = @as(usize, st.page) * per_page;
+    const slice = rows.items[start..@min(total, start + per_page)];
+
+    if (st.stall) {
+        try stallHead(list, st.side == 0);
+        if (slice.len == 0) try placeholder(list, "empty", "No item matches that query.");
+        for (slice) |i| try stallRow(list, m, i, st.side == 0, p, &words);
+        try stallSlip(slip, m, p, &words);
+    } else {
+        if (mode == .person) {
+            if (try youRow(list, m, p, &words)) toggle_stall = true;
+            for (slice) |k| {
+                if (try personRow(list, k, m.agents[k], st.pick_kind == 1 and st.pick == k, spares, &words)) {
+                    if (st.pick_kind == 1 and st.pick == k) st.pick_kind = 0 else pickAgent(st, m, k, p);
+                }
+            }
+        } else {
+            for (slice) |i| {
+                if (try goodRow(list, m, i, st.pick_kind == 2 and st.pick == i, p, &words)) {
+                    if (st.pick_kind == 2 and st.pick == i) st.pick_kind = 0 else {
+                        st.pick_kind = 2;
+                        st.pick = @intCast(i);
+                        st.give = @splat(0);
+                        st.take = @splat(0);
+                    }
+                }
+            }
+        }
+        if (slice.len == 0) {
+            _ = (try list.text("empty", "Nothing matches that query.")).with_style(.{ Style{ .font = 11, .text = th.dim }, style.pad_sym(pad_x, 16) });
+        }
+        switch (st.pick_kind) {
+            1 => result.settled = try agentSlip(slip, m, st.pick, st, p, &words),
+            2 => try goodSlip(slip, m, st.pick, st, &words),
+            else => {
+                try slipHeading(slip, "THE DEAL");
+                try placeholder(slip, "placeholder", "Pick a neighbour, or a good, on the left.");
+            },
+        }
+    }
+
+    // The head's count line, now the rows are known.
+    const sub = if (st.stall)
+        try a.print("{d} item{s} \u{00b7} {s}", .{ total, if (total == 1) "" else "s", if (st.side == 0) "your inventory" else "offered by neighbours" })
+    else
+        try a.print("{d} of {d} neighbours \u{00b7} by {s}{s}", .{ visible_people, m.n, @tagName(mode), if (st.group == 0) " (natural)" else "" });
+    _ = (try sub_slot.text("t", sub)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+
+    // --- foot: friction and pages ------------------------------------------------------------
+    try hrule(view, "foot_rule");
+    const foot = try band(view, "foot", 8, 8);
+    _ = foot.with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
+    if (st.stall) {
+        var live: u32 = 0;
+        for (0..nb.item_count) |i| live += @intFromBool(m.sell_posts[i].qty > 0) + @intFromBool(m.buy_posts[i].qty > 0);
+        try runFit(foot, "friction", 11, false, &.{ .{ try a.print("{}", .{live}), th.warn }, .{ " posts live \u{00b7} neighbours trade against them while you work.", th.dim } });
+    } else {
+        const severe = visible_people > 0 and idle_people * 10 >= visible_people * 6;
+        try runFit(foot, "friction", 11, false, &.{ .{ try a.print("{d} of {d}", .{ idle_people, visible_people }), if (severe) th.danger else th.warn }, .{ " neighbours want nothing you hold spare.", th.dim } });
+    }
+    st.page = @intCast(try paginator_mod.paginator(foot, "pages", st.page, total, per_page));
+
+    if (toggle_stall) {
+        st.stall = !st.stall;
+        st.page = 0;
+    }
+    return result;
+}

@@ -25,6 +25,7 @@ pub const grid = @import("./grid/root.zig");
 pub const migration = @import("./migration.zig");
 pub const reload = @import("./reload.zig");
 pub const market = @import("./market.zig");
+pub const neighbours = @import("./neighbours.zig");
 pub const barter = @import("./barter.zig");
 pub const res = @import("./res.zig");
 pub const world = @import("./world.zig");
@@ -53,6 +54,7 @@ test {
     _ = migration;
     _ = reload;
     _ = market;
+    _ = neighbours;
     _ = barter;
     _ = res;
     _ = actions;

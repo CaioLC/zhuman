@@ -146,6 +146,8 @@ pub const TradeNotation = trade_dialog_mod.Notation;
 pub const deal_slip = @import("./deal_slip.zig").deal_slip;
 pub const quantity_stepper = @import("./quantity_stepper.zig").quantity_stepper;
 pub const paginator = @import("./paginator.zig").paginator;
+pub const market_view = @import("./market_view.zig").market_view;
+pub const MarketPlayer = @import("./market_view.zig").Player;
 pub const act_one_surface = act_one_surface_mod.act_one_surface;
 pub const ActOneSurface = act_one_surface_mod.Result;
 pub const ActOneSurfaceOptions = act_one_surface_mod.Options;
@@ -224,6 +226,7 @@ test {
     _ = @import("./deal_slip.zig");
     _ = @import("./quantity_stepper.zig");
     _ = @import("./paginator.zig");
+    _ = @import("./market_view.zig");
     _ = trade_dialog_mod;
     _ = menu_dialog_mod;
     _ = @import("./settings_panel.zig");
