@@ -76,7 +76,7 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
         },
         .exchange => .{
             .signal = "\u{25C6} EXCHANGE",
-            .copy = "The permanent market is open.",
+            .copy = "standing trading floor \u{00B7} permanent books \u{00B7} open market.",
             .action = "ENTER \u{2192}",
             .tone = .good,
         },

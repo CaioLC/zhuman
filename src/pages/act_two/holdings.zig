@@ -48,7 +48,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     for (fx.flows, flows) |f, *l| l.* = .{ .key = f.resource, .label = f.label, .value = f.value, .tone = if (f.positive) .good else .danger };
 
     const body = try a.alloc(Sentence, fx.body_projection.len);
-    for (fx.body_projection, body) |b, *s| s.* = .{ .key = @tagName(b.key), .prefix = b.prefix, .value = b.value, .suffix = b.suffix, .tone = if (b.positive) .good else .warn };
+    for (fx.body_projection, body) |b, *s| s.* = .{ .key = @tagName(b.key), .prefix = b.prefix, .value = if (b.key == .population) try a.print("{}", .{@as(u32, @intFromFloat(fx.populationOf(&ctx.res.sim)))}) else b.value, .suffix = b.suffix, .tone = if (b.positive) .good else .warn };
 
     return .{
         .count = try a.print("{d} KINDS, {d}", .{ owned.items.len, units }),

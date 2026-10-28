@@ -67,6 +67,9 @@ pub const Goal = struct {
     requirements: []const Requirement = &.{},
     explanation: []const u8 = "",
     action: []const u8 = "",
+    /// Open (or close) the details on this frame — a fixture's first frame; null leaves the
+    /// disclosure to the player.
+    expand: ?bool = null,
 };
 
 pub const Milestone = struct {
@@ -141,6 +144,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .with_offset(0, bar_control_offset_y)
         .with_style(.{Style{ .fill = th.bg }});
     const disclosure_state = disclosure.state(DisclosureState);
+    if (goal.expand) |x| disclosure_state.expanded = x;
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (disclosure.query().clicked) disclosure_state.expanded = !disclosure_state.expanded;
     const dq = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded });

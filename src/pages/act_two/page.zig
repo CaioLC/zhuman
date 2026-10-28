@@ -48,7 +48,8 @@ const actions_shelf = t.ActionsShelf{
     .density = .compact,
 };
 /// Act II's BUILD content — the same pane as Act I's: the settlement's recipes of every tier.
-/// The act authors no milestone card yet (the Exchange, ACT2-17). Its orders run to three
+/// Its milestone, the Exchange, is composed by the page (`exchangeGoal`) because its
+/// conditions are research and population. Its orders run to three
 /// materials (`36me 24fu 20mi`), so its COST lane is wide and WHAT CHANGES gives the width up.
 const build_shelf = t.BuildShelf{
     .act = 2,
@@ -96,6 +97,8 @@ pub const Options = struct {
     open_trade: bool = false,
     /// Seed the MARKET view's state on this frame (a fixture's first frame).
     market: ?uic.UiState.MarketState = null,
+    /// Open the Exchange card's details on this frame (a fixture's first frame).
+    exchange_open: bool = false,
 };
 
 /// Build the Act II page. Returns its roots in draw order: the shell, then the merchant dialog's
@@ -111,7 +114,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     // Vigor and the six stocks are the player's; population and coin have no model yet.
     var stocks: [2 + 1 + ledger_stocks.len]t.Stock = undefined;
     var n: usize = 0;
-    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = fx.population };
+    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx) };
     n += 1;
     if (agent) |e| {
         const vigor = world.get(e, comp.Vigor).?;
@@ -144,7 +147,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     const s = try t.act_surface(regions.body, "a2_surface", .{
         .labels = &view_labels,
         .focus_views = &focus_views,
-        .market = .merchant,
+        .market = if (ctx.res.sim.exchange.standing) .exchange else .merchant,
         .activity = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null),
         .nav_gap = 8, // `.act-two .surface-nav`
         .initial_view = opts.initial_view,
@@ -172,7 +175,15 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         // ACTIONS fills the view: its heading, search and summary stay put, only the tiles scroll.
         .actions => _ = try t.actions_section(s.view, world, e, "a2_actions", actions_shelf, s.catalog, s.owner, s.scroll),
         // BUILD is the shared pane: it fills the view and scrolls only its table.
-        .build => _ = try t.build_section(s.view, world, e, "a2_build", build_shelf, s.catalog, s.owner, s.scroll),
+        .build => {
+            var shelf = build_shelf;
+            var raised = false;
+            shelf.goal = try exchangeGoal(ctx, world, e);
+            if (opts.exchange_open) shelf.goal.?.expand = true;
+            shelf.raised = &raised;
+            _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
+            if (raised) raiseExchange(ctx, world, e);
+        },
         .generators => {
             const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
             _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
@@ -189,7 +200,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     return page.finish(.{
         .stocks = stocks[0..n],
         .compact_stocks = true,
-        .act_label = "Act II",
+        .act_label = if (ctx.res.sim.exchange.standing) "Act III" else "Act II",
         .gen = fx.energy_gen,
         .consumed = fx.energy_consumed,
         .log = !s.focus,
@@ -233,6 +244,104 @@ fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) 
             if (n > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
         },
     }
+}
+
+/// The Exchange's price and the population it waits on (`act-ii.html`).
+const exchange_cost = [_]struct { ha.roster.Resource, f32 }{ .{ .biomass, 80 }, .{ .minerals, 40 }, .{ .metal, 24 } };
+
+/// The settlement's population: the fixture's stand-in, or the stub override a fixture sets.
+fn population(ctx: *UiCtx) f32 {
+    return fx.populationOf(&ctx.res.sim);
+}
+
+/// The first ring-4 technology established, alphabetically (the prototype names one).
+fn ringFour(ctx: *UiCtx, world: *World, e: Entity) ?[]const u8 {
+    const research = world.get(e, comp.Research) orelse return null;
+    var best: ?[]const u8 = null;
+    for (ctx.res.catalog.technologies, 0..) |tech, i| {
+        if (tech.coord.ring() != 4 or research.state[i] != .researched) continue;
+        if (best == null or std.mem.order(u8, tech.name, best.?) == .lt) best = tech.name;
+    }
+    return best;
+}
+
+/// The Exchange card: locked until a ring-4 technology stands and the settlement passes 500
+/// people, unfunded until the biomass, minerals and metal are held, ready, then standing.
+fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
+    const a = ctx.arena;
+    const standing = ctx.res.sim.exchange.standing;
+    const people = population(ctx);
+    const four = ringFour(ctx, world, e);
+    const research_met = four != null;
+    const people_met = people > 500;
+    var short_kinds: u32 = 0;
+    var short: std.ArrayList(u8) = .empty;
+    var reqs: std.ArrayList(t.MilestoneRequirement) = .empty;
+    try reqs.append(a, .{ .label = "RING 4", .value = if (research_met or standing) "1/1" else "0/1", .met = research_met or standing });
+    try reqs.append(a, .{ .label = "PEOPLE", .value = try a.print("{}/501", .{@as(u32, @intFromFloat(people))}), .met = people_met or standing });
+    for (exchange_cost) |c| {
+        const have = ledger.balance(world, e, c[0]);
+        const word = c[0].wordIn(2);
+        if (have < c[1]) {
+            short_kinds += 1;
+            if (short.items.len > 0) try short.appendSlice(a, " \u{00b7} ");
+            try short.appendSlice(a, try a.print("{} {s}", .{ @as(u32, @intFromFloat(c[1] - @floor(have))), word }));
+        }
+        try reqs.append(a, .{
+            .label = try std.ascii.allocUpperString(a, word),
+            .value = if (standing) try a.print("{} paid", .{@as(u32, @intFromFloat(c[1]))}) else try a.print("{}/{}", .{ @as(i64, @intFromFloat(@floor(have))), @as(u32, @intFromFloat(c[1])) }),
+            .met = standing or have >= c[1],
+        });
+    }
+    const unlocked = research_met and people_met;
+    const state: t.MilestoneLifecycle = if (standing) .done else if (!unlocked) .locked else if (short_kinds > 0) .unfunded else .ready;
+    const people_n: u32 = @intFromFloat(people);
+    const unmet: u32 = @as(u32, @intFromBool(!research_met)) + @intFromBool(!people_met);
+    return .{
+        .state = state,
+        .title = "Exchange",
+        .readiness = switch (state) {
+            .locked => try a.print("locked \u{00b7} {} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }),
+            .unfunded => "inputs short",
+            .ready => "ready to raise",
+            .done => "standing \u{00b7} ACT III",
+        },
+        .summary = switch (state) {
+            .locked => try a.print("ring 4 {}/1 \u{00b7} people {}/501", .{ @intFromBool(research_met), people_n }),
+            .unfunded => try a.print("inputs short \u{00b7} {} kind{s}", .{ short_kinds, if (short_kinds == 1) "" else "s" }),
+            .ready => try a.print("{s} \u{00b7} {} people \u{00b7} inputs ready", .{ four.?, people_n }),
+            .done => "permanent market \u{00b7} Act III",
+        },
+        .kicker = "ACT II CURTAIN \u{00b7} A MARKET WITH A PLACE",
+        .cost = "80 biomass \u{00b7} 40 minerals \u{00b7} 24 metal \u{00b7} 18d",
+        .copy = if (standing)
+            "The Exchange gives trade a permanent place. Passing lots become posted offers and the settlement enters Act III."
+        else
+            "Raise a standing trading floor. Once it opens, passing lots give way to a permanent market and Act III begins.",
+        .requirements = reqs.items,
+        .explanation = switch (state) {
+            .locked => if (!research_met and !people_met) "Research any ring-4 technology and grow beyond 500 people." else if (!research_met) "Research any ring-4 technology." else try a.print("Grow beyond 500 people \u{00b7} {}/501.", .{people_n}),
+            .unfunded => try a.print("needs {s}", .{short.items}),
+            .ready => try a.print("{s} established \u{00b7} {} people \u{00b7} all inputs held", .{ four.?, people_n }),
+            .done => try a.print("opened after {s} \u{00b7} permanent market established", .{four orelse "ring-4 research"}),
+        },
+        .action = switch (state) {
+            .locked => "LOCKED",
+            .unfunded => "NEEDS INPUTS",
+            .ready => "RAISE EXCHANGE \u{2192}",
+            .done => "ACT III OPEN",
+        },
+    };
+}
+
+/// Raise the Exchange: pay its price from the ledger and stand it; the settlement reads as
+/// Act III from the next frame.
+fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
+    if (ctx.res.sim.exchange.standing) return;
+    for (exchange_cost) |c| if (ledger.balance(world, e, c[0]) < c[1]) return;
+    for (exchange_cost) |c| _ = ledger.move(world, e, c[0], -c[1]);
+    ctx.res.sim.exchange.standing = true;
+    ctx.res.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost

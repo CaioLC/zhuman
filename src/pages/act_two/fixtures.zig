@@ -11,6 +11,12 @@ const Resource = @import("ha").roster.Resource;
 /// The settlement's population.
 pub const population: f32 = 48;
 
+/// The population the pages show: the stand-in, or the Exchange stub's override (a fixture
+/// reaching the Exchange's 500-people condition).
+pub fn populationOf(sim: *const @import("ha").res.Sim) f32 {
+    return sim.exchange.population orelse population;
+}
+
 // —— Coin Merchant (ACT2-14) ————————————————————————————————————————————————————————————
 // The merchant's finite lots, priced in the stub Coin. A term names a `Resource` or a good by
 // catalog id; a lot is one unit of trade, scaled linearly by the slip's lot count. BUY lots

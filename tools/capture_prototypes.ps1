@@ -43,6 +43,7 @@ $matrix = [ordered]@{
     "act_two_build"      = "act-ii.html#build"
     "act_two_generators" = "act-ii.html#generators"
     "act_two_research"   = "act-ii.html#research"
+    "act_two_exchange"   = "act-ii.html?exchangeopen=1#build"
     "act_two_market"     = "act-ii.html#market"
     "act_two_trade"      = "act-ii.html?modal=merchant#actions"
     "act_one_menu"       = "menu.html"

@@ -116,6 +116,10 @@ pub const Spec = struct {
     attract_s: f32 = 6,
     /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 4`).
     market: ?uic.UiState.MarketState = null,
+    /// The Exchange stub on the first frame (standing, a population override), and whether
+    /// its card opens with the details showing (`screen = .act_two`, `view = 1`).
+    exchange: ha.res.Sim.Exchange = .{},
+    exchange_open: bool = false,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -152,6 +156,20 @@ const settlement = Settlement{
         .{ .item = .coin, .n = 42 },
     },
     .building = "granary",
+};
+
+/// The settlement on the Exchange's threshold: the water wedge walked to its ring-4 pumping
+/// station and stocks that cover the Exchange's price.
+const exchange_settlement = Settlement{
+    .researched = settlement.researched ++ &[_][]const u8{ "aqueduct", "pumping_station" },
+    .stocks = &.{
+        .{ .item = .water, .n = 9 },
+        .{ .item = .fuel, .n = 14 },
+        .{ .item = .metal, .n = 30 },
+        .{ .item = .minerals, .n = 44 },
+        .{ .item = .biomass, .n = 96 },
+        .{ .item = .coin, .n = 42 },
+    },
 };
 
 /// The settlement's body and goods: the three tools that grant a verb and a lean-to.
@@ -419,6 +437,38 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
     },
     .{
+        .name = "act_two_exchange",
+        .about = "Act II BUILD: the Exchange card opened, locked on ring 4 and population.",
+        .screen = .act_two,
+        .view = 1,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .exchange_open = true,
+    },
+    .{
+        .name = "act_two_exchange_ready",
+        .about = "Act II BUILD: the Exchange ready to raise (ring 4 established, 520 people, inputs held).",
+        .screen = .act_two,
+        .view = 1,
+        .day = 140,
+        .balances = settlement_balances,
+        .settlement = exchange_settlement,
+        .exchange = .{ .population = 520 },
+        .exchange_open = true,
+    },
+    .{
+        .name = "act_two_exchange_standing",
+        .about = "Act III identity: the Exchange standing, the market strip an EXCHANGE.",
+        .screen = .act_two,
+        .view = 1,
+        .day = 160,
+        .balances = settlement_balances,
+        .settlement = exchange_settlement,
+        .exchange = .{ .population = 520, .standing = true },
+        .exchange_open = true,
+    },
+    .{
         .name = "act_two_generators",
         .about = "Act II GENERATORS: both acts' generators the settlement owns, compact.",
         .screen = .act_two,
@@ -642,6 +692,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     // there, and the controls own them after, so the seeded screen stays navigable.
     const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
+    if (first) ctx.res.sim.exchange = spec.exchange;
     const opening: ?usize = if (first) spec.view else null;
     const collapsed: ?bool = if (first and spec.holdings_collapsed) true else null;
     const open_trade = first and spec.trade_open;
@@ -651,7 +702,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     }
     return switch (spec.screen) {
         .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
-        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null }),
+        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null, .exchange_open = first and spec.exchange_open }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
         .title => blk: {

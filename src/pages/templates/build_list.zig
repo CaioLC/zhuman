@@ -68,6 +68,10 @@ pub const Shelf = struct {
     crude_only: bool = false,
     subtitle: []const u8,
     milestone: ?MilestoneCopy = null,
+    /// A milestone the act composes itself rather than from a good's record (Act II's
+    /// Exchange, whose conditions are research and population). Its CTA sets `raised`.
+    goal: ?milestone_mod.Goal = null,
+    raised: ?*bool = null,
     /// How the act splits the table's lane (`capital_row.Widths`); the default is Act I's.
     widths: row_mod.Widths = .{},
     /// Whether goods the agent already owns from an earlier act stay on the shelf. Anything can
@@ -399,6 +403,12 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
 
     // --- the milestone, pinned below and outside the filter ------------------------------
     if (shelf.milestone) |m| try milestone_goal(outer, world, e, "goal", m);
+    if (shelf.goal) |g| {
+        const m = try milestone_mod.milestone_goal(outer, "goal", g);
+        if (m.clicked) if (shelf.raised) |r| {
+            r.* = true;
+        };
+    }
     return outer;
 }
 
