@@ -11,6 +11,11 @@
 .proto-switch button { padding: 2px 7px; cursor: pointer; border: 1px solid var(--line); color: var(--dim); background: transparent; font-size: 10px; }
 .proto-switch button[aria-pressed="true"] { border-color: var(--line-2); color: var(--fg); }
 
+/* Embedded by act-i.html / act-ii.html (`?embed=1`): the act page shows through behind the
+   dialog's backdrop, and the act is the page's, so the review switch goes. */
+html.is-embedded, html.is-embedded body { background: transparent; }
+html.is-embedded .proto-switch { display: none; }
+
 /* ---- the trade dialog ---- */
 .trade-dialog { width: min(820px, calc(100vw - 28px)); }
 .trade-dialog .dialog-shell { max-height: min(620px, calc(100vh - 28px)); }
@@ -157,7 +162,7 @@ const ACTS = {
     ],
   },
   ii: {
-    kicker: 'CARAVAN · MARKET OPEN <em>2.4 DAYS</em>',
+    kicker: 'MERCHANT · MARKET OPEN <em>2.4 DAYS</em>',
     heads: {
       buy:  { lot: 'THEY OFFER', price: 'PRICE',    corner: 'STOCK' },
       sell: { lot: 'YOU OFFER',  price: 'THEY PAY', corner: 'YOU HOLD' },
@@ -200,6 +205,10 @@ const ACTS = {
 };
 
 const params = new URLSearchParams(location.search);
+const embedded = params.get('embed') === '1';
+if (embedded) document.documentElement.classList.add('is-embedded');
+/* The host act page hears each settlement (for its log) and the dialog closing. */
+const tellHost = message => { if (embedded && parent !== window) parent.postMessage(message, '*'); };
 let actKey = params.get('act') === 'i' ? 'i' : 'ii';
 let act = ACTS[actKey];
 let mode = params.get('mode') === 'sell' ? 'sell' : 'buy';
@@ -458,6 +467,7 @@ function settle() {
   Object.entries(give).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) - n; visit[k] = (visit[k] ?? 0) - n; });
   Object.entries(get).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) + n; visit[k] = (visit[k] ?? 0) + n; });
   if (offer.mode === 'buy') offer.stock -= qty;
+  tellHost({ type: 'trade-settled', message: `You settle ${qty} lot${qty === 1 ? '' : 's'} of ${offer.lot}. The exchange is final.` });
 
   qty = Math.max(1, Math.min(qty, maxLots(offer)));
   justSettled = true;
@@ -498,6 +508,7 @@ setMode(mode);
 for (let i = 0; i < seedSettle; i += 1) settle();
 if (seedQty) { qty = Math.min(seedQty, maxLots(offerById(selectedId))); renderSlip(); }
 dialog.showModal();
+dialog.addEventListener('close', () => tellHost({ type: 'trade-closed' }));
 /* Open on the offers, not on the close control. */
 document.querySelector('#ledger').focus();
 </script>

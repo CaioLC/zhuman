@@ -1,9 +1,15 @@
 # Human Action — Unified UI Spec (Act I & Act II)
 
-Reconciles the two vetted prototypes (`act-i.html`, `act-ii.html`) into one shared
-component and vocabulary contract. Act II is a deliberate evolution of Act I, not a
-different product: the city grows, the economy matures, but the same instruments are
-recognizable across acts.
+Reconciles the vetted prototypes into one shared component and vocabulary contract: the act
+shells (`act-i.html`, `act-ii.html`), the trade dialog (`trade.html`), the neighbours view
+(`market.html`), the session menu (`menu.html`) and the title screen (`title.html`). The
+last four are the most recent decisions and win over anything older that contradicts them.
+Act II is a deliberate evolution of Act I, not a different product: the city grows, the
+economy matures, but the same instruments are recognizable across acts.
+
+**Parity rule.** The Zig game reproduces every prototype visually and functionally. Only
+*content* may differ (which goods, which prices, which names): a Zig passerby may sell a
+hatchet where the prototype sells a hand axe, provided the screen looks and behaves the same.
 
 Legend: **[decided]** = confirmed design intent. **[proposal]** = resolves an open
 drift/question and is open to revision.
@@ -65,12 +71,30 @@ separator. Tokens present depend on the act.
 ## 3. Trade modal — shared skeleton, act-specific vocabulary
 
 **[decided]** Passerby (Act I) → Merchant (Act II) is intentional (the city evolves and now
-has a moneyed trader). **[proposal]** They must feel like the same instrument, so both use
-one modal skeleton driven by an identity map.
+has a moneyed trader). One modal serves both, driven by an identity map. **`trade.html` is
+the authoritative design**; `act-i.html` and `act-ii.html` frame it (`trade.html?act=i|ii&embed=1`)
+behind their `TRADE →` rather than carrying copies.
 
 ### 3.1 Shared structure (identical in both)
-Header (kicker + title + close) · direction tabs · body grid
-(their-stock | preview | your-stock) · footer (note + LEAVE + primary CTA).
+Header (kicker + title + close) · direction tabs (+ lot search when busy) · body: **ledger**
+(left) | **deal slip** (250px, right) · footer (visit ledger · paginator when busy · LEAVE).
+
+- **Ledger.** A sticky three-column head and one row per lot: lot name over a derived
+  sub-line (`{effect} · you hold {n} {subject}`), the counterpart bundle, and a corner that is
+  `×{max lots}` or the refusal in danger. Refused rows stay selectable and dim.
+- **Refusals** derive in order: `sold out` (buy, stock 0), `you hold {n}` (sell short),
+  `needs {n} more {stock}` (buy short), each with a long form shown in the slip.
+- **Search and pagination** appear only when a direction holds more than 7 lots. Tokens AND,
+  `-` negates, `is:available` / `is:refused` filter by state.
+- **Deal slip** (shared with the neighbours view): `THE DEAL`, the lot, a `LOTS − n +` stepper
+  `of {max}` (1..max), `YOU GIVE|PAY` / `YOU RECEIVE` scaled **linearly** by lots, `AFTER`
+  before → after on only the stocks the deal touches (down warn, up good, below zero flagged),
+  the consequence copy, and the CTA. A refused lot shows the long refusal and `CANNOT TRADE`.
+- **Behavior.** Selecting a row sets lots to 1; selecting it again deselects. Switching
+  direction selects the first takeable lot and resets lots and page. **Settling does not
+  close the dialog**: stocks, the visit ledger and the stepper's max update, and the AFTER
+  values flash (not under reduced motion). The dialog opens with focus on the ledger.
+- **Visit ledger.** `THIS VISIT {signed deltas}` or `THIS VISIT nothing traded yet`.
 
 ### 3.2 Vocabulary map
 
@@ -79,24 +103,16 @@ Header (kicker + title + close) · direction tabs · body grid
 | Kicker | `PASSERBY · {N} DAYS LEFT` | `MERCHANT · MARKET OPEN {N} DAYS` |
 | Title | `What will you trade?` | `What will you trade?` |
 | Tabs | `BUY` / `SELL` | `BUY` / `SELL` |
-| Their column heading | `THEIR STOCK` | `THEIR STOCK` |
-| Your column heading | `YOU HOLD` | `YOU HOLD` |
+| Ledger head (buy) | `THEY OFFER · YOU GIVE · STOCK` | `THEY OFFER · PRICE · STOCK` |
+| Ledger head (sell) | `YOU OFFER · THEY GIVE · YOU HOLD` | `YOU OFFER · THEY PAY · YOU HOLD` |
 | Give label (buy) | `YOU GIVE` | `YOU PAY` |
 | Give label (sell) | `YOU GIVE` | `YOU GIVE` |
 | Receive label | `YOU RECEIVE` | `YOU RECEIVE` |
 | CTA | `TRADE →` | `BUY →` / `SELL →` |
-| Footer note | barter ratios, finite stock, limited time | coin prices, finite stock, limited market time |
+| Short bundle | `2f 8m`, goods `Title ×n` | `5 coin`, goods `Title ×n` |
 
-- **[proposal]** Unify title, tab labels, and column headings across acts (was
-  "BUY FROM THEM"/"SELL YOUR STOCK", "PASSERBY STOCK"/"MERCHANT STOCK",
-  "YOU HOLD"/"YOUR PURSE & STOCK").
-- **[proposal, item 3]** The give-label swap function exists in **both** acts (shared code).
-  Act I's map returns `YOU GIVE` for both buy and sell (barter is symmetric); Act II returns
-  `YOU PAY` (buy) / `YOU GIVE` (sell). Receive label constant.
-- **[proposal]** Rename CSS class `passerby-strip` → shared `merchant-strip` (the stylesheet
-  already duplicates the two selectors; collapse to one). Element becomes act-neutral;
-  copy differs via the identity map. Signal glyph: `● PASSERBY` (Act I) / `● MERCHANT`
-  (Act II) still varies, set from the map.
+- **[decided]** The strip is the shared `merchant-strip`; its signal reads `● PASSERBY`
+  (Act I) / `● MERCHANT` (Act II), set from the identity map.
 
 ---
 
@@ -105,10 +121,12 @@ Header (kicker + title + close) · direction tabs · body grid
 - **[decided]** Both acts use the same ACTIONS catalog: heading + count, a search field
   (`Search actions · out:food state:ready`, `/` focuses it), `{n} of {m} actions shown`, and
   the tiles in authored order. **No sorting** for actions. Act I's grid is regular density
-  (82px tiles) with the eating policy in the right lane; Act II's is **compact** (52px tiles,
-  6px gaps) and its eating policy rides the **rail under BODY**, out of the long catalog.
-- **[decided]** Act I has a third tab, **GENERATORS**: owned generators as action-like tiles
-  with a state line, an accumulation underbar and an ON/OFF switch in the lower-right corner.
+  (82px tiles); Act II's is **compact** (52px tiles, 6px gaps). In both acts the eating
+  policy rides the **rail under BODY**, out of the catalog.
+- **[decided]** Both acts have a **GENERATORS** tab, one shared view: owned generators as
+  action-like tiles with a state line, an accumulation underbar and an ON/OFF switch in the
+  lower-right corner. Act II lists the union of the Act I and Act II generators the
+  settlement owns, at the act's compact density.
 - **[proposal, item 8]** Normalize the **action tile** to Act II's format in both acts:
   - Metrics string: `−{energy}e · {duration}` (middot separator).
   - One left-aligned metrics run: `−{energy}e {inputs} · {duration} {curve} +{lo}–{hi}{unit}`
@@ -170,10 +188,47 @@ Header (kicker + title + close) · direction tabs · body grid
 
 ---
 
-## 7. Structure / research tab
+## 7. Tabs, RESEARCH and MARKET
 
-- **[decided, item 7 & 16]** STRUCTURE tab and the hex research board exist only in Act II.
-  Population is an Act II concept. Act I has ACTIONS + BUILD only.
+- **[decided]** Act I tabs: `ACTIONS · BUILD · GENERATORS`. Act II tabs:
+  `ACTIONS · BUILD · GENERATORS · RESEARCH · MARKET`.
+- **[decided]** RESEARCH (formerly STRUCTURE) and its hex board exist only in Act II.
+  Population is an Act II concept.
+- **[decided]** MARKET is the neighbours view (`market.html`, framed by `act-ii.html`). It
+  lives beside the visiting merchant: the merchant comes and goes behind the strip's
+  `TRADE →`; the neighbours are always there.
+- **[decided]** RESEARCH and MARKET are **focus views**: the merchant and activity strips and
+  the event log step aside, and the Household collapses on every entry (§8).
+
+### 7.1 MARKET — the neighbours view
+
+- Head `Who will trade with you?` (stall: `What will you post?`) with a count line; controls:
+  search, a `BY PERSON | GOOD` segment (stall: `SIDE SELLING | BUYING`), `YOUR STALL` toggle;
+  body: list | 262px deal slip; foot: friction line and paginator (8 per page).
+- Natural grouping is by person up to 12 neighbours, by good beyond. A person row reads as a
+  sentence with a match badge; a good row is notation with offered/wanted counts and an
+  evidence range (`lo–hi coin · last n` or `not yet traded`) and `you spare n`.
+- Search grammar: `needs:` `has:` `trade:` `is:match`, `-` negates. The stall's own grammar:
+  `type:`/`kind:` and `is:posted|idle`.
+- Deal slip with a neighbour: YOU GIVE (spare only) and YOU RECEIVE lines each with a stepper,
+  a verdict (`idle`, `refuse`, `accept`, `counter`) in the neighbour's own valuation, AFTER
+  rows, and `PROPOSE →` enabled only on accept. With a good selected: the cheapest sellers and
+  the best-paying buyers, each name opening a deal.
+- Stall: ITEM · POSTED/WANTED stepper · PRICE stepper · WHO WOULD BUY/SELL; the slip becomes a
+  summary with a warning when buy posts commit more coin than held.
+
+## 7.2 Session menu and title screen
+
+- **[decided]** `menu.html` is the session menu, on the trade dialog's shell (620px): kicker
+  `PAUSED · ACT {n} · DAY {d}`, title per screen, × resumes. Screens: menu (Continue, Save,
+  Load, Settings, Quit to menu), save/load (three slots, one list flipping its verbs), settings,
+  quit confirmation (`QUIT TO MENU` · `SAVE FIRST` · `CANCEL`). Escape on a sub-screen returns
+  to the menu; on the menu it resumes. The HUD behind is frozen.
+- **[decided]** `title.html` is the title screen: a canned attract loop behind a wordmark and
+  the shared menu list (Continue disabled with its reason while no settlement exists, New
+  game, Settings, Credits, Quit).
+- **[decided]** Settings are one shared panel in both: DIFFICULTY, MUSIC, EFFECTS, UI SCALE,
+  CONTRAST, WINDOW. A setting with no backend yet is stubbed (held, no effect), not omitted.
 
 ---
 
@@ -183,17 +238,15 @@ Header (kicker + title + close) · direction tabs · body grid
   body that lives on them and how it consumes. The collapsed restore label reads `HOUSEHOLD`
   in both acts (one person in Act I, the settlement in Act II); the inner panel keeps its
   `HOLDINGS` heading.
-- **[decided]** Act I: HOLDINGS + MARGINS, BODY (eating, food lasts, full vigor); the eating
-  policy rides the action grid. Act II: HOLDINGS + `FLOWS / DAY`, the settlement's BODY
-  (population, larder, water, hall vigor) and the **eating policy at the foot of the rail**,
-  aligned to the panels and collapsing with them.
+- **[decided]** Act I: HOLDINGS + MARGINS, BODY (food lasts, full vigor). Act II: HOLDINGS +
+  `FLOWS / DAY` and the settlement's BODY (population, larder, water, hall vigor). In both
+  acts the **eating policy sits at the foot of the rail**, aligned to the panels and
+  collapsing with them.
 
-- **[proposal, item 17]** Adopt Act II's **per-view collapse memory**
-  (`holdingsCollapsedByView`) as the shared model. Act I (single view) degenerates to the
-  same behavior.
-- **[decided, item 17]** **Entering STRUCTURE always collapses holdings by default**, and
-  unlike other views it **forces collapse on each entry** (does not restore remembered
-  state). Actions/Build restore their remembered state.
+- **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
+  acts: ACTIONS, BUILD and GENERATORS each remember their own collapse.
+- **[decided, item 17]** **Entering a focus view (RESEARCH, MARKET) always collapses
+  holdings** on each entry, without overwriting the other views' memory.
 - **[decided, item 18]** Holdings "MARGINS" contents are act-specific by design (resource
   renaming intentional); the *set* of margin rows is not fixed across acts.
 
@@ -203,8 +256,7 @@ Header (kicker + title + close) · direction tabs · body grid
 
 - **[proposal, item 19]** Both acts: `<footer class="screen-footer" id="event-log" ...>`
   with the same `addLog(message)` contract.
-- Act II additionally hides the log on the STRUCTURE tab; Act I has no such logic but keeps
-  the identical id and API.
+- Act II additionally hides the log on the focus views (RESEARCH, MARKET); Act I has none.
 - **[decided, item 14]** The log is the channel for "recipe/action unlocked" announcements.
 
 ---
@@ -245,8 +297,8 @@ Header (kicker + title + close) · direction tabs · body grid
 | 13 | row schema | proposal | Act II data-generated schema both acts |
 | 14 | blocked state | decided (revised) | show every recipe; `needs {tech}` rows; log unlocks; "recipe" |
 | 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible |
-| 16 | no STRUCTURE in Act I | decided | keep |
-| 17 | holdings collapse | proposal/decided | per-view memory; STRUCTURE forces collapse |
+| 16 | RESEARCH only in Act II | decided | Act II tabs ACTIONS · BUILD · GENERATORS · RESEARCH · MARKET |
+| 17 | holdings collapse | decided | per-view memory; focus views force collapse |
 | 18 | margins contents | decided | act-specific |
 | 19 | footer id | proposal | shared `id="event-log"` + `addLog()` |
 | 20 | body constants | proposal | extract to `bodyConfig` |

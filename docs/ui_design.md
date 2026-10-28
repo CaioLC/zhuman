@@ -61,11 +61,11 @@ with compact two-column rows. Each row remains one full button and carries name,
 time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
 `*` use the same grammar as BUILD. ACTIONS does not sort: verbs read in authored order. Every act
-uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs, the
-subtitle, and Act I's eating policy at the foot of the grid).
+uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs and the
+subtitle).
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
-so it remains fixed below that collection. It is a `0..100` slider, not a set of named
+so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named
 rations: the rate is `0.5 × 4^(value/100)`, so the ends are half and double the normal
 appetite and `50` is normal, and the slider's word (`meager`, `lean`, `modest`, `normal`,
 `hearty`, `generous`, `lavish`) steps every sixteen points. The panel reads
@@ -200,36 +200,59 @@ transitions stay responsive while paused or at faster game speeds.
 
 ## Session menu
 
-`MENU` sits at the far right, after the speed stepper. It opens a top-layer modal through the
-same focus trap, outside-click boundary, Escape dismissal, and opener restoration as trade. Opening
-temporarily pauses simulation and remembers whether it was already paused: Escape, ×, or an outside
-click restores that prior state, while `RESUME` explicitly unpauses. The menu exposes only reduced
-motion, resume, and quit; speed is the header stepper's alone. Settings are session-only; raw tuning configuration and destructive
-run reset are absent until save persistence and confirmation have a product policy.
+`MENU` sits at the far right, after the speed stepper. It opens the session menu on the trade
+dialog's shell, through the same focus trap, outside-click boundary, Escape dismissal, and opener
+restoration. Opening pauses the simulation and remembers whether it was already paused; the HUD
+behind it is frozen. The kicker reads `PAUSED · ACT {n} · DAY {d}` and the title names the
+screen. The menu lists Continue, Save, Load, Settings and Quit to menu. Save and Load share one
+list of three slots that flips its verbs (`SAVE HERE`/`OVERWRITE`, `LOAD`), each slot describing
+the settlement it holds. Settings is the panel the title screen shares: difficulty, music,
+effects, UI scale, contrast and window. Quit is the one destructive choice, so it is the one that
+confirms, naming the day it would lose and offering to save first. Escape on a sub-screen returns
+to the menu; on the menu, Escape or × resumes. Speed is the header stepper's alone.
+
+## Title screen
+
+Before a run, the title screen shows the game itself, receded: a ticking stockline, the merchant
+strip, work filling and an event log behind a wordmark and the menu list (Continue, New game,
+Settings, Credits, Quit). Continue stays visible but disabled, saying there is no settlement to
+resume, because a hidden control teaches nothing.
 
 ## The market strip and the trade dialog
 
 One strip and one dialog serve every counterparty the game will have; an identity map supplies
 the glyph and wording (`● PASSERBY`, `● MERCHANT`, `◆ EXCHANGE`), the kicker and title, the
-give-label for each direction, the call to action and the footer note. The strip reports who
-is here and offers one action; the dialog is a modal with BUY/SELL tabs over three columns —
-the offers, a preview of what you give and receive, and your live holdings — and a footer
-that confirms.
+ledger heads and give-label for each direction, and the call to action. The strip reports who
+is here and offers one action; the dialog is a modal with BUY/SELL tabs over a **ledger** of lots
+on the left and a **deal slip** on the right.
 
-**An offer is a quote, and a quote can be refused.** Each row has finite stock and, when it
-cannot be taken, says why — sold out, no longer affordable, or the counterparty has changed
-or left — in place of pretending to be available. A sell shows what the *next* unit would
-fetch before you confirm, because repeated units fetch less. Confirming is atomic: the trade
-happens whole or not at all, and the header, HOLDINGS and the log reflect it in the same
-frame. Switching tabs keeps each direction's selection; closing the dialog returns focus to
-the control that opened it.
+**A lot is a quote, and a quote can be refused.** Each ledger row names the lot, says what you
+already hold of what it moves, shows the counterpart bundle and either how many lots you could
+take or, in danger, why you cannot — sold out, you hold too little, or how much more you need.
+A refused row can still be selected; the slip explains it. The slip takes a lot count (linear
+in the lot), shows what you give and receive and the before → after of every stock the deal
+touches, and settles. Settling is atomic, and it does not close the dialog: a visit is one
+sitting, the footer keeps a running tally of what the visit has moved, and the header, HOLDINGS
+and the log reflect each settlement in the same frame. Search and pages appear only when a
+direction holds more lots than fit. Switching direction selects the first lot that can be
+taken; closing the dialog returns focus to the control that opened it.
 
 In Act I the counterparty is the passerby, who arrives on the simulation's clock, lingers
 with a small satchel, and leaves; the strip reads that state and never infers it from the
 day count. While absent the strip is dim and disabled and its `TRADE →` link is hidden. While
 present the link returns and opens the dialog.
 
-## STRUCTURE — the board
+## MARKET — the neighbours
+
+Act II's MARKET tab is a view, not a dialog, and its primitive is a person, not a good. With
+few neighbours the list reads as people in sentences; with many it collapses to goods in
+notation, each with a price range drawn only from trades that happened. A deal composes both
+sides on the shared deal slip, and a refusal is answered in the counterparty's own valuation.
+YOUR STALL posts sells and buys at your own prices — what the neighbours read while you work —
+and each post says how many would take it at that price. Like RESEARCH it owns the whole
+surface: the strips and the log step aside and the Household collapses.
+
+## RESEARCH — the board
 
 *Designed, not built.* A production structure rather than a tech tree, which changes its
 topology: videogame trees fan **out**, one item unlocking three, but capital goods are

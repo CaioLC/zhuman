@@ -111,6 +111,11 @@
 .paginator button:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
 .paginator button:disabled { cursor: default; border-color: var(--line); color: var(--line-2); }
 .page-now { min-width: 6ch; color: var(--fg); font-size: 11px; text-align: center; }
+
+/* Embedded as Act II's MARKET view (`?embed=1`): the surface frames it, so it fills the frame. */
+html.is-embedded, html.is-embedded body { min-width: 0; background: var(--bg); }
+html.is-embedded body { display: block; min-height: 0; }
+html.is-embedded .market { width: 100%; height: 100vh; border: 0; }
 </style>
 </head>
 <body>
@@ -139,6 +144,8 @@
 </main>
 
 <script>
+if (new URLSearchParams(location.search).get('embed') === '1') document.documentElement.classList.add('is-embedded');
+
 /* ---------- deterministic world ---------- */
 let seed = 20261019;
 const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;

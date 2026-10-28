@@ -68,7 +68,9 @@
         <nav class="surface-nav" aria-label="Act II surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
-          <button class="tab" id="tab-structure" type="button" role="tab" aria-selected="false" aria-controls="view-structure" data-view="structure">STRUCTURE</button>
+          <button class="tab" id="tab-generators" type="button" role="tab" aria-selected="false" aria-controls="view-generators" data-view="generators">GENERATORS</button>
+          <button class="tab" id="tab-research" type="button" role="tab" aria-selected="false" aria-controls="view-research" data-view="research">RESEARCH</button>
+          <button class="tab" id="tab-market" type="button" role="tab" aria-selected="false" aria-controls="view-market" data-view="market">MARKET</button>
         </nav>
 
         <div class="merchant-strip" id="market-strip" role="status">
@@ -130,10 +132,44 @@
           </section>
         </section>
 
-        <section id="view-structure" role="tabpanel" aria-labelledby="tab-structure" hidden>
+        <section id="view-generators" role="tabpanel" aria-labelledby="tab-generators" hidden>
+          <div class="surface-heading">
+            <div><h1>GENERATORS</h1><p>Let time accumulate, then collect without stopping the work.</p></div>
+            <span class="eyebrow">4 owned</span>
+          </div>
+
+          <div class="action-grid" aria-label="Owned generators">
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Check traps" aria-disabled="true">
+              <span class="action-name">Check traps</span>
+              <span class="action-state">accumulating</span>
+              <span class="action-metrics"><span>−1e −1b · 24h</span><img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution"><span class="yield">+1–5f</span></span>
+              <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Check traps generator">● ON</button></div>
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Garden bed" aria-disabled="true">
+              <span class="action-name">Garden bed</span>
+              <span class="action-state">accumulating</span>
+              <span class="action-metrics"><span>−0.5e −0.2b · 48h</span><img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution"><span class="yield">+0–1f</span></span>
+              <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Garden bed generator">● ON</button></div>
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Charcoal kiln" aria-disabled="true">
+              <span class="action-name">Charcoal kiln</span>
+              <span class="action-state">accumulating</span>
+              <span class="action-metrics"><span>−1e −4b · 36h</span><img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution"><span class="yield">+3–5fu</span></span>
+              <span class="generator-progress" style="width: 71%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Charcoal kiln generator">● ON</button></div>
+            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Spring well" aria-disabled="true">
+              <span class="action-name">Spring well</span>
+              <span class="action-state">off</span>
+              <span class="action-metrics"><span>−0.5e · 12h</span><img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution"><span class="yield">+2–4w</span></span>
+              <span class="generator-progress" style="width: 33%" aria-hidden="true"></span>
+            </button><button class="generator-toggle" type="button" role="switch" aria-checked="false" aria-label="Spring well generator">○ OFF</button></div>
+          </div>
+        </section>
+
+        <section id="view-research" role="tabpanel" aria-labelledby="tab-research" hidden>
           <section class="structure-surface" aria-labelledby="structure-title">
             <header class="structure-topbar">
-              <div class="structure-title"><h1 id="structure-title">STRUCTURE</h1><p>What exists, and what does it take?</p></div>
+              <div class="structure-title"><h1 id="structure-title">RESEARCH</h1><p>What exists, and what does it take?</p></div>
               <div class="board-toolbar" aria-label="Research board controls">
                 <div class="control-group" data-board-filter-group><button class="chip" type="button" aria-pressed="false" data-board-filter="researched">researched</button><button class="chip" type="button" aria-pressed="false" aria-label="Available and researched" data-board-filter="available">available</button><button class="chip" type="button" aria-pressed="true" data-board-filter="all">all</button></div>
                 <input class="search-box" id="board-search" type="search" placeholder="find a technology" aria-label="Find a technology">
@@ -157,6 +193,10 @@
             <div class="board-hints"><span id="structure-status">Select an available or researched technology</span><span>Wheel zoom / drag pan</span><span>Arrows move · Esc clears</span></div>
           </footer>
         </section>
+
+        <section id="view-market" role="tabpanel" aria-labelledby="tab-market" hidden>
+          <iframe class="market-frame" id="market-frame" title="Neighbours" data-src="market.html?embed=1"></iframe>
+        </section>
       </section>
     </div>
 
@@ -168,26 +208,7 @@
     </footer>
   </main>
 
-  <dialog class="terminal-dialog" id="merchant-dialog" aria-labelledby="merchant-title">
-    <form class="dialog-shell" method="dialog">
-      <header class="dialog-header"><div><div class="dialog-kicker" id="market-dialog-kicker">MERCHANT · MARKET OPEN 2.4 DAYS</div><h2 class="dialog-title" id="merchant-title">What will you trade?</h2></div><button class="dialog-close" id="market-dialog-close" type="submit" value="cancel" aria-label="Close merchant">×</button></header>
-      <div class="dialog-tabs" role="tablist" aria-label="Merchant direction"><button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY</button><button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL</button></div>
-      <div class="dialog-body"><div class="trade-grid">
-        <section class="trade-column" aria-labelledby="merchant-stock-title"><h3 class="column-heading" id="merchant-stock-title">THEIR STOCK</h3><div class="offer-list" id="merchant-offers">
-          <button class="offer-button" type="button" aria-pressed="true" data-mode="buy" data-name="Water" data-cost="5 coin" data-coins="5" data-receive="Water +6" data-effect="Six units enter your Water stock. Local production is not required." data-stock="3" data-resource="water" data-quantity="6"><span>Water +6<small>typed resource · 5 coin</small></span><span class="stock-count">×3</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Minerals" data-cost="7 coin" data-coins="7" data-receive="Minerals +5" data-effect="Five units enter your Minerals stock before or after Quarry pit." data-stock="2" data-resource="minerals" data-quantity="5"><span>Minerals +5<small>typed resource · 7 coin</small></span><span class="stock-count">×2</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Fuel" data-cost="8 coin" data-coins="8" data-receive="Fuel +4" data-effect="Four units enter your Fuel stock without changing local production." data-stock="2" data-resource="fuel" data-quantity="4"><span>Fuel +4<small>typed resource · 8 coin</small></span><span class="stock-count">×2</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Metal" data-cost="12 coin" data-coins="12" data-receive="Metal +3" data-effect="Three units enter your Metal stock as one scarce lot." data-stock="2" data-resource="metal" data-quantity="3"><span>Metal +3<small>typed resource · 12 coin</small></span><span class="stock-count">×2</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Fishing net" data-cost="18 coin" data-coins="18" data-receive="Fishing net ×1" data-effect="A finished good can be imported even before its local BUILD recipe is established." data-stock="1"><span>Fishing net<small>finished capital · 18 coin</small></span><span class="stock-count">×1</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Food" data-cost="Food ×8" data-coins="4" data-receive="4 coin" data-effect="Eight units leave your larder as one market lot." data-stock="2" data-resource="food" data-quantity="8" hidden><span>Food ×8<small>merchant pays 4 coin</small></span><span class="stock-count">×2</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Biomass" data-cost="Biomass ×6" data-coins="5" data-receive="5 coin" data-effect="Six units leave your Biomass stock as one market lot." data-stock="3" data-resource="biomass" data-quantity="6" hidden><span>Biomass ×6<small>merchant pays 5 coin</small></span><span class="stock-count">×3</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Planks" data-cost="Planks ×4" data-coins="6" data-receive="6 coin" data-effect="Four finished planks leave your Holdings as one lot." data-stock="2" hidden><span>Planks ×4<small>merchant pays 6 coin</small></span><span class="stock-count">×2</span></button>
-          <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-coins="7" data-receive="7 coin" data-effect="A spare pair is sold first; your equipped Sandals keep their Forage margin." data-stock="2" hidden><span>Sandals ×1<small>merchant pays 7 coin</small></span><span class="stock-count">×2</span></button>
-        </div></section>        <section class="trade-preview" aria-label="Merchant trade preview"><div class="preview-line"><span id="preview-give-label">YOU PAY</span><strong id="preview-give">5 coin</strong></div><div class="trade-arrow" aria-hidden="true">↔</div><div class="preview-line"><span id="preview-receive-label">YOU RECEIVE</span><strong id="preview-receive">Water +6</strong></div><div class="preview-effect" id="preview-effect">Six units enter your Water stock. Local production is not required.</div></section>
-        <section class="trade-column" aria-labelledby="your-stock-title"><h3 class="column-heading" id="your-stock-title">YOU HOLD</h3><ul class="inventory-list"><li class="inventory-row"><span>Coin</span><strong class="accent" data-coin-balance>42</strong></li><li class="inventory-row"><span>Food</span><strong data-resource-balance="food">23</strong></li><li class="inventory-row"><span>Water</span><strong data-resource-balance="water">0</strong></li><li class="inventory-row"><span>Fuel</span><strong data-resource-balance="fuel">0</strong></li><li class="inventory-row"><span>Metal</span><strong data-resource-balance="metal">0</strong></li><li class="inventory-row"><span>Minerals</span><strong data-resource-balance="minerals">0</strong></li><li class="inventory-row"><span>Biomass</span><strong data-resource-balance="biomass">30</strong></li></ul><p class="side-note">The price is final for this lot. Coin and stock settle together.</p></section>      </div></div>
-      <footer class="dialog-footer"><span class="dialog-note" id="market-dialog-note">Coin prices · finite stock · limited market time. Later lots may be repriced.</span><div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">BUY →</button></div></footer>
-    </form>
-  </dialog>
+  <iframe class="trade-frame" id="trade-frame" title="Trade" data-src="trade.html?act=ii&amp;embed=1" hidden></iframe>
 
   <script>
     (() => {
@@ -195,8 +216,13 @@
       const views = {
         actions: document.querySelector('#view-actions'),
         build: document.querySelector('#view-build'),
-        structure: document.querySelector('#view-structure')
+        generators: document.querySelector('#view-generators'),
+        research: document.querySelector('#view-research'),
+        market: document.querySelector('#view-market')
       };
+      // RESEARCH and MARKET own the whole surface: the strips and the log step aside, and the
+      // Household collapses on every entry without overwriting the other views' memory.
+      const focusViews = ['research', 'market'];
       const eventLog = document.querySelector('#event-log');
       const prototypeParams = new URLSearchParams(location.search);
       let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
@@ -232,7 +258,9 @@
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
         build: requestedHoldingsState === 'collapsed',
-        structure: requestedHoldingsState !== 'expanded'
+        generators: requestedHoldingsState === 'collapsed',
+        research: requestedHoldingsState !== 'expanded',
+        market: requestedHoldingsState !== 'expanded'
       };
       let activeView = null;
       let holdingsCollapsed = false;
@@ -250,15 +278,20 @@
         if (!views[name]) name = 'actions';
         if (activeView) holdingsCollapsedByView[activeView] = holdingsCollapsed;
         activeView = name;
-        document.querySelector('.act-two').classList.toggle('is-structure-focus', name === 'structure');
-        eventLog.hidden = name === 'structure';
+        const focus = focusViews.includes(name);
+        document.querySelector('.act-two').classList.toggle('is-focus-view', focus);
+        eventLog.hidden = focus;
+        if (name === 'market') {
+          const frame = document.querySelector('#market-frame');
+          if (!frame.src) frame.src = frame.dataset.src;
+        }
         Object.entries(views).forEach(([key, view]) => {
           view.hidden = key !== name;
           const tab = document.querySelector(`[data-view="${key}"]`);
           tab.setAttribute('aria-selected', String(key === name));
           tab.tabIndex = key === name ? 0 : -1;
         });
-        setHoldingsCollapsed(name === 'structure' ? true : holdingsCollapsedByView[name], false);
+        setHoldingsCollapsed(focus ? true : holdingsCollapsedByView[name], false);
         if (updateHash && location.hash !== `#${name}`) {
           const nextUrl = new URL(location.href);
           nextUrl.hash = name;
@@ -295,6 +328,14 @@
         if (event.key === 'End') { event.preventDefault(); setSpeed(3); }
       });
       setSpeed(1);
+
+      // GENERATORS: the ON/OFF switch pauses accumulation and keeps the progress made.
+      document.querySelectorAll('.generator-toggle').forEach(toggle => toggle.addEventListener('click', () => {
+        const on = toggle.getAttribute('aria-checked') !== 'true';
+        toggle.setAttribute('aria-checked', String(on));
+        toggle.textContent = on ? '● ON' : '○ OFF';
+        toggle.closest('.generator-cell').querySelector('.action-state').textContent = on ? 'accumulating' : 'off';
+      }));
 
       const actionCatalog = [
         { name: 'Forage', type: 'gather', energy: 1.7, time: 4, duration: '4h', inputs: [], outputs: ['food'], yield: '+1–3f', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
@@ -822,11 +863,6 @@
         document.querySelector('#market-signal').textContent = actThree ? '◆ EXCHANGE' : '● MERCHANT';
         document.querySelector('#market-copy').textContent = actThree ? 'standing trading floor · permanent books · open market.' : '9 lots · water, fuel, metal, minerals, goods.';
         document.querySelector('#market-action').textContent = actThree ? 'ENTER →' : 'TRADE →';
-        document.querySelector('#market-dialog-kicker').textContent = actThree ? 'EXCHANGE · PERMANENT MARKET' : 'MERCHANT · MARKET OPEN 2.4 DAYS';
-        document.querySelector('#merchant-title').textContent = actThree ? 'What will the floor clear?' : 'What will you trade?';
-        document.querySelector('#merchant-stock-title').textContent = actThree ? 'EXCHANGE OFFERS' : 'THEIR STOCK';
-        document.querySelector('#market-dialog-close').setAttribute('aria-label', actThree ? 'Close Exchange' : 'Close merchant');
-        document.querySelector('#market-dialog-note').textContent = actThree ? 'Permanent venue · posted Coin prices · settlement stock and outside offers.' : 'Coin prices · finite stock · limited market time. Later lots may be repriced.';
       }
 
       function refreshExchangeMilestone() {
@@ -934,60 +970,27 @@
         exchangeOpen: () => exchangeOpen,
         setExchangeOpen(open) { exchangeOpen = Boolean(open); syncExchangeDisclosure(true); return exchangeOpen; }
       };
-      const dialog = document.querySelector('#merchant-dialog');
-      const offers = [...document.querySelectorAll('.offer-button')];
-      const modeTabs = [...document.querySelectorAll('[data-trade-mode]')];
-      const coinOutputs = [...document.querySelectorAll('[data-coin-balance]')];
-      let coinBalance = 42;
-      let tradeMode = 'buy';
-      let selectedOffer = offers[0];
-      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', () => dialog.showModal()));
-      modeTabs.forEach(button => button.addEventListener('click', () => {
-        tradeMode = button.dataset.tradeMode;
-        modeTabs.forEach(candidate => candidate.setAttribute('aria-selected', String(candidate === button)));
-        offers.forEach(offer => offer.hidden = offer.dataset.mode !== tradeMode);
-        selectedOffer = offers.find(offer => offer.dataset.mode === tradeMode && Number(offer.dataset.stock) > 0) || offers.find(offer => offer.dataset.mode === tradeMode);
-        selectOffer(selectedOffer);
-      }));
-      offers.forEach(offer => offer.addEventListener('click', () => selectOffer(offer)));
-      function selectOffer(offer) {
-        if (!offer) return;
-        selectedOffer = offer;
-        offers.forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === offer)));
-        document.querySelector('#preview-give-label').textContent = tradeMode === 'buy' ? 'YOU PAY' : 'YOU GIVE';
-        document.querySelector('#preview-receive-label').textContent = 'YOU RECEIVE';
-        document.querySelector('#preview-give').textContent = offer.dataset.cost;
-        document.querySelector('#preview-receive').textContent = offer.dataset.receive;
-        document.querySelector('#preview-effect').textContent = offer.dataset.effect;
-        const soldOut = Number(offer.dataset.stock) <= 0;
-        const unaffordableCoin = tradeMode === 'buy' && Number(offer.dataset.coins) > coinBalance;
-        const unaffordableStock = tradeMode === 'sell' && offer.dataset.resource && resourceBalances[offer.dataset.resource] < Number(offer.dataset.quantity);
-        const action = document.querySelector('#complete-trade');
-        action.disabled = soldOut || unaffordableCoin || unaffordableStock;
-        action.textContent = soldOut ? 'GONE' : unaffordableCoin ? 'NOT ENOUGH COIN' : unaffordableStock ? `NOT ENOUGH ${offer.dataset.resource.toUpperCase()}` : tradeMode === 'buy' ? 'BUY →' : 'SELL →';
-      }
-      document.querySelector('#complete-trade').addEventListener('click', () => {
-        if (!selectedOffer || Number(selectedOffer.dataset.stock) <= 0) return;
-        const coins = Number(selectedOffer.dataset.coins);
-        const resource = selectedOffer.dataset.resource;
-        const quantity = Number(selectedOffer.dataset.quantity || 0);
-        if (tradeMode === 'buy' && coins > coinBalance) return;
-        if (tradeMode === 'sell' && resource && resourceBalances[resource] < quantity) return;
-        coinBalance += tradeMode === 'buy' ? -coins : coins;
-        coinOutputs.forEach(output => output.textContent = coinBalance);
-        if (resource) resourceBalances[resource] += tradeMode === 'buy' ? quantity : -quantity;
-        refreshPrototypeResources();
-        selectedOffer.dataset.stock = String(Number(selectedOffer.dataset.stock) - 1);
-        selectedOffer.querySelector('.stock-count').textContent = `×${selectedOffer.dataset.stock}`;
-        const direction = tradeMode === 'buy' ? `You buy ${selectedOffer.dataset.name} for ${coins} coin.` : `The merchant buys ${selectedOffer.dataset.name} for ${coins} coin.`;
-        addLog(`${direction} Coin and stock settle together.`);
-        dialog.close('traded');
-      });
+      // TRADE → frames trade.html over the page; it reports each settlement for the log and
+      // says when it closes, so focus returns to the strip that opened it. `?trade=sell` opens
+      // on SELL.
+      const tradeFrame = document.querySelector('#trade-frame');
+      const tradeOpener = document.querySelector('[data-open-merchant]');
       const seededMode = prototypeParams.get('trade') === 'sell' ? 'sell' : 'buy';
-      modeTabs.find(button => button.dataset.tradeMode === seededMode).click();
-      const seededOfferName = prototypeParams.get('offer');
-      const seededOffer = offers.find(offer => offer.dataset.mode === seededMode && offer.dataset.name === seededOfferName);
-      if (seededOffer) selectOffer(seededOffer);
+      function openTrade() {
+        tradeFrame.src = `${tradeFrame.dataset.src}&mode=${seededMode}`;
+        tradeFrame.hidden = false;
+        tradeFrame.focus();
+      }
+      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', openTrade));
+      addEventListener('message', event => {
+        if (event.source !== tradeFrame.contentWindow) return;
+        if (event.data?.type === 'trade-settled') addLog(event.data.message);
+        if (event.data?.type === 'trade-closed') {
+          tradeFrame.hidden = true;
+          tradeFrame.removeAttribute('src');
+          tradeOpener?.focus();
+        }
+      });
 
       function addLog(message) {
         const lines = [...document.querySelectorAll('.screen-footer .log-line')];
@@ -999,11 +1002,7 @@
       }
       window.addPrototypeLog = addLog;
 
-      if (prototypeParams.get('modal') === 'merchant') requestAnimationFrame(() => dialog.showModal());
-      if (prototypeParams.get('settle') === 'selected') requestAnimationFrame(() => {
-        if (!dialog.open) dialog.showModal();
-        document.querySelector('#complete-trade').click();
-      });
+      if (prototypeParams.get('modal') === 'merchant') openTrade();
     })();
   </script>
 

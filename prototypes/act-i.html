@@ -50,9 +50,14 @@
 
         <section class="panel side-note" aria-label="Current body policy and recovery">
           <span class="eyebrow">BODY</span><br>
-          Eating <strong id="body-policy-label">normal</strong>.<br>
           Food lasts <strong id="food-coverage">5.2d</strong>.<br>
           Full vigor in <strong id="vigor-recovery">0.2d</strong>.
+        </section>
+
+        <section class="policy-tile" aria-labelledby="eating-policy-title">
+          <div class="policy-head"><h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
+          <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
+          <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
         </section>
       </aside>
 
@@ -126,14 +131,6 @@
               </span>
             </button>
 
-            <section class="policy-tile" aria-labelledby="eating-policy-title">
-              <div class="policy-head">
-                <h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2>
-                <output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output>
-              </div>
-              <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
-              <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
-            </section>
             <p class="empty-copy" id="action-empty" hidden>No action matches your search.</p>
           </div>
 
@@ -212,56 +209,7 @@
     </footer>
   </main>
 
-  <dialog class="terminal-dialog" id="merchant-dialog" aria-labelledby="merchant-title">
-    <form class="dialog-shell" method="dialog">
-      <header class="dialog-header">
-        <div><div class="dialog-kicker">PASSERBY · 1.8 DAYS LEFT</div><h2 class="dialog-title" id="merchant-title">What will you trade?</h2></div>
-        <button class="dialog-close" type="submit" value="cancel" aria-label="Close barter">×</button>
-      </header>
-      <div class="dialog-tabs" role="tablist" aria-label="Barter direction">
-        <button class="tab" type="button" role="tab" aria-selected="true" data-trade-mode="buy">BUY</button>
-        <button class="tab" type="button" role="tab" aria-selected="false" data-trade-mode="sell">SELL</button>
-      </div>
-      <div class="dialog-body">
-        <div class="trade-grid">
-          <section class="trade-column" aria-labelledby="merchant-stock-title">
-            <h3 class="column-heading" id="merchant-stock-title">THEIR STOCK</h3>
-            <div class="offer-list" id="merchant-offers">
-              <button class="offer-button" type="button" aria-pressed="true" data-mode="buy" data-name="Fishing net" data-cost="12 food + 16 materials" data-receive="Fishing net ×1" data-effect="Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack." data-stock="1"><span>Fishing net<small>better Fish tool</small></span><span class="stock-count">×1</span></button>
-              <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Hand axe" data-cost="8 food + 24 materials" data-receive="Hand axe ×1" data-effect="Replaces Hatchet margins: Split wood takes 20% less energy." data-stock="1"><span>Hand axe<small>better wood tool</small></span><span class="stock-count">×1</span></button>
-              <button class="offer-button" type="button" aria-pressed="false" data-mode="buy" data-name="Preserved food" data-cost="8 materials" data-receive="Preserved food +10" data-effect="Adds food now. It does not change the larder's spoilage margin." data-stock="2"><span>Preserved food<small>10 food · keeps well</small></span><span class="stock-count">×2</span></button>
-              <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Sandals" data-cost="Sandals ×1" data-receive="6 food + 5 materials" data-effect="The first pair earns the most. Their next Sandals offer falls to 3 food + 2 materials." data-stock="2" hidden><span>Sandals<small>your spare stock</small></span><span class="stock-count">×1</span></button>
-              <button class="offer-button" type="button" aria-pressed="false" data-mode="sell" data-name="Hatchet" data-cost="Hatchet ×1" data-receive="9 food + 8 materials" data-effect="A spare is sold first; the Hatchet you use keeps granting Split wood." data-stock="2" hidden><span>Hatchet<small>your spare stock</small></span><span class="stock-count">×1</span></button>
-            </div>
-          </section>
-
-          <section class="trade-preview" aria-label="Trade preview">
-            <div class="preview-line"><span>YOU GIVE</span><strong id="preview-give">12 food + 16 materials</strong></div>
-            <div class="trade-arrow" aria-hidden="true">↔</div>
-            <div class="preview-line"><span>YOU RECEIVE</span><strong id="preview-receive">Fishing net ×1</strong></div>
-            <div class="preview-effect" id="preview-effect">Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.</div>
-          </section>
-
-          <section class="trade-column" aria-labelledby="your-stock-title">
-            <h3 class="column-heading" id="your-stock-title">YOU HOLD</h3>
-            <ul class="inventory-list">
-              <li class="inventory-row"><span>Food</span><strong>11.6</strong></li>
-              <li class="inventory-row"><span>Materials</span><strong>31</strong></li>
-              <li class="inventory-row"><span>Sandals</span><strong>×2</strong></li>
-              <li class="inventory-row"><span>Hatchet</span><strong>×2</strong></li>
-              <li class="inventory-row"><span>Root cellar</span><strong>×1</strong></li>
-              <li class="inventory-row"><span>Leaf bed</span><strong>×1</strong></li>
-            </ul>
-            <p class="side-note">The preview is final: payment, replacement, and remaining stock are visible before exchange.</p>
-          </section>
-        </div>
-      </div>
-      <footer class="dialog-footer">
-        <span class="dialog-note">Fixed ratios, finite stock, limited time. Selling repeats at diminishing marginal prices.</span>
-        <div class="dialog-actions"><button class="secondary-action" type="submit" value="cancel">LEAVE</button><button class="primary-action" id="complete-trade" type="button">TRADE →</button></div>
-      </footer>
-    </form>
-  </dialog>
+  <iframe class="trade-frame" id="trade-frame" title="Trade" data-src="trade.html?act=i&amp;embed=1" hidden></iframe>
 
   <script>
     (() => {
@@ -381,7 +329,6 @@
 
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
-      const bodyPolicyLabel = document.querySelector('#body-policy-label');
       const foodCoverage = document.querySelector('#food-coverage');
       const vigorRecovery = document.querySelector('#vigor-recovery');
       const eatingWords = [
@@ -405,7 +352,6 @@
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
-        bodyPolicyLabel.textContent = word;
         foodCoverage.textContent = `${coverage.toFixed(1)}d`;
         vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
       }
@@ -777,43 +723,24 @@
       if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
       if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Spear'));
 
-      const dialog = document.querySelector('#merchant-dialog');
-      const offers = [...document.querySelectorAll('.offer-button')];
-      const modeTabs = [...document.querySelectorAll('[data-trade-mode]')];
-      let tradeMode = 'buy';
-      let selectedOffer = offers[0];
-
-      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', () => dialog.showModal()));
-
-      modeTabs.forEach(button => button.addEventListener('click', () => {
-        tradeMode = button.dataset.tradeMode;
-        modeTabs.forEach(candidate => candidate.setAttribute('aria-selected', String(candidate === button)));
-        offers.forEach(offer => offer.hidden = offer.dataset.mode !== tradeMode);
-        selectedOffer = offers.find(offer => offer.dataset.mode === tradeMode && Number(offer.dataset.stock) > 0) || offers.find(offer => offer.dataset.mode === tradeMode);
-        selectOffer(selectedOffer);
-      }));
-
-      offers.forEach(offer => offer.addEventListener('click', () => selectOffer(offer)));
-
-      function selectOffer(offer) {
-        if (!offer) return;
-        selectedOffer = offer;
-        offers.forEach(candidate => candidate.setAttribute('aria-pressed', String(candidate === offer)));
-        document.querySelector('#preview-give').textContent = offer.dataset.cost;
-        document.querySelector('#preview-receive').textContent = offer.dataset.receive;
-        document.querySelector('#preview-effect').textContent = offer.dataset.effect;
-        const unavailable = Number(offer.dataset.stock) <= 0;
-        document.querySelector('#complete-trade').disabled = unavailable;
-        document.querySelector('#complete-trade').textContent = unavailable ? 'GONE' : 'TRADE →';
+      // TRADE → frames trade.html over the page; it reports each settlement for the log and
+      // says when it closes, so focus returns to the strip that opened it.
+      const tradeFrame = document.querySelector('#trade-frame');
+      const tradeOpener = document.querySelector('[data-open-merchant]');
+      function openTrade() {
+        tradeFrame.src = tradeFrame.dataset.src;
+        tradeFrame.hidden = false;
+        tradeFrame.focus();
       }
-
-      document.querySelector('#complete-trade').addEventListener('click', () => {
-        if (!selectedOffer || Number(selectedOffer.dataset.stock) <= 0) return;
-        selectedOffer.dataset.stock = String(Number(selectedOffer.dataset.stock) - 1);
-        selectedOffer.querySelector('.stock-count').textContent = `×${selectedOffer.dataset.stock}`;
-        const direction = tradeMode === 'buy' ? `You trade for ${selectedOffer.dataset.name}.` : `The passerby takes one ${selectedOffer.dataset.name}.`;
-        addLog(`${direction} The exchange is final.`);
-        dialog.close('traded');
+      document.querySelectorAll('[data-open-merchant]').forEach(button => button.addEventListener('click', openTrade));
+      addEventListener('message', event => {
+        if (event.source !== tradeFrame.contentWindow) return;
+        if (event.data?.type === 'trade-settled') addLog(event.data.message);
+        if (event.data?.type === 'trade-closed') {
+          tradeFrame.hidden = true;
+          tradeFrame.removeAttribute('src');
+          tradeOpener?.focus();
+        }
       });
 
       function addLog(message) {
@@ -824,7 +751,7 @@
         lines[0].innerHTML = `<span class="time">${stamp}</span><span>${message}</span>`;
       }
 
-      if (prototypeParams.get('modal') === 'merchant') requestAnimationFrame(() => dialog.showModal());
+      if (prototypeParams.get('modal') === 'merchant') openTrade();
     })();
   </script>
 </body>

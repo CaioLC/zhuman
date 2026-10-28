@@ -10,7 +10,7 @@ Work is split below by architectural responsibility and tied back together by th
 
 When two references disagree, use this order:
 
-1. `prototypes/act-i.html` and `prototypes/act-ii.html` as the rendered-product and interaction truth, including their current embedded scripts.
+1. `prototypes/menu.html`, `prototypes/title.html`, `prototypes/market.html` and `prototypes/trade.html` (the most recent decisions; they win over anything older that contradicts them), then `prototypes/act-i.html` and `prototypes/act-ii.html`, as the rendered-product and interaction truth, including their current embedded scripts. The act pages frame `trade.html` (behind `TRADE →`) and `market.html` (Act II's MARKET tab) rather than carrying copies.
 2. `prototypes/prototype.css` for exact visual tokens, density, state styling, breakpoints, clipping, and transition timing.
 3. `prototypes/UNIFIED_UI_SPEC.md` for cross-act component identity, vocabulary, and normalization decisions.
 4. `docs/hex_tech_board_spec.md` for the canonical Act II board topology, coordinates, technology roster, migration rules, and board invariants.
@@ -36,13 +36,14 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 - Act I has Vigor, Food, and generic Materials; Act II has Vigor, Population, Coin, Food, Water, Fuel, Metal, Minerals, and Biomass.
 - At the Act I curtain, Food carries unchanged and unspent Materials converts to Biomass at exactly `1:1`. Built goods remain built. Same-named Act I material costs and Act II biomass costs remain numerically equal.
 - Energy is a flow/rate in the runline, never a stockline balance.
-- Act I has ACTIONS, BUILD, and GENERATORS. Act II adds STRUCTURE.
+- Act I has ACTIONS, BUILD, and GENERATORS. Act II has ACTIONS, BUILD, GENERATORS, RESEARCH (the board, formerly STRUCTURE), and MARKET (the neighbours view). Act II's GENERATORS lists the union of the Act I and Act II generators owned.
 - Act I ACTIONS is a compact static roster; Act II ACTIONS is a 20-entry searchable/sortable catalog.
 - BUILD uses one data-generated six-column recipe catalog in both acts. Act I shows its complete crude shelf and dims rows that are currently short; Act II keeps technology/prerequisite-locked recipes absent. Newly eligible recipes appear with an event-log announcement.
 - Recipe states visible to the player are `ready`, `reach`, `owned`, and `building`; milestone states are `locked`, `unfunded`, `ready`, and `done` (`built`/`standing` copy is act-specific).
 - Shelter and Exchange share one milestone component. Passerby, Merchant, and Exchange share one market-strip/trade-dialog skeleton with identity-specific wording.
-- Holdings collapse is remembered separately for ACTIONS and BUILD. Entering STRUCTURE forces collapse each time without overwriting those memories.
-- ACTIONS, BUILD, and GENERATORS retain the four-line event log. STRUCTURE alone hides it.
+- Holdings collapse is remembered separately for ACTIONS, BUILD, and GENERATORS. Entering a focus view (RESEARCH, MARKET) forces collapse each time without overwriting those memories.
+- ACTIONS, BUILD, and GENERATORS retain the four-line event log and the merchant/activity strips. The focus views hide them.
+- **Parity rule.** Zig reproduces the prototypes visually and functionally; only content (goods, prices, names) may differ. A screen whose backend does not exist yet is built against a stub or fixture, never omitted.
 - The Act II board contains one noninteractive ring-0 foundation plus exactly 60 technology tiles in rings 1–4. It does not reserve Act III rings.
 
 ## 1. Delivery order
@@ -53,6 +54,18 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 4. **Hardening:** screenshot matrix, keyboard-only journeys, performance/leak checks, cleanup, and stale-path removal (`PARITY-*`, `QA-*`, `CLEAN-*`).
 
 A later slice may use deterministic fixture data before its simulation backend is complete, but fixture-only behavior is not product completion. Live Act II UI requires typed ledgers and catalog snapshots (`ACT2-01..07`); board chrome can be fixture-built earlier, but research completion cannot ship against prototype-local balances. The gaps in section 2 block nothing in this order and are picked up where a consumer needs them.
+
+### Prototype parity port — October 2026
+
+The prototypes refined after the last sync (`9e50c6b`) are ported in this order. Each step leaves the game shippable. Backends that do not exist yet are stubbed or fixture-backed (see the parity rule above).
+
+- [ ] **PORT-01 — Act I/II shell parity.** Act I's eating policy under BODY and its "Eating {word}" sentence dropped; per-view Holdings collapse in Act I (SHELL-02); Act II tabs ACTIONS/BUILD/GENERATORS/RESEARCH/MARKET with GENERATORS as the shared view over the union of both acts' generators; RESEARCH and MARKET as focus views (strips and log hidden, Holdings forced collapsed); Act II ACTIONS scrolls only its grid; Act II copy (BUILD subtitle, holdings count).
+- [ ] **PORT-02 — Shared dialog frame.** SHELL-04's frame (header with kicker/emphasis/title/close, body slot, footer slot) under trade and menu; CLEAN-08.
+- [ ] **PORT-03 — Session menu.** `menu.html` in full: menu list, save/load slots (stubbed: session-held slots, no file), the shared settings panel (stubbed where no backend exists), quit confirmation, Escape back-then-resume, frozen HUD. Supersedes PLAY-10's session-only scope.
+- [ ] **PORT-04 — Trade dialog v2.** `trade.html`: ledger, shared deal slip, lots stepper with linear scaling, refusals in the row, search and paginator past 7 lots, visit ledger, settle flash; settling keeps the dialog open. Act I settles through `barter` with a lot count; Act II on fixtures until ACT2-14.
+- [ ] **PORT-05 — Title screen.** `title.html`: a pre-game route, canned attract loop, wordmark, the shared menu list and settings panel, credits; New game starts a run, Continue stays disabled with its reason until saves exist.
+- [ ] **PORT-06 — MARKET view.** `market.html` on fixtures: person and good rows, natural grouping, search grammar, paginator, the deal slip with verdicts, the stall, friction line.
+- [ ] **PORT-07 — RESEARCH board and Exchange card.** The hex board view and the Exchange milestone, fixture-backed where BOARD-* and ACT2-17 have not landed.
 
 ### Requested Act I gameplay slice — easy to hardest
 

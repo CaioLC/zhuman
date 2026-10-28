@@ -752,11 +752,6 @@ button:disabled {
   text-align: right;
 }
 
-/* The game rides the policy in the grid's right lane, under the tiles there. */
-.action-grid > .policy-tile {
-  grid-column: 2;
-}
-
 .policy-tile {
   display: grid;
   grid-template-rows: auto 18px auto;
@@ -849,7 +844,7 @@ button:disabled {
   color: var(--warn);
 }
 
-/* Act II: the eating policy rides the rail under BODY, out of the long action catalog. It
+/* Both acts: the eating policy rides the rail under BODY, out of the action catalog. It
    shares the panels' right margin, so all three edges line up, and collapses with them. */
 .side-rail .policy-tile {
   flex: none;
@@ -2493,12 +2488,12 @@ button:disabled {
   margin-bottom: 8px;
 }
 
-.act-two.is-structure-focus .merchant-strip,
-.act-two.is-structure-focus .activity-strip {
+.act-two.is-focus-view .merchant-strip,
+.act-two.is-focus-view .activity-strip {
   display: none;
 }
 
-.act-two.is-structure-focus .surface {
+.act-two.is-focus-view .surface {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow-y: hidden;
@@ -2507,31 +2502,59 @@ button:disabled {
   scrollbar-gutter: auto;
 }
 
-.act-two.is-structure-focus #view-structure {
+/* RESEARCH and MARKET are focus views: each owns the whole surface below the tabs. */
+.act-two.is-focus-view #view-research:not([hidden]) {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
 }
 
-.act-two #view-structure .structure-surface {
+.act-two.is-focus-view #view-market:not([hidden]) {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The trade dialog is authored once, in trade.html; each act page frames it over itself. */
+.trade-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+/* The neighbours view is authored once, in market.html; Act II frames it. */
+.market-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--bg);
+}
+
+.act-two #view-research .structure-surface {
   min-height: 0;
   padding: 0;
 }
 
-.act-two #view-structure .structure-layout {
+.act-two #view-research .structure-layout {
   grid-template-columns: minmax(0, 1fr) 238px;
 }
 
-.act-two #view-structure .hex-board {
+.act-two #view-research .hex-board {
   min-height: 480px;
 }
 
-.act-two #view-structure .structure-detail {
+.act-two #view-research .structure-detail {
   padding-left: 10px;
 }
 
-.act-two #view-structure .structure-footer {
+.act-two #view-research .structure-footer {
   min-height: 44px;
   margin: 0;
   padding-top: 6px;
@@ -2543,11 +2566,11 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
-  .act-two #view-structure .structure-layout {
+  .act-two #view-research .structure-layout {
     grid-template-columns: 1fr;
   }
 
-  .act-two #view-structure .structure-detail {
+  .act-two #view-research .structure-detail {
     padding: 11px;
   }
 }
@@ -2681,7 +2704,7 @@ button:disabled {
 
 
 @media (max-width: 760px) {
-  .act-two:not(.is-structure-focus) .surface {
+  .act-two:not(.is-focus-view) .surface {
     display: block;
     overflow: visible;
     padding-bottom: 14px;
@@ -2751,7 +2774,7 @@ button:disabled {
 }
 
 /* ---- the deal slip ----
-   Shared by the trade dialog (passerby, caravan) and the neighbours view. The
+   Shared by the trade dialog (passerby, merchant) and the neighbours view. The
    containers differ by act; this atom — quantity, give/receive, before→after,
    atomic confirm — does not. */
 .slip {
