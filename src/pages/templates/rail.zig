@@ -39,6 +39,8 @@ pub const RailOptions = struct {
     /// The collapse bit when the caller owns it (read on entry, written after the toggle);
     /// null means the rail keeps its own memory keyed by `id`.
     collapsed: ?*bool = null,
+    /// Set the collapse bit on this frame only (a fixture's first frame); null leaves it.
+    initial_collapsed: ?bool = null,
 };
 
 /// The built rail: `collapsed` is this frame's resolved state (a caller may skip building
@@ -71,6 +73,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     const box = try parent.div(opts.id);
     const st = box.state(RailState);
     if (opts.collapsed) |c| st.collapsed = c.*;
+    if (opts.initial_collapsed) |c| st.collapsed = c;
     if (opts.force_collapsed) st.collapsed = true;
 
     // Build the body before the toggle so the control remains the top-painted sibling after

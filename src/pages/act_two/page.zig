@@ -77,6 +77,10 @@ pub const Options = struct {
     /// The view to open on (0 ACTIONS, 1 BUILD, 2 STRUCTURE), applied on the frame it is set;
     /// the tabs own the selection on every other frame.
     initial_view: ?usize = null,
+    /// Collapse the Household rail on this frame (a fixture's first frame); null leaves it.
+    initial_collapsed: ?bool = null,
+    /// Open the merchant dialog on this frame (a fixture's first frame).
+    open_trade: bool = false,
 };
 
 /// Build the Act II page. Returns its roots in draw order: the shell, then the merchant dialog's
@@ -127,7 +131,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .initial_view = opts.initial_view,
     });
     if (s.market_action) |m| {
-        if (m.query().clicked) trade_owner.state(uic.UiState.TradeState).open = true;
+        if (m.query().clicked or opts.open_trade) trade_owner.state(uic.UiState.TradeState).open = true;
     }
 
     // --- the rail: Holdings/BODY, then the eating policy, collapsing together -----------------
@@ -140,6 +144,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             .id = rail_ids[@min(s.active, rail_ids.len - 1)],
             .label = "HOUSEHOLD",
             .force_collapsed = s.active == 2,
+            .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {
             const column = try t.holdings(body, "a2_holdings", try a2_holdings.content(ctx, world, e));

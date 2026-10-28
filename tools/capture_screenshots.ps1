@@ -45,6 +45,12 @@ $matrix = [ordered]@{
     "act_two_actions"   = "QA-11 Act II shell ACTIONS / catalog"
     "act_two_build"     = "QA-11 Act II shell BUILD / 50-recipe catalog"
     "act_two_w560"      = "QA-11 Act II narrow layout, 560 width class"
+    "act_one_generators" = "Act I GENERATORS view"
+    "act_one_collapsed" = "Act I Household rail collapsed"
+    "act_one_trade"     = "Act I passerby trade dialog open"
+    "act_one_menu"      = "Session menu open"
+    "act_two_research"  = "Act II RESEARCH focus view"
+    "act_two_trade"     = "Act II merchant trade dialog open"
 }
 
 if (-not (Test-Path $Exe)) {

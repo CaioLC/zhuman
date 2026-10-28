@@ -24,6 +24,8 @@ const collapsed_gap: f32 = 12;
 pub const Options = struct {
     surface: surface_mod.Options,
     holdings: holdings_mod.Content,
+    /// Collapse (or expand) the rail on this frame only — a fixture's first frame.
+    initial_collapsed: ?bool = null,
 };
 
 pub const Result = struct {
@@ -49,6 +51,7 @@ pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, o
     const built_rail = try rail_mod.rail(rail_lane, .{
         .id = "holdings_rail",
         .label = "HOUSEHOLD",
+        .initial_collapsed = opts.initial_collapsed,
     });
     if (built_rail.body) |body| {
         _ = try holdings_mod.holdings(body, "holdings", opts.holdings);

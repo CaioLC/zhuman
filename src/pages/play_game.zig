@@ -19,6 +19,10 @@ const act_one_holdings = @import("./act_one/holdings.zig");
 pub const Options = struct {
     /// Open the work surface on this view (a fixture's first frame); null keeps the selection.
     initial_view: ?usize = null,
+    /// Collapse the Household rail on this frame (a fixture's first frame); null leaves it.
+    initial_collapsed: ?bool = null,
+    /// Open the trade dialog on this frame if the passerby is dealable (a fixture's first frame).
+    open_trade: bool = false,
 };
 
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
@@ -54,6 +58,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
 
         const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
             .holdings = try act_one_holdings.content(ctx, world, e),
+            .initial_collapsed = opts.initial_collapsed,
             .surface = .{
                 .market_available = ctx.res.sim.encounter.dealable(),
                 .initial_view = opts.initial_view,
@@ -64,7 +69,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // The nested surface returns the phase-aware Passerby strip control; encounter eligibility
         // and modal state remain page responsibilities rather than presentation concerns.
         trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
-        if (workspace.surface.market_action.consume(.clicked) and ctx.res.sim.encounter.dealable()) {
+        if ((workspace.surface.market_action.consume(.clicked) or opts.open_trade) and ctx.res.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }
 

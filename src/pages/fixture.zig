@@ -101,6 +101,12 @@ pub const Spec = struct {
     settlement: ?Settlement = null,
     /// Event-log history, oldest first. Empty keeps the run's own log.
     log: []const LogLine = &.{},
+    /// Open on the first frame with the Household rail collapsed.
+    holdings_collapsed: bool = false,
+    /// Open on the first frame with the trade dialog showing (Act I needs `encounter = .present`).
+    trade_open: bool = false,
+    /// Open on the first frame with the session menu showing.
+    menu_open: bool = false,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -290,6 +296,68 @@ pub const catalog = [_]Spec{
         .balances = settlement_balances,
         .settlement = settlement,
     },
+    .{
+        .name = "act_one_generators",
+        .about = "Act I GENERATORS: the owned generators with their switches and underbars.",
+        .day = 19,
+        .view = 2,
+        .balances = .{
+            .food = 11.6,
+            .biomass = 31,
+            .goods = &.{
+                .{ .id = "wire_snares", .n = 1 },
+                .{ .id = "garden_bed", .n = 1 },
+            },
+        },
+    },
+    .{
+        .name = "act_one_collapsed",
+        .about = "Act I ACTIONS with the Household rail collapsed to its restore control.",
+        .day = 19,
+        .holdings_collapsed = true,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_trade",
+        .about = "Act I with the passerby's trade dialog open.",
+        .day = 12,
+        .encounter = .present,
+        .trade_open = true,
+        .balances = .{
+            .food = 11.6,
+            .biomass = 31,
+            .goods = &.{
+                .{ .id = "sandals", .n = 2 },
+                .{ .id = "hatchet", .n = 2 },
+                .{ .id = "fish_rod", .n = 1 },
+            },
+        },
+    },
+    .{
+        .name = "act_one_menu",
+        .about = "Act I with the session menu open over the frozen page.",
+        .day = 19,
+        .menu_open = true,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_two_research",
+        .about = "Act II RESEARCH: the focus view, Household forced collapsed, strips and log hidden.",
+        .screen = .act_two,
+        .view = 2,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_trade",
+        .about = "Act II with the merchant's trade dialog open.",
+        .screen = .act_two,
+        .day = 112,
+        .trade_open = true,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
 };
 
 /// Find a spec by name, or null when the catalog has no such fixture.
@@ -435,12 +503,16 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
         @intFromFloat(spec.window_h),
     ) catch {};
 
-    // A launch's first build is UI frame 1: the fixture opens its view there, and the tabs own
-    // the selection after, so the seeded screen stays navigable.
-    const opening: ?usize = if (ctx.frame == 1) spec.view else null;
+    // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
+    // there, and the controls own them after, so the seeded screen stays navigable.
+    const first = ctx.frame == 1;
+    const opening: ?usize = if (first) spec.view else null;
+    const collapsed: ?bool = if (first and spec.holdings_collapsed) true else null;
+    const open_trade = first and spec.trade_open;
+    if (first and spec.menu_open) ctx.res.menu.show(&ctx.res.playback);
     return switch (spec.screen) {
-        .act_one => try p_playgame(ctx, world, .{ .initial_view = opening }),
-        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening }),
+        .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
+        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
     };
