@@ -1,16 +1,17 @@
-//! Session menu overlay on the shared modal/focus-trap foundation.
+//! Session menu overlay on the shared `dialog_frame`.
 //!
 //! The menu exposes only reviewed host settings: reduced motion, resume, and quit. Speed is
-//! the header stepper's alone. Opening pauses the simulation through `MenuState`; Escape/outside/close restores the
-//! prior pause state, while RESUME explicitly unpauses. No tuning `Config` field is exposed.
+//! the header stepper's alone. Opening pauses the simulation through `MenuState`; Escape/close
+//! restores the prior pause state, while RESUME explicitly unpauses. No tuning `Config` field is
+//! exposed. (PORT-03 rebuilds this on `menu.html`.)
 
 const ha = @import("ha");
 const uic = ha.ui_client;
 const style = uic.style;
 const Style = style.Style;
-const El = uic.elements.El;
 
 const modal_mod = @import("./modal.zig");
+const frame_mod = @import("./dialog_frame.zig");
 const button_mod = @import("./button.zig");
 
 const width: f32 = 420;
@@ -24,33 +25,20 @@ pub const Result = struct {
 
 pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8) !Result {
     const th = ctx.res.view.theme;
-    const m = try modal_mod.modal(ctx, id, "Menu", width);
+    const frame = try frame_mod.dialog_frame(ctx, .{
+        .id = id,
+        .width = width,
+        .kicker = "SESSION",
+        .title = "MENU",
+        .close_name = "Close menu",
+    });
 
-    const header = try m.box.div("header");
-    _ = header.with_size(.{ .fixed = width - 30 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center })
-        .with_style(.{style.pad_sym(15, 12)});
-    const heading = try header.div("heading");
-    _ = heading.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
-    _ = (try heading.text("kicker", "SESSION")).with_style(.{ style.small, Style{ .text = th.warn } });
-    _ = (try heading.text("title", "MENU")).with_style(.{ style.heading, Style{ .text = th.fg } });
-
-    const close = try header.div("close");
-    _ = close.with_size(.{ .fixed = 28 }, .{ .fixed = 28 })
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-    const close_q = close.control(.{ .name = "Close menu", .role = .icon_button });
-    _ = (try close.text("glyph", "×"))
-        .with_style(.{Style{ .font = 18, .text = if (close_q.hovering or close_q.held or close_q.focused) th.acc else th.dim }});
-    const close_clicked = close.consume(.clicked);
-    try modal_mod.rule(m.box, "header_rule", width);
-
-    const body = try m.box.div("body");
-    _ = body.with_size(.{ .fixed = width - 30 }, .fit_children)
+    const body = try frame.body.div("content");
+    _ = body.with_size(.{ .fixed = frame.inner_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(14)
-        .with_style(.{style.pad_sym(15, 14)});
+        .with_style(.{style.pad_sym(frame_mod.pad_x, 14)});
     _ = (try body.text("status", "Simulation paused while this menu is open."))
         .with_style(.{ style.body, Style{ .text = th.dim } });
-
 
     const motion = try body.div("motion");
     if (motion.query().clicked) ctx.res.motion.reduced_motion = !ctx.res.motion.reduced_motion;
@@ -68,19 +56,14 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8) !Result {
     _ = (try motion.text("value", if (reduced) "● ON" else "○ OFF"))
         .with_style(.{ style.small, Style{ .text = if (reduced) th.good else th.dim } });
 
-    try modal_mod.rule(m.box, "footer_rule", width);
-    const footer = try m.box.div("footer");
-    _ = footer.with_size(.{ .fixed = width - 30 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center })
-        .with_style(.{style.pad_sym(15, 10)});
-    const quit = try button_mod.button(footer, "quit", "QUIT", true);
-    const resume_button = try button_mod.button(footer, "resume_button", "RESUME", true);
+    const quit = try button_mod.button(frame.footer, "quit", "QUIT", true);
+    const resume_button = try button_mod.button(frame.footer, "resume_button", "RESUME", true);
     const quit_clicked = quit.consume(.clicked);
     const resume_button_clicked = resume_button.consume(.clicked);
 
     return .{
-        .root = m.root,
-        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or resume_button_clicked or quit_clicked, resume_button.get().key),
+        .root = frame.modal.root,
+        .dismissed = modal_mod.dismissed(ctx, frame.modal, frame.close_clicked or resume_button_clicked or quit_clicked, resume_button.get().key),
         .resumed = resume_button_clicked,
         .quit = quit_clicked,
     };

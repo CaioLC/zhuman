@@ -273,59 +273,6 @@ pub const UiState = struct {
             if (self.mode == 0) self.buy_sel = i else self.sell_sel = i;
         }
     };
-    /// A select/popup control's state, keyed by the control's own `node.key`: whether
-    /// its popup is `open`, the committed `value` index, and the `highlight` index the arrows
-    /// move while open (the pending choice Enter commits). All default to the closed, first-item
-    /// state (bitwise zero). Carries the **pure state machine** (open/toggle/cancel/move/commit)
-    /// so the pointer path and a host's keyboard routing drive one source of truth; the `select`
-    /// template is the view. Tested here (this file is covered by `test-ui`, unlike a page).
-    pub const SelectState = struct {
-        open: bool = false,
-        value: usize = 0,
-        highlight: usize = 0,
-
-        /// Open the popup, seeding the highlight at the committed value (disabled → no-op).
-        pub fn openPopup(s: *SelectState, disabled: bool) void {
-            if (disabled) return;
-            s.open = true;
-            s.highlight = s.value;
-        }
-        /// Close without committing (Escape / outside click).
-        pub fn cancel(s: *SelectState) void {
-            s.open = false;
-        }
-        /// Toggle open/closed (the control's own click). Opening seeds the highlight.
-        pub fn toggle(s: *SelectState, disabled: bool) void {
-            if (disabled) return;
-            if (s.open) s.open = false else s.openPopup(disabled);
-        }
-        /// Move the highlight while open (arrows). Clamps at the ends (no wrap — a list, not a
-        /// ring). A no-op when closed.
-        pub fn moveHighlight(s: *SelectState, delta: isize, n: usize) void {
-            if (!s.open or n == 0) return;
-            const cur: isize = @intCast(s.highlight);
-            const last: isize = @intCast(n - 1);
-            s.highlight = @intCast(std.math.clamp(cur + delta, 0, last));
-        }
-        /// The pointer path's one transition per frame. A click on option `row` commits it and
-        /// closes; that same click bubbles to the control, which must not also toggle, so the
-        /// control's own `clicked` only counts when no row was clicked. Disabled controls never
-        /// reach here (the template gates on `enabled`).
-        pub fn pointer(s: *SelectState, row: ?usize, control_clicked: bool, n: usize) void {
-            if (row) |i| s.commit(i, n) else if (control_clicked) s.toggle(false);
-        }
-        /// Commit `index` as the value and close (Enter on the highlight, or a click on option).
-        pub fn commit(s: *SelectState, index: usize, n: usize) void {
-            if (n == 0) return;
-            s.value = @min(index, n - 1);
-            s.open = false;
-        }
-        /// Commit the current highlight (Enter).
-        pub fn commitHighlight(s: *SelectState, n: usize) void {
-            s.commit(s.highlight, n);
-        }
-    };
-
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`
     /// snapped to `step`; the caller maps that to a rate. Both the pointer drag and the
@@ -912,57 +859,6 @@ test "regression: text input keeps its 128-byte whole-edit refusal" {
     try std.testing.expectEqualStrings("iron ore", ed.text()); // unchanged, not truncated
 }
 
-// ---- select/popup state machine ----------------------------------------------------
-
-test "SelectState: toggle open seeds highlight at value; toggles closed; disabled is inert" {
-    var s = UiState.SelectState{ .value = 2 };
-    s.toggle(false);
-    try std.testing.expect(s.open);
-    try std.testing.expectEqual(@as(usize, 2), s.highlight); // seeded at the committed value
-    s.toggle(false);
-    try std.testing.expect(!s.open);
-
-    var d = UiState.SelectState{};
-    d.openPopup(true);
-    try std.testing.expect(!d.open); // disabled never opens
-    d.toggle(true);
-    try std.testing.expect(!d.open);
-}
-
-test "SelectState: arrows move highlight clamped (no wrap) only while open" {
-    var s = UiState.SelectState{};
-    s.moveHighlight(1, 4); // closed ⇒ no-op
-    try std.testing.expectEqual(@as(usize, 0), s.highlight);
-    s.openPopup(false);
-    s.moveHighlight(1, 4);
-    try std.testing.expectEqual(@as(usize, 1), s.highlight);
-    s.moveHighlight(-5, 4);
-    try std.testing.expectEqual(@as(usize, 0), s.highlight); // clamps at 0
-    s.moveHighlight(9, 4);
-    try std.testing.expectEqual(@as(usize, 3), s.highlight); // clamps at last
-}
-
-test "SelectState: Enter commits highlight and closes; Escape closes without committing" {
-    var s = UiState.SelectState{ .value = 0 };
-    s.openPopup(false);
-    s.moveHighlight(2, 4);
-    s.commitHighlight(4);
-    try std.testing.expectEqual(@as(usize, 2), s.value);
-    try std.testing.expect(!s.open);
-
-    s.openPopup(false);
-    s.moveHighlight(1, 4); // pending, not committed
-    s.cancel();
-    try std.testing.expect(!s.open);
-    try std.testing.expectEqual(@as(usize, 2), s.value); // unchanged by cancel
-}
-
-test "SelectState: commit clamps an out-of-range index to the last option" {
-    var s = UiState.SelectState{};
-    s.commit(99, 3);
-    try std.testing.expectEqual(@as(usize, 2), s.value);
-}
-
 // ---- range slider value math -------------------------------------------------------
 
 test "SliderModel.snap clamps to range and snaps to the nearest step" {
@@ -1003,14 +899,4 @@ test "SliderModel.nudge: arrows one step, page coarse, Home/End jump to ends" {
     // Nudging past an end clamps.
     try std.testing.expectApproxEqAbs(@as(f32, 100), m.nudge(100, .right), 1e-4);
     try std.testing.expectApproxEqAbs(@as(f32, 0), m.nudge(0, .left), 1e-4);
-}
-
-test "SelectState: a click on an option commits it; the click that bubbles to the control does not toggle" {
-    var s = UiState.SelectState{};
-    s.openPopup(false);
-    s.pointer(2, true, 3); // the row's click bubbles to the control too
-    try std.testing.expectEqual(@as(usize, 2), s.value);
-    try std.testing.expect(!s.open);
-    s.pointer(null, true, 3); // the control's own click: toggle open
-    try std.testing.expect(s.open);
 }

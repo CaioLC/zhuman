@@ -201,8 +201,8 @@ transitions stay responsive while paused or at faster game speeds.
 ## Session menu
 
 `MENU` sits at the far right, after the speed stepper. It opens the session menu on the trade
-dialog's shell, through the same focus trap, outside-click boundary, Escape dismissal, and opener
-restoration. Opening pauses the simulation and remembers whether it was already paused; the HUD
+dialog's shell, through the same focus trap, Escape handling, and opener restoration; a click on
+the backdrop does nothing. Opening pauses the simulation and remembers whether it was already paused; the HUD
 behind it is frozen. The kicker reads `PAUSED · ACT {n} · DAY {d}` and the title names the
 screen. The menu lists Continue, Save, Load, Settings and Quit to menu. Save and Load share one
 list of three slots that flips its verbs (`SAVE HERE`/`OVERWRITE`, `LOAD`), each slot describing

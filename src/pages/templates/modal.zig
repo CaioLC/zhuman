@@ -1,5 +1,6 @@
-//! `modal` — game-level modal chrome over the ui-client scrim/focus shell. It owns only the
-//! centered outer frame and dismissal boundary; header/body/footer content is composed by callers.
+//! `modal` — game-level modal chrome over the ui-client scrim/focus shell: the centered outer
+//! frame and the end-of-build close step. `dialog_frame` composes the shared header, body and
+//! footer on top of it; callers fill the body and the footer.
 
 const ha = @import("ha");
 const uic = ha.ui_client;
@@ -16,7 +17,7 @@ pub const Modal = struct {
     root: *uic.Node,
     box: El,
     width: f32,
-    /// True on the frame the dialog first builds (see `dismissed`).
+    /// True on the frame the dialog first builds (see `settle`).
     first_open: bool,
     /// The key focused when the dialog opened, restored on close.
     opener: ?u64,
@@ -38,23 +39,50 @@ pub fn rule(parent: El, id: []const u8, width: f32) !void {
         .with_style(.{Style{ .fill = ctx.res.view.theme.line }});
 }
 
-/// The dialog's end-of-build step. Consumes all activation inside the dialog, then inspects
-/// the fullscreen root: `owned` combines explicit controls such as × and LEAVE with the
-/// outside click and Escape into one caller result. Focus policy lives here too: on the frame
-/// the dialog opens, focus goes to `primary` (the confirmation control; the first control in
-/// the trap when it is disabled or absent), and on the frame it closes, back to the opener. The
-/// closing frame also forgets the shell's open edge, so a dialog that reopens next frame is a
-/// fresh open (initial focus, a new opener), not a continuation of this one.
-pub fn dismissed(ctx: *UiCtx, m: Modal, owned: bool, primary: ?u64) bool {
+/// What the caller tells the close step.
+pub const Close = struct {
+    /// An explicit close the dialog's own controls asked for this frame (×, LEAVE, RESUME).
+    owned: bool = false,
+    /// Where focus goes on the frame the dialog opens; null (or a key that cannot take focus)
+    /// falls back to the first control in the trap.
+    initial_focus: ?u64 = null,
+    /// A sub-screen is showing: Escape steps back to the dialog's first screen instead of
+    /// closing it (the session menu's save/load/settings/quit screens).
+    escape_steps_back: bool = false,
+};
+
+pub const Outcome = struct {
+    /// The dialog closed this frame; focus is back on the opener.
+    closed: bool,
+    /// Escape asked a sub-screen to step back; the dialog stays open.
+    back: bool,
+};
+
+/// The dialog's end-of-build step. Consumes all activation inside the dialog, then folds the
+/// caller's explicit close with Escape into one outcome. A click on the backdrop does nothing,
+/// as with the prototypes' `<dialog>`: the scrim only blocks what it covers. Focus policy
+/// lives here too: on the frame the dialog opens, focus goes to `initial_focus`, and on the
+/// frame it closes, back to the opener. The closing frame also forgets the shell's open edge,
+/// so a dialog that reopens next frame is a fresh open (initial focus, a new opener), not a
+/// continuation of this one.
+pub fn settle(ctx: *UiCtx, m: Modal, c: Close) Outcome {
     _ = ctx.consumeFlag(m.box.get().key, .clicked);
-    const root_q = (El{ .node = m.root, .ctx = ctx }).query();
-    const closing = owned or root_q.clicked or root_q.dismissed;
+    const root = El{ .node = m.root, .ctx = ctx };
+    const root_q = root.query();
+    const escape = root_q.dismissed;
+    const back = escape and c.escape_steps_back and !c.owned;
+    const closing = c.owned or (escape and !c.escape_steps_back);
     if (closing) {
         if (m.opener) |opener| _ = ctx.requestFocus(opener);
-        (El{ .node = m.root, .ctx = ctx }).state(uic.UiState.ModalState).* = .{};
+        root.state(uic.UiState.ModalState).* = .{};
     } else if (m.first_open) {
-        const on_primary = if (primary) |key| ctx.requestFocus(key) else false;
-        if (!on_primary) _ = ctx.focusFirstInScope();
+        const on_target = if (c.initial_focus) |key| ctx.requestFocus(key) else false;
+        if (!on_target) _ = ctx.focusFirstInScope();
     }
-    return closing;
+    return .{ .closed = closing, .back = back };
+}
+
+/// `settle` for a dialog with one screen: closes on its own controls or Escape.
+pub fn dismissed(ctx: *UiCtx, m: Modal, owned: bool, initial_focus: ?u64) bool {
+    return settle(ctx, m, .{ .owned = owned, .initial_focus = initial_focus }).closed;
 }

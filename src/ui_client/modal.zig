@@ -44,9 +44,12 @@ pub const Modal = struct {
 pub fn modal(ctx: *UiCtx, id: []const u8, title: []const u8) !Modal {
     const th = ctx.res.view.theme;
 
-    // `el.root` sizes the scrim to the whole drawable, in device px (the layout space).
+    // `el.root` sizes the scrim to the whole drawable, in device px (the layout space). The
+    // scrim is the terminal ground at 85% (`.terminal-dialog::backdrop`), so the covered
+    // screen stays visible, receded, behind the dialog.
     const root = try el.root(ctx, id);
-    _ = root.with_style(.{Style{ .fill = th.bg }});
+    const ground = ctx.res.view.ground;
+    _ = root.with_style(.{Style{ .fill = .{ .r = ground.r, .g = ground.g, .b = ground.b, .a = 0xd9 } }});
     _ = root.track(); // fullscreen scrim: a queried root structurally blocks lower trees
     ctx.res.commands.registerEscape(root.get().key);
 

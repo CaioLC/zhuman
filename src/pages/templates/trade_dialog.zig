@@ -1,5 +1,5 @@
-//! `trade_dialog` — thin venue/state coordinator composed from four templates:
-//! `modal` (outer shell), `modal_header`, `modal_body`, and `modal_footer`.
+//! `trade_dialog` — thin venue/state coordinator on the shared `dialog_frame`: the venue's
+//! kicker and title in the frame's header, `modal_body` in its body, `modal_footer` in its footer.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -8,7 +8,7 @@ const UiCtx = uic.UiCtx;
 const TradeState = uic.UiState.TradeState;
 const market = @import("./market_strip.zig");
 const modal_mod = @import("./modal.zig");
-const header_mod = @import("./modal_header.zig");
+const frame_mod = @import("./dialog_frame.zig");
 const body_mod = @import("./modal_body.zig");
 const footer_mod = @import("./modal_footer.zig");
 
@@ -53,21 +53,25 @@ pub const Result = struct {
 
 pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: []const u8, buy_offers: []const Offer, sell_offers: []const Offer, holdings: []const Holding, st: *TradeState) !Result {
     const identity = venueIdentity(kind);
-    const m = try modal_mod.modal(ctx, id, identity.title, modal_mod.default_width);
+    const frame = try frame_mod.dialog_frame(ctx, .{
+        .id = id,
+        .kicker = try ctx.arena.print("{s} \u{00b7} {s}", .{ identity.kicker, meta }),
+        .title = identity.title,
+        .close_name = "Close trade dialog",
+    });
 
-    const close_clicked = try header_mod.modal_header(m.box, m.width, identity.kicker, meta, identity.title);
-    const body = try body_mod.modal_body(m.box, m.width, identity.buy_give, identity.sell_give, identity.hold_note, buy_offers, sell_offers, holdings, st);
+    const body = try body_mod.modal_body(frame.body, frame.width, identity.buy_give, identity.sell_give, identity.hold_note, buy_offers, sell_offers, holdings, st);
     // The CTA follows the active tab: a merchant shows `BUY →` on the buy tab and `SELL →` on
     // the sell tab; single-CTA venues set both to the same label, so this is a no-op for them.
     const cta = if (body.mode == 0) identity.buy_cta else identity.sell_cta;
-    const footer = try footer_mod.modal_footer(m.box, m.width, identity.footer, cta, body.can_confirm);
+    const footer = try footer_mod.modal_footer(frame.footer, identity.footer, cta, body.can_confirm);
 
     return .{
         .mode = body.mode,
         .selected = body.selected,
         .confirmed = if (footer.confirm) body.selected else null,
-        .dismissed = modal_mod.dismissed(ctx, m, close_clicked or footer.leave, footer.primary_key),
-        .root = m.root,
+        .dismissed = modal_mod.dismissed(ctx, frame.modal, frame.close_clicked or footer.leave, footer.primary_key),
+        .root = frame.modal.root,
     };
 }
 
