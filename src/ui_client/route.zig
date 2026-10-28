@@ -239,6 +239,14 @@ pub const Router = struct {
         return self.ui.markKey(key, flag);
     }
 
+    /// Route an arrow to the focused grid owner (the research board), which moves its own
+    /// selection in two dimensions; false when focus is elsewhere.
+    fn markFocusedGrid(self: *Router, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
+        const key = self.ui.focusedKey() orelse return false;
+        if (!self.ui.res.commands.isGridOwner(key)) return false;
+        return self.ui.markKey(key, flag);
+    }
+
     /// Copy the current selection to the platform clipboard when both a selection and a
     /// clipboard exist. Returns whether the platform accepted the text. The editor slice is
     /// only valid until the next mutation, so it is NUL-terminated into a stack buffer first.
@@ -268,6 +276,7 @@ pub const Router = struct {
             .focus_next => return .{ .handled = ui.moveFocus(.next, true) },
             .focus_previous => return .{ .handled = ui.moveFocus(.previous, true) },
             .move_left => {
+                if (self.markFocusedGrid(.nav_left)) return .{ .handled = true };
                 const moved = ui.moveFocusedRoving(.previous, true);
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);
@@ -275,6 +284,7 @@ pub const Router = struct {
                 return .{ .handled = moved or self.markFocusedRange(.decrement) };
             },
             .move_right => {
+                if (self.markFocusedGrid(.nav_right)) return .{ .handled = true };
                 const moved = ui.moveFocusedRoving(.next, true);
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);
@@ -282,6 +292,7 @@ pub const Router = struct {
                 return .{ .handled = moved or self.markFocusedRange(.increment) };
             },
             .move_up => {
+                if (self.markFocusedGrid(.nav_up)) return .{ .handled = true };
                 const moved = ui.moveFocusedRoving(.previous, true);
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);
@@ -289,6 +300,7 @@ pub const Router = struct {
                 return .{ .handled = moved or self.markFocusedRange(.increment) };
             },
             .move_down => {
+                if (self.markFocusedGrid(.nav_down)) return .{ .handled = true };
                 const moved = ui.moveFocusedRoving(.next, true);
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);

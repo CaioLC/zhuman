@@ -282,6 +282,25 @@ pub const UiState = struct {
         give: [13]u16 = @splat(0),
         take: [13]u16 = @splat(0),
     };
+    /// The RESEARCH board's state, on the view's always-built owner: the selected tile (a
+    /// catalog index, or none), the filter (0 all, 1 available, 2 researched), the camera
+    /// (zoom and pan in board units), the pan drag, and whether the opening selection has
+    /// been made (the board opens on Gamekeeping, as the prototype does).
+    pub const ResearchState = struct {
+        selected: ?u16 = null,
+        seeded: bool = false,
+        filter: u8 = 0,
+        zoom: f32 = 1,
+        pan_x: f32 = 0,
+        pan_y: f32 = 0,
+        drag: @import("drag.zig").ThresholdDrag = .{},
+        drag_pan_x: f32 = 0,
+        drag_pan_y: f32 = 0,
+        /// The tile researched last and the tiles it opened (a bit per catalog index), for
+        /// the status line until the selection moves.
+        last: ?u16 = null,
+        newly: u64 = 0,
+    };
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`
     /// snapped to `step`; the caller maps that to a rate. Both the pointer drag and the
@@ -491,6 +510,11 @@ pub const Interaction = packed struct {
     page_increment: bool = false,
     minimum: bool = false,
     maximum: bool = false,
+    // Arrow keys routed to the focused grid owner (`Registry.registerGrid`).
+    nav_left: bool = false,
+    nav_right: bool = false,
+    nav_up: bool = false,
+    nav_down: bool = false,
 
     disabled: bool = false,
     focused: bool = false,
@@ -514,6 +538,10 @@ pub const Interaction = packed struct {
         "page_increment",
         "minimum",
         "maximum",
+        "nav_left",
+        "nav_right",
+        "nav_up",
+        "nav_down",
     };
 };
 

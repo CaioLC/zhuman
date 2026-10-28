@@ -328,6 +328,8 @@ pub const TechState = enum { locked, available, researched };
 pub const Technology = struct {
     id: []const u8,
     name: []const u8,
+    /// The board label: a few capitals that fit inside a hex (`FORAGE`, `CISTRN`).
+    short: []const u8 = "",
     act: u8 = 2,
     coord: Coord,
     cost: []const Line = &.{},

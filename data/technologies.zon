@@ -4,7 +4,8 @@
 // research price as once-lines of resources; a tile established at the curtain has none.
 // `initial` is the state the act opens on: Foraging and Woodcutting carried over from Act I
 // as researched, the four other ring-1 tiles and the five ring-2 openers available, the
-// rest locked. `effect` and `enables` are the player's words. Rings 1–4; ring 0 is the
+// rest locked. `short` is the hex's board label. `effect` and `enables` are the player's
+// words. Rings 1–4; ring 0 is the
 // foundation and is not a record. The layout and the names follow
 // `docs/hex_tech_board_spec.md`.
 .{
@@ -12,6 +13,7 @@
     .{
         .id = "foraging",
         .name = "Foraging",
+        .short = "FORAGE",
         .coord = .{ .q = 1, .r = 0 },
         .initial = .researched,
         .effect = "Establishes Food gathering at Act II population scale; does not re-unlock the existing personal Forage action.",
@@ -19,6 +21,7 @@
     .{
         .id = "spring_well",
         .name = "Spring well",
+        .short = "WELL",
         .coord = .{ .q = 0, .r = 1 },
         .cost = .{ .{ .item = "food", .n = 2.0 }, .{ .item = "biomass", .n = 3.0 } },
         .initial = .available,
@@ -27,6 +30,7 @@
     .{
         .id = "firepit",
         .name = "Firepit",
+        .short = "FIRE",
         .coord = .{ .q = -1, .r = 1 },
         .cost = .{ .{ .item = "food", .n = 2.0 }, .{ .item = "biomass", .n = 4.0 } },
         .initial = .available,
@@ -35,6 +39,7 @@
     .{
         .id = "surface_ore",
         .name = "Surface ore",
+        .short = "ORE",
         .coord = .{ .q = -1, .r = 0 },
         .cost = .{ .{ .item = "food", .n = 3.0 }, .{ .item = "biomass", .n = 3.0 } },
         .initial = .available,
@@ -43,6 +48,7 @@
     .{
         .id = "quarry_pit",
         .name = "Quarry pit",
+        .short = "QUARRY",
         .coord = .{ .q = 0, .r = -1 },
         .cost = .{ .{ .item = "food", .n = 3.0 }, .{ .item = "biomass", .n = 2.0 } },
         .initial = .available,
@@ -51,6 +57,7 @@
     .{
         .id = "woodcutting",
         .name = "Woodcutting",
+        .short = "WOOD",
         .coord = .{ .q = 1, .r = -1 },
         .initial = .researched,
         .effect = "Establishes Biomass gathering at Act II population scale; does not re-unlock the existing personal Split wood behavior.",
@@ -60,6 +67,7 @@
     .{
         .id = "gamekeeping",
         .name = "Gamekeeping",
+        .short = "GAME",
         .coord = .{ .q = 2, .r = 0 },
         .cost = .{ .{ .item = "food", .n = 4.0 }, .{ .item = "biomass", .n = 3.0 } },
         .initial = .available,
@@ -68,6 +76,7 @@
     .{
         .id = "well_cistern",
         .name = "Well & cistern",
+        .short = "CISTRN",
         .coord = .{ .q = 0, .r = 2 },
         .cost = .{ .{ .item = "biomass", .n = 4.0 }, .{ .item = "minerals", .n = 3.0 } },
         .initial = .locked,
@@ -76,6 +85,7 @@
     .{
         .id = "charcoal_works",
         .name = "Charcoal works",
+        .short = "CHAR",
         .coord = .{ .q = -2, .r = 2 },
         .cost = .{ .{ .item = "biomass", .n = 6.0 }, .{ .item = "fuel", .n = 2.0 } },
         .initial = .locked,
@@ -84,6 +94,7 @@
     .{
         .id = "smithy",
         .name = "Smithy",
+        .short = "SMITH",
         .coord = .{ .q = -2, .r = 0 },
         .cost = .{ .{ .item = "metal", .n = 4.0 }, .{ .item = "fuel", .n = 2.0 } },
         .initial = .locked,
@@ -93,6 +104,7 @@
     .{
         .id = "stoneworks",
         .name = "Stoneworks",
+        .short = "STONE",
         .coord = .{ .q = 0, .r = -2 },
         .cost = .{ .{ .item = "minerals", .n = 5.0 }, .{ .item = "biomass", .n = 2.0 } },
         .initial = .locked,
@@ -101,6 +113,7 @@
     .{
         .id = "loom_ropewalk",
         .name = "Loom & ropewalk",
+        .short = "LOOM",
         .coord = .{ .q = 2, .r = -2 },
         .cost = .{ .{ .item = "biomass", .n = 5.0 }, .{ .item = "food", .n = 2.0 } },
         .initial = .available,
@@ -111,6 +124,7 @@
     .{
         .id = "net_fishery",
         .name = "Net fishery",
+        .short = "NET",
         .coord = .{ .q = 1, .r = 1 },
         .cost = .{ .{ .item = "biomass", .n = 4.0 }, .{ .item = "water", .n = 3.0 } },
         .initial = .available,
@@ -120,6 +134,7 @@
     .{
         .id = "peat_works",
         .name = "Peat works",
+        .short = "PEAT",
         .coord = .{ .q = -1, .r = 2 },
         .cost = .{ .{ .item = "water", .n = 3.0 }, .{ .item = "fuel", .n = 2.0 } },
         .initial = .locked,
@@ -128,6 +143,7 @@
     .{
         .id = "smelting_hearth",
         .name = "Smelting hearth",
+        .short = "SMELT",
         .coord = .{ .q = -2, .r = 1 },
         .cost = .{ .{ .item = "fuel", .n = 4.0 }, .{ .item = "metal", .n = 3.0 } },
         .initial = .locked,
@@ -137,6 +153,7 @@
     .{
         .id = "masonry_workshop",
         .name = "Masonry workshop",
+        .short = "MASON",
         .coord = .{ .q = -1, .r = -1 },
         .cost = .{ .{ .item = "metal", .n = 3.0 }, .{ .item = "minerals", .n = 4.0 } },
         .initial = .locked,
@@ -145,6 +162,7 @@
     .{
         .id = "pottery_works",
         .name = "Pottery works",
+        .short = "POTTRY",
         .coord = .{ .q = 1, .r = -2 },
         .cost = .{ .{ .item = "biomass", .n = 4.0 }, .{ .item = "minerals", .n = 3.0 } },
         .initial = .available,
@@ -153,6 +171,7 @@
     .{
         .id = "field_cultivation",
         .name = "Field cultivation",
+        .short = "FIELD",
         .coord = .{ .q = 2, .r = -1 },
         .cost = .{ .{ .item = "food", .n = 3.0 }, .{ .item = "biomass", .n = 4.0 } },
         .initial = .available,
@@ -163,6 +182,7 @@
     .{
         .id = "salting_smoking",
         .name = "Salting & smoking",
+        .short = "PRESRV",
         .coord = .{ .q = 3, .r = 0 },
         .cost = .{ .{ .item = "food", .n = 6.0 }, .{ .item = "fuel", .n = 4.0 }, .{ .item = "minerals", .n = 2.0 } },
         .initial = .locked,
@@ -171,6 +191,7 @@
     .{
         .id = "aqueduct",
         .name = "Aqueduct",
+        .short = "AQUED",
         .coord = .{ .q = 0, .r = 3 },
         .cost = .{ .{ .item = "minerals", .n = 6.0 }, .{ .item = "water", .n = 4.0 } },
         .initial = .locked,
@@ -179,6 +200,7 @@
     .{
         .id = "coal_mining",
         .name = "Coal mining",
+        .short = "COAL",
         .coord = .{ .q = -3, .r = 3 },
         .cost = .{ .{ .item = "fuel", .n = 6.0 }, .{ .item = "metal", .n = 4.0 }, .{ .item = "minerals", .n = 3.0 } },
         .initial = .locked,
@@ -187,6 +209,7 @@
     .{
         .id = "bronze_casting",
         .name = "Bronze casting",
+        .short = "BRONZE",
         .coord = .{ .q = -3, .r = 0 },
         .cost = .{ .{ .item = "metal", .n = 6.0 }, .{ .item = "fuel", .n = 5.0 } },
         .initial = .locked,
@@ -195,6 +218,7 @@
     .{
         .id = "brickworks",
         .name = "Brickworks",
+        .short = "BRICK",
         .coord = .{ .q = 0, .r = -3 },
         .cost = .{ .{ .item = "minerals", .n = 7.0 }, .{ .item = "fuel", .n = 4.0 } },
         .initial = .locked,
@@ -203,6 +227,7 @@
     .{
         .id = "carpentry",
         .name = "Carpentry",
+        .short = "CARP",
         .coord = .{ .q = 3, .r = -3 },
         .cost = .{ .{ .item = "biomass", .n = 7.0 }, .{ .item = "metal", .n = 3.0 } },
         .initial = .locked,
@@ -212,6 +237,7 @@
     .{
         .id = "fishing_boats",
         .name = "Fishing boats",
+        .short = "FBOAT",
         .coord = .{ .q = 2, .r = 1 },
         .cost = .{ .{ .item = "biomass", .n = 5.0 }, .{ .item = "water", .n = 4.0 }, .{ .item = "food", .n = 2.0 } },
         .initial = .locked,
@@ -220,6 +246,7 @@
     .{
         .id = "irrigation_canals",
         .name = "Irrigation canals",
+        .short = "IRRIG",
         .coord = .{ .q = 1, .r = 2 },
         .cost = .{ .{ .item = "water", .n = 6.0 }, .{ .item = "food", .n = 4.0 } },
         .initial = .locked,
@@ -228,6 +255,7 @@
     .{
         .id = "water_wheel",
         .name = "Water wheel",
+        .short = "WHEEL",
         .coord = .{ .q = -1, .r = 3 },
         .cost = .{ .{ .item = "water", .n = 5.0 }, .{ .item = "biomass", .n = 4.0 }, .{ .item = "metal", .n = 2.0 } },
         .initial = .locked,
@@ -236,6 +264,7 @@
     .{
         .id = "tar_pits",
         .name = "Tar pits",
+        .short = "TAR",
         .coord = .{ .q = -2, .r = 3 },
         .cost = .{ .{ .item = "fuel", .n = 6.0 }, .{ .item = "water", .n = 3.0 } },
         .initial = .locked,
@@ -244,6 +273,7 @@
     .{
         .id = "bellows_forge",
         .name = "Bellows forge",
+        .short = "BELLO",
         .coord = .{ .q = -3, .r = 2 },
         .cost = .{ .{ .item = "fuel", .n = 6.0 }, .{ .item = "metal", .n = 4.0 } },
         .initial = .locked,
@@ -252,6 +282,7 @@
     .{
         .id = "iron_smelting",
         .name = "Iron smelting",
+        .short = "IRON",
         .coord = .{ .q = -3, .r = 1 },
         .cost = .{ .{ .item = "metal", .n = 7.0 }, .{ .item = "fuel", .n = 6.0 } },
         .initial = .locked,
@@ -260,6 +291,7 @@
     .{
         .id = "nails_fittings",
         .name = "Nails & fittings",
+        .short = "NAILS",
         .coord = .{ .q = -2, .r = -1 },
         .cost = .{ .{ .item = "metal", .n = 5.0 }, .{ .item = "minerals", .n = 4.0 } },
         .initial = .locked,
@@ -268,6 +300,7 @@
     .{
         .id = "glassblowing",
         .name = "Glassblowing",
+        .short = "GLASS",
         .coord = .{ .q = -1, .r = -2 },
         .cost = .{ .{ .item = "minerals", .n = 6.0 }, .{ .item = "fuel", .n = 4.0 }, .{ .item = "metal", .n = 2.0 } },
         .initial = .locked,
@@ -276,6 +309,7 @@
     .{
         .id = "lime_kiln",
         .name = "Lime kiln",
+        .short = "LIME",
         .coord = .{ .q = 1, .r = -3 },
         .cost = .{ .{ .item = "minerals", .n = 6.0 }, .{ .item = "fuel", .n = 4.0 } },
         .initial = .locked,
@@ -284,6 +318,7 @@
     .{
         .id = "papermaking",
         .name = "Papermaking",
+        .short = "PAPER",
         .coord = .{ .q = 2, .r = -3 },
         .cost = .{ .{ .item = "biomass", .n = 6.0 }, .{ .item = "water", .n = 4.0 } },
         .initial = .locked,
@@ -292,6 +327,7 @@
     .{
         .id = "animal_husbandry",
         .name = "Animal husbandry",
+        .short = "HERDS",
         .coord = .{ .q = 3, .r = -2 },
         .cost = .{ .{ .item = "biomass", .n = 5.0 }, .{ .item = "food", .n = 4.0 } },
         .initial = .locked,
@@ -300,6 +336,7 @@
     .{
         .id = "granary",
         .name = "Granary",
+        .short = "GRNRY",
         .coord = .{ .q = 3, .r = -1 },
         .cost = .{ .{ .item = "food", .n = 6.0 }, .{ .item = "biomass", .n = 4.0 }, .{ .item = "minerals", .n = 2.0 } },
         .initial = .locked,
@@ -310,6 +347,7 @@
     .{
         .id = "selective_breeding",
         .name = "Selective breeding",
+        .short = "BREED",
         .coord = .{ .q = 4, .r = 0 },
         .cost = .{ .{ .item = "food", .n = 10.0 }, .{ .item = "biomass", .n = 6.0 }, .{ .item = "water", .n = 4.0 } },
         .initial = .locked,
@@ -318,6 +356,7 @@
     .{
         .id = "pumping_station",
         .name = "Pumping station",
+        .short = "PUMP",
         .coord = .{ .q = 0, .r = 4 },
         .cost = .{ .{ .item = "water", .n = 8.0 }, .{ .item = "metal", .n = 6.0 }, .{ .item = "fuel", .n = 5.0 } },
         .initial = .locked,
@@ -326,6 +365,7 @@
     .{
         .id = "coke_ovens",
         .name = "Coke ovens",
+        .short = "COKE",
         .coord = .{ .q = -4, .r = 4 },
         .cost = .{ .{ .item = "fuel", .n = 10.0 }, .{ .item = "minerals", .n = 6.0 }, .{ .item = "metal", .n = 4.0 } },
         .initial = .locked,
@@ -334,6 +374,7 @@
     .{
         .id = "precision_machining",
         .name = "Precision machining",
+        .short = "MACH",
         .coord = .{ .q = -4, .r = 0 },
         .cost = .{ .{ .item = "metal", .n = 10.0 }, .{ .item = "fuel", .n = 7.0 } },
         .initial = .locked,
@@ -342,6 +383,7 @@
     .{
         .id = "portland_cement",
         .name = "Portland cement",
+        .short = "CEMENT",
         .coord = .{ .q = 0, .r = -4 },
         .cost = .{ .{ .item = "minerals", .n = 10.0 }, .{ .item = "fuel", .n = 6.0 } },
         .initial = .locked,
@@ -350,6 +392,7 @@
     .{
         .id = "managed_forests",
         .name = "Managed forests",
+        .short = "FOREST",
         .coord = .{ .q = 4, .r = -4 },
         .cost = .{ .{ .item = "biomass", .n = 10.0 }, .{ .item = "water", .n = 5.0 } },
         .initial = .locked,
@@ -359,6 +402,7 @@
     .{
         .id = "fish_farming",
         .name = "Fish farming",
+        .short = "AQUA",
         .coord = .{ .q = 3, .r = 1 },
         .cost = .{ .{ .item = "food", .n = 7.0 }, .{ .item = "water", .n = 6.0 }, .{ .item = "biomass", .n = 4.0 } },
         .initial = .locked,
@@ -367,6 +411,7 @@
     .{
         .id = "ice_houses",
         .name = "Ice houses",
+        .short = "ICE",
         .coord = .{ .q = 2, .r = 2 },
         .cost = .{ .{ .item = "water", .n = 7.0 }, .{ .item = "food", .n = 5.0 }, .{ .item = "minerals", .n = 4.0 } },
         .initial = .locked,
@@ -375,6 +420,7 @@
     .{
         .id = "sanitation",
         .name = "Sanitation",
+        .short = "SANIT",
         .coord = .{ .q = 1, .r = 3 },
         .cost = .{ .{ .item = "water", .n = 9.0 }, .{ .item = "minerals", .n = 5.0 }, .{ .item = "metal", .n = 3.0 } },
         .initial = .locked,
@@ -383,6 +429,7 @@
     .{
         .id = "hydropower",
         .name = "Hydropower",
+        .short = "HYDRO",
         .coord = .{ .q = -1, .r = 4 },
         .cost = .{ .{ .item = "water", .n = 8.0 }, .{ .item = "metal", .n = 6.0 }, .{ .item = "minerals", .n = 5.0 } },
         .initial = .locked,
@@ -391,6 +438,7 @@
     .{
         .id = "steam_engine",
         .name = "Steam engine",
+        .short = "STEAM",
         .coord = .{ .q = -2, .r = 4 },
         .cost = .{ .{ .item = "fuel", .n = 9.0 }, .{ .item = "metal", .n = 7.0 }, .{ .item = "water", .n = 4.0 } },
         .initial = .locked,
@@ -399,6 +447,7 @@
     .{
         .id = "oil_drilling",
         .name = "Oil drilling",
+        .short = "OIL",
         .coord = .{ .q = -3, .r = 4 },
         .cost = .{ .{ .item = "fuel", .n = 9.0 }, .{ .item = "metal", .n = 6.0 }, .{ .item = "water", .n = 4.0 } },
         .initial = .locked,
@@ -408,6 +457,7 @@
     .{
         .id = "blast_furnace",
         .name = "Blast furnace",
+        .short = "BLAST",
         .coord = .{ .q = -4, .r = 3 },
         .cost = .{ .{ .item = "fuel", .n = 9.0 }, .{ .item = "metal", .n = 8.0 } },
         .initial = .locked,
@@ -416,6 +466,7 @@
     .{
         .id = "steelmaking",
         .name = "Steelmaking",
+        .short = "STEEL",
         .coord = .{ .q = -4, .r = 2 },
         .cost = .{ .{ .item = "metal", .n = 10.0 }, .{ .item = "fuel", .n = 8.0 }, .{ .item = "minerals", .n = 4.0 } },
         .initial = .locked,
@@ -425,6 +476,7 @@
     .{
         .id = "railways",
         .name = "Railways",
+        .short = "RAIL",
         .coord = .{ .q = -4, .r = 1 },
         .cost = .{ .{ .item = "metal", .n = 9.0 }, .{ .item = "fuel", .n = 7.0 }, .{ .item = "minerals", .n = 4.0 } },
         .initial = .locked,
@@ -433,6 +485,7 @@
     .{
         .id = "deep_mining",
         .name = "Deep mining",
+        .short = "DEEP",
         .coord = .{ .q = -3, .r = -1 },
         .cost = .{ .{ .item = "metal", .n = 8.0 }, .{ .item = "minerals", .n = 7.0 }, .{ .item = "fuel", .n = 4.0 } },
         .initial = .locked,
@@ -441,6 +494,7 @@
     .{
         .id = "reinforced_concrete",
         .name = "Reinforced concrete",
+        .short = "RCONC",
         .coord = .{ .q = -2, .r = -2 },
         .cost = .{ .{ .item = "minerals", .n = 9.0 }, .{ .item = "metal", .n = 7.0 }, .{ .item = "fuel", .n = 4.0 } },
         .initial = .locked,
@@ -449,6 +503,7 @@
     .{
         .id = "plate_glass",
         .name = "Plate glass",
+        .short = "PGLASS",
         .coord = .{ .q = -1, .r = -3 },
         .cost = .{ .{ .item = "minerals", .n = 8.0 }, .{ .item = "fuel", .n = 6.0 }, .{ .item = "metal", .n = 4.0 } },
         .initial = .locked,
@@ -457,6 +512,7 @@
     .{
         .id = "porcelain",
         .name = "Porcelain",
+        .short = "PORCLN",
         .coord = .{ .q = 1, .r = -4 },
         .cost = .{ .{ .item = "minerals", .n = 8.0 }, .{ .item = "fuel", .n = 6.0 }, .{ .item = "biomass", .n = 4.0 } },
         .initial = .locked,
@@ -465,6 +521,7 @@
     .{
         .id = "pulp_mill",
         .name = "Pulp mill",
+        .short = "PULP",
         .coord = .{ .q = 2, .r = -4 },
         .cost = .{ .{ .item = "biomass", .n = 9.0 }, .{ .item = "water", .n = 6.0 }, .{ .item = "minerals", .n = 3.0 } },
         .initial = .locked,
@@ -473,6 +530,7 @@
     .{
         .id = "lumber_yard",
         .name = "Lumber yard",
+        .short = "LUMBER",
         .coord = .{ .q = 3, .r = -4 },
         .cost = .{ .{ .item = "biomass", .n = 9.0 }, .{ .item = "metal", .n = 5.0 } },
         .initial = .locked,
@@ -481,6 +539,7 @@
     .{
         .id = "fertilizer",
         .name = "Fertilizer",
+        .short = "FERT",
         .coord = .{ .q = 4, .r = -3 },
         .cost = .{ .{ .item = "biomass", .n = 8.0 }, .{ .item = "food", .n = 6.0 }, .{ .item = "minerals", .n = 3.0 } },
         .initial = .locked,
@@ -489,6 +548,7 @@
     .{
         .id = "crop_rotation",
         .name = "Crop rotation",
+        .short = "ROTATE",
         .coord = .{ .q = 4, .r = -2 },
         .cost = .{ .{ .item = "food", .n = 8.0 }, .{ .item = "biomass", .n = 7.0 } },
         .initial = .locked,
@@ -497,6 +557,7 @@
     .{
         .id = "food_processing",
         .name = "Food processing",
+        .short = "PROCESS",
         .coord = .{ .q = 4, .r = -1 },
         .cost = .{ .{ .item = "food", .n = 9.0 }, .{ .item = "biomass", .n = 6.0 }, .{ .item = "metal", .n = 4.0 } },
         .initial = .locked,

@@ -93,6 +93,8 @@ pub const Registry = struct {
     building_search: ?u64 = null,
     current_escape: ?u64 = null,
     building_escape: ?u64 = null,
+    current_grid: ?u64 = null,
+    building_grid: ?u64 = null,
     overflow: bool = false,
 
     pub fn beginBuild(self: *Registry) void {
@@ -100,6 +102,7 @@ pub const Registry = struct {
         self.building_range_len = 0;
         self.building_search = null;
         self.building_escape = null;
+        self.building_grid = null;
         self.overflow = false;
     }
 
@@ -138,6 +141,12 @@ pub const Registry = struct {
         self.building_escape = key;
     }
 
+    /// A two-dimensional navigation owner (the research board): while it holds focus, the
+    /// four arrows reach it as `nav_*` flags instead of moving focus or a range. One per build.
+    pub fn registerGrid(self: *Registry, key: u64) void {
+        self.building_grid = key;
+    }
+
     pub fn endBuild(self: *Registry) void {
         const old = self.current_text;
         self.current_text = self.building_text;
@@ -149,10 +158,12 @@ pub const Registry = struct {
         self.current_range_len = self.building_range_len;
         self.current_search = self.building_search;
         self.current_escape = self.building_escape;
+        self.current_grid = self.building_grid;
         self.building_text_len = 0;
         self.building_range_len = 0;
         self.building_search = null;
         self.building_escape = null;
+        self.building_grid = null;
     }
 
     pub fn isTextOwner(self: *const Registry, key: u64) bool {
@@ -177,6 +188,10 @@ pub const Registry = struct {
 
     pub fn escapeTarget(self: *const Registry) ?u64 {
         return self.current_escape;
+    }
+
+    pub fn isGridOwner(self: *const Registry, key: u64) bool {
+        return self.current_grid == key;
     }
 };
 

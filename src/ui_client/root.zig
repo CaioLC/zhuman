@@ -168,6 +168,8 @@ pub const rgb = theme.rgb; // opaque RGB shorthand
 pub const UiState = ctx_binding.UiState;
 pub const Sprite = ctx_binding.Sprite;
 pub const Point = ctx_binding.Point; // a polyline vertex in a node's unit square (see features/line.zig)
+pub const Rect = @import("ui").Rect; // a stamped device-px rect (what a hit-test predicate receives)
+pub const SizeRule = @import("ui").SizeRule; // one axis's size rule, for helpers that take one
 pub const Stroke = ctx_binding.Stroke; // what a polyline is drawn with — color + width
 pub const icon_sprite = ctx_binding.icon_sprite;
 
@@ -197,6 +199,8 @@ pub const data_svg = features.data_svg;
 // SDL text input, the Escape owner and focus trap, the pass-through overlay root). The game's
 // templates wrap them with chrome.
 pub const text_input = text_input_mod.text_input;
+pub const text_input_look = text_input_mod.text_input_look;
+pub const TextInputLook = text_input_mod.Look;
 pub const Modal = modal_mod.Modal;
 pub const modal = modal_mod.modal;
 pub const tooltip = tooltip_mod.tooltip;

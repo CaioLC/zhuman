@@ -320,8 +320,8 @@ supersedes a weaker one; `needs` names the verb a modifier works on; `unlock`, `
 `milestone` are the shelter's. `copy` carries the player's words — the BUILD effect sentence,
 the rail's short form, the receipt line.
 
-**Technologies.** A tile of the research board is a `Technology { id, name, act, coord,
-cost, initial, effect, enables }`: an axial `coord` the ring and wedge derive from, a research
+**Technologies.** A tile of the research board is a `Technology { id, name, short, act, coord,
+cost, initial, effect, enables }`: a `short` board label of a few capitals, an axial `coord` the ring and wedge derive from, a research
 `cost` as once-lines, and the `initial` state the act opens on (`locked`, `available`,
 `researched`). Technologies have an id space of their own — a tile is never an item, and only
 a good's or a verb's `tech` names one — so a recipe and the technology that opens it may share

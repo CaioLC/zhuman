@@ -177,7 +177,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
             _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
-        .research => _ = try t.empty_state(s.view, "a2_research", "RESEARCH board", "The research board is not drawn yet."),
+        .research => try researchView(ctx, world, e, s),
         .market => try market(ctx, world, e, s, opts.market),
     } else {
         _ = try t.empty_state(s.view, "a2_nobody", "No settlement", "There is no one here to act.");
@@ -233,6 +233,52 @@ fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) 
             if (n > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
         },
     }
+}
+
+/// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost
+/// from the ledger and establishes it through `grid/board`, which opens its outward neighbours.
+fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface) !void {
+    const board = ha.grid.board;
+    const cat = &ctx.res.catalog;
+    const research = world.get(e, comp.Research) orelse {
+        _ = try t.empty_state(s.view, "a2_research", "No research board", "The settlement has not crossed the curtain.");
+        return;
+    };
+    const wedges = [6]ha.roster.Resource{ .food, .water, .fuel, .metal, .minerals, .biomass };
+    var held: [6]f32 = undefined;
+    for (wedges, 0..) |r, i| held[i] = ledger.balance(world, e, r);
+    const st = s.owner.state(uic.UiState.ResearchState);
+    const query_owner = try s.owner.div("research_query");
+    const out = try t.research_board(s.view, "a2_research", .{ .cat = cat, .research = research, .held = held }, st, query_owner);
+    const idx = out.research orelse return;
+
+    var bal = board.Balances{};
+    for (wedges, 0..) |r, i| bal.set(r, @intFromFloat(@max(0, @floor(held[i]))));
+    var before: u64 = 0;
+    for (0..cat.technologies.len) |i| if (research.state[i] == .available) {
+        before |= @as(u64, 1) << @intCast(i);
+    };
+    if (board.research(cat, research, idx, &bal) != .researched) return;
+    const tech = &cat.technologies[idx];
+    for (tech.cost) |line| {
+        const r = ha.roster.Catalog.resource(line.item) orelse continue;
+        _ = ledger.move(world, e, r, -@round(line.n));
+    }
+    var newly: u64 = 0;
+    var suffix: std.ArrayList(u8) = .empty;
+    for (0..cat.technologies.len) |i| {
+        const bit = @as(u64, 1) << @intCast(i);
+        if (research.state[i] == .available and before & bit == 0) {
+            newly |= bit;
+            try suffix.appendSlice(ctx.arena, if (suffix.items.len == 0) " " else ", ");
+            try suffix.appendSlice(ctx.arena, cat.technologies[i].name);
+        }
+    }
+    if (suffix.items.len > 0) try suffix.appendSlice(ctx.arena, " now available.");
+    st.last = idx;
+    st.newly = newly;
+    const cost = try t.researchCostLine(ctx.arena, tech);
+    ctx.res.sim.log.push(.good, try ctx.arena.print("{s} is established. {s} paid.{s}", .{ tech.name, cost, suffix.items }));
 }
 
 /// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the

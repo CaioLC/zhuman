@@ -35,6 +35,20 @@ const Style = style.Style;
 /// keys and text into the right slot. Returns the field box; the caller reads the model
 /// through `owner.state(UiState.TextInputState)` (or the field's).
 pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f32, owner: ?El) !El {
+    return text_input_look(parent, id, placeholder, width, owner, .{});
+}
+
+/// How a field reads where it departs from the default: a smaller face and a fainter
+/// placeholder (the research board's 10px `.search-box`, `line-2` placeholder).
+pub const Look = struct {
+    font: ?f32 = null,
+    placeholder: ?cb.Color = null,
+    pad_x: f32 = 8,
+    pad_y: f32 = 4,
+};
+
+/// `text_input` with a `Look`.
+pub fn text_input_look(parent: El, id: []const u8, placeholder: []const u8, width: f32, owner: ?El, look: Look) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -94,9 +108,9 @@ pub fn text_input(parent: El, id: []const u8, placeholder: []const u8, width: f3
     const outline = if (state.refused) th.danger else if (focused) th.acc else th.line2;
     _ = field.with_flow(.{ .dir = .row, .cross = .center })
         .with_size(.{ .fixed = width }, .fit_children)
-        .with_style(.{ style.pad_sym(8, 4), Style{ .outline_color = outline } });
-    const ink = if (state.len == 0 and !focused) th.dim else th.fg;
-    _ = (try field.text("shown", shown)).with_style(.{Style{ .text = ink }});
+        .with_style(.{ style.pad_sym(look.pad_x, look.pad_y), Style{ .outline_color = outline } });
+    const ink = if (state.len == 0 and !focused) (look.placeholder orelse th.dim) else th.fg;
+    _ = (try field.text("shown", shown)).with_style(.{Style{ .text = ink, .font = look.font }});
 
     // Pointer clear affordance: a trailing "✕" hit region that empties the field on click.
     // Only shown while there is text to clear.

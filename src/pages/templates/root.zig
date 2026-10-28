@@ -147,6 +147,9 @@ pub const deal_slip = @import("./deal_slip.zig").deal_slip;
 pub const quantity_stepper = @import("./quantity_stepper.zig").quantity_stepper;
 pub const paginator = @import("./paginator.zig").paginator;
 pub const market_view = @import("./market_view.zig").market_view;
+pub const research_board = @import("./research_board.zig").research_board;
+pub const ResearchBoard = @import("./research_board.zig").Board;
+pub const researchCostLine = @import("./research_board.zig").costLine;
 pub const MarketPlayer = @import("./market_view.zig").Player;
 pub const act_one_surface = act_one_surface_mod.act_one_surface;
 pub const ActOneSurface = act_one_surface_mod.Result;
@@ -227,6 +230,7 @@ test {
     _ = @import("./quantity_stepper.zig");
     _ = @import("./paginator.zig");
     _ = @import("./market_view.zig");
+    _ = @import("./research_board.zig");
     _ = trade_dialog_mod;
     _ = menu_dialog_mod;
     _ = @import("./settings_panel.zig");
