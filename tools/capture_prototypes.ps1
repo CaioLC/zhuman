@@ -64,8 +64,12 @@ foreach ($name in $names) {
     if (-not $matrix.Contains($name)) { Write-Warning "unknown state '$name' (skipped)"; continue }
     $png = Join-Path $out "$name.png"
     $url = "$base/$($matrix[$name])"
+    # Edge reports "bytes written" on stderr; under Windows PowerShell that is an error record,
+    # so the call runs with errors continuing and success is judged by the file.
+    $ErrorActionPreference = "Continue"
     & $Edge --headless=new --disable-gpu --hide-scrollbars --allow-file-access-from-files `
-        "--window-size=$Width,$Height" "--virtual-time-budget=$BudgetMs" "--screenshot=$png" $url 2>$null | Out-Null
+        "--window-size=$Width,$Height" "--virtual-time-budget=$BudgetMs" "--screenshot=$png" $url 2>&1 | Out-Null
+    $ErrorActionPreference = "Stop"
     if (Test-Path $png) { Write-Host "  $name -> $png" } else { Write-Warning "  $name produced no image" }
 }
 Write-Host "`nDone. Prototype PNGs in $OutDir."

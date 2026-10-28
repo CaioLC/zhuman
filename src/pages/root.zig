@@ -18,6 +18,8 @@ const p_act_one = @import("./play_game.zig").ui_playgame;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
+const title_page = @import("./title.zig");
+const p_title = title_page.ui_title;
 const fixture = @import("./fixture.zig");
 const act_two_fixtures = @import("./act_two/fixtures.zig");
 const t = @import("./templates/root.zig");
@@ -45,12 +47,18 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // Every page returns its roots in draw order (a dialog's root after the shell it covers).
     // The game is the normal route. The template audit harness remains available as an explicit
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
-    if (debugRequested(ui_ctx.res)) return try withMenu(ui_ctx, world, try p_debug(ui_ctx, world));
+    if (debugRequested(ui_ctx.res)) {
+        ui_ctx.res.route = .game;
+        return try withMenu(ui_ctx, world, try p_debug(ui_ctx, world));
+    }
 
     // The deterministic fixture harness: `HA_FIXTURE=<name>` seeds one named screen state and
     // renders it through the production page. A developer opt-in like the debug page; off unless
     // the variable is set and non-empty. See `fixture.zig`.
     if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, world, try fixture.build_fixture(ui_ctx, world, name));
+
+    // Before a run, the title screen.
+    if (ui_ctx.res.route == .title) return try p_title(ui_ctx, world);
 
     // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I curtain,
     // since owning the good that ends the act is the win condition; otherwise the live page.
@@ -72,18 +80,6 @@ fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
     };
 }
 
-/// Apply the window setting the menu changed: a windowed size, or fullscreen.
-fn applyWindow(ctx: *uic.UiCtx) void {
-    const choice = ctx.res.settings.window orelse return;
-    const win = ctx.res.platform.window;
-    if (choice.size()) |s| {
-        win.setFullscreen(false) catch {};
-        win.setSize(s.w, s.h) catch {};
-    } else {
-        win.setFullscreen(true) catch {};
-    }
-}
-
 /// Append the session menu as the final/topmost root over whichever production or development
 /// page was built. A header click can open it in this same frame; its modal shell owns focus,
 /// Escape, and opener restoration.
@@ -91,11 +87,12 @@ fn withMenu(ctx: *uic.UiCtx, world: *World, roots: uic.Trees) !uic.Trees {
     if (!ctx.res.menu.open) return roots;
 
     const menu = try t.menu_dialog(ctx, "session_menu", session(ctx, world));
-    if (menu.changed.window) applyWindow(ctx);
+    if (menu.changed.window) title_page.applyWindow(ctx);
     if (menu.quit) {
-        // Quit to menu lands on the title screen once it exists (PORT-04); until then, exit.
+        // Quit to menu: the run behind it is left, and the title screen comes up next frame.
         ctx.res.menu.open = false;
-        ctx.res.menu.quit_requested = true;
+        ctx.res.route = .title;
+        ctx.res.title = .{};
     } else if (menu.resumed) {
         ctx.res.menu.resumeGame(&ctx.res.playback);
     }
@@ -136,4 +133,5 @@ test {
     _ = @import("./fixture.zig");
     _ = @import("./act_two/page.zig");
     _ = @import("./act_one/holdings.zig");
+    _ = @import("./title.zig");
 }

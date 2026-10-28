@@ -57,6 +57,9 @@ $matrix = [ordered]@{
     "menu_save"         = "Session menu: save slots"
     "menu_settings"     = "Session menu: settings panel"
     "menu_quit"         = "Session menu: quit confirmation"
+    "title"             = "Title screen"
+    "title_settings"    = "Title screen: settings"
+    "title_credits"     = "Title screen: credits"
 }
 
 if (-not (Test-Path $Exe)) {

@@ -384,10 +384,11 @@ pub fn main(process: std.process.Init) !void {
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
         const player = ecs.MaybeSingle(.{ ha.world.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
         const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.catalog, .act_one) else false;
-        // Skip the simulation stage entirely while paused: passing zero through systems is not
-        // sufficient because boundary-state systems (an encounter at remaining=0, completed work,
-        // death/reach edge detectors) may still mutate without consuming time.
-        if (!housed and app.resources.time.dt > 0) {
+        // Skip the simulation stage entirely while paused or before a run (the title screen):
+        // passing zero through systems is not sufficient because boundary-state systems (an
+        // encounter at remaining=0, completed work, death/reach edge detectors) may still mutate
+        // without consuming time.
+        if (!housed and app.resources.route == .game and app.resources.time.dt > 0) {
             ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
             ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation

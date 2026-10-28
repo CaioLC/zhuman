@@ -152,6 +152,20 @@ pub const MenuState = struct {
 /// The session menu's screens (`menu.html`).
 pub const MenuScreen = enum { menu, save, load, settings, quit };
 
+/// Which top-level screen the host shows: the title screen before a run, or the game.
+pub const Route = enum { title, game };
+
+/// The title screen's own screens (`title.html`): the menu, the settings panel, the credits.
+pub const TitleScreen = enum { menu, settings, credits };
+
+/// The title screen's state. `attract_s` is the real time the title has been showing; the
+/// canned attract loop behind the menu is a pure function of it, so a fixture that pins it
+/// gets the same frame every launch.
+pub const TitleState = struct {
+    screen: TitleScreen = .menu,
+    attract_s: f32 = 0,
+};
+
 /// The player's settings, shared by the title screen and the session menu. Held for the
 /// session. Window size, fullscreen and UI scale act on the host; difficulty, the two volumes
 /// and contrast are held but have no effect until their systems exist (roadmap PORT-03).
@@ -432,6 +446,9 @@ pub const Resources = struct {
     time: Time = .{},
     playback: Playback = .{},
     menu: MenuState = .{},
+    /// The top-level screen. A launch opens on the title; New game routes to the game.
+    route: Route = .title,
+    title: TitleState = .{},
     settings: Settings = .{},
     saves: SaveSlots = .{},
     sim: Sim,

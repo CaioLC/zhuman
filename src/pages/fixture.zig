@@ -33,10 +33,12 @@ const p_playgame = @import("./play_game.zig").ui_playgame;
 const p_act_two = @import("./act_two/page.zig").ui_act_two;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
+const p_title = @import("./title.zig").ui_title;
 
 /// The screen a fixture seeds the shell onto. Act I is the live survival page; `act_two` renders
-/// the Act II shared-shell catalogs (fixture-driven until the Act II simulation model is wired).
-pub const Screen = enum { act_one, act_two, gameover, act_one_end };
+/// the Act II shared-shell catalogs (fixture-driven until the Act II simulation model is wired);
+/// `title` is the title screen with its attract loop pinned.
+pub const Screen = enum { act_one, act_two, gameover, act_one_end, title };
 
 /// The passerby's visit state a fixture wants reachable. `absent` leaves the market strip
 /// dormant; `present` seeds a dealable encounter with a full satchel so the trade dialog can
@@ -109,6 +111,9 @@ pub const Spec = struct {
     menu_open: bool = false,
     /// The menu's screen when `menu_open` (save, load, settings, quit).
     menu_screen: ha.res.MenuScreen = .menu,
+    /// The title screen's screen and the attract loop's pinned time (`screen = .title`).
+    title_screen: ha.res.TitleScreen = .menu,
+    attract_s: f32 = 6,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -359,6 +364,23 @@ pub const catalog = [_]Spec{
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
+        .name = "title",
+        .about = "The title screen: the menu over the attract loop.",
+        .screen = .title,
+    },
+    .{
+        .name = "title_settings",
+        .about = "The title screen's settings panel.",
+        .screen = .title,
+        .title_screen = .settings,
+    },
+    .{
+        .name = "title_credits",
+        .about = "The title screen's credits.",
+        .screen = .title,
+        .title_screen = .credits,
+    },
+    .{
         .name = "menu_save",
         .about = "The session menu's save screen: three slots.",
         .day = 19,
@@ -577,6 +599,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
     // there, and the controls own them after, so the seeded screen stays navigable.
     const first = ctx.frame == 1;
+    if (spec.screen != .title) ctx.res.route = .game;
     const opening: ?usize = if (first) spec.view else null;
     const collapsed: ?bool = if (first and spec.holdings_collapsed) true else null;
     const open_trade = first and spec.trade_open;
@@ -589,6 +612,14 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
         .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
+        .title => blk: {
+            // The attract loop is pinned (the page adds this frame's real time after) and the
+            // title screen is the spec's from the first frame.
+            ctx.res.title.attract_s = spec.attract_s;
+            if (first) ctx.res.title.screen = spec.title_screen;
+            ctx.res.route = .title;
+            break :blk try p_title(ctx, world);
+        },
     };
 }
 
