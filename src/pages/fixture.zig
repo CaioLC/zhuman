@@ -147,6 +147,7 @@ const settlement = Settlement{
         .{ .item = .metal, .n = 7 },
         .{ .item = .minerals, .n = 3 },
         .{ .item = .biomass, .n = 31 },
+        .{ .item = .coin, .n = 42 },
     },
     .building = "granary",
 };

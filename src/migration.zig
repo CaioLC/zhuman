@@ -41,6 +41,9 @@ pub const current_version: u32 = 1;
 /// The Act II stocks besides Biomass, opened empty at the curtain.
 const act_two_stocks = .{ comp.InventoryWater, comp.InventoryFuel, comp.InventoryMetal, comp.InventoryMinerals };
 
+/// The stub Coin purse the curtain opens (`comp.InventoryCoin`).
+pub const curtain_coin: f32 = 20;
+
 /// Whether `e` has already crossed the curtain — the presence of the `Migrated` stamp.
 pub fn is_migrated(w: *World, e: Entity) bool {
     return w.has(e, comp.Migrated);
@@ -84,6 +87,8 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const ha.roster.Catalog) b
     inline for (act_two_stocks) |Stock| {
         if (!w.has(e, Stock)) w.add(e, Stock{});
     }
+    // The stub Coin purse opens with a little to spend (ACT2-09 decides when coin emerges).
+    if (!w.has(e, comp.InventoryCoin)) w.add(e, comp.InventoryCoin{ .v = curtain_coin });
 
     // 4. Goods/counts/effects: nothing to do — the counts live on `comp.Goods` and what they
     // grant derives from them. The test asserts the no-op explicitly.

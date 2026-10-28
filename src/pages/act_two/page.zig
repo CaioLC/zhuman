@@ -126,7 +126,11 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             n += 1;
         }
     }
-    stocks[n] = .{ .abbrev = ha.roster.Resource.coin.abbrevIn(2), .full = ha.roster.Resource.coin.labelIn(2), .value = fx.coin };
+    stocks[n] = .{
+        .abbrev = ha.roster.Resource.coin.abbrevIn(2),
+        .full = ha.roster.Resource.coin.labelIn(2),
+        .value = if (agent) |e| ledger.balance(world, e, .coin) else 0,
+    };
     n += 1;
 
     // The merchant dialog's open/mode/selection persists on an always-built node, surviving
@@ -178,16 +182,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     }
 
     // --- the Coin Merchant overlay (its own top-layer root) ---------------------------------
-    const merchant = try coin_merchant(ctx, "a2_trade", trade_owner.state(uic.UiState.TradeState));
-    if (merchant.confirmed) |i| {
-        const lots = if (merchant.mode == 0) &fx.merchant_buys else &fx.merchant_sells;
-        if (i < lots.len) {
-            var buf: [64]u8 = undefined;
-            const verb = if (merchant.mode == 0) "buy" else "sell";
-            const msg = std.mem.print(&buf, "You {s} {s} from the merchant.", .{ verb, lots[i].name }) catch "You trade.";
-            ctx.res.sim.log.push(.good, msg);
-        }
-    }
+    const merchant_root: ?*Node = if (agent) |e| try coin_merchant(ctx, world, e, "a2_trade", trade_owner.state(uic.UiState.TradeState)) else null;
 
     return page.finish(.{
         .stocks = stocks[0..n],
@@ -196,7 +191,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .gen = fx.energy_gen,
         .consumed = fx.energy_consumed,
         .log = !s.focus,
-        .overlay = merchant.root,
+        .overlay = merchant_root,
     });
 }
 

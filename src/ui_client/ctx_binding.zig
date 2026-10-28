@@ -251,27 +251,22 @@ pub const UiState = struct {
         dir: Direction = .none,
         sort_open: bool = false,
     };
-    /// A trade dialog's per-mode selection, keyed by the dialog node. `mode` is the
-    /// active tab (0 = buy, 1 = sell); `buy_sel`/`sell_sel` are the selected offer index **kept
-    /// separately per mode**, so switching tabs does not discard the other mode's choice. All
-    /// default to 0 (buy tab, first offer) — bitwise zero.
+    /// A trade dialog's state, kept on a **stable** node (the market strip, built every frame)
+    /// so it survives the frame-arena rebuild and view switches. `mode` is the active tab (0 =
+    /// buy, 1 = sell); `selected` the chosen lot's id (0 = none), `lots` the slip's count, `page`
+    /// the ledger page. `taken` and `visit` are the Act II merchant stub's own books (lots sold
+    /// by lot index, and the visit's signed movement by balance index) until ACT2-14 gives the
+    /// merchant real stock. All default to the closed, nothing-chosen state.
     pub const TradeState = struct {
         mode: usize = 0,
-        buy_sel: usize = 0,
-        sell_sel: usize = 0,
-        /// Whether the trade dialog is open. Kept on a **stable** node (the market
-        /// strip, built every frame) so the open/close lifecycle survives the frame-arena rebuild;
-        /// the dialog's `mode`/selection ride here too, so a reopened dialog can restore them.
         open: bool = false,
-
-        /// The selection for the current `mode`.
-        pub fn sel(self: *const TradeState) usize {
-            return if (self.mode == 0) self.buy_sel else self.sell_sel;
-        }
-        /// Set the selection for the current `mode` (leaving the other mode's untouched).
-        pub fn setSel(self: *TradeState, i: usize) void {
-            if (self.mode == 0) self.buy_sel = i else self.sell_sel = i;
-        }
+        selected: u32 = 0,
+        lots: u32 = 1,
+        page: u32 = 0,
+        /// The settlement's frame flag for the AFTER flash (cleared once read).
+        settled: bool = false,
+        taken: [32]u16 = @splat(0),
+        visit: [16]f32 = @splat(0),
     };
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`

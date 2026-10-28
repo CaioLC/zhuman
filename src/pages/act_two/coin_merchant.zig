@@ -1,19 +1,20 @@
-//! `act_two/coin_merchant` — the Act II **Coin Merchant** (ACT2-14).
+//! `act_two/coin_merchant` — the Act II **Coin Merchant** (ACT2-14) on the shared trade dialog.
 //!
-//! A thin content adapter over the shared `trade_dialog` using the `.merchant` venue identity:
-//! BUY lots cost Coin (`YOU PAY` / `BUY →`), SELL lots earn Coin (`YOU GIVE` / `SELL →`), each a
-//! finite-stock Coin/resource/good bundle with a refusal reason when a lot is unavailable. The
-//! lots come from the fixture records; a confirmed offer is reported back by index so the caller
-//! can settle it atomically once the Act II market model (ACT2-07/08/09) is live.
-//!
-//! The merchant's inventory and the selected offer survive unrelated view switches because the
-//! dialog's open/mode/selection all live in the caller-owned `TradeState` (the same persistence
-//! the Act I passerby relies on); expiry/departure closes the dialog by the caller flipping
-//! `ts.open = false`, exactly as the Act I page does when the passerby leaves.
+//! The lots are fixture records (`fixtures.merchant_lots`) priced in the stub Coin; the balances
+//! are the settlement's live ledger and goods. A settlement moves real stocks and goods — Coin
+//! and resources through `ledger.move`, goods through `capital` — and the merchant's sold lots
+//! and the visit's tally live on the page's `TradeState` until ACT2-14 gives the merchant its own
+//! stock and departure clock.
 
 const std = @import("std");
 const ha = @import("ha");
 
+const comp = ha.comp;
+const ledger = ha.ledger;
+const capital = ha.capital;
+const roster = ha.roster;
+const World = ha.world.World;
+const Entity = ha.world.Entity;
 const uic = ha.ui_client;
 const Node = uic.Node;
 const UiCtx = uic.UiCtx;
@@ -22,85 +23,127 @@ const TradeState = uic.UiState.TradeState;
 const fx = @import("./fixtures.zig");
 const t = @import("../templates/root.zig");
 
-/// The result of building the merchant dialog for a frame.
-pub const Result = struct {
-    /// The dialog's overlay root (to list after the page shell), or null when closed.
-    root: ?*Node,
-    /// The confirmed offer's index into the active list, or null. `mode` says which list.
-    confirmed: ?usize = null,
-    /// 0 = BUY (into `fx.merchant_buys`), 1 = SELL (into `fx.merchant_sells`).
-    mode: usize = 0,
-};
+/// The stocks the merchant's balances list, in order; goods the lots name follow.
+const stocks = [_]roster.Resource{ .coin, .food, .water, .fuel, .metal, .minerals, .biomass };
 
-fn toOffers(arena: std.mem.Allocator, lots: []const fx.MerchantOffer) ![]t.TradeOffer {
-    const out = try arena.alloc(t.TradeOffer, lots.len);
-    for (lots, 0..) |lot, i| {
-        out[i] = .{
-            .id = lot.id,
-            .name = lot.name,
-            .detail = lot.detail,
-            .give = lot.give,
-            .receive = lot.receive,
-            .effect = lot.effect,
-            .stock = lot.stock,
-            .refusal = lot.refusal,
+/// A term's item resolved against the catalog, with the player's word for it.
+const Resolved = struct { item: ledger.Item, key: []const u8 };
+
+fn resolve(arena: std.mem.Allocator, cat: *const roster.Catalog, id: []const u8) !?Resolved {
+    const item = ledger.item(cat, id) orelse return null;
+    return switch (item) {
+        .resource => |r| .{ .item = item, .key = r.wordIn(2) },
+        .good => |gi| .{ .item = item, .key = try std.ascii.allocLowerString(arena, cat.goods[gi].name) },
+    };
+}
+
+fn heldOf(world: *World, e: Entity, item: ledger.Item) f32 {
+    return switch (item) {
+        .resource => |r| ledger.balance(world, e, r),
+        .good => |gi| if (world.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
+    };
+}
+
+fn termsOf(arena: std.mem.Allocator, cat: *const roster.Catalog, terms: []const fx.MerchantTerm) ![]t.TradeTerm {
+    var out: std.ArrayList(t.TradeTerm) = .empty;
+    for (terms) |term| {
+        const r = (try resolve(arena, cat, term.item)) orelse continue;
+        try out.append(arena, .{ .key = r.key, .n = term.n, .stock = r.item == .resource });
+    }
+    return out.items;
+}
+
+/// Move one side of `lots` lots: `sign` −1 pays out, +1 receives.
+fn moveSide(world: *World, e: Entity, res: *ha.res.Resources, terms: []const fx.MerchantTerm, lots: u32, sign: f32) void {
+    const cat = &res.catalog;
+    for (terms) |term| {
+        const item = ledger.item(cat, term.item) orelse continue;
+        const n = term.n * @as(f32, @floatFromInt(lots));
+        switch (item) {
+            .resource => |r| _ = ledger.move(world, e, r, sign * n),
+            .good => |gi| {
+                const units: u32 = @intFromFloat(@round(n));
+                if (sign > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
+            },
+        }
+    }
+}
+
+/// Build the merchant dialog when `ts.open` and settle what it asks this frame. Returns the
+/// overlay root (or null when closed).
+pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: *TradeState) !?*Node {
+    if (!ts.open) return null;
+    const a = ctx.arena;
+    const cat = &ctx.res.catalog;
+
+    // Balances: the stocks, then every good a lot names, once each.
+    var balances: std.ArrayList(t.TradeBalance) = .empty;
+    for (stocks) |r| {
+        try balances.append(a, .{ .key = r.wordIn(2), .held = ledger.balance(world, e, r) });
+    }
+    for (fx.merchant_lots) |lot| for ([_][]const fx.MerchantTerm{ lot.price, lot.receive }) |side| for (side) |term| {
+        const r = (try resolve(a, cat, term.item)) orelse continue;
+        if (r.item != .good) continue;
+        var seen = false;
+        for (balances.items) |b| seen = seen or std.mem.eql(u8, b.key, r.key);
+        if (seen) continue;
+        try balances.append(a, .{ .key = r.key, .held = heldOf(world, e, r.item) });
+    };
+
+    const lots = try a.alloc(t.TradeLot, fx.merchant_lots.len);
+    for (fx.merchant_lots, lots, 0..) |src, *dst, i| {
+        dst.* = .{
+            .id = src.id,
+            .mode = if (src.sell) .sell else .buy,
+            .lot = src.lot,
+            .effect = src.effect,
+            .price = try termsOf(a, cat, src.price),
+            .receive = try termsOf(a, cat, src.receive),
+            .stock = if (src.stock) |s| s -| ts.taken[i % ts.taken.len] else null,
+            .consequence = src.consequence,
         };
     }
-    return out;
-}
+    const book = t.TradeBook{ .lots = lots, .balances = balances.items };
 
-/// Build the Coin Merchant dialog when `ts.open`. Returns the overlay root (or null) plus any
-/// confirmed offer this frame. The caller lists the root after its page shell and routes a
-/// confirmed index to settlement.
-pub fn coin_merchant(ctx: *UiCtx, id: []const u8, ts: *TradeState) !Result {
-    if (!ts.open) return .{ .root = null };
+    const visit = try a.alloc(t.TradeDelta, @min(balances.items.len, ts.visit.len));
+    for (visit, 0..) |*d, i| d.* = .{ .key = balances.items[i].key, .n = ts.visit[i] };
 
-    const buys = try toOffers(ctx.arena, &fx.merchant_buys);
-    const sells = try toOffers(ctx.arena, &fx.merchant_sells);
+    const res = try t.trade_dialog(ctx, id, .merchant, fx.merchant_meta, book, visit, ts);
 
-    // The settlement's live Coin balance plus a few typed holdings — the YOU HOLD column.
-    const holdings = [_]t.TradeHolding{
-        .{ .label = ha.roster.Resource.coin.labelIn(2), .value = "126" },
-        .{ .label = ha.roster.Resource.biomass.labelIn(2), .value = "31" },
-        .{ .label = ha.roster.Resource.minerals.labelIn(2), .value = "3" },
-        .{ .label = ha.roster.Resource.fuel.labelIn(2), .value = "14" },
-        .{ .label = "Tools", .value = "\u{00d7}6" },
-    };
+    if (res.settle) |s| settle: {
+        for (fx.merchant_lots, 0..) |src, i| {
+            if (src.id != s.id) continue;
+            const lot = &lots[i];
+            // Revalidate against live state: the book's own gate, at this many lots.
+            if (s.lots == 0 or s.lots > book.maxLots(lot)) break :settle;
+            moveSide(world, e, ctx.res, src.price, s.lots, -1);
+            moveSide(world, e, ctx.res, src.receive, s.lots, 1);
+            if (src.stock != null) ts.taken[i % ts.taken.len] += @intCast(s.lots);
+            // The visit's tally, by balance.
+            for (balances.items, 0..) |b, bi| {
+                if (bi >= ts.visit.len) break;
+                for (lot.price) |term| if (std.mem.eql(u8, term.key, b.key)) {
+                    ts.visit[bi] -= term.n * @as(f32, @floatFromInt(s.lots));
+                };
+                for (lot.receive) |term| if (std.mem.eql(u8, term.key, b.key)) {
+                    ts.visit[bi] += term.n * @as(f32, @floatFromInt(s.lots));
+                };
+            }
+            ctx.res.sim.log.push(.good, try a.print("You trade {d} lot{s} of {s} with the merchant.", .{ s.lots, if (s.lots == 1) "" else "s", src.lot }));
+            ts.settled = true;
+        }
+    }
 
-    const res = try t.trade_dialog(ctx, id, .merchant, fx.merchant_meta, buys, sells, &holdings, ts);
-
-    // Escape / outside-click / LEAVE closes. (A live caller also closes on merchant departure.)
+    // Escape / × / LEAVE closes.
     if (res.dismissed) ts.open = false;
-
-    return .{
-        .root = if (ts.open) res.root else null,
-        .confirmed = res.confirmed,
-        .mode = res.mode,
-    };
+    return if (ts.open) res.root else null;
 }
 
-// ============================ Tests =====================================================
-
-test "coin merchant exposes the finite BUY and SELL lots" {
-    // The fixture carries both directions, including a sold-out and a refused lot.
-    try std.testing.expect(fx.merchant_buys.len == 9);
-    try std.testing.expect(fx.merchant_sells.len == 5);
-
-    var sold_out = false;
-    var refused = false;
-    for (fx.merchant_buys) |lot| {
-        if (lot.stock == 0) sold_out = true;
-        if (lot.refusal.len > 0) refused = true;
-    }
-    try std.testing.expect(sold_out); // a zero-stock lot is unselectable
-    try std.testing.expect(refused); // a refusal reason is unselectable
-}
-
-test "BUY lots pay Coin; SELL lots receive Coin" {
-    for (fx.merchant_buys) |lot| {
-        try std.testing.expect(std.mem.find(u8, lot.give, "Coin") != null); // YOU PAY coin
-    }
-    for (fx.merchant_sells) |lot| {
-        try std.testing.expect(std.mem.find(u8, lot.receive, "Coin") != null); // earn coin
+test "every merchant lot names items the catalog knows" {
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    for (fx.merchant_lots) |lot| {
+        for (lot.price) |term| try std.testing.expect(ledger.item(&cat, term.item) != null);
+        for (lot.receive) |term| try std.testing.expect(ledger.item(&cat, term.item) != null);
     }
 }

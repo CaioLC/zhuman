@@ -90,6 +90,13 @@ pub const InventoryMinerals = struct {
     v: f32 = 0,
 };
 
+/// **Coin, stubbed.** A balance like the others so the merchant and the neighbours can settle
+/// real numbers, opened at the curtain with a small purse. The simulation does not yet decide
+/// that a medium of exchange emerges (`docs/roadmap.md`, ACT2-09); this stands in until it does.
+pub const InventoryCoin = struct {
+    v: f32 = 0,
+};
+
 /// **Migration version stamp** — the versioned marker the Act I → II migration writes onto an
 /// agent the one time it runs. Its presence is what makes the migration idempotent: a second
 /// call sees the stamp and returns without reopening stocks or re-seeding research. The

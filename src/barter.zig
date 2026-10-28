@@ -61,18 +61,23 @@ fn owns_give(w: *World, e: Entity, res: *Resources, q: *const Quote) bool {
     return true;
 }
 
-/// Resolve `q` on player `e`, atomically. Revalidates everything first; on any failure returns the
-/// reason and mutates nothing. On success: deducts the give side, credits the receive side,
-/// decrements the passerby's stock, lands/leaves good effects once, logs one line.
-pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
+/// Resolve `lots` of quote `q` on player `e`, atomically: every line of both bundles scaled
+/// linearly by `lots`. Revalidates everything first; on any failure returns the reason and
+/// mutates nothing. On success: deducts the give side, credits the receive side, decrements the
+/// passerby's stock by `lots`, tallies the visit, lands/leaves good effects once, logs one line.
+pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: u16) Result {
     const enc = &res.sim.encounter;
     const cat = &res.catalog;
     const food = w.get(e, comp.InventoryFood).?;
     const stock = w.get(e, comp.InventoryBiomass).?;
+    if (lots == 0) return .{ .refusal = .sold_out };
+    const scaled = base.times(lots);
+    const q = &scaled;
 
     // --- revalidate (all-or-nothing gate) ---------------------------------------------------
     const r = q.refusal(enc, food.v, stock.v);
     if (r != .none) return .{ .refusal = r };
+    if (base.stock < lots) return .{ .refusal = .sold_out };
     if (!owns_give(w, e, res, q)) return .{ .refusal = .sold_out }; // player lacks the good to give
     // The receive side of a buy comes out of the passerby's satchel — confirm the satchel holds
     // every tool ware the player is to receive (bulk food/materials are the passerby's to
@@ -84,6 +89,8 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, q: *const Quote) Result {
 
     // --- apply (both bundles move, or neither — we are past every gate now) ------------------
     var biomass_moved: f32 = 0;
+    for (q.give.slice()) |line| enc.visit[@backingInt(line.item)] -= line.qty;
+    for (q.receive.slice()) |line| enc.visit[@backingInt(line.item)] += line.qty;
 
     // Give side leaves the player.
     for (q.give.slice()) |line| {
@@ -185,7 +192,7 @@ test "a buy moves both bundles atomically and decrements the satchel" {
     };
 
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
-    const r = resolve(&w, e, &res, &q);
+    const r = resolve(&w, e, &res, &q, 1);
     try testing.expect(r.ok());
     // Give side left the player.
     try testing.expectApproxEqAbs(@as(f32, 4), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6-2
@@ -215,7 +222,7 @@ test "a sell releases the good, credits materials, and passes it to the passerby
         .receive = market.Bundle.one(.biomass, 5),
     };
 
-    const r = resolve(&w, e, &res, &q);
+    const r = resolve(&w, e, &res, &q, 1);
     try testing.expect(r.ok());
     try testing.expectApproxEqAbs(@as(f32, 5), r.biomass_moved, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 17), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 12+5
@@ -247,7 +254,7 @@ test "every refusal path rolls back — nothing moves" {
 
     // Unaffordable → nothing changes.
     const before_mat = w.get(e, comp.InventoryBiomass).?.v;
-    try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q).refusal);
+    try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q, 1).refusal);
     try testing.expectEqual(before_mat, w.get(e, comp.InventoryBiomass).?.v);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count);
@@ -255,13 +262,13 @@ test "every refusal path rolls back — nothing moves" {
     // Affordable but stale (a different passerby now) → still nothing.
     q.give = market.Bundle.one(.biomass, 2);
     res.sim.encounter.id = 2;
-    try testing.expectEqual(market.Refusal.stale, resolve(&w, e, &res, &q).refusal);
+    try testing.expectEqual(market.Refusal.stale, resolve(&w, e, &res, &q, 1).refusal);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
 
     // Departed → nothing.
     res.sim.encounter.id = 1;
     res.sim.encounter.phase = .departed;
-    try testing.expectEqual(market.Refusal.departed, resolve(&w, e, &res, &q).refusal);
+    try testing.expectEqual(market.Refusal.departed, resolve(&w, e, &res, &q, 1).refusal);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_rod"));
     try testing.expectEqual(@as(usize, 0), res.sim.log.count); // never logged a failed trade
 }
@@ -279,6 +286,36 @@ test "selling a good you do not own is refused, not a panic" {
         .give = market.Bundle.one(.whetstone, 1),
         .receive = market.Bundle.one(.biomass, 5),
     };
-    try testing.expectEqual(market.Refusal.sold_out, resolve(&w, e, &res, &q).refusal);
+    try testing.expectEqual(market.Refusal.sold_out, resolve(&w, e, &res, &q, 1).refusal);
     try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // unchanged
+}
+
+test "several lots scale both bundles linearly, decrement stock by lots, and tally the visit" {
+    var w = World.init();
+    var res = try test_res();
+    defer res.catalog.deinit();
+    const e = spawn_trader(&w);
+
+    // Buy food at 2 materials a lot, three lots.
+    const q = Quote{
+        .id = 1,
+        .rev = 1,
+        .direction = .buy,
+        .give = market.Bundle.one(.biomass, 2),
+        .receive = market.Bundle.one(.food, 1),
+        .stock = 8,
+    };
+    try testing.expect(resolve(&w, e, &res, &q, 3).ok());
+    try testing.expectApproxEqAbs(@as(f32, 6), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 12-6
+    try testing.expectApproxEqAbs(@as(f32, 9), w.get(e, comp.InventoryFood).?.v, 1e-5); // 6+3
+    try testing.expectApproxEqAbs(@as(f32, -6), res.sim.encounter.visit[@backingInt(Ware.biomass)], 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 3), res.sim.encounter.visit[@backingInt(Ware.food)], 1e-5);
+
+    // More lots than the quote's stock is refused whole.
+    var short_stock = q;
+    short_stock.stock = 2;
+    try testing.expectEqual(market.Refusal.sold_out, resolve(&w, e, &res, &short_stock, 3).refusal);
+    // More lots than the player can pay for is refused whole.
+    try testing.expectEqual(market.Refusal.unaffordable, resolve(&w, e, &res, &q, 4).refusal);
+    try testing.expectApproxEqAbs(@as(f32, 6), w.get(e, comp.InventoryBiomass).?.v, 1e-5);
 }

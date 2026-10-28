@@ -46,6 +46,9 @@ pub const Encounter = struct {
     /// The current visit's finite satchel — units of each `Ware` still available. Refilled on
     /// arrival, decremented by trades, never regenerated until the next arrival.
     stock: [ware_count]u16 = @splat(0),
+    /// What this visit has moved, from the player's side — signed units of each `Ware` (paid
+    /// out negative, received positive). The trade dialog's footer reads it; arrival clears it.
+    visit: [ware_count]f32 = @splat(0),
 
     /// Whether a deal can be opened right now — only while the passerby is actually present.
     /// The UI gates the TRADE action on this; tab visibility never enters into it.
@@ -121,6 +124,7 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Lo
             enc.id += 1;
             enc.remaining = sched.linger_days * spd;
             enc.stock = sched.satchel;
+            enc.visit = @splat(0);
             log.push(.good, "A passerby stops, and opens a satchel of odds and ends.");
             return .arrived;
         },
@@ -257,6 +261,15 @@ pub const Quote = struct {
 
     pub fn takeable(self: *const Quote, enc: *const Encounter, food: f32, biomass: f32) bool {
         return self.refusal(enc, food, biomass) == .none;
+    }
+
+    /// The same quote taken `lots` times over: every line scaled linearly. Stock counts lots.
+    pub fn times(self: *const Quote, lots: u16) Quote {
+        var q = self.*;
+        const k: f32 = @floatFromInt(lots);
+        for (q.give.lines[0..q.give.len]) |*l| l.qty *= k;
+        for (q.receive.lines[0..q.receive.len]) |*l| l.qty *= k;
+        return q;
     }
 };
 

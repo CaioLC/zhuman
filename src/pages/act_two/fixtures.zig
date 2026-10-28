@@ -10,50 +10,46 @@ const Resource = @import("ha").roster.Resource;
 
 /// The settlement's population.
 pub const population: f32 = 48;
-/// The coin balance.
-pub const coin: f32 = 126;
 
 // —— Coin Merchant (ACT2-14) ————————————————————————————————————————————————————————————
-// The merchant's finite lots. Buys cost Coin ("YOU PAY"); sells give goods/resources for Coin
-// ("YOU GIVE"). Each lot has a stock count and an optional refusal reason. A refused or
-// zero-stock lot is unselectable (the row-facing `valid()` the dialog already enforces).
+// The merchant's finite lots, priced in the stub Coin. A term names a `Resource` or a good by
+// catalog id; a lot is one unit of trade, scaled linearly by the slip's lot count. BUY lots
+// carry the merchant's stock; SELL lots are bounded by what the settlement holds.
 
-pub const MerchantOffer = struct {
-    id: usize,
-    name: []const u8,
-    detail: []const u8 = "",
-    /// What the player hands over for this lot (Coin on BUY, a good/resource on SELL).
-    give: []const u8,
-    /// What the player receives (the good/resource on BUY, Coin on SELL).
-    receive: []const u8,
-    effect: []const u8 = "",
-    stock: u32 = 1,
-    refusal: []const u8 = "",
+pub const MerchantTerm = struct { item: []const u8, n: f32 };
+
+pub const MerchantLot = struct {
+    id: u32,
+    sell: bool = false,
+    lot: []const u8,
+    effect: []const u8,
+    price: []const MerchantTerm,
+    receive: []const MerchantTerm,
+    stock: ?u32 = null,
+    consequence: []const u8 = "",
 };
 
-/// BUY lots — the player PAYS Coin. Nine lots: water, fuel, metal, minerals, biomass, goods.
-pub const merchant_buys = [_]MerchantOffer{
-    .{ .id = 1, .name = "Water", .detail = "spring-fresh", .give = "6 Coin", .receive = "Water +10", .effect = "Ten units enter your Water stock. Local production is not required.", .stock = 4 },
-    .{ .id = 2, .name = "Fuel", .detail = "seasoned charcoal", .give = "9 Coin", .receive = "Fuel +8", .effect = "Eight units enter your Fuel stock; burn it or hold it.", .stock = 3 },
-    .{ .id = 3, .name = "Metal", .detail = "bar stock", .give = "14 Coin", .receive = "Metal +4", .effect = "Four bars enter your Metal stock, the scarcest input in reach.", .stock = 2 },
-    .{ .id = 4, .name = "Minerals", .detail = "crushed ore", .give = "7 Coin", .receive = "Minerals +12", .effect = "Twelve units enter your Minerals stock.", .stock = 5 },
-    .{ .id = 5, .name = Resource.biomass.labelIn(2), .detail = "baled fibre", .give = "5 Coin", .receive = std.fmt.comptimePrint("{s} +15", .{Resource.biomass.labelIn(2)}), .effect = std.fmt.comptimePrint("Fifteen units enter your {s} stock.", .{Resource.biomass.labelIn(2)}), .stock = 6 },
-    .{ .id = 6, .name = "Preserved food", .detail = "keeps well", .give = "8 Coin", .receive = "Food +10", .effect = "Adds food now. It does not change the larder's spoilage margin.", .stock = 3 },
-    .{ .id = 7, .name = "Hand tools", .detail = "a maker's kit", .give = "22 Coin", .receive = "Tools \u{00d7}1", .stock = 1, .effect = "A ready-made toolset: Forge tools no longer needs Metal on hand." },
-    .{ .id = 8, .name = "Draft animal", .detail = "sold out", .give = "40 Coin", .receive = "Ox \u{00d7}1", .stock = 0 },
-    .{ .id = 9, .name = "Seed grain", .detail = "needs a granary", .give = "11 Coin", .receive = "Seed +6", .stock = 2, .refusal = "needs a granary" },
+pub const merchant_lots = [_]MerchantLot{
+    .{ .id = 1, .lot = "Water \u{00d7}6", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "water", .n = 6 }}, .stock = 3 },
+    .{ .id = 2, .lot = "Minerals \u{00d7}5", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 7 }}, .receive = &.{.{ .item = "minerals", .n = 5 }}, .stock = 2 },
+    .{ .id = 3, .lot = "Fuel \u{00d7}4", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 8 }}, .receive = &.{.{ .item = "fuel", .n = 4 }}, .stock = 2 },
+    .{ .id = 4, .lot = "Metal \u{00d7}3", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 12 }}, .receive = &.{.{ .item = "metal", .n = 3 }}, .stock = 2 },
+    .{ .id = 5, .lot = "Food \u{00d7}10", .effect = "preserved, keeps well", .price = &.{.{ .item = "coin", .n = 8 }}, .receive = &.{.{ .item = "food", .n = 10 }}, .stock = 3 },
+    .{ .id = 6, .lot = "Biomass \u{00d7}15", .effect = "baled fibre", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "biomass", .n = 15 }}, .stock = 4 },
+    .{ .id = 7, .lot = "Cut stone \u{00d7}4", .effect = "dressed downriver", .price = &.{.{ .item = "coin", .n = 9 }}, .receive = &.{.{ .item = "worked_stone", .n = 4 }}, .stock = 2 },
+    .{ .id = 8, .lot = "Glass pane \u{00d7}1", .effect = "no kiln here can make it", .price = &.{.{ .item = "coin", .n = 22 }}, .receive = &.{.{ .item = "glass_pane", .n = 1 }}, .stock = 1 },
+    .{ .id = 9, .lot = "Hand tools \u{00d7}1", .effect = "forged beyond the valley", .price = &.{.{ .item = "coin", .n = 26 }}, .receive = &.{.{ .item = "hand_tools", .n = 1 }}, .stock = 2 },
+    .{ .id = 10, .lot = "Fishing net \u{00d7}1", .effect = "better Fish tool", .price = &.{.{ .item = "coin", .n = 18 }}, .receive = &.{.{ .item = "fishing_net", .n = 1 }}, .stock = 1, .consequence = "Replaces Fishing rod: Fish yield rises. The unlock does not stack." },
+    .{ .id = 11, .lot = "Carpenter bench \u{00d7}1", .effect = "finished capital", .price = &.{.{ .item = "coin", .n = 60 }}, .receive = &.{.{ .item = "carpenter_bench", .n = 1 }}, .stock = 1 },
+    .{ .id = 101, .sell = true, .lot = "Biomass \u{00d7}6", .effect = "leaves your stock", .price = &.{.{ .item = "biomass", .n = 6 }}, .receive = &.{.{ .item = "coin", .n = 5 }} },
+    .{ .id = 102, .sell = true, .lot = "Food \u{00d7}8", .effect = "leaves your larder", .price = &.{.{ .item = "food", .n = 8 }}, .receive = &.{.{ .item = "coin", .n = 4 }} },
+    .{ .id = 103, .sell = true, .lot = "Fuel \u{00d7}4", .effect = "burned down the ridge", .price = &.{.{ .item = "fuel", .n = 4 }}, .receive = &.{.{ .item = "coin", .n = 6 }} },
+    .{ .id = 104, .sell = true, .lot = "Minerals \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "minerals", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 4 }} },
+    .{ .id = 105, .sell = true, .lot = "Metal \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "metal", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 9 }} },
+    .{ .id = 106, .sell = true, .lot = "Water \u{00d7}5", .effect = "drawn this morning", .price = &.{.{ .item = "water", .n = 5 }}, .receive = &.{.{ .item = "coin", .n = 3 }} },
+    .{ .id = 107, .sell = true, .lot = "Forge \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "forge", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 30 }}, .consequence = "A spare goes first; the forge you use keeps its verb." },
+    .{ .id = 108, .sell = true, .lot = "Lean-to \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "lean_to", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 7 }} },
 };
-
-/// SELL lots — the player GIVES a good/resource for Coin. Diminishing marginal prices are
-/// taught in the effect line, mirroring the Act I passerby.
-pub const merchant_sells = [_]MerchantOffer{
-    .{ .id = 101, .name = Resource.biomass.labelIn(2), .detail = "your surplus", .give = std.fmt.comptimePrint("{s} \u{00d7}10", .{Resource.biomass.labelIn(2)}), .receive = "4 Coin", .effect = "The first bale earns the most; the next falls to 3 Coin.", .stock = 3 },
-    .{ .id = 102, .name = "Minerals", .detail = "your surplus", .give = "Minerals \u{00d7}10", .receive = "5 Coin", .effect = "Diminishing: the next lot falls to 4 Coin.", .stock = 1 },
-    .{ .id = 103, .name = "Food", .detail = "your surplus", .give = "Food \u{00d7}10", .receive = "7 Coin", .effect = "Selling the larder down raises the price you later pay back.", .stock = 2 },
-    .{ .id = 104, .name = "Spare tools", .detail = "your spare stock", .give = "Tools \u{00d7}1", .receive = "16 Coin", .effect = "A spare is sold first; the set you use keeps its effect.", .stock = 2 },
-    .{ .id = 105, .name = "Fuel", .detail = "your surplus", .give = "Fuel \u{00d7}8", .receive = "6 Coin", .stock = 1 },
-};
-
 /// The merchant venue meta (time left); the dialog prefixes the venue kicker: `MERCHANT · MARKET OPEN 2.4 DAYS`.
 pub const merchant_meta = "MARKET OPEN 2.4 DAYS";
 

@@ -93,183 +93,178 @@ const market = ha.market;
 const barter = ha.barter;
 const Ware = market.Ware;
 
-/// A buy/sell offer paired with the authoritative `market.Quote` that backs it — the dialog shows
-/// the strings, `resolve` runs the quote. Built into the frame arena.
-const BackedOffer = struct { offer: t.TradeOffer, quote: market.Quote };
+/// The passerby's wares in the order the dialog lists their balances (the AFTER rows, the
+/// visit ledger): the two stocks, then the two tools.
+const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone };
 
-/// Format a bundle side into a short `NfF`, `NmM`, or tool-name string for the dialog.
-fn wareLabel(act: u8, w: Ware) []const u8 {
+/// The player's word for a ware (`food`, `materials`, `fishing rod`, `hatchet`).
+fn wareKey(act: u8, w: Ware) []const u8 {
     return switch (w) {
         .food => ha.roster.Resource.food.wordIn(act),
         .biomass => ha.roster.Resource.biomass.wordIn(act),
-        .fish_hook => "a fishing rod",
-        .whetstone => "a hatchet",
+        .fish_hook => "fishing rod",
+        .whetstone => "hatchet",
     };
 }
 
-fn bundleLabel(act: u8, buf: []u8, b: *const market.Bundle) []const u8 {
-    // A single-line summary of the bundle's lines: "2 food, 4m", or "a hand axe".
-    var w: usize = 0;
-    for (b.slice(), 0..) |line, i| {
-        const sep = if (i == 0) "" else " + ";
-        const piece = switch (line.item) {
-            .food => std.mem.print(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.food.wordIn(act) }) catch "",
-            .biomass => std.mem.print(buf[w..], "{s}{d:.0} {s}", .{ sep, line.qty, ha.roster.Resource.biomass.wordIn(act) }) catch "",
-            else => std.mem.print(buf[w..], "{s}{s}", .{ sep, wareLabel(act, line.item) }) catch "",
-        };
-        w += piece.len;
+/// A bundle as the dialog's terms.
+fn termsOf(arena: std.mem.Allocator, act: u8, b: *const market.Bundle) ![]t.TradeTerm {
+    const out = try arena.alloc(t.TradeTerm, b.len);
+    for (b.slice(), out) |line, *term| term.* = .{
+        .key = wareKey(act, line.item),
+        .n = line.qty,
+        .stock = barter.goodOf(line.item) == null,
+    };
+    return out;
+}
+
+/// One lot the dialog shows and the quote that backs it.
+const Backed = struct { lot: t.TradeLot, quote: market.Quote };
+
+fn buyQuote(enc: *const market.Encounter, ware: Ware) market.Quote {
+    var q = market.Quote{ .id = 1 + @as(u32, @backingInt(ware)), .rev = enc.id, .direction = .buy, .give = .{}, .receive = .{}, .stock = enc.stockOf(ware) };
+    switch (ware) {
+        // A modest posted price: the passerby wants materials for food, food for materials,
+        // and both for a tool.
+        .food => {
+            q.give = market.Bundle.one(.biomass, 2);
+            q.receive = market.Bundle.one(.food, 1);
+        },
+        .biomass => {
+            q.give = market.Bundle.one(.food, 1);
+            q.receive = market.Bundle.one(.biomass, 3);
+        },
+        .fish_hook => {
+            q.give.add(.food, 2);
+            q.give.add(.biomass, 8);
+            q.receive = market.Bundle.one(.fish_hook, 1);
+        },
+        .whetstone => {
+            q.give.add(.food, 2);
+            q.give.add(.biomass, 6);
+            q.receive = market.Bundle.one(.whetstone, 1);
+        },
     }
-    return buf[0..w];
+    return q;
 }
 
-fn wareTradeName(act: u8, w: Ware) []const u8 {
-    return switch (w) {
-        .food => "Preserved food",
-        .biomass => ha.roster.Resource.biomass.labelIn(act),
-        .fish_hook => "Fishing rod",
-        .whetstone => "Hatchet",
+/// The lots the player can sell: surplus food, a bundle of materials, and either tool. Lots
+/// scale linearly; a sell is bounded by what the player holds.
+fn sellQuote(enc: *const market.Encounter, ware: Ware) market.Quote {
+    const id = 101 + @as(u32, @backingInt(ware));
+    return switch (ware) {
+        .biomass => .{ .id = id, .rev = enc.id, .direction = .sell, .give = market.Bundle.one(.biomass, 10), .receive = market.Bundle.one(.food, 3), .stock = std.math.maxInt(u16) },
+        else => blk: {
+            var q = market.sell_quote(ware, 0, id, enc.id);
+            q.stock = std.math.maxInt(u16);
+            break :blk q;
+        },
     };
 }
 
-fn wareTradeDetail(w: Ware) []const u8 {
-    return switch (w) {
-        .food => "provisions \u{00b7} keeps well",
-        .biomass => "useful stock",
-        .fish_hook => "unlocks Fish",
-        .whetstone => "unlocks Split wood",
+fn buyCopy(act: u8, ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
+    _ = act;
+    return switch (ware) {
+        .food => .{ .lot = "Preserved food \u{00d7}1", .effect = "keeps well", .consequence = "" },
+        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "useful stock", .consequence = "" },
+        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "unlocks Fish", .consequence = "Fishing becomes available while you own it." },
+        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "unlocks Split wood", .consequence = "Split wood becomes available while you own it." },
     };
 }
 
-/// Build the trade dialog overlay when open, wiring confirm → `barter.resolve`. Returns the
-/// dialog's overlay root (or null when closed). The offers are the passerby's satchel wares (buy)
-/// and the player's sellable goods + surplus (sell), each backed by a live `market.Quote`.
+fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
+    return switch (ware) {
+        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "" },
+        .biomass => .{ .lot = "Materials \u{00d7}10", .effect = "raw stock", .consequence = "" },
+        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the rod you use keeps Fish open." },
+        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
+    };
+}
+
+/// Build the trade dialog overlay when open: the passerby's satchel as BUY lots and the
+/// player's stocks and tools as SELL lots, each backed by a live `market.Quote`; a settlement
+/// routes to `barter.resolve` with its lot count. Returns the dialog's overlay root (or null
+/// when closed).
 fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
     const ts = ts_opt orelse return null;
     if (!ts.open) return null;
+    const a = ctx.arena;
     const act = ha.migration.actOf(world, e);
-
     const enc = &ctx.res.sim.encounter;
-    const food = world.get(e, comp.InventoryFood).?;
-    const stock = world.get(e, comp.InventoryBiomass).?;
-
-    // --- buy offers: what the passerby will hand over from the satchel --------------------
-    var buys = std.ArrayList(BackedOffer).empty;
-    var gbuf = try ctx.arena.alloc(u8, 512);
-    var gw: usize = 0;
-    inline for (.{ Ware.food, Ware.biomass, Ware.fish_hook, Ware.whetstone }) |ware| {
-        const have = enc.stockOf(ware);
-        if (have > 0) {
-            // A simple posted buy price: the passerby wants Materials (bulk) or Food+Materials
-            // (tools) for what it carries. Kept modest; the sell side is where diminishing value
-            // is taught.
-            var q = market.Quote{ .id = @as(u32, @backingInt(ware)), .rev = enc.id, .direction = .buy, .give = undefined, .receive = undefined, .stock = have };
-            switch (ware) {
-                .food => {
-                    q.give = market.Bundle.one(.biomass, 2);
-                    q.receive = market.Bundle.one(.food, 1);
-                },
-                .biomass => {
-                    q.give = market.Bundle.one(.food, 1);
-                    q.receive = market.Bundle.one(.biomass, 3);
-                },
-                .fish_hook => {
-                    var g = market.Bundle{};
-                    g.add(.food, 2);
-                    g.add(.biomass, 8);
-                    q.give = g;
-                    q.receive = market.Bundle.one(.fish_hook, 1);
-                },
-                .whetstone => {
-                    var g = market.Bundle{};
-                    g.add(.food, 2);
-                    g.add(.biomass, 6);
-                    q.give = g;
-                    q.receive = market.Bundle.one(.whetstone, 1);
-                },
-            }
-            const give_s = bundleLabel(act, gbuf[gw..], &q.give);
-            gw += give_s.len;
-            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
-            gw += recv_s.len;
-            const refusal = q.refusal(enc, food.v, stock.v);
-            try buys.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = wareTradeDetail(ware), .give = give_s, .receive = recv_s, .stock = have, .refusal = refusal.reason() },
-                .quote = q,
-            });
-        }
-    }
-
-    // --- sell offers: the player's surplus + owned goods, at the diminishing schedule -----
-    var sells = std.ArrayList(BackedOffer).empty;
-    // Surplus resources (a token "sell 1 unit" at the first-unit value; the schedule teaches the
-    // decline via `next_unit`, shown in the effect line).
-    inline for (.{ Ware.food, Ware.biomass }) |ware| {
-        const held: f32 = if (ware == .food) food.v else stock.v;
-        if (held >= 1) {
-            const q = market.sell_quote(ware, 0, 100 + @as(u32, @backingInt(ware)), enc.id);
-            const give_s = bundleLabel(act, gbuf[gw..], &q.give);
-            gw += give_s.len;
-            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
-            gw += recv_s.len;
-            const eff = try ctx.arena.print("next unit: {d:.1}{s}", .{ q.next_unit orelse 0, ha.roster.Resource.biomass.letterIn(act) });
-            try sells.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = "your surplus", .give = give_s, .receive = recv_s, .effect = eff, .stock = 1 },
-                .quote = q,
-            });
-        }
-    }
-    // Owned tradeable goods (the wares the passerby recognizes, by their roster id).
     const cat = &ctx.res.catalog;
-    const goods = world.get(e, comp.Goods);
-    for ([_]Ware{ .fish_hook, .whetstone }) |ware| {
-        const gi = cat.goodIndex(barter.goodOf(ware).?) orelse continue;
-        const owned: u32 = if (goods) |g| g.count[gi] else 0;
-        if (owned > 0) {
-            const q = market.sell_quote(ware, 0, 200 + @as(u32, @backingInt(ware)), enc.id);
-            const give_s = try ctx.arena.print("{s}", .{wareLabel(act, ware)});
-            const recv_s = bundleLabel(act, gbuf[gw..], &q.receive);
-            gw += recv_s.len;
-            try sells.append(ctx.arena, .{
-                .offer = .{ .id = q.id, .name = wareTradeName(act, ware), .detail = "your spare stock", .give = give_s, .receive = recv_s, .stock = @intCast(@min(owned, std.math.maxInt(u16))) },
-                .quote = q,
-            });
-        }
+
+    // Balances, in the dialog's order.
+    var balances: [ware_order.len]t.TradeBalance = undefined;
+    for (ware_order, &balances) |ware, *b| {
+        const held: f32 = switch (ware) {
+            .food => world.get(e, comp.InventoryFood).?.v,
+            .biomass => world.get(e, comp.InventoryBiomass).?.v,
+            else => blk: {
+                const gi = cat.goodIndex(barter.goodOf(ware).?) orelse break :blk 0;
+                const goods = world.get(e, comp.Goods) orelse break :blk 0;
+                break :blk @floatFromInt(goods.count[gi]);
+            },
+        };
+        b.* = .{ .key = wareKey(act, ware), .held = held };
     }
 
-    // Flatten the offer views for the dialog.
-    var buy_views = try ctx.arena.alloc(t.TradeOffer, buys.items.len);
-    for (buys.items, 0..) |b, i| buy_views[i] = b.offer;
-    var sell_views = try ctx.arena.alloc(t.TradeOffer, sells.items.len);
-    for (sells.items, 0..) |s, i| sell_views[i] = s.offer;
+    var backed: std.ArrayList(Backed) = .empty;
+    for (ware_order) |ware| {
+        const q = buyQuote(enc, ware);
+        const c = buyCopy(act, ware);
+        try backed.append(a, .{ .quote = q, .lot = .{
+            .id = q.id,
+            .mode = .buy,
+            .lot = c.lot,
+            .effect = c.effect,
+            .price = try termsOf(a, act, &q.give),
+            .receive = try termsOf(a, act, &q.receive),
+            .stock = q.stock,
+            .consequence = c.consequence,
+        } });
+    }
+    for (ware_order) |ware| {
+        const q = sellQuote(enc, ware);
+        const c = sellCopy(ware);
+        try backed.append(a, .{ .quote = q, .lot = .{
+            .id = q.id,
+            .mode = .sell,
+            .lot = c.lot,
+            .effect = c.effect,
+            .price = try termsOf(a, act, &q.give),
+            .receive = try termsOf(a, act, &q.receive),
+            .consequence = c.consequence,
+        } });
+    }
+    const lots = try a.alloc(t.TradeLot, backed.items.len);
+    for (backed.items, lots) |b, *l| l.* = b.lot;
 
-    // Live holdings line.
-    // Live header metadata and structured YOU HOLD rows.
-    var meta_buf: [32]u8 = undefined;
+    const book = t.TradeBook{
+        .lots = lots,
+        .balances = &balances,
+        .notation = .{ .abbrev = &.{
+            .{ .key = ha.roster.Resource.food.wordIn(act), .letter = ha.roster.Resource.food.letterIn(act) },
+            .{ .key = ha.roster.Resource.biomass.wordIn(act), .letter = ha.roster.Resource.biomass.letterIn(act) },
+        } },
+    };
+
+    // What this visit has moved, from the encounter's own tally.
+    var visit: [ware_order.len]t.TradeDelta = undefined;
+    for (ware_order, &visit) |ware, *d| d.* = .{ .key = wareKey(act, ware), .n = enc.visit[@backingInt(ware)] };
+
     const days_left = enc.remaining / ctx.res.config.secs_per_day;
-    const meta = std.mem.print(&meta_buf, "{d:.1} DAYS LEFT", .{days_left}) catch "DAYS LEFT";
-    var food_buf: [24]u8 = undefined;
-    var material_buf: [24]u8 = undefined;
-    var holding_views = std.ArrayList(t.TradeHolding).empty;
-    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.food.labelIn(act), .value = std.mem.print(&food_buf, "{d:.1}", .{food.v}) catch "?" });
-    try holding_views.append(ctx.arena, .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = std.mem.print(&material_buf, "{d:.0}", .{stock.v}) catch "?" });
-    // The manufactured unlockers the passerby's deal turns on, plus one common crude holding.
-    for ([_][]const u8{ "sandals", "hatchet", "fish_rod" }) |gid| {
-        const gi = cat.goodIndex(gid) orelse continue;
-        const owned: u32 = if (goods) |g| g.count[gi] else 0;
-        if (owned > 0) {
-            try holding_views.append(ctx.arena, .{ .label = cat.goods[gi].name, .value = try ctx.arena.print("\u{00d7}{d}", .{owned}) });
+    const meta = try a.print("{d:.1} DAYS LEFT", .{days_left});
+    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, book, &visit, ts);
+
+    // Settle through the authoritative resolver; the header, HOLDINGS and the log read live
+    // state, so they move in this frame, and the slip flashes the new values next frame.
+    if (res.settle) |s| {
+        for (backed.items) |b| {
+            if (b.quote.id != s.id) continue;
+            if (barter.resolve(world, e, ctx.res, &b.quote, @intCast(@min(s.lots, std.math.maxInt(u16)))).ok()) ts.settled = true;
         }
     }
-
-    const res = try t.trade_dialog(ctx, "trade", .passerby, meta, buy_views, sell_views, holding_views.items, ts);
-
-    // Confirm → resolve the backing quote atomically. Header/Holdings/log read live world state,
-    // so they refresh this same frame.
-    if (res.confirmed) |i| {
-        const backing = if (res.mode == 0) buys.items else sells.items;
-        if (i < backing.len) _ = barter.resolve(world, e, ctx.res, &backing[i].quote);
-    }
-    // Escape / outside-click closes; also close if the passerby has left.
+    // Escape / × / LEAVE closes; so does the passerby leaving.
     if (res.dismissed or !enc.dealable()) ts.open = false;
 
     return if (ts.open) res.root else null;

@@ -444,8 +444,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "trade_dialog")) {
         return auditTradeOverlay(ctx, audit_trade);
     } else if (eq(name, "coin_merchant")) {
-        const m = try coin_merchant(ctx, "merchant", audit_trade);
-        return m.root;
+        // The merchant over the debug actor: it has not crossed the curtain, so its Act II
+        // stocks read empty and most buys are short of coin.
+        const a = player.get() orelse return null;
+        return try coin_merchant(ctx, world, a[0], "merchant", audit_trade);
     } else if (eq(name, "menu_dialog")) {
         _ = try stage.text("note", "The session menu opens over this page; reselect the entry to reopen it.");
     } else if (eq(name, "curtain")) {
@@ -576,36 +578,32 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
 /// page. `audit_trade` lives on the debug root, so dismissal persists after the overlay disappears.
 fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node {
     if (!audit_trade.open) return null;
-    const act: u8 = 1;
+    // The prototype's Act I passerby, as numbers (`trade.html`'s `ACTS.i`).
+    const lots = [_]t.TradeLot{
+        .{ .id = 1, .mode = .buy, .lot = "Fishing rod \u{00d7}1", .effect = "unlocks Fish", .price = &.{ .{ .key = "food", .n = 2 }, .{ .key = "materials", .n = 8 } }, .receive = &.{.{ .key = "fishing rod", .n = 1, .stock = false }}, .stock = 1, .consequence = "Fishing becomes available while you own it." },
+        .{ .id = 2, .mode = .buy, .lot = "Hand axe \u{00d7}1", .effect = "splitting costs less", .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 40 } }, .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }}, .stock = 1 },
+        .{ .id = 3, .mode = .buy, .lot = "Preserved food \u{00d7}10", .effect = "keeps well", .price = &.{.{ .key = "materials", .n = 8 }}, .receive = &.{.{ .key = "food", .n = 10 }}, .stock = 2 },
+        .{ .id = 11, .mode = .sell, .lot = "Sandals \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .key = "sandals", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 5 } }, .consequence = "A spare pair goes first; the pair you wear keeps its Forage margin." },
+        .{ .id = 12, .mode = .sell, .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .key = "hatchet", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 9 }, .{ .key = "materials", .n = 8 } } },
+        .{ .id = 13, .mode = .sell, .lot = "Materials \u{00d7}10", .effect = "raw stock", .price = &.{.{ .key = "materials", .n = 10 }}, .receive = &.{.{ .key = "food", .n = 3 }} },
+    };
+    const balances = [_]t.TradeBalance{
+        .{ .key = "food", .held = 11.6 },
+        .{ .key = "materials", .held = 31 },
+        .{ .key = "fishing rod", .held = 0 },
+        .{ .key = "hand axe", .held = 0 },
+        .{ .key = "sandals", .held = 2 },
+        .{ .key = "hatchet", .held = 2 },
+    };
+    const book = t.TradeBook{ .lots = &lots, .balances = &balances, .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "f" }, .{ .key = "materials", .letter = "m" } } } };
 
-    const food_word = ha.roster.Resource.food.wordIn(act);
-    const biomass_word = ha.roster.Resource.biomass.wordIn(act);
-    const buys = [_]t.TradeOffer{
-        .{ .id = 1, .name = "Fishing rod", .detail = "unlocks Fish", .give = try ctx.arena.print("2 {s} + 8 {s}", .{ food_word, biomass_word }), .receive = "Fishing rod \u{00d7}1", .effect = "Fishing becomes available while you own it." },
-        .{ .id = 2, .name = "Hatchet", .detail = "unlocks Split wood", .give = try ctx.arena.print("2 {s} + 6 {s}", .{ food_word, biomass_word }), .receive = "Hatchet \u{00d7}1", .effect = "Split wood becomes available while you own it." },
-        .{ .id = 3, .name = "Preserved food", .detail = "10 food \u{00b7} keeps well", .give = try ctx.arena.print("8 {s}", .{biomass_word}), .receive = "Preserved food +10", .stock = 2 },
-    };
-    const sells = [_]t.TradeOffer{
-        .{ .id = 11, .name = "Sandals", .detail = "your spare stock", .give = "Sandals \u{00d7}1", .receive = try ctx.arena.print("6 {s} + 5 {s}", .{ food_word, biomass_word }), .effect = try ctx.arena.print("The first pair earns the most. Their next Sandals offer falls to 3 {s} + 2 {s}.", .{ food_word, biomass_word }) },
-        .{ .id = 12, .name = "Hatchet", .detail = "your spare stock", .give = "Hatchet \u{00d7}1", .receive = try ctx.arena.print("9 {s} + 8 {s}", .{ food_word, biomass_word }), .effect = "A spare is sold first; the Hatchet you use keeps granting Split wood." },
-    };
-    const holdings = [_]t.TradeHolding{
-        .{ .label = ha.roster.Resource.food.labelIn(act), .value = "11.6" },
-        .{ .label = ha.roster.Resource.biomass.labelIn(act), .value = "31" },
-        .{ .label = "Sandals", .value = "\u{00d7}2" },
-        .{ .label = "Hatchet", .value = "\u{00d7}2" },
-        .{ .label = "Root cellar", .value = "\u{00d7}1" },
-        .{ .label = "Leaf bed", .value = "\u{00d7}1" },
-    };
-
-    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", &buys, &sells, &holdings, audit_trade);
+    const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", book, &.{}, audit_trade);
     if (result.dismissed) {
         audit_trade.open = false;
         return null;
     }
     return result.root;
 }
-
 /// Debug-only holdings: set the counts of the named goods and settle, so the verbs they
 /// grant and the margins they move are derived exactly as in production.
 fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { []const u8, u32 }) void {
