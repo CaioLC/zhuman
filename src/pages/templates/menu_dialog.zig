@@ -1,7 +1,7 @@
 //! Session menu overlay on the shared modal/focus-trap foundation.
 //!
-//! The menu exposes only reviewed host settings: simulation speed, reduced motion, resume, and
-//! quit. Opening pauses the simulation through `MenuState`; Escape/outside/close restores the
+//! The menu exposes only reviewed host settings: reduced motion, resume, and quit. Speed is
+//! the header stepper's alone. Opening pauses the simulation through `MenuState`; Escape/outside/close restores the
 //! prior pause state, while RESUME explicitly unpauses. No tuning `Config` field is exposed.
 
 const ha = @import("ha");
@@ -12,7 +12,6 @@ const El = uic.elements.El;
 
 const modal_mod = @import("./modal.zig");
 const button_mod = @import("./button.zig");
-const playback_mod = @import("./speed_controls.zig");
 
 const width: f32 = 420;
 
@@ -52,11 +51,6 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8) !Result {
     _ = (try body.text("status", "Simulation paused while this menu is open."))
         .with_style(.{ style.body, Style{ .text = th.dim } });
 
-    const speed_row = try body.div("speed_row");
-    _ = speed_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
-    _ = (try speed_row.text("label", "SPEED")).with_style(.{ style.small, Style{ .text = th.dim } });
-    _ = try playback_mod.speed_controls(speed_row, "speed");
 
     const motion = try body.div("motion");
     if (motion.query().clicked) ctx.res.motion.reduced_motion = !ctx.res.motion.reduced_motion;

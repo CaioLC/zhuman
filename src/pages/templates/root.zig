@@ -102,7 +102,6 @@ pub const Run = runline_mod.Run;
 pub const header = header_mod.header;
 pub const Header = header_mod.Header;
 pub const HeaderOptions = header_mod.Options;
-pub const speed_controls = speed_controls_mod.speed_controls;
 pub const menu_control = speed_controls_mod.menu_control;
 pub const speed_stepper = speed_controls_mod.speed_stepper;
 pub const market_strip = market_strip_mod.market_strip;

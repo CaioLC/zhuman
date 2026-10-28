@@ -203,8 +203,8 @@ transitions stay responsive while paused or at faster game speeds.
 `MENU` sits at the far right, after the speed stepper. It opens a top-layer modal through the
 same focus trap, outside-click boundary, Escape dismissal, and opener restoration as trade. Opening
 temporarily pauses simulation and remembers whether it was already paused: Escape, ×, or an outside
-click restores that prior state, while `RESUME` explicitly unpauses. The menu exposes only speed,
-reduced motion, resume, and quit. Settings are session-only; raw tuning configuration and destructive
+click restores that prior state, while `RESUME` explicitly unpauses. The menu exposes only reduced
+motion, resume, and quit; speed is the header stepper's alone. Settings are session-only; raw tuning configuration and destructive
 run reset are absent until save persistence and confirmation have a product policy.
 
 ## The market strip and the trade dialog

@@ -77,8 +77,8 @@ pub const Playback = struct {
         return if (self.paused) 0 else self.speed;
     }
 
-    /// Move to a stepper position, clamped to pause..3×. Pausing keeps the speed so the
-    /// menu's speed choice still reads; stepping up out of pause lands on 1×.
+    /// Move to a stepper position, clamped to pause..3×. Pausing leaves `speed` as it was;
+    /// stepping up out of pause lands on 1×.
     pub fn setLevel(self: *Playback, l: u8) void {
         const clamped = @min(l, max_level);
         if (clamped == 0) {
