@@ -24,9 +24,16 @@ const settings_mod = @import("./settings_panel.zig");
 
 /// `.menu-dialog`: 620px wide.
 const width: f32 = 620;
-const inner_width: f32 = width - 2 * frame_mod.pad_x;
 /// `.panel-body`'s cap.
 const settings_width: f32 = 540;
+
+/// The dialog's widths this frame: `min(620px, 100vw - 28px)`, its inner lane, and the settings
+/// panel's 540px held inside that lane.
+fn dims(ctx: *uic.UiCtx) struct { w: f32, inner: f32, settings: f32 } {
+    const w = @min(width, ctx.res.view.metrics.terminal.w - 28);
+    const inner = w - 2 * frame_mod.pad_x;
+    return .{ .w = w, .inner = inner, .settings = @min(settings_width, inner) };
+}
 const slot_id_w: f32 = 8 * 6;
 
 /// What the menu shows about the run behind it.
@@ -82,7 +89,7 @@ fn footerNote(menu: *const res_mod.MenuState) []const u8 {
 /// The sub-screens' head: BACK at the right (`.menu-dialog .panel-head`). Returns its click.
 fn backHead(parent: El) !bool {
     const head = try parent.div("head");
-    _ = head.with_size(.{ .fixed = inner_width }, .fit_children)
+    _ = head.with_size(.{ .fixed = dims(parent.ctx).inner }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .end, .cross = .center });
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
     _ = try parent.spacer("head_gap", 1, 11);
@@ -95,7 +102,7 @@ fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bo
     const th = ctx.res.view.theme;
     const enabled = saving or slot.filled;
     const row = try parent.item("slot", i);
-    _ = row.with_size(.{ .fixed = inner_width - 18 }, .fit_children)
+    _ = row.with_size(.{ .fixed = dims(ctx).inner - 18 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(11)
         .with_style(.{style.pad_sym(9, 8)});
     var dbuf: [64]u8 = undefined;
@@ -176,7 +183,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
     const shown = menu.screen;
     const frame = try frame_mod.dialog_frame(ctx, .{
         .id = id,
-        .width = width,
+        .width = dims(ctx).w,
         .kicker = try ctx.arena.print("PAUSED \u{00b7} ACT {s} \u{00b7} DAY {d}", .{ actNumeral(session.act), session.day }),
         .title = title(shown),
         .close_name = "Resume",
@@ -184,7 +191,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
 
     // `.menu-dialog .dialog-body`: 14px over, 15px aside, 16px under.
     const body = try frame.body.div("content");
-    _ = body.with_size(.{ .fixed = inner_width }, .fit_children)
+    _ = body.with_size(.{ .fixed = dims(ctx).inner }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{style.pad_each(14, frame_mod.pad_x, 16, frame_mod.pad_x)});
 
@@ -221,7 +228,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
             if (try backHead(screen_box)) {
                 menu.screen = .menu;
             } else {
-                changed = try settings_mod.settings_panel(screen_box, "settings", &ctx.res.settings, .{ .width = settings_width });
+                changed = try settings_mod.settings_panel(screen_box, "settings", &ctx.res.settings, .{ .width = dims(ctx).settings });
             }
         },
         .quit => switch (try quitScreen(screen_box, &ctx.res.saves, session)) {
@@ -233,7 +240,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
     }
 
     const note = footerNote(menu);
-    if (note.len > 0) try frame_mod.dialog_note(frame.footer, "note", note, inner_width);
+    if (note.len > 0) try frame_mod.dialog_note(frame.footer, "note", note, dims(ctx).inner);
 
     const outcome = modal_mod.settle(ctx, frame.modal, .{
         .owned = resumed or quit,

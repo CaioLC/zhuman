@@ -574,6 +574,23 @@ pub const catalog = [_]Spec{
         .reduced_motion = true,
     },
     .{
+        .name = "title_w560",
+        .about = "The title screen at the 560 width class.",
+        .screen = .title,
+        .window_w = 560,
+        .window_h = 900,
+    },
+    .{
+        .name = "menu_settings_w560",
+        .about = "The session menu's settings at the 560 width class: the dialog narrows to the window.",
+        .window_w = 560,
+        .window_h = 900,
+        .day = 19,
+        .menu_open = true,
+        .menu_screen = .settings,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
         .name = "act_two_trade_w560",
         .about = "The merchant dialog at the 560 width class: long lot copy wraps inside the narrow dialog.",
         .screen = .act_two,

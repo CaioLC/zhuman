@@ -67,6 +67,8 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_one_oversized` | QA-13 | the terminal capped and centred in a 1400×1000 window | `act-i.html` in a large window |
 | `act_one_reduced_motion` | QA-13 | the terminal under reduced motion (the rail snaps) | `prefers-reduced-motion: reduce` |
 | `act_two_trade_w560` | QA-13 | the trade dialog at 560: one column, lot copy wrapping | `trade.html` ≤760 media query |
+| `menu_settings_w560` | QA-13 | the session menu at 560: `min(620, w-28)` wide | `menu.html` at 560 |
+| `title_w560` | QA-13 | the title at 560: 700px tall on the ground, the stockline wrapping clear of the run context | `title.html` at 560 |
 | `title` / `title_settings` / `title_credits` | QA-13 | the title screen and its screens | `title.html`, `title.html?screen=…` |
 
 `tools/capture_prototypes.ps1` captures the prototype side of the same names (headless Edge), so

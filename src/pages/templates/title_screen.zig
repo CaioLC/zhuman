@@ -92,13 +92,25 @@ fn band(parent: El, id: []const u8, pad_y: f32) !El {
 fn attractTop(parent: El, a: Attract) !void {
     const th = parent.ctx.res.view.theme;
     const top = try band(parent, "attract_top", 11);
-    _ = top.with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
+    _ = top.with_flow(.{ .dir = .row, .main = .space_between, .cross = .start }).with_gap(14);
     const left = try top.div("stocks");
-    _ = left.with_flow(.{ .dir = .row, .cross = .center }).with_gap(13);
+    // `.attract-stock { flex-wrap: wrap }`: the stocks take what the run context leaves and
+    // wrap rather than run under it. A wrapping run measures only against a fixed width, so
+    // the stocks take the band's width less the run context's as stamped last frame.
+    _ = left.with_flow(.{ .dir = .row, .cross = .center, .wrap = true }).with_gap(13);
     for (a.stocks, 0..) |s, i| {
         _ = (try (try left.item("s", i)).text("t", s)).with_style(.{Style{ .font = 11, .text = th.line2 }});
     }
-    _ = (try top.text("run", a.run)).with_style(.{Style{ .font = 11, .tracking = 0.04, .text = th.line2 }});
+    const run = try top.text("run", a.run);
+    _ = run.with_style(.{Style{ .font = 11, .tracking = 0.04, .text = th.line2 }});
+    _ = top.pass_through().track();
+    _ = run.pass_through().track();
+    const top_g = top.prior_geometry();
+    const run_g = run.prior_geometry();
+    if (top_g != null and run_g != null) {
+        const gap = uic.view.dp(14, parent.ctx.res.view.scale);
+        _ = left.with_size_px(.{ .fixed = @max(0, top_g.?.rect.w - run_g.?.rect.w - gap) }, .fit_children);
+    }
     try hrule(parent, "top_rule", th.line);
 }
 

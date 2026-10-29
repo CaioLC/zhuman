@@ -94,9 +94,20 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
         // Full-window (≤760): the terminal is the whole window; no frame chrome. Fill with the
         // terminal's own bg and clip; the page is one scroll view, so its regions take their
         // natural heights and the whole page scrolls (`stacked`).
+        const capped = !opts.scroll and opts.max_h > 0 and opts.max_h < m.terminal.h;
         _ = root.with_layout(.top_left)
-            .with_style(.{Style{ .fill = th.bg }})
+            .with_style(.{Style{ .fill = if (capped) ground else th.bg }})
             .with_overflow(.clip);
+        if (capped) {
+            // A capped screen (the title's `min(700px, 100vh)`) sits at the top of the window
+            // on the ground, as the prototype's unframed `.title-screen` does.
+            const box = try root.div("terminal_box");
+            _ = box.with_layout(.top_left)
+                .with_size_px(.{ .fixed = uic.view.dp(m.terminal.w, scale) }, .{ .fixed = uic.view.dp(opts.max_h, scale) })
+                .with_style(.{Style{ .fill = th.bg, .outline_color = opts.outline orelse th.line2 }})
+                .with_overflow(.clip);
+            return .{ .root = root, .content = box };
+        }
         if (!opts.scroll) return .{ .root = root, .content = root };
         const page = try @import("./scroll_view.zig").scroll_view(root, "page_scroll", .{ .height = m.terminal.h, .framed = false, .gap = 0, .name = "page" }, null);
         return .{ .root = root, .content = page.content };
