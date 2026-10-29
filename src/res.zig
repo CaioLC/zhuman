@@ -374,6 +374,8 @@ pub const Sim = struct {
     pub const Exchange = struct {
         standing: bool = false,
         population: ?f32 = null,
+        /// Raised this frame: the card opens its details on the next build (ACT2-18).
+        reveal: bool = false,
     };
 
     /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would

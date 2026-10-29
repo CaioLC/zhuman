@@ -58,6 +58,8 @@ pub const merchant_lots = [_]MerchantLot{
 };
 /// The merchant venue meta (time left); the dialog prefixes the venue kicker: `MERCHANT · MARKET OPEN 2.4 DAYS`.
 pub const merchant_meta = "MARKET OPEN 2.4 DAYS";
+/// The kicker's tail once the Exchange stands: the floor no longer leaves.
+pub const exchange_meta = "STANDING FLOOR";
 
 // —— Holdings / BODY (ACT2-15) ——————————————————————————————————————————————————————————
 // The per-day flow margins and the population-relevant Body projection; the holdings

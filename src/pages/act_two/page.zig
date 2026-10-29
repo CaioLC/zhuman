@@ -179,7 +179,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             var shelf = build_shelf;
             var raised = false;
             shelf.goal = try exchangeGoal(ctx, world, e);
-            if (opts.exchange_open) shelf.goal.?.expand = true;
+            if (opts.exchange_open or ctx.res.sim.exchange.reveal) shelf.goal.?.expand = true;
+            ctx.res.sim.exchange.reveal = false;
             shelf.raised = &raised;
             _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
             if (raised) raiseExchange(ctx, world, e);
@@ -265,6 +266,25 @@ fn ringFour(ctx: *UiCtx, world: *World, e: Entity) ?[]const u8 {
     return best;
 }
 
+/// The Exchange's lifecycle: standing once raised; locked until a ring-4 technology stands and
+/// the settlement is strictly more than 500 people; then unfunded while any input is short.
+fn exchangeLifecycle(standing: bool, people: f32, ring_four: bool, short_kinds: u32) t.MilestoneLifecycle {
+    if (standing) return .done;
+    if (!(ring_four and people > 500)) return .locked;
+    return if (short_kinds > 0) .unfunded else .ready;
+}
+
+test "the Exchange unlocks past 500 people with a ring-4 technology, and funds separately" {
+    const x = std.testing.expectEqual;
+    try x(t.MilestoneLifecycle.locked, exchangeLifecycle(false, 500, true, 0));
+    try x(t.MilestoneLifecycle.ready, exchangeLifecycle(false, 501, true, 0));
+    try x(t.MilestoneLifecycle.locked, exchangeLifecycle(false, 501, false, 0));
+    // Each short input keeps it unfunded on its own.
+    try x(t.MilestoneLifecycle.unfunded, exchangeLifecycle(false, 501, true, 1));
+    try x(t.MilestoneLifecycle.unfunded, exchangeLifecycle(false, 501, true, 3));
+    try x(t.MilestoneLifecycle.done, exchangeLifecycle(true, 0, false, 3));
+}
+
 /// The Exchange card: locked until a ring-4 technology stands and the settlement passes 500
 /// people, unfunded until the biomass, minerals and metal are held, ready, then standing.
 fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
@@ -293,8 +313,7 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
             .met = standing or have >= c[1],
         });
     }
-    const unlocked = research_met and people_met;
-    const state: t.MilestoneLifecycle = if (standing) .done else if (!unlocked) .locked else if (short_kinds > 0) .unfunded else .ready;
+    const state = exchangeLifecycle(standing, people, research_met, short_kinds);
     const people_n: u32 = @intFromFloat(people);
     const unmet: u32 = @as(u32, @intFromBool(!research_met)) + @intFromBool(!people_met);
     return .{
@@ -341,6 +360,7 @@ fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
     for (exchange_cost) |c| if (ledger.balance(world, e, c[0]) < c[1]) return;
     for (exchange_cost) |c| _ = ledger.move(world, e, c[0], -c[1]);
     ctx.res.sim.exchange.standing = true;
+    ctx.res.sim.exchange.reveal = true;
     ctx.res.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 

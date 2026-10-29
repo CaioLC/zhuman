@@ -108,7 +108,9 @@ pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: 
     const visit = try a.alloc(t.TradeDelta, @min(balances.items.len, ts.visit.len));
     for (visit, 0..) |*d, i| d.* = .{ .key = balances.items[i].key, .n = ts.visit[i] };
 
-    const res = try t.trade_dialog(ctx, id, .merchant, fx.merchant_meta, book, visit, ts);
+    // A standing Exchange speaks through the same dialog under its own identity (ACT2-19).
+    const standing = ctx.res.sim.exchange.standing;
+    const res = try t.trade_dialog(ctx, id, if (standing) .exchange else .merchant, if (standing) fx.exchange_meta else fx.merchant_meta, book, visit, ts);
 
     if (res.settle) |s| settle: {
         for (fx.merchant_lots, 0..) |src, i| {
