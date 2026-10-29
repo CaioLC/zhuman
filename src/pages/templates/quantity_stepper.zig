@@ -36,7 +36,9 @@ pub fn quantity_stepper(parent: El, id: []const u8, value: u32, min: u32, max: u
     const th = ctx.res.view.theme;
     const row = try parent.div(id);
     _ = row.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2);
+        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
+        // The two rules on `.stepper` cascade: the group keeps its `line-2` box.
+        .with_style(.{ Style{ .outline_color = th.line2 }, style.pad(2) });
     var v = std.math.clamp(value, min, @max(min, max));
     if (try stepButton(row, "less", "\u{2212}", names.less, v > min)) v -= 1;
     // The count is display text (a `{d}` alone reads as a formatted id to the boundary check).
