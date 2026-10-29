@@ -45,9 +45,33 @@ const pad_x: f32 = 15;
 const price_w: f32 = 92;
 const corner_w: f32 = 151;
 const col_gap: f32 = 9;
-const ledger_w: f32 = width - slip_mod.width - 1;
-const ledger_inner: f32 = ledger_w - 2 * pad_x;
-const item_w: f32 = ledger_inner - price_w - corner_w - 2 * col_gap;
+/// The ledger's rows at narrow widths (`@media (max-width: 760px)`): the slip drops under it.
+const narrow_rows_h: f32 = 260;
+
+/// The dialog's lanes for this frame: `min(820px, 100vw - 28px)` wide, and at 760 and below
+/// one column (the slip under the ledger, no ledger head, the corner on its own line).
+const Lanes = struct {
+    width: f32,
+    narrow: bool,
+    ledger_w: f32,
+    ledger_inner: f32,
+    item_w: f32,
+
+    fn of(ctx: *UiCtx) Lanes {
+        const m = ctx.res.view.metrics;
+        const narrow = m.width_class.atMost(.w760);
+        const w = @min(width, m.terminal.w - 28);
+        const ledger_w = if (narrow) w else w - slip_mod.width - 1;
+        const inner = ledger_w - 2 * pad_x;
+        return .{
+            .width = w,
+            .narrow = narrow,
+            .ledger_w = ledger_w,
+            .ledger_inner = inner,
+            .item_w = if (narrow) inner - price_w - col_gap else inner - price_w - corner_w - 2 * col_gap,
+        };
+    }
+};
 
 pub const Heads = struct { lot: []const u8, price: []const u8, corner: []const u8 };
 
@@ -130,10 +154,11 @@ fn firstTakeable(a: std.mem.Allocator, book: Book, list: []const *const Lot) !u3
     return if (list.len > 0) list[0].id else 0;
 }
 
-fn headRow(parent: El, heads: Heads) !void {
+fn headRow(parent: El, heads: Heads, ln: Lanes) !void {
     const th = parent.ctx.res.view.theme;
+    const item_w = ln.item_w;
     const row = try parent.div("head");
-    _ = row.with_size(.{ .fixed = ledger_inner }, .fit_children)
+    _ = row.with_size(.{ .fixed = ln.ledger_inner }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(col_gap)
         .with_style(.{style.pad_each(10, pad_x, 7, pad_x)});
     const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
@@ -145,14 +170,15 @@ fn headRow(parent: El, heads: Heads) !void {
 }
 
 /// One ledger row (`.ledger-row`). Returns its click and key.
-fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool) !struct { clicked: bool, key: u64 } {
+fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes) !struct { clicked: bool, key: u64 } {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const a = ctx.arena;
+    const item_w = ln.item_w;
     const refused = try book.refusal(a, lot);
     const row = try parent.item("lot", lot.id);
-    _ = row.with_size(.{ .fixed = ledger_inner }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(col_gap)
+    _ = row.with_size(.{ .fixed = ln.ledger_inner }, .fit_children)
+        .with_flow(.{ .dir = .row, .wrap = ln.narrow, .cross = .center }).with_gap(col_gap)
         .with_style(.{style.pad_each(6, pad_x, 6, pad_x)});
     const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null });
     const hot = q.hovering or q.focused;
@@ -168,8 +194,9 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool) !struct { cl
     _ = (try row.text_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell = .{ .mode = .clip, .width = price_w } }))
         .with_style(.{Style{ .font = 12, .text = if (refused != null) th.line2 else th.fg }});
 
+    // Narrow, the corner takes its own line under the lot (`.row-corner { grid-column: 1 / -1 }`).
     const corner = try row.div("corner");
-    _ = corner.with_size(.{ .fixed = corner_w }, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    _ = corner.with_size(.{ .fixed = if (ln.narrow) ln.ledger_inner else corner_w }, .fit_children).with_flow(.{ .dir = .row, .main = if (ln.narrow) .start else .end });
     if (refused) |r| {
         _ = (try corner.text("t", r.short)).with_style(.{Style{ .font = 10, .text = th.danger }});
     } else {
@@ -212,9 +239,10 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     const th = ctx.res.view.theme;
     const a = ctx.arena;
     const identity = venueIdentity(kind);
+    const ln = Lanes.of(ctx);
     const frame = try frame_mod.dialog_frame(ctx, .{
         .id = id,
-        .width = width,
+        .width = ln.width,
         .kicker = try a.print("{s} \u{00b7} {s}", .{ identity.kicker, meta }),
         .title = identity.title,
     });
@@ -260,16 +288,18 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 
     // --- the ledger | the slip ------------------------------------------------------------
     const trade_body = try frame.body.div("trade_body");
-    _ = trade_body.with_size(.{ .fixed = width }, .{ .fixed = body_h })
-        .with_flow(.{ .dir = .row, .cross = .start });
+    _ = trade_body.with_size(.{ .fixed = ln.width }, .{ .fixed = if (ln.narrow) narrow_rows_h + 1 + body_h else body_h })
+        .with_flow(.{ .dir = if (ln.narrow) .column else .row, .cross = .start });
 
     const ledger = try trade_body.div("ledger");
-    _ = ledger.with_size(.{ .fixed = ledger_w }, .{ .pct_of_parent = 1.0 })
+    _ = ledger.with_size(.{ .fixed = ln.ledger_w }, if (ln.narrow) .{ .fixed = narrow_rows_h } else .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column, .cross = .start });
-    try headRow(ledger, if (mode == .buy) identity.buy_head else identity.sell_head);
+    if (!ln.narrow) try headRow(ledger, if (mode == .buy) identity.buy_head else identity.sell_head, ln);
     const rows_area = try ledger.div("rows_area");
     _ = rows_area.with_size(.{ .pct_of_parent = 1.0 }, .grow);
-    const rows = try scroll_mod.scroll_view(rows_area, "rows", .{ .height = 0, .framed = false, .gap = 0 }, null);
+    // Narrow, the rows get their height outright: a parent-high scroll view takes its content's
+    // height on a stacked page, and the dialog's rows must still scroll in their own box.
+    const rows = try scroll_mod.scroll_view(rows_area, "rows", .{ .height = if (ln.narrow) narrow_rows_h else 0, .framed = false, .gap = 0, .name = "lots" }, null);
 
     var first_row: ?u64 = null;
     if (list.len == 0) {
@@ -279,7 +309,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         const start = @as(usize, st.page) * per_page;
         const end = @min(list.len, start + per_page);
         for (list[start..end]) |l| {
-            const r = try ledgerRow(rows.content, book, l, st.selected == l.id);
+            const r = try ledgerRow(rows.content, book, l, st.selected == l.id, ln);
             if (first_row == null) first_row = r.key;
             if (r.clicked) {
                 st.selected = if (st.selected == l.id) 0 else l.id;
@@ -288,7 +318,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         }
     }
 
-    _ = (try trade_body.div("divider")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 })
+    _ = (try trade_body.div("divider")).with_size(if (ln.narrow) .{ .fixed = ln.width } else .{ .fixed = 1 }, if (ln.narrow) .{ .fixed = 1 } else .{ .pct_of_parent = 1.0 })
         .with_style(.{Style{ .fill = th.line }});
 
     const chosen = book.byId(st.selected);
@@ -327,5 +357,8 @@ test "venue identity map matches the authored trade chrome" {
 }
 
 test "the ledger's lanes fill its width" {
+    const ledger_inner = width - slip_mod.width - 1 - 2 * pad_x;
+    const item_w = ledger_inner - price_w - corner_w - 2 * col_gap;
+    try std.testing.expect(item_w > 0);
     try std.testing.expectApproxEqAbs(ledger_inner, item_w + price_w + corner_w + 2 * col_gap, 1e-3);
 }

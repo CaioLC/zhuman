@@ -107,6 +107,11 @@ pub const Spec = struct {
     holdings_collapsed: bool = false,
     /// Open on the first frame with the Household rail expanded, even on a focus view.
     holdings_open: bool = false,
+    /// Press Tab this many times once the first frame has published the focus order, so the
+    /// capture shows a focus-visible control (QA-13).
+    tab_presses: u8 = 0,
+    /// Render under the reduced-motion policy, as `HA_REDUCED_MOTION=1` would (QA-13).
+    reduced_motion: bool = false,
     /// Open on the first frame with the trade dialog showing (Act I needs `encounter = .present`).
     trade_open: bool = false,
     /// Open on the first frame with the session menu showing.
@@ -546,6 +551,40 @@ pub const catalog = [_]Spec{
         .research = .{ .select = "gamekeeping", .focus = true },
     },
     .{
+        .name = "act_one_focus",
+        .about = "Act I with keyboard focus three Tabs in: the focus-visible outline.",
+        .day = 19,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+        .tab_presses = 3,
+    },
+    .{
+        .name = "act_one_oversized",
+        .about = "Act I in a 1400x1000 window: the terminal capped at 900x820 and centred on the ground.",
+        .window_w = 1400,
+        .window_h = 1000,
+        .day = 19,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_reduced_motion",
+        .about = "Act I under reduced motion with the Household collapsed: the rail snaps, nothing eases.",
+        .day = 19,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+        .holdings_collapsed = true,
+        .reduced_motion = true,
+    },
+    .{
+        .name = "act_two_trade_w560",
+        .about = "The merchant dialog at the 560 width class: long lot copy wraps inside the narrow dialog.",
+        .screen = .act_two,
+        .window_w = 560,
+        .window_h = 900,
+        .day = 43,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .trade_open = true,
+    },
+    .{
         .name = "research_household",
         .about = "RESEARCH with the Household opened again beside the board.",
         .screen = .act_two,
@@ -833,6 +872,11 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.sim.exchange = spec.exchange;
+    if (spec.reduced_motion) ctx.res.motion.reduced_motion = true;
+    // The focus order exists once frame 1 has ended; Tab from there.
+    if (ctx.frame == 2) for (0..spec.tab_presses) |_| {
+        _ = ctx.moveFocus(.next, true);
+    };
     const opening: ?usize = if (first) spec.view else null;
     const collapsed: ?bool = if (first and spec.holdings_collapsed) true else if (first and spec.holdings_open) false else null;
     const open_trade = first and spec.trade_open;

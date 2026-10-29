@@ -63,14 +63,17 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `market_people` / `market_good` / `market_stall` | QA-11 | MARKET deal slip, good slip, YOUR STALL | `market.html`, `market.html?stall=1` |
 | `act_one_trade` / `act_two_trade` | QA-13 | the trade dialog over each act | `act-i.html?modal=merchant`, `act-ii.html?modal=merchant` |
 | `act_one_menu` / `menu_save` / `menu_settings` / `menu_quit` | QA-13 | the session menu and its screens | `menu.html`, `menu.html?screen=…` |
+| `act_one_focus` | QA-13 | focus-visible: three Tabs in | any page, keyboard focus |
+| `act_one_oversized` | QA-13 | the terminal capped and centred in a 1400×1000 window | `act-i.html` in a large window |
+| `act_one_reduced_motion` | QA-13 | the terminal under reduced motion (the rail snaps) | `prefers-reduced-motion: reduce` |
+| `act_two_trade_w560` | QA-13 | the trade dialog at 560: one column, lot copy wrapping | `trade.html` ≤760 media query |
 | `title` / `title_settings` / `title_credits` | QA-13 | the title screen and its screens | `title.html`, `title.html?screen=…` |
 
 `tools/capture_prototypes.ps1` captures the prototype side of the same names (headless Edge), so
 each pair can be set side by side.
 
-The remaining QA-13 overlays (long-offer wrapping, sort popup near edges, focus-visible,
-reduced-motion terminal, oversized-window centering) have no fixture; their entries are in
-`roadmap.md`.
+QA-13's sort popup has no counterpart any more (BUILD sorts from its column headers); every
+other QA-10..13 state above has a fixture.
 
 ## Parity checklist (PARITY-01..05)
 
