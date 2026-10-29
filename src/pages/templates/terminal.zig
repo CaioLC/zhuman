@@ -187,6 +187,10 @@ pub const Regions = struct {
 const header_content_height: f32 = 23;
 const header_pad_top: f32 = 15;
 const header_pad_bottom: f32 = 10;
+/// The header sizes to its content so a wrapped stockline can grow it. One line of 21px
+/// heading text is 28px tall, 5px past the 23px content box the prototype reserves, so the
+/// bottom inset gives those 5px back and a one-line header stays 48px.
+const header_line_overhang: f32 = 5;
 const grid_pad_top: f32 = 12;
 const grid_pad_bottom: f32 = 10;
 const footer_height: f32 = 86;
@@ -223,8 +227,9 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .with_flow(.{ .dir = .row, .cross = .start });
     _ = try header_band.spacer("lead", opts.page_pad, 1);
     const header = try header_band.div("shell_header");
-    _ = header.with_size(.grow, if (stacked(content.ctx)) .fit_children else .{ .fixed = header_content_height })
-        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
+    // The header's content is 23px at the reference; it grows only when the stockline wraps.
+    _ = header.with_size(.grow, .fit_children)
+        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom - header_line_overhang, 0)});
     _ = try header_band.spacer("tail", opts.page_pad, 1);
 
     // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.

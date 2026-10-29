@@ -37,13 +37,13 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
 
     const stocks = try stock_mod.stockline(root, "stocks", options.stocks, options.compact_stocks);
-    // Stacked (≤760) the stockline takes what the run context leaves and wraps
-    // (`.stockline { flex-wrap: wrap }`), the run context held to its first line.
-    if (@import("./terminal.zig").stacked(parent.ctx)) {
-        _ = root.with_flow(.{ .dir = .row, .main = .space_between, .cross = .start }).with_gap(12);
-        _ = stocks.with_size(.grow, .fit_children);
-        stocks.get().layout.flow.wrap = true;
-    }
+    // The stockline takes what the run context leaves, 12px clear of it, and wraps when it
+    // runs long (`.stockline { flex-wrap: wrap }`): a long line never runs under the run
+    // context, and nothing is hidden. Stacked (≤760) the run context holds to the first line.
+    const stack = @import("./terminal.zig").stacked(parent.ctx);
+    _ = root.with_flow(.{ .dir = .row, .main = .start, .cross = if (stack) .start else .center }).with_gap(12);
+    _ = stocks.with_size(.grow, .fit_children);
+    stocks.get().layout.flow.wrap = true;
 
     const right = try root.div("right");
     _ = right.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);

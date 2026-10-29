@@ -62,7 +62,9 @@ pub const ActPage = struct {
                 .consumed = f.consumed,
                 .act_label = f.act_label,
                 .day = day(ctx),
-                .compact = self.compact,
+                // The prototype keeps the act label at every width (it has no `.optional` run
+                // segment), so the runline never drops it.
+                .compact = false,
             },
         });
         // The footer is the content column's last row, so it is built here, after the body,
