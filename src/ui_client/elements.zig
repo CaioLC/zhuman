@@ -332,18 +332,8 @@ pub const El = struct {
         return .{ .ctx = self.ctx, .node = node };
     }
 
-    /// A polyline through `pts` — node-local coordinates in the unit square, so (0,0) is this
-    /// node's top-left and (1,1) its bottom-right. Unlike the other content leaves this one
-    /// does **not** size itself: points are relative, so the caller gives the node a box
-    /// (`with_size`) and the line stretches to fill it.
-    pub fn line(self: El, id: []const u8, pts: []const cb.Point, stroke: cb.Stroke) !El {
-        const node = try child(self, id);
-        feat.data_line(self.ctx, node, pts, stroke);
-        return .{ .ctx = self.ctx, .node = node };
-    }
-
-    /// A filled **convex polygon** through `pts` — node-local unit-square coordinates like
-    /// `line`, stretching to whatever box the caller sizes the node to. Fan-triangulated and
+    /// A filled **convex polygon** through `pts` — node-local unit-square coordinates,
+    /// stretching to whatever box the caller sizes the node to. Fan-triangulated and
     /// drawn by the `geometry` feature. Flat `color`; `opacity` fades the whole
     /// mesh. Does not size the node.
     pub fn polygon(self: El, id: []const u8, pts: []const cb.Point, color: cb.Color, opacity: f32) !El {

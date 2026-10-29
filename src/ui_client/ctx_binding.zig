@@ -384,30 +384,6 @@ pub const UiState = struct {
     /// when the node disappears or the app tears down. Without it, the texture would leak
     /// every time a scrolled-away / closed SVG node's slot is pruned. `src_key == 0` means
     /// "nothing rasterized yet"; `SvgState` intentionally uses the zeroable fallback.
-    /// A polyline's points, keyed by its own `node.key`. The first state that carries
-    /// *variable-length* data rather than a handle or a scalar — which is why it exists
-    /// at all: `RenderData` holds one payload per feature per node, and coordinates do
-    /// not fit in a tint. Fixed capacity keeps it POD (no `deinit`, no allocator), and a
-    /// caller with more points than this wants a second node rather than a bigger buffer.
-    /// `LineState` intentionally uses the zeroable fallback, so an unset line has
-    /// `len == 0` and draws nothing.
-    pub const LineState = struct {
-        pub const cap = 64;
-        buf: [cap]Point = undefined,
-        len: usize = 0,
-
-        pub fn set(self: *LineState, pts: []const Point) void {
-            const n = @min(pts.len, cap);
-            @memcpy(self.buf[0..n], pts[0..n]);
-            self.len = n;
-        }
-
-        /// The stored points. Never hold the slice across a pool `acquire` — the slot
-        /// may move; call this again instead.
-        pub fn points(self: *const LineState) []const Point {
-            return self.buf[0..self.len];
-        }
-    };
     pub const SvgState = struct {
         src_key: u64 = 0,
         tex: ?sdl.render.Texture = null,
@@ -419,7 +395,7 @@ pub const UiState = struct {
 
     /// An indexed triangle **mesh** for the `geometry` feature: the vertices and
     /// `u16` indices produced by `features/geometry_tess.zig` (a convex-polygon fan, a thick
-    /// polyline with miter joins/caps). Like `LineState` this is the *variable-length* kind of
+    /// polyline with miter joins/caps). This is the *variable-length* kind of
     /// state — a mesh has a variable vertex/index count that does not fit in a `RenderData`
     /// payload — and it follows the same POD, fixed-capacity contract: inline buffers owned by
     /// value, **no allocator and no `deinit`**, so the pool's init-on-fresh/reuse and
@@ -428,7 +404,7 @@ pub const UiState = struct {
     /// too large for the capacity is **refused as a whole** by the tessellator's `Mesh`
     /// builder (it latches overflow and emits no partial triangle), so an over-budget shape
     /// draws nothing rather than a torn mesh — the whole-refusal policy shared with
-    /// `TextState`/`LineState`. Positions are node-local unit-square coords (see `Vert`); the
+    /// `TextState`. Positions are node-local unit-square coords (see `Vert`); the
     /// feature maps them to device px at draw. Uses the zeroable fallback, so an unset mesh has
     /// `vlen == 0` and draws nothing.
     pub const GeometryState = struct {
@@ -478,16 +454,12 @@ pub const Vert = struct { p: Point, color: Color };
 
 /// A point in a node's own box, in the unit square: (0,0) is its top-left corner and
 /// (1,1) its bottom-right. Relative rather than pixel so a polyline survives a resize
-/// and a zoom without the caller recomputing it. See `features/line.zig`.
+/// and a zoom without the caller recomputing it. See `features/geometry.zig`.
 pub const Point = struct { x: f32, y: f32 };
 
-/// A stroke: what a polyline is drawn *with*, as against where it goes (which is
-/// variable-length, so it lives in `LineState`). Width is in px, unscaled.
-pub const Stroke = struct { color: Color, width: f32 = 1 };
-
 /// The `geometry` feature's payload: the per-mesh draw parameters that are *not*
-/// the variable-length vertices (those live in `GeometryState`, like a polyline's points live
-/// in `LineState`). Today that is a single `opacity` multiplier applied to every vertex's
+/// the variable-length vertices (those live in `GeometryState`). Today that is a single
+/// `opacity` multiplier applied to every vertex's
 /// alpha at draw — a cheap mesh-wide fade that is the natural hook for per-node dimming
 /// without recomputing each vertex color. Present ⟹ draw the node's pooled mesh.
 pub const Geometry = struct { opacity: f32 = 1 };
@@ -633,7 +605,6 @@ pub const RenderData = struct {
     outline: ?Outline = null, // stroked border (color + width + solid/dashed/dotted), drawn inward
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
-    line: ?Stroke = null, // polyline through node.state(LineState)'s points, in this stroke
     geometry: ?Geometry = null, // indexed triangle mesh in node.state(GeometryState), per-vertex color
 
     /// **Per-node visual opacity**, 0..1, default fully opaque. *Not* a paint

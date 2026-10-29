@@ -35,7 +35,7 @@ pub const Vertex = struct { p: V2, color: Rgba };
 /// the pooled `GeometryState`. It never allocates: `addVertex`/`addTriangle` append while
 /// there is room and latch `overflow` (refusing the whole excess, never a partial triangle)
 /// otherwise, so a shape too big for the pool's capacity draws nothing rather than a torn
-/// mesh — the same whole-refusal policy as `TextState`/`LineState`.
+/// mesh — the same whole-refusal policy as `TextState`.
 pub const Mesh = struct {
     verts: []Vertex,
     idx: []u16,

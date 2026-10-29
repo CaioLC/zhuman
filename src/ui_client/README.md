@@ -72,8 +72,8 @@ pub const Node  = ui.Node(RenderData);
   follows that same contract. The registry currently contains `TextState` (a bounded owned buffer + the px to render at — `update` copies a source in full or **refuses it as a whole** past `TextState.cap`, setting a
   `refused` flag and rendering nothing rather than a silently cut / mid-codepoint tail; a `wrap_width` of 0 keeps the fast single-line path, a positive value opts the node into constrained word-wrapped multiline via `features/wrap.zig` while an `overflow` cell clips/ellipsizes a fixed width and `tracking` sets device-px letter-spacing, and `orientation` rotates a single-line label 90° counter-clockwise at blit for the collapsed rail. It also **owns a cached GPU texture** (`tex` + `cache_key`): **every** accepted variant — single-line (tracked or not), wrapped, `.clip`, and `.ellipsis`, including the tracked combinations — rasterizes into **one composite white texture** the first time it is drawn, caches the uploaded composite keyed by every render-affecting input, and re-blits it — tinted at draw, so color is not a key dimension (nor is orientation, a final-blit transform) — instead of re-rasterizing every frame; no variant re-rasterizes on a cache hit. The composite is generated atomically (`renderComposite`) into a scoped render-target texture with the renderer's target/clip/draw-color/blend snapshotted and restored, so a failed generation caches nothing and retries; it declares `deinit` like `SvgState` so the eviction hook frees the texture exactly once), `ScrollState`,
   `TabsState`, `StepState`,
-  `TextInputState`, `LineState`, `GeometryState` and `SvgState`, plus the templates' logical states (`TabsState`, `DisclosureState`, `SliderState`, `RailState`, `CatalogState`, `TradeState`, `ModalState`). `LineState` and `GeometryState` are the ones that carry
-  *variable-length* data — a polyline's points, and an indexed triangle mesh's vertices/indices — since `RenderData` holds a single payload
+  `TextInputState`, `GeometryState` and `SvgState`, plus the templates' logical states (`TabsState`, `DisclosureState`, `SliderState`, `RailState`, `CatalogState`, `TradeState`, `ModalState`). `GeometryState` is the one that carries
+  *variable-length* data — an indexed triangle mesh's vertices/indices — since `RenderData` holds a single payload
   per feature and coordinates don't fit in a tint; fixed capacity keeps them POD (a mesh too large for the cap is refused whole, so an over-budget shape draws nothing rather than a torn mesh). `SvgState` and `TextState` own a GPU texture, so they declare `deinit` and the cache's
   eviction hook frees it when the node disappears. The pure cache-key/decision/lifecycle logic for `TextState`'s texture lives SDL-free in `features/text_cache.zig` (with a deterministic fake backend), so hit/miss/invalidation/reset/prune/reuse/growth is unit-tested without a graphics context. Feature `State` types live *here*, not
   in their feature module, because `UiState` is scanned to generate the pools and a feature
@@ -515,11 +515,11 @@ silently undrawn aspect.
 `renderGeometry`, it draws untextured per-vertex-colored triangle meshes: a convex-polygon
 fill (a hex body, a marker) and a thick polyline with correct **miter joins** (bevel fallback
 past the miter limit) and butt/square **caps** (a hex rail, a distribution curve, a slider
-diamond, a diagonal indicator). It is the second *variable-length* feature after `line`: a
+diamond, a diagonal indicator). It is the *variable-length* feature: a
 mesh's vertex/index count does not fit in a `RenderData` payload, so the vertices live in a
 pooled `GeometryState` and the payload (`?Geometry`) carries only a per-mesh `opacity`
-multiplier (the dimming hook). Points are **node-local unit-square** coords like
-`line`, so a shape survives resize/zoom; `draw` maps them to device px through the node's box,
+multiplier (the dimming hook). Points are **node-local unit-square** coords,
+so a shape survives resize/zoom; `draw` maps them to device px through the node's box,
 converts each per-vertex `Color` to SDL's float `FColor` with opacity folded into alpha, and
 submits one indexed draw (the `.blend` baseline makes vertex alpha composite, and
 the render walk's clip stack crops the triangles). The tessellation math —
@@ -558,7 +558,7 @@ explicitly — once at renderer creation (`main.zig`), and again at the top of e
 `draw_tree` so the baseline is self-healing after a device reset. SDL's default is `.none`
 (source *replaces* destination, ignoring `a`), which would render a translucent hover row,
 modal scrim, dimmed/locked tile, or wash fully opaque; `.blend` makes the geometry
-primitives every feature paints (`fill`/`outline`/`line` via `renderFillRect`/`renderLines`)
+primitives every feature paints (`fill`/`outline` via `renderFillRect`)
 alpha-composite against what is under them. Texture features carry their own per-texture
 blend mode: `svg`, `img`, and the cached `text` composite each set `.blend` before their
 tinted blit, so a tint's `a` (a dimmed icon, a translucent label) composites consistently
@@ -572,8 +572,8 @@ rail must stay a crisp whole-device-pixel line at any DPI scale, or it anti-alia
 blurry 1–2px smear and adjacent columns/rails **shimmer** as their sub-pixel coverage shifts.
 `paint.hairline(logical_w, scale)` rounds a hairline width to a whole number of device px
 (floored at 1), and `paint.snap(device_coord)` puts a hairline edge on a whole-pixel boundary.
-The `outline` feature snaps its box edges and bar thickness through these; the `line` feature
-snaps its stroke width. At DPI 1 both are identity for integer-authored geometry; a
+The `outline` feature snaps its box edges and bar thickness through these; a geometry stroke
+carries its own width in the unit square. At DPI 1 both are identity for integer-authored geometry; a
 high-DPI display's fractional `View.scale` is what makes them load-bearing. Pure and SDL-free,
 tested at scale ≠ 1.
 **Per-node visual opacity.** A node carries an optional `render_data.opacity`
@@ -632,7 +632,7 @@ _ = try header.text("title", "BUILD").with_style(.{ h1, red }); // style — a f
 
 **A method on `El` describes this one node; a function describes a composition.** The
 content leaves are methods on the parent handle — `div`, `text`, `image`, `sprite`, `svg`,
-`line`, `polygon`, `polyline`, `gradient` — with `item(id, i)` for a repeated child keyed by
+`polygon`, `polyline`, `gradient` — with `item(id, i)` for a repeated child keyed by
 its index (no id formatted per iteration) and `spacer(id, w, h)` for an empty fixed box that
 is never queried and so never hittable — plus the placement, look, behaviour and state
 methods below. `root(ctx, id)` is the one free constructor, because a root has no parent
