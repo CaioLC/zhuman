@@ -127,7 +127,10 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
         progress,
         density,
     );
-    _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    // A regular tile stands as tall as the prototype's (`min-height: 82px` plus the state
+    // line: 87px outer); a compact one fits its content, which already matches.
+    _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, if (density == .regular) .{ .fixed = generator_regular_h } else .fit_children)
+        .with_flow(.{ .dir = .column, .main = .center });
 
     // Nested control, anchored out of flow in the lower-right corner so it never grows the tile.
     // Right/bottom padding mirror the tile's inner padding (12 x 6 regular, 8 x 5 compact, with
@@ -153,6 +156,9 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
 }
 
 /// Build the act's generator shelf in authored good order.
+/// A regular generator tile's outer height (border included), logical px.
+const generator_regular_h: f32 = 87;
+
 pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
