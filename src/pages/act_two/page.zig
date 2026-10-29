@@ -99,7 +99,11 @@ pub const Options = struct {
     market: ?uic.UiState.MarketState = null,
     /// Open the Exchange card's details on this frame (a fixture's first frame).
     exchange_open: bool = false,
+    /// Seed the RESEARCH board on this frame (a fixture's first frame).
+    research: ?t.ResearchSeed = null,
 };
+
+pub const ResearchSeed = t.ResearchSeed;
 
 /// Build the Act II page. Returns its roots in draw order: the shell, then the merchant dialog's
 /// overlay root while it is open.
@@ -167,12 +171,16 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
 
     // --- the rail: the Household column, collapsing with it ---------------------------------
     // Each view keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse
-    // separately; a focus view collapses on every entry without touching those memories.
+    // separately; a focus view collapses its rail on entry without touching those memories,
+    // and the player may open it again while there.
+    const vm = trade_owner.state(uic.UiState.ViewMemory);
+    const entered = vm.last == null or vm.last.? != s.active;
+    vm.last = s.active;
     if (regions.rail) |rail_region| {
         const r = try t.rail(rail_region, .{
             .id = rail_ids[@min(s.active, rail_ids.len - 1)],
             .label = "HOUSEHOLD",
-            .force_collapsed = s.focus,
+            .force_collapsed = s.focus and entered,
             .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {
@@ -198,7 +206,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
             _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
-        .research => try researchView(ctx, world, e, s),
+        .research => try researchView(ctx, world, e, s, opts.research),
         .market => try market(ctx, world, e, s, opts.market),
     } else {
         _ = try t.empty_state(s.view, "a2_nobody", "No settlement", "There is no one here to act.");
@@ -375,7 +383,7 @@ fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost
 /// from the ledger and establishes it through `grid/board`, which opens its outward neighbours.
-fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface) !void {
+fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
     const board = ha.grid.board;
     const cat = &ctx.res.catalog;
     const research = world.get(e, comp.Research) orelse {
@@ -387,6 +395,7 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface) !void {
     for (wedges, 0..) |r, i| held[i] = ledger.balance(world, e, r);
     const st = s.owner.state(uic.UiState.ResearchState);
     const query_owner = try s.owner.div("research_query");
+    if (seed) |sd| t.researchApplySeed(cat, st, query_owner, sd);
     const out = try t.research_board(s.view, "a2_research", .{ .cat = cat, .research = research, .held = held }, st, query_owner);
     const idx = out.research orelse return;
 

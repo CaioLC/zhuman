@@ -361,6 +361,26 @@ fn detailSection(parent: El, id: []const u8, heading: []const u8) !El {
     return list;
 }
 
+/// A fixture's opening for the board: the selected tile (by id), the filter, the camera, a
+/// search, and whether the board holds focus.
+pub const Seed = struct {
+    select: ?[]const u8 = null,
+    filter: u8 = 0,
+    zoom: f32 = 1,
+    pan_x: f32 = 0,
+    pan_y: f32 = 0,
+    query: []const u8 = "",
+};
+
+/// Apply `seed` to the board's state and its search (a fixture's first frame).
+pub fn applySeed(cat: *const roster.Catalog, st: *ResearchState, query_owner: El, seed: Seed) void {
+    st.* = .{ .seeded = true, .filter = seed.filter, .zoom = seed.zoom, .pan_x = seed.pan_x, .pan_y = seed.pan_y };
+    if (seed.select) |id| st.selected = cat.techIndex(id);
+    const ed = query_owner.state(uic.UiState.TextInputState);
+    _ = ed.clear();
+    if (seed.query.len > 0) _ = ed.insert(seed.query);
+}
+
 // ---- the view ------------------------------------------------------------------------------
 
 /// Build the RESEARCH view into `parent` (it fills it). `query_owner` holds the search text
@@ -601,7 +621,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
                             .{ .x = v0.x + (v1.x - v0.x) * t0, .y = v0.y + (v1.y - v0.y) * t0 },
                             .{ .x = v0.x + (v1.x - v0.x) * t1, .y = v0.y + (v1.y - v0.y) * t1 },
                         };
-                        _ = (try (try dashes.item("d", n)).polyline("l", &seg, stroke_w / 2 * px_unit, false, .butt, stroke, 1))
+                        _ = (try (try dashes.item("d", n)).with_layout(.top_left).with_size(full, full).polyline("l", &seg, stroke_w / 2 * px_unit, false, .butt, stroke, 1))
                             .with_layout(.top_left).with_size(full, full);
                         n += 1;
                     }
@@ -615,12 +635,12 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             if (k.hybrid) {
                 for (0..2) |ri| {
                     const pts = hybridRail(k.res[ri], k.res[1 - ri]);
-                    _ = (try (try tile.item("rail", ri)).polyline("l", &pts, 1.1 * px_unit, false, .butt, wedgeColor(ctx, k.res[ri]), rail_op))
+                    _ = (try (try tile.item("rail", ri)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, false, .butt, wedgeColor(ctx, k.res[ri]), rail_op))
                         .with_layout(.top_left).with_size(full, full).pass_through();
                 }
             } else {
                 const pts = hexPts(rail_size);
-                _ = (try (try tile.item("rail", 0)).polyline("l", &pts, 1.1 * px_unit, true, .butt, wedgeColor(ctx, k.res[0]), rail_op))
+                _ = (try (try tile.item("rail", 0)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, true, .butt, wedgeColor(ctx, k.res[0]), rail_op))
                     .with_layout(.top_left).with_size(full, full).pass_through();
             }
 

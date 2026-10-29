@@ -285,6 +285,11 @@ pub const UiState = struct {
         give: [13]u16 = @splat(0),
         take: [13]u16 = @splat(0),
     };
+    /// Which view a page showed last frame, so a focus view collapses the Household on entry
+    /// only and the player may open it again while there.
+    pub const ViewMemory = struct {
+        last: ?usize = null,
+    };
     /// The RESEARCH board's state, on the view's always-built owner: the selected tile (a
     /// catalog index, or none), the filter (0 all, 1 available, 2 researched), the camera
     /// (zoom and pan in board units), the pan drag, and whether the opening selection has

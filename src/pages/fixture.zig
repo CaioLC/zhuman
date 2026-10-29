@@ -120,6 +120,8 @@ pub const Spec = struct {
     /// its card opens with the details showing (`screen = .act_two`, `view = 1`).
     exchange: ha.res.Sim.Exchange = .{},
     exchange_open: bool = false,
+    /// The RESEARCH board's opening (`screen = .act_two`, `view = 3`).
+    research: ?@import("./act_two/page.zig").ResearchSeed = null,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -168,6 +170,19 @@ const exchange_settlement = Settlement{
         .{ .item = .metal, .n = 30 },
         .{ .item = .minerals, .n = 44 },
         .{ .item = .biomass, .n = 96 },
+        .{ .item = .coin, .n = 42 },
+    },
+};
+
+/// The settlement short of metal: what RESEARCH's NEEDS … reads against.
+const lean_settlement = Settlement{
+    .researched = settlement.researched,
+    .stocks = &.{
+        .{ .item = .water, .n = 9 },
+        .{ .item = .fuel, .n = 14 },
+        .{ .item = .metal, .n = 1 },
+        .{ .item = .minerals, .n = 3 },
+        .{ .item = .biomass, .n = 31 },
         .{ .item = .coin, .n = 42 },
     },
 };
@@ -459,6 +474,76 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
     },
     .{
+        .name = "research_available",
+        .about = "RESEARCH filtered to available: locked tiles fade, the researched and available stay lit.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "gamekeeping", .filter = 1 },
+    },
+    .{
+        .name = "research_researched",
+        .about = "RESEARCH filtered to researched only.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "smithy", .filter = 2 },
+    },
+    .{
+        .name = "research_search",
+        .about = "RESEARCH searching \"iron\": everything else dims.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "iron_smelting", .query = "iron" },
+    },
+    .{
+        .name = "research_deficit",
+        .about = "RESEARCH with an available tile the stocks cannot pay for: NEEDS ….",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = lean_settlement,
+        .research = .{ .select = "food_processing" },
+    },
+    .{
+        .name = "research_outward",
+        .about = "RESEARCH on a researched tile whose outward neighbours are available (warn, dashed).",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "granary" },
+    },
+    .{
+        .name = "research_zoom_75",
+        .about = "RESEARCH at the 75% camera floor.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "gamekeeping", .zoom = 0.75, .pan_x = 77.5, .pan_y = 77.5 },
+    },
+    .{
+        .name = "research_zoom_250",
+        .about = "RESEARCH at the 250% camera ceiling, panned onto the Food wedge.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "gamekeeping", .zoom = 2.5, .pan_x = -740, .pan_y = -465 },
+    },
+    .{
         .name = "act_two_exchange",
         .about = "Act II BUILD: the Exchange card opened, locked on ring 4 and population.",
         .screen = .act_two,
@@ -724,7 +809,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     }
     return switch (spec.screen) {
         .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
-        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null, .exchange_open = first and spec.exchange_open }),
+        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null, .exchange_open = first and spec.exchange_open, .research = if (first) spec.research else null }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
         .title => blk: {
