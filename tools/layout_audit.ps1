@@ -27,7 +27,10 @@ if (-not (Test-Path $Exe)) { Write-Error "Binary not found at $Exe. Run 'zig bui
 
 $names = Select-String -Path "$PSScriptRoot/capture_screenshots.ps1" -Pattern '^\s*"([a-z0-9_]+)"\s*=' |
     ForEach-Object { $_.Matches[0].Groups[1].Value }
-if ($Only.Count -gt 0) { $names = $names | Where-Object { $Only -contains $_ } }
+if ($Only.Count -gt 0) {
+    $Only = $Only | ForEach-Object { $_ -split ',' } | Where-Object { $_ }
+    $names = $names | Where-Object { $Only -contains $_ }
+}
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 foreach ($n in $names) {
