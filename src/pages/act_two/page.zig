@@ -148,7 +148,16 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .labels = &view_labels,
         .focus_views = &focus_views,
         .market = if (ctx.res.sim.exchange.standing) .exchange else .merchant,
-        .activity = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null),
+        .activity = blk: {
+            var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null);
+            // A standing Exchange is what the idle settlement reports (`setActivity('idle',
+            // 'Exchange standing', 'Act III open')`).
+            if (act.state == .idle and ctx.res.sim.exchange.standing) {
+                act.subject = "Exchange standing";
+                act.metadata = "Act III open";
+            }
+            break :blk act;
+        },
         .nav_gap = 8, // `.act-two .surface-nav`
         .initial_view = opts.initial_view,
     });
