@@ -57,7 +57,7 @@ fi
 inventory='\.pass_through\(\)|setPassThrough\(|prior_geometry\(|\.rect\((parent\.)?ctx\)|rectOf\(|priorGeometry(Of)?\(|with_size_px\(|with_offset_px\(|view\.dp\(|capturePointer\(|releasePointerCapture\(|semantics\.publish\(|cursor\.request\(|requestFocus\(|consumeFlag\('
 # Components that own geometry or a host service, the game's dialog shell, and the debug page
 # (its tooltip fixture is placed and clamped like a production tooltip).
-approved='^src/(ui_client/(modal|tooltip|text_input)\.zig|pages/templates/(scroll_view|action_tile|milestone_goal|slider|terminal|tabs|capital_row|eating_policy|modal|catalog_controls|research_board)\.zig|pages/debug_page\.zig):'
+approved='^src/(ui_client/(modal|tooltip|text_input)\.zig|pages/templates/(scroll_view|action_tile|milestone_goal|slider|terminal|tabs|capital_row|eating_policy|modal|catalog_controls|research_board|header)\.zig|pages/debug_page\.zig):'
 sites=$(grep -rnE "$inventory" $scope --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//')
 echo "boundary: geometry and host-service sites (review against the roadmap's approved list):"
 echo "$sites" | sed 's/^/  /'

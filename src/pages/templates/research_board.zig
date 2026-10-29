@@ -353,7 +353,7 @@ fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
 fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
     const th = parent.ctx.res.view.theme;
     const row = try parent.item("row", i);
-    _ = row.with_size(.{ .fixed = detail_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(6);
+    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(6);
     _ = (try row.text("name", name)).with_style(.{Style{ .font = 9, .text = th.fg }});
     _ = (try row.text("value", value)).with_style(.{Style{ .font = 9, .text = th.dim }});
 }
@@ -361,14 +361,14 @@ fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
 fn detailSection(parent: El, id: []const u8, heading: []const u8) !El {
     const th = parent.ctx.res.view.theme;
     const sec = try parent.div(id);
-    _ = sec.with_size(.{ .fixed = detail_inner }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+    _ = sec.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
     _ = try sec.spacer("above", 1, 11);
-    try hrule(sec, "rule", .{ .fixed = detail_inner });
+    try hrule(sec, "rule", .{ .pct_of_parent = 1.0 });
     _ = try sec.spacer("pad", 1, 8);
     _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.dim }});
     _ = try sec.spacer("gap", 1, 6);
     const list = try sec.div("list");
-    _ = list.with_size(.{ .fixed = detail_inner }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
+    _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
     return list;
 }
 
@@ -427,7 +427,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     if (try chip(chips, "researched", "researched", filter == .researched)) st.filter = @intFromEnum(Filter.researched);
     if (try chip(chips, "available", "available", filter == .available)) st.filter = @intFromEnum(Filter.available);
     if (try chip(chips, "all", "all", filter == .all)) st.filter = @intFromEnum(Filter.all);
-    const field = try uic.text_input_look(tools, "search", "find a technology", 136, query_owner, .{ .font = 10, .placeholder = th.line2, .pad_x = 6, .pad_y = 5 });
+    const field = try uic.text_input_look(tools, "search", "find a technology", if (narrow) 110 else 136, query_owner, .{ .font = 10, .placeholder = th.line2, .pad_x = 6, .pad_y = 5 });
     _ = field;
     const query = std.mem.trim(u8, query_owner.state(uic.UiState.TextInputState).text(), " ");
     _ = try view.spacer("top_gap", 1, 8);
@@ -439,7 +439,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const pane = try layout.div("pane");
     _ = pane.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .grow, if (stack) .{ .fixed = 560 } else .{ .pct_of_parent = 1.0 }).with_overflow(.clip);
     const aside = try layout.div("aside");
-    _ = aside.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = detail_w }, if (stack) .{ .fixed = 300 } else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start });
+    _ = aside.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = detail_w }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start });
 
     // The pane is the board's one focus stop: arrows walk the tiles, Escape clears.
     const pq = pane.control(.{ .name = "Research board", .role = .group, .cursor = .grab });
@@ -709,8 +709,10 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
         _ = try aside.spacer("lead", detail_pad - 1, 1);
     }
+    // Stacked, the detail spans the page under the board (`.structure-detail` in one column).
+    const inner = if (stack) @import("./terminal.zig").stackedWidth(ctx) else detail_inner;
     const detail = try aside.div("detail");
-    _ = detail.with_size(.{ .fixed = detail_inner }, if (stack) .grow else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip);
+    _ = detail.with_size(.{ .fixed = inner }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip);
     _ = try detail.spacer("top", 1, 11);
     if (st.selected) |si| {
         const t = &cat.technologies[si];
@@ -722,7 +724,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = (try detail.text("name", t.name)).with_style(.{ style.heading, Style{ .text = th.fg } });
         _ = try detail.spacer("n_gap", 1, 8);
         const tags = try detail.div("tags");
-        _ = tags.with_size(.{ .fixed = detail_inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5);
+        _ = tags.with_size(.{ .fixed = inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5);
         var tag_n: usize = 0;
         const tag_texts = [_][]const u8{
             if (k.hybrid) "HYBRID" else "PURE",
@@ -740,13 +742,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = try detail.spacer("t_gap", 1, 10);
 
         // RESEARCH →, or what it lacks, between two rules.
-        try hrule(detail, "a_rule", .{ .fixed = detail_inner });
+        try hrule(detail, "a_rule", .{ .fixed = inner });
         _ = try detail.spacer("a_pad", 1, 8);
         const deficit = try deficitText(a, b, t);
         const can = s == .available and deficit == null;
         const label = if (s == .researched) "RESEARCHED" else if (deficit) |d| try a.print("NEEDS {s}", .{d}) else "RESEARCH \u{2192}";
         const btn = try detail.div("research");
-        _ = btn.with_size(.{ .fixed = detail_inner }, .{ .fixed = 34 });
+        _ = btn.with_size(.{ .fixed = inner }, .{ .fixed = 34 });
         const bq = btn.control(.{ .enabled = can, .name = label, .role = .button });
         const lit = can and (bq.hovering or bq.focused or bq.held);
         _ = btn.with_style(.{Style{ .outline_color = if (!can) th.line2 else if (lit) th.acc else th.fg }});
@@ -755,10 +757,10 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = try detail.spacer("b_gap", 1, 6);
         _ = (try detail.text("cost", try costText(a, t))).with_style(.{Style{ .font = 9, .text = th.dim }});
         _ = try detail.spacer("c_pad", 1, 9);
-        try hrule(detail, "c_rule", .{ .fixed = detail_inner });
+        try hrule(detail, "c_rule", .{ .fixed = inner });
         _ = try detail.spacer("c_gap", 1, 11);
 
-        _ = (try detail.text_fit("copy", t.effect, .{ .wrap = detail_inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", t.effect, .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
         if (t.cost.len == 0) try detailRow(costs, 0, "Act I foundation", "paid");
@@ -789,7 +791,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = try detail.spacer("k_gap", 1, 3);
         _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, Style{ .text = th.fg } });
         _ = try detail.spacer("n_gap", 1, 8);
-        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .{ .wrap = detail_inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------

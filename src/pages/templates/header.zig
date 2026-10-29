@@ -40,9 +40,10 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     // The stockline takes what the run context leaves, 12px clear of it, and wraps when it
     // runs long (`.stockline { flex-wrap: wrap }`): a long line never runs under the run
     // context, and nothing is hidden. Stacked (≤760) the run context holds to the first line.
+    // A wrapping run measures its lines only against a fixed width, so the stockline is given
+    // the width the header and the run context had last frame.
     const stack = @import("./terminal.zig").stacked(parent.ctx);
     _ = root.with_flow(.{ .dir = .row, .main = .start, .cross = if (stack) .start else .center }).with_gap(12);
-    _ = stocks.with_size(.grow, .fit_children);
     stocks.get().layout.flow.wrap = true;
 
     const right = try root.div("right");
@@ -50,6 +51,19 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     const run = try run_mod.runline(right, "run", options.run);
     const speed: ?El = if (options.show_speed) try speed_mod.speed_stepper(right, "speed") else null;
     const menu = try speed_mod.menu_control(right, "menu");
+
+    // The stockline's width: the header's less the run context's and the gap, as stamped last
+    // frame; until both are stamped it takes what is left without wrapping.
+    _ = right.pass_through().track();
+    _ = parent.pass_through().track();
+    const header_g = parent.prior_geometry();
+    const right_g = right.prior_geometry();
+    if (header_g != null and right_g != null) {
+        const gap = uic.view.dp(12, parent.ctx.res.view.scale);
+        _ = stocks.with_size_px(.{ .fixed = @max(0, header_g.?.rect.w - right_g.?.rect.w - gap) }, .fit_children);
+    } else {
+        _ = stocks.with_size(.grow, .fit_children);
+    }
 
     return .{ .el = root, .speed = speed, .stocks = stocks, .run = run, .menu = menu };
 }
