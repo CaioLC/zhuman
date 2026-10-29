@@ -23,7 +23,8 @@ Everything below follows from splitting questions apart and giving each its own 
 | **ACTIONS** | what will this body do now? | a searchable, bounded grid of compact verbs |
 | **BUILD** | what can I make next? | a sorted, filtered list of rows |
 | **HOLDINGS** | what do I own, and what is it doing for me? | a persistent panel |
-| **STRUCTURE** | what exists, and what does it take? | a board |
+| **RESEARCH** | what exists, and what does it take? | a board |
+| **MARKET** | who will trade with you? | a list of people (or goods) and a deal slip |
 
 ## Grammar
 
@@ -128,10 +129,16 @@ on both panes and keeps its place while their result collections scroll. Lines r
 first, each stamped with the game day and time it happened (`D19 11:45`); the newest is painted
 at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
-so it rests on the newest four and the wheel or scrollbar reaches older ones. STRUCTURE alone hides it to
-recover board height. Below 760 px the fixed-height workspace is released: ACTIONS, BUILD, and
-GENERATORS return to normal document scrolling, narrow BUILD drops lower-priority columns, and the log remains at the
-end of the document rather than creating nested touch scrollers.
+so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
+hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
+scroll, the Household rail sits above the surface (HOLDINGS and BODY side by side at 760, stacked below 560),
+ACTIONS, BUILD and GENERATORS take their natural height, narrow BUILD drops lower-priority columns, and the log
+remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
+
+**Every scroll answers the keyboard.** A scroll region that overflows is a Tab stop and the scroll owner of the
+controls inside it: Up/Down move a line, Page Up/Down a viewport, Home/End go to the ends, and a newly focused
+control inside it is scrolled into view. The wheel goes to the innermost region under the pointer, so the log
+or the board never also scrolls the page around it.
 
 **The goal card ends the act but is not filtered with ordinary goods.** One milestone
 component serves both acts: a fixed semantic bar, a disclosure whose summary carries title,
@@ -168,8 +175,8 @@ bed restores direct Vigor without raising its ceiling. No generator transfers re
 
 A panel, never opened, because its value peaks while you are looking at something else. It
 lives in the left rail, which collapses to a 36 px strip carrying a chevron and the label set
-vertically; ACTIONS and BUILD each remember their own collapse, and entering STRUCTURE forces
-the rail closed without touching those memories.
+vertically; ACTIONS, BUILD and GENERATORS each remember their own collapse, and entering RESEARCH or
+MARKET forces the rail closed without touching those memories.
 
 Three blocks. The **roster** names each owned kind with its count, since a good is not
 one-per-agent: a second pair of sandals is stock, made to trade. Kinds and units are
@@ -254,7 +261,20 @@ surface: the strips and the log step aside and the Household collapses.
 
 ## RESEARCH — the board
 
-*Designed, not built.* A production structure rather than a tech tree, which changes its
+The board is built as a hex of sixty technologies around a neutral foundation, four rings
+out (the four eras: crude production, settlement works, craft, early industrial), six wedges
+for the six resources. A tile is locked (a silhouette with no label), available, or
+researched; a tile becomes available when a researched neighbour on a lower ring touches it,
+and nothing else opens. Selecting a tile shows its ring, era, kind and state, what it costs
+against what is held, what it does, and what it opens outward; `RESEARCH →` pays the cost at
+once and establishes it, or names what is short. The camera zooms on the wheel about the
+pointer and pans on a drag; the arrows walk the lit tiles and Escape clears the selection.
+Filters (researched, available, all) and a search dim what they leave out rather than
+removing it, so the map keeps its shape.
+
+What follows is the board's intent beyond that first pass.
+
+A production structure rather than a tech tree, which changes its
 topology: videogame trees fan **out**, one item unlocking three, but capital goods are
 complementary — a recipe converges on its output, so the graph fans **in**.
 
@@ -283,7 +303,7 @@ an impossible good has no price to compare against — the merchant would become
 than a counterparty. Building across specializations stays possible at a penalty, because
 the lesson is comparative advantage: trade must pay even when you could make it yourself.
 
-Read-only. The board is the map, BUILD is the shop.
+The board is the map and the place research is paid for; BUILD is the shop.
 
 ## Constraints that shape the work
 

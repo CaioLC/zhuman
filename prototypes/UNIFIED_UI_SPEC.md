@@ -217,6 +217,28 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 - Stall: ITEM · POSTED/WANTED stepper · PRICE stepper · WHO WOULD BUY/SELL; the slip becomes a
   summary with a warning when buy posts commit more coin than held.
 
+### 7.1a RESEARCH — the hex board
+
+- **[decided]** Topbar `RESEARCH` · `What exists, and what does it take?` with the filter chips
+  (`researched` · `available` · `all`) and a `find a technology` search; body: the board pane |
+  238px detail aside; foot: the six-resource legend, the status line and the hints
+  (`Wheel zoom / drag pan`, `Arrows move · Esc clears`).
+- The board is the 620-unit viewBox fitted to the pane: a neutral hub, sixty tiles over rings
+  1–4, sector labels at the rim. Locked tiles are silhouettes with no label; available and
+  researched tiles carry a short label, resource rails, material dots, and (researched) a
+  marker. The selection strokes `fg`; its outward neighbours stroke `warn`, dashed.
+- Camera: wheel zoom about the pointer (×1.12), drag pan past 4px, `−` / `%` / `+` / `reset`,
+  zoom 0.75–2.5 in 0.2 steps. Filters and search dim (opacity 0.11), never remove.
+- Detail: `RING n · ERA`, name, `PURE|HYBRID` · resources · state tags, `RESEARCH →` (or
+  `NEEDS …` / `RESEARCHED`) with the cost line, the effect, RESEARCH COST (`n Resource` /
+  `n held`), ENABLES OUTWARD (what it opens in BUILD/ACTIONS, then outward tiles and their
+  state, or `Act III frontier`).
+- **[decided]** RESEARCH is real: `RESEARCH →` pays the cost from the stocks, establishes the
+  tile, opens its outward neighbours, and logs `{name} is established. {cost} paid.`
+- **[decided]** The Exchange card (BUILD) unlocks on any ring-4 technology and more than 500
+  people; raising it pays 80 biomass · 40 minerals · 24 metal and the page reads as Act III
+  (`◆ EXCHANGE`, `ENTER →`, the act label).
+
 ## 7.2 Session menu and title screen
 
 - **[decided]** `menu.html` is the session menu, on the trade dialog's shell (620px): kicker
@@ -231,6 +253,16 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   CONTRAST, WINDOW. A setting with no backend yet is stubbed (held, no effect), not omitted.
 
 ---
+
+### 7.3 Narrow widths and the keyboard
+
+- **[decided]** At 760px and below the page stacks: one page scroll, the Household above the
+  surface (HOLDINGS | BODY side by side at 760, stacked at 560 and below), every view at its
+  natural height, the stockline wrapping beside the run context. RESEARCH puts a 560px board
+  above its detail.
+- **[decided]** A scroll region that overflows is a Tab stop; Up/Down, Page Up/Down and
+  Home/End scroll the innermost region around focus, and a newly focused control scrolls into
+  view. The wheel goes to the innermost region under the pointer.
 
 ## 8. Household side rail
 

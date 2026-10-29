@@ -44,10 +44,27 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_two_actions`   | QA-11 | Act II shell ACTIONS / catalog | `act-ii.html`, `legacy/act-ii-focus-actions.png` |
 | `act_two_build`     | QA-11 | Act II shell BUILD / recipe catalog | `legacy/act-ii-focus-build.png` |
 | `act_two_w560`      | QA-11 | Act II narrow, 560 width class | `act-ii.html` ≤560 media query |
+| `act_two_build_w560` | QA-11 | Act II BUILD stacked: the page scrolls, the table takes its height | `act-ii.html` ≤560 media query |
+| `act_two_generators` | QA-11 | Act II GENERATORS over both acts' generators | `act-ii.html#generators` |
+| `act_two_collapsed` | QA-11 | Act II Household rail collapsed | `act-ii.html?holdings=collapsed` |
+| `act_two_research`  | QA-12 | RESEARCH opening: Gamekeeping selected, `all` filter, 100% camera | `act-ii.html#research` |
+| `act_two_research_w560` | QA-12 | RESEARCH stacked: 560px board, detail beneath | `act-ii.html#research` ≤560 media query |
+| `act_two_exchange`  | QA-11 | the Exchange card opened, locked | `act-ii.html?exchangeopen=1#build` |
+| `act_two_exchange_ready` | QA-11 | the Exchange ready to raise | `act-ii.html` (state of `refreshExchangeMilestone`) |
+| `act_two_exchange_standing` | QA-11 | Act III identity: `◆ EXCHANGE`, `Act III`, `ACT III OPEN` | `act-ii.html?exchange=standing` |
+| `act_two_market`    | QA-11 | MARKET by good | `act-ii.html#market`, `market.html` |
+| `market_people` / `market_good` / `market_stall` | QA-11 | MARKET deal slip, good slip, YOUR STALL | `market.html`, `market.html?stall=1` |
+| `act_one_trade` / `act_two_trade` | QA-13 | the trade dialog over each act | `act-i.html?modal=merchant`, `act-ii.html?modal=merchant` |
+| `act_one_menu` / `menu_save` / `menu_settings` / `menu_quit` | QA-13 | the session menu and its screens | `menu.html`, `menu.html?screen=…` |
+| `title` / `title_settings` / `title_credits` | QA-13 | the title screen and its screens | `title.html`, `title.html?screen=…` |
 
-QA-12 (STRUCTURE board) and the remaining QA-13 overlays (modal backdrop/clipping, long-offer
-wrapping, sort popup near edges, focus-visible, reduced-motion terminal, oversized-window
-centering) have no fixture; their entries are in `roadmap.md`.
+`tools/capture_prototypes.ps1` captures the prototype side of the same names (headless Edge), so
+each pair can be set side by side.
+
+The rest of QA-12 (filters, search dimming, deficits, tooltip, camera extremes, keyboard focus)
+and the remaining QA-13 overlays (long-offer wrapping, sort popup near edges, focus-visible,
+reduced-motion terminal, oversized-window centering) have no fixture; their entries are in
+`roadmap.md`.
 
 ## Parity checklist (PARITY-01..05)
 

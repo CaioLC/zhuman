@@ -699,7 +699,7 @@ rail, likewise), `slider` (the lane rect, capture, press-time focus, the drag cu
 `terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
 sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
 cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
-consumption), `research_board` (its camera over the pane's prior rect, the pan capture and
+consumption), `header` (the stockline's width from the header's and the run context's prior rects, so a long line wraps), `research_board` (its camera over the pane's prior rect, the pan capture and
 cursors, the tiles placed in device px), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
 tooltip fixture (placed and clamped by its prior-frame size, as a production tooltip is).
 `tools/boundary_check.sh` greps the known spellings of these reads — its `inventory` pattern —
@@ -715,6 +715,15 @@ automatically. This is still generic mechanism: host `PointerActivation` owns po
 identity and click suppression, while `ui_client.drag` owns concrete math. The scroll view's
 thumb and the slider capture and owner-release; `ThresholdDrag` shares the strict `>4px`
 boundary with pointer activation.
+
+**Keyboard and wheel routing to scroll regions.** An overflowing `scroll_view` is a focus stop
+and registers its viewport as a scroll owner and a wheel owner. The router sends Up/Down, Page
+Up/Down and Home/End, when no roving group, grid owner, range or editor takes them, to the
+innermost scroll owner that is or encloses the focused key (by the prior stamp's ancestry,
+`isStampedDescendant`), as the transient `scroll_*` flags on that owner alone. The engine marks
+`.wheel` on every ancestor under the pointer, so a scroll view leaves the wheel to any nested wheel
+owner the pointer is over (an inner scroll, the research board's zoom). A grid owner
+(`registerGrid`) receives the arrows as `nav_*` flags instead.
 
 **Why a handle rather than `*Node` methods:** applying a `font` re-measures the text, which
 needs the font backend on `ctx`, and the engine's `Node` is deliberately ctx-agnostic. `El`
