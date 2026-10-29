@@ -239,7 +239,7 @@ These remain in this file because it is the only future-work document, but they 
 ### Optional refactors
 
 - [ ] **UIE-10 — Resolve a percent rule for an out-of-flow child of a content-sized parent.** Out-of-flow children never feed the fit, so the parent's resolved size is known before they size. The action tile's progress underbar and the milestone wash could then drop their prior-frame rect reads. Those reads are approved component-internal sites until then.
-- [ ] **TEXT-07 — Store the text fit on `TextState` as the union it is authored with.** `El.text_fit` takes one `TextFit` (free, wrap, cell, vertical), but the state still holds three fields (`wrap_width`, `overflow`/`overflow_width`, `orientation`) that `remeasure` and `draw` branch on. Folding them into the union makes the exclusivity structural at the state too.
+- [x] **TEXT-07 — Store the text fit on `TextState` as the union it is authored with.** `El.text_fit` takes one `TextFit` (free, wrap, cell, vertical), but the state still holds three fields (`wrap_width`, `overflow`/`overflow_width`, `orientation`) that `remeasure` and `draw` branch on. Folding them into the union makes the exclusivity structural at the state too. Done: `TextState.fit` is a `Fit` union (`free`, `wrap`, `cell`, `vertical`, device px) that `El.text_fit` sets; `remeasure`, `draw` and the texture-cache key read it through `wrapWidth`/`overflow`/`cellWidth`/`orientation`, and the state tests pin one variant at a time.
 
 ## Definition of done
 

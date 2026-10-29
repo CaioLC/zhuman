@@ -274,38 +274,23 @@ pub const El = struct {
         const st = leaf.node.state(self.ctx, cb.UiState.TextState);
         const scale = self.ctx.res.view.scale;
         switch (fit) {
-            .free => {
-                st.wrap_width = 0;
-                st.overflow = .visible;
-                st.overflow_width = 0;
-                st.orientation = .horizontal;
-            },
-            .wrap => |max_w| {
-                st.wrap_width = view.dp(max_w, scale);
-                st.overflow = .visible;
-                st.overflow_width = 0;
-                st.orientation = .horizontal;
-            },
+            .free => st.fit = .free,
+            .wrap => |max_w| st.fit = .{ .wrap = view.dp(max_w, scale) },
             .cell => |c| {
                 std.debug.assert(c.width >= 0);
-                st.wrap_width = 0;
-                st.overflow = switch (c.mode) {
-                    .clip => .clip,
-                    .ellipsis => .ellipsis,
-                };
-                st.overflow_width = view.dp(c.width, scale);
-                st.orientation = .horizontal;
+                st.fit = .{ .cell = .{
+                    .mode = switch (c.mode) {
+                        .clip => .clip,
+                        .ellipsis => .ellipsis,
+                    },
+                    .width = view.dp(c.width, scale),
+                } };
                 // A `.clip` cell also routes through the engine's `Layout.overflow = .clip`, so any
                 // decoration subtree is cropped to the cell and hit-testing rejects outside it; the
                 // leaf's own glyphs are cropped renderer-scoped in `text.draw`.
                 if (c.mode == .clip) leaf.node.layout.overflow = .clip;
             },
-            .vertical => {
-                st.wrap_width = 0;
-                st.overflow = .visible;
-                st.overflow_width = 0;
-                st.orientation = .counter_clockwise_90;
-            },
+            .vertical => st.fit = .vertical,
         }
         feat.text.remeasure(self.ctx, leaf.node);
         return leaf;

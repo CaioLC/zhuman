@@ -46,37 +46,24 @@ pub const UiState = struct {
         /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
-        /// Maximum content width, in px, for constrained multiline text. `0` (the
-        /// default) is the **single-line fast path**: the node measures/draws one line
-        /// exactly as before, so dense rows pay nothing for the wrap machinery. A positive
-        /// value makes `attach`/`draw` run the pure `features/wrap.zig` routine — the same
-        /// routine for both, so the measured box and the rendered lines always agree. Set by
-        /// `El.text_fit` (a creation parameter of the leaf; style re-measures at it); `style.apply`
-        /// reads it so a heading re-measures at the same constraint. POD: still no allocator,
-        /// so the pool contract is unchanged (line spans are recomputed, never stored).
-        wrap_width: f32 = 0,
-        /// Single-line overflow discipline for a *cell* of an explicitly allocated width.
-        /// This is the vocabulary for a fixed-width slot — a stock token, a
-        /// catalog name column, a status readout in a narrow tile — where the drawn glyphs
-        /// must never redefine the box: the layout/hit geometry stays the allocated cell,
-        /// only the *visible* glyphs are constrained. Explicit, never implicit:
-        ///   - `.visible` (default) — the fast/wrapped path unchanged; no cell constraint,
-        ///     the box is the measured glyph width (or wrapped width).
-        ///   - `.clip` — draw the whole accepted string but scope the renderer's clip to
-        ///     the content cell (and restore the prior clip after, including on error).
-        ///   - `.ellipsis` — draw the longest codepoint-aligned prefix that fits
-        ///     `overflow_width − ellipsis_width` plus a deterministic ellipsis token.
-        /// Mutually exclusive with `wrap_width`: wrapping is multiline, overflow is
-        /// single-line; if both are set the wrap path wins (a wrapped node is not a cell).
-        overflow: Overflow = .visible,
-        /// The allocated cell width, in px, for `overflow != .visible`. A
-        /// **required nonnegative** value the caller allocates (a column/token/tile width);
-        /// `0` is a degenerate but legal zero-width cell (draws nothing, reserves nothing).
-        /// When positive and not wrapping, `remeasure` writes `data_width = overflow_width`
-        /// — the box and hit geometry are this cell, *never* the unbounded glyph width — so
-        /// a widening label can never shove its neighbors. `data_height`/`baseline` still
-        /// come from the font (a single line). POD like `wrap_width`; no allocator.
-        overflow_width: f32 = 0,
+        /// The leaf's measurement constraint, exactly one of four by construction (`El.text_fit`
+        /// sets it; `style.apply` re-measures at it), widths in device px. POD: line spans and
+        /// ellipsis prefixes are recomputed from it, never stored.
+        ///   - `.free` (default) - the **single-line fast path**: one measured line, so dense
+        ///     rows pay nothing for the wrap or cell machinery.
+        ///   - `.wrap` - multiline at this width through the pure `features/wrap.zig` routine,
+        ///     the same for measure and draw, so the box and the drawn lines agree.
+        ///   - `.cell` - a single line in an allocated width (a stock token, a catalog name
+        ///     column): `remeasure` writes `data_width = width`, never the glyph width, so a
+        ///     widening label cannot shove its neighbours. `.clip` draws the whole string under
+        ///     a clip scoped to the cell; `.ellipsis` draws the longest codepoint-aligned prefix
+        ///     that fits `width - ellipsis_width` plus the ellipsis token. `0` is a legal
+        ///     zero-width cell (draws nothing, reserves nothing).
+        ///   - `.vertical` - one line rotated 90 degrees counter-clockwise at blit (the
+        ///     collapsed rail label reads bottom-to-top); `remeasure` swaps the box axes, so
+        ///     layout, focus outline and hit geometry match the rotated pixels. Rotation is a
+        ///     final-blit transform, so it reuses the upright texture.
+        fit: Fit = .free,
         /// **Device-px letter-spacing** added between glyph clusters when rendering and
         /// measuring this text. `0` (the default) is the **untracked fast path**:
         /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, exactly
@@ -86,19 +73,11 @@ pub const UiState = struct {
         /// per-cluster advance routine — the measured width and the drawn glyph positions add
         /// the identical integer `dx` between the identical clusters, so box and render agree
         /// exactly for single-line, wrapped, clip, and ellipsis paths. Already an **integer**
-        /// device px (rounded at resolve time) so it stays crisp. POD like
-        /// `wrap_width`/`overflow` in *shape*, but the state as a whole is **no longer POD**
+        /// device px (rounded at resolve time) so it stays crisp. POD like `fit` in *shape*,
+        /// but the state as a whole is **no longer POD**
         /// (see `tex`/`cache_key` below): it owns a GPU texture and declares `deinit`.
         /// This is the render-affecting attribute the texture cache keys on.
         tracking: f32 = 0,
-        /// Final text orientation. `.horizontal` is every ordinary label.
-        /// `.counter_clockwise_90` rotates the cached upright composite 90° counter-clockwise
-        /// at blit time so the collapsed-rail label reads bottom-to-top. `text.remeasure`
-        /// swaps the content-box axes for the same state, keeping layout, focus outline, and
-        /// rectangular hit geometry synchronized with the rotated pixels. Orientation is a
-        /// final-blit transform, not a composite-pixel input, so changing it reuses the
-        /// texture rather than re-rasterizing glyphs.
-        orientation: Orientation = .horizontal,
 
         /// **Cached composite texture.** The uploaded, white-rasterized **composite**
         /// for whatever variant this node draws — single-line (tracked or not), wrapped,
@@ -122,10 +101,9 @@ pub const UiState = struct {
         /// alongside the texture exactly like `SvgState.src_key`, generalized to the full key.
         cache_key: ?@import("features/text_cache.zig").Key = null,
 
-        /// Single-line overflow modes. `.visible` is the default behavior (no cell
-        /// constraint); `.clip` and `.ellipsis` bound the drawn glyphs to `overflow_width`
-        /// while the layout box stays that allocated cell. Declared here (not with the
-        /// feature) for the same import-cycle reason as `TextState` itself.
+        /// Single-line overflow modes, derived from `fit` (`Fit.overflow`) for the texture cache
+        /// key and the draw branch. `.visible` is every fit but a cell. Declared here (not with
+        /// the feature) for the same import-cycle reason as `TextState` itself.
         pub const Overflow = enum { visible, clip, ellipsis };
 
         /// The only axis-aligned text orientations the product uses. A bounded enum
@@ -133,8 +111,47 @@ pub const UiState = struct {
         /// angles whose non-axis-aligned hit bounds would require a broader geometry policy.
         pub const Orientation = enum { horizontal, counter_clockwise_90 };
 
+        /// See the `fit` field. Widths are device px.
+        pub const Fit = union(enum) {
+            free,
+            wrap: f32,
+            cell: Cell,
+            vertical,
+
+            pub const Cell = struct { mode: CellMode, width: f32 };
+            pub const CellMode = enum { clip, ellipsis };
+
+            /// The wrap width, or 0 for a single-line fit.
+            pub fn wrapWidth(self: Fit) f32 {
+                return switch (self) {
+                    .wrap => |w| w,
+                    else => 0,
+                };
+            }
+            /// The cell discipline; `.visible` for every fit but a cell.
+            pub fn overflow(self: Fit) Overflow {
+                return switch (self) {
+                    .cell => |c| switch (c.mode) {
+                        .clip => .clip,
+                        .ellipsis => .ellipsis,
+                    },
+                    else => .visible,
+                };
+            }
+            /// The allocated cell width, or 0 for every fit but a cell.
+            pub fn cellWidth(self: Fit) f32 {
+                return switch (self) {
+                    .cell => |c| c.width,
+                    else => 0,
+                };
+            }
+            pub fn orientation(self: Fit) Orientation {
+                return if (self == .vertical) .counter_clockwise_90 else .horizontal;
+            }
+        };
+
         pub fn init() TextState {
-            return .{ .buf = undefined, .len = 0, .refused = false, .px = 0, .wrap_width = 0 };
+            return .{ .buf = undefined, .len = 0, .refused = false, .px = 0 };
         }
 
         /// Release the cached GPU texture — the pool eviction hook. Called by

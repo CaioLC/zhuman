@@ -219,18 +219,18 @@ fn orientMetrics(orientation: State.Orientation, upright: Metrics) Metrics {
 pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     const st = node.state(ctx, State);
     const measured = st.text() orelse "";
-    const upright: Metrics = if (st.wrap_width > 0) blk: {
+    const upright: Metrics = if (st.fit.wrapWidth() > 0) blk: {
         const font = ctx.res.platform.font.at(st.px) catch return;
-        const tw, const th, const baseline = measureWrapped(font, measured, st.wrap_width, st.tracking);
+        const tw, const th, const baseline = measureWrapped(font, measured, st.fit.wrapWidth(), st.tracking);
         break :blk .{ .width = tw, .height = th, .baseline = baseline };
-    } else if (st.overflow != .visible) blk: {
+    } else if (st.fit.overflow() != .visible) blk: {
         // An explicitly allocated single-line cell. The *box* is the allocated
         // width, never the unbounded glyph width — including a legal zero-width cell. A
         // widening label cannot shift its neighbors, and hit-testing uses this stamped cell.
         // Height and baseline still come from the font, single-line, so the cell baseline-aligns
         // like an ordinary label. The drawn glyphs are `draw`'s concern.
         _, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
-        break :blk .{ .width = st.overflow_width, .height = @floatFromInt(th), .baseline = baseline };
+        break :blk .{ .width = st.fit.cellWidth(), .height = @floatFromInt(th), .baseline = baseline };
     } else blk: {
         // Single-line, unconstrained. Height/baseline always come from the font; the width
         // is the tracking-aware advance when tracking is set and SDL's native width otherwise.
@@ -244,7 +244,7 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
         break :blk .{ .width = w, .height = @floatFromInt(th), .baseline = baseline };
     };
 
-    const oriented = orientMetrics(st.orientation, upright);
+    const oriented = orientMetrics(st.fit.orientation(), upright);
     node.size.data_width = oriented.width;
     node.size.data_height = oriented.height;
     node.size.baseline = oriented.baseline;
@@ -263,7 +263,7 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
 /// dropped visibly (empty node), never cut mid-codepoint. Text that must actually be
 /// longer than `State.cap` goes through the wrap fit.
 ///
-/// Wrapping is off here (`wrap_width` stays 0, the single-line fast path) — a caller opts a
+/// Wrapping is off here (the fit stays `.free`, the single-line fast path) — a caller opts a
 /// node into constrained multiline with `El.text_fit(.{ .wrap = w })`, which sets the width and re-measures.
 pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
     const st = node.state(ctx, State);
@@ -291,9 +291,9 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 /// The variant a node draws is decided by its state and reproduced *inside* the composite by
 /// `planVariant` (the one place each variant's glyph placement lives), so the cached pixels
 /// match the measure pass glyph-for-glyph:
-///   - single-line, unconstrained (`wrap_width == 0`, `overflow == .visible`) — the whole
+///   - single-line, unconstrained (`fit == .free`) — the whole
 ///     string (tracked: per-cluster at the measured advances; untracked: one span).
-///   - wrapped (`wrap_width > 0`) — the *same* `wrap.wrapLines` the measure pass ran, one
+///   - wrapped (`fit == .wrap`) — the *same* `wrap.wrapLines` the measure pass ran, one
 ///     stamped line per break at `i*lineSkip` (a blank line keeps its height), tracked or not.
 ///   - `.clip` — the whole string is cached (its pixels depend only on keyed inputs); the
 ///     clip **rect** is the one per-frame render-time op, scoped to the prior clip ∩ the cell
@@ -321,7 +321,7 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
     // clipped string are the whole string (they depend only on keyed inputs), so they are
     // cached like any other variant and the clip scope is applied around the cached blit.
     // No variant re-rasterizes a glyph on a cache hit.
-    const clip_cell: ?ui.Rect = if (st.wrap_width <= 0 and st.overflow == .clip) r else null;
+    const clip_cell: ?ui.Rect = if (st.fit.wrapWidth() <= 0 and st.fit.overflow() == .clip) r else null;
     drawCached(u, st, f, fmt, tint, r, clip_cell);
 }
 
@@ -335,9 +335,9 @@ fn cacheInputs(u: *UiCtx, st: *const State, fmt: []const u8) text_cache.Inputs {
         .px = st.px,
         .font_id = text_cache.default_font_id,
         .tracking = st.tracking,
-        .overflow = @backingInt(st.overflow),
-        .overflow_width = st.overflow_width,
-        .wrap_width = st.wrap_width,
+        .overflow = @backingInt(st.fit.overflow()),
+        .overflow_width = st.fit.cellWidth(),
+        .wrap_width = st.fit.wrapWidth(),
         .generation = u.res.platform.generation,
     };
 }
@@ -465,14 +465,14 @@ const Plan = struct {
 /// Walk a variant, emitting each white sub-blit to `sink` and returning the composite bounds
 /// (`w`, `h`) in device px. This is the ONE place a variant's glyph placement lives for the
 /// cache; `renderComposite` replays it against a real target, so the composite pixels match
-/// what the pre-cache per-frame paths drew glyph-for-glyph. `overflow_width`/`wrap_width` are
-/// read from `st`, matching `remeasure`'s cell/wrap branches.
+/// what the pre-cache per-frame paths drew glyph-for-glyph. The fit is
+/// read from `st.fit`, matching `remeasure`'s cell/wrap branches.
 fn planVariant(st: *const State, font: sdl.ttf.Font, text: []const u8, sink: *Plan.Sink) struct { f32, f32 } {
     var plan = Plan{ .font = font, .tracking = st.tracking, .sink = sink };
     const skip = lineSkip(font);
     const line_h = plan.lineHeight();
 
-    if (st.wrap_width > 0) {
+    if (st.fit.wrapWidth() > 0) {
         // Wrapped (tracked or not): each line stamped at (0, i*skip); a blank line still
         // advances `y` so the composite reserves its height, matching the measure pass.
         const Ctx = struct {
@@ -490,18 +490,18 @@ fn planVariant(st: *const State, font: sdl.ttf.Font, text: []const u8, sink: *Pl
         };
         var fm = FontMeasurer{ .font = font, .tracking = st.tracking };
         var c = Ctx{ .plan = &plan, .src = text, .skip = skip, .line_h = line_h };
-        wrap.wrapLines(text, st.wrap_width, fm.measurer(), *Ctx, &c, Ctx.take);
+        wrap.wrapLines(text, st.fit.wrapWidth(), fm.measurer(), *Ctx, &c, Ctx.take);
         return .{ plan.w, plan.h };
     }
 
-    if (st.overflow == .ellipsis) {
+    if (st.fit.overflow() == .ellipsis) {
         // Ellipsis cell: the identical `wrap.ellipsisFit` (measure == draw), then the
         // codepoint-aligned prefix and — if elided — the deterministic token at the prefix's
         // tracked width plus one inter-cluster gap. A too-narrow cell yields an empty fit.
         var fm = FontMeasurer{ .font = font, .tracking = st.tracking };
         const m = fm.measurer();
         const ell_w: f32 = m.width(ellipsis_token);
-        const r = wrap.ellipsisFit(text, st.overflow_width, ell_w, m);
+        const r = wrap.ellipsisFit(text, st.fit.cellWidth(), ell_w, m);
         const prefix = text[0..r.prefix_len];
         plan.span(prefix, 0, 0, line_h);
         if (r.elided) {
@@ -637,13 +637,13 @@ fn drawCached(u: *UiCtx, st: *State, font: sdl.ttf.Font, text: []const u8, c: cb
         // Horizontal glyph textures snap their final origin to device pixels below. Derive the
         // clip cell from that same origin so clipping and the shifted pixels cannot disagree by
         // one pixel at a fractional layout coordinate. Rotated text retains its exact center.
-        const aligned_cell = if (st.orientation == .horizontal) snapHorizontalOrigin(cell) else cell;
+        const aligned_cell = if (st.fit.orientation() == .horizontal) snapHorizontalOrigin(cell) else cell;
         const cell_clip = paint.irect(aligned_cell) orelse return;
         const narrowed: sdl.rect.IRect = if (prior) |p| intersectIRect(p, cell_clip) else cell_clip;
         renderer.setClipRect(narrowed) catch return;
-        blitCached(u, st.tex.?, c, box, st.orientation);
+        blitCached(u, st.tex.?, c, box, st.fit.orientation());
     } else {
-        blitCached(u, st.tex.?, c, box, st.orientation);
+        blitCached(u, st.tex.?, c, box, st.fit.orientation());
     }
 }
 
@@ -767,93 +767,62 @@ test "text feature: an over-cap string measures an empty box and draws nothing" 
     try std.testing.expect(st.text() == null); // draw's `orelse return` path
 }
 
-test "text feature: wrap_width is POD state that round-trips; default is the fast path" {
+test "text feature: the fit defaults to the single-line fast path and is one variant at a time" {
     var st = State.init();
-    try std.testing.expectEqual(@as(f32, 0), st.wrap_width); // default: single-line fast path
+    try std.testing.expect(st.fit == .free);
+    try std.testing.expectEqual(@as(f32, 0), st.fit.wrapWidth());
+    try std.testing.expectEqual(State.Overflow.visible, st.fit.overflow());
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth());
+    try std.testing.expectEqual(State.Orientation.horizontal, st.fit.orientation());
     try std.testing.expect(st.update("You are not alone here anymore."));
-    st.wrap_width = 120;
-    try std.testing.expectEqual(@as(f32, 120), st.wrap_width);
-    // The accepted string is untouched by the wrap constraint — wrapping recomputes spans
-    // from this same source, never mutates it, so measure and render read one buffer.
+
+    st.fit = .{ .wrap = 120 };
+    try std.testing.expectEqual(@as(f32, 120), st.fit.wrapWidth());
+    try std.testing.expectEqual(State.Overflow.visible, st.fit.overflow());
+
+    // A cell replaces the wrap: the union cannot hold both, so no precedence rule is needed.
+    st.fit = .{ .cell = .{ .mode = .ellipsis, .width = 64 } };
+    try std.testing.expectEqual(@as(f32, 0), st.fit.wrapWidth());
+    try std.testing.expectEqual(State.Overflow.ellipsis, st.fit.overflow());
+    try std.testing.expectEqual(@as(f32, 64), st.fit.cellWidth());
+    try std.testing.expectEqual(State.Orientation.horizontal, st.fit.orientation());
+
+    st.fit = .vertical;
+    try std.testing.expectEqual(State.Orientation.counter_clockwise_90, st.fit.orientation());
+    try std.testing.expectEqual(State.Overflow.visible, st.fit.overflow());
+
+    // Reused as an ordinary label, nothing of the old constraint lingers.
+    st.fit = .free;
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth());
+    try std.testing.expectEqual(State.Orientation.horizontal, st.fit.orientation());
+    // The fit never mutates the accepted string; measure and render read one buffer.
     try std.testing.expectEqualStrings("You are not alone here anymore.", st.text() orelse "");
 }
 
-test "text feature: an over-cap string is still refused whole even with wrap set" {
-    // The whole-refusal is preserved: wrapping is not a way to smuggle a too-long
-    // source past the cap. A refused state has no text, so the wrapped measure sees "" and
-    // reserves a zero box — identical to the single-line refusal path.
-    var st = State.init();
-    st.wrap_width = 200;
+test "text feature: an over-cap string is still refused whole under any fit" {
+    // Neither wrapping nor a cell is a way to smuggle a too-long source past the cap.
     var over: [State.cap + 1]u8 = undefined;
     @memset(&over, 'x');
-    try std.testing.expect(!st.update(&over)); // refused whole, wrap or not
-    try std.testing.expect(st.text() == null);
+    for ([_]State.Fit{ .{ .wrap = 200 }, .{ .cell = .{ .mode = .clip, .width = 120 } } }) |fit| {
+        var st = State.init();
+        st.fit = fit;
+        try std.testing.expect(!st.update(&over));
+        try std.testing.expect(st.text() == null);
+    }
 }
 
-test "text feature: overflow mode/width are POD state that round-trip; default is the fast path" {
+test "text feature: a cell measures to the allocated width, not the glyph width" {
+    // `remeasure` writes `data_width = fit.cellWidth()` for a cell (it needs a live font for
+    // height and baseline, so the width rule is pinned here): the width comes from the fit,
+    // never a measurement, and zero is a legal zero-width cell, not the unconstrained case.
     var st = State.init();
-    // Default is `.visible` + 0 width: the unconstrained single-line fast path, unchanged.
-    try std.testing.expectEqual(State.Overflow.visible, st.overflow);
-    try std.testing.expectEqual(@as(f32, 0), st.overflow_width);
-    try std.testing.expect(st.update("Iron Ingot ×12"));
-    st.overflow = .ellipsis;
-    st.overflow_width = 64;
-    try std.testing.expectEqual(State.Overflow.ellipsis, st.overflow);
-    try std.testing.expectEqual(@as(f32, 64), st.overflow_width);
-    // The accepted string is untouched by the cell constraint — overflow recomputes the fit
-    // from this same buffer, never mutates it, so measure and render read one source.
-    try std.testing.expectEqualStrings("Iron Ingot ×12", st.text() orelse "");
-}
-
-test "text feature: an over-cap string is still refused whole even with an overflow cell" {
-    // The whole-refusal holds: an overflow cell is not a way to smuggle a too-long
-    // source past the cap. A refused state has no text, so the cell draws nothing.
-    var st = State.init();
-    st.overflow = .clip;
-    st.overflow_width = 120;
-    var over: [State.cap + 1]u8 = undefined;
-    @memset(&over, 'x');
-    try std.testing.expect(!st.update(&over)); // refused whole, cell or not
-    try std.testing.expect(st.text() == null);
-}
-
-test "text feature: an overflow cell measures to the allocated width, not the glyph width" {
-    // The core geometry invariant, pinned SDL-free: `remeasure` writes
-    // `data_width = overflow_width` for an overflow cell, independent of the glyph width. We
-    // stand in for `remeasure`'s cell branch (which needs a live font for height/baseline)
-    // by exercising the exact rule it applies to the width — the width comes from the field,
-    // never from a measurement — so a widening label cannot redefine the box.
-    var st = State.init();
-    st.overflow = .clip;
-    st.overflow_width = 48;
+    st.fit = .{ .cell = .{ .mode = .clip, .width = 48 } };
     try std.testing.expect(st.update("a string far wider than forty-eight pixels of glyphs"));
-    // The rule remeasure applies for the width axis of a cell:
-    const cell_data_width: f32 = if (st.overflow != .visible)
-        st.overflow_width
-    else
-        0; // (glyph-measured branch not exercised here)
-    try std.testing.expectEqual(@as(f32, 48), cell_data_width);
-
-    // Zero is also an explicitly allocated cell, not the unconstrained sentinel: it keeps
-    // zero layout/hit width and the overflow draw branch emits no glyphs.
-    st.overflow = .ellipsis;
-    st.overflow_width = 0;
-    const zero_cell_width: f32 = if (st.overflow != .visible) st.overflow_width else -1;
-    try std.testing.expectEqual(@as(f32, 0), zero_cell_width);
-}
-
-test "text feature: switching a cell back to .visible clears the constraint" {
-    // Mode switching / reuse: a pooled node reused with `.visible` + 0 is byte-for-byte the
-    // fast path again — no lingering cell width steering the geometry.
-    var st = State.init();
-    try std.testing.expect(st.update("Copper Wire"));
-    st.overflow = .ellipsis;
-    st.overflow_width = 40;
-    // ...later reused as an ordinary label:
-    st.overflow = .visible;
-    st.overflow_width = 0;
-    try std.testing.expectEqual(State.Overflow.visible, st.overflow);
-    try std.testing.expectEqual(@as(f32, 0), st.overflow_width);
+    try std.testing.expect(st.fit.overflow() != .visible);
+    try std.testing.expectEqual(@as(f32, 48), st.fit.cellWidth());
+    st.fit = .{ .cell = .{ .mode = .ellipsis, .width = 0 } };
+    try std.testing.expect(st.fit.overflow() != .visible);
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth());
 }
 
 test "text feature: the ellipsis token is a single deterministic codepoint (U+2026)" {
@@ -894,7 +863,7 @@ test "text feature: integer clip-rect intersection is the overlap, empties to ze
 test "text feature: tracking is POD state that round-trips; default is the untracked fast path" {
     // `tracking` defaults to 0 (the untracked fast path — one getStringSize measure and one
     // renderTextSolid span). A resolved device-px delta round-trips like
-    // `wrap_width`/`overflow`, with no allocator (POD).
+    // `fit`, with no allocator (POD).
     var st = State.init();
     try std.testing.expectEqual(@as(f32, 0), st.tracking); // default: untracked
     try std.testing.expect(st.update("IN REACH"));
@@ -915,15 +884,6 @@ test "text feature: an over-cap string is still refused whole even with tracking
     @memset(&over, 'x');
     try std.testing.expect(!st.update(&over)); // refused whole, tracked or not
     try std.testing.expect(st.text() == null); // draws nothing
-}
-
-test "text feature: orientation defaults horizontal and preserves accepted content" {
-    var st = State.init();
-    try std.testing.expectEqual(State.Orientation.horizontal, st.orientation);
-    try std.testing.expect(st.update("HOLDINGS"));
-    st.orientation = .counter_clockwise_90;
-    try std.testing.expectEqual(State.Orientation.counter_clockwise_90, st.orientation);
-    try std.testing.expectEqualStrings("HOLDINGS", st.text() orelse "");
 }
 
 test "text feature: counter-clockwise orientation swaps layout axes and clears baseline" {
