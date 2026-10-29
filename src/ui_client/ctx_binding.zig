@@ -623,6 +623,12 @@ pub const RenderData = struct {
     /// recomputing each child's color. Purely visual: hit-testing (`mark`/interaction) never
     /// reads it, so opacity never changes clickability — state logic decides that separately.
     opacity: f32 = 1,
+
+    /// The keyboard focus ring (`outline: 1px solid var(--warn); outline-offset: 3px`). Not a
+    /// paint feature: `control` sets it on the focused control and the render walk strokes it
+    /// after the node's subtree, outside the box, under the ancestors' clip (inset when that
+    /// clip would cut it).
+    focus_ring: bool = false,
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent

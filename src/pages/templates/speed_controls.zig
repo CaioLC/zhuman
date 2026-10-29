@@ -61,7 +61,7 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
     if (try chevron(faster, ">>", "Faster", pb.level() < Playback.max_level)) pb.step(1);
 
     const lvl = pb.level();
-    const q = box.control(.{
+    _ = box.control(.{
         .name = "Simulation speed",
         .role = .slider,
         .value = level_names[lvl],
@@ -72,7 +72,6 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
     _ = (try value_cell.text("label", level_labels[lvl]))
         .with_style(.{ Style{ .font = 10, .tracking = 0.04, .text = color }, style.pad_sym(2, 2) });
-    if (q.focused) _ = box.with_style(.{Style{ .outline_color = th.acc }});
     return box;
 }
 

@@ -57,4 +57,28 @@ fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect, opacity: f32) void {
     } else clip;
 
     for (node.children.items) |c| draw_node(u, c, child_clip, eff);
+
+    if (node.render_data.focus_ring) drawFocusRing(u, node, clip, eff);
+}
+
+/// The keyboard focus ring: a `warn` hairline 3px clear of the box (`paint.focusRing`), over
+/// the subtree, under the ancestors' clip and not the node's own, so a clipping control (a
+/// tile, a field) still shows its ring.
+fn drawFocusRing(u: *UiCtx, node: *Node, clip: ?ui.Rect, opacity: f32) void {
+    const box = paint.full(node) orelse return;
+    const scale = u.res.view.scale;
+    const r = paint.focusRing(box, clip, scale) orelse return;
+    const rnd = u.res.platform.renderer;
+    rnd.setClipRect(paint.irect(clip)) catch {};
+    const col = paint.applyOpacity(u.res.view.theme.warn, opacity);
+    rnd.setDrawColor(.{ .r = col.r, .g = col.g, .b = col.b, .a = col.a }) catch return;
+    const w = paint.hairline(1, scale);
+    const x0 = paint.snap(r.x);
+    const y0 = paint.snap(r.y);
+    const x1 = paint.snap(r.x + r.w);
+    const y1 = paint.snap(r.y + r.h);
+    rnd.renderFillRect(.{ .x = x0, .y = y0, .w = x1 - x0, .h = w }) catch {};
+    rnd.renderFillRect(.{ .x = x0, .y = y1 - w, .w = x1 - x0, .h = w }) catch {};
+    rnd.renderFillRect(.{ .x = x0, .y = y0, .w = w, .h = y1 - y0 }) catch {};
+    rnd.renderFillRect(.{ .x = x1 - w, .y = y0, .w = w, .h = y1 - y0 }) catch {};
 }

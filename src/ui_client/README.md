@@ -747,9 +747,10 @@ hover color reads `node.query(ctx)` on the node it was just handed).
 `btn_icon`/`btn_link` — a shared `btn_ink` maps published state → color: `dim` disabled,
 `acc` on held/hover/focus-visible, else the variant's resting ink), `tab`/`chip`/`tag`,
 semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the roles
-including `good`), interaction chrome (`row_hover`, `focus_ring` — drawn **only** on
-`.focus_visible`, never bare hover — `disabled_chrome`, `selected_chrome`, `provisional` the
-dim-dashed placeholder box), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
+including `good`), interaction chrome (`row_hover`, `disabled_chrome`, `selected_chrome`, `provisional` the
+dim-dashed placeholder box; the keyboard focus ring is not a fragment: `control` sets
+`render_data.focus_ring` on the focused control and `draw.zig` strokes a `warn` hairline 3px
+outside its box, inset where the ancestors' clip would cut it), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
 `legend_dot(.food)` keyed to the six `view.resources` hues). The **stateful** ones are the
 `fn(*UiCtx, *Node) Style` form — they read the node's published `Interaction` bits
 (`publishControlState` sets `disabled`/`focus_visible`/`selected`/…) and return the chrome for

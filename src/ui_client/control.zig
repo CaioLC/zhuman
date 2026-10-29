@@ -80,6 +80,11 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
     });
 
     // Mirror the same facts into the semantic snapshot, in paint order.
+    // The warn focus ring marks a focused control. A group (a scroll viewport, the research
+    // board's pane) is a container focus stop that draws its own edge instead, as the
+    // prototype's focusable regions set `outline: none`.
+    node.render_data.focus_ring = focused and opts.role != .group;
+
     var sem = semantics.SemanticNode{ .key = key, .role = opts.role };
     _ = sem.setLabel(opts.name);
     if (opts.value) |v| _ = sem.setValue(v);

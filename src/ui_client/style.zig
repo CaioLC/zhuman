@@ -260,14 +260,6 @@ pub fn row_hover(ctx: *UiCtx, node: *Node) Style {
     return .{};
 }
 
-/// Focus-visible outline — draws an `acc` ring **only** when the node's `.focus_visible` bit is
-/// set (keyboard/AT focus), never on mere hover, so pointer users don't get a persistent ring.
-/// The shared focus cue every control composes last.
-pub fn focus_ring(ctx: *UiCtx, node: *Node) Style {
-    if (node.query(ctx).focus_visible) return .{ .outline_color = ctx.res.view.theme.acc, .outline_width = 1 };
-    return .{};
-}
-
 /// Disabled chrome — forces `dim` ink whenever the node's `.disabled` bit is set, overriding a
 /// resting color. Compose *after* a variant so a disabled control can never read as active.
 pub fn disabled_chrome(ctx: *UiCtx, node: *Node) Style {
@@ -688,22 +680,6 @@ test "semantic state text maps to the right roles" {
     try std.testing.expectEqual(th.warn, resolve(&f.ctx, n, .{state_warn}).text.?);
     try std.testing.expectEqual(th.danger, resolve(&f.ctx, n, .{state_danger}).text.?);
     try std.testing.expectEqual(th.dim, resolve(&f.ctx, n, .{state_muted}).text.?);
-}
-
-test "focus_ring draws only on focus_visible, never on hover alone" {
-    const f = try KitFixture.init();
-    defer f.deinit();
-    const th = f.resources.view.theme;
-
-    // Hover alone: no ring.
-    const hov = try f.node("f_hov");
-    f.ctx.setFlag(hov.key, .hovering, true);
-    try std.testing.expectEqual(@as(?Color, null), resolve(&f.ctx, hov, .{focus_ring}).outline_color);
-
-    // focus-visible: acc ring.
-    const fv = try f.node("f_fv");
-    f.ctx.setFlag(fv.key, .focus_visible, true);
-    try std.testing.expectEqual(th.acc, resolve(&f.ctx, fv, .{focus_ring}).outline_color.?);
 }
 
 test "row_hover lifts fill on hover, transparent at rest" {

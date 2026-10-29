@@ -92,6 +92,41 @@ pub fn applyOpacity(c: cb.Color, opacity: f32) cb.Color {
     return .{ .r = c.r, .g = c.g, .b = c.b, .a = @intFromFloat(@min(255, @max(0, @round(a)))) };
 }
 
+// --- The focus ring ------------------------------------------------------------
+//
+// `outline: 1px solid var(--warn); outline-offset: 3px`: a hairline `offset` logical px clear
+// of the box, outside it. A ring the ancestors' clip would cut (a row flush to a scroll
+// viewport's edge, a tile at the board's rim) is drawn inside the visible part of the box
+// instead, `inset` logical px in, so the focused control always shows it whole.
+
+pub const ring_offset: f32 = 3;
+pub const ring_inset: f32 = 2;
+
+/// The rect the ring's outer edge strokes, in device px: `box` grown by the offset and the
+/// hairline when `clip` holds that, else the visible part of `box` shrunk by the inset. Null
+/// when nothing of the box is visible.
+pub fn focusRing(box: ui.Rect, clip: ?ui.Rect, scale: f32) ?ui.Rect {
+    const s = if (scale > 0) scale else 1;
+    const w = hairline(1, s);
+    const out = grow(box, @round(ring_offset * s) + w);
+    const c = clip orelse return out;
+    if (contains(c, out)) return out;
+    const seen = c.intersect(box);
+    if (seen.w <= 0 or seen.h <= 0) return null;
+    const in = grow(seen, -@round(ring_inset * s));
+    if (in.w < 2 * w or in.h < 2 * w) return seen;
+    return in;
+}
+
+fn grow(r: ui.Rect, by: f32) ui.Rect {
+    return .{ .x = r.x - by, .y = r.y - by, .w = r.w + 2 * by, .h = r.h + 2 * by };
+}
+
+fn contains(outer: ui.Rect, inner: ui.Rect) bool {
+    return inner.x >= outer.x and inner.y >= outer.y and
+        inner.x + inner.w <= outer.x + outer.w and inner.y + inner.h <= outer.y + outer.h;
+}
+
 // ============================ Tests (deterministic, SDL-free) =========================
 
 const std = @import("std");
@@ -134,4 +169,20 @@ test "applyOpacity: scales alpha only, leaves rgb; opacity>=1 is identity" {
     try std.testing.expectEqual(@as(u8, 0), applyOpacity(c, 0).a);
     // Negative opacity clamps to 0 alpha.
     try std.testing.expectEqual(@as(u8, 0), applyOpacity(c, -1).a);
+}
+
+test "focusRing: 3px clear of the box outside it, inset when the clip would cut it" {
+    const box: ui.Rect = .{ .x = 100, .y = 50, .w = 40, .h = 20 };
+    // Unclipped at scale 1: grown by 3 + the 1px hairline.
+    try std.testing.expectEqual(ui.Rect{ .x = 96, .y = 46, .w = 48, .h = 28 }, focusRing(box, null, 1).?);
+    // At scale 2 the offset and the hairline both double.
+    try std.testing.expectEqual(ui.Rect{ .x = 92, .y = 42, .w = 56, .h = 36 }, focusRing(box, null, 2).?);
+    // A clip that holds the ring leaves it outside.
+    try std.testing.expectEqual(ui.Rect{ .x = 96, .y = 46, .w = 48, .h = 28 }, focusRing(box, .{ .x = 0, .y = 0, .w = 400, .h = 400 }, 1).?);
+    // A clip flush to the box's left edge draws inside the box, 2px in.
+    try std.testing.expectEqual(ui.Rect{ .x = 102, .y = 52, .w = 36, .h = 16 }, focusRing(box, .{ .x = 100, .y = 0, .w = 400, .h = 400 }, 1).?);
+    // A clip that shows only part of the box insets the visible part.
+    try std.testing.expectEqual(ui.Rect{ .x = 102, .y = 52, .w = 36, .h = 6 }, focusRing(box, .{ .x = 0, .y = 0, .w = 400, .h = 60 }, 1).?);
+    // A box scrolled wholly out of its clip draws nothing.
+    try std.testing.expectEqual(@as(?ui.Rect, null), focusRing(box, .{ .x = 0, .y = 0, .w = 50, .h = 50 }, 1));
 }
