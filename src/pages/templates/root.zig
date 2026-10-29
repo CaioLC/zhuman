@@ -201,6 +201,7 @@ pub const figure = figure_mod.figure;
 // Re-exporting a function does not pull its file's tests into a test build; referencing the
 // module does. One line per shelf module keeps every template's tests in `zig build test`.
 test {
+    _ = @import("./pointer_conflicts_test.zig");
     _ = button_mod;
     _ = panel_mod;
     _ = scroll_view_mod;
