@@ -408,6 +408,14 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface) !void {
     st.newly = newly;
     const cost = try t.researchCostLine(ctx.arena, tech);
     ctx.res.sim.log.push(.good, try ctx.arena.print("{s} is established. {s} paid.{s}", .{ tech.name, cost, suffix.items }));
+    // What it opens in BUILD and ACTIONS takes effect this frame (`capital.techMet`,
+    // `actions.verbOf` read the board); say so once, now, since a tile is researched once.
+    for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
+        ctx.res.sim.log.push(.normal, try ctx.arena.print("{s} can now be built.", .{g.name}));
+    };
+    for (cat.actions) |act| if (act.tech) |at| if (std.mem.eql(u8, at, tech.id)) {
+        ctx.res.sim.log.push(.normal, try ctx.arena.print("{s} is now open.", .{act.name}));
+    };
 }
 
 /// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the
