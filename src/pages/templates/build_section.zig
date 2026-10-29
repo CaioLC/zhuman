@@ -30,7 +30,10 @@ pub const Shelf = build_list_mod.Shelf;
 /// pinned below them.
 pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    const width = row_mod.tableWidth(ctx, shelf.widths);
+    // The lanes fitted to this width's surface; the list below lays out the same ones.
+    var fit = shelf;
+    fit.widths = row_mod.fitted(ctx, shelf.widths);
+    const width = row_mod.tableWidth(ctx, fit.widths);
 
     const section = try parent.div(id);
     // The table plus its reserved scroll gutter, so the track never covers a lane.
@@ -43,6 +46,6 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
     _ = heading_box.with_size(.{ .fixed = width }, .fit_children);
     _ = try browser_mod.browser_heading(heading_box, "heading", "BUILD", shelf.subtitle, count);
 
-    _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, catalog, search_owner, scroll);
+    _ = try build_list_mod.build_list(section, world, e, "buildlist", fit, catalog, search_owner, scroll);
     return section;
 }

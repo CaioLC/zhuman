@@ -47,9 +47,11 @@ pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, sta
     const st = state orelse bar.state(CatalogState);
 
     // The field spans the catalog's width (the prototype's `.build-query-field`), so the
-    // placeholder can teach the query syntax (`out:food state:ready`).
+    // placeholder can teach the query syntax (`out:food state:ready`). It grows into the bar
+    // rather than taking 100% of it: a percentage is the content box, so the field's own side
+    // padding would push its edge and the `/` hint past the catalog's clip.
     const field = try uic.text_input(bar, "search", placeholder, 200, search_owner);
-    _ = field.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    _ = field.with_size(.grow, .fit_children);
     const field_key = field.get().key;
     const editor = (search_owner orelse field).state(uic.UiState.TextInputState);
     // The `/` shortcut hint at the field's right edge while it is empty and unfocused (the

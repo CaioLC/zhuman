@@ -434,8 +434,24 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     // The title takes what the tools leave and clips its question (`.structure-title p`
     // ellipsizes), so a narrow surface never runs it under the chips.
     _ = title.with_size(if (narrow) .fit_children else .grow, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12).with_overflow(.clip);
-    _ = (try title.text("h", "RESEARCH")).with_style(.{ style.heading, Style{ .text = th.fg } });
-    if (!narrow) _ = (try title.text("p", "What exists, and what does it take?")).with_style(.{Style{ .font = 11, .text = th.dim }});
+    const h = try title.text("h", "RESEARCH");
+    _ = h.with_style(.{ style.heading, Style{ .text = th.fg } });
+    if (!narrow) {
+        // `.structure-title p { text-overflow: ellipsis }`: the question is a cell of what the
+        // heading leaves, as the title and heading stamped last frame; whole until both have.
+        const question = "What exists, and what does it take?";
+        const p_style = Style{ .font = 11, .text = th.dim };
+        _ = title.track();
+        _ = h.track();
+        const tg = title.prior_geometry();
+        const hg = h.prior_geometry();
+        if (tg != null and hg != null) {
+            const room = @max(0, (tg.?.rect.w - hg.?.rect.w) / ctx.res.view.scale - 12);
+            _ = (try title.text_fit("p", question, .{ .cell = .{ .mode = .ellipsis, .width = room } })).with_style(.{p_style});
+        } else {
+            _ = (try title.text("p", question)).with_style(.{p_style});
+        }
+    }
     const tools = try topbar.div("tools");
     _ = tools.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
     const chips = try tools.div("chips");

@@ -62,7 +62,8 @@ const Lanes = struct {
         const narrow = m.width_class.atMost(.w760);
         const w = @min(width, m.terminal.w - 28);
         const ledger_w = if (narrow) w else w - slip_mod.width - 1;
-        const inner = ledger_w - 2 * pad_x;
+        // Narrow, the rows scroll in a fixed-height view whose track takes its gutter.
+        const inner = ledger_w - 2 * pad_x - if (narrow) scroll_mod.scrollbar_w else 0;
         return .{
             .width = w,
             .narrow = narrow,

@@ -134,6 +134,35 @@ pub fn tableWidth(ctx: *UiCtx, lw: Widths) f32 {
     return contentWidth(ctx, lw) + row_pad_x * 2;
 }
 
+/// The prototype's floors for the lanes that give way (`minmax(…)` in `.build-row`): the
+/// recipe name, the order, and the sentence.
+const min_recipe: f32 = 88;
+const min_cost: f32 = 56;
+const min_effect: f32 = 70;
+
+/// `lw` fitted to the surface. Framed, every act's widths fill the 594px lane exactly. Stacked
+/// (≤760), the surface is the window less the page padding and the page's scrollbar, and the
+/// prototype's grid shrinks its flexible columns into it; here the excess comes out of WHAT
+/// CHANGES, then the recipe name, then the order, each down to its floor. The name and order
+/// cells elide, so nothing spills past the surface's clip.
+pub fn fitted(ctx: *UiCtx, lw: Widths) Widths {
+    const terminal = @import("./terminal.zig");
+    if (!terminal.stacked(ctx)) return lw;
+    var out = lw;
+    var excess = tableWidth(ctx, lw) + scroll_gutter - terminal.stackedWidth(ctx);
+    if (excess <= 0) return lw;
+    if (col(.effect).visible(ctx)) {
+        const take = @min(excess, @max(0, out.effect - min_effect));
+        out.effect -= take;
+        excess -= take;
+    }
+    const from_recipe = @min(excess, @max(0, out.recipe - min_recipe));
+    out.recipe -= from_recipe;
+    excess -= from_recipe;
+    out.cost -= @min(excess, @max(0, out.cost - min_cost));
+    return out;
+}
+
 /// How the header sorts: the caller's sort key for each lane (in `columns` order; null for a
 /// lane that does not sort), the active key, and the direction in force.
 pub const HeaderSort = struct {
