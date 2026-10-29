@@ -204,6 +204,9 @@ pub const UiState = struct {
         drag_pointer_kind: @import("input.zig").PointerKind = .unknown,
         drag_pointer_id: ?u64 = null,
         drag_owner_key: ?u64 = null,
+        /// The focused key the view last brought into view, so a newly focused child is
+        /// revealed once and the player can still scroll away from it.
+        revealed: ?u64 = null,
 
         pub fn clearDrag(self: *ScrollState) void {
             self.dragging = false;
@@ -515,6 +518,14 @@ pub const Interaction = packed struct {
     nav_right: bool = false,
     nav_up: bool = false,
     nav_down: bool = false,
+    // Scroll keys routed to the focused key and bubbled to its scroll viewport (or the
+    // focused viewport itself): Up/Down a line, Page Up/Down a viewport, Home/End the ends.
+    scroll_up: bool = false,
+    scroll_down: bool = false,
+    scroll_page_up: bool = false,
+    scroll_page_down: bool = false,
+    scroll_top: bool = false,
+    scroll_bottom: bool = false,
 
     disabled: bool = false,
     focused: bool = false,
@@ -542,6 +553,12 @@ pub const Interaction = packed struct {
         "nav_right",
         "nav_up",
         "nav_down",
+        "scroll_up",
+        "scroll_down",
+        "scroll_page_up",
+        "scroll_page_down",
+        "scroll_top",
+        "scroll_bottom",
     };
 };
 

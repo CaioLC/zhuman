@@ -239,6 +239,24 @@ pub const Router = struct {
         return self.ui.markKey(key, flag);
     }
 
+    /// Route a scroll key to the innermost registered scroll owner that is, or encloses, the
+    /// focused control (its viewport, by the prior frame's stamped ancestry). False when focus
+    /// sits outside every scroll view.
+    fn markFocusedScroll(self: *Router, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
+        const key = self.ui.focusedKey() orelse return false;
+        const owners = self.ui.res.commands.scrollOwners();
+        var best: ?u64 = null;
+        for (owners) |o| {
+            if (o != key and !self.ui.isStampedDescendant(key, o)) continue;
+            // Innermost: an owner that sits inside the current best replaces it.
+            if (best == null or self.ui.isStampedDescendant(o, best.?)) best = o;
+        }
+        const target = best orelse return false;
+        // Only the owner, not its ancestors: an enclosing page scroll must not move too.
+        self.ui.setFlag(target, flag, true);
+        return true;
+    }
+
     /// Route an arrow to the focused grid owner (the research board), which moves its own
     /// selection in two dimensions; false when focus is elsewhere.
     fn markFocusedGrid(self: *Router, comptime flag: std.meta.FieldEnum(UiCtx.Interaction)) bool {
@@ -297,7 +315,7 @@ pub const Router = struct {
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);
                 }
-                return .{ .handled = moved or self.markFocusedRange(.increment) };
+                return .{ .handled = moved or self.markFocusedRange(.increment) or self.markFocusedScroll(.scroll_up) };
             },
             .move_down => {
                 if (self.markFocusedGrid(.nav_down)) return .{ .handled = true };
@@ -305,10 +323,10 @@ pub const Router = struct {
                 if (moved) {
                     if (ui.focusedKey()) |key| _ = ui.markKey(key, .clicked);
                 }
-                return .{ .handled = moved or self.markFocusedRange(.decrement) };
+                return .{ .handled = moved or self.markFocusedRange(.decrement) or self.markFocusedScroll(.scroll_down) };
             },
-            .page_up => return .{ .handled = self.markFocusedRange(.page_increment) },
-            .page_down => return .{ .handled = self.markFocusedRange(.page_decrement) },
+            .page_up => return .{ .handled = self.markFocusedRange(.page_increment) or self.markFocusedScroll(.scroll_page_up) },
+            .page_down => return .{ .handled = self.markFocusedRange(.page_decrement) or self.markFocusedScroll(.scroll_page_down) },
             .activate => {
                 const key = ui.focusedKey() orelse return .{};
                 return .{ .handled = ui.markKey(key, .clicked) };
@@ -350,14 +368,14 @@ pub const Router = struct {
                     ed.home(false);
                     return .{ .handled = true };
                 }
-                return .{ .handled = self.markFocusedRange(.minimum) };
+                return .{ .handled = self.markFocusedRange(.minimum) or self.markFocusedScroll(.scroll_top) };
             },
             .line_end => {
                 if (self.focusedEditor()) |ed| {
                     ed.end(false);
                     return .{ .handled = true };
                 }
-                return .{ .handled = self.markFocusedRange(.maximum) };
+                return .{ .handled = self.markFocusedRange(.maximum) or self.markFocusedScroll(.scroll_bottom) };
             },
             .select_left => {
                 const ed = self.focusedEditor() orelse return .{};

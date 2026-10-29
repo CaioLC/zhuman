@@ -75,6 +75,7 @@ fn accel(mods: input.Modifiers) bool {
 pub const Registry = struct {
     pub const max_text_owners = 32;
     pub const max_range_owners = 16;
+    pub const max_scroll_owners = 16;
 
     /// A text owner: the focusable field `key`, and `editor`, the key whose
     /// `TextInputState` slot holds its model — the field itself, or an always-built owner
@@ -95,6 +96,14 @@ pub const Registry = struct {
     building_escape: ?u64 = null,
     current_grid: ?u64 = null,
     building_grid: ?u64 = null,
+    current_scroll: [max_scroll_owners]u64 = undefined,
+    current_scroll_len: usize = 0,
+    building_scroll: [max_scroll_owners]u64 = undefined,
+    building_scroll_len: usize = 0,
+    current_wheel: [max_scroll_owners]u64 = undefined,
+    current_wheel_len: usize = 0,
+    building_wheel: [max_scroll_owners]u64 = undefined,
+    building_wheel_len: usize = 0,
     overflow: bool = false,
 
     pub fn beginBuild(self: *Registry) void {
@@ -103,6 +112,8 @@ pub const Registry = struct {
         self.building_search = null;
         self.building_escape = null;
         self.building_grid = null;
+        self.building_scroll_len = 0;
+        self.building_wheel_len = 0;
         self.overflow = false;
     }
 
@@ -147,6 +158,39 @@ pub const Registry = struct {
         self.building_grid = key;
     }
 
+    /// A scroll owner (a scroll view's viewport that overflows): the scroll keys reach it
+    /// while it, or a control inside it, holds focus.
+    pub fn registerScroll(self: *Registry, key: u64) void {
+        for (self.building_scroll[0..self.building_scroll_len]) |existing| if (existing == key) return;
+        if (self.building_scroll_len == self.building_scroll.len) {
+            self.overflow = true;
+            return;
+        }
+        self.building_scroll[self.building_scroll_len] = key;
+        self.building_scroll_len += 1;
+    }
+
+    pub fn scrollOwners(self: *const Registry) []const u64 {
+        return self.current_scroll[0..self.current_scroll_len];
+    }
+
+    /// A node that takes the wheel itself (an overflowing scroll view, the research board's
+    /// zoom). An enclosing scroll view leaves the wheel to the innermost such owner under the
+    /// pointer, though the engine marks `.wheel` on every ancestor.
+    pub fn registerWheel(self: *Registry, key: u64) void {
+        for (self.building_wheel[0..self.building_wheel_len]) |existing| if (existing == key) return;
+        if (self.building_wheel_len == self.building_wheel.len) {
+            self.overflow = true;
+            return;
+        }
+        self.building_wheel[self.building_wheel_len] = key;
+        self.building_wheel_len += 1;
+    }
+
+    pub fn wheelOwners(self: *const Registry) []const u64 {
+        return self.current_wheel[0..self.current_wheel_len];
+    }
+
     pub fn endBuild(self: *Registry) void {
         const old = self.current_text;
         self.current_text = self.building_text;
@@ -159,6 +203,16 @@ pub const Registry = struct {
         self.current_search = self.building_search;
         self.current_escape = self.building_escape;
         self.current_grid = self.building_grid;
+        const old_scroll = self.current_scroll;
+        self.current_scroll = self.building_scroll;
+        self.building_scroll = old_scroll;
+        self.current_scroll_len = self.building_scroll_len;
+        self.building_scroll_len = 0;
+        const old_wheel = self.current_wheel;
+        self.current_wheel = self.building_wheel;
+        self.building_wheel = old_wheel;
+        self.current_wheel_len = self.building_wheel_len;
+        self.building_wheel_len = 0;
         self.building_text_len = 0;
         self.building_range_len = 0;
         self.building_search = null;

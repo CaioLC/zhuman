@@ -42,6 +42,8 @@ pub const Options = struct {
     framed: bool = true,
     /// Vertical gap between content rows, logical px. A dense feed (the footer log) uses 0.
     gap: f32 = content_gap,
+    /// The accessible name of the viewport while it is a focus stop (it overflows).
+    name: []const u8 = "scroll region",
 };
 
 pub const ScrollView = struct {
@@ -52,6 +54,17 @@ pub const ScrollView = struct {
     /// The column the caller appends rows into.
     content: El,
 };
+
+/// Whether the pointer is over another wheel owner nested inside the viewport `vkey` (an
+/// inner scroll view, the research board): that one takes the wheel, not this view.
+fn innerWheel(ctx: *UiCtx, vkey: u64) bool {
+    const p = ctx.res.input.pointer.position;
+    for (ctx.res.commands.wheelOwners()) |o| {
+        if (o == vkey or !ctx.isStampedDescendant(o, vkey)) continue;
+        if (ctx.rectOf(o)) |r| if (r.contains(p.x, p.y)) return true;
+    }
+    return false;
+}
 
 /// Build the view. `state` is the scroll state when the caller owns it (an always-built
 /// owner's slot keeps the offset while the view is hidden); null means the view keeps its own.
@@ -114,8 +127,33 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     else
         uic.view.dp(opts.height, scale);
     const max_offset = if (view_h <= 0) 0 else @max(0.0, content_h - view_h);
-    if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0) {
+    const vkey = viewport.get().key;
+    if (viewport.query().wheel and ctx.res.input.pointer.wheel.y != 0 and !innerWheel(ctx, vkey)) {
         st.offset -= ctx.res.input.pointer.wheel.y * uic.view.dp(scroll_speed, scale); // wheel up ⇒ toward the top
+    }
+    // Keyboard: an overflowing viewport is a focus stop and the scroll owner of the controls
+    // inside it. Up/Down move a line, Page Up/Down a viewport less a line, Home/End the ends.
+    if (max_offset > 0) {
+        ctx.res.commands.registerScroll(vkey);
+        ctx.res.commands.registerWheel(vkey);
+        const vq = viewport.control(.{ .name = opts.name, .role = .group, .cursor = .default });
+        const line = uic.view.dp(scroll_speed, scale);
+        if (vq.scroll_up) st.offset -= line;
+        if (vq.scroll_down) st.offset += line;
+        if (vq.scroll_page_up) st.offset -= @max(line, view_h - line);
+        if (vq.scroll_page_down) st.offset += @max(line, view_h - line);
+        if (vq.scroll_top) st.offset = 0;
+        if (vq.scroll_bottom) st.offset = max_offset;
+        if (vq.focus_visible and opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.acc }});
+        // A newly focused control inside the view is scrolled into it, once.
+        if (ctx.focusedKey()) |fk| {
+            if (fk != vkey and st.revealed != fk and ctx.isStampedDescendant(fk, vkey)) {
+                if (ctx.rectOf(fk)) |fr| if (viewport.get().rect(ctx)) |vr| {
+                    if (fr.y < vr.y) st.offset -= vr.y - fr.y else if (fr.y + fr.h > vr.y + vr.h) st.offset += @min(fr.y + fr.h - (vr.y + vr.h), fr.y - vr.y);
+                };
+            }
+            st.revealed = fk;
+        } else st.revealed = null;
     }
     st.offset = std.math.clamp(st.offset, 0, max_offset);
 

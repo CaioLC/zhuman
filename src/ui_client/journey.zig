@@ -247,6 +247,50 @@ test "QA-14 eating rate: arrow keys drive the focused slider as a range owner" {
     try testing.expect(rig.ctx.interactionOf(eating).increment);
 }
 
+test "UIE-12 scroll keys reach the innermost scroll view around the focused control" {
+    var rig: Rig = undefined;
+    rig.init();
+    defer rig.deinit();
+    var scene = Scene.init(&rig.ctx);
+
+    const page = key_of(0, "page_scroll");
+    const log = key_of(page, "log_viewport");
+    const row = key_of(log, "log_row");
+    const stampAll = struct {
+        fn f(c: *UiCtx, pg: u64, lg: u64, rw: u64) void {
+            _ = c.interactionOf(pg);
+            _ = c.stampRect(pg, .{ .x = 0, .y = 0, .w = 500, .h = 800 }, null, null);
+            _ = c.interactionOf(lg);
+            _ = c.stampRect(lg, .{ .x = 0, .y = 600, .w = 500, .h = 100 }, null, pg);
+            _ = c.interactionOf(rw);
+            _ = c.stampRect(rw, .{ .x = 0, .y = 610, .w = 500, .h = 20 }, null, lg);
+        }
+    }.f;
+    rig.ctx.beginFrame();
+    rig.ctx.res.commands.beginBuild();
+    rig.ctx.registerFocus(page, true);
+    rig.ctx.registerFocus(row, true);
+    stampAll(&rig.ctx, page, log, row);
+    rig.ctx.res.commands.registerScroll(page);
+    rig.ctx.res.commands.registerScroll(log);
+    rig.ctx.res.commands.endBuild();
+    rig.ctx.endFrame();
+    rig.ctx.beginFrame();
+    stampAll(&rig.ctx, page, log, row);
+    rig.ctx.res.input.beginFrame();
+
+    // Focus inside the log: Page Down scrolls the log, not the page around it.
+    try testing.expect(rig.ctx.requestFocus(row));
+    _ = scene.key(.page_down, .{});
+    try testing.expect(rig.ctx.interactionOf(log).scroll_page_down);
+    try testing.expect(!rig.ctx.interactionOf(page).scroll_page_down);
+
+    // Focus on the page itself: Down scrolls the page.
+    try testing.expect(rig.ctx.requestFocus(page));
+    _ = scene.key(.down, .{});
+    try testing.expect(rig.ctx.interactionOf(page).scroll_down);
+}
+
 test "QA-15 Act II keyboard journey: search focus, tab the catalog controls, roving sort" {
     var rig: Rig = undefined;
     rig.init();

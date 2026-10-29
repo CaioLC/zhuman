@@ -255,6 +255,21 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return (self.priorGeometryOf(k) orelse return null).rect;
         }
 
+        /// Whether `ancestor` is on key `k`'s stamped ancestor chain (as of the prior
+        /// frame's stamp). Non-allocating; a missing slot is not a descendant of anything.
+        pub fn isStampedDescendant(self: *const Self, k: u64, ancestor: u64) bool {
+            const idx = self.interactions.index.get(k) orelse return false;
+            var pk = self.interactions.slots.items[idx].value.parent_key;
+            var guard: u32 = 0;
+            while (pk) |key| : (guard += 1) {
+                if (guard > 256) return false;
+                if (key == ancestor) return true;
+                const pidx = self.interactions.index.get(key) orelse return false;
+                pk = self.interactions.slots.items[pidx].value.parent_key;
+            }
+            return false;
+        }
+
         /// Observe and consume one typed flag on `k` and its stamped ancestor chain.
         /// Missing/unset sources return false without allocation. Consumption is
         /// flag-specific: hover and every unrelated host flag remain untouched.

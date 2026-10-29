@@ -439,6 +439,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     // The pane is the board's one focus stop: arrows walk the tiles, Escape clears.
     const pq = pane.control(.{ .name = "Research board", .role = .group, .cursor = .grab });
     ctx.res.commands.registerGrid(pane.get().key);
+    ctx.res.commands.registerWheel(pane.get().key);
     if (pq.focused and st.selected != null) ctx.res.commands.registerEscape(pane.get().key);
     if (pq.dismissed) st.selected = null;
 
