@@ -39,6 +39,8 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         .act = .act_one,
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
+        // A curtain centred in the window; it never scrolls.
+        .scroll = false,
     });
     // The beat persists on the body's own slot (the shell region is rebuilt every frame).
     const st = regions.body.state(StepState);

@@ -37,6 +37,14 @@ pub const Tone = enum { normal, warn, danger };
 /// A compact line's resting type size and token gap, logical px.
 const compact_font: f32 = 10;
 const compact_gap: f32 = 4;
+/// The full line's gap (`.stockline { gap: 9px }`).
+const line_gap: f32 = 9;
+
+/// The stockline's face: 17px (15px stacked, ≤760) at the body tracking — `.stockline`,
+/// and the size a compact token returns to while read.
+pub fn lineType(ctx: *UiCtx) Style {
+    return .{ .font = if (@import("./terminal.zig").stacked(ctx)) 15 else 17, .tracking = -0.025 };
+}
 
 /// One stock token's domain data. `abbrev` is the two-letter short form, `full` the
 /// hover/focus label, `value` the raw amount, and `max` an optional ceiling shown as `/max`
@@ -140,9 +148,9 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     const label_txt = std.mem.print(&buf, "{s}:", .{label}) catch label;
     const size: Style = if (compact and !reveal) .{ .font = compact_font } else .{};
     const lbl = (try box.text("l", label_txt))
-        .with_style(.{ style.heading, size, Style{ .text = th.dim } });
+        .with_style(.{ lineType(box.ctx), size, Style{ .text = th.dim } });
     const val = (try box.text("v", value))
-        .with_style(.{ style.heading, size, Style{ .text = valueColor(th, s.tone) } });
+        .with_style(.{ lineType(box.ctx), size, Style{ .text = valueColor(th, s.tone) } });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like its label
     _ = lbl;
 }
@@ -152,7 +160,7 @@ fn sep(parent: El, i: usize, compact: bool) !void {
     const slot = try parent.item("sep", i);
     const size: Style = if (compact) .{ .font = compact_font } else .{};
     _ = (try slot.text("t", "|"))
-        .with_style(.{ style.heading, size, Style{ .text = parent.ctx.res.view.theme.dim } });
+        .with_style(.{ lineType(parent.ctx), size, Style{ .text = parent.ctx.res.view.theme.line2 } });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
@@ -161,7 +169,7 @@ fn sep(parent: El, i: usize, compact: bool) !void {
 pub fn stockline(parent: El, id: []const u8, stocks: []const Stock, compact: bool) !El {
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center })
-        .with_gap(if (compact) compact_gap else ha.tokens.gap.stack);
+        .with_gap(if (compact) compact_gap else line_gap);
     for (stocks, 0..) |s, i| {
         if (i > 0) try sep(bar, i, compact);
         try stock_token_in(try bar.item("tok", i), s, compact);

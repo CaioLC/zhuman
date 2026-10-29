@@ -102,9 +102,14 @@ pub const Widths = struct {
     }
 };
 
-/// The body font's advance per character, logical px (monospace) — the measure `costFits`
-/// holds a shelf's longest order to.
-const glyph_w: f32 = 8;
+/// The row font's advance per character, logical px (monospace, 11px at 0.6em) — the
+/// measure `costFits` holds a shelf's longest order to.
+const glyph_w: f32 = 6.6;
+
+/// The row's type (`.build-row`): 11px, the name 12px, its kind 8px uppercase.
+const row_font: f32 = 11;
+const name_font: f32 = 12;
+const kind_font: f32 = 8;
 
 /// The content lane every act's widths fill (see `Widths`).
 pub const lane_width: f32 = 594;
@@ -194,11 +199,12 @@ fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary
     const th = ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+    _ = box.with_gap(1);
     _ = (try box.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-        .with_style(.{ style.body, Style{ .text = color } });
+        .with_style(.{Style{ .font = name_font, .text = color }});
     if (secondary.len > 0) {
         _ = (try box.text_fit("ty", secondary, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-            .with_style(.{ style.small, Style{ .text = th.dim } });
+            .with_style(.{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .text = th.line2 }});
     }
 }
 
@@ -294,7 +300,12 @@ pub fn capital_row(
 
     // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded
     // roster that moves it to another index.
-    const row = try parent.div(rec.id);
+    // One hairline above each row (`.build-row { border-top }`), then the row.
+    const wrap = try parent.div(rec.id);
+    _ = wrap.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column });
+    _ = (try wrap.div("rule")).with_size(.{ .fixed = contentWidth(ctx, lw) + 2 * row_pad_x }, .{ .fixed = 1 })
+        .with_style(.{Style{ .fill = th.line }});
+    const row = try wrap.div("row");
     const hot = kind == .ready;
     const row_key = row.get().key;
     // The row is a composite tile: the good's name is its accessible name and `hot` is the
@@ -303,15 +314,17 @@ pub fn capital_row(
     const lit: Color = switch (kind) {
         .ready => if (ctl.held or ctl.hovering or ctl.focused) th.acc else th.fg,
         .building => th.fg,
-        .owned => th.dim,
-        .reach, .busy, .blocked, .locked => th.dim,
+        // `.build-row.blocked/.owned .good-name` dim; every other name reads fg.
+        .owned, .blocked => th.dim,
+        .reach, .busy, .locked => th.fg,
     };
-    const faint: Color = if (kind == .ready or kind == .building) th.dim else th.line2;
+    // The row's own ink: fg on a ready or building row, dim otherwise (`.build-row.ready`).
+    const faint: Color = if (kind == .ready or kind == .building) th.fg else th.dim;
 
     // The row's lanes are the header's: the same columns, widths and visibility.
     _ = row.with_size(.{ .fixed = contentWidth(ctx, lw) }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
-        .with_style(.{ style.pad_sym(row_pad_x, 5), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
+        .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
     try name_cell(row, "nm", lw.of(.recipe), rec.name, recipeType(rec), lit);
@@ -325,7 +338,7 @@ pub fn capital_row(
     }
 
     if (col(.effect).visible(ctx)) {
-        try cell(row, "sa", lw.of(.effect), rec.copy.effect, if (kind == .ready) th.fg else faint, false);
+        try cell(row, "sa", lw.of(.effect), rec.copy.effect, if (kind == .blocked or kind == .owned) th.dim else th.fg, false);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
@@ -336,12 +349,12 @@ pub fn capital_row(
 
     switch (kind) {
         .ready => _ = (try state_in.text("ready", "ready"))
-            .with_style(.{ style.body, Style{ .text = th.acc } }),
+            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.acc } }),
         .owned => _ = (try state_in.text("owned", "owned"))
-            .with_style(.{ style.body, Style{ .text = th.line2 } }),
+            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.line2 } }),
         // The order is on hand; only the hands are taken. Says so instead of a full meter.
         .busy => _ = (try state_in.text("busy", "hands busy"))
-            .with_style(.{ style.body, Style{ .text = th.warn } }),
+            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.warn } }),
         .blocked => {
             var nbuf: [40]u8 = undefined;
             // Waiting on research names the technology; otherwise the verb or tool it needs.
@@ -351,17 +364,17 @@ pub fn capital_row(
             // text may run on over that empty lane before it elides.
             const room = lw.of(.state) + row_gap + lw.of(.corner);
             _ = (try state_in.text_fit("blocked", txt, .{ .cell = .{ .mode = .ellipsis, .width = room } }))
-                .with_style(.{ style.body, Style{ .text = th.danger } });
+                .with_style(.{ Style{ .font = row_font }, Style{ .text = th.danger } });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
-            .with_style(.{ style.body, Style{ .text = th.danger } }),
+            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.danger } }),
         .building => {
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
             const left = busy.remaining / ctx.res.config.secs_per_day;
             const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
-            _ = (try state_in.text("time", txt)).with_style(.{ style.body, Style{ .text = th.fg } });
+            _ = (try state_in.text("time", txt)).with_style(.{ Style{ .font = row_font }, Style{ .text = th.fg } });
         },
         .reach => {
             // How far the first line of the order is: `31/48m`.
@@ -373,7 +386,7 @@ pub fn capital_row(
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
-            _ = (try state_in.text("biomass", txt)).with_style(.{ style.body, Style{ .text = faint } });
+            _ = (try state_in.text("biomass", txt)).with_style(.{ Style{ .font = row_font }, Style{ .text = faint } });
         },
     }
 
@@ -388,14 +401,14 @@ pub fn capital_row(
     var cancel_key: ?u64 = null;
     switch (kind) {
         .ready => _ = (try action_in.text("build", "Build \u{2192}"))
-            .with_style(.{ style.body, Style{ .text = lit } }),
+            .with_style(.{ Style{ .font = row_font }, Style{ .text = lit } }),
         .owned => {
             // Another unit is stock; offered whenever the quote would accept it.
             if (q.ready()) {
                 const more = try action_in.div("more");
                 const mq = more.control(.{ .name = "Build +1", .role = .button });
                 _ = (try more.text("t", "Build +1"))
-                    .with_style(.{ style.body, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
+                    .with_style(.{ Style{ .font = row_font }, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
                 build_more = more.consume(.clicked);
             }
         },

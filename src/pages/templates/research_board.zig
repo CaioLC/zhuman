@@ -402,13 +402,18 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
 
     // --- topbar: RESEARCH and its question | the chips and the search ----------------------
     _ = try view.spacer("top_pad", 1, 4);
-    const topbar = try view.div("topbar");
+    const topbar_box = try view.div("topbar_box");
+    // `.structure-topbar { align-items: end }`: a column packs the row at the box's foot (a
+    // row's cross alignment only spans its own line).
+    _ = topbar_box.with_size(.{ .pct_of_parent = 1.0 }, if (ctx.res.view.metrics.width_class.atMost(.w560)) .fit_children else .{ .fixed = 44 })
+        .with_flow(.{ .dir = .column, .main = .end, .cross = .start });
+    const topbar = try topbar_box.div("topbar");
     // Below 560 the toolbar drops under the title and the question goes (`.structure-topbar`).
     const narrow = ctx.res.view.metrics.width_class.atMost(.w560);
     if (narrow) {
         _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(8);
     } else {
-        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 44 }).with_flow(.{ .dir = .row, .main = .space_between, .cross = .end });
+        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
     }
     const title = try topbar.div("title");
     _ = title.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12);

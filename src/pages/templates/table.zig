@@ -67,7 +67,7 @@ pub fn cell(parent: El, id: []const u8, width: f32, text: []const u8, color: Col
     const inner = try box.div("i");
     _ = inner.with_layout(if (right) .center_right else .center_left);
     _ = (try inner.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
-        .with_style(.{ style.body, Style{ .text = color } });
+        .with_style(.{Style{ .font = 11, .text = color }}); // `.build-row { font-size: 11px }`
 }
 
 /// A row of lanes: flowed left to right, centered on the cross axis, `gap` apart, padded

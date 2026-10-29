@@ -16,6 +16,8 @@ pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         .act = .act_one,
         .page_pad = ha.tokens.pad_page,
         .section_gap = ha.tokens.gap.section,
+        // A curtain centred in the window; it never scrolls.
+        .scroll = false,
     });
     const c = try t.curtain(regions.body, "c_div", .{
         .figure = t.fig_dead,

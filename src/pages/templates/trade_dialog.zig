@@ -243,7 +243,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     var query: []const u8 = "";
     const editor = frame.modal.box.state(uic.UiState.TextInputState);
     if (busy or editor.len > 0) {
-        const field = try uic.text_input(tab_band, "search", "search lots", 80, frame.modal.box);
+        const field = try uic.text_input_look(tab_band, "search", "search lots", 80, frame.modal.box, .{ .font = 10, .placeholder = th.line2 });
         _ = field.with_size(.grow, .fit_children);
         query = frame.modal.box.state(uic.UiState.TextInputState).text();
     }

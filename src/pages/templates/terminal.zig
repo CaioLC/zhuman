@@ -65,7 +65,24 @@ pub fn stackedWidth(ctx: *UiCtx) f32 {
 
 /// Build the terminal shell for this frame and return the inner content box to fill. `id`
 /// keys the shell nodes. See the module doc for the framed vs full-window composition.
+/// How a screen's terminal departs from the play terminal: a lower height cap (the title's
+/// `min(700px, 100vh)`), whether a full-window page scrolls as one, and its hairline.
+pub const TerminalOptions = struct {
+    /// Cap the framed terminal's height (logical px), centred in the window; 0 keeps the
+    /// 820 reference cap.
+    max_h: f32 = 0,
+    /// Full-window (≤760), lay the page out in one scroll view. A screen that fits the
+    /// window by its own arithmetic (the title) turns it off.
+    scroll: bool = true,
+    /// The framed hairline; null is `line2`.
+    outline: ?uic.Color = null,
+};
+
 pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
+    return terminal_with(ctx, id, .{});
+}
+
+pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell {
     const m = ctx.res.view.metrics;
     const th = ctx.res.view.theme;
     const ground = ctx.res.view.ground;
@@ -80,7 +97,8 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
         _ = root.with_layout(.top_left)
             .with_style(.{Style{ .fill = th.bg }})
             .with_overflow(.clip);
-        const page = try @import("./scroll_view.zig").scroll_view(root, "page_scroll", .{ .height = m.terminal.h, .framed = false, .gap = 0 }, null);
+        if (!opts.scroll) return .{ .root = root, .content = root };
+        const page = try @import("./scroll_view.zig").scroll_view(root, "page_scroll", .{ .height = m.terminal.h, .framed = false, .gap = 0, .name = "page" }, null);
         return .{ .root = root, .content = page.content };
     }
 
@@ -89,9 +107,10 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 
     // The terminal rect in device px (metrics.terminal is logical — scale once).
     const tx = uic.view.dp(m.terminal.x, scale);
-    const ty = uic.view.dp(m.terminal.y, scale);
+    const capped_h = if (opts.max_h > 0) @min(opts.max_h, m.terminal.h) else m.terminal.h;
+    const ty = uic.view.dp(m.terminal.y + (m.terminal.h - capped_h) / 2, scale);
     const tw = uic.view.dp(m.terminal.w, scale);
-    const twh = uic.view.dp(m.terminal.h, scale);
+    const twh = uic.view.dp(capped_h, scale);
 
     // A soft drop shadow behind the terminal, placed before the box so it paints
     // under it. Understated: the prototype's `0 16px 80px #000a`, in device px.
@@ -108,7 +127,7 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
     _ = box.with_layout(.top_left)
         .with_size_px(.{ .fixed = tw }, .{ .fixed = twh })
         .with_offset_px(tx, ty)
-        .with_style(.{Style{ .fill = th.bg, .outline_color = th.line2 }})
+        .with_style(.{Style{ .fill = th.bg, .outline_color = opts.outline orelse th.line2 }})
         .with_overflow(.clip);
 
     return .{ .root = root, .content = box };
@@ -157,6 +176,9 @@ pub const ShellOptions = struct {
     market: bool = false,
     activity: bool = false,
     footer: bool = false,
+    /// Full-window (≤760), stack the page and scroll it as one. A curtain centred in its
+    /// body (game over, the act's end) keeps the window-high layout instead.
+    scroll: bool = true,
 };
 
 /// The two acts the one shell serves. Act I is the survival HUD; Act II (the settlement /
@@ -187,10 +209,6 @@ pub const Regions = struct {
 const header_content_height: f32 = 23;
 const header_pad_top: f32 = 15;
 const header_pad_bottom: f32 = 10;
-/// The header sizes to its content so a wrapped stockline can grow it. One line of 21px
-/// heading text is 28px tall, 5px past the 23px content box the prototype reserves, so the
-/// bottom inset gives those 5px back and a one-line header stays 48px.
-const header_line_overhang: f32 = 5;
 const grid_pad_top: f32 = 12;
 const grid_pad_bottom: f32 = 10;
 const footer_height: f32 = 86;
@@ -227,9 +245,10 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .with_flow(.{ .dir = .row, .cross = .start });
     _ = try header_band.spacer("lead", opts.page_pad, 1);
     const header = try header_band.div("shell_header");
-    // The header's content is 23px at the reference; it grows only when the stockline wraps.
+    // The header's content is one 17px line (23px) at the reference; it grows only when the
+    // stockline wraps.
     _ = header.with_size(.grow, .fit_children)
-        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom - header_line_overhang, 0)});
+        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
     _ = try header_band.spacer("tail", opts.page_pad, 1);
 
     // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.
@@ -247,7 +266,7 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     // The page-grid row owns all remaining height after the header and optional reserved footer.
     // Its authored 12px/10px vertical and page-width horizontal insets are real flow lanes; the
     // body therefore has a definite height and cannot extend underneath the logger.
-    const stack = stacked(content.ctx);
+    const stack = stacked(content.ctx) and opts.scroll;
     const grid_band = try content.div("shell_grid_band");
     _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
         .with_flow(.{ .dir = .column });
@@ -320,7 +339,7 @@ pub fn footer_band(content: El, page_pad: f32) !El {
 /// Build the terminal shell **and** its region skeleton, returning the region handles the
 /// screen fills. The interior is the same composer used by the full-page debug fixture.
 pub fn shell(ctx: *UiCtx, opts: ShellOptions) !Regions {
-    const sh = try terminal(ctx, opts.id);
+    const sh = try terminal_with(ctx, opts.id, .{ .scroll = opts.scroll });
     return shell_content(sh.root, sh.content, opts);
 }
 

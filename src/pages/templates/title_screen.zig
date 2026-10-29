@@ -220,7 +220,8 @@ fn credits(parent: El) !void {
 
 pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
     const th = ctx.res.view.theme;
-    const sh = try terminal_mod.terminal(ctx, id);
+    // `.title-screen`: `min(700px, 100vh)` high on a `line` hairline, and it never scrolls.
+    const sh = try terminal_mod.terminal_with(ctx, id, .{ .max_h = 700, .scroll = false, .outline = th.line });
     const screen = &ctx.res.title.screen;
     var action: Action = .none;
     var changed: settings_mod.Changed = .{};

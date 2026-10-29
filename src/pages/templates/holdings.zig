@@ -100,14 +100,15 @@ fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
     const th = parent.ctx.res.view.theme;
     const panel = try readout.readout_panel(parent, "body", col_w - body_pad.left - body_pad.right, body_pad);
     _ = try readout.section_label(panel, "title", "BODY");
-    _ = try panel.spacer("gap", 1, 6);
+    _ = try panel.spacer("gap", 1, 1);
     if (c.body_note) |note| {
         _ = (try panel.text("note", note)).with_style(.{Style{ .font = 11, .text = th.dim }});
         return;
     }
+    // `.body-panel` sets its sentences at 11px on a 1.35 line, no gap between them.
     const list = try panel.div("list");
     _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(5);
+        .with_flow(.{ .dir = .column }).with_gap(0);
     for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, toneColor(th, s.tone));
 }
 

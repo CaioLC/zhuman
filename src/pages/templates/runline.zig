@@ -27,6 +27,11 @@ pub const Run = struct {
     compact: bool = false,
 };
 
+/// The runline's face: 17px (14px stacked, ≤760) at the body tracking (`.runline`).
+fn runType(ctx: *UiCtx) Style {
+    return .{ .font = if (@import("./terminal.zig").stacked(ctx)) 14 else 17, .tracking = -0.025 };
+}
+
 /// Build the runline into `parent`, right-anchored by the caller. Returns the row `El`.
 pub fn runline(parent: El, id: []const u8, run: Run) !El {
     const ctx = parent.ctx;
@@ -34,7 +39,7 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
     var buf: [48]u8 = undefined;
 
     const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_);
+    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
 
     // Energy rate segment — only when there is a flow (Act II): `⚡ +gen/−consumed`, the
     // prototype's `.energy-rate` — dim bolt and slash, generated in `acc`, consumed in `warn`.
@@ -42,28 +47,28 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
     if (run.gen != 0 or run.consumed != 0) {
         const energy = try row.div("energy");
         _ = energy.with_flow(.{ .dir = .row, .cross = .center }).with_gap(3)
-            .with_style(.{style.pad_each(0, 12 - ha.tokens.gap.inline_, 0, 0)}); // 12px before the act label
-        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ style.heading, Style{ .text = th.dim } });
+            .with_style(.{style.pad_each(0, 12 - 8, 0, 0)}); // 12px before the act label
+        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ runType(ctx), Style{ .text = th.dim } });
         var gbuf: [16]u8 = undefined;
         var cbuf: [16]u8 = undefined;
         const gen_txt = std.mem.print(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
         const use_txt = std.mem.print(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
-        _ = (try energy.text("gen", gen_txt)).with_style(.{ style.heading, Style{ .text = th.acc } });
-        _ = (try energy.text("slash", "/")).with_style(.{ style.heading, Style{ .text = th.dim } });
-        _ = (try energy.text("use", use_txt)).with_style(.{ style.heading, Style{ .text = th.warn } });
+        _ = (try energy.text("gen", gen_txt)).with_style(.{ runType(ctx), Style{ .text = th.acc } });
+        _ = (try energy.text("slash", "/")).with_style(.{ runType(ctx), Style{ .text = th.dim } });
+        _ = (try energy.text("use", use_txt)).with_style(.{ runType(ctx), Style{ .text = th.warn } });
     }
 
     // Act label — optional context, dropped when compact; the middot follows it.
     if (!run.compact) {
         const atxt = std.mem.print(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
         _ = (try row.text("act", atxt))
-            .with_style(.{ style.heading, Style{ .text = th.dim } });
+            .with_style(.{ runType(ctx), Style{ .text = th.dim } });
     }
 
     // Day — the functional counter, always shown, in fg.
     const dtxt = std.mem.print(&buf, "Day {d}", .{run.day}) catch "?";
     _ = (try row.text("day", dtxt))
-        .with_style(.{ style.heading, Style{ .text = th.fg } });
+        .with_style(.{ runType(ctx), Style{ .text = th.fg } });
 
     return row;
 }

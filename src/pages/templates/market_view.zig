@@ -651,8 +651,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
 
     const view = try parent.div(id);
     _ = view.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{Style{ .outline_color = th.line }});
+        .with_flow(.{ .dir = .column, .cross = .start });
 
     // --- head --------------------------------------------------------------------------------
     const head = try band(view, "head", 11, 9);
@@ -665,7 +664,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     // --- controls ----------------------------------------------------------------------------
     const controls = try band(view, "controls", 9, 9);
     const owner = if (st.stall) stall_owner else query_owner;
-    const field = try uic.text_input(controls, if (st.stall) "stall_search" else "search", if (st.stall) "search items  \u{00b7}  type:crafted  is:posted" else "search  \u{00b7}  needs:biomass  has:food  trade:fisher", 80, owner);
+    const field = try uic.text_input_look(controls, if (st.stall) "stall_search" else "search", if (st.stall) "search items  \u{00b7}  type:crafted  is:posted" else "search  \u{00b7}  needs:biomass  has:food  trade:fisher", 80, owner, .{ .font = 11, .placeholder = th.line2 });
     _ = field.with_size(.grow, .fit_children);
     const query = owner.state(uic.UiState.TextInputState).text();
     const seg = try controls.div("seg");
