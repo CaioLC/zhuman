@@ -60,6 +60,8 @@ pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy) !Activity {
 pub const Options = struct {
     /// The view tabs, in order. At most `max_views`.
     labels: []const []const u8,
+    /// The tab strip's accessible name (`nav.surface-nav[aria-label]`).
+    nav_name: []const u8 = "Surfaces",
     /// The focus views (Act II's RESEARCH and MARKET): each owns the whole surface, so the
     /// strips are suppressed there, and the page drops its log (`Result.focus`).
     focus_views: []const usize = &.{},
@@ -119,7 +121,7 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
 
     const nav = try surface.div("nav");
     _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
-    const tabs = try tabs_mod.tabs(nav, "tabs", opts.labels, &selected);
+    const tabs = try tabs_mod.tabs_named(nav, "tabs", opts.nav_name, opts.labels, &selected);
     _ = tabs.el.with_layout(.bottom_left);
     surface.state(uic.UiState.TabsState).active = tabs.active; // existing slot: no growth
     _ = try surface.spacer("nav_gap", 1, opts.nav_gap);

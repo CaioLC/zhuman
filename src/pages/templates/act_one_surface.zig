@@ -69,6 +69,7 @@ pub const Result = struct {
 pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
     const s = try surface_mod.act_surface(parent, id, .{
         .labels = &view_labels,
+        .nav_name = "Act I surfaces",
         .market = opts.market,
         .market_available = opts.market_available,
         .activity = opts.activity,
@@ -81,7 +82,7 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
     // put and scrolls only its table, so it takes the view directly.
     switch (s.active) {
         0 => {
-            const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
+            const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Available actions" }, s.scroll);
             _ = try actions_section_mod.actions_section(scroll.content, world, e, "actions_section", actions_shelf, s.catalog, s.owner, null);
         },
         1 => {
@@ -90,7 +91,7 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
             _ = try build_section_mod.build_section(s.view, world, e, "buildsection", shelf, s.catalog, s.owner, s.scroll);
         },
         2 => {
-            const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
+            const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Owned generators" }, s.scroll);
             _ = try generator_section_mod.generator_section(scroll.content, world, e, "generator_section", generator_shelf);
         },
         else => unreachable,

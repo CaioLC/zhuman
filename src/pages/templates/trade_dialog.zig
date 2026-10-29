@@ -262,7 +262,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(7)
         .with_style(.{style.pad_each(9, pad_x, 0, pad_x)});
     const previous_mode = st.mode;
-    _ = try tabs_mod.tabs(tab_band, "modes", &.{ "BUY", "SELL" }, &st.mode);
+    _ = try tabs_mod.tabs_named(tab_band, "modes", "Trade direction", &.{ "BUY", "SELL" }, &st.mode);
     const mode = modeOf(st);
     var in_mode: usize = 0;
     for (book.lots) |l| in_mode += @intFromBool(l.mode == mode);

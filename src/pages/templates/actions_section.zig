@@ -175,7 +175,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     const host = if (scroll) |st| blk: {
         const area = try section.div("results");
         _ = area.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
-        const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false }, st);
+        const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false, .name = "Available actions; scroll for more" }, st);
         break :blk sv.content;
     } else section;
     const grid = try browser.tile_lanes(host, "grid", compact, if (shelf.density == .compact) compact_grid_gap else grid_gap);

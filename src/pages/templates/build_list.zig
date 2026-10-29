@@ -384,6 +384,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
         .height = 0,
         .framed = false,
         .gap = 0,
+        .name = "Buildable recipes; scroll for more",
     }, scroll);
     const rows = sv.content;
 

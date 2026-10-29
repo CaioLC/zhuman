@@ -87,6 +87,7 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         .height = band,
         .framed = false, // the shell's footer row already frames the log
         .gap = footer_content_gap,
+        .name = "Event log",
     }, null);
 
     // Publish a polite announcement of the newest line so a reader hears the latest event once

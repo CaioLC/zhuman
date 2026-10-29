@@ -156,6 +156,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     // --- the body: the shared act surface, then the active view ----------------------------
     const s = try t.act_surface(regions.body, "a2_surface", .{
         .labels = &view_labels,
+        .nav_name = "Act II surfaces",
         .focus_views = &focus_views,
         .market = if (ctx.res.sim.exchange.standing) .exchange else .merchant,
         .activity = blk: {
@@ -220,7 +221,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             if (raised) raiseExchange(ctx, world, e);
         },
         .generators => {
-            const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
+            const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Owned generators" }, s.scroll);
             _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
         .research => try researchView(ctx, world, e, s, opts.research),

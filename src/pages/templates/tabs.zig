@@ -39,6 +39,11 @@ pub const Tabs = struct { el: El, active: usize };
 /// Build the strip. When the caller passes `active`, that is the selection (read on entry,
 /// written on exit) and the strip's own slot is only a mirror; null means the strip owns it.
 pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
+    return tabs_named(parent, id, "tabs", labels, active);
+}
+
+/// `tabs` with the strip's accessible name (the prototype's `nav aria-label`).
+pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
@@ -84,8 +89,8 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*us
     }
 
     // The strip itself is a single-selection group controlling its member tabs (by key,
-    // in paint order). Named "tabs" for the bridge; the caller left-aligns it over content.
-    ctx.res.semantics.publish(uic.semantic.describeGroup(bar_key, "tabs", member_keys[0..member_len]));
+    // in paint order), under the caller's name; the caller left-aligns it over content.
+    ctx.res.semantics.publish(uic.semantic.describeGroup(bar_key, name, member_keys[0..member_len]));
 
     return .{ .el = bar, .active = st.active };
 }

@@ -204,7 +204,7 @@ pub fn capital_header(parent: El, id: []const u8, lw: Widths, sort: ?HeaderSort)
         }
     }
     if (nmembers > 0) {
-        ctx.res.semantics.publish(uic.semantic.describeGroup(group, "sort by column", members[0..nmembers]));
+        ctx.res.semantics.publish(uic.semantic.describeGroup(group, "Sort by column", members[0..nmembers]));
     }
     return .{ .el = header, .clicked = clicked };
 }
