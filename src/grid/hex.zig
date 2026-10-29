@@ -309,6 +309,41 @@ pub fn vertexOffsets(s: f32) [6]Point {
     return out;
 }
 
+/// Pixel → the hex containing it, the inverse of `toPixel` for size `s` and center `(cx, cy)`:
+/// fractional axial coordinates, then cube rounding (the component with the largest rounding
+/// error is recomputed from the other two, so `x + y + z == 0` holds).
+pub fn fromPixel(p: Point, s: f32, cx: f32, cy: f32) Axial {
+    const sqrt3 = std.math.sqrt(3.0);
+    const px = p.x - cx;
+    const py = p.y - cy;
+    const fq = (sqrt3 / 3.0 * px - 1.0 / 3.0 * py) / s;
+    const fr = (2.0 / 3.0 * py) / s;
+    const fx = fq;
+    const fz = fr;
+    const fy = -fx - fz;
+    var rx = @round(fx);
+    const ry = @round(fy);
+    var rz = @round(fz);
+    const dx = @abs(rx - fx);
+    const dy = @abs(ry - fy);
+    const dz = @abs(rz - fz);
+    if (dx > dy and dx > dz) {
+        rx = -ry - rz;
+    } else if (dy <= dz) {
+        rz = -rx - ry;
+    }
+    return .{ .q = @intFromFloat(rx), .r = @intFromFloat(rz) };
+}
+
+/// Whether `p` lies inside the pointy-top hex of radius `s` centred on `c` (edges included).
+pub fn containsPoint(c: Point, s: f32, p: Point) bool {
+    const sqrt3 = std.math.sqrt(3.0);
+    const dx = @abs(p.x - c.x);
+    const dy = @abs(p.y - c.y);
+    if (dx > s * sqrt3 / 2.0 or dy > s) return false;
+    return dy <= s - dx / sqrt3;
+}
+
 // ============================ Tests =============================
 
 const testing = std.testing;
@@ -468,4 +503,36 @@ test "Wedge: code, next, prev wrap in the fixed clockwise order" {
     try testing.expectEqual(Wedge.water, Wedge.food.next());
     try testing.expectEqual(Wedge.food, Wedge.biomass.next()); // wrap
     try testing.expectEqual(Wedge.biomass, Wedge.food.prev()); // wrap
+}
+
+test "fromPixel: every hex's centre maps back to it, and a near-centre point too" {
+    var list: std.ArrayList(Axial) = .empty;
+    defer list.deinit(testing.allocator);
+    try disk(testing.allocator, 4, &list);
+    for (list.items) |a| {
+        const c = toPixel(a, 31, 310, 310);
+        try testing.expect(fromPixel(c, 31, 310, 310).eql(a));
+        try testing.expect(fromPixel(.{ .x = c.x + 9, .y = c.y - 7 }, 31, 310, 310).eql(a));
+    }
+}
+
+test "containsPoint: the centre and a vertex are in; the bounding-box corner is out" {
+    const c = Point{ .x = 0, .y = 0 };
+    try testing.expect(containsPoint(c, 10, c));
+    try testing.expect(containsPoint(c, 10, .{ .x = 0, .y = 10 })); // the bottom vertex
+    try testing.expect(!containsPoint(c, 10, .{ .x = 8.6, .y = 9.9 })); // past a slanted edge
+    try testing.expect(!containsPoint(c, 10, .{ .x = 0, .y = 10.1 }));
+}
+
+test "fromPixel and containsPoint agree on the visible tile area" {
+    const a = Axial{ .q = 2, .r = -1 };
+    const c = toPixel(a, 31, 310, 310);
+    var dy: f32 = -25;
+    while (dy <= 25) : (dy += 5) {
+        var dx: f32 = -25;
+        while (dx <= 25) : (dx += 5) {
+            const p = Point{ .x = c.x + dx, .y = c.y + dy };
+            if (containsPoint(c, 29.5, p)) try testing.expect(fromPixel(p, 31, 310, 310).eql(a));
+        }
+    }
 }

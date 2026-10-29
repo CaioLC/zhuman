@@ -167,29 +167,6 @@ fn circlePts(dx: f32, dy: f32, radius: f32) [14]uic.Point {
     return out;
 }
 
-/// The material dots a tile shows: its own wedges, then the resources its cost names, up to
-/// two from ring 3 and three on a ring-4 hybrid.
-fn materials(t: *const roster.Technology, k: Kind, out: *[3]u3) []u3 {
-    const want: usize = if (k.ring == 4 and k.hybrid) 3 else if (k.ring >= 3) 2 else k.len;
-    var n: usize = 0;
-    for (k.res[0..k.len]) |w| {
-        out[n] = w;
-        n += 1;
-    }
-    for (t.cost) |line| {
-        if (n >= want) break;
-        const r = roster.Catalog.resource(line.item) orelse continue;
-        const w: u3 = for (wedge_res, 0..) |wr, i| {
-            if (wr == r) break @intCast(i);
-        } else continue;
-        if (std.mem.findScalar(u3, out[0..n], w) == null) {
-            out[n] = w;
-            n += 1;
-        }
-    }
-    return out[0..@min(n, want)];
-}
-
 /// The camera mapping board units to the pane's local device px: the 620 square fitted into
 /// the pane, then `p·zoom + pan`.
 const Camera = struct {
@@ -655,8 +632,12 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             }
 
             // The material dots, and the research marker on an established tile.
+            // The board's own rule (`grid/board.materialMarkers`), as wedge indices.
+            var wbuf: [3]hex.Wedge = undefined;
+            const wm = ha.grid.board.materialMarkers(t, &wbuf);
             var mat_buf: [3]u3 = undefined;
-            const mats = materials(t, k, &mat_buf);
+            for (wm, 0..) |w, j| mat_buf[j] = @intFromEnum(w);
+            const mats = mat_buf[0..wm.len];
             const dot_op: f32 = switch (s) {
                 .locked => 0.4,
                 .available => 0.92,

@@ -206,6 +206,64 @@ pub fn research(cat: *const Catalog, board: *Research, index: usize, bal: *Balan
     return .researched;
 }
 
+/// How many material-reference dots a tile carries (spec §: ring 1 = 6, ring 2 = 18, ring 3 =
+/// 36, ring 4 = 66 in all): its own wedges up to ring 2, two from ring 3, three on a ring-4
+/// hybrid.
+pub fn markerCount(coord: roster.Coord) usize {
+    const a = axial(coord);
+    const n = hex.ring(a);
+    const hybrid = switch (hex.classify(a)) {
+        .hybrid => true,
+        else => false,
+    };
+    if (n == 4 and hybrid) return 3;
+    if (n >= 3) return 2;
+    return if (hybrid) 2 else 1;
+}
+
+/// The wedge of a research resource, or null for one with no wedge (coin).
+fn wedgeOf(r: Resource) ?hex.Wedge {
+    return switch (r) {
+        .food => .food,
+        .water => .water,
+        .fuel => .fuel,
+        .metal => .metal,
+        .minerals => .minerals,
+        .biomass => .biomass,
+        .coin => null,
+    };
+}
+
+/// The material-reference dots of a tile, in order: its own wedges first, then the resources
+/// its cost names that are not already shown, to `markerCount`. Fills `out` and returns the
+/// slice; a tile whose cost cannot supply its count returns fewer (the catalog test fails it).
+pub fn materialMarkers(t: *const Technology, out: *[3]hex.Wedge) []hex.Wedge {
+    const want = markerCount(t.coord);
+    var n: usize = 0;
+    switch (hex.classify(axial(t.coord))) {
+        .foundation => {},
+        .pure => |p| {
+            out[0] = p.wedge;
+            n = 1;
+        },
+        .hybrid => |h| {
+            out[0] = h.wedge;
+            out[1] = h.wedge.next();
+            n = 2;
+        },
+    }
+    for (t.cost) |line| {
+        if (n >= want) break;
+        const r = lineResource(line.item) orelse continue;
+        const w = wedgeOf(r) orelse continue;
+        if (std.mem.findScalar(hex.Wedge, out[0..n], w) == null) {
+            out[n] = w;
+            n += 1;
+        }
+    }
+    return out[0..@min(n, want)];
+}
+
 /// Count tiles in a given state — for tests and HUD summaries.
 pub fn countState(cat: *const Catalog, board: *const Research, s: State) u32 {
     var n: u32 = 0;
@@ -391,4 +449,100 @@ test "a chain of research walks a wedge outward without opening other wedges" {
     try testing.expectEqual(State.researched, stateOf(&cat, &r, "pumping_station").?);
     // A far wedge pure corner (Metal ring 4) stays Locked — nothing unrelated opened.
     try testing.expectEqual(State.locked, stateOf(&cat, &r, "precision_machining").?);
+}
+
+// ---- the authored board's invariants (BOARD-02, BOARD-03, QA-06) --------------------------
+
+test "the board holds sixty tiles over rings 1-4: six pure and 6(n-1) hybrids per ring" {
+    var cat = try testCatalog();
+    defer cat.deinit();
+    try testing.expectEqual(@as(usize, 60), cat.technologies.len);
+    var pure = @as([5]u32, @splat(0));
+    var hybrid = @as([5]u32, @splat(0));
+    for (cat.technologies, 0..) |t, i| {
+        const a = axial(t.coord);
+        const n = hex.ring(a);
+        try testing.expect(n >= 1 and n <= 4); // no foundation record, no Act III coordinate
+        try testing.expectEqual(n, t.coord.ring());
+        switch (hex.classify(a)) {
+            .foundation => return error.TestUnexpectedResult,
+            .pure => pure[n] += 1,
+            .hybrid => hybrid[n] += 1,
+        }
+        // No two tiles share a coordinate.
+        for (cat.technologies[i + 1 ..]) |u| try testing.expect(!(u.coord.q == t.coord.q and u.coord.r == t.coord.r));
+    }
+    var n: u32 = 1;
+    while (n <= 4) : (n += 1) {
+        try testing.expectEqual(@as(u32, 6), pure[n]);
+        try testing.expectEqual(6 * (n - 1), hybrid[n]);
+    }
+}
+
+test "the board draws 96 rails: a full loop per pure tile, two halves per hybrid" {
+    var cat = try testCatalog();
+    defer cat.deinit();
+    var full: u32 = 0;
+    var half: u32 = 0;
+    for (cat.technologies) |t| switch (hex.classify(axial(t.coord))) {
+        .pure => full += 1,
+        .hybrid => half += 2,
+        .foundation => {},
+    };
+    try testing.expectEqual(@as(u32, 24), full);
+    try testing.expectEqual(@as(u32, 72), half);
+    try testing.expectEqual(@as(u32, 96), full + half);
+}
+
+test "every tile's cost supplies its material dots: 6, 18, 36 and 66 by ring" {
+    var cat = try testCatalog();
+    defer cat.deinit();
+    var dots = @as([5]usize, @splat(0));
+    var short: usize = 0;
+    for (cat.technologies) |*t| {
+        var buf: [3]hex.Wedge = undefined;
+        const m = materialMarkers(t, &buf);
+        if (m.len != markerCount(t.coord)) {
+            std.debug.print("{s} shows {d} of {d} material dots\n", .{ t.id, m.len, markerCount(t.coord) });
+            short += 1;
+        }
+        dots[t.coord.ring()] += m.len;
+    }
+    try testing.expectEqual(@as(usize, 0), short);
+    try testing.expectEqual(@as(usize, 6), dots[1]);
+    try testing.expectEqual(@as(usize, 18), dots[2]);
+    try testing.expectEqual(@as(usize, 36), dots[3]);
+    try testing.expectEqual(@as(usize, 66), dots[4]);
+}
+
+test "research is priced only in the six board resources, and every tile has a label" {
+    var cat = try testCatalog();
+    defer cat.deinit();
+    for (cat.technologies) |t| {
+        try testing.expect(t.short.len > 0 and t.short.len <= 7);
+        for (t.cost) |line| {
+            const r = lineResource(line.item) orelse return error.TestUnexpectedResult;
+            try testing.expect(wedgeOf(r) != null); // never coin
+            try testing.expect(line.n > 0);
+        }
+    }
+}
+
+test "every resource a research cost names has an authored way to get it" {
+    var cat = try testCatalog();
+    defer cat.deinit();
+    for (cat.technologies) |t| for (t.cost) |line| {
+        const r = lineResource(line.item).?;
+        var found = false;
+        for (cat.actions) |a| for (a.output) |o| {
+            if (lineResource(o.item) == r) found = true;
+        };
+        for (cat.goods) |g| for (g.output) |o| {
+            if (lineResource(o.item) == r) found = true;
+        };
+        if (!found) {
+            std.debug.print("{s} costs {s}, which nothing produces\n", .{ t.id, line.item });
+            return error.TestUnexpectedResult;
+        }
+    };
 }

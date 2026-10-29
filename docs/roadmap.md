@@ -138,10 +138,10 @@ Prototype catalogs are deterministic UX fixtures, not permission to hardcode eco
 
 ### Pure grid and catalog validation
 
-- [ ] **BOARD-01 — Add a pure `src/grid/` hex module.** Implement axial/cube conversion, pointy-top axial→pixel, pixel→hex rounding, ring distance, six neighbors, rings, exact pure/hybrid classification, vertices, and point-in-hex. It imports no UI/game modules. Export it through the appropriate library/test roots.
+- [x] **BOARD-01 — Add a pure `src/grid/` hex module.** Implement axial/cube conversion, pointy-top axial→pixel, pixel→hex rounding, ring distance, six neighbors, rings, exact pure/hybrid classification, vertices, and point-in-hex. It imports no UI/game modules. Export it through the appropriate library/test roots.
   - Test `ring = max(|q|, |r|, |q+r|)`, `6n` cells per ring, 61 cells rings 0–4, round trips, boundaries, and wedge order Food→Water→Fuel→Metal→Minerals→Biomass clockwise from 3 o'clock.
-- [ ] **BOARD-02 — Author/validate exactly 60 technology records.** Use `docs/hex_tech_board_spec.md` names, coordinates, rings/eras, pure/hybrid domains, effects, explicit costs, enable links, and stable IDs. The records are `data/technologies.zon`; the loader holds id uniqueness, the foundation and shared coordinates. Validate the rest over the catalog — ring-coordinate agreement, 6 pure tiles per ring, `6(n−1)` hybrids, only adjacent-resource hybrids, and no Act III coordinates — in `grid`'s tests.
-- [ ] **BOARD-03 — Validate board visual counts.** Across rings 1–4 there are 24 pure and 36 hybrid technologies, 96 rail paths (24 full + 72 half-domain), and material-dot totals/ring counts from the spec. Fail tests on malformed authored data rather than silently drawing it.
+- [x] **BOARD-02 — Author/validate exactly 60 technology records.** Use `docs/hex_tech_board_spec.md` names, coordinates, rings/eras, pure/hybrid domains, effects, explicit costs, enable links, and stable IDs. The records are `data/technologies.zon`; the loader holds id uniqueness, the foundation and shared coordinates. Validate the rest over the catalog — ring-coordinate agreement, 6 pure tiles per ring, `6(n−1)` hybrids, only adjacent-resource hybrids, and no Act III coordinates — in `grid`'s tests.
+- [x] **BOARD-03 — Validate board visual counts.** Across rings 1–4 there are 24 pure and 36 hybrid technologies, 96 rail paths (24 full + 72 half-domain), and material-dot totals/ring counts from the spec. Fail tests on malformed authored data rather than silently drawing it. (Done: `grid/board`'s catalog tests hold the counts, the rails and `materialMarkers` per tile; they caught Blast furnace and Crop rotation short of a third material, now authored. `hex.fromPixel` and `hex.containsPoint` complete BOARD-01.)
 
 ### Rendering and layout
 
@@ -182,7 +182,7 @@ How each check is evidenced — the fixtures, captures, and interaction tests be
 ### Automated tests
 
 - [ ] **QA-05 — Add Act II domain tests.** Cover typed transfer atomicity/ownership, population boundaries, quote-resolution equality, research adjacency/payment, technology↔recipe links, Merchant settlement, Exchange `500/501` boundary, Exchange payment/completion, and one-time Act III transition.
-- [ ] **QA-06 — Add grid/catalog invariant tests.** Cover all BOARD-01..03 counts/classification, canonical opening state, resource vocabulary, unique IDs/coordinates, no generic Materials research costs, and no unavailable resource type without an authored acquisition route.
+- [x] **QA-06 — Add grid/catalog invariant tests.** Cover all BOARD-01..03 counts/classification, canonical opening state, resource vocabulary, unique IDs/coordinates, no generic Materials research costs, and no unavailable resource type without an authored acquisition route.
 - [ ] **QA-21 — DPI tests at scales `1`, `1.5` and `2`.** Logical dimensions, hit geometry, text cells, scroll thumbs, progress, dialogs and pointer conversion. The `El` and style seams scale once through `view.dp`; only that helper and `type.toDevice` are pinned today.
 
 ### Deterministic UI fixture harness
