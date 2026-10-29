@@ -604,6 +604,17 @@ building a box so the layers paint under it (siblings paint in child order); the
 the near-black terminal ground at the prototype's `0xd9` alpha, for the fullscreen root a modal
 already builds. The framed terminal draws its drop shadow through `drop`.
 
+## Layout dump
+
+`HA_LAYOUT_DUMP=<path>` writes one frame's trees to a text file (`layout_dump.zig`, QA-09),
+on frame `HA_LAYOUT_DUMP_FRAME` (default 30), from the frame driver's `sample` hook: every
+node in paint order, indented by depth, with its key, box and inherited clip in logical px,
+`clips` when it crops its subtree, `hidden` when its clip shows none of it, its render
+features and text, `tab`/`tab-off` for a focus registration, `focused`, `ring`, `hover`,
+`selected`, `disabled`, `pass`, and the semantic role, name and value published for it.
+Diagnose an overlap or a clipping fault from it, and check that no `hidden` line carries
+`tab`: `HA_FIXTURE=act_one_focus HA_LAYOUT_DUMP=dump.txt zig-out/bin/human_action.exe`.
+
 ## Five-pass profiling
 
 The desktop loop uses the engine's profiled layout variant, sums its three solve timings
