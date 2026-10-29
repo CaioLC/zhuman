@@ -100,6 +100,8 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     const target: f32 = if (st.collapsed) ha.tokens.rail.collapsed else ha.tokens.rail.expanded;
     ctx.res.tween.retarget(box.get().key, target, ha.tokens.dur_rail_s);
     const w = ctx.res.tween.value(box.get().key, target);
+    // Stacked (≤760), the expanded rail spans the page above the surface.
+    const stack = @import("./terminal.zig").stacked(ctx);
 
     if (st.collapsed) {
         // The 36×124 restore control exactly fills this box. Keep overflow visible in the
@@ -134,7 +136,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
         return .{ .collapsed = true, .body = null };
     }
 
-    _ = box.with_size(.{ .fixed = w }, .{ .pct_of_parent = 1.0 })
+    _ = box.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = w }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 })
         .with_overflow(.clip);
     _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.stack);
@@ -143,7 +145,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // Its chevron is independently centered in both axes; the old right-anchored bare text
     // had neither the correct box nor a definite height against which to center.
     _ = toggle.with_layout(.top_right)
-        .with_offset(-2, 0)
+        .with_offset(if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2, 0)
         .with_size(.{ .fixed = collapse_width }, .{ .fixed = collapse_height })
         .with_style(.{toggle_chrome});
     _ = (try toggle.text("chevron", "\u{2039}"))

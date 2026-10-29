@@ -62,6 +62,23 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
 
     const fill = opts.width <= 0;
     const fill_h = opts.height <= 0;
+    // Stacked (≤760) the whole page is the scroll view: a parent-high view has no height to
+    // fill, so it takes its content's and lets the page scroll it.
+    if (fill_h and @import("./terminal.zig").stacked(ctx)) {
+        const outer = try parent.div(id);
+        _ = outer.with_flow(.{ .dir = .row, .cross = .start })
+            .with_size(if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .fit_children);
+        const viewport = try outer.div("viewport");
+        _ = viewport.with_flow(.{ .dir = .column, .cross = .start })
+            .with_size(if (fill) .grow else .{ .fixed = opts.width }, .fit_children);
+        if (opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.line2 }});
+        const content = try viewport.div("content");
+        _ = content.with_flow(.{ .dir = .column }).with_gap(opts.gap);
+        if (fill) _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+        const st = state orelse outer.state(ScrollState);
+        if (st.dragging) uic.cancelScrollThumb(ctx, st);
+        return .{ .outer = outer, .viewport = viewport, .content = content };
+    }
     const outer = try parent.div(id);
     // Top-aligned: the default baseline cross-alignment would place the viewport by its
     // content's first baseline and shift it against the track.

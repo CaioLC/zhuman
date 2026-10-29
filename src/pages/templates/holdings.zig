@@ -76,11 +76,12 @@ fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
 /// keeps the count clear of the rail's collapse control at the panel's upper-right corner.
 const heading_inset: f32 = 16;
 
-fn mainPanel(parent: El, c: Content) !void {
+fn mainPanel(parent: El, c: Content, col_w: f32) !void {
     const th = parent.ctx.res.view.theme;
-    const panel = try readout.readout_panel(parent, "panel", main_content_width, main_pad);
+    const content_w = col_w - main_pad.left - main_pad.right;
+    const panel = try readout.readout_panel(parent, "panel", content_w, main_pad);
     const heading_box = try panel.div("heading_box");
-    _ = heading_box.with_size(.{ .fixed = main_content_width - heading_inset }, .fit_children);
+    _ = heading_box.with_size(.{ .fixed = content_w - heading_inset }, .fit_children);
     _ = try readout.readout_heading(heading_box, "heading", "HOLDINGS", c.count);
     _ = try panel.spacer("heading_gap", 1, 8);
     if (c.roster.len == 0) {
@@ -95,9 +96,9 @@ fn mainPanel(parent: El, c: Content) !void {
     try lines(panel, "section", c.section, 4);
 }
 
-fn bodyPanel(parent: El, c: Content) !void {
+fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
     const th = parent.ctx.res.view.theme;
-    const panel = try readout.readout_panel(parent, "body", body_content_width, body_pad);
+    const panel = try readout.readout_panel(parent, "body", col_w - body_pad.left - body_pad.right, body_pad);
     _ = try readout.section_label(panel, "title", "BODY");
     _ = try panel.spacer("gap", 1, 6);
     if (c.body_note) |note| {
@@ -110,15 +111,47 @@ fn bodyPanel(parent: El, c: Content) !void {
     for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, toneColor(th, s.tone));
 }
 
-/// Build the HOLDINGS + BODY column from one act's `Content`.
+/// The stacked column: one panel's width and whether HOLDINGS and BODY sit side by side.
+pub fn stackedColumn(ctx: *uic.UiCtx) struct { total: f32, col_w: f32, two_up: bool } {
+    const total = @import("./terminal.zig").stackedWidth(ctx);
+    const two_up = !ctx.res.view.metrics.width_class.atMost(.w560);
+    return .{ .total = total, .col_w = if (two_up) (total - stacked_gap) / 2 else total, .two_up = two_up };
+}
+
+/// Build the HOLDINGS + BODY column from one act's `Content`. Framed, it is the rail's 240px
+/// column. Stacked (≤760) it spans the page: HOLDINGS and BODY side by side at the 760 class,
+/// one above the other below 560. Returns the box the household's foot (the eating policy)
+/// goes into, at one panel's width.
 pub fn holdings(parent: El, id: []const u8, c: Content) !El {
+    const ctx = parent.ctx;
+    const terminal = @import("./terminal.zig");
+    if (terminal.stacked(ctx)) {
+        const sc = stackedColumn(ctx);
+        const total = sc.total;
+        const two_up = sc.two_up;
+        const col_w = sc.col_w;
+        const column = try parent.div(id);
+        _ = column.with_size(.{ .fixed = total }, .fit_children)
+            .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
+        const panels = try column.div("panels");
+        _ = panels.with_size(.{ .fixed = total }, .fit_children)
+            .with_flow(.{ .dir = if (two_up) .row else .column, .cross = .start }).with_gap(if (two_up) stacked_gap else panel_gap);
+        try mainPanel(panels, c, col_w);
+        try bodyPanel(panels, c, col_w);
+        const foot = try column.div("foot");
+        _ = foot.with_size(.{ .fixed = col_w }, .fit_children).with_flow(.{ .dir = .column });
+        return foot;
+    }
     const column = try parent.div(id);
     _ = column.with_size(.{ .fixed = column_width }, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
-    try mainPanel(column, c);
-    try bodyPanel(column, c);
+    try mainPanel(column, c, column_width);
+    try bodyPanel(column, c, column_width);
     return column;
 }
+
+/// The stacked rail's column gap (`.side-rail` as a two-column grid).
+const stacked_gap: f32 = 22;
 
 test "holdings column geometry mirrors the standalone reference" {
     try std.testing.expectEqual(@as(f32, 240), column_width);

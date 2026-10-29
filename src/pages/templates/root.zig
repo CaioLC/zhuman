@@ -84,6 +84,7 @@ pub const terminal = terminal_mod.terminal;
 pub const Terminal = terminal_mod.Shell;
 pub const shell = terminal_mod.shell;
 pub const shell_content = terminal_mod.shell_content;
+pub const stacked = terminal_mod.stacked;
 pub const Shell = terminal_mod.Regions;
 pub const ShellOptions = terminal_mod.ShellOptions;
 pub const Act = terminal_mod.Act;

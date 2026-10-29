@@ -396,16 +396,24 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     };
 
     const view = try parent.div(id);
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start });
+    // Stacked (≤760) the detail drops under a 560px board and the view takes its height.
+    const stack = @import("./terminal.zig").stacked(ctx);
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start });
 
     // --- topbar: RESEARCH and its question | the chips and the search ----------------------
     _ = try view.spacer("top_pad", 1, 4);
     const topbar = try view.div("topbar");
-    _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 44 }).with_flow(.{ .dir = .row, .main = .space_between, .cross = .end });
+    // Below 560 the toolbar drops under the title and the question goes (`.structure-topbar`).
+    const narrow = ctx.res.view.metrics.width_class.atMost(.w560);
+    if (narrow) {
+        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(8);
+    } else {
+        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 44 }).with_flow(.{ .dir = .row, .main = .space_between, .cross = .end });
+    }
     const title = try topbar.div("title");
     _ = title.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12);
     _ = (try title.text("h", "RESEARCH")).with_style(.{ style.heading, Style{ .text = th.fg } });
-    _ = (try title.text("p", "What exists, and what does it take?")).with_style(.{Style{ .font = 11, .text = th.dim }});
+    if (!narrow) _ = (try title.text("p", "What exists, and what does it take?")).with_style(.{Style{ .font = 11, .text = th.dim }});
     const tools = try topbar.div("tools");
     _ = tools.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
     const chips = try tools.div("chips");
@@ -422,11 +430,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
 
     // --- layout: the board pane | the detail aside -----------------------------------------
     const layout = try view.div("layout");
-    _ = layout.with_size(.{ .pct_of_parent = 1.0 }, .grow).with_flow(.{ .dir = .row, .cross = .start }).with_gap(12);
+    _ = layout.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start }).with_gap(12);
     const pane = try layout.div("pane");
-    _ = pane.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_overflow(.clip);
+    _ = pane.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .grow, if (stack) .{ .fixed = 560 } else .{ .pct_of_parent = 1.0 }).with_overflow(.clip);
     const aside = try layout.div("aside");
-    _ = aside.with_size(.{ .fixed = detail_w }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .row, .cross = .start });
+    _ = aside.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = detail_w }, if (stack) .{ .fixed = 300 } else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start });
 
     // The pane is the board's one focus stop: arrows walk the tiles, Escape clears.
     const pq = pane.control(.{ .name = "Research board", .role = .group, .cursor = .grab });
@@ -689,10 +697,14 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     }
 
     // --- the detail aside --------------------------------------------------------------------
-    _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
-    _ = try aside.spacer("lead", detail_pad - 1, 1);
+    if (stack) {
+        try hrule(aside, "rule", .{ .pct_of_parent = 1.0 });
+    } else {
+        _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
+        _ = try aside.spacer("lead", detail_pad - 1, 1);
+    }
     const detail = try aside.div("detail");
-    _ = detail.with_size(.{ .fixed = detail_inner }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip);
+    _ = detail.with_size(.{ .fixed = detail_inner }, if (stack) .grow else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip);
     _ = try detail.spacer("top", 1, 11);
     if (st.selected) |si| {
         const t = &cat.technologies[si];

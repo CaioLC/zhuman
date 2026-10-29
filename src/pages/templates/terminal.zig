@@ -38,6 +38,31 @@ pub const Shell = struct {
     content: El,
 };
 
+/// Whether the page stacks (the full-window width classes, ≤760): the rail sits above the
+/// surface, every region takes its natural height, and the whole page scrolls as one, as the
+/// prototype's `@media (max-width: 760px)` lays it out.
+pub fn stacked(ctx: *UiCtx) bool {
+    return !ctx.res.view.metrics.framed();
+}
+
+/// The height rule of a region that fills its parent when framed and takes its natural height
+/// when stacked (a percentage of an indefinite parent would collapse to nothing).
+pub fn fill_h(ctx: *UiCtx) uic.SizeRule {
+    return if (stacked(ctx)) .fit_children else .{ .pct_of_parent = 1.0 };
+}
+
+/// The height rule of a region that takes what its parent's column leaves when framed, and
+/// its natural height when stacked.
+pub fn grow_h(ctx: *UiCtx) uic.SizeRule {
+    return if (stacked(ctx)) .fit_children else .grow;
+}
+
+/// The logical width a stacked page's regions span: the window less the page insets.
+pub fn stackedWidth(ctx: *UiCtx) f32 {
+    const pad: f32 = if (ctx.res.view.metrics.width_class.atMost(.w560)) ha.tokens.pad_page_compact else ha.tokens.pad_page;
+    return ctx.res.view.metrics.terminal.w - 2 * pad - @import("./scroll_view.zig").scrollbar_w;
+}
+
 /// Build the terminal shell for this frame and return the inner content box to fill. `id`
 /// keys the shell nodes. See the module doc for the framed vs full-window composition.
 pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
@@ -50,11 +75,13 @@ pub fn terminal(ctx: *UiCtx, id: []const u8) !Shell {
 
     if (!m.framed()) {
         // Full-window (≤760): the terminal is the whole window; no frame chrome. Fill with the
-        // terminal's own bg and clip, and hand the root back as the content box.
+        // terminal's own bg and clip; the page is one scroll view, so its regions take their
+        // natural heights and the whole page scrolls (`stacked`).
         _ = root.with_layout(.top_left)
             .with_style(.{Style{ .fill = th.bg }})
             .with_overflow(.clip);
-        return .{ .root = root, .content = root };
+        const page = try @import("./scroll_view.zig").scroll_view(root, "page_scroll", .{ .height = m.terminal.h, .framed = false, .gap = 0 }, null);
+        return .{ .root = root, .content = page.content };
     }
 
     // Framed: the window is the terminal ground; the terminal is a centered, capped box.
@@ -196,7 +223,7 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .with_flow(.{ .dir = .row, .cross = .start });
     _ = try header_band.spacer("lead", opts.page_pad, 1);
     const header = try header_band.div("shell_header");
-    _ = header.with_size(.grow, .{ .fixed = header_content_height })
+    _ = header.with_size(.grow, if (stacked(content.ctx)) .fit_children else .{ .fixed = header_content_height })
         .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
     _ = try header_band.spacer("tail", opts.page_pad, 1);
 
@@ -215,28 +242,30 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     // The page-grid row owns all remaining height after the header and optional reserved footer.
     // Its authored 12px/10px vertical and page-width horizontal insets are real flow lanes; the
     // body therefore has a definite height and cannot extend underneath the logger.
+    const stack = stacked(content.ctx);
     const grid_band = try content.div("shell_grid_band");
-    _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+    _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
         .with_flow(.{ .dir = .column });
     _ = try grid_band.spacer("top", 1, grid_pad_top);
     const grid_row = try grid_band.div("row");
-    _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+    _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
         .with_flow(.{ .dir = .row, .cross = .start });
     _ = try grid_row.spacer("lead", opts.page_pad, 1);
     const grid = try grid_row.div("shell_grid");
-    _ = grid.with_size(.grow, .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .row }).with_gap(opts.section_gap);
+    // Stacked, the grid is one column: the rail above the surface (`.page-grid: 1fr`).
+    _ = grid.with_size(.grow, if (stack) .fit_children else .{ .pct_of_parent = 1.0 })
+        .with_flow(.{ .dir = if (stack) .column else .row, .cross = .start }).with_gap(opts.section_gap);
     _ = try grid_row.spacer("tail", opts.page_pad, 1);
     _ = try grid_band.spacer("bottom", 1, grid_pad_bottom);
 
     const rail = if (opts.rail) blk: {
         const r = try grid.div("shell_rail");
-        _ = r.with_size(.fit_children, .{ .pct_of_parent = 1.0 });
+        _ = r.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .fit_children, if (stack) .fit_children else .{ .pct_of_parent = 1.0 });
         break :blk r;
     } else null;
 
     const body = try grid.div("shell_body");
-    _ = body.with_size(.grow, .{ .pct_of_parent = 1.0 });
+    _ = body.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .grow, if (stack) .fit_children else .{ .pct_of_parent = 1.0 });
 
     // Footer: reserve its complete 86px frame plus bottom page margin in normal flow. The
     // previous absolute child did not subtract itself from the growing grid, allowing workspace

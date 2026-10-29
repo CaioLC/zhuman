@@ -34,7 +34,7 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
 
     const section = try parent.div(id);
     // The table plus its reserved scroll gutter, so the track never covers a lane.
-    _ = section.with_size(.{ .fixed = width + row_mod.scroll_gutter }, .{ .pct_of_parent = 1.0 })
+    _ = section.with_size(.{ .fixed = width + row_mod.scroll_gutter }, @import("./terminal.zig").fill_h(ctx))
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
 
     var count_buf: [24]u8 = undefined;

@@ -403,7 +403,13 @@ fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.
     const st = s.owner.state(uic.UiState.MarketState);
     if (initial) |seed| st.* = seed;
     const stall_owner = try s.owner.div("stall_query");
-    const r = try t.market_view(s.view, "a2_market", m, st, player, s.owner, stall_owner);
+    // Stacked (≤760) the page scrolls as one, so the view gets a definite height of its own.
+    const host = if (t.stacked(ctx)) blk: {
+        const box = try s.view.div("a2_market_box");
+        _ = box.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 640 });
+        break :blk box;
+    } else s.view;
+    const r = try t.market_view(host, "a2_market", m, st, player, s.owner, stall_owner);
     if (r.settled) |deal| {
         for (0..nb.item_count) |i| {
             if (deal.give[i] > 0) moveItem(world, e, ctx.res, i, -@as(f32, @floatFromInt(deal.give[i])));

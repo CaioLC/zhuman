@@ -332,7 +332,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     const cat = &ctx.res.catalog;
 
     const outer = try parent.div(id);
-    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .grow)
+    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx))
         .with_flow(.{ .dir = .column }).with_gap(6);
 
     // --- the controls bar: search only; the table's column headers sort -------------------
@@ -376,7 +376,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // The view takes what the controls, summary, header and milestone leave; the track sits in
     // the gutter right of the table, so it never covers a lane and appears only on overflow.
     const view = try outer.div("rows_view");
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, .grow);
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
     const sv = try scroll_view_mod.scroll_view(view, "scroll", .{
         .width = row_mod.tableWidth(ctx, shelf.widths),
         .height = 0,

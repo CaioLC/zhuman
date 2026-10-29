@@ -23,6 +23,7 @@ const ScrollState = uic.UiState.ScrollState;
 
 const tabs_mod = @import("./tabs.zig");
 const market_strip_mod = @import("./market_strip.zig");
+const terminal_mod = @import("./terminal.zig");
 
 const nav_height: f32 = 29;
 const market_to_activity: f32 = 6;
@@ -93,7 +94,7 @@ pub const Result = struct {
 pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     std.debug.assert(opts.labels.len > 0 and opts.labels.len <= max_views);
     const surface = try parent.div(id);
-    _ = surface.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
+    _ = surface.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.fill_h(parent.ctx))
         .with_flow(.{ .dir = .column, .cross = .start })
         .with_overflow(.clip);
 
@@ -131,7 +132,7 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     }
 
     const view = try surface.div("view");
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, .grow);
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.grow_h(parent.ctx));
     const owner = owners[tabs.active];
     return .{
         .el = surface,

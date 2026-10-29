@@ -152,7 +152,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     const cat = &ctx.res.catalog;
 
     const section = try parent.div(id);
-    _ = section.with_size(.{ .pct_of_parent = 1.0 }, if (scroll != null) .{ .pct_of_parent = 1.0 } else .fit_children)
+    _ = section.with_size(.{ .pct_of_parent = 1.0 }, if (scroll != null) @import("./terminal.zig").fill_h(ctx) else .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
 
     // The heading counts the verbs the actor holds — the same set the summary counts against.
@@ -174,7 +174,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     // the summary.
     const host = if (scroll) |st| blk: {
         const area = try section.div("results");
-        _ = area.with_size(.{ .pct_of_parent = 1.0 }, .grow);
+        _ = area.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
         const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false }, st);
         break :blk sv.content;
     } else section;
