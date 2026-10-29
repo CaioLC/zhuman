@@ -72,32 +72,31 @@ pub const exchange_meta = "STANDING FLOOR";
 // themselves are the agent's goods. No decorative durability/maintenance meters (those systems
 // do not exist).
 
-/// Act-specific per-day flow margins (generated vs consumed). A positive flow is `good`, a
-/// deficit `danger` — the semantics the caller colors.
-pub const FlowRecord = struct {
-    label: []const u8,
-    value: []const u8,
-    positive: bool,
-    resource: []const u8, // Resource tag name for keying
-};
+/// Act-specific per-day flow margins (generated vs consumed), authored until a production model
+/// computes them. A positive flow reads `good`, a deficit `danger`.
+pub const FlowRecord = struct { resource: Resource, per_day: f32 };
 pub const flows = [_]FlowRecord{
-    .{ .label = "Food", .value = "+6/day", .positive = true, .resource = "food" },
-    .{ .label = "Water", .value = "-3/day", .positive = false, .resource = "water" },
-    .{ .label = "Fuel", .value = "+2/day", .positive = true, .resource = "fuel" },
-    .{ .label = "Coin", .value = "+4/day", .positive = true, .resource = "coin" },
+    .{ .resource = .food, .per_day = 6 },
+    .{ .resource = .water, .per_day = -3 },
+    .{ .resource = .fuel, .per_day = 2 },
+    .{ .resource = .coin, .per_day = 4 },
 };
 
-/// The population-relevant Body projections — sentences the caller renders dim-prefix + value.
-/// What a Body sentence projects; its row is keyed by this, not by its wording.
-pub const Body = enum { population, larder, water, vigor };
+/// The authored flow of `r`, or 0 when none is authored.
+pub fn flowOf(r: Resource) f32 {
+    for (flows) |f| if (f.resource == r) return f.per_day;
+    return 0;
+}
 
-pub const BodyRecord = struct { key: Body, prefix: []const u8, value: []const u8, suffix: []const u8, positive: bool };
-pub const body_projection = [_]BodyRecord{
-    .{ .key = .population, .prefix = "Population ", .value = "48", .suffix = " under one roof.", .positive = true },
-    .{ .key = .larder, .prefix = "Larder feeds all for ", .value = "7.4d", .suffix = ".", .positive = true },
-    .{ .key = .water, .prefix = "Water runs short in ", .value = "3.0d", .suffix = ".", .positive = false },
-    .{ .key = .vigor, .prefix = "Vigor across the hall: ", .value = "weary", .suffix = ".", .positive = false },
-};
+/// The settlement's housing, the prototype's stand-in until the population model (ACT2-01):
+/// twelve places for a hamlet, and room for 640 once it has outgrown that.
+pub fn capacityOf(people: f32) f32 {
+    return if (people > 12) @max(640, people) else 12;
+}
+
+/// Food one person eats a day at the normal ration, the prototype's (`23` food feeding `7`
+/// people `10.3d`), until the population model gives each person a metabolism.
+pub const ration_per_person: f32 = 0.32;
 
 /// The runline energy flow the Act II HUD shows (generated / consumed per unit).
 pub const energy_gen: f32 = 7.2;

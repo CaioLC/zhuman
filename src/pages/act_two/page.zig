@@ -124,7 +124,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     // Vigor and the six stocks are the player's; population and coin have no model yet.
     var stocks: [2 + 1 + ledger_stocks.len]t.Stock = undefined;
     var n: usize = 0;
-    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx) };
+    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx), .max = fx.capacityOf(population(ctx)) };
     n += 1;
     if (agent) |e| {
         const vigor = world.get(e, comp.Vigor).?;
