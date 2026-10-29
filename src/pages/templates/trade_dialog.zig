@@ -278,7 +278,10 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     }
 
     const list = try visible(a, book, mode, query);
-    if (st.mode != previous_mode) {
+    // A chosen lot from the other direction (the tab set from outside the strip) is no choice.
+    var chosen_here = false;
+    for (book.lots) |l| chosen_here = chosen_here or (l.id == st.selected and l.mode == mode);
+    if (st.mode != previous_mode or (st.selected != 0 and !chosen_here)) {
         // Switching direction takes the first lot that can be taken, at one lot, page one.
         st.selected = try firstTakeable(a, book, list);
         st.lots = 1;

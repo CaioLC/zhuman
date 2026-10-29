@@ -69,6 +69,14 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_two_trade_w560` | QA-13 | the trade dialog at 560: one column, lot copy wrapping | `trade.html` ≤760 media query |
 | `menu_settings_w560` | QA-13 | the session menu at 560: `min(620, w-28)` wide | `menu.html` at 560 |
 | `title_w560` | QA-13 | the title at 560: 700px tall on the ground, the stockline wrapping clear of the run context | `title.html` at 560 |
+| `act_one_build_query` | QA-10 | BUILD searched `type:tool`, sorted by TIME ascending | `act-i.html` BUILD with a query and a sort |
+| `act_one_building` | QA-10 | a build half done: the row's meter, time left and cancel corner; other rows "hands busy" | `act-i.html` `.build-row.is-building` |
+| `act_one_shelter_locked` / `_unfunded` / `_ready` | QA-10 | the Shelter card's details open in each lifecycle state | `act-i.html` milestone card |
+| `act_one_trade_sell` | QA-10 | the passerby dialog on SELL | `trade.html` SELL |
+| `act_two_actions_filtered` | QA-11 | ACTIONS filtered `out:food` | `act-ii.html` ACTIONS with a query |
+| `act_two_build_none` | QA-11 | BUILD with a query nothing answers (the active build is not filtered out) | `act-ii.html` BUILD, empty result |
+| `act_two_trade_sell` / `_sold_out` / `_poor` | QA-11 | the merchant on SELL; with lots sold out; with every lot refused for coin | `trade.html` SELL, sold out, refusal |
+| `act_two_exchange_unfunded` | QA-11 | the Exchange's conditions met, its inputs short | `act-ii.html` Exchange card, unfunded |
 | `title` / `title_settings` / `title_credits` | QA-13 | the title screen and its screens | `title.html`, `title.html?screen=…` |
 
 `tools/capture_prototypes.ps1` captures the prototype side of the same names (headless Edge), so

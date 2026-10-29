@@ -101,6 +101,12 @@ pub const Options = struct {
     exchange_open: bool = false,
     /// Seed the RESEARCH board on this frame (a fixture's first frame).
     research: ?t.ResearchSeed = null,
+    /// Seed the active view's search and sort, and the merchant dialog's tab and its lots
+    /// already taken (a fixture's first frame).
+    initial_query: ?[]const u8 = null,
+    initial_sort: ?uic.UiState.CatalogState = null,
+    trade_mode: ?usize = null,
+    trade_taken: ?[]const u16 = null,
 };
 
 pub const ResearchSeed = t.ResearchSeed;
@@ -164,9 +170,18 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         },
         .nav_gap = 8, // `.act-two .surface-nav`
         .initial_view = opts.initial_view,
+        .initial_query = opts.initial_query,
+        .initial_sort = opts.initial_sort,
     });
     if (s.market_action) |m| {
         if (m.query().clicked or opts.open_trade) trade_owner.state(uic.UiState.TradeState).open = true;
+    }
+    {
+        const ts = trade_owner.state(uic.UiState.TradeState);
+        if (opts.trade_mode) |mode| ts.mode = mode;
+        if (opts.trade_taken) |taken| for (taken, 0..) |sold, i| {
+            if (i < ts.taken.len) ts.taken[i] = sold;
+        };
     }
 
     // --- the rail: the Household column, collapsing with it ---------------------------------

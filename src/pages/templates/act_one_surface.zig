@@ -52,6 +52,10 @@ pub const Options = struct {
     /// Open on this view (0 ACTIONS, 1 BUILD, 2 GENERATORS) instead of the remembered one —
     /// a fixture's first frame. Null keeps the tabs' own selection.
     initial_view: ?usize = null,
+    /// Seed the view's search text and sort, and open the Shelter card (a fixture's first frame).
+    initial_query: ?[]const u8 = null,
+    initial_sort: ?uic.UiState.CatalogState = null,
+    milestone_open: bool = false,
 };
 
 pub const Result = struct {
@@ -69,6 +73,8 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
         .market_available = opts.market_available,
         .activity = opts.activity,
         .initial_view = opts.initial_view,
+        .initial_query = opts.initial_query,
+        .initial_sort = opts.initial_sort,
     });
 
     // ACTIONS and GENERATORS scroll whole; BUILD keeps its heading, search and column header
@@ -78,7 +84,11 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
             const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
             _ = try actions_section_mod.actions_section(scroll.content, world, e, "actions_section", actions_shelf, s.catalog, s.owner, null);
         },
-        1 => _ = try build_section_mod.build_section(s.view, world, e, "buildsection", build_shelf, s.catalog, s.owner, s.scroll),
+        1 => {
+            var shelf = build_shelf;
+            if (opts.milestone_open) shelf.milestone.?.expand = true;
+            _ = try build_section_mod.build_section(s.view, world, e, "buildsection", shelf, s.catalog, s.owner, s.scroll);
+        },
         2 => {
             const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false }, s.scroll);
             _ = try generator_section_mod.generator_section(scroll.content, world, e, "generator_section", generator_shelf);

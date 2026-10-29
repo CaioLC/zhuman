@@ -58,6 +58,8 @@ pub const MilestoneCopy = struct {
     explanation: []const u8,
     /// The CTA once the milestone can be raised (`RAISE SHELTER`).
     action: []const u8,
+    /// Open (or close) the card's details this frame; null leaves the player's choice.
+    expand: ?bool = null,
 };
 
 /// One act's BUILD content: which records are its recipes, the heading's subtitle, and the
@@ -511,6 +513,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
         .requirements = requirements[0..nreq],
         .explanation = words.explanation,
         .action = action,
+        .expand = words.expand,
     });
     // Raising the milestone is the same begin lifecycle; the transition itself happens when
     // the build completes in the simulation (no UI-local shortcut).

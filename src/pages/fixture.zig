@@ -129,6 +129,18 @@ pub const Spec = struct {
     exchange_open: bool = false,
     /// The RESEARCH board's opening (`screen = .act_two`, `view = 3`).
     research: ?@import("./act_two/page.zig").ResearchSeed = null,
+    /// The active catalog's search text and sort on the first frame (ACTIONS or BUILD).
+    query: ?[]const u8 = null,
+    sort: ?uic.UiState.CatalogState = null,
+    /// Open the Shelter card's details on the first frame (Act I BUILD).
+    milestone_open: bool = false,
+    /// The trade dialog's tab, applied on frame 2: a fresh open starts on BUY, so the tab is
+    /// set once the dialog has opened. 0 BUY, 1 SELL.
+    trade_mode: ?usize = null,
+    /// The Act II merchant's lots already sold, by lot index (a sold-out lot is its stock).
+    trade_taken: ?[]const u16 = null,
+    /// A build of this recipe in progress, half done (either act).
+    building: ?[]const u8 = null,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -192,6 +204,28 @@ const lean_settlement = Settlement{
         .{ .item = .biomass, .n = 31 },
         .{ .item = .coin, .n = 42 },
     },
+};
+
+/// The settlement down to 4 coin: what the merchant's coin refusals read against.
+const poor_settlement = Settlement{
+    .researched = settlement.researched,
+    .stocks = &.{
+        .{ .item = .water, .n = 9 },
+        .{ .item = .fuel, .n = 14 },
+        .{ .item = .metal, .n = 7 },
+        .{ .item = .minerals, .n = 3 },
+        .{ .item = .biomass, .n = 31 },
+        .{ .item = .coin, .n = 4 },
+    },
+};
+
+/// Act I goods of five buildable kinds: the Shelter's RECIPES condition met.
+const shelter_goods = [_]Owned{
+    .{ .id = "sandals", .n = 1 },
+    .{ .id = "spear", .n = 1 },
+    .{ .id = "root_cellar", .n = 1 },
+    .{ .id = "leaf_bed", .n = 1 },
+    .{ .id = "wire_snares", .n = 1 },
 };
 
 /// The settlement's body and goods: the three tools that grant a verb and a lean-to.
@@ -711,6 +745,126 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
         .market = .{ .group = 2, .pick_kind = 2, .pick = 0 },
     },
+    // --- QA-10: the Act I states the matrix was missing ---------------------------------
+    .{
+        .name = "act_one_build_query",
+        .about = "Act I BUILD searched for tools and sorted by time, quickest first.",
+        .day = 19,
+        .view = 1,
+        .query = "type:tool",
+        .sort = .{ .sort = 2, .dir = .ascending },
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_building",
+        .about = "Act I BUILD with Sandals half built: the row's meter, time left and cancel corner.",
+        .day = 19,
+        .view = 1,
+        .building = "sandals",
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_shelter_locked",
+        .about = "Act I BUILD, the Shelter card open and locked: vigor, food and goods short.",
+        .day = 19,
+        .view = 1,
+        .milestone_open = true,
+        .balances = .{ .food = 4, .biomass = 12, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_shelter_unfunded",
+        .about = "Act I BUILD, the Shelter card open: every condition met, the biomass short.",
+        .day = 40,
+        .view = 1,
+        .milestone_open = true,
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 14, .biomass = 31, .goods = &shelter_goods },
+    },
+    .{
+        .name = "act_one_shelter_ready",
+        .about = "Act I BUILD, the Shelter card open and ready to raise.",
+        .day = 44,
+        .view = 1,
+        .milestone_open = true,
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 14, .biomass = 72, .goods = &shelter_goods },
+    },
+    .{
+        .name = "act_one_trade_sell",
+        .about = "Act I with the passerby's trade dialog open on SELL.",
+        .day = 12,
+        .encounter = .present,
+        .trade_open = true,
+        .trade_mode = 1,
+        .balances = .{
+            .food = 11.6,
+            .biomass = 31,
+            .goods = &.{
+                .{ .id = "sandals", .n = 2 },
+                .{ .id = "hatchet", .n = 2 },
+                .{ .id = "fish_rod", .n = 1 },
+                .{ .id = "wire_snares", .n = 1 },
+            },
+        },
+    },
+    // --- QA-11: the Act II states the matrix was missing --------------------------------
+    .{
+        .name = "act_two_actions_filtered",
+        .about = "Act II ACTIONS filtered to the verbs that yield food.",
+        .screen = .act_two,
+        .day = 112,
+        .query = "out:food",
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_build_none",
+        .about = "Act II BUILD with a query nothing answers: the empty table.",
+        .screen = .act_two,
+        .view = 1,
+        .day = 112,
+        .query = "zeppelin",
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_trade_sell",
+        .about = "Act II merchant dialog open on SELL.",
+        .screen = .act_two,
+        .day = 112,
+        .trade_open = true,
+        .trade_mode = 1,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_trade_sold_out",
+        .about = "Act II merchant dialog with the water and fuel lots sold out.",
+        .screen = .act_two,
+        .day = 112,
+        .trade_open = true,
+        .trade_taken = &.{ 3, 0, 2 },
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
+        .name = "act_two_trade_poor",
+        .about = "Act II merchant dialog with 4 coin: every lot refused for coin.",
+        .screen = .act_two,
+        .day = 112,
+        .trade_open = true,
+        .balances = settlement_balances,
+        .settlement = poor_settlement,
+    },
+    .{
+        .name = "act_two_exchange_unfunded",
+        .about = "Act II BUILD: the Exchange's conditions met, its inputs short.",
+        .screen = .act_two,
+        .view = 1,
+        .day = 140,
+        .balances = settlement_balances,
+        .settlement = .{ .researched = exchange_settlement.researched, .stocks = settlement.stocks },
+        .exchange = .{ .population = 520 },
+        .exchange_open = true,
+    },
     .{
         .name = "market_stall",
         .about = "MARKET's stall: the player's posts and who would take them.",
@@ -838,6 +992,16 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
         }
     }
     if (spec.settlement) |st| seedSettlement(res, world, player, st);
+    if (spec.building) |id| seedBuild(res, world, player, id);
+}
+
+/// A build of `id` in progress, half done (Act I's BUILD row with its cancel corner).
+fn seedBuild(res: *Resources, world: *World, player: Entity, id: []const u8) void {
+    const cat = &res.catalog;
+    const gi = cat.goodIndex(id) orelse return;
+    const total = ha.res.hours_to_secs(cat.goods[gi].requires.?.hours, res.config.secs_per_day);
+    if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
+    world.add(player, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total / 2, .quality = 1 });
 }
 
 /// Carry the actor across the curtain and lay down a settlement: the board at its entry state
@@ -856,13 +1020,7 @@ fn seedSettlement(res: *Resources, world: *World, player: Entity, st: Settlement
     for (st.stocks) |a| {
         _ = ha.ledger.move(world, player, a.item, a.n - ha.ledger.balance(world, player, a.item));
     }
-    if (st.building) |id| {
-        if (cat.goodIndex(id)) |gi| {
-            const total = ha.res.hours_to_secs(cat.goods[gi].requires.?.hours, res.config.secs_per_day);
-            if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
-            world.add(player, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total / 2, .quality = 1 });
-        }
-    }
+    if (st.building) |id| seedBuild(res, world, player, id);
 }
 
 /// Build the fixture page: resolve the requested spec, seed the world/resources deterministically,
@@ -902,8 +1060,27 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
         ctx.res.menu.screen = spec.menu_screen;
     }
     return switch (spec.screen) {
-        .act_one => try p_playgame(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade }),
-        .act_two => try p_act_two(ctx, world, .{ .initial_view = opening, .initial_collapsed = collapsed, .open_trade = open_trade, .market = if (first) spec.market else null, .exchange_open = first and spec.exchange_open, .research = if (first) spec.research else null }),
+        .act_one => try p_playgame(ctx, world, .{
+            .initial_view = opening,
+            .initial_collapsed = collapsed,
+            .open_trade = open_trade,
+            .initial_query = if (first) spec.query else null,
+            .initial_sort = if (first) spec.sort else null,
+            .milestone_open = first and spec.milestone_open,
+            .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
+        }),
+        .act_two => try p_act_two(ctx, world, .{
+            .initial_view = opening,
+            .initial_collapsed = collapsed,
+            .open_trade = open_trade,
+            .market = if (first) spec.market else null,
+            .exchange_open = first and spec.exchange_open,
+            .research = if (first) spec.research else null,
+            .initial_query = if (first) spec.query else null,
+            .initial_sort = if (first) spec.sort else null,
+            .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
+            .trade_taken = if (first) spec.trade_taken else null,
+        }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),
         .title => blk: {

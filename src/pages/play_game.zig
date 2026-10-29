@@ -23,6 +23,12 @@ pub const Options = struct {
     initial_collapsed: ?bool = null,
     /// Open the trade dialog on this frame if the passerby is dealable (a fixture's first frame).
     open_trade: bool = false,
+    /// Seed the active view's search and sort, open the Shelter card, and pick the trade
+    /// dialog's tab and lot (a fixture's first frame).
+    initial_query: ?[]const u8 = null,
+    initial_sort: ?uic.UiState.CatalogState = null,
+    milestone_open: bool = false,
+    trade_mode: ?usize = null,
 };
 
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
@@ -62,6 +68,9 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
             .surface = .{
                 .market_available = ctx.res.sim.encounter.dealable(),
                 .initial_view = opts.initial_view,
+                .initial_query = opts.initial_query,
+                .initial_sort = opts.initial_sort,
+                .milestone_open = opts.milestone_open,
                 .activity = try t.activityOf(ctx, world.get(e, comp.Busy)),
             },
         });
@@ -72,6 +81,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         if ((workspace.surface.market_action.consume(.clicked) or opts.open_trade) and ctx.res.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }
+        if (opts.trade_mode) |mode| trade_ts.?.mode = mode;
 
         // The TradeDialog. Built last, as its own overlay root (drawn on top), only while
         // open. Offers are built from live `market.Quote`s — buys from the passerby's satchel

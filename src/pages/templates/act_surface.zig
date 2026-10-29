@@ -70,6 +70,9 @@ pub const Options = struct {
     nav_gap: f32 = 12,
     /// Open on this view this frame instead of the remembered one (a fixture's first frame).
     initial_view: ?usize = null,
+    /// Seed the active view's search text and sort this frame (a fixture's first frame).
+    initial_query: ?[]const u8 = null,
+    initial_sort: ?CatalogState = null,
 };
 
 pub const Result = struct {
@@ -134,6 +137,12 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     const view = try surface.div("view");
     _ = view.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.grow_h(parent.ctx));
     const owner = owners[tabs.active];
+    if (opts.initial_query) |q| {
+        const ed = owner.state(uic.UiState.TextInputState);
+        _ = ed.clear();
+        _ = ed.insert(q);
+    }
+    if (opts.initial_sort) |cs| owner.state(CatalogState).* = cs;
     return .{
         .el = surface,
         .active = tabs.active,
