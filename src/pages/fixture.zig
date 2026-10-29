@@ -143,6 +143,8 @@ pub const Spec = struct {
     building: ?[]const u8 = null,
     /// An action (verb id) in progress, two thirds done: the running tile and its underbar.
     working: ?[]const u8 = null,
+    /// The Act II merchant away downriver on the first frame.
+    merchant_away: bool = false,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -864,6 +866,15 @@ pub const catalog = [_]Spec{
         .settlement = poor_settlement,
     },
     .{
+        .name = "act_two_merchant_away",
+        .about = "Act II with the merchant away downriver: the strip dim, TRADE disabled.",
+        .screen = .act_two,
+        .day = 112,
+        .merchant_away = true,
+        .balances = settlement_balances,
+        .settlement = settlement,
+    },
+    .{
         .name = "act_two_exchange_unfunded",
         .about = "Act II BUILD: the Exchange's conditions met, its inputs short.",
         .screen = .act_two,
@@ -1001,6 +1012,9 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
         }
     }
     if (spec.settlement) |st| seedSettlement(res, world, player, st);
+    // The merchant two fifths into its three-day stay, as the prototype reads (`2.4 DAYS`);
+    // once, so the visit's clock runs from there.
+    if (res.sim.merchant.remaining < 0) res.sim.merchant.remaining = 2.4 * res.config.secs_per_day;
     if (spec.building) |id| seedBuild(res, world, player, id);
     if (spec.working) |id| seedWork(res, world, player, id);
 }
@@ -1066,6 +1080,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.sim.exchange = spec.exchange;
+    if (first and spec.merchant_away) ctx.res.sim.merchant = .{ .present = false, .remaining = ctx.res.config.secs_per_day };
     if (spec.reduced_motion) ctx.res.motion.reduced_motion = true;
     // The focus order exists once frame 1 has ended; Tab from there.
     if (ctx.frame == 2) for (0..spec.tab_presses) |_| {

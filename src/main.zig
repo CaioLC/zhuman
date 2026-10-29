@@ -404,6 +404,14 @@ pub fn main(process: std.process.Init) !void {
             ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
         }
+        // Act II's systems are stubbed until its population model exists (ACT2-01), so the
+        // household clock above stops at the curtain; the Coin Merchant's visits run on game
+        // time here, and a standing Exchange replaces the cart.
+        if (housed and app.resources.route == .game and app.resources.time.dt > 0 and !app.resources.sim.exchange.standing) {
+            if (player.get()) |p| if (ha.migration.actOf(&app.world, p[0]) == 2) {
+                _ = ha.market.tickMerchant(&app.resources.sim.merchant, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
+            };
+        }
 
         // UI + Render Stage: the canonical per-frame UI lifecycle, run by the frame driver.
         // The host callbacks wrap page build, the cursor apply, the clear/present around the

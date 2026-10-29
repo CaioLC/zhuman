@@ -360,6 +360,10 @@ pub const Sim = struct {
     /// day); the UI reads it. Cleared by `reset` for a fresh run.
     encounter: marketmod.Encounter = .{},
 
+    /// **The Act II Coin Merchant's visits** — present or away, a visit identity, the time left.
+    /// Ticked by `market.tickMerchant` in Act II; the merchant dialog and strip read it.
+    merchant: marketmod.MerchantVisit = .{},
+
     /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this
     /// deterministic stand-in until the population and market model exist (ACT2-01..09).
     /// Seeded on first use; cleared by `reset` for a fresh run.

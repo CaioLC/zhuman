@@ -159,6 +159,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .nav_name = "Act II surfaces",
         .focus_views = &focus_views,
         .market = if (ctx.res.sim.exchange.standing) .exchange else .merchant,
+        .market_available = ctx.res.sim.exchange.standing or ctx.res.sim.merchant.dealable(),
         .activity = blk: {
             var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null);
             // A standing Exchange is what the idle settlement reports (`setActivity('idle',
@@ -175,7 +176,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .initial_sort = opts.initial_sort,
     });
     if (s.market_action) |m| {
-        if (m.query().clicked or opts.open_trade) trade_owner.state(uic.UiState.TradeState).open = true;
+        if ((m.query().clicked or opts.open_trade) and (ctx.res.sim.exchange.standing or ctx.res.sim.merchant.dealable()))
+            trade_owner.state(uic.UiState.TradeState).open = true;
     }
     {
         const ts = trade_owner.state(uic.UiState.TradeState);

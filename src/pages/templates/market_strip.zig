@@ -89,7 +89,9 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
 pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: bool) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const idn = marketIdentity(kind);
+    var idn = marketIdentity(kind);
+    // The merchant's cart on the river road: the strip says so until it is back.
+    if (kind == .merchant and !available) idn.copy = "away downriver \u{00B7} back with fresh stock.";
     const signal_color = if (available) toneColor(ctx, idn.tone) else th.dim;
     const copy_color = if (available) th.fg else th.dim;
 

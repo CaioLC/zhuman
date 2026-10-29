@@ -287,6 +287,8 @@ pub const UiState = struct {
         settled: bool = false,
         taken: [32]u16 = @splat(0),
         visit: [16]f32 = @splat(0),
+        /// The Act II merchant visit `taken` and `visit` belong to; a new visit clears them.
+        visit_id: u32 = 0,
     };
     /// The MARKET view's state, on the view's always-built owner so it survives a tab switch:
     /// the grouping (0 natural, 1 by person, 2 by good), the stall and its side (0 selling,

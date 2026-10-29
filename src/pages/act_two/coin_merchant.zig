@@ -72,6 +72,16 @@ fn moveSide(world: *World, e: Entity, res: *ha.res.Resources, terms: []const fx.
 /// Build the merchant dialog when `ts.open` and settle what it asks this frame. Returns the
 /// overlay root (or null when closed).
 pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: *TradeState) !?*Node {
+    const standing = ctx.res.sim.exchange.standing;
+    const visit_now = &ctx.res.sim.merchant;
+    // The merchant's books belong to one visit: a return restocks the lots and starts a new tally.
+    if (ts.visit_id != visit_now.id) {
+        ts.taken = @splat(0);
+        ts.visit = @splat(0);
+        ts.visit_id = visit_now.id;
+    }
+    // The cart leaving closes the dialog; a standing Exchange never leaves.
+    if (!standing and !visit_now.dealable()) ts.open = false;
     if (!ts.open) return null;
     const a = ctx.arena;
     const cat = &ctx.res.catalog;
@@ -108,11 +118,14 @@ pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: 
     const visit = try a.alloc(t.TradeDelta, @min(balances.items.len, ts.visit.len));
     for (visit, 0..) |*d, i| d.* = .{ .key = balances.items[i].key, .n = ts.visit[i] };
 
-    // A standing Exchange speaks through the same dialog under its own identity (ACT2-19).
-    const standing = ctx.res.sim.exchange.standing;
-    const res = try t.trade_dialog(ctx, id, if (standing) .exchange else .merchant, if (standing) fx.exchange_meta else fx.merchant_meta, book, visit, ts);
+    // A standing Exchange speaks through the same dialog under its own identity (ACT2-19); the
+    // merchant's kicker counts down its stay.
+    const meta = if (standing) fx.exchange_meta else try a.print("MARKET OPEN {d:.1} DAYS", .{fx.merchantDaysLeft(ctx.res)});
+    const res = try t.trade_dialog(ctx, id, if (standing) .exchange else .merchant, meta, book, visit, ts);
 
     if (res.settle) |s| settle: {
+        // Revalidate the venue: still here, still the visit the dialog was built against.
+        if (!standing and (!visit_now.dealable() or ts.visit_id != visit_now.id)) break :settle;
         for (fx.merchant_lots, 0..) |src, i| {
             if (src.id != s.id) continue;
             const lot = &lots[i];

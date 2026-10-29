@@ -317,6 +317,49 @@ pub fn sell_quote(ware: Ware, already_sold: u32, id: u32, rev: u32) Quote {
     };
 }
 
+// ============================ The Act II merchant's visits =========================
+//
+// The Coin Merchant stays a few days, packs up, and comes back after a short absence with fresh
+// stock. A smaller clock than the passerby's: two phases, a visit identity that bumps on each
+// return (so a lot sold out last visit is restocked, and a dialog opened against one visit
+// cannot settle against the next), and a log line at each edge. Ticked off the sim clock in Act
+// II only; the dialog and the strip read it.
+
+pub const MerchantVisit = struct {
+    present: bool = true,
+    /// Bumps on every return; the dialog's sold-out tally belongs to one visit.
+    id: u32 = 1,
+    /// Seconds left in the current phase; negative until the first tick seeds the stay.
+    remaining: f32 = -1,
+
+    pub fn dealable(self: *const MerchantVisit) bool {
+        return self.present;
+    }
+};
+
+pub const MerchantSchedule = struct {
+    stay_days: f32 = 3.0,
+    away_days: f32 = 1.5,
+};
+
+/// Advance the merchant by `dt` seconds, logging departure and return.
+pub fn tickMerchant(v: *MerchantVisit, dt: f32, sched: MerchantSchedule, spd: f32, log: *logmod.Log) Event {
+    if (v.remaining < 0) v.remaining = sched.stay_days * spd;
+    v.remaining -= dt;
+    if (v.remaining > 0) return .none;
+    if (v.present) {
+        v.present = false;
+        v.remaining = sched.away_days * spd;
+        log.push(.dim, "The merchant packs the cart and takes the river road.");
+        return .departed;
+    }
+    v.present = true;
+    v.id += 1;
+    v.remaining = sched.stay_days * spd;
+    log.push(.good, "The merchant's cart is back, restocked from downriver.");
+    return .arrived;
+}
+
 // ============================ Tests =====================================================
 
 const testing = std.testing;
@@ -474,4 +517,22 @@ test "sell_quote exposes the next unit's diminished value before confirmation" {
     try testing.expectApproxEqAbs(sell_value(.food, 0), q.receive.qtyOf(.biomass), 1e-5);
     try testing.expect(q.next_unit.? < q.receive.qtyOf(.biomass));
     try testing.expectApproxEqAbs(sell_value(.food, 1), q.next_unit.?, 1e-5);
+}
+
+test "the merchant stays, leaves, and returns as a new visit" {
+    var log = logmod.Log{};
+    var v = MerchantVisit{};
+    const sched = MerchantSchedule{};
+    try testing.expectEqual(Event.none, tickMerchant(&v, 1, sched, secs_per_day, &log));
+    try testing.expect(v.dealable());
+    try testing.expectApproxEqAbs(sched.stay_days * secs_per_day - 1, v.remaining, 1e-3);
+
+    try testing.expectEqual(Event.departed, tickMerchant(&v, sched.stay_days * secs_per_day, sched, secs_per_day, &log));
+    try testing.expect(!v.dealable());
+    try testing.expectEqual(@as(u32, 1), v.id);
+
+    try testing.expectEqual(Event.arrived, tickMerchant(&v, sched.away_days * secs_per_day, sched, secs_per_day, &log));
+    try testing.expect(v.dealable());
+    try testing.expectEqual(@as(u32, 2), v.id); // a fresh visit: last visit's sales no longer count
+    try testing.expectEqual(@as(usize, 2), log.count);
 }

@@ -79,6 +79,7 @@ $matrix = [ordered]@{
     "act_two_trade_sold_out" = "QA-11 Merchant lots sold out"
     "act_two_trade_poor" = "QA-11 Merchant, insufficient coin"
     "act_two_exchange_unfunded" = "QA-11 Exchange unfunded"
+    "act_two_merchant_away" = "ACT2-14 merchant away"
     "research_zoom_75" = "RESEARCH 75% camera"
     "research_zoom_250" = "RESEARCH 250% camera, panned"
     "act_two_exchange"  = "Act II Exchange card, details open, locked"
