@@ -154,6 +154,8 @@ const App = struct {
     /// interaction / node state counts over one shared report window. Fed by the frame
     /// `sample` hook; a no-op unless the env switch is set and info logging is compiled in.
     ui_capture: ui_client.FrameCapture = .{},
+    /// The once-only trigger for the development layout dump (`HA_LAYOUT_DUMP`).
+    layout_dump: ui_client.layout_dump.Trigger = .{},
     /// The `data/` files' modification times; a change reloads the roster between frames.
     data_watch: ha.reload.Watch = .{},
 
@@ -461,6 +463,15 @@ const FrameHost = struct {
         // capture's `Report.log` (it emits the same five-pass avg/max lines plus state lines).
         self.app.ui_capture.record(sample, ui_ctx, trees);
         if (self.app.ui_capture.takeIfReady(600)) |report| report.log();
+        // Development node/layout dump (`HA_LAYOUT_DUMP=<path>`): once, on the configured frame.
+        const dump = ui_client.layout_dump;
+        if (self.app.resources.env(dump.env_path)) |path| {
+            if (path.len > 0 and self.app.layout_dump.fire(dump.frameFrom(self.app.resources.env(dump.env_frame)))) {
+                if (dump.writeFile(ui_ctx, trees, self.app.io, path)) {
+                    std.log.info("layout dump written to {s}", .{path});
+                } else |err| std.log.warn("layout dump to {s} failed: {s}", .{ path, @errorName(err) });
+            }
+        }
     }
 };
 

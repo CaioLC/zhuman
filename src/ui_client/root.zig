@@ -94,6 +94,10 @@ pub const FramePresent = frame.Present;
 pub const profile = @import("./profile.zig");
 pub const FrameCapture = profile.FrameCapture;
 
+// Development node/layout dump (`HA_LAYOUT_DUMP=<path>`, QA-09): one frame's trees with keys,
+// boxes, clips, features, focus and semantics, through the same `sample` hook.
+pub const layout_dump = @import("./layout_dump.zig");
+
 // Full-frame synthetic-input replay: a script of pointer/wheel/key/text/focus/resize events
 // fed through the same `Input.record*` entry points and `route.Router` the SDL loop uses,
 // then run through `frame.Driver` one headless frame at a time (built + laid out + stamped,
@@ -225,6 +229,7 @@ test {
     _ = @import("./route.zig");
     _ = @import("./frame.zig");
     _ = @import("./profile.zig");
+    _ = @import("./layout_dump.zig");
     _ = @import("./replay.zig");
     _ = @import("./journey.zig");
     _ = @import("./frame_lifecycle_test.zig");
