@@ -370,12 +370,18 @@ pub const Seed = struct {
     pan_x: f32 = 0,
     pan_y: f32 = 0,
     query: []const u8 = "",
+    /// Pin the tooltip over this tile (by id), as though hovered.
+    hover: ?[]const u8 = null,
+    /// Give the board keyboard focus.
+    focus: bool = false,
 };
 
 /// Apply `seed` to the board's state and its search (a fixture's first frame).
 pub fn applySeed(cat: *const roster.Catalog, st: *ResearchState, query_owner: El, seed: Seed) void {
     st.* = .{ .seeded = true, .filter = seed.filter, .zoom = seed.zoom, .pan_x = seed.pan_x, .pan_y = seed.pan_y };
     if (seed.select) |id| st.selected = cat.techIndex(id);
+    if (seed.hover) |id| st.pin_tip = cat.techIndex(id);
+    st.want_focus = seed.focus;
     const ed = query_owner.state(uic.UiState.TextInputState);
     _ = ed.clear();
     if (seed.query.len > 0) _ = ed.insert(seed.query);
@@ -425,7 +431,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
     }
     const title = try topbar.div("title");
-    _ = title.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12);
+    // The title takes what the tools leave and clips its question (`.structure-title p`
+    // ellipsizes), so a narrow surface never runs it under the chips.
+    _ = title.with_size(if (narrow) .fit_children else .grow, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12).with_overflow(.clip);
     _ = (try title.text("h", "RESEARCH")).with_style(.{ style.heading, Style{ .text = th.fg } });
     if (!narrow) _ = (try title.text("p", "What exists, and what does it take?")).with_style(.{Style{ .font = 11, .text = th.dim }});
     const tools = try topbar.div("tools");
@@ -452,6 +460,10 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
 
     // The pane is the board's one focus stop: arrows walk the tiles, Escape clears.
     const pq = pane.control(.{ .name = "Research board", .role = .group, .cursor = .grab });
+    if (st.want_focus) {
+        st.want_focus = false;
+        _ = ctx.requestFocus(pane.get().key);
+    }
     ctx.res.commands.registerGrid(pane.get().key);
     ctx.res.commands.registerWheel(pane.get().key);
     if (pq.focused and st.selected != null) ctx.res.commands.registerEscape(pane.get().key);
@@ -682,13 +694,20 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             }
         }
 
-        // The tooltip follows the pointer over a lit tile.
-        if (hovered) |hi| {
+        // The tooltip follows the pointer over a lit tile (or sits over a fixture's pinned one,
+        // until the pointer hovers a tile).
+        if (hovered != null) st.pin_tip = null;
+        const tip_at: ?u16 = hovered orelse st.pin_tip;
+        if (tip_at) |hi| {
             const t = &cat.technologies[hi];
             const k = kindOf(t.coord);
             const tip = try pane.div("tooltip");
-            const lx = @min(pointer.position.x - r.x + 12 * scale, r.w - 220 * scale);
-            const ly = @max(4 * scale, pointer.position.y - r.y + 12 * scale);
+            const anchor: Pt = if (hovered != null) .{ .x = pointer.position.x - r.x, .y = pointer.position.y - r.y } else blk: {
+                const p = axialToBoard(t.coord.q, t.coord.r);
+                break :blk .{ .x = cam.x(p.x), .y = cam.y(p.y) };
+            };
+            const lx = @min(anchor.x + 12 * scale, r.w - 220 * scale);
+            const ly = @max(4 * scale, anchor.y + 12 * scale);
             _ = tip.with_layout(.top_left).with_offset_px(lx, ly).with_size(.fit_children, .fit_children)
                 .with_flow(.{ .dir = .column, .cross = .start })
                 .with_style(.{ style.pad_sym(7, 5), Style{ .fill = th.panel, .outline_color = th.dim } }).pass_through();
@@ -814,9 +833,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     try hrule(view, "foot_rule", .{ .pct_of_parent = 1.0 });
     _ = try view.spacer("foot_pad", 1, 6);
     const foot = try view.div("foot");
-    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 38 }).with_flow(.{ .dir = .row, .main = .space_between, .cross = .start }).with_gap(10);
+    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .start }).with_gap(10);
     const legend = try foot.div("legend");
-    _ = legend.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave, measured as
+    // stamped last frame (a wrapping run packs only against a fixed width).
+    _ = legend.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(6);
+    _ = foot.pass_through().track();
+    const foot_g = foot.prior_geometry();
     for (wedge_res, 0..) |r, w| {
         const entry = try legend.item("r", w);
         _ = entry.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(4);
@@ -825,6 +848,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     }
     const hints = try foot.div("hints");
     _ = hints.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    _ = hints.pass_through().track();
+    const hints_g = hints.prior_geometry();
+    if (foot_g != null and hints_g != null) {
+        _ = legend.with_size_px(.{ .fixed = @max(0, foot_g.?.rect.w - hints_g.?.rect.w - 10 * scale) }, .fit_children);
+    } else {
+        _ = legend.with_size(.fit_children, .fit_children);
+    }
     var counts = [3]u32{ 0, 0, 0 };
     for (states) |s| counts[@intFromEnum(s)] += 1;
     const status = if (st.selected) |si| blk: {
@@ -845,6 +875,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     _ = (try hints.text("status", status)).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
     _ = (try hints.text("pan", "Wheel zoom / drag pan")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
     _ = (try hints.text("keys", "Arrows move \u{00b7} Esc clears")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
+    // `.structure-footer { min-height }`: a one-line foot still reserves its 38px.
+    const foot_h: f32 = if (foot_g) |g| g.rect.h / scale else 0;
+    if (foot_h < 38) _ = try view.spacer("foot_floor", 1, 38 - foot_h);
 
     return result;
 }

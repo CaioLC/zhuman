@@ -180,7 +180,9 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         const r = try t.rail(rail_region, .{
             .id = rail_ids[@min(s.active, rail_ids.len - 1)],
             .label = "HOUSEHOLD",
-            .force_collapsed = s.focus and entered,
+            // A fixture that opens the rail on its first frame (`initial_collapsed = false`)
+            // overrides the entry collapse.
+            .force_collapsed = s.focus and entered and opts.initial_collapsed != false,
             .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {

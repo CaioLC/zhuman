@@ -105,6 +105,8 @@ pub const Spec = struct {
     log: []const LogLine = &.{},
     /// Open on the first frame with the Household rail collapsed.
     holdings_collapsed: bool = false,
+    /// Open on the first frame with the Household rail expanded, even on a focus view.
+    holdings_open: bool = false,
     /// Open on the first frame with the trade dialog showing (Act I needs `encounter = .present`).
     trade_open: bool = false,
     /// Open on the first frame with the session menu showing.
@@ -524,6 +526,37 @@ pub const catalog = [_]Spec{
         .research = .{ .select = "granary" },
     },
     .{
+        .name = "research_tooltip",
+        .about = "RESEARCH with the tooltip over Field cultivation.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "gamekeeping", .hover = "field_cultivation" },
+    },
+    .{
+        .name = "research_focus",
+        .about = "RESEARCH with keyboard focus on the board (the arrows walk the tiles).",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .research = .{ .select = "gamekeeping", .focus = true },
+    },
+    .{
+        .name = "research_household",
+        .about = "RESEARCH with the Household opened again beside the board.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .holdings_open = true,
+        .research = .{ .select = "gamekeeping" },
+    },
+    .{
         .name = "research_zoom_75",
         .about = "RESEARCH at the 75% camera floor.",
         .screen = .act_two,
@@ -801,7 +834,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.sim.exchange = spec.exchange;
     const opening: ?usize = if (first) spec.view else null;
-    const collapsed: ?bool = if (first and spec.holdings_collapsed) true else null;
+    const collapsed: ?bool = if (first and spec.holdings_collapsed) true else if (first and spec.holdings_open) false else null;
     const open_trade = first and spec.trade_open;
     if (first and spec.menu_open) {
         ctx.res.menu.show(&ctx.res.playback);

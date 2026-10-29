@@ -53,6 +53,8 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `research_search` | QA-12 | search dimming (`iron`) | `act-ii.html#research` with a query |
 | `research_deficit` | QA-12 | an available tile the stocks cannot pay for: `NEEDS …` | `act-ii.html?tech=…#research` |
 | `research_outward` | QA-12 | a researched tile's available outward neighbours, warn and dashed | `act-ii.html?tech=Granary#research` |
+| `research_tooltip` / `research_focus` | QA-12 | the tooltip (pinned by the fixture) and the board holding keyboard focus | `act-ii.html#research` hovered / focused |
+| `research_household` | QA-12 | the Household opened again beside the board | `act-ii.html#research` with the rail expanded |
 | `research_zoom_75` / `research_zoom_250` | QA-12 | the camera floor and ceiling (the latter panned) | `act-ii.html#research` after zooming |
 | `act_two_exchange`  | QA-11 | the Exchange card opened, locked | `act-ii.html?exchangeopen=1#build` |
 | `act_two_exchange_ready` | QA-11 | the Exchange ready to raise | `act-ii.html` (state of `refreshExchangeMilestone`) |
@@ -66,8 +68,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 `tools/capture_prototypes.ps1` captures the prototype side of the same names (headless Edge), so
 each pair can be set side by side.
 
-The rest of QA-12 (the tooltip and keyboard focus, which need pointer or key input)
-and the remaining QA-13 overlays (long-offer wrapping, sort popup near edges, focus-visible,
+The remaining QA-13 overlays (long-offer wrapping, sort popup near edges, focus-visible,
 reduced-motion terminal, oversized-window centering) have no fixture; their entries are in
 `roadmap.md`.
 

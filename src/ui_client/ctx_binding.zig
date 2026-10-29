@@ -310,6 +310,10 @@ pub const UiState = struct {
         newly: u64 = 0,
         /// Each tile's last target fill opacity and filter opacity (negative: never drawn),
         /// so a change starts a `board_s` transition from where the tile stood.
+        /// A fixture's pinned tooltip (a catalog index) until the pointer hovers a tile, and a
+        /// focus request for the board on its next build.
+        pin_tip: ?u16 = null,
+        want_focus: bool = false,
         fill_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
         fade_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
     };
