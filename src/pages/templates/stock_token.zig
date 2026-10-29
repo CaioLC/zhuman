@@ -31,8 +31,9 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 const Color = uic.Color;
 
-/// Semantic tone for the numeric value. Labels remain dim in every state.
-pub const Tone = enum { normal, warn, danger };
+/// Semantic tone for the numeric value. Labels remain dim in every state. `accent` is the
+/// medium of exchange (`.stock-value.accent` on Coin).
+pub const Tone = enum { normal, warn, danger, accent };
 
 /// A compact line's resting type size and token gap, logical px.
 const compact_font: f32 = 10;
@@ -63,6 +64,7 @@ fn valueColor(th: uic.Theme, tone: Tone) Color {
         .normal => th.fg,
         .warn => th.warn,
         .danger => th.danger,
+        .accent => th.acc,
     };
 }
 
@@ -146,7 +148,25 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
     const label_txt = std.mem.print(&buf, "{s}:", .{label}) catch label;
-    const size: Style = if (compact and !reveal) .{ .font = compact_font } else .{};
+    // A compact token grows to the line's size while read, over 90ms (`.stockline.compact
+    // .stock-token { transition: font-size 90ms }`); the tween snaps under reduced motion.
+    const size: Style = if (compact) blk: {
+        const ctx = box.ctx;
+        const reg = &ctx.res.tween;
+        const key = box.get().key;
+        const read_size = lineType(ctx).font.?;
+        const target: f32 = if (reveal) read_size else compact_font;
+        // The token's last state, pooled on it; a change starts the ease from where it stands,
+        // and a finished ease gives its slot back.
+        const mem = box.state(uic.UiState.RevealState);
+        if (mem.shown != reveal) {
+            reg.from(key, reg.value(key, if (reveal) compact_font else read_size), target, ha.tokens.dur_stock_token_s);
+            mem.shown = reveal;
+        }
+        const px = reg.value(key, target);
+        if (px == target) reg.release(key);
+        break :blk .{ .font = px };
+    } else .{};
     const lbl = (try box.text("l", label_txt))
         .with_style(.{ lineType(box.ctx), size, Style{ .text = th.dim } });
     const val = (try box.text("v", value))

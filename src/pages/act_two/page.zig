@@ -145,6 +145,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .abbrev = ha.roster.Resource.coin.abbrevIn(2),
         .full = ha.roster.Resource.coin.labelIn(2),
         .value = if (agent) |e| ledger.balance(world, e, .coin) else 0,
+        .tone = .accent,
     };
     n += 1;
 
