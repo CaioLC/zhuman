@@ -115,6 +115,7 @@ pub const Driver = struct {
         sample.stamping = clock.now() -| stamp_start;
         // Geometry is re-stamped at the current size: the resize guard may lift.
         self.router.geometryStamped();
+        self.router.scale = res.view.scale;
 
         // Draw: trees in list order, so later ones (overlays) land on top.
         if (host.present) |present| {

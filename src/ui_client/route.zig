@@ -93,6 +93,9 @@ pub const Router = struct {
     /// pointer activation is suppressed so a click cannot land on the previous frame's
     /// now-stale stamped rects (the "one-frame clickable ghost").
     geometry_stale: bool = false,
+    /// The frame's logical→device scale, published by the frame driver after each stamp, so
+    /// a press measures its drag threshold in logical px.
+    scale: f32 = 1,
 
     pub fn init(ui: *UiCtx, platform: Platform) Router {
         return .{ .ui = ui, .platform = platform };
@@ -106,7 +109,7 @@ pub const Router = struct {
     pub fn pointerPress(self: *Router, kind: PointerKind, id: ?u64, position: Point) void {
         if (self.geometry_stale) return;
         const target = self.ui.markTarget(.pressed, position.x, position.y);
-        self.activation.press(target, kind, id, position);
+        self.activation.pressScaled(target, kind, id, position, self.scale);
     }
 
     /// Pointer motion: advance the drag classification and republish `.dragging` on the

@@ -303,6 +303,10 @@ pub const UiState = struct {
         /// the status line until the selection moves.
         last: ?u16 = null,
         newly: u64 = 0,
+        /// Each tile's last target fill opacity and filter opacity (negative: never drawn),
+        /// so a change starts a `board_s` transition from where the tile stood.
+        fill_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
+        fade_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
     };
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`

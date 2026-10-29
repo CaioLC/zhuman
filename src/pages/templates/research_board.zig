@@ -216,6 +216,18 @@ const Camera = struct {
     }
 };
 
+/// A tile value that eases to `target` over `board_s` when its target changes, from where it
+/// stood. `prev` holds the last target (negative: first frame, which simply sits there). A
+/// finished transition gives its slot back, so the board never holds the registry's table.
+fn tweened(ctx: *uic.UiCtx, id: u64, prev: *f32, target: f32) f32 {
+    const reg = &ctx.res.tween;
+    if (prev.* >= 0 and prev.* != target) reg.from(id, reg.value(id, prev.*), target, ha.tokens.dur_board_s);
+    prev.* = target;
+    const v = reg.value(id, target);
+    if (v == target) reg.release(id);
+    return v;
+}
+
 /// Zoom to `next` about `focus` (viewBox units), keeping that point still.
 fn zoomAbout(st: *ResearchState, next: f32, fx: f32, fy: f32) void {
     const target = std.math.clamp(next, min_zoom, max_zoom);
@@ -328,11 +340,11 @@ fn centred(parent: El, id: []const u8, i: usize, str: []const u8, x: f32, y: f32
 }
 
 /// A `.board-view-button`. Returns its click.
-fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, enabled: bool, min_w: f32, rest: Color) !bool {
+fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, enabled: bool, min_w: f32, rest: Color, value: ?[]const u8) !bool {
     const th = parent.ctx.res.view.theme;
     const b = try parent.div(id);
     _ = b.with_size(.{ .fixed = min_w }, .{ .fixed = 22 });
-    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
+    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value });
     const hot = enabled and (q.hovering or q.focused);
     _ = b.with_style(.{Style{ .outline_color = if (hot) th.line2 else th.bg }});
     _ = (try (try centreIn(b)).text("t", label)).with_style(.{Style{ .font = 10, .text = if (hot) th.fg else rest }});
@@ -507,7 +519,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         // Drag pan past the threshold; the pressed tile does not take the click after a pan.
         if (pq.pressed and !st.drag.active) {
-            st.drag.begin(pointer.position);
+            st.drag.beginScaled(pointer.position, scale);
             st.drag_pan_x = st.pan_x;
             st.drag_pan_y = st.pan_y;
             _ = ctx.capturePointer(pane.get().key);
@@ -562,7 +574,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const p = axialToBoard(t.coord.q, t.coord.r);
             const tile = try tiles.item("tile", i);
             _ = tile.with_layout(.top_left).with_offset_px(cam.x(p.x) - side / 2, cam.y(p.y) - side / 2).with_size_px(.{ .fixed = side }, .{ .fixed = side });
-            if (faded[i]) _ = tile.with_opacity(0.11);
+            // The filter and search fade rides `board_s` (`.tech-tile { transition: opacity }`).
+            _ = tile.with_opacity(tweened(ctx, tile.get().key ^ 0xfade, &st.fade_prev[i], if (faded[i]) 0.11 else 1));
             const live = s != .locked;
             var hot = false;
             if (live) {
@@ -581,11 +594,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const selected = st.selected != null and st.selected.? == i;
             const is_out = live and std.mem.findScalar(u16, outs, @intCast(i)) != null;
 
-            const fill_op: f32 = switch (s) {
+            const fill_op: f32 = tweened(ctx, tile.get().key ^ 0xf111, &st.fill_prev[i], switch (s) {
                 .locked => 0.24,
                 .available => if (selected) 0.9 else if (hot) 0.84 else 0.66,
                 .researched => 1,
-            };
+            });
             const stroke_w: f32 = if (selected) 2 else if (hot) 1.7 else switch (s) {
                 .locked => 1,
                 .available => 1.25,
@@ -689,13 +702,15 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = bar.with_layout(.top_right).with_offset(-7, 7).with_size(.fit_children, .fit_children)
             .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
             .with_style(.{ style.pad(2), Style{ .fill = th.bg, .outline_color = th.line2 } });
-        if (try viewButton(bar, "out", "-", "Zoom out", st.zoom > min_zoom + 0.001, 22, th.dim)) zoomAbout(st, st.zoom - zoom_step, center, center);
+        // The zoom buttons speak the level they leave the board at (`output aria-live`).
+        const pct = try a.print("{}%", .{@as(u32, @intFromFloat(@round(st.zoom * 100)))});
+        if (try viewButton(bar, "out", "-", "Zoom out", st.zoom > min_zoom + 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom - zoom_step, center, center);
         const level = try bar.div("level");
         _ = level.with_size(.{ .fixed = 37 }, .{ .fixed = 22 });
-        _ = (try (try centreIn(level)).text("t", try a.print("{}%", .{@as(u32, @intFromFloat(@round(st.zoom * 100)))}))).with_style(.{Style{ .font = 9, .text = th.dim }});
-        if (try viewButton(bar, "in", "+", "Zoom in", st.zoom < max_zoom - 0.001, 22, th.dim)) zoomAbout(st, st.zoom + zoom_step, center, center);
+        _ = (try (try centreIn(level)).text("t", pct)).with_style(.{Style{ .font = 9, .text = th.dim }});
+        if (try viewButton(bar, "in", "+", "Zoom in", st.zoom < max_zoom - 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom + zoom_step, center, center);
         const moved = @abs(st.zoom - 1) >= 0.001 or @abs(st.pan_x) >= 0.001 or @abs(st.pan_y) >= 0.001;
-        if (try viewButton(bar, "reset", "reset", "Reset board pan and zoom", moved, 35, th.line2)) {
+        if (try viewButton(bar, "reset", "reset", "Reset board pan and zoom", moved, 35, th.line2, null)) {
             st.zoom = 1;
             st.pan_x = 0;
             st.pan_y = 0;

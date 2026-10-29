@@ -20,9 +20,17 @@ pub const ThresholdDrag = struct {
     crossed: bool = false,
     origin: Point = .{},
     previous: Point = .{},
+    /// The threshold in device px: four logical px at the scale given to `begin`.
+    threshold: f32 = drag_threshold,
 
     pub fn begin(self: *ThresholdDrag, position: Point) void {
-        self.* = .{ .active = true, .origin = position, .previous = position };
+        self.beginScaled(position, 1);
+    }
+
+    /// `begin` at a logical→device `scale` (positions are device px), so a pan starts past
+    /// four logical px at any pixel density, the same boundary pointer activation uses.
+    pub fn beginScaled(self: *ThresholdDrag, position: Point, scale: f32) void {
+        self.* = .{ .active = true, .origin = position, .previous = position, .threshold = drag_threshold * scale };
     }
 
     pub fn update(self: *ThresholdDrag, position: Point) DragUpdate {
@@ -30,7 +38,7 @@ pub const ThresholdDrag = struct {
         const was_crossed = self.crossed;
         const dx = position.x - self.origin.x;
         const dy = position.y - self.origin.y;
-        self.crossed = self.crossed or dx * dx + dy * dy > drag_threshold * drag_threshold;
+        self.crossed = self.crossed or dx * dx + dy * dy > self.threshold * self.threshold;
         const delta = if (!self.crossed)
             Point{}
         else if (!was_crossed)
@@ -104,6 +112,13 @@ pub fn updateScrollThumb(
 pub fn cancelScrollThumb(ctx: *cb.UiCtx, state: *cb.UiState.ScrollState) void {
     if (state.drag_owner_key) |key| _ = ctx.releasePointerCapture(key);
     state.clearDrag();
+}
+
+test "a scaled threshold drag starts beyond four logical pixels at 2x" {
+    var drag: ThresholdDrag = .{};
+    drag.beginScaled(.{ .x = 0, .y = 0 }, 2);
+    try std.testing.expect(!drag.update(.{ .x = 7, .y = 0 }).dragging); // 3.5 logical
+    try std.testing.expect(drag.update(.{ .x = 8.1, .y = 0 }).dragging);
 }
 
 test "threshold drag starts only beyond four logical pixels and reports pan deltas" {

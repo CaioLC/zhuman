@@ -14,13 +14,22 @@ pub const PointerActivation = struct {
     pointer_id: ?u64 = null,
     origin: Point = .{},
     dragged: bool = false,
+    /// The drag threshold in device px for this gesture: `drag_threshold` logical px at the
+    /// frame scale the router knew at the press.
+    threshold: f32 = drag_threshold,
 
     pub fn press(self: *PointerActivation, target: ?u64, kind: PointerKind, id: ?u64, position: Point) void {
+        self.pressScaled(target, kind, id, position, 1);
+    }
+
+    /// `press` at a logical→device `scale`, so the threshold stays four logical px.
+    pub fn pressScaled(self: *PointerActivation, target: ?u64, kind: PointerKind, id: ?u64, position: Point, scale: f32) void {
         self.* = .{
             .pressed_key = target,
             .pointer_kind = kind,
             .pointer_id = id,
             .origin = position,
+            .threshold = drag_threshold * scale,
         };
     }
 
@@ -28,7 +37,7 @@ pub const PointerActivation = struct {
         if (self.pressed_key == null or !self.samePointer(kind, id)) return;
         const dx = position.x - self.origin.x;
         const dy = position.y - self.origin.y;
-        self.dragged = self.dragged or dx * dx + dy * dy > drag_threshold * drag_threshold;
+        self.dragged = self.dragged or dx * dx + dy * dy > self.threshold * self.threshold;
     }
 
     /// Complete only for the pointer and stable target that began the gesture. The
