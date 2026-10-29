@@ -142,17 +142,13 @@ pub fn tile(
     _ = (try row.text("yield", yield_txt))
         .with_style(.{ metric_role, Style{ .text = if (lit) th.fg else chrome } });
 
-    // The underbar: full tile width × progress, sized from LAST frame's rect (this frame
-    // isn't laid out yet — the prior-frame pattern). Anchored, so it never resizes the tile.
+    // The underbar: full tile width × progress, a percentage of the box it is anchored in
+    // (an out-of-flow child resolves against its parent's final size, so it never resizes
+    // the tile and needs no prior-frame rect).
     if (progress) |p| {
-        if (box.get().rect(ctx)) |r| {
-            const bar = try box.div("bar");
-            // `r.w` is the stamped (device-px) box width; the underbar width tracks it, so use
-            // `with_size_px` — the 3px logical height is scaled through `view.dp`.
-            _ = bar.with_layout(.bottom_left)
-                .with_size_px(.{ .fixed = r.w * std.math.clamp(p, 0, 1) }, .{ .fixed = uic.view.dp(3, ctx.res.view.scale) })
-                .with_style(.{Style{ .fill = th.acc }});
-        }
+        _ = (try box.div("bar")).with_layout(.bottom_left)
+            .with_size(.{ .pct_of_parent = std.math.clamp(p, 0, 1) }, .{ .fixed = 3 })
+            .with_style(.{Style{ .fill = th.acc }});
     }
 
     return .{ .el = box, .clicked = !running and can and q.clicked };

@@ -462,7 +462,10 @@ are **pure** — no host callback. `set_global_pos` runs three passes:
    content boxes and allocate each definite parent's main-axis remainder among its
    in-flow growers before descending. `fit_children` is the only **indefinite** rule,
    so parent-relative rules without a usable base fall back to `content` (the node's
-   `data_*`, or a safe **0** when it has no measured content).
+   `data_*`, or a safe **0** when it has no measured content). The exception is an
+   out-of-flow (anchored) child: it never feeds its parent's main-axis fit, so its
+   percentage resolves against the fitted parent (an underbar `pct_of_parent = progress`
+   under a content-sized tile, a wash `1 × 1` under a content-sized card).
 3. **`place`** (top-down) — assign global positions via one line-based flow algorithm
    (break into lines → distribute each along `main` → align each child across it by
    `cross` → stack the lines); pure geometry, sizes already resolved.

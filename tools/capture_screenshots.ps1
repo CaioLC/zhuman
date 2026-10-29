@@ -72,6 +72,7 @@ $matrix = [ordered]@{
     "act_one_shelter_unfunded" = "QA-10 Shelter unfunded"
     "act_one_shelter_ready" = "QA-10 Shelter ready to raise"
     "act_one_trade_sell" = "QA-10 Passerby SELL"
+    "act_one_foraging" = "QA-10 Act I running action, underbar"
     "act_two_actions_filtered" = "QA-11 Act II ACTIONS filtered"
     "act_two_build_none" = "QA-11 Act II BUILD all filtered out"
     "act_two_trade_sell" = "QA-11 Merchant SELL"

@@ -141,6 +141,8 @@ pub const Spec = struct {
     trade_taken: ?[]const u16 = null,
     /// A build of this recipe in progress, half done (either act).
     building: ?[]const u8 = null,
+    /// An action (verb id) in progress, two thirds done: the running tile and its underbar.
+    working: ?[]const u8 = null,
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
@@ -805,6 +807,13 @@ pub const catalog = [_]Spec{
             },
         },
     },
+    .{
+        .name = "act_one_foraging",
+        .about = "Act I ACTIONS with Forage two thirds done: the running tile's underbar.",
+        .day = 19,
+        .working = "forage",
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
     // --- QA-11: the Act II states the matrix was missing --------------------------------
     .{
         .name = "act_two_actions_filtered",
@@ -993,6 +1002,16 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     }
     if (spec.settlement) |st| seedSettlement(res, world, player, st);
     if (spec.building) |id| seedBuild(res, world, player, id);
+    if (spec.working) |id| seedWork(res, world, player, id);
+}
+
+/// An action `id` in progress, two thirds done (the running tile's underbar).
+fn seedWork(res: *Resources, world: *World, player: Entity, id: []const u8) void {
+    const cat = &res.catalog;
+    const ai = cat.actionIndex(id) orelse return;
+    const total = ha.res.hours_to_secs(cat.actions[ai].requires.hours, res.config.secs_per_day);
+    if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
+    world.add(player, comp.Busy{ .doing = .{ .labor = ai }, .total = total, .remaining = total / 3, .quality = 1 });
 }
 
 /// A build of `id` in progress, half done (Act I's BUILD row with its cancel corner).

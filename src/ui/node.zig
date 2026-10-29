@@ -639,6 +639,40 @@ test "pct_of_parent under an indefinite (fit) parent falls back to content (0, n
     try std.testing.expectEqual(@as(f32, 0), root.size.width); // fit cross-axis = max(0) = 0
 }
 
+test "an out-of-flow pct child resolves against its fit parent's final size" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A fit column holding 100x20 and 60x30 is 100x50; padding 4 all round makes it 108x58.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+    root.size.padding = .{ .up = 4, .right = 4, .down = 4, .left = 4 };
+    const k1 = try TestNode.pcreate(a, "k1", root);
+    _ = k1.with_size(Size.initFixed(100, 20)).with_layout(.relative, null);
+    const k2 = try TestNode.pcreate(a, "k2", root);
+    _ = k2.with_size(Size.initFixed(60, 30)).with_layout(.relative, null);
+    // An underbar: half the content box wide, 3 high, on the bottom edge.
+    const bar = try TestNode.pcreate(a, "bar", root);
+    _ = bar.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .{ .fixed = 3 })).with_layout(.bottom_left, null);
+    // A wash covering the whole content box.
+    const wash = try TestNode.pcreate(a, "wash", root);
+    _ = wash.with_size(Size.init(.{ .pct_of_parent = 1 }, .{ .pct_of_parent = 1 })).with_layout(.top_left, null);
+    // An in-flow pct child of the same parent keeps the indefinite fallback.
+    const flow = try TestNode.pcreate(a, "flow", root);
+    _ = flow.with_size(Size.init(.{ .pct_of_parent = 1 }, .{ .fixed = 0 })).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 108), root.size.width); // the overlays never fed the fit
+    try std.testing.expectEqual(@as(f32, 58), root.size.height);
+    try std.testing.expectEqual(@as(f32, 50), bar.size.width);
+    try std.testing.expectEqual(@as(f32, 51), bar.layout._global_y.?); // 4 + 50 - 3
+    try std.testing.expectEqual(@as(f32, 100), wash.size.width);
+    try std.testing.expectEqual(@as(f32, 50), wash.size.height);
+    try std.testing.expectEqual(@as(f32, 0), flow.size.width);
+}
+
 /// Build a fixed 200×100 row with two fixed 40-wide children, under `main` distribution,
 /// and return their resolved main-axis (x) positions. The parent is definite, so the
 /// distribution has 200 − 80 = 120 of free main space to share.

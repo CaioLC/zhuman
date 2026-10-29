@@ -104,30 +104,24 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ready = goal.state == .ready;
 
     const outer = try parent.div(id);
-    _ = outer.track(); // keep a stamped geometry slot for the paint-only wash/rail next frame
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column })
         .with_overflow(.clip);
 
     // State wash and 2px semantic rail paint behind the in-flow content and do not participate
     // in sizing. Ready/done are 11% good; locked/unfunded are 8% danger, fading at 76%.
+    // Anchored, they take percentages of the card's final (fitted) size, so they cover the
+    // collapsed or expanded card in the frame it changes.
     const wash_alpha: u8 = if (pres.tone == .good) 28 else 20;
     const wash = try outer.gradient("wash", .horizontal, &.{
         .{ .pos = 0, .color = alpha(tone, wash_alpha) },
         .{ .pos = 0.76, .color = alpha(tone, 0) },
         .{ .pos = 1, .color = alpha(tone, 0) },
     }, 1.0);
-    _ = wash.with_layout(.top_left);
-    const state_rail = try outer.div("state_rail");
-    _ = state_rail.with_layout(.top_left)
+    _ = wash.with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 });
+    _ = (try outer.div("state_rail")).with_layout(.top_left)
+        .with_size(.{ .fixed = 2 }, .{ .pct_of_parent = 1.0 })
         .with_style(.{Style{ .fill = tone }});
-    // Anchored percentage height under a fit-content parent is indefinite in the pure layout
-    // pass. Size these paint-only layers from the prior stamped card rect (the established
-    // prior-geometry pattern) so they cover the complete collapsed or expanded card.
-    if (outer.get().rect(ctx)) |r| {
-        _ = wash.with_size_px(.{ .fixed = r.w }, .{ .fixed = r.h });
-        _ = state_rail.with_size_px(.{ .fixed = uic.view.dp(2, ctx.res.view.scale) }, .{ .fixed = r.h });
-    }
 
     // Exact bar columns without content-box padding drift:
     // 10px inset | flexible disclosure | 10px | 132px CTA | 5px inset.

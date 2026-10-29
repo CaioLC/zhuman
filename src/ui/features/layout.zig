@@ -428,8 +428,9 @@ fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Ax
 
 /// Pass 2 — top-down parent-relative finalize. Percentages resolve against definite
 /// parent content boxes, then in-flow `grow` children divide the parent's remaining
-/// main-axis space before their descendants resolve. `fit_children` is indefinite;
-/// percentages and growers without a definite usable parent fall back to content.
+/// main-axis space before their descendants resolve. `fit_children` is indefinite for its
+/// in-flow children, whose percentages and growers fall back to content; an out-of-flow
+/// child's percentage resolves against the fitted size.
 fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
     finalize_box(node, p_def_w, p_def_h, p_inner_w, p_inner_h);
     resolve_children(node, rule_definite(node.size.w), rule_definite(node.size.h));
@@ -453,7 +454,14 @@ fn rule_definite(rule: size_mod.SizeRule) bool {
 fn resolve_children(node: anytype, def_w: bool, def_h: bool) void {
     const inner_w = inner_extent(node, .x);
     const inner_h = inner_extent(node, .y);
-    for (node.children.items) |c| finalize_box(c, def_w, def_h, inner_w, inner_h);
+    // An out-of-flow child never feeds its parent's fit on the main axis, and on the cross
+    // axis only through its pass-1 (content) extent, so a `fit_children` parent's size is
+    // final by now: a percentage on an anchored child resolves against it (UIE-10). In-flow
+    // children keep the indefinite fallback, since their size is what the fit summed.
+    for (node.children.items) |c| {
+        const oof = c.layout.anchor != .relative;
+        finalize_box(c, def_w or oof, def_h or oof, inner_w, inner_h);
+    }
 
     const main = main_axis(node.layout.flow);
     if ((main == .x and def_w) or (main == .y and def_h)) distribute_grow(node, main);

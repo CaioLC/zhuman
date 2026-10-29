@@ -24,9 +24,10 @@ pub const Padding = struct {
 ///   - `pct_of_parent`      — needs the parent; definite iff the parent's axis is.
 ///   - `grow`               — consumes remaining space on a definite parent's main axis.
 ///   - `fit_children`       — needs the children; the only *indefinite* rule.
-/// A `.pct_of_parent` under an indefinite (`fit_children`) parent and a `.grow` that is
-/// root/out-of-flow/cross-axis or under an indefinite parent fall back to `content`
-/// (the node's measured `data_*`, or 0).
+/// An in-flow `.pct_of_parent` under an indefinite (`fit_children`) parent and a `.grow` that
+/// is root/out-of-flow/cross-axis or under an indefinite parent fall back to `content`
+/// (the node's measured `data_*`, or 0). An out-of-flow `.pct_of_parent` resolves against
+/// the fitted parent, which it never sizes.
 pub const SizeRule = union(enum) {
     fixed: f32,
     content, // sizes to the host-measured `data_width`/`data_height`

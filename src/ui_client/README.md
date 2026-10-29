@@ -432,7 +432,8 @@ The fullscreen root and modal scrim size to the drawable px (`metrics.px_w/px_h`
 coordinates are multiplied by `dpi_scale` at one seam in `main` (`pointerAt`) so hit geometry
 (device px) matches. **Values read back from stamped geometry** (`.rect`, a parent's resolved
 `size.*.fixed`) are already device px and must use `El.with_size_px` (no re-scaling) — the few
-prior-frame-geometry sites (the action-tile underbar and the page content box) do. **Not** scaled: simulation values and camera percentages are not dimensions. At DPI 1
+prior-frame-geometry sites (the page content box) do. The action-tile underbar is a
+percentage of its tile now (UIE-10). **Not** scaled: simulation values and camera percentages are not dimensions. At DPI 1
 (`scale == 1`) every conversion is identity, so production is unchanged; the scale becomes
 load-bearing on a high-DPI display.
 
@@ -704,9 +705,7 @@ registry, and `main` looks the model up through `editorKeyOf`.
 **Where geometry is read.** Prior-frame rects, pass-through probes, device-pixel sizing,
 pointer capture and direct focus or cursor requests live only inside a component that owns
 geometry or a host service, never in an ordinary page or template: `scroll_view` (its content
-probe and thumb), `action_tile` (the progress underbar from the prior tile rect — a percent
-rule cannot size it, because the tile is content-sized), `milestone_goal` (the wash and state
-rail, likewise), `slider` (the lane rect, capture, press-time focus, the drag cursor),
+probe and thumb), `slider` (the lane rect, capture, press-time focus, the drag cursor),
 `terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
 sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
 cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
