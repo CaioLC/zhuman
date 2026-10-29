@@ -67,6 +67,10 @@ pub const ActPage = struct {
                 .compact = false,
             },
         });
+        // The log's new lines are announced whether or not this view shows the log: a focus
+        // view (RESEARCH, MARKET) hides the footer, not the events. An announcement is a
+        // polite live region, never a focus move.
+        announceLog(ctx);
         // The footer is the content column's last row, so it is built here, after the body,
         // once the page knows whether the active view keeps the log. log_view authors in
         // logical px: the terminal's logical width less the page padding.
@@ -80,6 +84,18 @@ pub const ActPage = struct {
         return roots.items;
     }
 };
+
+/// Announce the event-log lines pushed since the last read, oldest first; the first read
+/// announces only the newest, so a launch does not recite the history.
+pub fn announceLog(ctx: *UiCtx) void {
+    const log = &ctx.res.sim.log;
+    var seen = ctx.res.log_heard orelse log.pushed -| 1;
+    // A fresh run starts a new log behind the old count: hear it from its newest line.
+    if (seen > log.pushed) seen = log.pushed -| 1;
+    var n = log.newSince(seen);
+    while (n > 0) : (n -= 1) _ = ctx.res.announcements.announce(log.get(n - 1).text());
+    ctx.res.log_heard = log.pushed;
+}
 
 /// Open the page: the shell with the log footer, at the width class's padding.
 pub fn act_page(ctx: *UiCtx, opts: Options) !ActPage {
@@ -115,4 +131,36 @@ pub fn vigorStock(ctx: *UiCtx, abbrev: []const u8, vigor: *const comp.Vigor) sto
             .spent => .danger,
         },
     };
+}
+
+test "the log's new lines are announced once each, in order, without moving focus" {
+    var res = uic.replay.headlessResources();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx = UiCtx.init(&res, std.testing.allocator, arena.allocator());
+    defer ctx.deinit();
+    const ch = &res.announcements;
+
+    res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
+    res.sim.log.push(.normal, "You return with 3 food.");
+    // The first read hears only the newest line, not the history.
+    announceLog(&ctx);
+    try std.testing.expectEqual(@as(usize, 1), ch.pending().len);
+    try std.testing.expectEqualStrings("You return with 3 food.", ch.pending()[0].slice());
+    // A frame with nothing new says nothing.
+    announceLog(&ctx);
+    try std.testing.expectEqual(@as(usize, 1), ch.pending().len);
+    // Two lines in one frame are both heard, oldest first, whether a view shows the log or not.
+    res.sim.log.push(.good, "A passerby stops, and opens a satchel of odds and ends.");
+    res.sim.log.push(.dim, "The merchant packs the cart and takes the river road.");
+    announceLog(&ctx);
+    try std.testing.expectEqual(@as(usize, 3), ch.pending().len);
+    try std.testing.expectEqualStrings("A passerby stops, and opens a satchel of odds and ends.", ch.pending()[1].slice());
+    // A fresh run's log is heard from its newest line.
+    res.sim.log = .{};
+    res.sim.log.push(.dim, "You wake alone. Cold. Hungry.");
+    announceLog(&ctx);
+    try std.testing.expectEqualStrings("You wake alone. Cold. Hungry.", ch.pending()[3].slice());
+    // An announcement is a live region; nothing here touches focus.
+    try std.testing.expectEqual(@as(?u64, null), ctx.focusedKey());
 }

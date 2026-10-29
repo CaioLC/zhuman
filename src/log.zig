@@ -50,6 +50,9 @@ pub const Log = struct {
     entries: [capacity]Entry = @splat(.{}),
     head: usize = 0, // next write slot (also the oldest, once full)
     count: usize = 0, // live entries, saturating at `capacity`
+    /// Every line ever pushed this run, monotonic (`clear` keeps it): a reader that remembers
+    /// the total it last saw knows exactly which lines are new, even two identical ones.
+    pushed: u64 = 0,
     /// The run clock in game-seconds, kept current by `advance_clock`; every `push` stamps
     /// it on the entry so call sites need not pass a time.
     now: f32 = 0,
@@ -71,6 +74,14 @@ pub const Log = struct {
         e.at = self.now;
         self.head = (self.head + 1) % capacity;
         if (self.count < capacity) self.count += 1;
+        self.pushed += 1;
+    }
+
+    /// How many of the newest entries arrived after a reader saw `seen` lines in all, capped at
+    /// what the ring still holds. `get(n - 1)` is the oldest of them, `get(0)` the newest.
+    pub fn newSince(self: *const Log, seen: u64) usize {
+        if (self.pushed <= seen) return 0;
+        return @intCast(@min(self.pushed - seen, self.count));
     }
 
     /// Drop every entry — used on "start over" so a new run begins with a clean feed.
@@ -179,4 +190,21 @@ test "log clear resets the feed" {
     log.clear();
     try testing.expectEqual(@as(usize, 0), log.count);
     try testing.expectEqual(@as(usize, 0), log.head);
+}
+
+test "newSince counts the lines a reader has not seen, identical ones included" {
+    var log = Log{};
+    try testing.expectEqual(@as(usize, 0), log.newSince(0));
+    log.push(.normal, "You return with 3 food.");
+    log.push(.normal, "You return with 3 food.");
+    try testing.expectEqual(@as(usize, 2), log.newSince(0));
+    try testing.expectEqual(@as(usize, 1), log.newSince(1));
+    try testing.expectEqual(@as(usize, 0), log.newSince(2));
+    // A reader far behind hears at most what the ring still holds.
+    for (0..capacity + 5) |_| log.push(.dim, "tick");
+    try testing.expectEqual(capacity, log.newSince(2));
+    // `clear` keeps the running total, so a cleared feed is not replayed.
+    const total = log.pushed;
+    log.clear();
+    try testing.expectEqual(@as(usize, 0), log.newSince(total));
 }

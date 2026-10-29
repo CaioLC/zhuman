@@ -90,11 +90,8 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         .name = "Event log",
     }, null);
 
-    // Publish a polite announcement of the newest line so a reader hears the latest event once
-    // (live region).
-    if (feed.count > 0) {
-        _ = ctx.res.announcements.announce(feed.get(0).text());
-    }
+    // The page announces the log's new lines (`act_page.announceLog`), shown or not; the
+    // feed itself is the visible history.
 
     var i: usize = 0;
     const stamp_w = stamp_width(ctx);

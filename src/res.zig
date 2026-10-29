@@ -444,6 +444,9 @@ pub const Resources = struct {
     /// order during `build_ui` and published after end-frame, exactly like `commands`.
     semantics: @import("./ui_client/semantics.zig").SemanticRegistry = .{},
     announcements: @import("./ui_client/semantics.zig").AnnouncementChannel = .{},
+    /// The event-log lines already announced (`Log.pushed` when last read); null before the
+    /// first page reads the log, which then announces only its newest line.
+    log_heard: ?u64 = null,
     /// Host-side accessibility bridge: consumes the published `semantics` snapshot
     /// and drains `announcements` to the active platform provider each frame. Default provider
     /// is the inert `NoopProvider` — this build ships no Windows UIA screen-reader tree
