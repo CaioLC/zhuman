@@ -121,6 +121,250 @@ pub const Overflow = enum {
     clip,
 };
 
+// ============================ Grid tracks ====================================
+
+/// How one column track takes its base width (CSS `grid-template-columns` terms).
+pub const Basis = union(enum) {
+    /// A fixed width in px (the solve's units; the host scales logical px at build).
+    px: f32,
+    /// A share of the free space, by weight (CSS `Nfr`). The base is the track's `min`, so
+    /// the default `min = 0` is CSS `minmax(0, Nfr)`.
+    fr: f32,
+    /// The widest non-spanning cell in this track over **every** participant of the set
+    /// (max-content, measured in pass 1).
+    auto,
+};
+
+/// One column track of a `TrackSet`.
+pub const Track = struct {
+    basis: Basis,
+    /// Floor on the width (CSS `minmax` min). An `fr` track starts here.
+    min: f32 = 0,
+    /// Ceiling on the width; an `fr` track stops growing here and its excess goes to the
+    /// other `fr` tracks. Below `min`, `min` wins.
+    max: ?f32 = null,
+    /// Opt-in priority shrink when the tracks overflow: null never shrinks below the base.
+    /// Lower orders give way first, each down to its `min`, before the next order is touched;
+    /// tracks of one order share in proportion to `(base - min)`. Anything left overflows.
+    shrink_order: ?u8 = null,
+    /// Dropped at this width: 0 wide, one adjacent gap removed, and implicit placement skips it.
+    hidden: bool = false,
+};
+
+/// A set of column tracks shared by rows that are not siblings (a table head under the
+/// frame and its rows inside a scroll view), so their columns line up without the template
+/// threading widths through every row. One node declares it (`Layout.track_owner`); each
+/// row that lays out by it is a participant (`Layout.track_row`) whose in-flow children are
+/// its cells. See "Grid tracks" in the engine README.
+///
+/// `auto_max` and `widths` are solve scratch of the same length as `tracks`, provided by the
+/// caller (an arena). The solve writes them; nothing else should.
+pub const TrackSet = struct {
+    tracks: []const Track,
+    /// Space between adjacent visible tracks, px.
+    col_gap: f32,
+    /// Per track, the widest non-spanning cell seen this solve (`auto` tracks only).
+    auto_max: []f32,
+    /// Per track, the width solved for `solved_for`.
+    widths: []f32,
+    /// The participant content width `widths` was solved for; equal means reuse.
+    solved_for: ?f32 = null,
+    /// Debug guard: set while pass 1 is inside the owner's subtree, so a participant
+    /// outside it (whose scratch would never be reset) trips an assert.
+    open: bool = false,
+
+    /// Solve `widths` for a participant whose content box is `avail` wide (memoized on
+    /// `solved_for`). Base = px | auto_max | min (fr), clamped to [min, max]; hidden tracks
+    /// are 0. Positive free space water-fills the `fr` tracks by weight up to their max;
+    /// with no `fr` track it stays at the end. Negative free space is taken from the tracks
+    /// with a `shrink_order`, lowest order first, each down to its min; the rest overflows.
+    pub fn solve(self: *TrackSet, avail: f32) void {
+        if (self.solved_for) |s| if (s == avail) return;
+        self.solved_for = avail;
+        var base_sum: f32 = 0;
+        for (self.tracks, 0..) |_, t| {
+            self.widths[t] = self.base(t);
+            base_sum += self.widths[t];
+        }
+        // `avail − Σbase − gaps`, in that order: with one `fr` track it is exactly the
+        // arithmetic `distribute_grow` does for one grower among fixed siblings.
+        const free = avail - base_sum - self.gaps();
+        if (free > 0) self.grow_fr(free) else if (free < 0) self.shrink(-free);
+    }
+
+    /// Track `t`'s base width (before free space is shared).
+    fn base(self: *const TrackSet, t: usize) f32 {
+        const tr = self.tracks[t];
+        if (tr.hidden) return 0;
+        return clamp_track(tr, switch (tr.basis) {
+            .px => |v| v,
+            .auto => self.auto_max[t],
+            .fr => tr.min,
+        });
+    }
+
+    /// The gaps between the visible tracks.
+    fn gaps(self: *const TrackSet) f32 {
+        var n: usize = 0;
+        for (self.tracks) |tr| {
+            if (!tr.hidden) n += 1;
+        }
+        return if (n > 1) self.col_gap * @as(f32, @floatFromInt(n - 1)) else 0;
+    }
+
+    /// What a participant's tracks need before any free space: Σ base + gaps. The pass-1
+    /// width of a `fit_children` participant.
+    fn base_extent(self: *const TrackSet) f32 {
+        var sum: f32 = 0;
+        for (self.tracks, 0..) |_, t| sum += self.base(t);
+        return sum + self.gaps();
+    }
+
+    fn has_auto(self: *const TrackSet) bool {
+        for (self.tracks) |tr| {
+            if (tr.basis == .auto) return true;
+        }
+        return false;
+    }
+
+    /// Reset the per-solve scratch: run by the owner before pass 1 enters its subtree, every
+    /// solve, so a re-solve of the same tree starts from nothing.
+    fn open_solve(self: *TrackSet) void {
+        @memset(self.auto_max, 0);
+        self.solved_for = null;
+        self.open = true;
+    }
+
+    fn fr_weight(tr: Track) f32 {
+        if (tr.hidden) return 0;
+        return switch (tr.basis) {
+            .fr => |w| @max(0, w),
+            else => 0,
+        };
+    }
+
+    /// Weighted water filling over the `fr` tracks, the same rounds as `distribute_grow`: a
+    /// track capped by its max keeps what fits and the rest goes round again by weight.
+    fn grow_fr(self: *TrackSet, free: f32) void {
+        var remaining = free;
+        while (remaining > 0.0001) {
+            var active: f32 = 0;
+            for (self.tracks, 0..) |tr, t| {
+                const w = fr_weight(tr);
+                if (w <= 0) continue;
+                if (track_max(tr)) |m| {
+                    if (self.widths[t] + 0.0001 < m) active += w;
+                } else active += w;
+            }
+            if (active <= 0) break; // no fr track, or every one is at its max
+            var used: f32 = 0;
+            for (self.tracks, 0..) |tr, t| {
+                const w = fr_weight(tr);
+                if (w <= 0) continue;
+                const share = remaining * w / active;
+                const capacity = if (track_max(tr)) |m| @max(0, m - self.widths[t]) else share;
+                const add = @min(share, capacity);
+                if (add <= 0) continue;
+                self.widths[t] += add;
+                used += add;
+            }
+            if (used <= 0.0001) break;
+            remaining -= used;
+        }
+    }
+
+    /// Priority shrink: order 0 gives up to its floors first, then order 1, and so on.
+    /// Within one order, each track gives in proportion to its room `(width − min)`.
+    fn shrink(self: *TrackSet, deficit_in: f32) void {
+        var deficit = deficit_in;
+        var order: u16 = 0;
+        while (order <= std.math.maxInt(u8) and deficit > 0) : (order += 1) {
+            var room: f32 = 0;
+            for (self.tracks, 0..) |tr, t| {
+                if (!gives_at(tr, order)) continue;
+                room += @max(0, self.widths[t] - tr.min);
+            }
+            if (room <= 0) continue;
+            const take = @min(deficit, room);
+            for (self.tracks, 0..) |tr, t| {
+                if (!gives_at(tr, order)) continue;
+                if (take >= room) {
+                    self.widths[t] = @min(self.widths[t], tr.min);
+                } else {
+                    // `take × (r / room)`: a lone track of its order gives exactly `take`.
+                    const r = @max(0, self.widths[t] - tr.min);
+                    self.widths[t] -= take * (r / room);
+                }
+            }
+            deficit -= take;
+        }
+    }
+
+    /// Where cell `c` sits, given the track `cursor` after the previous cell: an explicit
+    /// `cell_col` moves the cursor, otherwise the next visible track. Both clamp to the set,
+    /// so a surplus cell lands past the last track with no width (asserted in debug).
+    fn slot(self: *const TrackSet, cursor: usize, c: anytype) Slot {
+        const n = self.tracks.len;
+        var col: usize = if (c.layout.cell_col) |k| k else cursor;
+        if (c.layout.cell_col == null) {
+            while (col < n and self.tracks[col].hidden) col += 1;
+        }
+        std.debug.assert(col < n); // more cells than tracks, or cell_col out of range
+        col = @min(col, n);
+        const span = @min(@max(1, @as(usize, c.layout.cell_span)), n - col);
+        return .{ .col = col, .span = span };
+    }
+
+    /// The x of track `col` from the participant's content left: every earlier visible
+    /// track plus its gap.
+    fn x_of(self: *const TrackSet, col: usize) f32 {
+        var x: f32 = 0;
+        for (self.tracks[0..col], 0..) |tr, t| {
+            if (!tr.hidden) x += self.widths[t] + self.col_gap;
+        }
+        return x;
+    }
+
+    /// A slot's border-box width: its visible tracks plus the gaps between them. A hidden
+    /// track inside the span adds neither width nor gap.
+    fn span_width(self: *const TrackSet, s: Slot) f32 {
+        var w: f32 = 0;
+        var shown: usize = 0;
+        for (s.col..s.col + s.span) |t| {
+            if (self.tracks[t].hidden) continue;
+            if (shown > 0) w += self.col_gap;
+            w += self.widths[t];
+            shown += 1;
+        }
+        return w;
+    }
+};
+
+const Slot = struct {
+    col: usize,
+    span: usize,
+
+    fn end(self: Slot) usize {
+        return self.col + self.span;
+    }
+};
+
+fn track_max(tr: Track) ?f32 {
+    return if (tr.max) |m| @max(tr.min, m) else null;
+}
+
+/// Whether `tr` takes part in the priority shrink round `order`.
+fn gives_at(tr: Track, order: u16) bool {
+    const o = tr.shrink_order orelse return false;
+    return !tr.hidden and o == order;
+}
+
+fn clamp_track(tr: Track, v: f32) f32 {
+    var r = @max(tr.min, v);
+    if (track_max(tr)) |m| r = @min(r, m);
+    return r;
+}
+
 pub const Layout = struct {
     /// How *this* node sits within its parent: one of the 9 anchor presets (it places
     /// itself, out-of-flow), or `.relative` (the parent's `flow` places it).
@@ -162,6 +406,23 @@ pub const Layout = struct {
     /// `.visible` (no cropping), so ordinary nodes are unaffected. Set directly
     /// (`node.layout.overflow = .clip`) or via `with_overflow`.
     overflow: Overflow = .visible,
+    /// Declares a shared column-track set (see `TrackSet`, "Grid tracks" in the README). The
+    /// owner resets the set's per-solve scratch before pass 1 visits its subtree, so every
+    /// participant (`track_row`) must be a descendant. The owner does not lay its own
+    /// children out by the tracks unless it is also a participant. Defaults to null.
+    track_owner: ?*TrackSet = null,
+    /// Makes this node a track **participant**: its in-flow children are cells, sized and
+    /// placed on the x axis by the shared `TrackSet` instead of by `grow`/`shrink`/`main`.
+    /// Must be a non-wrapping, non-reversed `.row` (asserted in debug) under the set's owner.
+    /// The y axis (cross alignment, `fit_cross`, stretch) works as for any row.
+    track_row: ?*TrackSet = null,
+    /// As a cell of a participant: the track this cell starts in. Null (the default) takes
+    /// the next visible track after the previous cell; an explicit index moves the cursor,
+    /// so skipped tracks are left empty.
+    cell_col: ?u16 = null,
+    /// As a cell of a participant: how many tracks this cell covers, from `cell_col`. Its
+    /// width is the covered visible tracks plus the gaps between them. Defaults to 1.
+    cell_span: u16 = 1,
     _global_x: ?f32,
     _global_y: ?f32,
 
@@ -213,15 +474,20 @@ pub const Layout = struct {
 
 /// Solve the whole tree, then place it. Widths are solved before heights, because a
 /// wrapping row's height depends on its width (how many lines it breaks into):
-///   1. `recalculate_size`    — bottom-up, both axes: intrinsic sizes and provisionals.
-///   2. `resolve_axis(.x)`    — top-down, x only: percentages, grow, shrink and stretch.
-///                              Every width is final after it.
+///   1. `recalculate_size`    — bottom-up, both axes: intrinsic sizes and provisionals. A
+///                              track owner resets its `TrackSet` first; participants
+///                              record their `auto` tracks' max-content (`auto_max`).
+///   2. `resolve_axis(.x)`    — top-down, x only: percentages, grow, shrink, stretch, and
+///                              grid tracks (each participant solves its `TrackSet` and sizes
+///                              its cells, definite for their descendants). Every width is
+///                              final after it.
 ///      (boundary)            — with a measurer only: each `measure_h` node's
 ///                              `data_height`/`baseline` re-measured at its final width.
 ///   3. `recalculate_axis(.y)`— bottom-up, y only: every height again from scratch, with a
 ///                              wrapping row's lines packed against its final width.
 ///   4. `resolve_axis(.y)`    — top-down, y only: the mirror of step 2.
-///   5. `place`               — top-down: assign every node its global position.
+///   5. `place`               — top-down: assign every node its global position (a
+///                              participant's cells at their tracks' x, `track_place`).
 /// The sizing passes are pure (no host callback — `content` sizes read the host's
 /// pre-measured `data_width`/`data_height`, set on the node at build). `place` takes a
 /// scratch `Allocator` only to materialize each node's in-flow child list; it still never
@@ -406,6 +672,10 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis, resolved_main: ?f32) f32 {
         }
         return fit_cross(node, axis, flow);
     }
+    // A track participant's main extent is its tracks' base widths, not the cells' sum.
+    if (axis == .x) {
+        if (node.layout.track_row) |set| return set.base_extent();
+    }
 
     var acc: f32 = 0;
     var flow_count: usize = 0;
@@ -529,10 +799,43 @@ fn fit_cross(node: anytype, cross_axis: Axis, flow: Flow) f32 {
 /// (from already-resolved children); `pct_of_parent` and `grow` take a provisional = their
 /// content size (the fallback value), finalized top-down in `resolve_axis`. A wrapping
 /// row's height here counts lines only against a `fixed` width; step 3 redoes it.
+///
+/// Grid tracks hook in here twice: a `track_owner` resets its set before its subtree
+/// (pre-order) and, when the set has an `auto` track, redoes its subtree's x extents once
+/// every participant has reported; a `track_row` records its cells into `auto_max` after
+/// they are sized (post-order), and its `fit_children` width is the tracks' base extent.
 fn recalculate_size(node: anytype) void {
+    // A track owner resets its set before any participant below it measures into it.
+    if (node.layout.track_owner) |set| set.open_solve();
     for (node.children.items) |c| recalculate_size(c);
+    if (node.layout.track_row) |set| collect_auto(node, set);
+    if (node.layout.track_owner) |set| {
+        // A `fit_children` participant (or anything fitting around one) read `auto_max` while
+        // later participants had yet to report. Now the max covers every participant, so
+        // redo the subtree's x extents; the max is idempotent, so the redo measures the same.
+        if (set.has_auto()) {
+            for (node.children.items) |c| recalculate_axis(c, .x);
+        }
+        set.open = false;
+    }
     bottom_up(node, .x, null);
     bottom_up(node, .y, null);
+}
+
+/// Pass 1 at a participant, its cells already sized: every non-spanning in-flow cell in an
+/// `auto` track raises that track's `auto_max` to its border-box width.
+fn collect_auto(node: anytype, set: *TrackSet) void {
+    std.debug.assert(set.open); // a participant must be a descendant of its set's owner
+    const flow = node.layout.flow;
+    std.debug.assert(flow.dir == .row and !flow.wrap and !flow.reverse); // multi-line rows: not yet
+    var cursor: usize = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue;
+        const s = set.slot(cursor, c);
+        cursor = s.end();
+        if (c.layout.cell_span != 1 or s.col >= set.tracks.len) continue;
+        if (set.tracks[s.col].basis == .auto) set.auto_max[s.col] = @max(set.auto_max[s.col], extent(c, .x));
+    }
 }
 
 /// Step 3 — pass 1 again on `axis` alone (the solve calls it for `.y`), after step 2 has
@@ -578,6 +881,10 @@ fn bottom_up(node: anytype, axis: Axis, resolved_main: ?f32) void {
 /// `1.0` grandchild fills the stretched box. Per parent the order is finalize children →
 /// main-axis `grow` → main-axis shrink → cross-axis stretch → recurse.
 ///
+/// A track participant (`Layout.track_row`) replaces grow and shrink on x with `size_cells`:
+/// its `TrackSet` is solved against its content width and every in-flow cell takes its slot's
+/// width, which counts as definite for the cell's descendants (`is_cell`).
+///
 /// Run for x first, then (after step 3) for y. No x decision reads a height except a
 /// column-wrap's stretch, which packs its lines against the pass-1 heights.
 fn resolve_axis(root: anytype, comptime axis: Axis) void {
@@ -610,14 +917,37 @@ fn resolve_children(node: anytype, comptime axis: Axis, def: bool) void {
     }
 
     const main = main_axis(node.layout.flow);
-    if (main == axis and def) {
+    if (axis == .x and node.layout.track_row != null) {
+        size_cells(node, node.layout.track_row.?);
+    } else if (main == axis and def) {
         distribute_grow(node, main);
         distribute_shrink(node, main);
     }
     if (node.layout.flow.cross == .stretch and cross(main) == axis) stretch_children(node, main);
 
     for (node.children.items) |c| {
-        resolve_children(c, axis, rule_definite(axis_rule(c, axis)) or stretches(node, c, axis));
+        resolve_children(c, axis, rule_definite(axis_rule(c, axis)) or stretches(node, c, axis) or is_cell(node, c, axis));
+    }
+}
+
+/// Whether `c` is a track cell of `node` on `axis`: its width came from the tracks, so it is
+/// definite for its descendants the way a stretched axis is (a `.fill` text or a `1.0`
+/// grandchild resolves against the track).
+fn is_cell(node: anytype, c: anytype, axis: Axis) bool {
+    return axis == .x and node.layout.track_row != null and c.layout.anchor == .relative;
+}
+
+/// `resolve_axis(.x)` at a participant, in place of grow and shrink: solve the shared tracks
+/// against this row's content width, then give each in-flow cell its slot's border box (its
+/// own padding inside, its min/max on the content box).
+fn size_cells(node: anytype, set: *TrackSet) void {
+    set.solve(inner_extent(node, .x));
+    var cursor: usize = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue;
+        const s = set.slot(cursor, c);
+        cursor = s.end();
+        set_inner_extent(c, .x, @max(0, set.span_width(s) - padding_extent(&c.size, .x)));
     }
 }
 
@@ -973,7 +1303,53 @@ fn place(node: anytype, alloc: Allocator, info: ?ChildrenPosInfo) anyerror!void 
     }
     if (l.flow.reverse) std.mem.reverse(@TypeOf(node), flow_kids);
 
+    if (l.track_row) |set| return track_place(node, alloc, flow_kids, set);
     try flow_place(node, alloc, flow_kids);
+}
+
+/// The cross extent of one line of children, and its shared baseline: the plain max of the
+/// children's cross extents, or for a baseline row the deepest ascent plus the deepest
+/// descent when that is larger. `flow_place` keeps one per line; `track_place` one for its row.
+const LineCross = struct {
+    max: f32 = 0,
+    ascent: f32 = 0,
+    descent: f32 = 0,
+
+    fn add(self: *LineCross, c: anytype, m: Axis) void {
+        self.max = @max(self.max, extent(c, cross(m)));
+        if (m == .x) { // baseline only means something for a row
+            self.ascent = @max(self.ascent, c.size.height - c.size.baseline_off());
+            self.descent = @max(self.descent, c.size.baseline_off());
+        }
+    }
+
+    fn line(self: LineCross, flow: Flow) f32 {
+        return if (flow.dir == .row and flow.cross == .baseline)
+            @max(self.ascent + self.descent, self.max) // a baseline row can be deeper than any child
+        else
+            self.max;
+    }
+};
+
+/// Place a track participant's in-flow `kids`: each cell at its track's x (the visible
+/// tracks before it plus their gaps) and across the row by `flow.cross`, exactly as
+/// `flow_place` aligns one line. `flow.main` is not read: free space the tracks don't take
+/// stays after the last track. The tracks are solved again for this row's width, which is
+/// free when it matches the last solve and keeps rows of different widths correct.
+fn track_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node), set: *TrackSet) anyerror!void {
+    const flow = node.layout.flow;
+    set.solve(inner_extent(node, .x));
+    var lc: LineCross = .{};
+    for (kids) |c| lc.add(c, .x);
+    const line_cross = lc.line(flow);
+    var cursor: usize = 0;
+    for (kids) |c| {
+        const s = set.slot(cursor, c);
+        cursor = s.end();
+        const xo = set.x_of(s.col);
+        const yo = cross_within(flow, .x, line_cross, c, lc.ascent);
+        try place(c, alloc, .{ .x_offset = xo, .y_offset = yo });
+    }
 }
 
 /// The one flow algorithm: arrange `kids` (already ordered, reverse applied) inside `node`'s
@@ -1001,9 +1377,7 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
         var j = i;
         var run: f32 = 0; // main extent incl. gaps so far — the wrap test
         var main_sum: f32 = 0; // sum of child main extents (no gaps)
-        var cross_max: f32 = 0;
-        var max_ascent: f32 = 0;
-        var max_descent: f32 = 0;
+        var lc: LineCross = .{};
         while (j < kids.len) {
             const c = kids[j];
             const cm = extent(c, m);
@@ -1011,19 +1385,12 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
             if (flow.wrap and j > i and run + step > main_size) break;
             run += step;
             main_sum += cm;
-            cross_max = @max(cross_max, extent(c, cross(m)));
-            if (m == .x) { // baseline only means something for a row
-                max_ascent = @max(max_ascent, c.size.height - c.size.baseline_off());
-                max_descent = @max(max_descent, c.size.baseline_off());
-            }
+            lc.add(c, m);
             j += 1;
         }
         const count = j - i;
         const fcount: f32 = @floatFromInt(count);
-        const line_cross = if (flow.dir == .row and flow.cross == .baseline)
-            @max(max_ascent + max_descent, cross_max) // a baseline row can be deeper than any child
-        else
-            cross_max;
+        const line_cross = lc.line(flow);
 
         // -- main-axis distribution: leading offset + spacing between children --
         var lead: f32 = 0;
@@ -1049,7 +1416,7 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
         var cursor = lead;
         for (kids[i..j]) |c| {
             const cm = extent(c, m);
-            const co = line_start + cross_within(flow, m, line_cross, c, max_ascent);
+            const co = line_start + cross_within(flow, m, line_cross, c, lc.ascent);
             const xo = if (m == .x) cursor else co;
             const yo = if (m == .x) co else cursor;
             try place(c, alloc, .{ .x_offset = xo, .y_offset = yo });

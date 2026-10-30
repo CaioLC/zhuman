@@ -483,10 +483,13 @@ breaks into). Five passes, plus one optional measure step between 2 and 3:
 1. **`recalculate_size`** (bottom-up, both axes) — resolve constrained
    `fixed`/`content`/`fit_children`; parent-relative rules take measured-content
    provisionals. A wrapping row's lines are counted only against a `fixed` width here.
+   A track owner resets its `TrackSet`, and each participant records its `auto` columns
+   (see "Grid tracks").
 2. **`resolve_axis(.x)`** (top-down, x only) — finalize percentages against definite
    parent content boxes, allocate each definite parent's main-axis remainder among its
-   in-flow growers, take an overflow out of opted-in shrinkers, and apply `cross =
-   .stretch`, all before descending. `fit_children` is the only **indefinite** rule,
+   in-flow growers, take an overflow out of opted-in shrinkers, solve a track
+   participant's shared columns and size its cells (in place of grow and shrink), and
+   apply `cross = .stretch`, all before descending. `fit_children` is the only **indefinite** rule,
    so parent-relative rules without a usable base fall back to `content` (the node's
    `data_*`, or a safe **0** when it has no measured content). The exception is an
    out-of-flow (anchored) child: it never feeds its parent's main-axis fit, so its
@@ -506,7 +509,9 @@ breaks into). Five passes, plus one optional measure step between 2 and 3:
    stretch and baseline read the re-solved heights.
 5. **`place`** (top-down) — assign global positions via one line-based flow algorithm
    (break into lines → distribute each along `main` → align each child across it by
-   `cross` → stack the lines); pure geometry, sizes already resolved.
+   `cross` → stack the lines); pure geometry, sizes already resolved. A track
+   participant's cells go to their tracks' x instead (`track_place`), aligned across the
+   row by the same `cross` code.
 
 One coupling still runs from heights back to widths: a column-wrap (`dir = .column`,
 `wrap`) needs heights to count its columns, but its width is solved first, so its
@@ -533,6 +538,68 @@ The **measurer** is a comptime host parameter, a struct value with
 
 The host's measurer (`ui_client/measure.zig`) wraps `El.text_fit(.., .fill)` leaves at their
 solved width and memoizes the result on the text's pooled state.
+
+### Grid tracks
+
+A table's head and its rows are separate nodes, often at different depths (the head under
+the frame, the rows inside a scroll view's content), and each row is its own control with
+its own key, hover and role. The prototypes align them by repeating one
+`grid-template-columns` on the head and row classes. The engine does the same with a
+**shared track set** instead of the template threading widths through every row:
+
+- `Track` is one column: a `Basis` (`px`, `fr` weight, or `auto`), a `min` floor (CSS
+  `minmax` min; an `fr` track starts there, so the default 0 is `minmax(0, Nfr)`), an
+  optional `max`, an optional `shrink_order`, and `hidden`.
+- `TrackSet` holds the tracks, a `col_gap`, and caller-provided solve scratch (`auto_max`,
+  `widths`, `solved_for`), the same length as the tracks. The host allocates it per frame
+  in its arena (`ui_client`'s `tracks(ctx, spec, gap)` also scales logical px).
+- `Layout.track_owner` marks the node that declares the set. Every participant must be its
+  **descendant**: the owner resets the scratch before pass 1 enters its subtree, every
+  solve, so re-solving a tree repeats exactly. A participant outside it trips a debug
+  assert (the set is only "open" while pass 1 is inside the owner); in release it would
+  read stale scratch. The owner lays its own children out by the tracks only if it is also
+  a participant.
+- `Layout.track_row` marks a **participant**: a non-wrapping, non-reversed `.row`
+  (asserted in debug) whose in-flow children are cells. `Layout.cell_col` places a cell
+  explicitly (it moves the cursor; skipped tracks stay empty) and `cell_span` covers
+  several tracks. Anchored children of a participant ignore the tracks.
+
+The pass hooks:
+
+1. Pass 1: the owner resets the set (pre-order). Each participant, after its cells are
+   sized, raises `auto_max[t]` to the widest non-spanning cell in each `auto` track, so
+   **`auto` is max-content over all participants**, wherever they sit. A `fit_children`
+   participant is Σ base + gaps (base = `px`, `auto_max`, or `min` for `fr`). Because an
+   early participant measured before a later one reported, an owner whose set has an
+   `auto` track redoes its subtree's x extents once all have reported.
+2. `resolve_axis(.x)`: each participant solves the tracks against its content width
+   (memoized on `solved_for`): bases clamped to [min, max], hidden tracks 0;
+   positive free space water-fills the `fr` tracks by weight up to their max (with none,
+   the slack stays at the end; `flow.main` is not read); negative free space goes to the
+   priority shrink. Each cell's border box becomes its span's tracks plus the gaps between
+   them, its own padding inside and min/max on its content box, and its x counts as
+   **definite** for its descendants, as a stretched axis does, so `.fill`/`.cell_fill` text
+   and percentage grandchildren resolve against the track before the measurer runs.
+3. The y passes are unchanged: a participant is a row whose height is its cells' max (or
+   ascent + descent for a baseline row).
+4. `place`: a cell's x is the visible tracks before it plus their gaps, from the
+   participant's content left; y comes from `flow.cross` through the line logic
+   `flow_place` uses. `offset` and the parent's scroll fold apply as usual.
+
+**`shrink_order` vs CSS.** A CSS grid that overflows shrinks its flexible tracks toward
+their `minmax` floors together. The prototypes' BUILD table instead gives way in a fixed
+priority: WHAT CHANGES goes to its floor first, then the recipe name, then the order
+(`capital_row.fitted`, floors 70/88/56), because the sentence is the cheapest to elide and
+the cost is the last thing a player should lose. `shrink_order` says that directly: lower
+orders give way first, each to its `min`; tracks of one order share in proportion to
+`(base − min)`; a null order never shrinks; what no track can absorb overflows.
+
+**Hidden tracks** are 0 wide, drop one adjacent gap, and are skipped by implicit placement
+(a responsive column dropped at a width class).
+
+**Deferred: multi-line participants.** A span that doesn't fit wrapping onto its own line
+(the trade dialog's narrow corner, `grid-column: 1 / -1`) is not modeled yet; `flow.wrap` on
+a participant asserts in debug.
 
 ### Five-pass frame profiling
 

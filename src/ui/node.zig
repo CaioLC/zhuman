@@ -2302,3 +2302,436 @@ test "measure_h: the profiled measured solve reports the measure walk" {
     try std.testing.expectEqual(@as(u64, 0), p.measure);
     try std.testing.expectEqual(@as(u64, 50), p.total());
 }
+
+// ---- ENGINE-06b: shared grid tracks ------------------------------------------------------
+
+const Track = features.Track;
+const TrackSet = features.TrackSet;
+
+/// A `TrackSet` over `spec` with arena scratch (left undefined: the owner resets it).
+fn track_set(a: std.mem.Allocator, spec: []const Track, gap: f32) !*TrackSet {
+    const set = try a.create(TrackSet);
+    set.* = .{
+        .tracks = spec,
+        .col_gap = gap,
+        .auto_max = try a.alloc(f32, spec.len),
+        .widths = try a.alloc(f32, spec.len),
+    };
+    return set;
+}
+
+/// A column root `w` × 400 owning `set`.
+fn track_owner(a: std.mem.Allocator, w: f32, set: *TrackSet) !*TestNode {
+    const root = try TestNode.create(a, "owner");
+    _ = root.with_size(Size.initFixed(w, 400)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    root.layout.track_owner = set;
+    return root;
+}
+
+/// A participant row under `parent`, width rule `w`, top-aligned cells.
+fn track_row(a: std.mem.Allocator, id: []const u8, parent: *TestNode, set: *TrackSet, w: features.SizeRule) !*TestNode {
+    const r = try TestNode.pcreate(a, id, parent);
+    _ = r.with_size(Size.init(w, .fit_children)).with_layout(.relative, .{ .dir = .row, .cross = .start });
+    r.layout.track_row = set;
+    return r;
+}
+
+/// A content-sized cell `w` × `h` (its width is the track's once solved).
+fn track_cell(a: std.mem.Allocator, id: []const u8, row: *TestNode, w: f32, h: f32) !*TestNode {
+    const c = try TestNode.pcreate(a, id, row);
+    _ = c.with_size(Size.initContent(w, h)).with_layout(.relative, null);
+    return c;
+}
+
+const stall_spec = [_]Track{
+    .{ .basis = .{ .fr = 1 } }, // minmax(0, 1fr)
+    .{ .basis = .{ .px = 86 } },
+    .{ .basis = .{ .px = 86 } },
+    .{ .basis = .{ .px = 143 } },
+};
+
+test "tracks: minmax(0,1fr) 86 86 143 fill a padded 600 row, cells at their tracks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const set = try track_set(a, &stall_spec, 10);
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    row.size.padding = features.Padding.initEach(0, 20, 0, 20);
+    row.layout.flow.cross = .center;
+    const item = try track_cell(a, "item", row, 400, 10); // wider than its track: no effect
+    item.size.padding = features.Padding.initEach(0, 4, 0, 4);
+    const fill = try TestNode.pcreate(a, "fill", item);
+    _ = fill.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .{ .fixed = 10 })).with_layout(.relative, null);
+    const qty = try track_cell(a, "qty", row, 20, 30);
+    const price = try track_cell(a, "price", row, 20, 10);
+    const who = try track_cell(a, "who", row, 20, 10);
+
+    try root.set_global_pos(a);
+    // 560 inner − 315 − 3 × 10 = 215 for the fr track; the widths fill the inner exactly.
+    try std.testing.expectEqualSlices(f32, &.{ 215, 86, 86, 143 }, set.widths);
+    try std.testing.expectEqual(@as(f32, 215), item.size.width); // border box, padding inside
+    try std.testing.expectEqual(@as(f32, 207), fill.size.width);
+    try std.testing.expectEqual(@as(f32, 24), fill.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 20), item.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 245), qty.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 341), price.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 437), who.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 580), who.layout._global_x.? + who.size.width);
+    // Cross alignment is the row's: centered in the 30 line.
+    try std.testing.expectEqual(@as(f32, 30), row.size.height);
+    try std.testing.expectEqual(@as(f32, 10), item.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 0), qty.layout._global_y.?);
+}
+
+test "tracks: auto is the widest cell over every participant, at any depth" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .auto }, .{ .basis = .{ .fr = 1 } } };
+    const set = try track_set(a, &spec, 0);
+    const root = try track_owner(a, 600, set);
+    // The head right under the owner; the rows in scroll → content → wrap, fitted.
+    const head = try track_row(a, "head", root, set, .{ .pct_of_parent = 1.0 });
+    const h0 = try track_cell(a, "h0", head, 40, 10);
+    _ = try track_cell(a, "h1", head, 5, 10);
+    const scroll = try TestNode.pcreate(a, "scroll", root);
+    _ = scroll.with_size(Size.initFixed(600, 100)).with_layout(.relative, .{ .dir = .column, .cross = .start });
+    const content = try TestNode.pcreate(a, "content", scroll);
+    _ = content.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .column, .cross = .start });
+    const wrap = try TestNode.pcreate(a, "wrap", content);
+    _ = wrap.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .column, .cross = .start });
+    const r1 = try track_row(a, "r1", wrap, set, .fit_children);
+    const c1 = try track_cell(a, "c1", r1, 55, 10);
+    _ = try track_cell(a, "c1b", r1, 5, 10);
+    const r2 = try track_row(a, "r2", wrap, set, .fit_children);
+    const c2 = try track_cell(a, "c2", r2, 70, 10); // the widest, measured last
+    const c2b = try track_cell(a, "c2b", r2, 5, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 70), set.auto_max[0]);
+    try std.testing.expectEqual(@as(f32, 70), h0.size.width);
+    try std.testing.expectEqual(@as(f32, 70), c1.size.width);
+    try std.testing.expectEqual(@as(f32, 70), c2.size.width);
+    // A fitted row is Σ base: 70 + the fr min 0, so the fr cell gets nothing. r1 was measured
+    // before r2 reported 70, and the owner's redo brings it (and its fitted ancestors) up.
+    try std.testing.expectEqual(@as(f32, 70), r1.size.width);
+    try std.testing.expectEqual(@as(f32, 70), wrap.size.width);
+    try std.testing.expectEqual(@as(f32, 70), content.size.width);
+    try std.testing.expectEqual(@as(f32, 0), c2b.size.width);
+    try std.testing.expectEqual(@as(f32, 70), c2b.layout._global_x.?);
+    // The head is 600 wide, so its fr cell takes the rest.
+    try std.testing.expectEqual(@as(f32, 530), head.children.items[1].size.width);
+}
+
+test "tracks: auto ignores a spanning cell" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .auto }, .{ .basis = .auto } };
+    const set = try track_set(a, &spec, 4);
+    const root = try track_owner(a, 600, set);
+    const r1 = try track_row(a, "r1", root, set, .{ .pct_of_parent = 1.0 });
+    const wide = try track_cell(a, "wide", r1, 300, 10);
+    wide.layout.cell_span = 2;
+    const r2 = try track_row(a, "r2", root, set, .{ .pct_of_parent = 1.0 });
+    _ = try track_cell(a, "a", r2, 30, 10);
+    const b = try track_cell(a, "b", r2, 40, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 30, 40 }, set.widths); // no fr: slack at the end
+    try std.testing.expectEqual(@as(f32, 74), wide.size.width); // 30 + 4 + 40
+    try std.testing.expectEqual(@as(f32, 34), b.layout._global_x.?);
+}
+
+test "tracks: fr weights split 1:2, and a capped fr releases its excess to the others" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const weighted = [_]Track{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .fr = 2 } } };
+    const set = try track_set(a, &weighted, 0);
+    const root = try track_owner(a, 300, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    _ = try track_cell(a, "a", row, 0, 10);
+    _ = try track_cell(a, "b", row, 0, 10);
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 100, 200 }, set.widths);
+
+    // 1 : 2 (max 100) : 1 in 400. Round one offers 100 / 200 / 100; the middle keeps 100
+    // and the other 100 goes to the outer two, 50 each.
+    const capped = [_]Track{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .fr = 2 }, .max = 100 }, .{ .basis = .{ .fr = 1 } } };
+    set.* = (try track_set(a, &capped, 0)).*;
+    root.size.w = .{ .fixed = 400 };
+    _ = try track_cell(a, "c", row, 0, 10);
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 150, 100, 150 }, set.widths);
+}
+
+test "tracks: shrink_order gives way by order, each to its floor, and the residue overflows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{
+        .{ .basis = .{ .px = 100 }, .min = 40, .shrink_order = 0 },
+        .{ .basis = .{ .px = 100 }, .min = 50, .shrink_order = 1 },
+        .{ .basis = .{ .px = 100 }, .min = 80, .shrink_order = 2 },
+        .{ .basis = .{ .px = 50 } }, // never shrinks
+    };
+    const set = try track_set(a, &spec, 0);
+    set.solve(300); // 50 over: order 0 alone
+    try std.testing.expectEqualSlices(f32, &.{ 50, 100, 100, 50 }, set.widths);
+    set.solve(230); // 120 over: order 0 to 40 (60), order 1 to 50 (50), order 2 gives 10
+    try std.testing.expectEqualSlices(f32, &.{ 40, 50, 90, 50 }, set.widths);
+    set.solve(100); // 250 over: every floor (140), the other 110 overflows
+    try std.testing.expectEqualSlices(f32, &.{ 40, 50, 80, 50 }, set.widths);
+
+    // One order shares in proportion to (base − min): 100 and 50 over floors 0 give 20 and 10.
+    const shared = [_]Track{
+        .{ .basis = .{ .px = 100 }, .shrink_order = 0 },
+        .{ .basis = .{ .px = 50 }, .shrink_order = 0 },
+    };
+    const s2 = try track_set(a, &shared, 0);
+    s2.solve(120);
+    try std.testing.expectEqualSlices(f32, &.{ 80, 40 }, s2.widths);
+}
+
+/// `capital_row.fitted`'s arithmetic, restated for the golden test: the excess over the
+/// surface comes out of WHAT CHANGES (if shown), then the recipe, then the cost, each to its
+/// floor. Lanes in `capital_row.columns` order: recipe, cost, time, effect, state, corner.
+fn fitted_ref(lanes: [6]f32, shown: [6]bool, surface: f32) [6]f32 {
+    const row_gap: f32 = 8;
+    const row_pad_x: f32 = 6;
+    const scroll_gutter: f32 = 8;
+    var width: f32 = 0;
+    var n: f32 = 0;
+    for (lanes, shown) |w, s| if (s) {
+        width += w;
+        n += 1;
+    };
+    const table = width + (n - 1) * row_gap + row_pad_x * 2;
+    var out = lanes;
+    var excess = table + scroll_gutter - surface;
+    if (excess <= 0) return out;
+    if (shown[3]) {
+        const take = @min(excess, @max(0, out[3] - 70));
+        out[3] -= take;
+        excess -= take;
+    }
+    const from_recipe = @min(excess, @max(0, out[0] - 88));
+    out[0] -= from_recipe;
+    excess -= from_recipe;
+    out[1] -= @min(excess, @max(0, out[1] - 56));
+    return out;
+}
+
+test "tracks: priority shrink reproduces capital_row.fitted for Act I" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Act I (`capital_row.Widths{}`): effect is 178 less the 8px scroll gutter.
+    const lanes = [6]f32{ 118, 74, 42, 170, 76, 54 };
+    const variants = [_][6]bool{
+        .{ true, true, true, true, true, true },
+        .{ true, true, true, false, true, true }, // WHAT CHANGES dropped (w440)
+        .{ true, true, false, false, true, true }, // and TIME (w560)
+    };
+    for (variants) |shown| {
+        const spec = [_]Track{
+            .{ .basis = .{ .px = lanes[0] }, .min = 88, .shrink_order = 1, .hidden = !shown[0] },
+            .{ .basis = .{ .px = lanes[1] }, .min = 56, .shrink_order = 2, .hidden = !shown[1] },
+            .{ .basis = .{ .px = lanes[2] }, .hidden = !shown[2] },
+            .{ .basis = .{ .px = lanes[3] }, .min = 70, .shrink_order = 0, .hidden = !shown[3] },
+            .{ .basis = .{ .px = lanes[4] }, .hidden = !shown[4] },
+            .{ .basis = .{ .px = lanes[5] }, .hidden = !shown[5] },
+        };
+        const set = try track_set(a, &spec, 8);
+        var surface: f32 = 300;
+        while (surface <= 640) : (surface += 7) {
+            // The row is the surface less the scroll gutter, its content box less 2 × 6 padding.
+            set.solve(surface - 8 - 12);
+            const want = fitted_ref(lanes, shown, surface);
+            for (0..6) |t| {
+                const expect: f32 = if (shown[t]) want[t] else 0;
+                try std.testing.expectEqual(expect, set.widths[t]);
+            }
+        }
+    }
+    // Spot values, all lanes shown: 520 takes 74 from WHAT CHANGES; 470 floors it and takes
+    // 24 from the recipe; 400 floors all three and 46 overflows.
+    const all = [_]Track{
+        .{ .basis = .{ .px = 118 }, .min = 88, .shrink_order = 1 },
+        .{ .basis = .{ .px = 74 }, .min = 56, .shrink_order = 2 },
+        .{ .basis = .{ .px = 42 } },
+        .{ .basis = .{ .px = 170 }, .min = 70, .shrink_order = 0 },
+        .{ .basis = .{ .px = 76 } },
+        .{ .basis = .{ .px = 54 } },
+    };
+    const set = try track_set(a, &all, 8);
+    set.solve(500);
+    try std.testing.expectEqualSlices(f32, &.{ 118, 74, 42, 96, 76, 54 }, set.widths);
+    set.solve(450);
+    try std.testing.expectEqualSlices(f32, &.{ 94, 74, 42, 70, 76, 54 }, set.widths);
+    set.solve(380);
+    try std.testing.expectEqualSlices(f32, &.{ 88, 56, 42, 70, 76, 54 }, set.widths);
+}
+
+test "tracks: a hidden track is 0 wide, drops one gap, and implicit placement skips it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .{ .px = 60 }, .hidden = true }, .{ .basis = .{ .px = 70 } } };
+    const set = try track_set(a, &spec, 10);
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .fit_children);
+    const c0 = try track_cell(a, "a", row, 1, 10);
+    const c1 = try track_cell(a, "b", row, 1, 10);
+    const r2 = try track_row(a, "r2", root, set, .fit_children);
+    const all = try track_cell(a, "all", r2, 1, 10);
+    all.layout.cell_span = 3;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 50, 0, 70 }, set.widths);
+    try std.testing.expectEqual(@as(f32, 130), row.size.width); // 50 + 10 + 70
+    try std.testing.expectEqual(@as(f32, 50), c0.size.width);
+    try std.testing.expectEqual(@as(f32, 60), c1.layout._global_x.?); // track 2, after one gap
+    try std.testing.expectEqual(@as(f32, 70), c1.size.width);
+    try std.testing.expectEqual(@as(f32, 130), all.size.width); // the hidden track adds no gap
+}
+
+test "tracks: an explicit cell_col leaves a hole, and span 2 is w0 + gap + w1" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .{ .px = 60 } }, .{ .basis = .{ .px = 70 } } };
+    const set = try track_set(a, &spec, 10);
+    const root = try track_owner(a, 600, set);
+    const r1 = try track_row(a, "r1", root, set, .{ .pct_of_parent = 1.0 });
+    const first = try track_cell(a, "first", r1, 1, 10);
+    const last = try track_cell(a, "last", r1, 1, 10);
+    last.layout.cell_col = 2;
+    const r2 = try track_row(a, "r2", root, set, .{ .pct_of_parent = 1.0 });
+    const pair = try track_cell(a, "pair", r2, 1, 10);
+    pair.layout.cell_span = 2;
+    const after = try track_cell(a, "after", r2, 1, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), first.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 130), last.layout._global_x.?); // 50 + 10 + 60 + 10
+    try std.testing.expectEqual(@as(f32, 70), last.size.width);
+    try std.testing.expectEqual(@as(f32, 120), pair.size.width); // 50 + 10 + 60
+    try std.testing.expectEqual(@as(f32, 130), after.layout._global_x.?);
+}
+
+test "tracks: a measure_h leaf in a cell is measured at the track width, and a 1.0 grandchild fills it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 100 } } };
+    const set = try track_set(a, &spec, 0);
+    const root = try track_owner(a, 300, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    // A fit_children cell: without the track it would be indefinite for its children.
+    const cell = try TestNode.pcreate(a, "cell", row);
+    _ = cell.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", cell, .{ .pct_of_parent = 1.0 }, 450);
+    const bar = try TestNode.pcreate(a, "bar", cell);
+    _ = bar.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .{ .fixed = 2 })).with_layout(.relative, null);
+    _ = try track_cell(a, "side", row, 10, 10);
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log });
+    try std.testing.expectEqual(@as(f32, 200), cell.size.width);
+    try std.testing.expectEqual(@as(f32, 200), log.last_w);
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height); // ceil(450 / 200) lines
+    try std.testing.expectEqual(@as(f32, 200), bar.size.width);
+    try std.testing.expectEqual(@as(f32, 32), row.size.height);
+}
+
+test "tracks: a fit_children participant is its tracks' base plus gaps" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .auto }, .{ .basis = .{ .fr = 1 }, .min = 20 } };
+    const set = try track_set(a, &spec, 5);
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .fit_children);
+    _ = try track_cell(a, "a", row, 999, 10);
+    _ = try track_cell(a, "b", row, 33, 10);
+    const c = try track_cell(a, "c", row, 999, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 113), row.size.width); // 50 + 33 + 20 + 2 × 5
+    try std.testing.expectEqual(@as(f32, 20), c.size.width); // no free space: the fr min
+    try std.testing.expectEqual(@as(f32, 93), c.layout._global_x.?);
+}
+
+test "tracks: an anchored child of a participant is not a cell" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .{ .px = 60 } } };
+    const set = try track_set(a, &spec, 0);
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .{ .fixed = 200 });
+    _ = try track_cell(a, "a", row, 1, 10);
+    const badge = try TestNode.pcreate(a, "badge", row);
+    _ = badge.with_size(Size.initFixed(12, 8)).with_layout(.top_right, null);
+    const b = try track_cell(a, "b", row, 1, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 50), b.layout._global_x.?); // track 1, the badge skipped
+    try std.testing.expectEqual(@as(f32, 12), badge.size.width);
+    try std.testing.expectEqual(@as(f32, 188), badge.layout._global_x.?); // its own anchor
+}
+
+test "tracks: scroll_y on an ancestor shifts participants and their cells" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const set = try track_set(a, &stall_spec, 10);
+    const root = try track_owner(a, 600, set);
+    root.layout.scroll_y = 15;
+    const r1 = try track_row(a, "r1", root, set, .{ .pct_of_parent = 1.0 });
+    const c1 = try track_cell(a, "c1", r1, 1, 10);
+    const r2 = try track_row(a, "r2", root, set, .{ .pct_of_parent = 1.0 });
+    _ = try track_cell(a, "c2", r2, 1, 10);
+    const who = try track_cell(a, "who", r2, 1, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, -15), r1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, -15), c1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, -5), r2.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, -5), who.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 265), who.layout._global_x.?); // 255 + 10
+}
+
+test "tracks: a re-solve resets the set, so it repeats exactly and follows changed cells" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .auto }, .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 40 } } };
+    const set = try track_set(a, &spec, 6);
+    const root = try track_owner(a, 400, set);
+    const r1 = try track_row(a, "r1", root, set, .{ .pct_of_parent = 1.0 });
+    const wide = try track_cell(a, "wide", r1, 90, 10);
+    const f1 = try track_cell(a, "f1", r1, 1, 10);
+    const r2 = try track_row(a, "r2", root, set, .fit_children);
+    _ = try track_cell(a, "n2", r2, 30, 10);
+    const tail = try track_cell(a, "f2", r2, 1, 10);
+    _ = try track_cell(a, "p2", r2, 1, 10);
+
+    try root.set_global_pos(a);
+    const first = [_]f32{ set.widths[0], set.widths[1], set.widths[2], r2.size.width, tail.layout._global_x.? };
+    try root.set_global_pos(a);
+    const again = [_]f32{ set.widths[0], set.widths[1], set.widths[2], r2.size.width, tail.layout._global_x.? };
+    try std.testing.expectEqualSlices(f32, &first, &again);
+    try std.testing.expectEqual(@as(f32, 258), f1.size.width); // 400 − 90 − 40 − 2 × 6
+    try std.testing.expectEqual(@as(f32, 142), r2.size.width); // fitted: the fr track gets 0
+    try std.testing.expectEqual(@as(f32, 96), tail.layout._global_x.?);
+
+    // The widest cell narrows: without the owner's reset the old 90 would stay the max.
+    wide.size.data_width = 20;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 30), set.auto_max[0]);
+    try std.testing.expectEqual(@as(f32, 82), r2.size.width); // 30 + 0 + 40 + 2 × 6
+}

@@ -334,28 +334,37 @@ fn goodRow(parent: El, m: *const nb.Market, i: usize, chosen: bool, p: Player, w
     return q.clicked;
 }
 
+/// The stall table's columns (`.stall-head`/`.stall-row`): `minmax(0, 1fr) 86px 86px 143px`,
+/// gap 10. The head and every row lay out by one set, declared on the list.
+const stall_tracks = [_]uic.Track{
+    .{ .basis = .{ .fr = 1 } },
+    .{ .basis = .{ .px = 86 } },
+    .{ .basis = .{ .px = 86 } },
+    .{ .basis = .{ .px = 143 } },
+};
+const stall_gap: f32 = 10;
+
 /// The stall's table head (`.stall-head`).
-fn stallHead(parent: El, selling: bool) !void {
+fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
     const th = parent.ctx.res.view.theme;
     const lr = try listRow(parent, "stall_head", null, 0);
     _ = lr.outer.with_style(.{style.pad_each(9, 0, 7, 0)});
     const row = lr.inner;
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks);
     const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
     const item = try row.div("item");
-    _ = item.with_size(.grow, .fit_children);
     _ = (try item.text("t", "ITEM")).with_style(.{s});
-    inline for (.{ .{ "qty", if (selling) "POSTED" else "WANTED", 86 }, .{ "price", "PRICE", 86 } }) |c| {
+    inline for (.{ .{ "qty", if (selling) "POSTED" else "WANTED" }, .{ "price", "PRICE" } }) |c| {
         const cell = try row.div(c[0]);
-        _ = cell.with_size(.{ .fixed = c[2] }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+        _ = cell.with_flow(.{ .dir = .row, .main = .center });
         _ = (try cell.text("t", c[1])).with_style(.{s});
     }
     const who = try row.div("who");
-    _ = who.with_size(.{ .fixed = 143 }, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    _ = who.with_flow(.{ .dir = .row, .main = .end });
     _ = (try who.text("t", if (selling) "WHO WOULD BUY" else "WHO WOULD SELL")).with_style(.{s});
 }
 
-fn stallRow(parent: El, m: *nb.Market, i: usize, selling: bool, p: Player, words: []const []const u8) !void {
+fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling: bool, p: Player, words: []const []const u8) !void {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const a = ctx.arena;
@@ -364,9 +373,9 @@ fn stallRow(parent: El, m: *nb.Market, i: usize, selling: bool, p: Player, words
     const lr = try listRow(parent, "stall", i, 6);
     _ = lr.outer.with_style(.{Style{ .fill = if (post.qty > 0) th.panel else th.bg }});
     const row = lr.inner;
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks);
     const item = try row.div("item");
-    _ = item.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
+    _ = item.with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
     _ = (try item.text("name", try book_mod.title(a, words[i]))).with_style(.{Style{ .font = 13, .text = if (post.qty > 0) th.acc else th.dim }});
     const sub = if (selling)
         try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] })
@@ -377,14 +386,14 @@ fn stallRow(parent: El, m: *nb.Market, i: usize, selling: bool, p: Player, words
     _ = (try item.text("sub", sub)).with_style(.{Style{ .font = 10, .text = th.line2 }});
     const cap: u32 = if (selling) @intFromFloat(@floor(p.spare(i))) else 99;
     const qty_cell = try row.div("qty");
-    _ = qty_cell.with_size(.{ .fixed = 86 }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+    _ = qty_cell.with_flow(.{ .dir = .row, .main = .center });
     post.qty = @intCast(try stepper_mod.quantity_stepper(qty_cell, "stepper", post.qty, 0, cap, .{ .less = "Fewer", .more = "More" }));
     const price_cell = try row.div("price");
-    _ = price_cell.with_size(.{ .fixed = 86 }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
+    _ = price_cell.with_flow(.{ .dir = .row, .main = .center });
     post.price = @intCast(try stepper_mod.quantity_stepper(price_cell, "stepper", post.price, 1, 99, .{ .less = "Lower price", .more = "Raise price" }));
     const takers = if (selling) m.buyersFor(i, post.price) else m.sellersFor(i, post.price);
     const who = try row.div("who");
-    _ = who.with_size(.{ .fixed = 143 }, .fit_children).with_flow(.{ .dir = .row, .main = .end });
+    _ = who.with_flow(.{ .dir = .row, .main = .end });
     const text = if (post.qty == 0) "not posted" else try a.print("{d} {s}", .{ takers, if (selling) "would buy" else "would sell" });
     _ = (try who.text("t", text)).with_style(.{Style{ .font = 10, .text = if (post.qty > 0 and takers > 0) th.good else th.line2 }});
 }
@@ -754,9 +763,12 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     const slice = rows.items[start..@min(total, start + per_page)];
 
     if (st.stall) {
-        try stallHead(list, st.side == 0);
+        // One column set for the head and every row (`grid-template-columns` on both).
+        const tracks = try uic.tracks(ctx, &stall_tracks, stall_gap);
+        _ = list.with_tracks(tracks);
+        try stallHead(list, tracks, st.side == 0);
         if (slice.len == 0) try placeholder(list, "empty", "No item matches that query.");
-        for (slice) |i| try stallRow(list, m, i, st.side == 0, p, &words);
+        for (slice) |i| try stallRow(list, tracks, m, i, st.side == 0, p, &words);
         try stallSlip(slip, m, p, &words);
     } else {
         if (mode == .person) {

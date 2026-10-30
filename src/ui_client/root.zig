@@ -179,6 +179,9 @@ pub const Sprite = ctx_binding.Sprite;
 pub const Point = ctx_binding.Point; // a polyline vertex in a node's unit square (see features/geometry.zig)
 pub const Rect = @import("ui").Rect; // a stamped device-px rect (what a hit-test predicate receives)
 pub const SizeRule = @import("ui").SizeRule; // one axis's size rule, for helpers that take one
+pub const Track = @import("ui").Track; // one column of a shared track set (`tracks`)
+pub const TrackSet = @import("ui").TrackSet; // shared table columns: `El.with_tracks`/`in_tracks`
+pub const tracks = elements.tracks; // a frame-arena `TrackSet` from logical-px tracks
 pub const icon_sprite = ctx_binding.icon_sprite;
 
 // draw

@@ -90,6 +90,17 @@ fn node(u: *UiCtx, n: *Node, clip: ?ui.Rect, depth: usize, scale: f32, w: *std.I
         }
     }
     if (n.layout.overflow == .clip) try w.writeAll(" clips");
+    if (n.layout.track_owner != null) try w.writeAll(" track_owner");
+    if (n.layout.track_row) |set| {
+        // Solved for this row's own content width (a no-op when it matches the last solve).
+        set.solve(n.size.width - n.size.padding.left - n.size.padding.right);
+        try w.writeAll(" tracks=[");
+        for (set.tracks, set.widths, 0..) |t, wd, i| {
+            if (i > 0) try w.writeByte(',');
+            if (t.hidden) try w.writeByte('-') else try w.print("{d:.0}", .{wd / scale});
+        }
+        try w.writeByte(']');
+    }
 
     const rd = n.render_data;
     if (rd.fill != null) try w.writeAll(" fill");

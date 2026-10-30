@@ -18,3 +18,6 @@ pub const set_global_pos_profiled = layout_mod.set_global_pos_profiled;
 pub const set_global_pos_measured = layout_mod.set_global_pos_measured;
 pub const set_global_pos_measured_profiled = layout_mod.set_global_pos_measured_profiled;
 pub const Measured = layout_mod.Measured;
+pub const Basis = layout_mod.Basis;
+pub const Track = layout_mod.Track;
+pub const TrackSet = layout_mod.TrackSet;

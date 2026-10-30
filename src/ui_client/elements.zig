@@ -205,6 +205,34 @@ pub const El = struct {
         return self;
     }
 
+    /// Declare a shared column-track set (from `tracks`) on this node, the common ancestor of
+    /// every row that lays out by it: a table's head and its rows, at whatever depths. The
+    /// node itself keeps its own flow. Every `in_tracks` row of `set` must be built under it.
+    pub fn with_tracks(self: El, set: *ui.TrackSet) El {
+        self.node.layout.track_owner = set;
+        return self;
+    }
+
+    /// Lay this row's in-flow children out by `set`'s columns (CSS `grid-template-columns`
+    /// repeated on each row): each child is a cell whose width and x come from the tracks,
+    /// and whose descendants see that width as definite (`.fill` text, a `1.0` child). The
+    /// row must be a non-wrapping `.dir = .row` flow under the set's `with_tracks` owner;
+    /// `flow.cross` still aligns the cells vertically and `with_gap` is not read (the set has
+    /// its own gap). Each row keeps its own key, control and role.
+    pub fn in_tracks(self: El, set: *ui.TrackSet) El {
+        self.node.layout.track_row = set;
+        return self;
+    }
+
+    /// Place this cell of an `in_tracks` row explicitly: start at track `col` (null takes the
+    /// next visible track) and cover `span` tracks plus the gaps between them. A plain cell
+    /// needs no call.
+    pub fn at_track(self: El, col: ?u16, span: u16) El {
+        self.node.layout.cell_col = col;
+        self.node.layout.cell_span = span;
+        return self;
+    }
+
     /// Displace this node in **logical** px (scales to device px) from wherever its
     /// anchor or its parent's flow put it. `.center` plus a computed delta is polar placement
     /// — the way anything positioned by its own arithmetic (a radial board, a graph) reaches
@@ -423,6 +451,37 @@ fn scaleRule(rule: ui.SizeRule, scale: f32) ui.SizeRule {
         .fixed => |px| .{ .fixed = view.dp(px, scale) },
         else => rule,
     };
+}
+
+/// A shared column-track set for `El.with_tracks`/`El.in_tracks`, allocated this frame in
+/// `ctx.arena` with its solve scratch. `spec` is in **logical** px (a comptime literal is
+/// fine; the set holds a scaled copy): `px`, `min`, `max` and `col_gap` scale to device px,
+/// `fr` weights are unitless. One table, one call:
+///
+///   const set = try el.tracks(ctx, &.{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 86 } } }, 10);
+pub fn tracks(ctx: *UiCtx, spec: []const ui.Track, col_gap: f32) !*ui.TrackSet {
+    const s = ctx.res.view.scale;
+    const a = ctx.arena;
+    const scaled = try a.alloc(ui.Track, spec.len);
+    for (spec, scaled) |t, *out| {
+        out.* = t;
+        out.min = view.dp(t.min, s);
+        if (t.max) |m| out.max = view.dp(m, s);
+        out.basis = switch (t.basis) {
+            .px => |v| .{ .px = view.dp(v, s) },
+            else => t.basis,
+        };
+    }
+    const set = try a.create(ui.TrackSet);
+    set.* = .{
+        .tracks = scaled,
+        .col_gap = view.dp(col_gap, s),
+        .auto_max = try a.alloc(f32, spec.len),
+        .widths = try a.alloc(f32, spec.len),
+    };
+    @memset(set.auto_max, 0);
+    @memset(set.widths, 0);
+    return set;
 }
 
 // -- The root: the one constructor with no parent handle to hang off. ------------------
