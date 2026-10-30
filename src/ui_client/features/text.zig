@@ -236,9 +236,12 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
         // width, never the unbounded glyph width — including a legal zero-width cell. A
         // widening label cannot shift its neighbors, and hit-testing uses this stamped cell.
         // Height and baseline still come from the font, single-line, so the cell baseline-aligns
-        // like an ordinary label. The drawn glyphs are `draw`'s concern.
+        // like an ordinary label. The drawn glyphs are `draw`'s concern. A `.cell_fill` reserves
+        // no width at all (CSS `min-width: 0`): its box is whatever the solve gives it, and the
+        // solve's measurer records that width on the fit (`heightForWidth`).
         _, const th, const baseline = ctx.res.platform.font.measureBaseline(measured, st.px) catch return;
-        break :blk .{ .width = st.fit.cellWidth(), .height = @floatFromInt(th), .baseline = baseline };
+        const cell_w = cellBoxWidth(st.fit);
+        break :blk .{ .width = cell_w, .height = @floatFromInt(th), .baseline = baseline };
     } else blk: {
         // Single-line, unconstrained. Height/baseline always come from the font; the width
         // is the tracking-aware advance when tracking is set and SDL's native width otherwise.
@@ -258,11 +261,24 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     node.size.baseline = oriented.baseline;
 }
 
+/// The `data_width` `remeasure` reserves for a cell fit: the allocated width of a `.cell`,
+/// and 0 for a `.cell_fill` whatever width a previous solve recorded on it, so the cell never
+/// inflates a `fit_children` parent or pushes a sibling (it takes what layout gives it).
+fn cellBoxWidth(fit: State.Fit) f32 {
+    return if (fit == .cell_fill) 0 else fit.cellWidth();
+}
+
 /// The layout measurer's text half (`measure.TextMeasurer`): the wrapped height and
 /// baseline of a `.fill` leaf at its solved content width `w` (device px). Returns null,
 /// keeping the build-time single-line `data_height`, for a node without the text aspect,
 /// for any fit but `.fill`, for a refused/empty string, for a width under one device px
 /// and on a font error.
+///
+/// A `.cell_fill` leaf is a single line whatever its width, so it always returns null (the
+/// build-time height and baseline stand) and runs no font measure. The measurer **records**
+/// the solved width instead: floored to whole device px (0 under one px) into
+/// `st.fit.cell_fill.width`, which `draw` elides/clips at and the cache key carries. This is
+/// a write to host-side `TextState`, not to the tree's layout.
 ///
 /// `w` is floored to whole device px before use, so a fractional layout width (a
 /// percentage, a grow share) yields one stable `wrap_width_bits` in the texture cache key
@@ -295,8 +311,13 @@ fn quantizeFillWidth(w: f32) ?f32 {
 }
 
 /// The SDL-free body of `heightForWidth`: quantize, record the width on the fit, then hit
-/// the memo or measure through `fonts.wrapped(text, px, width, tracking) ?Metrics`.
+/// the memo or measure through `fonts.wrapped(text, px, width, tracking) ?Metrics`. A
+/// `.cell_fill` only records the floored width (0 under one px) and returns null.
 fn fillMeasure(st: *State, w: f32, fonts: anytype) ?ui.Measured {
+    if (st.fit == .cell_fill) {
+        st.fit.cell_fill.width = quantizeFillWidth(w) orelse 0;
+        return null;
+    }
     if (st.fit != .fill) return null;
     const qw = quantizeFillWidth(w) orelse {
         st.fit = .{ .fill = 0 }; // draw falls back to the single line it was measured as
@@ -379,7 +400,10 @@ pub fn draw(u: *UiCtx, node: *Node, c: cb.Color, opacity: f32) void {
         return;
     };
     const tint = paint.applyOpacity(c, opacity); // subtree dimming (tint-on-blit)
-    const r = paint.content(node) orelse return;
+    // A `.cell_fill` reserves no `data_width`, so its box is the resolved content box (the
+    // solved width minus padding), and a cell solved under one px draws nothing.
+    const r = (if (st.fit == .cell_fill) paint.resolvedContent(node) else paint.content(node)) orelse return;
+    if (st.fit == .cell_fill and st.fit.cellWidth() <= 0) return;
     const f = u.res.platform.font.at(st.px) catch return;
 
     // **All variants cached:** every accepted variant — normal, tracked, wrapped,
@@ -1084,4 +1108,55 @@ test "text feature: .fill measure declines other fits, empty text and sub-pixel 
     st.fit = .{ .fill = 0 };
     try std.testing.expect(fillMeasure(&st, 20, fonts) == null);
     try std.testing.expectEqual(@as(usize, 0), calls);
+}
+// --- `.cell_fill` (ENGINE-06a), SDL-free ---------------------------------------------------
+
+test "text feature: .cell_fill records the floored solved width and keeps the single-line height" {
+    var calls: usize = 0;
+    const fonts = FakeFonts{ .calls = &calls };
+    var st = State.init();
+    try std.testing.expect(st.update("What exists, and what does it take?"));
+    st.fit = .{ .cell_fill = .{ .mode = .ellipsis, .width = 0 } };
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth()); // unmeasured
+    // Null: the build-time single-line `data_height`/`baseline` stand.
+    try std.testing.expect(fillMeasure(&st, 380.6, fonts) == null);
+    try std.testing.expectEqual(@as(f32, 380), st.fit.cellWidth()); // draw/cache key elide here
+    try std.testing.expectEqual(State.Overflow.ellipsis, st.fit.overflow());
+    try std.testing.expectEqual(@as(f32, 0), st.fit.wrapWidth()); // single line, never wrapped
+    // A new solve re-records; no font measure runs for a cell.
+    try std.testing.expect(fillMeasure(&st, 120, fonts) == null);
+    try std.testing.expectEqual(@as(f32, 120), st.fit.cellWidth());
+    try std.testing.expectEqual(@as(usize, 0), calls);
+    try std.testing.expect(st.fill_memo == null);
+}
+
+test "text feature: .cell_fill under one px records 0 (draws nothing)" {
+    var calls: usize = 0;
+    const fonts = FakeFonts{ .calls = &calls };
+    var st = State.init();
+    try std.testing.expect(st.update("abc"));
+    st.fit = .{ .cell_fill = .{ .mode = .clip, .width = 50 } };
+    try std.testing.expect(fillMeasure(&st, 0.9, fonts) == null);
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth());
+    try std.testing.expectEqual(State.Overflow.clip, st.fit.overflow());
+    st.fit.cell_fill.width = 50;
+    try std.testing.expect(fillMeasure(&st, std.math.nan(f32), fonts) == null);
+    try std.testing.expectEqual(@as(f32, 0), st.fit.cellWidth());
+    try std.testing.expectEqual(@as(usize, 0), calls);
+}
+
+test "text feature: a .cell_fill reserves no data_width; a .cell keeps its allocated width" {
+    // `remeasure`'s cell branch (it needs a live font for height and baseline, so the width
+    // rule is pinned through `cellBoxWidth`): a solved `.cell_fill` width never feeds back
+    // into the box, so `style.apply`'s re-measure cannot widen the cell's parent.
+    try std.testing.expectEqual(@as(f32, 0), cellBoxWidth(.{ .cell_fill = .{ .mode = .ellipsis, .width = 0 } }));
+    try std.testing.expectEqual(@as(f32, 0), cellBoxWidth(.{ .cell_fill = .{ .mode = .clip, .width = 380 } }));
+    try std.testing.expectEqual(@as(f32, 48), cellBoxWidth(.{ .cell = .{ .mode = .clip, .width = 48 } }));
+    // The measure path leaves an authored `.cell` alone.
+    var calls: usize = 0;
+    var st = State.init();
+    try std.testing.expect(st.update("abc"));
+    st.fit = .{ .cell = .{ .mode = .ellipsis, .width = 64 } };
+    try std.testing.expect(fillMeasure(&st, 10, FakeFonts{ .calls = &calls }) == null);
+    try std.testing.expectEqual(@as(f32, 64), st.fit.cellWidth());
 }

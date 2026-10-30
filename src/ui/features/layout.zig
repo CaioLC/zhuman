@@ -249,7 +249,9 @@ const NoMeasure = struct {};
 /// called once per solve for each node with `Size.measure_h`, after every width is final
 /// and before any height is computed. `width` is the node's resolved content-box width.
 /// Returning null keeps the node's `data_height`/`baseline`. The measurer may only report a
-/// height and baseline; it must not mutate the tree (the solve writes the result itself).
+/// height and baseline; it must not mutate the tree's sizing or layout (the solve writes the
+/// result itself). It may record what it was given into host-side state it owns (the text
+/// host stores the solved width it wraps or elides at), since nothing in the solve reads it.
 pub fn set_global_pos_measured(node: anytype, alloc: Allocator, measurer: anytype) anyerror!void {
     _ = try solve(node, alloc, null, measurer);
 }

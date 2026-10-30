@@ -32,6 +32,19 @@ pub fn content(node: *Node) ?ui.Rect {
     };
 }
 
+/// `content` at the node's **resolved** size: global pos inset by padding, sized to the solved
+/// `width`/`height` minus padding (never negative). For a leaf whose box is set by layout
+/// rather than by its `data_*` dims (a `.cell_fill` text cell reserves `data_width = 0`).
+pub fn resolvedContent(node: *Node) ?ui.Rect {
+    const s = node.size;
+    return .{
+        .x = (node.layout._global_x orelse return null) + s.padding.left,
+        .y = (node.layout._global_y orelse return null) + s.padding.up,
+        .w = @max(0, s.width - s.padding.left - s.padding.right),
+        .h = @max(0, s.height - s.padding.up - s.padding.down),
+    };
+}
+
 /// `ui.Rect` (f32) → SDL `FRect`, the shape the renderer's fill/blit primitives take.
 pub fn frect(r: ui.Rect) sdl.rect.FRect {
     return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };

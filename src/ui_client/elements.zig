@@ -40,7 +40,7 @@ pub const GradientStop = feat.geometry.GradientStop;
 pub const GradientDir = feat.geometry.Dir;
 
 /// A text leaf's measurement constraint, chosen when the leaf is created (`El.text_fit`) —
-/// exactly one of the five, by construction. `.free` is what a plain `text` leaf gets.
+/// exactly one of the six, by construction. `.free` is what a plain `text` leaf gets.
 pub const TextFit = union(enum) {
     /// The measured glyph box, single line.
     free,
@@ -66,6 +66,15 @@ pub const TextFit = union(enum) {
     /// cell; `.ellipsis` draws the longest codepoint-aligned prefix plus an ellipsis. `width`
     /// must be nonnegative; `0` is a legal zero-width cell that draws nothing.
     cell: Cell,
+    /// A single-line `.cell` at the width the **layout** gives the leaf (CSS `text-overflow` on
+    /// a `min-width: 0` box): no width is authored. The width rule becomes
+    /// `.pct_of_parent = 1.0`; chain `with_size` after `text_fit` for another (`.grow` takes a
+    /// row's remainder). The leaf reserves no width of its own (`data_width = 0`), so it never
+    /// inflates a `fit_children` parent or pushes a sibling, and under an indefinite parent it
+    /// collapses to 0 (draws nothing). The solve records the resolved width and the draw
+    /// clips or elides at it; height and baseline stay the font's single line. `.clip` also
+    /// sets `Layout.overflow = .clip`, as `.cell` does.
+    cell_fill: CellMode,
     /// One line rotated 90° counter-clockwise, reading bottom-to-top (the collapsed
     /// rail label); the box is the swapped footprint. A bounded orientation, not an angle.
     vertical,
@@ -297,8 +306,8 @@ pub const El = struct {
     /// field; a later `with_style(.{ font })` re-measures at the same fit. Widths are logical
     /// px, scaled once here against the device-px font metrics. The rotated footprint,
     /// the cell box and the wrapped box are what the engine stamps, so layout, focus outline and
-    /// hit target agree with the drawn glyphs by construction. `.fill` also sets the width rule
-    /// and opts the node into the solve's height measure — see `TextFit.fill`.
+    /// hit target agree with the drawn glyphs by construction. `.fill` and `.cell_fill` also set
+    /// the width rule and opt the node into the solve's measure — see `TextFit`.
     pub fn text_fit(self: El, id: []const u8, str: []const u8, fit: TextFit) !El {
         const leaf = try self.text(id, str);
         const st = leaf.node.state(self.ctx, cb.UiState.TextState);
@@ -326,6 +335,21 @@ pub const El = struct {
                 // decoration subtree is cropped to the cell and hit-testing rejects outside it; the
                 // leaf's own glyphs are cropped renderer-scoped in `text.draw`.
                 if (c.mode == .clip) leaf.node.layout.overflow = .clip;
+            },
+            .cell_fill => |mode| {
+                // No reserved width (`remeasure` writes `data_width = 0`); the solve's measurer
+                // records the resolved width on the fit (`text.heightForWidth`) and returns
+                // null, so the single-line height and baseline stand.
+                st.fit = .{ .cell_fill = .{
+                    .mode = switch (mode) {
+                        .clip => .clip,
+                        .ellipsis => .ellipsis,
+                    },
+                    .width = 0,
+                } };
+                leaf.node.size.w = .{ .pct_of_parent = 1.0 };
+                leaf.node.size.measure_h = true;
+                if (mode == .clip) leaf.node.layout.overflow = .clip;
             },
             .vertical => st.fit = .vertical,
         }

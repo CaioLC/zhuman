@@ -438,19 +438,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     _ = h.with_style(.{ style.heading, Style{ .text = th.fg } });
     if (!narrow) {
         // `.structure-title p { text-overflow: ellipsis }`: the question is a cell of what the
-        // heading leaves, as the title and heading stamped last frame; whole until both have.
+        // heading leaves. It grows into the title row's remainder after the heading and the
+        // row's 12px gap, and reserves no width of its own, so it never widens the title.
         const question = "What exists, and what does it take?";
         const p_style = Style{ .font = 11, .text = th.dim };
-        _ = title.track();
-        _ = h.track();
-        const tg = title.prior_geometry();
-        const hg = h.prior_geometry();
-        if (tg != null and hg != null) {
-            const room = @max(0, (tg.?.rect.w - hg.?.rect.w) / ctx.res.view.scale - 12);
-            _ = (try title.text_fit("p", question, .{ .cell = .{ .mode = .ellipsis, .width = room } })).with_style(.{p_style});
-        } else {
-            _ = (try title.text("p", question)).with_style(.{p_style});
-        }
+        _ = (try title.text_fit("p", question, .{ .cell_fill = .ellipsis })).with_style(.{p_style}).with_size(.grow, .content);
     }
     const tools = try topbar.div("tools");
     _ = tools.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);

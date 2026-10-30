@@ -46,7 +46,7 @@ pub const UiState = struct {
         /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
-        /// The leaf's measurement constraint, exactly one of five by construction (`El.text_fit`
+        /// The leaf's measurement constraint, exactly one of six by construction (`El.text_fit`
         /// sets it; `style.apply` re-measures at it), widths in device px. POD: line spans and
         /// ellipsis prefixes are recomputed from it, never stored.
         ///   - `.free` (default) - the **single-line fast path**: one measured line, so dense
@@ -63,6 +63,9 @@ pub const UiState = struct {
         ///     a clip scoped to the cell; `.ellipsis` draws the longest codepoint-aligned prefix
         ///     that fits `width - ellipsis_width` plus the ellipsis token. `0` is a legal
         ///     zero-width cell (draws nothing, reserves nothing).
+        ///   - `.cell_fill` - a `.cell` at the width the layout solve gives the node: the box
+        ///     reserves no width (`data_width = 0`), the solve's measurer records the solved
+        ///     width here, and draw clips or elides at it.
         ///   - `.vertical` - one line rotated 90 degrees counter-clockwise at blit (the
         ///     collapsed rail label reads bottom-to-top); `remeasure` swaps the box axes, so
         ///     layout, focus outline and hit geometry match the rotated pixels. Rotation is a
@@ -159,6 +162,15 @@ pub const UiState = struct {
             /// line for every `.fill` value — the wrapped height is the measurer's to write.
             fill: f32,
             cell: Cell,
+            /// A single-line cell at the width the layout solve gives the node
+            /// (`El.text_fit(.., .{ .cell_fill = mode })`). The box reserves no width of its own
+            /// (`remeasure` writes `data_width = 0`, CSS `min-width: 0`), so the cell takes what
+            /// layout gives it and never pushes a sibling or inflates a `fit_children` parent.
+            /// `width` is the solved content width in whole device px, recorded by the solve's
+            /// measurer (`text.heightForWidth`) at the phase boundary; 0 until measured, or when
+            /// the solved width is under one px (draws nothing). Draw and the cache key elide or
+            /// clip at it exactly like `.cell`.
+            cell_fill: Cell,
             vertical,
 
             pub const Cell = struct { mode: CellMode, width: f32 };
@@ -173,20 +185,21 @@ pub const UiState = struct {
                     else => 0,
                 };
             }
-            /// The cell discipline; `.visible` for every fit but a cell.
+            /// The cell discipline; `.visible` for every fit but a cell (`.cell`, `.cell_fill`).
             pub fn overflow(self: Fit) Overflow {
                 return switch (self) {
-                    .cell => |c| switch (c.mode) {
+                    .cell, .cell_fill => |c| switch (c.mode) {
                         .clip => .clip,
                         .ellipsis => .ellipsis,
                     },
                     else => .visible,
                 };
             }
-            /// The allocated cell width, or 0 for every fit but a cell.
+            /// The cell width draw and the cache key elide/clip at: the allocated width of a
+            /// `.cell`, the last solved width of a `.cell_fill`, 0 for every other fit.
             pub fn cellWidth(self: Fit) f32 {
                 return switch (self) {
-                    .cell => |c| c.width,
+                    .cell, .cell_fill => |c| c.width,
                     else => 0,
                 };
             }

@@ -104,7 +104,13 @@ fn node(u: *UiCtx, n: *Node, clip: ?ui.Rect, depth: usize, scale: f32, w: *std.I
         const cut = s[0..@min(s.len, 40)];
         try w.print(" text\"{s}{s}\"", .{ cut, if (s.len > cut.len) "\u{2026}" else "" });
         // A `.fill` leaf: the width it was wrapped at this frame (logical px; 0 = unmeasured).
-        if (n.size.measure_h) try w.print(" fill@{d:.0}", .{st.fit.wrapWidth() / scale});
+        // A `.cell_fill` leaf: the width it was clipped/elided at (`cell@`).
+        if (n.size.measure_h) {
+            if (st.fit == .cell_fill)
+                try w.print(" cell@{d:.0}", .{st.fit.cellWidth() / scale})
+            else
+                try w.print(" fill@{d:.0}", .{st.fit.wrapWidth() / scale});
+        }
     }
 
     for (u.focus.building.items) |t| if (t.key == n.key) {

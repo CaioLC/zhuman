@@ -2195,6 +2195,53 @@ test "measure_h: under a fit_children parent the width falls back to the seed, t
     try std.testing.expectEqual(@as(f32, 10), mid.size.height);
 }
 
+// ---- ENGINE-06a: a zero-seed measure_h cell takes what layout gives it -------------------
+
+test "measure_h: a zero-width seed under a fit_children parent contributes no width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 100)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const mid = try TestNode.pcreate(a, "mid", root);
+    _ = mid.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .row, .cross = .start });
+    const label = try TestNode.pcreate(a, "label", mid);
+    _ = label.with_size(Size.initFixed(40, 10)).with_layout(.relative, null);
+    const cell = try measured_leaf(a, "cell", mid, .{ .pct_of_parent = 1.0 }, 0);
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log, .refuse = true });
+    try std.testing.expectEqual(@as(f32, 40), mid.size.width); // the cell adds nothing
+    try std.testing.expectEqual(@as(f32, 0), cell.size.width);
+    try std.testing.expectEqual(@as(f32, 0), log.last_w); // the measurer sees the 0
+    try std.testing.expectEqual(@as(f32, 7), cell.size.height); // null keeps the seed height
+}
+
+test "measure_h: a zero-seed grow cell takes the row remainder after a gap" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The research title row: [title: grow row, gap 12 | heading 97, cell grow] [tools 327].
+    const bar = try TestNode.create(a, "bar");
+    _ = bar.with_size(Size.init(.{ .fixed = 816 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .main = .space_between, .cross = .center });
+    const title = try TestNode.pcreate(a, "title", bar);
+    _ = title.with_size(Size.init(.grow, .fit_children)).with_layout(.relative, .{ .dir = .row, .cross = .baseline });
+    title.layout.gap = 12;
+    const heading = try TestNode.pcreate(a, "heading", title);
+    _ = heading.with_size(Size.initFixed(97, 28)).with_layout(.relative, null);
+    const cell = try measured_leaf(a, "cell", title, .grow, 0);
+    const tools = try TestNode.pcreate(a, "tools", bar);
+    _ = tools.with_size(Size.initFixed(327, 24)).with_layout(.relative, null);
+
+    var log: FakeMeasure.Log = .{};
+    try bar.set_global_pos_measured(a, FakeMeasure{ .log = &log, .refuse = true });
+    try std.testing.expectEqual(@as(f32, 489), title.size.width); // 816 − 327
+    try std.testing.expectEqual(@as(f32, 380), cell.size.width); // 489 − 97 − 12
+    try std.testing.expectEqual(@as(f32, 380), log.last_w);
+    try std.testing.expectEqual(@as(f32, 109), cell.layout._global_x.?); // 97 + 12
+    try std.testing.expectEqual(@as(f32, 489), tools.layout._global_x.?);
+}
+
 test "measure_h: the plain solve keeps the build-time data_height" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
