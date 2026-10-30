@@ -383,9 +383,16 @@ Two orthogonal axes, both Unity-inspired:
   *orthogonal* knobs (≈ CSS flexbox, ≈ Unity Layout Groups): `dir` (`row`/`column`),
   `wrap`, `reverse`, `main` (main-axis distribution — `start`/`center`/`end`/`space_between`
   /`space_around`/`space_evenly`), and `cross` (per-child cross-axis alignment — `start`/
-  `center`/`end`/`baseline`). One `place` algorithm reads all five, so every combination
+  `center`/`end`/`baseline`/`stretch`). One `place` algorithm reads all five, so every combination
   composes; the old flat `ChildrenAlign` enum enumerated a fixed subset of that product by
   hand (and grew a second, overlapping cross-align mechanism as features were bolted on).
+  `stretch` (CSS `align-items: stretch`) is the one cross mode that *sizes*: in the sizing
+  pass, in-flow children with an auto cross rule (`fit_children`/`content`) grow to their
+  line's cross extent (the parent's content box, or each wrapped line's max), so equal-height
+  columns need no `pct_of_parent = 1.0` or fixed-height fakes. It runs before the children's
+  own descendants resolve, so the stretched axis is definite for them (a `1.0` grandchild
+  fills it). `fixed`/`pct_of_parent` children keep their size, a stretch never shrinks a
+  child, min/max still apply, and it never feeds back into a `fit_children` parent's size.
 - **`gap`** — space inserted *between* adjacent flowed children along the main axis
   (and between wrapped lines on the cross axis); not before the first or after the last,
   and ignored by the `space_*` main distributions (they compute their own spacing). A

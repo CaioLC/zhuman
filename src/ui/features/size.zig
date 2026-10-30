@@ -23,7 +23,8 @@ pub const Padding = struct {
 ///   - `fixed` / `content` — leaf, *definite* (known without parent or children).
 ///   - `pct_of_parent`      — needs the parent; definite iff the parent's axis is.
 ///   - `grow`               — consumes remaining space on a definite parent's main axis.
-///   - `fit_children`       — needs the children; the only *indefinite* rule.
+///   - `fit_children`       — needs the children; the only *indefinite* rule, except on an
+///                            axis a `cross = .stretch` parent has stretched (then definite).
 /// An in-flow `.pct_of_parent` under an indefinite (`fit_children`) parent and a `.grow` that
 /// is root/out-of-flow/cross-axis or under an indefinite parent fall back to `content`
 /// (the node's measured `data_*`, or 0). An out-of-flow `.pct_of_parent` resolves against

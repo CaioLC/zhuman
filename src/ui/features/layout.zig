@@ -49,7 +49,9 @@ pub const Flow = struct {
     /// cross extent (flexbox `align-items`). Defaults to `.baseline` — text-first: a row of
     /// mixed-size text shares a common writing line; a plain box (no baseline) falls back to
     /// the trailing edge, and on a `.column` (where baseline is meaningless) it falls back to
-    /// the leading edge (`.start`).
+    /// the leading edge (`.start`). `.stretch` instead *sizes* auto (`fit_children`/`content`)
+    /// children to fill the line in pass 2, the way CSS equal-height columns work, so a
+    /// template need not fake it with `pct_of_parent = 1.0` or fixed heights.
     cross: CrossAlign = .baseline,
 };
 
@@ -75,12 +77,27 @@ pub const MainAlign = enum {
     space_evenly,
 };
 
-/// Cross-axis alignment — where each child sits within its line's cross extent. `start`/
+/// Cross-axis alignment — where each child sits within its line's cross extent (and, for
+/// `stretch`, how far it extends across it). `start`/
 /// `center`/`end` are relative to the line's cross band (top/center/bottom for a row;
 /// left/center/right for a column). `baseline` (rows only) lines every child's text baseline
 /// onto a shared line, so mixed-size text reads on one row; a box with no baseline aligns to
 /// its trailing edge, and on a column `baseline` degrades to `start`.
-pub const CrossAlign = enum { start, center, end, baseline };
+pub const CrossAlign = enum {
+    start,
+    center,
+    end,
+    baseline,
+    /// Fill the line (CSS `align-items: stretch`): every in-flow child whose cross rule is
+    /// auto (`fit_children`/`content`, and cross-axis `grow`, which acts as `content`) has its
+    /// border box raised to the line's cross extent, then sits at the line start like
+    /// `.start`. `fixed`/`pct_of_parent` children keep their size; a stretch never shrinks a
+    /// child, and min/max still bound its content box. A non-wrapping line is the parent's
+    /// content box; a wrapping run stretches each child to its own line. Applied in pass 2
+    /// (`stretch_children`), so the stretched axis is definite for the child's descendants.
+    /// Never feeds back into a `fit_children` parent, whose cross fit stays the plain max.
+    stretch,
+};
 
 pub const ChildrenPosInfo = struct {
     x_offset: f32,
@@ -382,7 +399,8 @@ fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow) ?f32 {
 /// (ascent) plus the deepest below-baseline (descent), so mixed-size text still fits — an
 /// out-of-flow child just contributes its own extent. Every other case is a plain max of
 /// child cross-extents (which is what `start`/`center`/`end` need). Reduces to
-/// `max(child cross-extent)` when no baseline row widens it.
+/// `max(child cross-extent)` when no baseline row widens it. `stretch` is the plain max too:
+/// it raises children to this fitted line in pass 2 and never feeds back into it.
 fn fit_cross(node: anytype, cross_axis: Axis, flow: Flow) f32 {
     if (flow.dir == .row and flow.cross == .baseline) {
         var max_ascent: f32 = 0; // deepest above the baseline (height − baseline)
@@ -432,6 +450,12 @@ fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Ax
 /// main-axis space before their descendants resolve. `fit_children` is indefinite for its
 /// in-flow children, whose percentages and growers fall back to content; an out-of-flow
 /// child's percentage resolves against the fitted size.
+///
+/// Under `cross = .stretch`, auto-sized in-flow children are then raised to their line's
+/// cross extent (`stretch_children`), still before their descendants resolve, so a stretched
+/// `fit_children` axis counts as definite for them: a `1.0` grandchild fills the stretched
+/// box. Per parent the order is finalize children → main-axis `grow` → cross-axis stretch →
+/// recurse, because the wrap packing reads the final main extents.
 fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
     finalize_box(node, p_def_w, p_def_h, p_inner_w, p_inner_h);
     resolve_children(node, rule_definite(node.size.w), rule_definite(node.size.h));
@@ -466,8 +490,77 @@ fn resolve_children(node: anytype, def_w: bool, def_h: bool) void {
 
     const main = main_axis(node.layout.flow);
     if ((main == .x and def_w) or (main == .y and def_h)) distribute_grow(node, main);
+    if (node.layout.flow.cross == .stretch) stretch_children(node, main);
 
-    for (node.children.items) |c| resolve_children(c, rule_definite(c.size.w), rule_definite(c.size.h));
+    for (node.children.items) |c| {
+        resolve_children(c, rule_definite(c.size.w) or stretches(node, c, .x), rule_definite(c.size.h) or stretches(node, c, .y));
+    }
+}
+
+/// Whether `c`'s `axis` is stretched by its parent `node`: the parent's flow is `.stretch`,
+/// `c` is in flow, `axis` is the parent's cross axis, and `c`'s rule there is auto. The same
+/// test picks who `stretch_children` raises and whose axis then counts as definite, so the
+/// two can't disagree. Every such child is raised (the line is always known in pass 2).
+fn stretches(node: anytype, c: anytype, axis: Axis) bool {
+    if (node.layout.flow.cross != .stretch or c.layout.anchor != .relative) return false;
+    if (axis == main_axis(node.layout.flow)) return false;
+    return switch (axis_rule(c, axis)) {
+        // Cross-axis `grow` has no share to take and falls back to content, so it stretches.
+        .fit_children, .content, .grow => true,
+        .fixed, .pct_of_parent => false,
+    };
+}
+
+/// Raise `c`'s cross border box to `line`. Never shrinks it below its current (pass-1)
+/// extent; `set_inner_extent` keeps min/max on the content box, so a max can cap it short.
+fn stretch_to(c: anytype, axis: Axis, line: f32) void {
+    const target = @max(extent(c, axis), line);
+    set_inner_extent(c, axis, target - padding_extent(&c.size, axis));
+}
+
+/// `cross = .stretch`, pass 2. A single line is the parent's content box on the cross axis
+/// (for a `fit_children` parent that is the already-fitted max, so shorter siblings grow to
+/// the tallest, as in CSS). A wrapping run is packed into lines exactly as `flow_place` packs
+/// them (flow order, `reverse`, `gap`, against the content-box main extent) and each child
+/// takes its own line's max. Pass 3's line extents come out unchanged, because no child
+/// grows past the line it was measured in.
+fn stretch_children(node: anytype, main: Axis) void {
+    const ca = cross(main);
+    const flow = node.layout.flow;
+    if (!flow.wrap) {
+        const line = inner_extent(node, ca);
+        for (node.children.items) |c| {
+            if (stretches(node, c, ca)) stretch_to(c, ca, line);
+        }
+        return;
+    }
+
+    var n: usize = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor == .relative) n += 1;
+    }
+    const main_size = inner_extent(node, main);
+    const gap = node.layout.gap;
+    var i: usize = 0;
+    while (i < n) {
+        var j = i;
+        var run: f32 = 0;
+        var line: f32 = 0;
+        while (j < n) {
+            const c = nth_flow_child(node, if (flow.reverse) n - 1 - j else j);
+            const cm = extent(c, main);
+            const step = if (j == i) cm else gap + cm;
+            if (j > i and run + step > main_size) break;
+            run += step;
+            line = @max(line, extent(c, ca));
+            j += 1;
+        }
+        for (i..j) |k| {
+            const c = nth_flow_child(node, if (flow.reverse) n - 1 - k else k);
+            if (stretches(node, c, ca)) stretch_to(c, ca, line);
+        }
+        i = j;
+    }
 }
 
 fn is_grow(rule: size_mod.SizeRule) bool {
@@ -727,11 +820,12 @@ fn cross(m: Axis) Axis {
 /// A child's offset within its line's cross band (measured from the line's cross start).
 /// `start`/`center`/`end` position the box; `baseline` (rows only) drops the child so its
 /// baseline lands on the line's shared baseline (at `max_ascent` from the line top), and on
-/// a column falls back to `start`.
+/// a column falls back to `start`. `stretch` already sized the child to the line in pass 2,
+/// so it only places it at the line start.
 fn cross_within(flow: Flow, m: Axis, line_cross: f32, c: anytype, max_ascent: f32) f32 {
     const cc = extent(c, cross(m));
     return switch (flow.cross) {
-        .start => 0,
+        .start, .stretch => 0, // stretch sized the child in pass 2; it sits at the line start
         .center => (line_cross - cc) / 2,
         .end => line_cross - cc,
         .baseline => if (flow.dir == .row) max_ascent - (c.size.height - c.size.baseline_off()) else 0,

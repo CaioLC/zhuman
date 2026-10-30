@@ -587,6 +587,207 @@ test "horizontal cross-align: center is derived from the same reduction" {
     try std.testing.expectEqual(@as(f32, 10), k2.layout._global_y.?);
 }
 
+/// A child whose cross extent is decided by `content`: a fixed main extent and a measured
+/// cross extent of `cross_px`, set the way the host's text measure sets `data_*`.
+fn stretch_kid(a: std.mem.Allocator, id: []const u8, parent: *TestNode, main_px: f32, cross_px: f32) !*TestNode {
+    const k = try TestNode.pcreate(a, id, parent);
+    _ = k.with_size(Size.init(.{ .fixed = main_px }, .content)).with_layout(.relative, null);
+    k.size.data_height = cross_px;
+    return k;
+}
+
+test "cross stretch: a definite row fills auto children to its content height" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Row 200x60 (content box), padding-top 5. `fit` holds a 30x20 grandchild, so pass 1
+    // makes it 20 tall; stretch raises it to 60. The fixed 40x30 child keeps 30. Both sit at
+    // the line start, the parent's content top (y = 5).
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 60));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    root.size.padding = features.Padding.initEach(5, 0, 0, 0);
+    const fit = try TestNode.pcreate(a, "fit", root);
+    _ = fit.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, null);
+    const gc = try TestNode.pcreate(a, "gc", fit);
+    _ = gc.with_size(Size.initFixed(30, 20)).with_layout(.relative, null);
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(40, 30)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 60), fit.size.height);
+    try std.testing.expectEqual(@as(f32, 30), fit.size.width);
+    try std.testing.expectEqual(@as(f32, 20), gc.size.height);
+    try std.testing.expectEqual(@as(f32, 30), fixed.size.height);
+    try std.testing.expectEqual(@as(f32, 5), fit.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 5), fixed.layout._global_y.?);
+}
+
+test "cross stretch: a fit row stretches to its tallest child and stays that size" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Auto children 20/50/35 tall plus a fixed 25: the fit height is the plain max (50), the
+    // auto children all become 50, the fixed one stays 25, and nothing feeds back.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    const k20 = try stretch_kid(a, "k20", root, 10, 20);
+    const k50 = try stretch_kid(a, "k50", root, 10, 50);
+    const k35 = try stretch_kid(a, "k35", root, 10, 35);
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(10, 25)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 50), root.size.height);
+    try std.testing.expectEqual(@as(f32, 50), k20.size.height);
+    try std.testing.expectEqual(@as(f32, 50), k50.size.height);
+    try std.testing.expectEqual(@as(f32, 50), k35.size.height);
+    try std.testing.expectEqual(@as(f32, 25), fixed.size.height);
+    for ([_]*TestNode{ k20, k50, k35, fixed }) |k| try std.testing.expectEqual(@as(f32, 0), k.layout._global_y.?);
+}
+
+test "cross stretch: a column fills a content-width child's border box, padding included" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Column with a 300-wide content box (padding 10 left/right on top). The child measures
+    // 40 wide with 6px side padding (box 52); stretched, its border box is the parent's
+    // content width, 300, so its content is 288. It starts at the content left (x = 10).
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 100));
+    _ = root.with_layout(.top_left, .{ .dir = .column, .cross = .stretch });
+    root.size.padding = features.Padding.initEach(0, 10, 0, 10);
+    const k = try TestNode.pcreate(a, "k", root);
+    _ = k.with_size(Size.init(.content, .{ .fixed = 20 })).with_layout(.relative, null);
+    k.size.data_width = 40;
+    k.size.padding = features.Padding.initEach(0, 6, 0, 6);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 300), k.size.width);
+    try std.testing.expectEqual(@as(f32, 10), k.layout._global_x.?);
+}
+
+test "cross stretch: the stretched axis is definite for the child's descendants" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Row 80 tall. `cell` is a fit row (padding 4 top/bottom) holding a `pct 1.0`-tall
+    // grandchild: unstretched it would be indefinite and fall back to 0; stretched to 80 its
+    // content box is 72, which the grandchild fills. `col` is a fit column with a 20 header
+    // and a `grow` body: the body takes the stretched remainder, 80 − 20 = 60.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 80));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    const cell = try TestNode.pcreate(a, "cell", root);
+    _ = cell.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, null);
+    cell.size.padding = features.Padding.initEach(4, 0, 4, 0);
+    const fill = try TestNode.pcreate(a, "fill", cell);
+    _ = fill.with_size(Size.init(.{ .fixed = 10 }, .{ .pct_of_parent = 1.0 })).with_layout(.relative, null);
+    const col = try TestNode.pcreate(a, "col", root);
+    _ = col.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .column });
+    const head = try TestNode.pcreate(a, "head", col);
+    _ = head.with_size(Size.initFixed(10, 20)).with_layout(.relative, null);
+    const body = try TestNode.pcreate(a, "body", col);
+    _ = body.with_size(Size.init(.{ .fixed = 10 }, .grow)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 80), cell.size.height);
+    try std.testing.expectEqual(@as(f32, 72), fill.size.height);
+    try std.testing.expectEqual(@as(f32, 80), col.size.height);
+    try std.testing.expectEqual(@as(f32, 60), body.size.height);
+    try std.testing.expectEqual(@as(f32, 20), body.layout._global_y.?);
+}
+
+test "cross stretch: max caps the stretch, min is respected, nothing shrinks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Row 100 tall. `capped`: max content 40 → 40. `capped_pad`: max 40 plus 5+5 padding →
+    // box 50. `floored`: min 10 → stretched to 100. `tall`: min 120 already exceeds the line,
+    // and a stretch never shrinks, so it stays 120.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 100));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    const capped = try stretch_kid(a, "capped", root, 10, 15);
+    capped.size.max_height = 40;
+    const capped_pad = try stretch_kid(a, "capped_pad", root, 10, 15);
+    capped_pad.size.max_height = 40;
+    capped_pad.size.padding = features.Padding.initEach(5, 0, 5, 0);
+    const floored = try stretch_kid(a, "floored", root, 10, 5);
+    floored.size.min_height = 10;
+    const tall = try stretch_kid(a, "tall", root, 10, 5);
+    tall.size.min_height = 120;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 40), capped.size.height);
+    try std.testing.expectEqual(@as(f32, 50), capped_pad.size.height);
+    try std.testing.expectEqual(@as(f32, 100), floored.size.height);
+    try std.testing.expectEqual(@as(f32, 120), tall.size.height);
+}
+
+test "cross stretch: a wrapping row stretches each child to its own line" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Width 100, gap 4, three 40-wide children: k0 (auto 10), k1 (fixed 30), k2 (auto 5).
+    // Forward: line 1 = k0,k1 (40+4+40 ≤ 100) max 30; line 2 = k2 alone, 5. So k0 → 30 and
+    // k2 stays 5, at y = 30 + 4. Fit height = 30 + 4 + 5.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 100 }, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .wrap = true, .cross = .stretch });
+    root.layout.gap = 4;
+    const k0 = try stretch_kid(a, "k0", root, 40, 10);
+    const k1 = try TestNode.pcreate(a, "k1", root);
+    _ = k1.with_size(Size.initFixed(40, 30)).with_layout(.relative, null);
+    const k2 = try stretch_kid(a, "k2", root, 40, 5);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 39), root.size.height);
+    try std.testing.expectEqual(@as(f32, 30), k0.size.height);
+    try std.testing.expectEqual(@as(f32, 30), k1.size.height);
+    try std.testing.expectEqual(@as(f32, 5), k2.size.height);
+    try std.testing.expectEqual(@as(f32, 0), k0.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 34), k2.layout._global_y.?);
+
+    // Reversed, the packing order is k2,k1 | k0, so k2 now shares k1's line (→ 30) and k0
+    // is alone on line 2 (stays 10). The pass-2 packing mirrors `flow_place`'s reverse.
+    root.layout.flow.reverse = true;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 30), k2.size.height);
+    try std.testing.expectEqual(@as(f32, 10), k0.size.height);
+    try std.testing.expectEqual(@as(f32, 34), k0.layout._global_y.?);
+}
+
+test "cross stretch: a stretch row's line is the plain max, not the baseline extent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Under `.baseline` this pair would fit to max ascent + max descent: k1 (50 tall,
+    // baseline 10) has ascent 40, k2 (30 tall, baseline 25) has descent 25, so 65. Stretch
+    // ignores baselines: the line is max(50, 30) = 50 and k2 (auto) stretches to it.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    const k1 = try TestNode.pcreate(a, "k1", root);
+    _ = k1.with_size(Size.initFixed(100, 50)).with_layout(.relative, null);
+    k1.size.baseline = 10;
+    const k2 = try stretch_kid(a, "k2", root, 80, 30);
+    k2.size.baseline = 25;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 50), root.size.height);
+    try std.testing.expectEqual(@as(f32, 50), k2.size.height);
+    try std.testing.expectEqual(@as(f32, 0), k2.layout._global_y.?);
+}
+
 test "layout gap: fit parent reserves it, children flow spaced by it" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
