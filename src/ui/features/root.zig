@@ -15,3 +15,6 @@ pub const Layout = layout_mod.Layout;
 pub const Overflow = layout_mod.Overflow;
 pub const set_global_pos = layout_mod.set_global_pos;
 pub const set_global_pos_profiled = layout_mod.set_global_pos_profiled;
+pub const set_global_pos_measured = layout_mod.set_global_pos_measured;
+pub const set_global_pos_measured_profiled = layout_mod.set_global_pos_measured_profiled;
+pub const Measured = layout_mod.Measured;

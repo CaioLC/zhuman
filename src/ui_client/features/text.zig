@@ -189,15 +189,20 @@ const MeasureAcc = struct {
 /// row. Runs the *same* `wrap.wrapLines` `draw` runs, so box and glyphs agree.
 fn measureWrapped(font: sdl.ttf.Font, text: []const u8, max_w: f32, tracking: f32) struct { f32, f32, f32 } {
     var fm = FontMeasurer{ .font = font, .tracking = tracking };
-    var acc = MeasureAcc{ .src = text, .m = fm.measurer() };
-    wrap.wrapLines(text, max_w, fm.measurer(), *MeasureAcc, &acc, MeasureAcc.take);
-    const skip = lineSkip(font);
+    const m = wrappedMetrics(fm.measurer(), text, max_w, lineSkip(font), @floatFromInt(font.getAscent()));
+    return .{ m.width, m.height, m.baseline };
+}
+
+/// The SDL-free core of `measureWrapped`: wrap `text` at `max_w` with `m`, then size the
+/// block from the line count, the line `skip` and the font `ascent`.
+fn wrappedMetrics(m: wrap.Measurer, text: []const u8, max_w: f32, skip: f32, ascent: f32) Metrics {
+    var acc = MeasureAcc{ .src = text, .m = m };
+    wrap.wrapLines(text, max_w, m, *MeasureAcc, &acc, MeasureAcc.take);
     const height = @as(f32, @floatFromInt(acc.count)) * skip;
     // Baseline from bottom = descent = one line's height − ascent. For a stacked block the
     // reference is the last line, whose bottom is the box bottom, so the same descent holds.
-    const ascent: f32 = @floatFromInt(font.getAscent());
     const baseline = if (acc.count == 0) 0 else skip - ascent;
-    return .{ acc.max_line_w, height, baseline };
+    return .{ .width = acc.max_line_w, .height = height, .baseline = baseline };
 }
 
 const Metrics = struct { width: f32, height: f32, baseline: f32 };
@@ -219,7 +224,10 @@ fn orientMetrics(orientation: State.Orientation, upright: Metrics) Metrics {
 pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     const st = node.state(ctx, State);
     const measured = st.text() orelse "";
-    const upright: Metrics = if (st.fit.wrapWidth() > 0) blk: {
+    // `.fill` always measures one line here, whatever width a previous solve left in it:
+    // the single-line width is the seed the layout's width pass reads, and the wrapped
+    // height is written by `heightForWidth` once the width is solved.
+    const upright: Metrics = if (st.fit != .fill and st.fit.wrapWidth() > 0) blk: {
         const font = ctx.res.platform.font.at(st.px) catch return;
         const tw, const th, const baseline = measureWrapped(font, measured, st.fit.wrapWidth(), st.tracking);
         break :blk .{ .width = tw, .height = th, .baseline = baseline };
@@ -248,6 +256,65 @@ pub fn remeasure(ctx: *UiCtx, node: *Node) void {
     node.size.data_width = oriented.width;
     node.size.data_height = oriented.height;
     node.size.baseline = oriented.baseline;
+}
+
+/// The layout measurer's text half (`measure.TextMeasurer`): the wrapped height and
+/// baseline of a `.fill` leaf at its solved content width `w` (device px). Returns null,
+/// keeping the build-time single-line `data_height`, for a node without the text aspect,
+/// for any fit but `.fill`, for a refused/empty string, for a width under one device px
+/// and on a font error.
+///
+/// `w` is floored to whole device px before use, so a fractional layout width (a
+/// percentage, a grow share) yields one stable `wrap_width_bits` in the texture cache key
+/// rather than a re-raster whenever the fraction moves. The floored width is stored in
+/// `st.fit.fill`, which `draw` wraps at. A width the text can't fill in one line breaks
+/// exactly as `.wrap` would at that width.
+///
+/// Memoized on the state (`State.fill_memo`): equal content, px, tracking and quantized
+/// width return the stored metrics without a font call. `.fill` has no vertical form (the
+/// `Fit` union holds one of `.fill`/`.vertical`), so the result is always upright.
+pub fn heightForWidth(ctx: *UiCtx, node: *Node, w: f32) ?ui.Measured {
+    if (node.render_data.text == null) return null;
+    const st = node.state(ctx, State);
+    const Fonts = struct {
+        ctx: *UiCtx,
+        fn wrapped(self: @This(), text: []const u8, px: f32, width: f32, tracking: f32) ?Metrics {
+            const font = self.ctx.res.platform.font.at(px) catch return null;
+            const tw, const th, const baseline = measureWrapped(font, text, width, tracking);
+            return .{ .width = tw, .height = th, .baseline = baseline };
+        }
+    };
+    return fillMeasure(st, w, Fonts{ .ctx = ctx });
+}
+
+/// A solved width floored to whole device px, or null when it is under one px (nothing
+/// can be wrapped into it; the leaf keeps its single-line seed).
+fn quantizeFillWidth(w: f32) ?f32 {
+    if (!(w >= 1)) return null; // also rejects NaN
+    return @floor(w);
+}
+
+/// The SDL-free body of `heightForWidth`: quantize, record the width on the fit, then hit
+/// the memo or measure through `fonts.wrapped(text, px, width, tracking) ?Metrics`.
+fn fillMeasure(st: *State, w: f32, fonts: anytype) ?ui.Measured {
+    if (st.fit != .fill) return null;
+    const qw = quantizeFillWidth(w) orelse {
+        st.fit = .{ .fill = 0 }; // draw falls back to the single line it was measured as
+        return null;
+    };
+    st.fit = .{ .fill = qw };
+    const content = st.text() orelse return null;
+    const key = State.FillMemo.keyOf(content, st.px, st.tracking, qw);
+    if (st.fill_memo) |memo| {
+        if (memo.matches(key)) return .{ .height = memo.height, .baseline = memo.baseline };
+    }
+    const upright = fonts.wrapped(content, st.px, qw, st.tracking) orelse return null;
+    const m = orientMetrics(st.fit.orientation(), upright);
+    var memo = key;
+    memo.height = m.height;
+    memo.baseline = m.baseline;
+    st.fill_memo = memo;
+    return .{ .height = m.height, .baseline = m.baseline };
 }
 
 /// Give `node` cached text — measured at build (the host has the font on hand),
@@ -293,7 +360,8 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 /// match the measure pass glyph-for-glyph:
 ///   - single-line, unconstrained (`fit == .free`) — the whole
 ///     string (tracked: per-cluster at the measured advances; untracked: one span).
-///   - wrapped (`fit == .wrap`) — the *same* `wrap.wrapLines` the measure pass ran, one
+///   - wrapped (`fit == .wrap`, or a measured `.fill` at its solved width) — the *same*
+///     `wrap.wrapLines` the measure pass ran, one
 ///     stamped line per break at `i*lineSkip` (a blank line keeps its height), tracked or not.
 ///   - `.clip` — the whole string is cached (its pixels depend only on keyed inputs); the
 ///     clip **rect** is the one per-frame render-time op, scoped to the prior clip ∩ the cell
@@ -933,4 +1001,87 @@ test "text feature: horizontal blit snaps only its fractional device-pixel origi
         ui.Rect{ .x = 8, .y = 9, .w = 80.5, .h = 20.25 },
         snapHorizontalOrigin(box),
     );
+}
+
+// --- `.fill` measure (ENGINE-05), SDL-free -------------------------------------------------
+//
+// `heightForWidth` needs a live font only for the wrap itself; quantization, the fit write and
+// the memo live in `fillMeasure`, driven here by a 1px-per-byte fake through the same
+// `wrappedMetrics` core `measureWrapped` uses (line skip 10, ascent 8 → baseline 2).
+
+const FakeFonts = struct {
+    calls: *usize,
+    fn width(_: *const anyopaque, t: []const u8) f32 {
+        return @floatFromInt(t.len);
+    }
+    fn prefixBytes(_: *const anyopaque, t: []const u8, max_w: f32) usize {
+        if (max_w <= 0) return 0;
+        return @min(t.len, @as(usize, @intFromFloat(max_w)));
+    }
+    fn wrapped(self: FakeFonts, t: []const u8, _: f32, w: f32, _: f32) ?Metrics {
+        self.calls.* += 1;
+        const dummy: u8 = 0;
+        const m: wrap.Measurer = .{ .ptr = &dummy, .widthFn = width, .prefixBytesFn = prefixBytes };
+        return wrappedMetrics(m, t, w, 10, 8);
+    }
+};
+
+test "text feature: .fill wraps at the floored solved width and the draw width follows it" {
+    var st = State.init();
+    try std.testing.expect(st.update("aaaa bbbb cccc"));
+    st.fit = .{ .fill = 0 };
+    try std.testing.expectEqual(@as(f32, 0), st.fit.wrapWidth()); // unmeasured: single line
+    var calls: usize = 0;
+    // 9.75 floors to 9: "aaaa bbbb" (9) fits, "cccc" wraps → 2 lines.
+    const m = fillMeasure(&st, 9.75, FakeFonts{ .calls = &calls }).?;
+    try std.testing.expectEqual(@as(f32, 20), m.height);
+    try std.testing.expectEqual(@as(f32, 2), m.baseline);
+    try std.testing.expectEqual(@as(f32, 9), st.fit.wrapWidth()); // draw/cache key wrap here
+    try std.testing.expectEqual(State.Overflow.visible, st.fit.overflow());
+}
+
+test "text feature: .fill memo hits on equal inputs and misses on any change" {
+    var st = State.init();
+    try std.testing.expect(st.update("aaaa bbbb cccc"));
+    st.fit = .{ .fill = 0 };
+    var calls: usize = 0;
+    const fonts = FakeFonts{ .calls = &calls };
+    _ = fillMeasure(&st, 9, fonts).?;
+    try std.testing.expectEqual(@as(usize, 1), calls);
+    // Same inputs, and a fraction that floors to the same width: no font call.
+    _ = fillMeasure(&st, 9, fonts).?;
+    _ = fillMeasure(&st, 9.5, fonts).?;
+    try std.testing.expectEqual(@as(usize, 1), calls);
+    // A new width, px, tracking or content each re-measure once.
+    try std.testing.expectEqual(@as(f32, 10), fillMeasure(&st, 14, fonts).?.height); // one line
+    try std.testing.expectEqual(@as(usize, 2), calls);
+    st.px = 12;
+    _ = fillMeasure(&st, 14, fonts).?;
+    st.tracking = 1;
+    _ = fillMeasure(&st, 14, fonts).?;
+    try std.testing.expect(st.update("aaaa bbbb dddd"));
+    _ = fillMeasure(&st, 14, fonts).?;
+    try std.testing.expectEqual(@as(usize, 5), calls);
+    _ = fillMeasure(&st, 14, fonts).?;
+    try std.testing.expectEqual(@as(usize, 5), calls);
+}
+
+test "text feature: .fill measure declines other fits, empty text and sub-pixel widths" {
+    var calls: usize = 0;
+    const fonts = FakeFonts{ .calls = &calls };
+    var st = State.init();
+    try std.testing.expect(st.update("aaaa bbbb"));
+    st.fit = .{ .wrap = 5 };
+    try std.testing.expect(fillMeasure(&st, 5, fonts) == null);
+    try std.testing.expectEqual(@as(f32, 5), st.fit.wrapWidth()); // `.wrap` untouched
+    st.fit = .free;
+    try std.testing.expect(fillMeasure(&st, 5, fonts) == null);
+    st.fit = .{ .fill = 7 };
+    try std.testing.expect(fillMeasure(&st, 0.5, fonts) == null);
+    try std.testing.expectEqual(@as(f32, 0), st.fit.wrapWidth()); // back to the single line
+    try std.testing.expect(fillMeasure(&st, std.math.nan(f32), fonts) == null);
+    _ = st.update("");
+    st.fit = .{ .fill = 0 };
+    try std.testing.expect(fillMeasure(&st, 20, fonts) == null);
+    try std.testing.expectEqual(@as(usize, 0), calls);
 }

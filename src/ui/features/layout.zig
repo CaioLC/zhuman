@@ -216,6 +216,8 @@ pub const Layout = struct {
 ///   1. `recalculate_size`    — bottom-up, both axes: intrinsic sizes and provisionals.
 ///   2. `resolve_axis(.x)`    — top-down, x only: percentages, grow, shrink and stretch.
 ///                              Every width is final after it.
+///      (boundary)            — with a measurer only: each `measure_h` node's
+///                              `data_height`/`baseline` re-measured at its final width.
 ///   3. `recalculate_axis(.y)`— bottom-up, y only: every height again from scratch, with a
 ///                              wrapping row's lines packed against its final width.
 ///   4. `resolve_axis(.y)`    — top-down, y only: the mirror of step 2.
@@ -224,8 +226,37 @@ pub const Layout = struct {
 /// pre-measured `data_width`/`data_height`, set on the node at build). `place` takes a
 /// scratch `Allocator` only to materialize each node's in-flow child list; it still never
 /// consults the host. Call at the root.
+///
+/// This entrypoint never re-measures: a `Size.measure_h` node keeps its build-time
+/// `data_height`. `set_global_pos_measured` is the same solve with a host measurer called
+/// once, between steps 2 and 3, for the opted-in nodes (see `measure_heights`).
 pub fn set_global_pos(node: anytype, alloc: Allocator) anyerror!void {
-    _ = try solve(node, alloc, null);
+    _ = try solve(node, alloc, null, NoMeasure{});
+}
+
+/// A height measured by the host at a node's resolved content width: the new `data_height`
+/// and `baseline` (content-relative, like `Size.baseline`). See `set_global_pos_measured`.
+pub const Measured = struct { height: f32, baseline: f32 };
+
+/// The measurer behind the plain entrypoints: it has no `height_for_width`, and the solve
+/// skips the measure walk for it at comptime, so the pure path makes no callback at all.
+const NoMeasure = struct {};
+
+/// `set_global_pos` with a host **measurer** for content whose height depends on its width
+/// (text wrapped at the width the solve gives it). `measurer` is a comptime duck-typed
+/// struct value with
+///   `fn height_for_width(self, node: @TypeOf(node), width: f32) ?Measured`
+/// called once per solve for each node with `Size.measure_h`, after every width is final
+/// and before any height is computed. `width` is the node's resolved content-box width.
+/// Returning null keeps the node's `data_height`/`baseline`. The measurer may only report a
+/// height and baseline; it must not mutate the tree (the solve writes the result itself).
+pub fn set_global_pos_measured(node: anytype, alloc: Allocator, measurer: anytype) anyerror!void {
+    _ = try solve(node, alloc, null, measurer);
+}
+
+/// The profiled `set_global_pos_measured`: the measure walk is timed as `Sample.measure`.
+pub fn set_global_pos_measured_profiled(node: anytype, alloc: Allocator, clock: Clock, measurer: anytype) anyerror!Sample {
+    return solve(node, alloc, clock, measurer);
 }
 
 // ============================ Sizing (passes 1–4) ============================
@@ -235,9 +266,10 @@ const Axis = enum { x, y };
 /// Diagnostic variant of `set_global_pos`: identical solve, with nanosecond durations read
 /// from the host's `clock`. Both bottom-up passes (1, 3) count as `intrinsic`, both
 /// top-down passes (2, 4) as `relative`, and `place` as `placement`. The normal entrypoint
-/// remains clock-free and callback-free.
+/// remains clock-free and callback-free. Like `set_global_pos`, it never re-measures, so
+/// `Sample.measure` stays 0.
 pub fn set_global_pos_profiled(node: anytype, alloc: Allocator, clock: Clock) anyerror!Sample {
-    return solve(node, alloc, clock);
+    return solve(node, alloc, clock, NoMeasure{});
 }
 
 const Clock = @import("../profile.zig").Clock;
@@ -261,8 +293,8 @@ const Lap = struct {
     }
 };
 
-/// The one solve behind both entrypoints (see `set_global_pos` for the passes).
-fn solve(node: anytype, alloc: Allocator, clock: ?Clock) anyerror!Sample {
+/// The one solve behind every entrypoint (see `set_global_pos` for the passes).
+fn solve(node: anytype, alloc: Allocator, clock: ?Clock, measurer: anytype) anyerror!Sample {
     var sample: Sample = .{};
     var lap = Lap.init(clock);
 
@@ -271,9 +303,15 @@ fn solve(node: anytype, alloc: Allocator, clock: ?Clock) anyerror!Sample {
     resolve_axis(node, .x);
     lap.add(&sample.relative);
 
-    // Phase boundary: every width is final and no height has been resolved yet. Anything
-    // whose height depends on its width (text wrapped at the resolved width) is re-measured
-    // here, before step 3 reads `data_height`.
+    // Phase boundary: every width is final and no height has been resolved yet. A
+    // `measure_h` node (text wrapped at its resolved width) is re-measured here by the host
+    // measurer, before step 3 reads `data_height`. Pass 1's heights for those nodes came
+    // from the build-time seed, and step 3 recomputes every height from scratch, so nothing
+    // computed from the seed survives. Without a measurer this is compiled out.
+    if (@TypeOf(measurer) != NoMeasure) {
+        measure_heights(node, measurer);
+        lap.add(&sample.measure);
+    }
 
     recalculate_axis(node, .y);
     lap.add(&sample.intrinsic);
@@ -283,6 +321,19 @@ fn solve(node: anytype, alloc: Allocator, clock: ?Clock) anyerror!Sample {
     try place(node, alloc, null);
     lap.add(&sample.placement);
     return sample;
+}
+
+/// The phase-boundary walk: every `measure_h` node in the subtree, pre-order, is measured at
+/// its final content width. A non-null result replaces `data_height` and `baseline`;
+/// `data_width` (the seed the x pass already used) is never touched.
+fn measure_heights(node: anytype, measurer: anytype) void {
+    if (node.size.measure_h) {
+        if (measurer.height_for_width(node, inner_extent(node, .x))) |m| {
+            node.size.data_height = m.height;
+            node.size.baseline = m.baseline;
+        }
+    }
+    for (node.children.items) |c| measure_heights(c, measurer);
 }
 
 /// The main (flow) axis of a parent's children: x for a row, y for a column. `fit_children`

@@ -251,6 +251,19 @@ pub fn Node(comptime RenderData: type) type {
             return features.set_global_pos_profiled(self, alloc, clock);
         }
 
+        /// `set_global_pos` with a host measurer: each `Size.measure_h` node's height and
+        /// baseline are re-measured at its resolved width, between the width and height
+        /// passes. `measurer` is a struct value with
+        /// `fn height_for_width(self, node: *Self, width: f32) ?features.Measured`.
+        pub fn set_global_pos_measured(self: *Self, alloc: Allocator, measurer: anytype) !void {
+            try features.set_global_pos_measured(self, alloc, measurer);
+        }
+
+        /// The profiled `set_global_pos_measured`; the measure walk reports as `Sample.measure`.
+        pub fn set_global_pos_measured_profiled(self: *Self, alloc: Allocator, clock: @import("profile.zig").Clock, measurer: anytype) !@import("profile.zig").Sample {
+            return features.set_global_pos_measured_profiled(self, alloc, clock, measurer);
+        }
+
         /// This node's interaction state this frame (read-through: allocates/keeps
         /// its store slot). **Panics** if the node has no `key`. `u` is duck-typed
         /// (the concrete `Ctx`); the return type is the host's interaction-flag
@@ -2023,4 +2036,222 @@ test "a duplicate sibling key is detected and the structural path names it" {
     // A buffer too small for the path yields the longest prefix of whole segments.
     var tiny: [6]u8 = undefined;
     try std.testing.expectEqualStrings("root", row.pathInto(&tiny));
+}
+
+// ---- ENGINE-05: height measured at the resolved width -----------------------------------
+
+/// A fake wrapped-text measurer: the text is `data_width` px long on one line, so at width
+/// `w` it breaks into `ceil(data_width / w)` lines of 10 px, with a baseline of 3. Records
+/// the widths it was called with; `refuse` makes it return null (keep `data_height`).
+const FakeMeasure = struct {
+    log: ?*Log = null,
+    refuse: bool = false,
+
+    const Log = struct { calls: usize = 0, last_w: f32 = -1 };
+
+    pub fn height_for_width(self: FakeMeasure, node: *TestNode, w: f32) ?features.Measured {
+        if (self.log) |l| {
+            l.calls += 1;
+            l.last_w = w;
+        }
+        if (self.refuse) return null;
+        const lines = @max(1, @ceil(node.size.data_width / w));
+        return .{ .height = lines * 10, .baseline = 3 };
+    }
+};
+
+/// A `measure_h` text-like leaf under `parent`: width rule `w`, height `.content`, a
+/// single-line seed of `seed_w` × 7 with baseline 1 (so a re-measure is visible).
+fn measured_leaf(a: std.mem.Allocator, id: []const u8, parent: *TestNode, w: features.SizeRule, seed_w: f32) !*TestNode {
+    const k = try TestNode.pcreate(a, id, parent);
+    _ = k.with_size(Size.init(w, .content)).with_layout(.relative, null);
+    k.size.data_width = seed_w;
+    k.size.data_height = 7;
+    k.size.baseline = 1;
+    k.size.measure_h = true;
+    return k;
+}
+
+test "measure_h: a full-width leaf in a column is measured at the column width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 1.0 }, 250);
+    const after = try TestNode.pcreate(a, "after", root);
+    _ = after.with_size(Size.initFixed(10, 10)).with_layout(.relative, null);
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log });
+    try std.testing.expectEqual(@as(usize, 1), log.calls);
+    try std.testing.expectEqual(@as(f32, 100), log.last_w);
+    try std.testing.expectEqual(@as(f32, 100), leaf.size.width);
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height); // ceil(250/100) = 3 lines
+    try std.testing.expectEqual(@as(f32, 3), leaf.size.baseline);
+    try std.testing.expectEqual(@as(f32, 250), leaf.size.data_width); // the seed is untouched
+    try std.testing.expectEqual(@as(f32, 30), after.layout._global_y.?);
+}
+
+test "measure_h: a shrunk leaf is measured at its shrunk width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 150 + 50 in a 100 row: the leaf (the only shrinker) gives up the 100 overflow.
+    const root = try flex_row(a, 100);
+    const leaf = try measured_leaf(a, "leaf", root, .content, 150);
+    leaf.size.shrink = 1;
+    _ = try flex_kid(a, "rigid", root, .{ .fixed = 50 });
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log });
+    try std.testing.expectEqual(@as(f32, 50), leaf.size.width);
+    try std.testing.expectEqual(@as(f32, 50), log.last_w);
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height); // ceil(150/50)
+}
+
+test "measure_h: a leaf widened by column stretch is measured at the stretched width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(120, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .stretch });
+    const leaf = try measured_leaf(a, "leaf", root, .content, 60);
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log });
+    try std.testing.expectEqual(@as(f32, 120), leaf.size.width);
+    try std.testing.expectEqual(@as(f32, 120), log.last_w);
+    try std.testing.expectEqual(@as(f32, 10), leaf.size.height); // one line, not the 7 seed
+}
+
+test "measure_h: a column grow sibling takes the remainder after the measured height" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 100)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 1.0 }, 250);
+    const rest = try TestNode.pcreate(a, "rest", root);
+    _ = rest.with_size(Size.init(.{ .fixed = 10 }, .grow)).with_layout(.relative, null);
+
+    try root.set_global_pos_measured(a, FakeMeasure{});
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height);
+    try std.testing.expectEqual(@as(f32, 70), rest.size.height);
+    try std.testing.expectEqual(@as(f32, 30), rest.layout._global_y.?);
+}
+
+test "measure_h: a row stretch sibling is raised to the measured height" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 100 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 0.5 }, 120);
+    const side = try TestNode.pcreate(a, "side", root);
+    _ = side.with_size(Size.init(.{ .fixed = 50 }, .fit_children)).with_layout(.relative, null);
+
+    try root.set_global_pos_measured(a, FakeMeasure{});
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height); // ceil(120/50)
+    try std.testing.expectEqual(@as(f32, 30), root.size.height);
+    try std.testing.expectEqual(@as(f32, 30), side.size.height);
+}
+
+test "measure_h: a baseline row aligns on the measured baseline" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 200 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .cross = .baseline });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 0.5 }, 250);
+    const chip = try TestNode.pcreate(a, "chip", root);
+    _ = chip.with_size(Size.initFixed(50, 20)).with_layout(.relative, null);
+
+    try root.set_global_pos_measured(a, FakeMeasure{});
+    // Leaf: 3 lines = 30 tall, baseline 3 → ascent 27. Chip: ascent 20, descent 0.
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height);
+    try std.testing.expectEqual(@as(f32, 3), leaf.size.baseline);
+    try std.testing.expectEqual(@as(f32, 30), root.size.height); // 27 + 3
+    try std.testing.expectEqual(@as(f32, 0), leaf.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 7), chip.layout._global_y.?); // 27 − 20
+}
+
+test "measure_h: under a fit_children parent the width falls back to the seed, the height follows the measurer" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 300)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const mid = try TestNode.pcreate(a, "mid", root);
+    _ = mid.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", mid, .{ .pct_of_parent = 1.0 }, 80);
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log });
+    try std.testing.expectEqual(@as(f32, 80), leaf.size.width); // indefinite: the seed
+    try std.testing.expectEqual(@as(f32, 80), log.last_w);
+    try std.testing.expectEqual(@as(f32, 10), leaf.size.height); // one line, from the measurer
+    try std.testing.expectEqual(@as(f32, 80), mid.size.width);
+    try std.testing.expectEqual(@as(f32, 10), mid.size.height);
+}
+
+test "measure_h: the plain solve keeps the build-time data_height" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 1.0 }, 250);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 7), leaf.size.height);
+    try std.testing.expectEqual(@as(f32, 1), leaf.size.baseline);
+}
+
+test "measure_h: a null measure keeps data_height, and nodes without measure_h are never asked" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 1.0 }, 250);
+    const plain = try measured_leaf(a, "plain", root, .{ .pct_of_parent = 1.0 }, 250);
+    plain.size.measure_h = false;
+
+    var log: FakeMeasure.Log = .{};
+    try root.set_global_pos_measured(a, FakeMeasure{ .log = &log, .refuse = true });
+    try std.testing.expectEqual(@as(usize, 1), log.calls); // only the opted-in leaf
+    try std.testing.expectEqual(@as(f32, 7), leaf.size.height);
+    try std.testing.expectEqual(@as(f32, 1), leaf.size.baseline);
+    try std.testing.expectEqual(@as(f32, 7), plain.size.height);
+}
+
+test "measure_h: the profiled measured solve reports the measure walk" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(100, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const leaf = try measured_leaf(a, "leaf", root, .{ .pct_of_parent = 1.0 }, 250);
+
+    const Ticker = struct {
+        var t: u64 = 0;
+        fn now(_: *const anyopaque) u64 {
+            t += 10;
+            return t;
+        }
+    };
+    const clock: @import("profile.zig").Clock = .{ .ctx = &Ticker.t, .nowFn = Ticker.now };
+    const s = try root.set_global_pos_measured_profiled(a, clock, FakeMeasure{});
+    try std.testing.expectEqual(@as(u64, 10), s.measure);
+    try std.testing.expectEqual(@as(u64, 20), s.intrinsic);
+    try std.testing.expectEqual(@as(u64, 20), s.relative);
+    try std.testing.expectEqual(@as(u64, 10), s.placement);
+    try std.testing.expectEqual(@as(u64, 60), s.total());
+    try std.testing.expectEqual(@as(f32, 30), leaf.size.height);
+
+    // The plain profiled solve has no measure walk at all.
+    const p = try root.set_global_pos_profiled(a, clock);
+    try std.testing.expectEqual(@as(u64, 0), p.measure);
+    try std.testing.expectEqual(@as(u64, 50), p.total());
 }

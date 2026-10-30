@@ -36,6 +36,7 @@ pub const Padding = features.Padding;
 pub const Size = features.Size;
 pub const SizeRule = features.SizeRule;
 pub const Layout = features.Layout;
+pub const Measured = features.Measured;
 
 /// The tree atom (generic over the host's `RenderData`) and the post-layout `stamp_rects`
 /// walk — both defined in `node.zig`, re-exported here as `ui.Node` / `ui.stamp_rects`.

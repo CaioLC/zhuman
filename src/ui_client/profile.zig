@@ -170,12 +170,12 @@ pub const FrameCapture = struct {
             const max = self.timings.maximum;
             const stamp_share: f64 = @as(f64, @floatFromInt(self.timings.stampingPermille())) / 10.0;
             std.log.info(
-                "ui five-pass {d}f avg us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}; stamp={d:.1}%",
-                .{ self.timings.frames, us(avg.intrinsic), us(avg.relative), us(avg.placement), us(avg.stamping), us(avg.drawing), stamp_share },
+                "ui five-pass {d}f avg us intrinsic={d:.1} measure={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}; stamp={d:.1}%",
+                .{ self.timings.frames, us(avg.intrinsic), us(avg.measure), us(avg.relative), us(avg.placement), us(avg.stamping), us(avg.drawing), stamp_share },
             );
             std.log.info(
-                "ui five-pass max us intrinsic={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}",
-                .{ us(max.intrinsic), us(max.relative), us(max.placement), us(max.stamping), us(max.drawing) },
+                "ui five-pass max us intrinsic={d:.1} measure={d:.1} relative={d:.1} place={d:.1} stamp={d:.1} draw={d:.1}",
+                .{ us(max.intrinsic), us(max.measure), us(max.relative), us(max.placement), us(max.stamping), us(max.drawing) },
             );
             const s = self.state;
             std.log.info(

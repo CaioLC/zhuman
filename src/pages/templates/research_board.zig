@@ -811,7 +811,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         try hrule(detail, "c_rule", .{ .fixed = inner });
         _ = try detail.spacer("c_gap", 1, 11);
 
-        _ = (try detail.text_fit("copy", t.effect, .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
         if (t.cost.len == 0) try detailRow(costs, 0, "Act I foundation", "paid");
@@ -842,7 +842,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         _ = try detail.spacer("k_gap", 1, 3);
         _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, Style{ .text = th.fg } });
         _ = try detail.spacer("n_gap", 1, 8);
-        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------

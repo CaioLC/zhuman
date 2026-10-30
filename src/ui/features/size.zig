@@ -78,9 +78,20 @@ pub const Size = struct {
     /// Intrinsic content size in px — the **host measures it at build** (text
     /// metrics, a sprite's dims) and stores it here. The `content` rule sizes to
     /// it; the host renderer draws to it. 0 for nodes with no intrinsic content.
-    /// Sizing is pure: core reads these, never computes them (no host callback).
+    /// Sizing is pure: core reads these, never computes them (no host callback) — with the
+    /// one exception of `measure_h` below.
     data_width: f32,
     data_height: f32,
+    /// Opt-in: this node's height depends on its width (text wrapped at whatever width the
+    /// solve gives it). Under `set_global_pos_measured`, the host measurer re-measures
+    /// `data_height` and `baseline` at the node's **resolved content width**, once, after
+    /// every width is final and before any height is computed. `data_width` stays the seed
+    /// the width pass reads wherever the width is indefinite (a `content` rule, or the
+    /// fallback under a `fit_children` parent): the single-line, max-content width. So the
+    /// width rule should resolve definitely (`pct_of_parent`, `grow`, `fixed`, stretched);
+    /// otherwise the node is measured at its seed width and stays one line. Ignored by the
+    /// plain `set_global_pos`, which keeps the build-time `data_height`.
+    measure_h: bool = false,
     /// Cross-axis **alignment reference** for a row (`dir = .row`): the px offset of the
     /// reference line up from the *content's* bottom edge. `0` (the default) ⇒ the reference
     /// is the content bottom, so a plain box aligns by its bottom. The host sets it for text

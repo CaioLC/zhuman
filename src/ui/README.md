@@ -476,8 +476,9 @@ The *intrinsic content size* is host policy — the host **measures it at build*
 metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
 the `content` rule sizes to those, and the host renderer draws to them. The *rule*
 that turns that seed / parent / children into the final box is core. The sizing passes
-are **pure** — no host callback. `set_global_pos` solves widths before heights, because a
-wrapping row's height depends on its width (how many lines it breaks into). Five passes:
+are **pure without a measurer** — `set_global_pos` makes no host callback. It solves widths
+before heights, because a wrapping row's height depends on its width (how many lines it
+breaks into). Five passes, plus one optional measure step between 2 and 3:
 
 1. **`recalculate_size`** (bottom-up, both axes) — resolve constrained
    `fixed`/`content`/`fit_children`; parent-relative rules take measured-content
@@ -492,6 +493,10 @@ wrapping row's height depends on its width (how many lines it breaks into). Five
    percentage resolves against the fitted parent (an underbar `pct_of_parent = progress`
    under a content-sized tile, a wash `1 × 1` under a content-sized card). Every width
    is final after this pass.
+   - **Measure** (only under `set_global_pos_measured`) — every node with
+     `Size.measure_h` is handed to the host measurer at its final content width, and the
+     `data_height`/`baseline` it returns replace the build-time seed. This is the one
+     place the solve calls the host (see below).
 3. **`recalculate_axis(.y)`** (bottom-up, y only) — every height again from scratch, as
    in pass 1, except that a wrapping row packs its lines against its final width and its
    children's final widths, whatever its rule (`grow`, `pct_of_parent`, shrunk,
@@ -510,10 +515,24 @@ template wraps a column.
 
 Because the engine never measures anything, `set_global_pos` takes no host `ctx` — only a
 scratch `Allocator` that `place` uses to materialize each node's in-flow child list (so the
-flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-size-pass
-would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
-where height depends on the resolved width. The solve leaves room for it between steps 2
-and 3, where every width is final and no height is; we don't do that yet.)
+flow reads as one loop, with no fixed-size stack buffers).
+
+Content sizing that is *constraint-dependent* — wrapped text, whose height depends on the
+width it resolves to — is the one case a build-time measure can't cover, so it gets one
+narrow seam: `set_global_pos_measured(node, alloc, measurer)` (and its `_profiled` twin).
+The **measurer** is a comptime host parameter, a struct value with
+`fn height_for_width(self, node, width: f32) ?Measured`. The rules it lives under:
+
+- It is called only at the width/height boundary (after step 2, before step 3), once per
+  solve, and only for nodes that opted in with `Size.measure_h`.
+- It may only return a height and a baseline (`Measured`), or null to keep the seed. The
+  solve writes them; the measurer must not mutate the tree. `data_width` stays the
+  build-time seed the width pass already read.
+- Without a measurer the core stays pure: `set_global_pos` passes an internal no-op type
+  and the walk is compiled out, so no callback exists on that path.
+
+The host's measurer (`ui_client/measure.zig`) wraps `El.text_fit(.., .fill)` leaves at their
+solved width and memoizes the result on the text's pooled state.
 
 ### Five-pass frame profiling
 
@@ -607,11 +626,13 @@ Adding a visual (an svg, an opacity) is adding a feature module + one `list` ent
 one `RenderData` field — no engine change. `features.assertFeature` fails the build if
 the hand-written `RenderData` drifts from the list.
 
-**Sizing is host-measured too.** The engine has no size callback either — the
+**Sizing is host-measured too.** The engine has no size callback on its plain path — the
 host measures content at build (`data_text` asks the font for the text's px
 extent) and stores it on the node's `Size` as `data_width`/`data_height`.
-The `content` rule sizes to those and `draw_text` draws to them, so the whole
-solve is pure and `set_global_pos` takes no `ctx`. Host code reads `u.res` when it
+The `content` rule sizes to those and `draw_text` draws to them, so the plain
+solve is pure and `set_global_pos` takes no `ctx`. The one exception is the opt-in
+`measure_h` re-measure at the solved width, supplied by the host as a comptime measurer
+(see the sizing section). Host code reads `u.res` when it
 measures; the *generic* engine code never does.
 
 ## Design decisions (the short version)

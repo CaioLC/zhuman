@@ -19,6 +19,9 @@ pub const Sample = struct {
     placement: u64 = 0,
     stamping: u64 = 0,
     drawing: u64 = 0,
+    /// The layout solve's phase-boundary measure walk (`set_global_pos_measured_profiled`):
+    /// host re-measures of `measure_h` nodes at their resolved widths. 0 without a measurer.
+    measure: u64 = 0,
 
     pub fn add(self: *Sample, other: Sample) void {
         inline for (@typeInfo(Sample).@"struct".field_names) |name| {

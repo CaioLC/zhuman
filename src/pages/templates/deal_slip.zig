@@ -81,7 +81,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     _ = (try slip.text("heading", "THE DEAL")).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
 
     const l = lot orelse {
-        _ = (try slip.text_fit("placeholder", "Pick a lot on the left.", .{ .wrap = inner }))
+        _ = (try slip.text_fit("placeholder", "Pick a lot on the left.", .fill))
             .with_style(.{Style{ .font = 11, .text = th.dim }});
         return .{ .lots = lots, .settle = false, .cta_key = null };
     };
@@ -90,13 +90,15 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     const max = book.maxLots(l);
     var n = std.math.clamp(lots, 1, @max(1, max));
 
+    // The wrapped texts below fill their parent's width, so each parent column takes the
+    // slip's content width (a fitted column would leave them one line wide).
     const head = try slip.div("lot");
-    _ = head.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
-    _ = (try head.text_fit("name", l.lot, .{ .wrap = inner })).with_style(.{Style{ .font = 14, .text = th.fg }});
-    _ = (try head.text_fit("effect", l.effect, .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.dim }});
+    _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    _ = (try head.text_fit("name", l.lot, .fill)).with_style(.{Style{ .font = 14, .text = th.fg }});
+    _ = (try head.text_fit("effect", l.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
 
     if (refused) |r| {
-        _ = (try slip.text_fit("refusal", r.long, .{ .wrap = inner })).with_style(.{Style{ .font = 11, .text = th.danger }});
+        _ = (try slip.text_fit("refusal", r.long, .fill)).with_style(.{Style{ .font = 11, .text = th.danger }});
     } else {
         // LOTS − n + of {max}, between two rules.
         try hrule(slip, "qty_top");
@@ -112,14 +114,14 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
 
         // YOU GIVE / YOU RECEIVE.
         const terms = try slip.div("terms");
-        _ = terms.with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
+        _ = terms.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
         inline for (.{ .{ "give", true }, .{ "get", false } }) |side| {
             const giving = side[1];
             const term = try terms.div(side[0]);
-            _ = term.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
+            _ = term.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
             try label(term, "dt", if (giving) opts.give_label else "YOU RECEIVE");
             const text = try Book.fmtLong(a, if (giving) l.price else l.receive, n, !giving);
-            _ = (try term.text_fit("dd", text, .{ .wrap = inner })).with_style(.{Style{ .font = 13, .text = th.fg }});
+            _ = (try term.text_fit("dd", text, .fill)).with_style(.{Style{ .font = 13, .text = th.fg }});
         }
 
         // AFTER: before → after on only the stocks the deal touches.
@@ -152,7 +154,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         }
     }
     if (refused == null and l.consequence.len > 0) {
-        _ = (try slip.text_fit("consequence", l.consequence, .{ .wrap = inner })).with_style(.{Style{ .font = 10, .text = th.acc }});
+        _ = (try slip.text_fit("consequence", l.consequence, .fill)).with_style(.{Style{ .font = 10, .text = th.acc }});
     }
 
     // The call to action sits at the slip's foot (`.slip-action { margin-top: auto }`).

@@ -12,8 +12,8 @@
 //!                     resets and last frame's tree dies
 //!   3. rebuild        a fresh tree through `El`; controls run the host protocol (query,
 //!                     focus registration, control-state and semantic publication)
-//!   4. layout+stamp   `set_global_pos`, then `stamp_rects` per root in list order, which is
-//!                     the frame's paint order
+//!   4. layout+stamp   `set_global_pos_measured` (with the driver's text measurer), then
+//!                     `stamp_rects` per root in list order, which is the frame's paint order
 //!   5. draw           the render walk paints the roots in that same order
 //!   6. endFrame       prune untouched pool slots, repair focus and pointer capture, clear
 //!                     transient flags, swap the command and semantic registries
@@ -32,6 +32,7 @@ const cb = @import("./ctx_binding.zig");
 const el = @import("./elements.zig");
 const input = @import("./input.zig");
 const frame_mod = @import("./frame.zig");
+const measure = @import("./measure.zig");
 const route = @import("./route.zig");
 const replay = @import("./replay.zig");
 const semantics = @import("./semantics.zig");
@@ -200,7 +201,7 @@ const Harness = struct {
     }
 
     fn layoutAndStamp(h: *Harness) !void {
-        for (h.roots()) |t| try t.set_global_pos(h.ui.arena);
+        for (h.roots()) |t| try t.set_global_pos_measured(h.ui.arena, measure.TextMeasurer{ .ui = &h.ui });
         for (h.roots()) |t| ui.stamp_rects(&h.ui, t);
         h.router().geometryStamped();
     }
@@ -665,7 +666,7 @@ test "misordered: routing after the rebuild finds no target on the first frame, 
     for (h.roots()) |t| ui.stamp_rects(&h.ui, t);
     try expectEqual(@as(usize, 0), h.ui.order.items.len);
     try expectEqual(a_rect, h.ui.rectOf(a_key).?);
-    for (h.roots()) |t| try t.set_global_pos(h.ui.arena);
+    for (h.roots()) |t| try t.set_global_pos_measured(h.ui.arena, measure.TextMeasurer{ .ui = &h.ui });
     h.endFrame();
     h.beginEvents();
     try expectEqual(@as(?u64, null), h.ui.targetAt(50, 25));

@@ -29,6 +29,7 @@ const ui = @import("ui");
 const cb = @import("ctx_binding.zig");
 const cursor = @import("cursor.zig");
 const draw = @import("draw.zig");
+const measure = @import("measure.zig");
 const route = @import("route.zig");
 const tree = @import("tree.zig");
 
@@ -101,13 +102,15 @@ pub const Driver = struct {
         const trees = try host.build(host.user, u);
         if (host.apply_cursor) |apply| apply(host.user, res.cursor.requested);
 
-        // Layout: the solver's three internal passes, profiled per independent root; then
-        // stamp every root as one aggregate pass — geometry plus paint order for the next
-        // event stage. The normal `set_global_pos` entry remains clock-free.
+        // Layout: the solver's internal passes, profiled per independent root, with the text
+        // measurer at the width/height boundary (a `.fill` leaf wraps at its solved width);
+        // then stamp every root as one aggregate pass — geometry plus paint order for the next
+        // event stage. The engine's plain `set_global_pos` entry remains clock- and callback-free.
         var sample: Sample = .{};
         const clock = self.awakeClock();
+        const measurer = measure.TextMeasurer{ .ui = u };
         for (trees) |t| {
-            const layout_sample = try t.set_global_pos_profiled(u.arena, clock);
+            const layout_sample = try t.set_global_pos_measured_profiled(u.arena, clock, measurer);
             sample.add(layout_sample);
         }
         const stamp_start = clock.now();

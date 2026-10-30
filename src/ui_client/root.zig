@@ -88,6 +88,11 @@ pub const FrameDriver = frame.Driver;
 pub const FrameHost = frame.Host;
 pub const FramePresent = frame.Present;
 
+// The layout measurer the frame driver passes to the engine solve: re-measures `.fill` text
+// at its solved width between the width and height passes. See `measure.zig`.
+pub const measure = @import("./measure.zig");
+pub const TextMeasurer = measure.TextMeasurer;
+
 // Host-side frame capture — the development baseline (`HA_UI_PROFILE`) pairing the engine's
 // five-pass timings with per-pool/interaction/node state counts over one shared report
 // window. Integrated through the frame `sample` hook. See `profile.zig`.

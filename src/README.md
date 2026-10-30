@@ -92,8 +92,9 @@ Each frame:
    `beginBuild` here, so interactive controls publish their prior-build command owners and
    their owned accessibility metadata (role/label/value/state/relationships/live-region) in
    paint order as they build.
-5. **Layout** — `set_global_pos()` per root: solve sizes, then resolve positions. Pure — content
-   was measured at build time.
+5. **Layout** — `set_global_pos_measured()` per root: solve sizes, then resolve positions.
+   Content was measured at build time; the one host call is the text measurer re-measuring
+   `.fill` text at its solved width, between the width and height passes.
 6. **Stamp** — `ui.stamp_rects(root)` copies each queried node's rect into its slot, feeding
    the next frame's step 2.
 7. **Render** — `ui_client.draw_tree()` per root in list order, so later trees paint on top.

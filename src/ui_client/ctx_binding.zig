@@ -46,13 +46,17 @@ pub const UiState = struct {
         /// pool calls `init`, which seeds `px` at 0; `attach` (run every frame before `draw`)
         /// (re)sets this; a stray 0 would just clamp to the backend's 1px floor.
         px: f32,
-        /// The leaf's measurement constraint, exactly one of four by construction (`El.text_fit`
+        /// The leaf's measurement constraint, exactly one of five by construction (`El.text_fit`
         /// sets it; `style.apply` re-measures at it), widths in device px. POD: line spans and
         /// ellipsis prefixes are recomputed from it, never stored.
         ///   - `.free` (default) - the **single-line fast path**: one measured line, so dense
         ///     rows pay nothing for the wrap or cell machinery.
         ///   - `.wrap` - multiline at this width through the pure `features/wrap.zig` routine,
         ///     the same for measure and draw, so the box and the drawn lines agree.
+        ///   - `.fill` - multiline at the width the layout solve resolves for the node: the
+        ///     build measures one line (the width seed), and the solve's measurer
+        ///     (`text.heightForWidth`) writes the solved width here and the wrapped height
+        ///     onto the node, before any height is computed. Draw then wraps at that width.
         ///   - `.cell` - a single line in an allocated width (a stock token, a catalog name
         ///     column): `remeasure` writes `data_width = width`, never the glyph width, so a
         ///     widening label cannot shove its neighbours. `.clip` draws the whole string under
@@ -101,6 +105,39 @@ pub const UiState = struct {
         /// alongside the texture exactly like `SvgState.src_key`, generalized to the full key.
         cache_key: ?@import("features/text_cache.zig").Key = null,
 
+        /// The `.fill` measure memo: the last `text.heightForWidth` result and the inputs it
+        /// depends on (content, px, tracking, quantized width). A repeat measure with equal
+        /// inputs returns the stored metrics without touching the font, so a still frame
+        /// costs a content hash per `.fill` leaf. `null` until the first measure.
+        fill_memo: ?FillMemo = null,
+
+        pub const FillMemo = struct {
+            content_hash: u64,
+            px_bits: u32,
+            tracking_bits: u32,
+            width: f32,
+            height: f32,
+            baseline: f32,
+
+            /// The memo key for these inputs (the result fields are left 0).
+            pub fn keyOf(content: []const u8, px: f32, tracking: f32, width: f32) FillMemo {
+                return .{
+                    .content_hash = std.hash.Wyhash.hash(0, content),
+                    .px_bits = @bitCast(px),
+                    .tracking_bits = @bitCast(tracking),
+                    .width = width,
+                    .height = 0,
+                    .baseline = 0,
+                };
+            }
+
+            /// Whether `self` was measured from the same inputs as `key`.
+            pub fn matches(self: FillMemo, key: FillMemo) bool {
+                return self.content_hash == key.content_hash and self.px_bits == key.px_bits and
+                    self.tracking_bits == key.tracking_bits and self.width == key.width;
+            }
+        };
+
         /// Single-line overflow modes, derived from `fit` (`Fit.overflow`) for the texture cache
         /// key and the draw branch. `.visible` is every fit but a cell. Declared here (not with
         /// the feature) for the same import-cycle reason as `TextState` itself.
@@ -115,16 +152,24 @@ pub const UiState = struct {
         pub const Fit = union(enum) {
             free,
             wrap: f32,
+            /// Wrap at the width the layout solve gives the node (`El.text_fit(.., .fill)`):
+            /// the last solved content width in whole device px, written by
+            /// `text.heightForWidth` at the solve's phase boundary. 0 until measured; while 0,
+            /// `remeasure` measures one line, which seeds `data_width`. `remeasure` measures one
+            /// line for every `.fill` value — the wrapped height is the measurer's to write.
+            fill: f32,
             cell: Cell,
             vertical,
 
             pub const Cell = struct { mode: CellMode, width: f32 };
             pub const CellMode = enum { clip, ellipsis };
 
-            /// The wrap width, or 0 for a single-line fit.
+            /// The wrap width, or 0 for a single-line fit. A measured `.fill` reports its
+            /// solved width, so draw, `planVariant` and the cache key wrap exactly where the
+            /// layout measured.
             pub fn wrapWidth(self: Fit) f32 {
                 return switch (self) {
-                    .wrap => |w| w,
+                    .wrap, .fill => |w| w,
                     else => 0,
                 };
             }

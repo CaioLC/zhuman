@@ -398,7 +398,7 @@ fn slipHeading(parent: El, text: []const u8) !void {
 
 fn placeholder(parent: El, id: []const u8, text: []const u8) !void {
     const th = parent.ctx.res.view.theme;
-    _ = (try parent.text_fit(id, text, .{ .wrap = slip_inner })).with_style(.{Style{ .font = 11, .text = th.dim }});
+    _ = (try parent.text_fit(id, text, .fill)).with_style(.{Style{ .font = 11, .text = th.dim }});
 }
 
 fn sideHead(parent: El, left: []const u8, right: []const u8) !void {
@@ -444,7 +444,7 @@ fn goodSlip(slip: El, m: *const nb.Market, i: usize, st: *MarketState, words: []
     inline for (.{ .{ "sell", "CHEAPEST SELLING", true }, .{ "buy", "PAYING MOST", false } }) |side| {
         const list = if (side[2]) sellers.items else buyers.items;
         const box = try slip.div(side[0]);
-        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        _ = box.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
         try sideHead(box, side[1], try a.print("{}", .{list.len}));
         if (list.len == 0) try placeholder(box, "none", if (side[2]) "Nobody is selling." else "Nobody is buying.");
         for (list[0..@min(4, list.len)], 0..) |k, j| {
@@ -496,16 +496,17 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     const agent = m.agents[k];
     try slipHeading(slip, "THE DEAL");
     const who = try slip.div("who");
-    _ = who.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    // Full slip width, so the wrapped line below fills it (a fitted column would not wrap it).
+    _ = who.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
     _ = (try who.text("name", try a.print("{s} {s}", .{ agent.firstName(), agent.lastName() }))).with_style(.{Style{ .font = 14, .text = th.fg }});
-    _ = (try who.text_fit("small", try a.print("{s} \u{00b7} buys {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true) }), .{ .wrap = slip_inner }))
+    _ = (try who.text_fit("small", try a.print("{s} \u{00b7} buys {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true) }), .fill))
         .with_style(.{Style{ .font = 10, .text = th.dim }});
 
     // YOU GIVE (spare only): what it buys that the player has spare, and coin.
     inline for (.{ .{ "give", "YOU GIVE", "spare only" }, .{ "take", "YOU RECEIVE", "theirs" } }) |side| {
         const giving = comptime std.mem.eql(u8, side[0], "give");
         const box = try slip.div(side[0]);
-        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        _ = box.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
         try sideHead(box, side[1], side[2]);
         var any = false;
         for (0..nb.bundle_len) |i| {
@@ -538,7 +539,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     const box = try slip.div("verdict");
     _ = box.with_size(.{ .fixed = slip_inner - 16 }, .fit_children)
         .with_style(.{ Style{ .outline_color = line_color }, style.pad_sym(8, 7) });
-    _ = (try box.text_fit("t", text, .{ .wrap = slip_inner - 16 })).with_style(.{Style{ .font = 11, .text = color }});
+    _ = (try box.text_fit("t", text, .fill)).with_style(.{Style{ .font = 11, .text = color }});
 
     // AFTER: before → after on what the deal touches.
     var rows = false;
@@ -617,13 +618,13 @@ fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8
         _ = (try row.text("v", value)).with_style(.{Style{ .font = 11, .text = if (r[2] and over) th.danger else th.fg }});
     }
     if (over) {
-        _ = (try slip.text_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .{ .wrap = slip_inner }))
+        _ = (try slip.text_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .fill))
             .with_style(.{Style{ .font = 10, .text = th.danger }});
     }
     inline for (.{ .{ "posted_sell", "POSTED TO SELL", true }, .{ "posted_buy", "POSTED TO BUY", false } }) |side| {
         const posts = if (side[2]) &m.sell_posts else &m.buy_posts;
         const box = try slip.div(side[0]);
-        _ = box.with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+        _ = box.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
         var count: u32 = 0;
         for (posts) |post| count += @intFromBool(post.qty > 0);
         try sideHead(box, side[1], try a.print("{}", .{count}));
