@@ -22,7 +22,8 @@ pub const Padding = struct {
 /// which is what drives the multi-pass solve:
 ///   - `fixed` / `content` — leaf, *definite* (known without parent or children).
 ///   - `pct_of_parent`      — needs the parent; definite iff the parent's axis is.
-///   - `grow`               — consumes remaining space on a definite parent's main axis.
+///   - `grow`               — consumes remaining space on a definite parent's main axis,
+///                            shared in proportion to `Size.grow_weight` (default 1).
 ///   - `fit_children`       — needs the children; the only *indefinite* rule, except on an
 ///                            axis a `cross = .stretch` parent has stretched (then definite).
 /// An in-flow `.pct_of_parent` under an indefinite (`fit_children`) parent and a `.grow` that
@@ -39,7 +40,7 @@ pub const SizeRule = union(enum) {
     fixed: f32,
     content, // sizes to the host-measured `data_width`/`data_height`
     pct_of_parent: f32, // fraction in 0..1 of the parent's content box; includes own padding
-    grow, // equal share of definite parent main-axis remainder; includes own padding
+    grow, // `grow_weight`-weighted share of definite parent main-axis remainder; includes own padding
     fit_children,
 };
 
@@ -56,6 +57,20 @@ pub const Size = struct {
     min_height: f32 = 0,
     max_width: ?f32 = null,
     max_height: ?f32 = null,
+    /// Main-axis growth factor (CSS `flex-grow`), read only when this node's rule on its
+    /// parent's main axis is `.grow`: growers split the free space in proportion to their
+    /// weights, so weights 1 and 2 take a third and two thirds. Defaults to 1, the equal
+    /// share. A weight `<= 0` never grows; the node stays at its minimum. It is a field
+    /// rather than a `SizeRule.grow` payload so a plain `.grow` keeps meaning weight 1.
+    grow_weight: f32 = 1,
+    /// Main-axis shrink factor (CSS `flex-shrink`), opt-in. When a definite, non-wrapping
+    /// parent's in-flow run overflows its main axis, each child with `shrink > 0` gives up
+    /// a part of the overflow proportional to `shrink ×` its content extent, never going
+    /// below its main-axis `min_*` (CSS would use min-content, which the engine doesn't
+    /// measure). Padding never shrinks. Defaults to 0, not CSS's 1, so an over-constrained
+    /// run keeps overflowing as authored. Ignored on a `.grow` main axis: a grower already
+    /// sits at its minimum whenever the run overflows.
+    shrink: f32 = 0,
     /// Resolved box size (content-box + padding), filled by the solve passes.
     width: f32,
     height: f32,

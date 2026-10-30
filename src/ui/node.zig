@@ -1316,6 +1316,296 @@ test "grow falls back to measured content without a definite main-axis parent" {
     try std.testing.expectEqual(@as(f32, 30), root.size.width);
 }
 
+/// An in-flow child of `parent` with rule `main_rule` on a row's main axis and a fixed
+/// height of 10, for the weighted-grow and shrink tests.
+fn flex_kid(a: std.mem.Allocator, id: []const u8, parent: *TestNode, main_rule: features.SizeRule) !*TestNode {
+    const k = try TestNode.pcreate(a, id, parent);
+    _ = k.with_size(Size.init(main_rule, .{ .fixed = 10 })).with_layout(.relative, null);
+    return k;
+}
+
+/// A `fixed_w × 50` row root, flowing left to right.
+fn flex_row(a: std.mem.Allocator, fixed_w: f32) !*TestNode {
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(fixed_w, 50));
+    _ = root.with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    return root;
+}
+
+test "weighted grow: weights 1:2 split 300 of free space 100:200" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try flex_row(a, 300);
+    const one = try flex_kid(a, "one", root, .grow);
+    const two = try flex_kid(a, "two", root, .grow);
+    two.size.grow_weight = 2;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 100), one.size.width);
+    try std.testing.expectEqual(@as(f32, 200), two.size.width);
+    try std.testing.expectEqual(@as(f32, 100), two.layout._global_x.?);
+}
+
+test "weighted grow: a max-capped heavy grower's excess redistributes by weight" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Weights 1:1:2 over 400: the first round offers 100/100/200, the weight-2 child is
+    // capped at 100, and its unused 100 goes 1:1 to the other two.
+    const root = try flex_row(a, 400);
+    const left = try flex_kid(a, "left", root, .grow);
+    const mid = try flex_kid(a, "mid", root, .grow);
+    const heavy = try flex_kid(a, "heavy", root, .grow);
+    heavy.size.grow_weight = 2;
+    heavy.size.max_width = 100;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 150), left.size.width);
+    try std.testing.expectEqual(@as(f32, 150), mid.size.width);
+    try std.testing.expectEqual(@as(f32, 100), heavy.size.width);
+}
+
+test "weighted grow: weight 0 stays at its minimum, and an all-zero sum grows nobody" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try flex_row(a, 300);
+    const still = try flex_kid(a, "still", root, .grow);
+    still.size.grow_weight = 0;
+    still.size.min_width = 30;
+    const rest = try flex_kid(a, "rest", root, .grow);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 30), still.size.width);
+    try std.testing.expectEqual(@as(f32, 270), rest.size.width);
+
+    const root2 = try flex_row(a, 300);
+    const z1 = try flex_kid(a, "z1", root2, .grow);
+    z1.size.grow_weight = 0;
+    const z2 = try flex_kid(a, "z2", root2, .grow);
+    z2.size.grow_weight = -1;
+    z2.size.min_width = 5;
+
+    try root2.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), z1.size.width);
+    try std.testing.expectEqual(@as(f32, 5), z2.size.width);
+}
+
+test "weighted grow: padding comes out of the border box before the weighted split" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 300 − 30 of padding leaves 270 to split 1:2, so content 90:180 and border 120:180.
+    const root = try flex_row(a, 300);
+    const padded = try flex_kid(a, "padded", root, .grow);
+    padded.size.padding = features.Padding.initEach(0, 15, 0, 15);
+    const heavy = try flex_kid(a, "heavy", root, .grow);
+    heavy.size.grow_weight = 2;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 120), padded.size.width);
+    try std.testing.expectEqual(@as(f32, 180), heavy.size.width);
+    try std.testing.expectEqual(@as(f32, 120), heavy.layout._global_x.?);
+}
+
+test "shrink: equal bases split the overflow by factor, and descendants follow" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try flex_row(a, 300);
+    const left = try flex_kid(a, "left", root, .{ .fixed = 200 });
+    left.size.shrink = 1;
+    const right = try flex_kid(a, "right", root, .{ .fixed = 200 });
+    right.size.shrink = 1;
+    // A full-width grandchild resolves against the shrunk box, not the fixed 200.
+    const fill = try TestNode.pcreate(a, "fill", left);
+    _ = fill.with_size(Size.init(.{ .pct_of_parent = 1 }, .{ .fixed = 5 })).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 150), left.size.width);
+    try std.testing.expectEqual(@as(f32, 150), right.size.width);
+    try std.testing.expectEqual(@as(f32, 150), right.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 150), fill.size.width);
+
+    // Factors 1:3 over equal 200 bases: the overflow of 100 splits 25:75.
+    const root2 = try flex_row(a, 300);
+    const light = try flex_kid(a, "light", root2, .{ .fixed = 200 });
+    light.size.shrink = 1;
+    const heavy = try flex_kid(a, "heavy", root2, .{ .fixed = 200 });
+    heavy.size.shrink = 3;
+
+    try root2.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 175), light.size.width);
+    try std.testing.expectEqual(@as(f32, 125), heavy.size.width);
+}
+
+test "shrink: the overflow is weighted by each child's base" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Bases 100 and 300, both factor 1, in 300: the overflow of 100 goes 25:75.
+    const root = try flex_row(a, 300);
+    const narrow = try flex_kid(a, "narrow", root, .{ .fixed = 100 });
+    narrow.size.shrink = 1;
+    const wide = try flex_kid(a, "wide", root, .{ .fixed = 300 });
+    wide.size.shrink = 1;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 75), narrow.size.width);
+    try std.testing.expectEqual(@as(f32, 225), wide.size.width);
+}
+
+test "shrink: a child stops at its min and the rest moves to its sibling; padding stays" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // An equal split would take 50 from each; `floored` can only give 20, so `free` gives 80.
+    const root = try flex_row(a, 300);
+    const floored = try flex_kid(a, "floored", root, .{ .fixed = 200 });
+    floored.size.shrink = 1;
+    floored.size.min_width = 180;
+    const free = try flex_kid(a, "free", root, .{ .fixed = 200 });
+    free.size.shrink = 1;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 180), floored.size.width);
+    try std.testing.expectApproxEqAbs(@as(f32, 120), free.size.width, 0.001);
+
+    // Padding never shrinks: 220 + 200 overflows by 120, taken 60:60 from the 200 contents.
+    const root2 = try flex_row(a, 300);
+    const padded = try flex_kid(a, "padded", root2, .{ .fixed = 200 });
+    padded.size.shrink = 1;
+    padded.size.padding = features.Padding.initEach(0, 10, 0, 10);
+    const plain = try flex_kid(a, "plain", root2, .{ .fixed = 200 });
+    plain.size.shrink = 1;
+
+    try root2.set_global_pos(a);
+    try std.testing.expectApproxEqAbs(@as(f32, 160), padded.size.width, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 140), plain.size.width, 0.001);
+
+    // Every shrinker at its floor: the run still overflows, deterministically.
+    const root3 = try flex_row(a, 300);
+    const stiff1 = try flex_kid(a, "stiff1", root3, .{ .fixed = 200 });
+    stiff1.size.shrink = 1;
+    stiff1.size.min_width = 190;
+    const stiff2 = try flex_kid(a, "stiff2", root3, .{ .fixed = 200 });
+    stiff2.size.shrink = 1;
+    stiff2.size.min_width = 190;
+
+    try root3.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 190), stiff1.size.width);
+    try std.testing.expectEqual(@as(f32, 190), stiff2.size.width);
+}
+
+test "shrink: the default 0 overflows as before, and gap counts only for packed modes" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try flex_row(a, 300);
+    root.layout.gap = 10;
+    const left = try flex_kid(a, "left", root, .{ .fixed = 200 });
+    const right = try flex_kid(a, "right", root, .{ .fixed = 200 });
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 200), left.size.width);
+    try std.testing.expectEqual(@as(f32, 200), right.size.width);
+    try std.testing.expectEqual(@as(f32, 210), right.layout._global_x.?);
+
+    // Opted in under `.start`, the gap is part of the overflow: 410 − 300 = 110, 55 each.
+    left.size.shrink = 1;
+    right.size.shrink = 1;
+    try root.set_global_pos(a);
+    try std.testing.expectApproxEqAbs(@as(f32, 145), left.size.width, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 145), right.size.width, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 155), right.layout._global_x.?, 0.001);
+
+    // `space_between` ignores `gap`, so only 100 overflows.
+    root.layout.flow.main = .space_between;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 150), left.size.width);
+    try std.testing.expectEqual(@as(f32, 150), right.size.width);
+
+    // A grower's `shrink` is ignored: it sits at its minimum and the fixed sibling shrinks.
+    const root2 = try flex_row(a, 300);
+    const grower = try flex_kid(a, "grower", root2, .grow);
+    grower.size.shrink = 1;
+    grower.size.min_width = 40;
+    const wide = try flex_kid(a, "wide", root2, .{ .fixed = 400 });
+    wide.size.shrink = 1;
+
+    try root2.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 40), grower.size.width);
+    try std.testing.expectApproxEqAbs(@as(f32, 260), wide.size.width, 0.001);
+}
+
+test "shrink: a fit_children parent and a wrapping parent never shrink" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fit = try TestNode.create(a, "fit");
+    _ = fit.with_size(Size.init(.fit_children, .{ .fixed = 50 }));
+    _ = fit.with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    fit.size.max_width = 300; // even capped short of its children, a fit axis stays indefinite
+    const f1 = try flex_kid(a, "f1", fit, .{ .fixed = 200 });
+    f1.size.shrink = 1;
+    const f2 = try flex_kid(a, "f2", fit, .{ .fixed = 200 });
+    f2.size.shrink = 1;
+
+    try fit.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 300), fit.size.width);
+    try std.testing.expectEqual(@as(f32, 200), f1.size.width);
+    try std.testing.expectEqual(@as(f32, 200), f2.size.width);
+
+    const wrap = try TestNode.create(a, "wrap");
+    _ = wrap.with_size(Size.initFixed(300, 50));
+    _ = wrap.with_layout(.top_left, .{ .dir = .row, .wrap = true, .cross = .start });
+    const w1 = try flex_kid(a, "w1", wrap, .{ .fixed = 200 });
+    w1.size.shrink = 1;
+    const w2 = try flex_kid(a, "w2", wrap, .{ .fixed = 200 });
+    w2.size.shrink = 1;
+
+    try wrap.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 200), w1.size.width);
+    try std.testing.expectEqual(@as(f32, 200), w2.size.width);
+    try std.testing.expectEqual(@as(f32, 0), w2.layout._global_x.?); // broke onto line 2
+    try std.testing.expectEqual(@as(f32, 10), w2.layout._global_y.?);
+}
+
+test "weighted grow and shrink work on a column's main axis" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const col = try TestNode.create(a, "col");
+    _ = col.with_size(Size.initFixed(50, 300));
+    _ = col.with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const top = try TestNode.pcreate(a, "top", col);
+    _ = top.with_size(Size.init(.{ .fixed = 10 }, .{ .fixed = 200 })).with_layout(.relative, null);
+    top.size.shrink = 1;
+    const bottom = try TestNode.pcreate(a, "bottom", col);
+    _ = bottom.with_size(Size.init(.{ .fixed = 10 }, .{ .fixed = 200 })).with_layout(.relative, null);
+    bottom.size.shrink = 1;
+
+    try col.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 150), top.size.height);
+    try std.testing.expectEqual(@as(f32, 150), bottom.size.height);
+    try std.testing.expectEqual(@as(f32, 150), bottom.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 10), top.size.width); // the cross axis is untouched
+
+    const col2 = try TestNode.create(a, "col2");
+    _ = col2.with_size(Size.initFixed(50, 300));
+    _ = col2.with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const g1 = try TestNode.pcreate(a, "g1", col2);
+    _ = g1.with_size(Size.init(.{ .fixed = 10 }, .grow)).with_layout(.relative, null);
+    const g2 = try TestNode.pcreate(a, "g2", col2);
+    _ = g2.with_size(Size.init(.{ .fixed = 10 }, .grow)).with_layout(.relative, null);
+    g2.size.grow_weight = 2;
+
+    try col2.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 100), g1.size.height);
+    try std.testing.expectEqual(@as(f32, 200), g2.size.height);
+}
+
 /// Records what `stamp_walk` handed it, standing in for a `Ctx` — the walk takes its
 /// sink as `anytype`, so its ordering and clip logic test without a context, a pool or
 /// a window. `slots` names the keys that have an interaction slot; every other key is

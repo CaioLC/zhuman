@@ -454,8 +454,8 @@ fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Ax
 /// Under `cross = .stretch`, auto-sized in-flow children are then raised to their line's
 /// cross extent (`stretch_children`), still before their descendants resolve, so a stretched
 /// `fit_children` axis counts as definite for them: a `1.0` grandchild fills the stretched
-/// box. Per parent the order is finalize children → main-axis `grow` → cross-axis stretch →
-/// recurse, because the wrap packing reads the final main extents.
+/// box. Per parent the order is finalize children → main-axis `grow` → main-axis shrink →
+/// cross-axis stretch → recurse, because the wrap packing reads the final main extents.
 fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
     finalize_box(node, p_def_w, p_def_h, p_inner_w, p_inner_h);
     resolve_children(node, rule_definite(node.size.w), rule_definite(node.size.h));
@@ -489,7 +489,10 @@ fn resolve_children(node: anytype, def_w: bool, def_h: bool) void {
     }
 
     const main = main_axis(node.layout.flow);
-    if ((main == .x and def_w) or (main == .y and def_h)) distribute_grow(node, main);
+    if ((main == .x and def_w) or (main == .y and def_h)) {
+        distribute_grow(node, main);
+        distribute_shrink(node, main);
+    }
     if (node.layout.flow.cross == .stretch) stretch_children(node, main);
 
     for (node.children.items) |c| {
@@ -570,9 +573,33 @@ fn is_grow(rule: size_mod.SizeRule) bool {
     };
 }
 
-/// Equal-share water filling over the in-flow growers on the parent's main axis. Fixed
-/// siblings and minimums never shrink. A max-capped grower releases its unused share to
-/// the remaining growers; if fixed sizes plus minimums exceed the parent, they overflow.
+/// The spacing a main-axis run spends between its `flow_count` in-flow children: one `gap`
+/// per adjacent pair for the packed modes (`start`/`center`/`end`), 0 for the `space_*`
+/// modes, which derive their own spacing from the free space.
+fn main_spacing(node: anytype, flow_count: usize) f32 {
+    const uses_gap = switch (node.layout.flow.main) {
+        .start, .center, .end => true,
+        else => false,
+    };
+    return if (uses_gap and flow_count > 1)
+        node.layout.gap * @as(f32, @floatFromInt(flow_count - 1))
+    else
+        0;
+}
+
+/// A grower's weight (`Size.grow_weight`); anything `<= 0` means it does not grow.
+fn grow_weight(c: anytype) f32 {
+    return @max(0, c.size.grow_weight);
+}
+
+/// Weighted water filling (CSS `flex-grow`) over the in-flow growers on the parent's main
+/// axis. Every grower starts at its minimum. Each round, an active grower (positive weight,
+/// below its max) takes `remaining × w / Σ w(active)`; a max-capped grower keeps only what
+/// fits and the unused part goes round again to the others, still by weight. A weight of 0
+/// holds the grower at its minimum, and an all-zero sum leaves every grower there. With all
+/// weights 1 this is the plain equal share, bit for bit. Fixed siblings and minimums are
+/// never reduced here: if they exceed the parent the run overflows, unless
+/// `distribute_shrink` takes the overflow out of siblings that opted in.
 fn distribute_grow(node: anytype, main: Axis) void {
     var flow_count: usize = 0;
     var grow_count: usize = 0;
@@ -595,32 +622,31 @@ fn distribute_grow(node: anytype, main: Axis) void {
     }
     if (grow_count == 0) return;
 
-    const uses_gap = switch (node.layout.flow.main) {
-        .start, .center, .end => true,
-        else => false,
-    };
-    const spacing = if (uses_gap and flow_count > 1)
-        node.layout.gap * @as(f32, @floatFromInt(flow_count - 1))
-    else
-        0;
+    const spacing = main_spacing(node, flow_count);
     const available = @max(0, inner_extent(node, main) - fixed_sum - grow_padding - spacing);
     var remaining = @max(0, available - min_sum);
 
     while (remaining > 0.0001) {
-        var active: usize = 0;
+        var active_weight: f32 = 0;
         for (node.children.items) |c| {
             if (c.layout.anchor != .relative or !is_grow(axis_rule(c, main))) continue;
+            const w = grow_weight(c);
+            if (w <= 0) continue;
             const current = inner_extent(c, main);
             if (max_extent(&c.size, main)) |maximum| {
-                if (current + 0.0001 < maximum) active += 1;
-            } else active += 1;
+                if (current + 0.0001 < maximum) active_weight += w;
+            } else active_weight += w;
         }
-        if (active == 0) break;
+        if (active_weight <= 0) break; // every grower is capped, or every weight is 0
 
-        const share = remaining / @as(f32, @floatFromInt(active));
         var used: f32 = 0;
         for (node.children.items) |c| {
             if (c.layout.anchor != .relative or !is_grow(axis_rule(c, main))) continue;
+            const w = grow_weight(c);
+            if (w <= 0) continue;
+            // `remaining × w` first: with w = 1 that is exact, so all-1 weights reproduce
+            // the old `remaining / active` share bit for bit.
+            const share = remaining * w / active_weight;
             const current = inner_extent(c, main);
             const capacity = if (max_extent(&c.size, main)) |maximum| @max(0, maximum - current) else share;
             const add = @min(share, capacity);
@@ -630,6 +656,107 @@ fn distribute_grow(node: anytype, main: Axis) void {
         }
         if (used <= 0.0001) break;
         remaining -= used;
+    }
+}
+
+/// Whether `c` takes part in `distribute_shrink`: in flow, `shrink > 0`, and not a grower
+/// on `main` (a grower is already at its minimum whenever the run overflows, so its
+/// `shrink` is ignored).
+fn shrinks(c: anytype, main: Axis) bool {
+    return c.layout.anchor == .relative and c.size.shrink > 0 and !is_grow(axis_rule(c, main));
+}
+
+/// How much shrink ratio `c` can absorb before it reaches its floor:
+/// `(base − floor) / (shrink × base)`, with `base` its current content extent. A child with
+/// no content (`base = 0`) has no room.
+fn shrink_room(c: anytype, main: Axis) f32 {
+    const base = inner_extent(c, main);
+    const scaled = c.size.shrink * base;
+    if (scaled <= 0) return 0;
+    return @max(0, base - min_extent(&c.size, main)) / scaled;
+}
+
+const ShrinkTally = struct {
+    /// Shrinkers frozen at their floor at this ratio.
+    frozen: usize = 0,
+    /// The overflow the frozen ones absorb, `Σ (base − floor)`.
+    released: f32 = 0,
+    /// `Σ (shrink × base)` over the ones still free.
+    weight: f32 = 0,
+};
+
+/// Split the shrinkers at `ratio`: those whose room is below it would pass their floor and
+/// freeze there; the rest share what is left of the overflow.
+fn shrink_tally(node: anytype, main: Axis, ratio: f32) ShrinkTally {
+    var t: ShrinkTally = .{};
+    for (node.children.items) |c| {
+        if (!shrinks(c, main)) continue;
+        const base = inner_extent(c, main);
+        if (shrink_room(c, main) < ratio) {
+            t.frozen += 1;
+            t.released += @max(0, base - min_extent(&c.size, main));
+        } else t.weight += c.size.shrink * base;
+    }
+    return t;
+}
+
+/// Opt-in flex shrink (CSS `flex-shrink` with CSS's weighting) on a definite parent's main
+/// axis, run right after `distribute_grow`. When the in-flow children's border boxes plus
+/// spacing (`gap` only for the packed modes, as in `distribute_grow`) exceed the parent's
+/// content box, the overflow comes out of the children with `Size.shrink > 0`, each in
+/// proportion to `shrink × base`, where `base` is its content extent after finalize and
+/// grow. Weighting by base means a wide column gives up more than a narrow one with the
+/// same factor, so neither is driven to zero first. Padding never shrinks.
+///
+/// No child goes below its main-axis minimum. One that would is frozen at it and the rest
+/// of the overflow is shared again among the others (the same water filling as the grow
+/// caps). If every shrinker reaches its floor, the run still overflows. The loop needs no
+/// per-child storage: at a common ratio `λ`, a child is frozen exactly when its
+/// `shrink_room` is below `λ`, and freezing a child only raises `λ`, so the frozen set
+/// only grows and settles within one round per shrinker. Sizes are written once at the
+/// end, so every round reads the untouched bases.
+///
+/// Skipped for a wrapping run, which breaks lines instead (CSS shrinks each line on its
+/// own; we don't need that yet). Descendants resolve against the shrunk size, since the
+/// recursion runs afterwards. A shrunk `fit_children` child keeps its rule, so its own
+/// in-flow children still see an indefinite parent; only its box got smaller.
+fn distribute_shrink(node: anytype, main: Axis) void {
+    if (node.layout.flow.wrap) return;
+    var flow_count: usize = 0;
+    var shrinker_count: usize = 0;
+    var total: f32 = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) continue;
+        flow_count += 1;
+        total += extent(c, main);
+        if (shrinks(c, main)) shrinker_count += 1;
+    }
+    if (shrinker_count == 0) return;
+    const overflow = total + main_spacing(node, flow_count) - inner_extent(node, main);
+    if (!(overflow > 0)) return;
+
+    var ratio: f32 = 0; // λ; 0 freezes nobody, so the first round tallies everyone
+    var frozen: usize = 0;
+    var round: usize = 0;
+    while (round <= shrinker_count) : (round += 1) {
+        const t = shrink_tally(node, main, ratio);
+        if (round > 0 and t.frozen == frozen) break; // λ agrees with the set it came from
+        frozen = t.frozen;
+        if (t.weight <= 0) { // everyone is at their floor; the rest overflows
+            ratio = std.math.inf(f32);
+            break;
+        }
+        ratio = @max(0, overflow - t.released) / t.weight;
+    }
+
+    for (node.children.items) |c| {
+        if (!shrinks(c, main)) continue;
+        const base = inner_extent(c, main);
+        const target = if (shrink_room(c, main) < ratio)
+            min_extent(&c.size, main)
+        else
+            base - ratio * c.size.shrink * base;
+        set_inner_extent(c, main, target);
     }
 }
 

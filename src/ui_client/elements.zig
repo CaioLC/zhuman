@@ -167,6 +167,23 @@ pub const El = struct {
         return self;
     }
 
+    /// Growth weight for a `.grow` main axis (CSS `flex-grow`): growers split the parent's
+    /// free space in proportion, so `with_grow(2)` takes twice a plain `.grow` sibling's
+    /// share. `0` holds the node at its minimum. Unitless, so not scaled.
+    pub fn with_grow(self: El, weight: f32) El {
+        self.node.size.grow_weight = weight;
+        return self;
+    }
+
+    /// Opt in to main-axis shrink (CSS `flex-shrink`; the default 0 never shrinks). When a
+    /// definite, non-wrapping parent's run overflows, this node gives up overflow in
+    /// proportion to `factor ×` its content extent, down to its main-axis minimum.
+    /// Ignored on a `.grow` main axis. Unitless, so not scaled.
+    pub fn with_shrink(self: El, factor: f32) El {
+        self.node.size.shrink = factor;
+        return self;
+    }
+
     /// Displace this node in **logical** px (scales to device px) from wherever its
     /// anchor or its parent's flow put it. `.center` plus a computed delta is polar placement
     /// — the way anything positioned by its own arithmetic (a radial board, a graph) reaches

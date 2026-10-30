@@ -447,10 +447,21 @@ Every node picks a `SizeRule` **per axis** (mandatory — width and height size
 independently): `fixed`, `content`, `pct_of_parent`, `grow`, or `fit_children`.
 `grow` is meaningful for an in-flow child on its parent's main axis: under a definite
 parent, growers divide the content-box remainder after fixed siblings, their own padding,
-and packed-mode gaps. Each starts at its minimum; max-capped shares redistribute to the
-remaining growers. Fixed sizes and minimums never shrink, so an over-constrained run
-overflows deterministically. At root, out of flow, on the cross axis, or under an
-indefinite parent, `grow` falls back to measured content.
+and packed-mode gaps, in proportion to `Size.grow_weight` (CSS `flex-grow`; default 1,
+the equal share; 0 never grows). Each starts at its minimum; a max-capped grower releases
+its unused share to the others, by weight. The weight is a `Size` field rather than a
+`grow` payload, so a plain `.grow` keeps meaning weight 1. At root, out of flow, on the
+cross axis, or under an indefinite parent, `grow` falls back to measured content.
+
+Shrink is opt-in: `Size.shrink` (CSS `flex-shrink`) defaults to 0 rather than CSS's 1, so
+an over-constrained run overflows deterministically, as authored, unless a child asks to
+give. When a definite, non-wrapping parent's in-flow children plus gaps exceed its content
+box, children with `shrink > 0` (and a non-`grow` main rule) give up the overflow in
+proportion to `shrink × content extent`, so a wide column gives more than a narrow one with
+the same factor. Padding never shrinks, and no child goes below its main-axis minimum (CSS
+would use min-content, which the engine doesn't measure); a child that reaches it stops and
+the rest moves to its siblings. A wrapping run breaks lines instead, and a `fit_children`
+parent has nothing to shrink against.
 
 The parent-relative rules (`pct_of_parent`, `grow`) size the whole box: a node's own
 padding comes out of its share, so `pct_of_parent = 1` with padding fills the parent
