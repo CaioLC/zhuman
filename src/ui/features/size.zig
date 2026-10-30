@@ -28,11 +28,17 @@ pub const Padding = struct {
 /// is root/out-of-flow/cross-axis or under an indefinite parent fall back to `content`
 /// (the node's measured `data_*`, or 0). An out-of-flow `.pct_of_parent` resolves against
 /// the fitted parent, which it never sizes.
+///
+/// Box model: the parent-relative rules (`pct_of_parent`, `grow`) size the node's whole
+/// **border box** — its own padding comes out of the share, so a `1.0` child with padding
+/// fills its parent exactly. The intrinsic rules (`fixed`, `content`, `fit_children`) size
+/// the **content box** and padding is added on top. The indefinite fallback is a content
+/// size like any `content` rule.
 pub const SizeRule = union(enum) {
     fixed: f32,
     content, // sizes to the host-measured `data_width`/`data_height`
-    pct_of_parent: f32, // fraction in 0..1
-    grow, // equal share of definite parent main-axis remainder
+    pct_of_parent: f32, // fraction in 0..1 of the parent's content box; includes own padding
+    grow, // equal share of definite parent main-axis remainder; includes own padding
     fit_children,
 };
 
@@ -40,8 +46,11 @@ pub const Size = struct {
     w: SizeRule,
     h: SizeRule,
     padding: Padding,
-    /// Per-axis bounds on the resolved **content box**; padding is added afterward.
-    /// Minimum defaults to 0, maximum to unbounded. If max is below min, min wins.
+    /// Per-axis bounds on the resolved **content box**; padding is added afterward. This
+    /// holds for every rule: a border-box rule (`pct_of_parent`, `grow`) first takes its
+    /// padding out of the share, then the remaining content is clamped, so a min can still
+    /// push the box past its share. Minimum defaults to 0, maximum to unbounded. If max is
+    /// below min, min wins.
     min_width: f32 = 0,
     min_height: f32 = 0,
     max_width: ?f32 = null,

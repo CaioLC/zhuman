@@ -445,6 +445,11 @@ remaining growers. Fixed sizes and minimums never shrink, so an over-constrained
 overflows deterministically. At root, out of flow, on the cross axis, or under an
 indefinite parent, `grow` falls back to measured content.
 
+The parent-relative rules (`pct_of_parent`, `grow`) size the whole box: a node's own
+padding comes out of its share, so `pct_of_parent = 1` with padding fills the parent
+exactly (padding wider than the share leaves 0 content). The intrinsic rules (`fixed`,
+`content`, `fit_children`) size the content and padding is added around it.
+
 Each axis also has a content-box minimum (default 0) and optional maximum; padding is
 added after clamping, and minimum wins a conflicting min/max pair. Constraints apply to
 every rule.

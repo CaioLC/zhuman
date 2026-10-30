@@ -673,6 +673,79 @@ test "an out-of-flow pct child resolves against its fit parent's final size" {
     try std.testing.expectEqual(@as(f32, 0), flow.size.width);
 }
 
+/// A fixed 200×40 row holding one `pct_of_parent = frac` child padded `pad_x` left and
+/// right; returns the child so a test can read its box and content widths.
+fn padded_pct_child(a: std.mem.Allocator, frac: f32, pad_x: f32) !*TestNode {
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 40)).with_layout(.top_left, .{ .dir = .row });
+    const child = try TestNode.pcreate(a, "child", root);
+    _ = child.with_size(Size.init(.{ .pct_of_parent = frac }, .{ .fixed = 10 })).with_layout(.relative, null);
+    child.size.padding = features.Padding.initSymmetric(pad_x, 0);
+    try root.set_global_pos(a);
+    return child;
+}
+
+test "pct_of_parent sizes the border box: 1.0 plus padding fills the parent exactly" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const child = try padded_pct_child(arena.allocator(), 1.0, 10);
+    try std.testing.expectEqual(@as(f32, 200), child.size.width); // not 220
+    try std.testing.expectEqual(@as(f32, 180), child.size.width - child.size.padding.left - child.size.padding.right); // content
+    try std.testing.expectEqual(@as(f32, 10), child.size.height); // fixed axis untouched
+}
+
+test "pct_of_parent border box: a fraction's padding comes out of its share" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const child = try padded_pct_child(arena.allocator(), 0.5, 10);
+    try std.testing.expectEqual(@as(f32, 100), child.size.width); // 0.5 × 200, content 80
+}
+
+test "pct_of_parent border box: padding wider than the share clamps content to 0" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    // 0.1 × 200 = 20 of share against 60 of padding: content 0, box = the padding.
+    const child = try padded_pct_child(arena.allocator(), 0.1, 30);
+    try std.testing.expectEqual(@as(f32, 60), child.size.width);
+}
+
+test "pct_of_parent border box: min still bounds the content left after padding" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 40)).with_layout(.top_left, .{ .dir = .row });
+    const child = try TestNode.pcreate(a, "child", root);
+    _ = child.with_size(Size.init(.{ .pct_of_parent = 0.25 }, .{ .fixed = 10 })).with_layout(.relative, null);
+    child.size.padding = features.Padding.initSymmetric(10, 0);
+    child.size.min_width = 60; // share 50 − padding 20 = 30 content, raised to 60
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 80), child.size.width);
+}
+
+test "an out-of-flow padded pct child under a fit parent is border-box too" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A fit column around one 100×20 child; an anchored 1.0 × 1.0 wash padded 6 all round
+    // covers the parent's content box exactly (100×20), its content inset to 88×8.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.fit_children, .fit_children));
+    _ = root.with_layout(.top_left, .{ .dir = .column });
+    const k = try TestNode.pcreate(a, "k", root);
+    _ = k.with_size(Size.initFixed(100, 20)).with_layout(.relative, null);
+    const wash = try TestNode.pcreate(a, "wash", root);
+    _ = wash.with_size(Size.init(.{ .pct_of_parent = 1 }, .{ .pct_of_parent = 1 })).with_layout(.top_left, null);
+    wash.size.padding = features.Padding.init(6);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 100), root.size.width); // the overlay never fed the fit
+    try std.testing.expectEqual(@as(f32, 20), root.size.height);
+    try std.testing.expectEqual(@as(f32, 100), wash.size.width);
+    try std.testing.expectEqual(@as(f32, 20), wash.size.height);
+}
+
 /// Build a fixed 200×100 row with two fixed 40-wide children, under `main` distribution,
 /// and return their resolved main-axis (x) positions. The parent is definite, so the
 /// distribution has 200 − 80 = 120 of free main space to share.

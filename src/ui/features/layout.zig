@@ -427,7 +427,8 @@ fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Ax
 }
 
 /// Pass 2 — top-down parent-relative finalize. Percentages resolve against definite
-/// parent content boxes, then in-flow `grow` children divide the parent's remaining
+/// parent content boxes and size the child's whole box (its padding included, see
+/// `finalize_axis`), then in-flow `grow` children divide the parent's remaining
 /// main-axis space before their descendants resolve. `fit_children` is indefinite for its
 /// in-flow children, whose percentages and growers fall back to content; an out-of-flow
 /// child's percentage resolves against the fitted size.
@@ -539,12 +540,19 @@ fn distribute_grow(node: anytype, main: Axis) void {
     }
 }
 
+/// One axis's final **content** extent (the caller adds padding back on). Intrinsic rules
+/// (`fixed`, `content`, `fit_children`) size the content and padding grows the box around
+/// it. A definite `pct_of_parent` sizes the whole box instead, as `grow` does: the fraction
+/// is taken of the parent's content box and the node's own padding comes out of that share,
+/// so `1.0` plus padding fills the parent rather than overflowing it by the padding. Padding
+/// wider than the share leaves 0 content (the box is then just the padding). Min/max still
+/// bound the content box. The indefinite fallback is `content_seed`, a content size.
 fn finalize_axis(s: *const Size, axis: Axis, rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p_def: bool, p_inner: f32) f32 {
     const raw = switch (rule) {
         .fixed => |n| n,
         .content => content_seed,
         .fit_children => pass1_inner,
-        .pct_of_parent => |f| if (p_def) p_inner * f else content_seed,
+        .pct_of_parent => |f| if (p_def) @max(0, p_inner * f - padding_extent(s, axis)) else content_seed,
         .grow => content_seed,
     };
     return constrain_inner(s, axis, raw);
