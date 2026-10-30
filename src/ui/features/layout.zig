@@ -50,7 +50,7 @@ pub const Flow = struct {
     /// mixed-size text shares a common writing line; a plain box (no baseline) falls back to
     /// the trailing edge, and on a `.column` (where baseline is meaningless) it falls back to
     /// the leading edge (`.start`). `.stretch` instead *sizes* auto (`fit_children`/`content`)
-    /// children to fill the line in pass 2, the way CSS equal-height columns work, so a
+    /// children to fill the line in the top-down pass, the way CSS equal-height columns work, so a
     /// template need not fake it with `pct_of_parent = 1.0` or fixed heights.
     cross: CrossAlign = .baseline,
 };
@@ -93,7 +93,7 @@ pub const CrossAlign = enum {
     /// border box raised to the line's cross extent, then sits at the line start like
     /// `.start`. `fixed`/`pct_of_parent` children keep their size; a stretch never shrinks a
     /// child, and min/max still bound its content box. A non-wrapping line is the parent's
-    /// content box; a wrapping run stretches each child to its own line. Applied in pass 2
+    /// content box; a wrapping run stretches each child to its own line. Applied top-down
     /// (`stretch_children`), so the stretched axis is definite for the child's descendants.
     /// Never feeds back into a `fit_children` parent, whose cross fit stays the plain max.
     stretch,
@@ -211,39 +211,79 @@ pub const Layout = struct {
 
 // ============================ Public entry ===================================
 
-/// Solve the whole tree, then place it. Three passes:
-///   1. `recalculate_size` — bottom-up: resolve intrinsic/fixed/fit provisional sizes.
-///   2. `resolve_pct`       — top-down: finalize percentages and sibling grow allocation.
-///   3. `place`             — top-down: assign every node its global position.
+/// Solve the whole tree, then place it. Widths are solved before heights, because a
+/// wrapping row's height depends on its width (how many lines it breaks into):
+///   1. `recalculate_size`    — bottom-up, both axes: intrinsic sizes and provisionals.
+///   2. `resolve_axis(.x)`    — top-down, x only: percentages, grow, shrink and stretch.
+///                              Every width is final after it.
+///   3. `recalculate_axis(.y)`— bottom-up, y only: every height again from scratch, with a
+///                              wrapping row's lines packed against its final width.
+///   4. `resolve_axis(.y)`    — top-down, y only: the mirror of step 2.
+///   5. `place`               — top-down: assign every node its global position.
 /// The sizing passes are pure (no host callback — `content` sizes read the host's
 /// pre-measured `data_width`/`data_height`, set on the node at build). `place` takes a
 /// scratch `Allocator` only to materialize each node's in-flow child list; it still never
 /// consults the host. Call at the root.
 pub fn set_global_pos(node: anytype, alloc: Allocator) anyerror!void {
-    recalculate_size(node);
-    resolve_pct(node, true, true, 0, 0);
-    try place(node, alloc, null);
+    _ = try solve(node, alloc, null);
 }
 
-// ============================ Sizing (passes 1 & 2) ==========================
+// ============================ Sizing (passes 1–4) ============================
 
 const Axis = enum { x, y };
 
-/// Diagnostic variant of `set_global_pos`: identical solve, with nanosecond durations
-/// for the intrinsic, parent-relative/grow, and placement passes, read from the host's
-/// `clock`. The normal entrypoint remains clock-free and callback-free.
-pub fn set_global_pos_profiled(node: anytype, alloc: Allocator, clock: Clock) anyerror!@import("../profile.zig").Sample {
-    const start = clock.now();
-    recalculate_size(node);
-    const sized = clock.now();
-    resolve_pct(node, true, true, 0, 0);
-    const resolved = clock.now();
-    try place(node, alloc, null);
-    const placed = clock.now();
-    return .{ .intrinsic = sized -| start, .relative = resolved -| sized, .placement = placed -| resolved };
+/// Diagnostic variant of `set_global_pos`: identical solve, with nanosecond durations read
+/// from the host's `clock`. Both bottom-up passes (1, 3) count as `intrinsic`, both
+/// top-down passes (2, 4) as `relative`, and `place` as `placement`. The normal entrypoint
+/// remains clock-free and callback-free.
+pub fn set_global_pos_profiled(node: anytype, alloc: Allocator, clock: Clock) anyerror!Sample {
+    return solve(node, alloc, clock);
 }
 
 const Clock = @import("../profile.zig").Clock;
+const Sample = @import("../profile.zig").Sample;
+
+/// Adds the time since the previous reading to a `Sample` field; does nothing without a
+/// clock, so the unprofiled solve never reads one.
+const Lap = struct {
+    clock: ?Clock,
+    last: u64,
+
+    fn init(clock: ?Clock) Lap {
+        return .{ .clock = clock, .last = if (clock) |c| c.now() else 0 };
+    }
+
+    fn add(self: *Lap, into: *u64) void {
+        const c = self.clock orelse return;
+        const t = c.now();
+        into.* +|= t -| self.last;
+        self.last = t;
+    }
+};
+
+/// The one solve behind both entrypoints (see `set_global_pos` for the passes).
+fn solve(node: anytype, alloc: Allocator, clock: ?Clock) anyerror!Sample {
+    var sample: Sample = .{};
+    var lap = Lap.init(clock);
+
+    recalculate_size(node);
+    lap.add(&sample.intrinsic);
+    resolve_axis(node, .x);
+    lap.add(&sample.relative);
+
+    // Phase boundary: every width is final and no height has been resolved yet. Anything
+    // whose height depends on its width (text wrapped at the resolved width) is re-measured
+    // here, before step 3 reads `data_height`.
+
+    recalculate_axis(node, .y);
+    lap.add(&sample.intrinsic);
+    resolve_axis(node, .y);
+    lap.add(&sample.relative);
+
+    try place(node, alloc, null);
+    lap.add(&sample.placement);
+    return sample;
+}
 
 /// The main (flow) axis of a parent's children: x for a row, y for a column. `fit_children`
 /// sums child extents along this axis and maxes them across it.
@@ -299,16 +339,17 @@ fn axis_rule(node: anytype, axis: Axis) size_mod.SizeRule {
 /// the **cross** axis: `fit_cross` (a max, or a baseline-aware ascent+descent for a
 /// baseline row) — which deliberately *does* still count anchored children (the header's
 /// fit-height is set by its two anchored groups). Reads children's already-resolved
-/// (pass-1) sizes.
+/// bottom-up sizes.
 ///
 /// A `wrap`ping run is measured across **all** its lines (`wrap_cross`, added 2026-08-24)
-/// whenever the main extent is knowable this early — otherwise a shelf that wraps to two
-/// rows would report one row of height and whatever follows it would draw on top.
-fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
+/// whenever the main extent is knowable — otherwise a shelf that wraps to two rows would
+/// report one row of height and whatever follows it would draw on top. `resolved_main` is
+/// the node's final inner main extent when the caller has one (step 3, for a row).
+fn fit_axis(node: anytype, axis: Axis, main: Axis, resolved_main: ?f32) f32 {
     const flow = node.layout.flow;
     if (axis != main) {
         if (flow.wrap) {
-            if (wrap_cross(node, axis, main, flow)) |h| return h;
+            if (wrap_cross(node, axis, main, flow, resolved_main)) |h| return h;
         }
         return fit_cross(node, axis, flow);
     }
@@ -325,7 +366,7 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis) f32 {
 }
 
 /// The `k`-th in-flow child, in flow order. Linear per call (so the wrap measurement is
-/// O(n²) in children) — deliberately allocation-free, since pass-1 sizing has no
+/// O(n²) in children) — deliberately allocation-free, since bottom-up sizing has no
 /// allocator, and a wrapping run is a handful of tiles.
 fn nth_flow_child(node: anytype, k: usize) @TypeOf(node) {
     var seen: usize = 0;
@@ -338,18 +379,27 @@ fn nth_flow_child(node: anytype, k: usize) @TypeOf(node) {
 }
 
 /// Cross-axis `fit` for a **wrapping** run: pack the in-flow children into lines exactly
-/// the way `flow_place` does, then sum the line extents plus one `gap` per break. Returns
-/// `null` when there's no limit to pack against — only a `fixed` main rule is known during
-/// pass 1 (bottom-up), since `pct_of_parent` is still provisional and `fit_children` on the
-/// main axis is circular by definition — so the caller falls back to the single-line max.
+/// the way `flow_place` does, then sum the line extents plus one `gap` per break. The limit
+/// packed against is `resolved_main` when given, else a `fixed` main rule; with neither it
+/// returns `null` and the caller falls back to the single-line max.
 ///
-/// A `fixed` rule value *is* the content extent (padding grows the box on top of it), which
-/// is the same number `flow_place` packs against after subtracting its padding — so the two
-/// agree without either consulting the resolved size. `reverse` is mirrored, since reversing
-/// changes which children share a line and therefore how deep each line is.
-fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow) ?f32 {
+/// A row gets `resolved_main` in step 3 (`recalculate_axis(.y)`): its width and its
+/// children's widths are final by then, whatever their rules (`grow`, `pct_of_parent`,
+/// shrunk, stretched), so the lines counted are the lines `flow_place` will place. Pass 1
+/// passes `null`, since only a `fixed` rule is known bottom-up (`pct_of_parent` is still
+/// provisional and `fit_children` on the main axis is circular). A `fixed` rule value *is*
+/// the content extent, the same number `flow_place` packs against after subtracting its
+/// padding.
+///
+/// A column-wrap (main = y) is measured in pass 1 only: its `fit_children` width is needed
+/// by the x pass, before any height is final, so it packs against a `fixed` height and the
+/// children's pass-1 heights. That is the one coupling still running from y back to x.
+///
+/// `reverse` is mirrored, since reversing changes which children share a line and
+/// therefore how deep each line is.
+fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow, resolved_main: ?f32) ?f32 {
     const main_rule = if (main == .x) node.size.w else node.size.h;
-    const main_size = switch (main_rule) {
+    const main_size = resolved_main orelse switch (main_rule) {
         .fixed => |n| constrain_inner(&node.size, main, n),
         else => return null,
     };
@@ -400,7 +450,7 @@ fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow) ?f32 {
 /// out-of-flow child just contributes its own extent. Every other case is a plain max of
 /// child cross-extents (which is what `start`/`center`/`end` need). Reduces to
 /// `max(child cross-extent)` when no baseline row widens it. `stretch` is the plain max too:
-/// it raises children to this fitted line in pass 2 and never feeds back into it.
+/// it raises children to this fitted line in the top-down pass and never feeds back into it.
 fn fit_cross(node: anytype, cross_axis: Axis, flow: Flow) f32 {
     if (flow.dir == .row and flow.cross == .baseline) {
         var max_ascent: f32 = 0; // deepest above the baseline (height − baseline)
@@ -422,51 +472,70 @@ fn fit_cross(node: anytype, cross_axis: Axis, flow: Flow) f32 {
     return acc;
 }
 
-/// Pass 1 — bottom-up sizing. Resolves `fixed`, `content`, and `fit_children`
-/// (from already-resolved children); `pct_of_parent` takes a provisional = its
-/// content size (the fallback value), finalized top-down in `resolve_pct`.
+/// Pass 1 — bottom-up sizing, both axes. Resolves `fixed`, `content`, and `fit_children`
+/// (from already-resolved children); `pct_of_parent` and `grow` take a provisional = their
+/// content size (the fallback value), finalized top-down in `resolve_axis`. A wrapping
+/// row's height here counts lines only against a `fixed` width; step 3 redoes it.
 fn recalculate_size(node: anytype) void {
     for (node.children.items) |c| recalculate_size(c);
+    bottom_up(node, .x, null);
+    bottom_up(node, .y, null);
+}
+
+/// Step 3 — pass 1 again on `axis` alone (the solve calls it for `.y`), after step 2 has
+/// finalized the other axis. Every extent on `axis` is recomputed from its rule and the
+/// children's fresh extents, so it depends only on rules, `data_*` and the other axis.
+/// The only difference from pass 1 is that a row's `wrap_cross` packs against the row's
+/// final inner width and its children's final widths, for any main rule.
+fn recalculate_axis(node: anytype, comptime axis: Axis) void {
+    for (node.children.items) |c| recalculate_axis(c, axis);
+    const main = main_axis(node.layout.flow);
+    // Only a row-wrap's height is solved against a final main extent. A column-wrap's width
+    // would need final heights, which come after it (see `wrap_cross`).
+    const resolved_main: ?f32 = if (axis == .y and main == .x) inner_extent(node, .x) else null;
+    bottom_up(node, axis, resolved_main);
+}
+
+/// One node's bottom-up extent on `axis`, its children's already computed.
+fn bottom_up(node: anytype, axis: Axis, resolved_main: ?f32) void {
     const s = &node.size;
     const main = main_axis(node.layout.flow);
-    const inner_w = constrain_inner(s, .x, bottom_up_axis(s.w, s.data_width, node, .x, main));
-    const inner_h = constrain_inner(s, .y, bottom_up_axis(s.h, s.data_height, node, .y, main));
-    s.width = inner_w + padding_extent(s, .x);
-    s.height = inner_h + padding_extent(s, .y);
-}
-
-fn bottom_up_axis(rule: size_mod.SizeRule, content: f32, node: anytype, axis: Axis, main: Axis) f32 {
-    return switch (rule) {
+    const content = if (axis == .x) s.data_width else s.data_height;
+    const raw = switch (axis_rule(node, axis)) {
         .fixed => |n| n,
         .content => content,
-        .pct_of_parent, .grow => content, // provisional; pass 2 finalizes parent-relative rules
-        .fit_children => fit_axis(node, axis, main),
+        .pct_of_parent, .grow => content, // provisional; the top-down pass finalizes these
+        .fit_children => fit_axis(node, axis, main, resolved_main),
     };
+    const resolved = constrain_inner(s, axis, raw) + padding_extent(s, axis);
+    if (axis == .x) s.width = resolved else s.height = resolved;
 }
 
-/// Pass 2 — top-down parent-relative finalize. Percentages resolve against definite
-/// parent content boxes and size the child's whole box (its padding included, see
-/// `finalize_axis`), then in-flow `grow` children divide the parent's remaining
-/// main-axis space before their descendants resolve. `fit_children` is indefinite for its
-/// in-flow children, whose percentages and growers fall back to content; an out-of-flow
-/// child's percentage resolves against the fitted size.
+/// Steps 2 and 4 — top-down parent-relative finalize on one axis. Percentages resolve
+/// against definite parent content boxes and size the child's whole box (its padding
+/// included, see `finalize_axis`), then, when `axis` is the parent's main axis, in-flow
+/// `grow` children divide the remaining space and opted-in shrinkers absorb an overflow
+/// before their descendants resolve. `fit_children` is indefinite for its in-flow children,
+/// whose percentages and growers fall back to content; an out-of-flow child's percentage
+/// resolves against the fitted size.
 ///
-/// Under `cross = .stretch`, auto-sized in-flow children are then raised to their line's
-/// cross extent (`stretch_children`), still before their descendants resolve, so a stretched
-/// `fit_children` axis counts as definite for them: a `1.0` grandchild fills the stretched
-/// box. Per parent the order is finalize children → main-axis `grow` → main-axis shrink →
-/// cross-axis stretch → recurse, because the wrap packing reads the final main extents.
-fn resolve_pct(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
-    finalize_box(node, p_def_w, p_def_h, p_inner_w, p_inner_h);
-    resolve_children(node, rule_definite(node.size.w), rule_definite(node.size.h));
+/// When `axis` is the cross axis of a `cross = .stretch` parent, auto-sized in-flow children
+/// are then raised to their line's cross extent (`stretch_children`), still before their
+/// descendants resolve, so a stretched `fit_children` axis counts as definite for them: a
+/// `1.0` grandchild fills the stretched box. Per parent the order is finalize children →
+/// main-axis `grow` → main-axis shrink → cross-axis stretch → recurse.
+///
+/// Run for x first, then (after step 3) for y. No x decision reads a height except a
+/// column-wrap's stretch, which packs its lines against the pass-1 heights.
+fn resolve_axis(root: anytype, comptime axis: Axis) void {
+    finalize_node(root, axis, true, 0);
+    resolve_children(root, axis, rule_definite(axis_rule(root, axis)));
 }
 
-fn finalize_box(node: anytype, p_def_w: bool, p_def_h: bool, p_inner_w: f32, p_inner_h: f32) void {
+fn finalize_node(node: anytype, comptime axis: Axis, p_def: bool, p_inner: f32) void {
     const s = &node.size;
-    const inner_w = finalize_axis(s, .x, s.w, s.data_width, inner_extent(node, .x), p_def_w, p_inner_w);
-    const inner_h = finalize_axis(s, .y, s.h, s.data_height, inner_extent(node, .y), p_def_h, p_inner_h);
-    set_inner_extent(node, .x, inner_w);
-    set_inner_extent(node, .y, inner_h);
+    const content = if (axis == .x) s.data_width else s.data_height;
+    set_inner_extent(node, axis, finalize_axis(s, axis, axis_rule(node, axis), content, inner_extent(node, axis), p_def, p_inner));
 }
 
 fn rule_definite(rule: size_mod.SizeRule) bool {
@@ -476,34 +545,33 @@ fn rule_definite(rule: size_mod.SizeRule) bool {
     };
 }
 
-fn resolve_children(node: anytype, def_w: bool, def_h: bool) void {
-    const inner_w = inner_extent(node, .x);
-    const inner_h = inner_extent(node, .y);
+fn resolve_children(node: anytype, comptime axis: Axis, def: bool) void {
+    const p_inner = inner_extent(node, axis);
     // An out-of-flow child never feeds its parent's fit on the main axis, and on the cross
-    // axis only through its pass-1 (content) extent, so a `fit_children` parent's size is
+    // axis only through its bottom-up (content) extent, so a `fit_children` parent's size is
     // final by now: a percentage on an anchored child resolves against it (UIE-10). In-flow
     // children keep the indefinite fallback, since their size is what the fit summed.
     for (node.children.items) |c| {
         const oof = c.layout.anchor != .relative;
-        finalize_box(c, def_w or oof, def_h or oof, inner_w, inner_h);
+        finalize_node(c, axis, def or oof, p_inner);
     }
 
     const main = main_axis(node.layout.flow);
-    if ((main == .x and def_w) or (main == .y and def_h)) {
+    if (main == axis and def) {
         distribute_grow(node, main);
         distribute_shrink(node, main);
     }
-    if (node.layout.flow.cross == .stretch) stretch_children(node, main);
+    if (node.layout.flow.cross == .stretch and cross(main) == axis) stretch_children(node, main);
 
     for (node.children.items) |c| {
-        resolve_children(c, rule_definite(c.size.w) or stretches(node, c, .x), rule_definite(c.size.h) or stretches(node, c, .y));
+        resolve_children(c, axis, rule_definite(axis_rule(c, axis)) or stretches(node, c, axis));
     }
 }
 
 /// Whether `c`'s `axis` is stretched by its parent `node`: the parent's flow is `.stretch`,
 /// `c` is in flow, `axis` is the parent's cross axis, and `c`'s rule there is auto. The same
 /// test picks who `stretch_children` raises and whose axis then counts as definite, so the
-/// two can't disagree. Every such child is raised (the line is always known in pass 2).
+/// two can't disagree. Every such child is raised (the line is always known in the top-down pass).
 fn stretches(node: anytype, c: anytype, axis: Axis) bool {
     if (node.layout.flow.cross != .stretch or c.layout.anchor != .relative) return false;
     if (axis == main_axis(node.layout.flow)) return false;
@@ -514,19 +582,20 @@ fn stretches(node: anytype, c: anytype, axis: Axis) bool {
     };
 }
 
-/// Raise `c`'s cross border box to `line`. Never shrinks it below its current (pass-1)
+/// Raise `c`'s cross border box to `line`. Never shrinks it below its current (bottom-up)
 /// extent; `set_inner_extent` keeps min/max on the content box, so a max can cap it short.
 fn stretch_to(c: anytype, axis: Axis, line: f32) void {
     const target = @max(extent(c, axis), line);
     set_inner_extent(c, axis, target - padding_extent(&c.size, axis));
 }
 
-/// `cross = .stretch`, pass 2. A single line is the parent's content box on the cross axis
+/// `cross = .stretch`, top-down. A single line is the parent's content box on the cross axis
 /// (for a `fit_children` parent that is the already-fitted max, so shorter siblings grow to
 /// the tallest, as in CSS). A wrapping run is packed into lines exactly as `flow_place` packs
 /// them (flow order, `reverse`, `gap`, against the content-box main extent) and each child
-/// takes its own line's max. Pass 3's line extents come out unchanged, because no child
-/// grows past the line it was measured in.
+/// takes its own line's max. `place`'s line extents come out unchanged, because no child
+/// grows past the line it was measured in. A row-wrap stretches in the y pass against final
+/// widths; a column-wrap stretches in the x pass, so it packs against bottom-up heights.
 fn stretch_children(node: anytype, main: Axis) void {
     const ca = cross(main);
     const flow = node.layout.flow;
@@ -947,12 +1016,12 @@ fn cross(m: Axis) Axis {
 /// A child's offset within its line's cross band (measured from the line's cross start).
 /// `start`/`center`/`end` position the box; `baseline` (rows only) drops the child so its
 /// baseline lands on the line's shared baseline (at `max_ascent` from the line top), and on
-/// a column falls back to `start`. `stretch` already sized the child to the line in pass 2,
+/// a column falls back to `start`. `stretch` already sized the child to the line in the top-down pass,
 /// so it only places it at the line start.
 fn cross_within(flow: Flow, m: Axis, line_cross: f32, c: anytype, max_ascent: f32) f32 {
     const cc = extent(c, cross(m));
     return switch (flow.cross) {
-        .start, .stretch => 0, // stretch sized the child in pass 2; it sits at the line start
+        .start, .stretch => 0, // stretch sized the child in the top-down pass; it sits at the line start
         .center => (line_cross - cc) / 2,
         .end => line_cross - cc,
         .baseline => if (flow.dir == .row) max_ascent - (c.size.height - c.size.baseline_off()) else 0,

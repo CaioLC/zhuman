@@ -849,11 +849,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     try hrule(view, "foot_rule", .{ .pct_of_parent = 1.0 });
     _ = try view.spacer("foot_pad", 1, 6);
     const foot = try view.div("foot");
-    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .start }).with_gap(10);
+    // `.start`, not `space_between`: the legend grows into what the hints leave, so the hints
+    // still sit flush right, and a packed run keeps the 10px gap out of the legend's share.
+    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10);
     const legend = try foot.div("legend");
-    // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave, measured as
-    // stamped last frame (a wrapping run packs only against a fixed width).
-    _ = legend.with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(6);
+    // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave. Its grown width
+    // is final before heights are solved, so the foot's fit height counts every legend line.
+    _ = legend.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(6);
     _ = foot.pass_through().track();
     const foot_g = foot.prior_geometry();
     for (wedge_res, 0..) |r, w| {
@@ -864,13 +866,6 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     }
     const hints = try foot.div("hints");
     _ = hints.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    _ = hints.pass_through().track();
-    const hints_g = hints.prior_geometry();
-    if (foot_g != null and hints_g != null) {
-        _ = legend.with_size_px(.{ .fixed = @max(0, foot_g.?.rect.w - hints_g.?.rect.w - 10 * scale) }, .fit_children);
-    } else {
-        _ = legend.with_size(.fit_children, .fit_children);
-    }
     var counts = [3]u32{ 0, 0, 0 };
     for (states) |s| counts[@intFromEnum(s)] += 1;
     const status = if (st.selected) |si| blk: {

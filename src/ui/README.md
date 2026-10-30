@@ -476,35 +476,52 @@ The *intrinsic content size* is host policy — the host **measures it at build*
 metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
 the `content` rule sizes to those, and the host renderer draws to them. The *rule*
 that turns that seed / parent / children into the final box is core. The sizing passes
-are **pure** — no host callback. `set_global_pos` runs three passes:
+are **pure** — no host callback. `set_global_pos` solves widths before heights, because a
+wrapping row's height depends on its width (how many lines it breaks into). Five passes:
 
-1. **`recalculate_size`** (bottom-up) — resolve constrained
+1. **`recalculate_size`** (bottom-up, both axes) — resolve constrained
    `fixed`/`content`/`fit_children`; parent-relative rules take measured-content
-   provisionals.
-2. **`resolve_pct`** (top-down) — finalize percentages against definite parent
-   content boxes and allocate each definite parent's main-axis remainder among its
-   in-flow growers before descending. `fit_children` is the only **indefinite** rule,
+   provisionals. A wrapping row's lines are counted only against a `fixed` width here.
+2. **`resolve_axis(.x)`** (top-down, x only) — finalize percentages against definite
+   parent content boxes, allocate each definite parent's main-axis remainder among its
+   in-flow growers, take an overflow out of opted-in shrinkers, and apply `cross =
+   .stretch`, all before descending. `fit_children` is the only **indefinite** rule,
    so parent-relative rules without a usable base fall back to `content` (the node's
    `data_*`, or a safe **0** when it has no measured content). The exception is an
    out-of-flow (anchored) child: it never feeds its parent's main-axis fit, so its
    percentage resolves against the fitted parent (an underbar `pct_of_parent = progress`
-   under a content-sized tile, a wash `1 × 1` under a content-sized card).
-3. **`place`** (top-down) — assign global positions via one line-based flow algorithm
+   under a content-sized tile, a wash `1 × 1` under a content-sized card). Every width
+   is final after this pass.
+3. **`recalculate_axis(.y)`** (bottom-up, y only) — every height again from scratch, as
+   in pass 1, except that a wrapping row packs its lines against its final width and its
+   children's final widths, whatever its rule (`grow`, `pct_of_parent`, shrunk,
+   stretched). So a wrapping row's `fit_children` height counts every line it is placed
+   as, and a template need not feed it last frame's width.
+4. **`resolve_axis(.y)`** (top-down, y only) — the mirror of step 2, so column grow, row
+   stretch and baseline read the re-solved heights.
+5. **`place`** (top-down) — assign global positions via one line-based flow algorithm
    (break into lines → distribute each along `main` → align each child across it by
    `cross` → stack the lines); pure geometry, sizes already resolved.
+
+One coupling still runs from heights back to widths: a column-wrap (`dir = .column`,
+`wrap`) needs heights to count its columns, but its width is solved first, so its
+`fit_children` width and its `stretch` lines use the bottom-up (pass 1) heights. No
+template wraps a column.
 
 Because the engine never measures anything, `set_global_pos` takes no host `ctx` — only a
 scratch `Allocator` that `place` uses to materialize each node's in-flow child list (so the
 flow reads as one loop, with no fixed-size stack buffers). (A callback-in-the-size-pass
 would only earn its place once content sizing becomes *constraint-dependent* — wrapped text,
-where height depends on the resolved width. We don't do that yet.)
+where height depends on the resolved width. The solve leaves room for it between steps 2
+and 3, where every width is final and no height is; we don't do that yet.)
 
 ### Five-pass frame profiling
 
 `FrameProfiler` measures the five passes relevant to UI traversal cost: intrinsic sizing,
 relative/percentage/grow resolution, placement, stamping, and drawing. The normal
 `set_global_pos` remains clock-free and callback-free; its explicit diagnostic sibling
-`set_global_pos_profiled` times the same three internal calls and returns a `Sample`.
+`set_global_pos_profiled` times the same solve and returns a `Sample`: both bottom-up
+passes count as intrinsic sizing, both top-down passes as relative resolution.
 It reads time from a `profile.Clock` (`ui.FrameClock`) the host passes in, a monotonic
 nanosecond callback, so the engine names no OS or I/O API and a test can supply a fake.
 The host owns stamping/drawing clocks, combines every root into one frame sample, and

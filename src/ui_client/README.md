@@ -709,7 +709,7 @@ probe and thumb), `slider` (the lane rect, capture, press-time focus, the drag c
 `terminal` (the centered box in device px), `tabs` (its group node), `capital_row` (a row's
 sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
 cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
-consumption), `header` (the stockline's width from the header's and the run context's prior rects, so a long line wraps), `research_board` (its camera over the pane's prior rect, the pan capture and
+consumption), `research_board` (its camera over the pane's prior rect, the pan capture and
 cursors, the tiles placed in device px), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
 tooltip fixture (placed and clamped by its prior-frame size, as a production tooltip is).
 `tools/boundary_check.sh` greps the known spellings of these reads — its `inventory` pattern —

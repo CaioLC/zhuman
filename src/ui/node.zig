@@ -245,8 +245,8 @@ pub fn Node(comptime RenderData: type) type {
             try features.set_global_pos(self, alloc);
         }
 
-        /// Diagnostic solve returning exact timings for the three internal layout passes,
-        /// read from the host's monotonic `clock`.
+        /// Diagnostic solve returning exact timings for the layout passes (bottom-up,
+        /// top-down, placement), read from the host's monotonic `clock`.
         pub fn set_global_pos_profiled(self: *Self, alloc: Allocator, clock: @import("profile.zig").Clock) !@import("profile.zig").Sample {
             return features.set_global_pos_profiled(self, alloc, clock);
         }
@@ -353,8 +353,11 @@ test "profiled solve times each pass from the host clock" {
     var root = try TestNode.create(allocator, "root");
     _ = root.with_size(Size.initFixed(800, 600));
     _ = root.with_layout(.top_left, null);
+    const kid = try TestNode.pcreate(allocator, "kid", root);
+    _ = kid.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .fit_children)).with_layout(.relative, null);
 
-    // Each reading advances 10ns, so every pass measures exactly one tick.
+    // Each reading advances 10ns, so every pass measures exactly one tick. The solve has five
+    // passes: both bottom-up passes are `intrinsic`, both top-down passes `relative`.
     const Ticker = struct {
         var t: u64 = 0;
         fn now(_: *const anyopaque) u64 {
@@ -364,9 +367,14 @@ test "profiled solve times each pass from the host clock" {
     };
     const clock: @import("profile.zig").Clock = .{ .ctx = &Ticker.t, .nowFn = Ticker.now };
     const s = try root.set_global_pos_profiled(allocator, clock);
-    try std.testing.expectEqual(@as(u64, 10), s.intrinsic);
-    try std.testing.expectEqual(@as(u64, 10), s.relative);
+    try std.testing.expectEqual(@as(u64, 20), s.intrinsic);
+    try std.testing.expectEqual(@as(u64, 20), s.relative);
     try std.testing.expectEqual(@as(u64, 10), s.placement);
+    try std.testing.expectEqual(@as(u64, 0), s.stamping); // the host's, never the engine's
+    try std.testing.expectEqual(@as(u64, 0), s.drawing);
+    // The profiled solve is the same solve.
+    try std.testing.expectEqual(@as(f32, 400), kid.size.width);
+    try std.testing.expectEqual(@as(f32, 0), kid.layout._global_y.?);
 }
 
 test "node tree layout" {
@@ -1080,6 +1088,218 @@ test "a wrapping fit falls back to one line when the main extent is indefinite" 
     try root.set_global_pos(a);
     try std.testing.expectEqual(@as(f32, 10), root.size.height);
     try std.testing.expectEqual(@as(f32, 120), root.size.width);
+}
+
+/// `n` in-flow `w`×`h` fixed boxes under `parent`, for the wrap tests below.
+fn test_boxes(a: Allocator, parent: *TestNode, n: usize, w: f32, h: f32) ![]*TestNode {
+    const kids = try a.alloc(*TestNode, n);
+    for (kids, 0..) |*slot, i| {
+        const k = try TestNode.pcreate(a, try a.print("k{d}", .{i}), parent);
+        _ = k.with_size(Size.initFixed(w, h)).with_layout(.relative, null);
+        slot.* = k;
+    }
+    return kids;
+}
+
+test "width before height: a grown wrapping row counts every line it breaks into" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A 300-wide row: fixed 100 and 60 siblings leave the grower 140. Its three 60×10 kids
+    // with gap 4 pack 60+4+60 = 124 on line 1; the third wraps. Height 10 + 4 + 10 = 24,
+    // where pass 1 alone (no fixed width to pack against) would report one line.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(300, 100)).with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    const left = try TestNode.pcreate(a, "left", root);
+    _ = left.with_size(Size.initFixed(100, 20)).with_layout(.relative, null);
+    const wrap = try TestNode.pcreate(a, "wrap", root);
+    _ = wrap.with_size(Size.init(.grow, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+    wrap.layout.gap = 4;
+    const kids = try test_boxes(a, wrap, 3, 60, 10);
+    const right = try TestNode.pcreate(a, "right", root);
+    _ = right.with_size(Size.initFixed(60, 20)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 140), wrap.size.width);
+    try std.testing.expectEqual(@as(f32, 24), wrap.size.height);
+    try std.testing.expectEqual(@as(f32, 14), kids[2].layout._global_y.?); // line 2, placed where measured
+    try std.testing.expectEqual(@as(f32, 100), kids[2].layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 240), right.layout._global_x.?);
+}
+
+test "width before height: a pct-width wrapping row counts every line" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Half of 200 is the border box; 5px side padding leaves 90 of content. Four 30×10 kids
+    // pack three to a line (90 ≤ 90), so the row is two lines tall.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const wrap = try TestNode.pcreate(a, "wrap", root);
+    _ = wrap.with_size(Size.init(.{ .pct_of_parent = 0.5 }, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+    wrap.size.padding = .initEach(0, 5, 0, 5);
+    const kids = try test_boxes(a, wrap, 4, 30, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 100), wrap.size.width);
+    try std.testing.expectEqual(@as(f32, 20), wrap.size.height);
+    try std.testing.expectEqual(@as(f32, 10), kids[3].layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 5), kids[3].layout._global_x.?);
+}
+
+test "width before height: line packing reads the children's final pct widths" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A fixed 100-wide wrapping row of three 0.4 children. Bottom-up they are provisionally
+    // 0 wide (no content) and would all share one line; final they are 40 each, so the
+    // third wraps (40+40+40 > 100) and the height is two lines.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.init(.{ .fixed = 100 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .wrap = true, .cross = .start });
+    const kids = try test_boxes(a, root, 3, 0, 10);
+    for (kids) |k| k.size.w = .{ .pct_of_parent = 0.4 };
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 40), kids[0].size.width);
+    try std.testing.expectEqual(@as(f32, 20), root.size.height);
+    try std.testing.expectEqual(@as(f32, 10), kids[2].layout._global_y.?);
+}
+
+test "width before height: a shrunk wrapping row is measured at its shrunk width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A 200-wide row holds a fixed 150 wrapping row (shrink 1) and a fixed 100 sibling: the
+    // 50 overflow comes out of the wrapping row, leaving 100. Its three 40×10 kids fit one
+    // line at 150 but two at 100, and its height follows the shrunk width.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 100)).with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    const wrap = try TestNode.pcreate(a, "wrap", root);
+    _ = wrap.with_size(Size.init(.{ .fixed = 150 }, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+    wrap.size.shrink = 1;
+    const kids = try test_boxes(a, wrap, 3, 40, 10);
+    const sib = try TestNode.pcreate(a, "sib", root);
+    _ = sib.with_size(Size.initFixed(100, 10)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 100), wrap.size.width);
+    try std.testing.expectEqual(@as(f32, 20), wrap.size.height);
+    try std.testing.expectEqual(@as(f32, 10), kids[2].layout._global_y.?);
+}
+
+test "width before height: a stretched content-width wrapping row is measured at the stretch" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A `.stretch` column raises its 50-wide content child to 200. At 200 its five 60×10
+    // kids pack three to a line, so two lines; at its 50px content width each would take a
+    // line of its own, and bottom-up there is no width to pack against at all.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 200)).with_layout(.top_left, .{ .dir = .column, .cross = .stretch });
+    const wrap = try TestNode.pcreate(a, "wrap", root);
+    _ = wrap.with_size(Size.init(.content, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+    wrap.size.data_width = 50;
+    const kids = try test_boxes(a, wrap, 5, 60, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 200), wrap.size.width);
+    try std.testing.expectEqual(@as(f32, 20), wrap.size.height);
+    try std.testing.expectEqual(@as(f32, 10), kids[3].layout._global_y.?);
+}
+
+test "width before height: column grow, row stretch and baseline read the re-solved height" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Each tree holds a wrapping row that is 20 tall (two 10px lines) only once its width is
+    // known: four 100×10 kids in 300 (three to a line), or in a 250 grower (two to a line).
+    {
+        // A 100-tall column: the `.grow` sibling under the wrapping row takes the other 80.
+        const root = try TestNode.create(a, "col");
+        _ = root.with_size(Size.initFixed(300, 100)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+        const wrap = try TestNode.pcreate(a, "wrap", root);
+        _ = wrap.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+        _ = try test_boxes(a, wrap, 4, 100, 10);
+        const rest = try TestNode.pcreate(a, "rest", root);
+        _ = rest.with_size(Size.init(.{ .fixed = 10 }, .grow)).with_layout(.relative, null);
+
+        try root.set_global_pos(a);
+        try std.testing.expectEqual(@as(f32, 20), wrap.size.height);
+        try std.testing.expectEqual(@as(f32, 80), rest.size.height);
+        try std.testing.expectEqual(@as(f32, 20), rest.layout._global_y.?);
+    }
+    {
+        // A fit-height `.stretch` row: its line is the wrapping row's 20, and the 5px content
+        // sibling stretches to it.
+        const root = try TestNode.create(a, "stretch");
+        _ = root.with_size(Size.init(.{ .fixed = 300 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .cross = .stretch });
+        const wrap = try TestNode.pcreate(a, "wrap", root);
+        _ = wrap.with_size(Size.init(.grow, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+        _ = try test_boxes(a, wrap, 4, 100, 10);
+        const side = try TestNode.pcreate(a, "side", root);
+        _ = side.with_size(Size.initContent(50, 5)).with_layout(.relative, null);
+
+        try root.set_global_pos(a);
+        try std.testing.expectEqual(@as(f32, 250), wrap.size.width);
+        try std.testing.expectEqual(@as(f32, 20), root.size.height);
+        try std.testing.expectEqual(@as(f32, 20), side.size.height);
+    }
+    {
+        // A baseline row: no baselines set, so both align by their bottoms, and the 8px
+        // sibling drops to the wrapping row's second line (20 − 8).
+        const root = try TestNode.create(a, "baseline");
+        _ = root.with_size(Size.init(.{ .fixed = 300 }, .fit_children)).with_layout(.top_left, .{ .dir = .row, .cross = .baseline });
+        const wrap = try TestNode.pcreate(a, "wrap", root);
+        _ = wrap.with_size(Size.init(.grow, .fit_children)).with_layout(.relative, .{ .dir = .row, .wrap = true, .cross = .start });
+        _ = try test_boxes(a, wrap, 4, 100, 10);
+        const side = try TestNode.pcreate(a, "side", root);
+        _ = side.with_size(Size.initContent(50, 8)).with_layout(.relative, null);
+
+        try root.set_global_pos(a);
+        try std.testing.expectEqual(@as(f32, 20), root.size.height);
+        try std.testing.expectEqual(@as(f32, 12), side.layout._global_y.?);
+    }
+}
+
+test "width before height: a column-wrap's x pass still packs against bottom-up heights" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Pins the one y-to-x coupling left. A 200×100 wrapping `.stretch` column: k0 is 0.5 of
+    // the height (50 final, 0 bottom-up), k1 a 10-wide content box 30 tall, k2 80 wide and
+    // 30 tall. Widths are solved first, so the stretch packs the bottom-up heights 0+30+30
+    // into one line, whose widest member is k2: k1 stretches to 80. (Against the final
+    // heights, 50+30 would fill line 1 and k1 would stretch only to k0's 50.) Placement
+    // then packs the final heights, puts k2 on a second line, and starts it past k1's 80.
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(200, 100)).with_layout(.top_left, .{ .dir = .column, .wrap = true, .cross = .stretch });
+    const k0 = try TestNode.pcreate(a, "k0", root);
+    _ = k0.with_size(Size.init(.{ .fixed = 50 }, .{ .pct_of_parent = 0.5 })).with_layout(.relative, null);
+    const k1 = try TestNode.pcreate(a, "k1", root);
+    _ = k1.with_size(Size.init(.content, .{ .fixed = 30 })).with_layout(.relative, null);
+    k1.size.data_width = 10;
+    const k2 = try TestNode.pcreate(a, "k2", root);
+    _ = k2.with_size(Size.initFixed(80, 30)).with_layout(.relative, null);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 50), k0.size.height);
+    try std.testing.expectEqual(@as(f32, 80), k1.size.width);
+    try std.testing.expectEqual(@as(f32, 50), k1.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 80), k2.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 0), k2.layout._global_y.?);
+
+    // A fit-width column-wrap has the same limit: its width is measured in pass 1, where k0
+    // is 0 tall, so it counts one column (80) though placement makes two.
+    root.size.w = .fit_children;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 80), root.size.width);
 }
 
 test "padding grows a fit parent AND insets its flowed children" {

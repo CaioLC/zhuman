@@ -19,7 +19,8 @@ pub const Padding = struct {
 
 /// How a node derives its size on **one axis** — the host *must* pick, per axis.
 /// Resolution lives in `layout.zig`; the variants differ in dependency direction,
-/// which is what drives the multi-pass solve:
+/// which is what drives the multi-pass solve (bottom-up, then top-down, widths before
+/// heights, because a wrapping row's `fit_children` height depends on its final width):
 ///   - `fixed` / `content` — leaf, *definite* (known without parent or children).
 ///   - `pct_of_parent`      — needs the parent; definite iff the parent's axis is.
 ///   - `grow`               — consumes remaining space on a definite parent's main axis,
