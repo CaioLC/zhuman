@@ -2495,9 +2495,9 @@ test "tracks: shrink_order gives way by order, each to its floor, and the residu
     try std.testing.expectEqualSlices(f32, &.{ 80, 40 }, s2.widths);
 }
 
-/// `capital_row.fitted`'s arithmetic, restated for the golden test: the excess over the
+/// The BUILD table's former hand-written `fitted` arithmetic, restated for the golden test: the excess over the
 /// surface comes out of WHAT CHANGES (if shown), then the recipe, then the cost, each to its
-/// floor. Lanes in `capital_row.columns` order: recipe, cost, time, effect, state, corner.
+/// floor. Lanes in BUILD column order: recipe, cost, time, effect, state, corner.
 fn fitted_ref(lanes: [6]f32, shown: [6]bool, surface: f32) [6]f32 {
     const row_gap: f32 = 8;
     const row_pad_x: f32 = 6;

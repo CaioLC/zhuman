@@ -603,7 +603,7 @@ The pass hooks:
 **`shrink_order` vs CSS.** A CSS grid that overflows shrinks its flexible tracks toward
 their `minmax` floors together. The prototypes' BUILD table instead gives way in a fixed
 priority: WHAT CHANGES goes to its floor first, then the recipe name, then the order
-(`capital_row.fitted`, floors 70/88/56), because the sentence is the cheapest to elide and
+(`capital_row.trackSpec`, floors 70/88/56), because the sentence is the cheapest to elide and
 the cost is the last thing a player should lose. `shrink_order` says that directly: lower
 orders give way first, each to its `min`; tracks of one order share in proportion to
 `(base − min)`; a null order never shrinks; what no track can absorb overflows.

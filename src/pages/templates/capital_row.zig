@@ -5,7 +5,8 @@
 //! shape that lets a build in progress keep its place in the list instead of becoming a
 //! 3px underbar on a dim box.
 //!
-//! Six fixed columns so every row's fields line up down the list. The last two carry the
+//! Six columns, shared by the header and every row as one set of grid tracks
+//! (`tableTracks`), so every row's fields line up down the list. The last two carry the
 //! row's *state*: an affordable good shows `Build →`, one out of reach shows how far
 //! (`31/48m`), one in progress shows time left and a `×` in the corner that abandons it,
 //! and one whose prerequisite is missing says which verb it wants.
@@ -40,8 +41,12 @@ const Column = struct {
     hidden_at: ?uic.view.WidthClass = null,
 
     fn visible(self: Column, ctx: *UiCtx) bool {
+        return self.shownIn(ctx.res.view.metrics.width_class);
+    }
+
+    fn shownIn(self: Column, class: uic.view.WidthClass) bool {
         const at = self.hidden_at orelse return true;
-        return !ctx.res.view.metrics.width_class.atMost(at);
+        return !class.atMost(at);
     }
 };
 
@@ -62,6 +67,18 @@ const columns = [_]Column{
 
 fn col(lane: Lane) Column {
     return columns[@backingInt(lane)];
+}
+
+/// Which lanes show at `class`, in `columns` order.
+fn shownAt(class: uic.view.WidthClass) [columns.len]bool {
+    var out: [columns.len]bool = undefined;
+    for (columns, &out) |c, *s| s.* = c.shownIn(class);
+    return out;
+}
+
+/// Place a cell of the header or a row on its lane's track, covering `span` lanes.
+fn place(cell_el: El, lane: Lane, span: u16) void {
+    _ = cell_el.at_track(@intCast(@backingInt(lane)), span);
 }
 
 /// One act's lane widths in logical px. Every act fills the canonical 594px expanded content
@@ -117,50 +134,86 @@ pub const lane_width: f32 = 594;
 const row_gap: f32 = 8;
 const row_pad_x: f32 = 6;
 
-/// The visible lanes plus the gaps between them, logical px.
-fn contentWidth(ctx: *UiCtx, lw: Widths) f32 {
-    var width: f32 = 0;
-    var shown: f32 = 0;
-    for (columns, 0..) |c, i| {
-        if (c.visible(ctx)) {
-            width += lw.of(@fromBackingInt(@intCast(i)));
-            shown += 1;
-        }
-    }
-    return width + (shown - 1) * row_gap;
-}
-
-pub fn tableWidth(ctx: *UiCtx, lw: Widths) f32 {
-    return contentWidth(ctx, lw) + row_pad_x * 2;
-}
-
 /// The prototype's floors for the lanes that give way (`minmax(…)` in `.build-row`): the
 /// recipe name, the order, and the sentence.
 const min_recipe: f32 = 88;
 const min_cost: f32 = 56;
 const min_effect: f32 = 70;
 
-/// `lw` fitted to the surface. Framed, every act's widths fill the 594px lane exactly. Stacked
-/// (≤760), the surface is the window less the page padding and the page's scrollbar, and the
-/// prototype's grid shrinks its flexible columns into it; here the excess comes out of WHAT
-/// CHANGES, then the recipe name, then the order, each down to its floor. The name and order
-/// cells elide, so nothing spills past the surface's clip.
-pub fn fitted(ctx: *UiCtx, lw: Widths) Widths {
-    const terminal = @import("./terminal.zig");
-    if (!terminal.stacked(ctx)) return lw;
-    var out = lw;
-    var excess = tableWidth(ctx, lw) + scroll_gutter - terminal.stackedWidth(ctx);
-    if (excess <= 0) return lw;
-    if (col(.effect).visible(ctx)) {
-        const take = @min(excess, @max(0, out.effect - min_effect));
-        out.effect -= take;
-        excess -= take;
+/// The table's column tracks, logical px, in `columns` order: each lane at the act's width
+/// (`lw`), and a lane not `shown` at this width a hidden track. When the rows overflow their
+/// surface the prototype's grid gives way in a fixed priority: WHAT CHANGES first, then the
+/// recipe name, then the order, each down to its floor (`shrink_order` 0, 1, 2); TIME, STATE
+/// and the corner keep their widths. The name and order cells elide, so nothing spills past
+/// the surface's clip.
+fn trackSpec(lw: Widths, shown: [columns.len]bool) [columns.len]uic.Track {
+    var spec: [columns.len]uic.Track = undefined;
+    for (&spec, shown, 0..) |*t, s, i| {
+        const lane: Lane = @fromBackingInt(@intCast(i));
+        t.* = .{ .basis = .{ .px = lw.of(lane) }, .hidden = !s };
+        switch (lane) {
+            .effect => {
+                t.min = min_effect;
+                t.shrink_order = 0;
+            },
+            .recipe => {
+                t.min = min_recipe;
+                t.shrink_order = 1;
+            },
+            .cost => {
+                t.min = min_cost;
+                t.shrink_order = 2;
+            },
+            .time, .state, .corner => {},
+        }
     }
-    const from_recipe = @min(excess, @max(0, out.recipe - min_recipe));
-    out.recipe -= from_recipe;
-    excess -= from_recipe;
-    out.cost -= @min(excess, @max(0, out.cost - min_cost));
-    return out;
+    return spec;
+}
+
+/// The width the table fits, logical px. Framed, the 594px lane, which every act's widths
+/// fill exactly, so nothing shrinks. Stacked (≤760), the page's surface: the window less the
+/// page padding and the page's scrollbar.
+fn surface(ctx: *UiCtx) f32 {
+    const terminal = @import("./terminal.zig");
+    return if (terminal.stacked(ctx)) terminal.stackedWidth(ctx) else lane_width;
+}
+
+/// A row's border box, logical px, once `spec` is solved for a `surface_w` surface: the row's
+/// content box there is the surface less the scroll gutter and the row padding. It is the
+/// solved tracks, the gaps between the visible ones and the padding, so it never exceeds the
+/// lanes' own widths (no track is `fr`; slack stays outside the row) and never goes under their
+/// floors (what the floors cannot absorb overflows the surface).
+fn solvedWidth(spec: []const uic.Track, surface_w: f32) f32 {
+    var auto_max: [columns.len]f32 = @splat(0);
+    var widths: [columns.len]f32 = undefined;
+    var set: uic.TrackSet = .{ .tracks = spec, .col_gap = row_gap, .auto_max = &auto_max, .widths = &widths };
+    set.solve(surface_w - scroll_gutter - 2 * row_pad_x);
+    var sum: f32 = 0;
+    var shown: f32 = 0;
+    for (spec, widths) |t, w| if (!t.hidden) {
+        sum += w;
+        shown += 1;
+    };
+    return sum + (shown - 1) * row_gap + 2 * row_pad_x;
+}
+
+/// One frame's BUILD table: the column tracks the header and every row lay out by (the caller
+/// declares `set` on their common ancestor, `El.with_tracks`), and the width of a row.
+pub const TableTracks = struct {
+    set: *uic.TrackSet,
+    /// A row's (and the header's) border box, logical px: the tracks solved for this width's
+    /// surface, their gaps and the row padding. The engine solves the same tracks against the
+    /// row's content box, which is this less the padding, so the two agree. The rows sit in the
+    /// scroll view's content-sized column and the surface is a window measure, not a laid-out
+    /// box, so nothing above them has this width to take a percentage of: the section, its
+    /// heading, the header, each row's wrap and the scroll view are sized from it.
+    width: f32,
+};
+
+/// The BUILD table's tracks for the act's lane widths `lw` at this frame's width.
+pub fn tableTracks(ctx: *UiCtx, lw: Widths) !TableTracks {
+    const spec = trackSpec(lw, shownAt(ctx.res.view.metrics.width_class));
+    return .{ .set = try uic.tracks(ctx, &spec, row_gap), .width = solvedWidth(&spec, surface(ctx)) };
 }
 
 /// How the header sorts: the caller's sort key for each lane (in `columns` order; null for a
@@ -177,30 +230,31 @@ pub const Header = struct {
     clicked: ?usize,
 };
 
-/// Column labels aligned to the exact same responsive lanes as every capital row: the
-/// table's header row and cells, sized to the lanes visible at this width. With `sort`, each
-/// sortable lane's label is a sort control wearing the active column's arrow, and the header
-/// row is their roving group (one Tab stop). `lw` is the act's lane widths.
-pub fn capital_header(parent: El, id: []const u8, lw: Widths, sort: ?HeaderSort) !Header {
+/// Column labels on the same tracks as every capital row: the table's header row, one cell
+/// per lane visible at this width. With `sort`, each sortable lane's label is a sort control
+/// wearing the active column's arrow, and the header row is their roving group (one Tab
+/// stop). `tt` is this frame's table (`tableTracks`).
+pub fn capital_header(parent: El, id: []const u8, tt: TableTracks, sort: ?HeaderSort) !Header {
     const ctx = parent.ctx;
-    const header = try table.table_row(parent, id, row_gap, row_pad_x, 4);
-    _ = header.with_size(.{ .fixed = contentWidth(ctx, lw) }, .fit_children);
+    const header = try table.table_row(parent, id, tt.set, row_pad_x, 4);
+    _ = header.with_size(.{ .fixed = tt.width - 2 * row_pad_x }, .fit_children);
     const group = header.get().key;
     var clicked: ?usize = null;
     var members: [columns.len]u64 = undefined;
     var nmembers: usize = 0;
     for (columns, 0..) |c, i| {
         if (!c.visible(ctx)) continue;
-        const w = lw.of(@fromBackingInt(@intCast(i)));
+        const lane: Lane = @fromBackingInt(@intCast(i));
         const key = if (sort) |s| s.keys[i] else null;
         if (key) |k| {
             const shown: table.SortShown = if (k == sort.?.active) sort.?.dir else .none;
-            const cell_r = try table.sort_header_cell(header, c.id, w, c.label, shown, group);
+            const cell_r = try table.sort_header_cell(header, c.id, c.label, shown, group);
+            place(cell_r.el, lane, 1);
             if (cell_r.clicked) clicked = k;
             members[nmembers] = cell_r.key;
             nmembers += 1;
         } else {
-            try table.header_cell(header, c.id, w, c.label);
+            place(try table.header_cell(header, c.id, c.label), lane, 1);
         }
     }
     if (nmembers > 0) {
@@ -218,23 +272,24 @@ pub const Row = struct { kind: Kind, reach: f32, clicked_build: bool, clicked_ca
 /// A row's plain cell is the table's.
 const cell = table.cell;
 
-/// A catalog **name** cell: the label is an ellipsis cell of exactly the column
-/// width, so a long good name is elided (`Reinforced Timber Fra…`) instead of stretching the
-/// row and knocking every downstream column out of its lane. The box and hit geometry stay
-/// the allocated `width`; only the visible glyphs are bounded. A **secondary type** sub-label
-/// rides under the name in dim/small — the recipe's kind (`recipeType`).
-fn name_cell(parent: El, id: []const u8, width: f32, text: []const u8, secondary: []const u8, color: Color) !void {
+/// A catalog **name** cell: the label elides at its track's width (`.cell_fill`), so a long
+/// good name is elided (`Reinforced Timber Fra…`) instead of stretching the row and knocking
+/// every downstream column out of its lane. The box and hit geometry are the track; only the
+/// visible glyphs are bounded. A **secondary type** sub-label rides under the name in
+/// dim/small — the recipe's kind (`recipeType`).
+fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8, color: Color) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const box = try parent.div(id);
-    _ = box.with_size(.{ .fixed = width }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+    _ = box.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
     _ = box.with_gap(1);
-    _ = (try box.text_fit("t", text, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+    _ = (try box.text_fit("t", text, .{ .cell_fill = .ellipsis }))
         .with_style(.{Style{ .font = name_font, .text = color }});
     if (secondary.len > 0) {
-        _ = (try box.text_fit("ty", secondary, .{ .cell = .{ .mode = .ellipsis, .width = width } }))
+        _ = (try box.text_fit("ty", secondary, .{ .cell_fill = .ellipsis }))
             .with_style(.{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .text = th.line2 }});
     }
+    return box;
 }
 
 /// The verb or tool a recipe's first `needs` names, in the player's words.
@@ -278,7 +333,7 @@ pub fn orderChars(act: u8, rec: *const roster.Good) usize {
 
 /// The COST cell: the order then its energy on one line (`12m 4e`, the prototype's
 /// `.recipe-cost`), elided at the lane width when a long Act II order outruns it.
-fn cost_cell(parent: El, id: []const u8, width: f32, act: u8, rec: *const roster.Good, color: Color) !void {
+fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, color: Color) !El {
     var obuf: [48]u8 = undefined;
     var ebuf: [12]u8 = undefined;
     var lbuf: [64]u8 = undefined;
@@ -288,7 +343,7 @@ fn cost_cell(parent: El, id: []const u8, width: f32, act: u8, rec: *const roster
         std.mem.print(&lbuf, "{s} {s}", .{ order, energy }) catch order
     else
         energy;
-    try cell(parent, id, width, line, color, false);
+    return cell(parent, id, line, color, false);
 }
 
 /// The word a recipe's row names its kind with, under the name and for `type:` — what the
@@ -317,7 +372,7 @@ pub fn capital_row(
     parent: El,
     world: *World,
     e: Entity,
-    lw: Widths,
+    tt: TableTracks,
     q: capital.Quote,
     kind: Kind,
 ) !Row {
@@ -331,8 +386,8 @@ pub fn capital_row(
     // roster that moves it to another index.
     // One hairline above each row (`.build-row { border-top }`), then the row.
     const wrap = try parent.div(rec.id);
-    _ = wrap.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column });
-    _ = (try wrap.div("rule")).with_size(.{ .fixed = contentWidth(ctx, lw) + 2 * row_pad_x }, .{ .fixed = 1 })
+    _ = wrap.with_size(.{ .fixed = tt.width }, .fit_children).with_flow(.{ .dir = .column });
+    _ = (try wrap.div("rule")).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
         .with_style(.{Style{ .fill = th.line }});
     const row = try wrap.div("row");
     const hot = kind == .ready;
@@ -350,31 +405,36 @@ pub fn capital_row(
     // The row's own ink: fg on a ready or building row, dim otherwise (`.build-row.ready`).
     const faint: Color = if (kind == .ready or kind == .building) th.fg else th.dim;
 
-    // The row's lanes are the header's: the same columns, widths and visibility.
-    _ = row.with_size(.{ .fixed = contentWidth(ctx, lw) }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(row_gap)
+    // The row's lanes are the header's: the same tracks, so the same widths and visibility.
+    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
+        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tt.set)
         .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
-    try name_cell(row, "nm", lw.of(.recipe), rec.name, recipeType(rec), lit);
+    place(try name_cell(row, "nm", rec.name, recipeType(rec), lit), .recipe, 1);
 
-    try cost_cell(row, "co", lw.of(.cost), act, rec, faint);
+    place(try cost_cell(row, "co", act, rec, faint), .cost, 1);
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
         const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
-        try cell(row, "dy", lw.of(.time), days_txt, faint, false);
+        place(try cell(row, "dy", days_txt, faint, false), .time, 1);
     }
 
     if (col(.effect).visible(ctx)) {
-        try cell(row, "sa", lw.of(.effect), rec.copy.effect, if (kind == .blocked or kind == .owned) th.dim else th.fg, false);
+        place(try cell(row, "sa", rec.copy.effect, if (kind == .blocked or kind == .owned) th.dim else th.fg, false), .effect, 1);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
+    // A blocked row has no corner action, so its state spans the empty corner lane too (and
+    // no corner cell is built): a technology name can outrun the STATE lane alone.
     const state = try row.div("st");
-    _ = state.with_size(.{ .fixed = lw.of(.state) }, .fit_children);
+    _ = state.with_size(.fit_children, .fit_children);
+    place(state, .state, if (kind == .blocked) 2 else 1);
     const state_in = try state.div("i");
     _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
+    // The blocked text elides at the span, so its box must be the cell's.
+    if (kind == .blocked) _ = state_in.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
     switch (kind) {
         .ready => _ = (try state_in.text("ready", "ready"))
@@ -389,10 +449,8 @@ pub fn capital_row(
             // Waiting on research names the technology; otherwise the verb or tool it needs.
             const wants = if (q.standing == .tech) techName(cat, rec) else needsName(cat, rec);
             const txt = std.mem.print(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
-            // A technology name can outrun the lane. A blocked row has no corner action, so the
-            // text may run on over that empty lane before it elides.
-            const room = lw.of(.state) + row_gap + lw.of(.corner);
-            _ = (try state_in.text_fit("blocked", txt, .{ .cell = .{ .mode = .ellipsis, .width = room } }))
+            // Elided at the STATE + corner span.
+            _ = (try state_in.text_fit("blocked", txt, .{ .cell_fill = .ellipsis }))
                 .with_style(.{ Style{ .font = row_font }, Style{ .text = th.danger } });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
@@ -420,36 +478,40 @@ pub fn capital_row(
     }
 
     // --- right-side action column: Build → / Build +1 / cancel -----------------------------
-    const action = try row.div("ac");
-    _ = action.with_size(.{ .fixed = lw.of(.corner) }, .fit_children);
-    const action_in = try action.div("i");
-    _ = action_in.with_layout(.center_right);
-
+    // Not built on a blocked row: its state spans this lane.
     var build_more = false;
     var cancelled = false;
     var cancel_key: ?u64 = null;
-    switch (kind) {
-        .ready => _ = (try action_in.text("build", "Build \u{2192}"))
-            .with_style(.{ Style{ .font = row_font }, Style{ .text = lit } }),
-        .owned => {
-            // Another unit is stock; offered whenever the quote would accept it.
-            if (q.ready()) {
-                const more = try action_in.div("more");
-                const mq = more.control(.{ .name = "Build +1", .role = .button });
-                _ = (try more.text("t", "Build +1"))
-                    .with_style(.{ Style{ .font = row_font }, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
-                build_more = more.consume(.clicked);
-            }
-        },
-        .building => {
-            const x = try action_in.div("cancel");
-            const xq = x.control(.{ .name = "Cancel build", .role = .icon_button });
-            _ = (try x.text("t", "\u{00d7}"))
-                .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or xq.focused) th.danger else th.line2 } });
-            cancelled = x.consume(.clicked);
-            cancel_key = x.get().key;
-        },
-        .reach, .busy, .blocked, .locked => {},
+    if (kind != .blocked) {
+        const action = try row.div("ac");
+        _ = action.with_size(.fit_children, .fit_children);
+        place(action, .corner, 1);
+        const action_in = try action.div("i");
+        _ = action_in.with_layout(.center_right);
+
+        switch (kind) {
+            .ready => _ = (try action_in.text("build", "Build \u{2192}"))
+                .with_style(.{ Style{ .font = row_font }, Style{ .text = lit } }),
+            .owned => {
+                // Another unit is stock; offered whenever the quote would accept it.
+                if (q.ready()) {
+                    const more = try action_in.div("more");
+                    const mq = more.control(.{ .name = "Build +1", .role = .button });
+                    _ = (try more.text("t", "Build +1"))
+                        .with_style(.{ Style{ .font = row_font }, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
+                    build_more = more.consume(.clicked);
+                }
+            },
+            .building => {
+                const x = try action_in.div("cancel");
+                const xq = x.control(.{ .name = "Cancel build", .role = .icon_button });
+                _ = (try x.text("t", "\u{00d7}"))
+                    .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or xq.focused) th.danger else th.line2 } });
+                cancelled = x.consume(.clicked);
+                cancel_key = x.get().key;
+            },
+            .reach, .busy, .blocked, .locked => {},
+        }
     }
 
     // The row controls its cancel sub-action when one exists. The sub-action's key is
@@ -523,6 +585,97 @@ test "reachSegments quantizes reach into thirds" {
 
 test "Act I's default lane widths fill the expanded content lane" {
     try std.testing.expectEqual(lane_width, (Widths{}).laneTotal());
+}
+
+/// Act II's lane widths (`act_two/page.zig`'s BUILD shelf), for the track tests.
+const act_two_widths = Widths{ .cost = 112, .effect = 140 - scroll_gutter };
+
+/// The tracks of `spec` solved for a row on a `surface_w` surface, as the engine solves a
+/// participant (its content box: the surface less the scroll gutter and the row padding).
+fn solveFor(spec: []const uic.Track, surface_w: f32) [columns.len]f32 {
+    var auto_max: [columns.len]f32 = @splat(0);
+    var widths: [columns.len]f32 = undefined;
+    var set: uic.TrackSet = .{ .tracks = spec, .col_gap = row_gap, .auto_max = &auto_max, .widths = &widths };
+    set.solve(surface_w - scroll_gutter - 2 * row_pad_x);
+    return widths;
+}
+
+/// The lane widths and table width the BUILD table had before it laid out by tracks
+/// (`capital_row.fitted` and `tableWidth`, restated as the oracle): framed the act's widths;
+/// stacked, the excess over the surface out of WHAT CHANGES (if shown), then the recipe name,
+/// then the order, each to its floor. Hidden lanes are 0, as their tracks are.
+fn oldFitted(lw: Widths, shown: [columns.len]bool, stacked: bool, surface_w: f32) struct { lanes: [columns.len]f32, table: f32 } {
+    var lanes: [columns.len]f32 = undefined;
+    for (&lanes, 0..) |*w, i| w.* = lw.of(@fromBackingInt(@intCast(i)));
+    const tableOf = struct {
+        fn f(l: [columns.len]f32, s: [columns.len]bool) f32 {
+            var width: f32 = 0;
+            var n: f32 = 0;
+            for (l, s) |w, v| if (v) {
+                width += w;
+                n += 1;
+            };
+            return width + (n - 1) * row_gap + row_pad_x * 2;
+        }
+    }.f;
+    var excess = tableOf(lanes, shown) + scroll_gutter - surface_w;
+    if (stacked and excess > 0) {
+        const effect = @backingInt(Lane.effect);
+        const recipe = @backingInt(Lane.recipe);
+        const cost = @backingInt(Lane.cost);
+        if (shown[effect]) {
+            const take = @min(excess, @max(0, lanes[effect] - min_effect));
+            lanes[effect] -= take;
+            excess -= take;
+        }
+        const from_recipe = @min(excess, @max(0, lanes[recipe] - min_recipe));
+        lanes[recipe] -= from_recipe;
+        excess -= from_recipe;
+        lanes[cost] -= @min(excess, @max(0, lanes[cost] - min_cost));
+    }
+    const table_w = tableOf(lanes, shown);
+    for (&lanes, shown) |*w, v| if (!v) {
+        w.* = 0;
+    };
+    return .{ .lanes = lanes, .table = table_w };
+}
+
+test "framed, every act's tracks fill the lane exactly and nothing shrinks" {
+    for ([_]Widths{ .{}, act_two_widths }) |lw| {
+        try std.testing.expectEqual(lane_width, lw.laneTotal());
+        const spec = trackSpec(lw, shownAt(.full));
+        const want = oldFitted(lw, shownAt(.full), false, lane_width);
+        try std.testing.expectEqualSlices(f32, &want.lanes, &solveFor(&spec, lane_width));
+        try std.testing.expectEqual(lane_width - scroll_gutter, solvedWidth(&spec, lane_width));
+    }
+}
+
+test "stacked, the solved tracks and table width are the old fitted lanes at every surface" {
+    for ([_]Widths{ .{}, act_two_widths }) |lw| {
+        for ([_]uic.view.WidthClass{ .w760, .w560, .w440 }) |class| {
+            const shown = shownAt(class);
+            const spec = trackSpec(lw, shown);
+            // From past every act's lanes (nothing shrinks) down past their floors (overflow).
+            var surface_w: f32 = 260;
+            while (surface_w <= 760) : (surface_w += 1) {
+                const want = oldFitted(lw, shown, true, surface_w);
+                try std.testing.expectEqualSlices(f32, &want.lanes, &solveFor(&spec, surface_w));
+                try std.testing.expectEqual(want.table, solvedWidth(&spec, surface_w));
+            }
+        }
+    }
+    // Spot values, Act II at 560 (window 560: the 534 surface): WHAT CHANGES gives 10.
+    const spec = trackSpec(act_two_widths, shownAt(.w560));
+    try std.testing.expectEqualSlices(f32, &.{ 118, 112, 0, 122, 76, 54 }, &solveFor(&spec, 534));
+    try std.testing.expectEqual(@as(f32, 526), solvedWidth(&spec, 534));
+}
+
+test "a lane dropped at a width class is a hidden track" {
+    const at_560 = trackSpec(.{}, shownAt(.w560));
+    try std.testing.expect(at_560[@backingInt(Lane.time)].hidden and !at_560[@backingInt(Lane.effect)].hidden);
+    const at_440 = trackSpec(.{}, shownAt(.w440));
+    try std.testing.expect(at_440[@backingInt(Lane.time)].hidden and at_440[@backingInt(Lane.effect)].hidden);
+    for (trackSpec(.{}, shownAt(.full))) |t| try std.testing.expect(!t.hidden);
 }
 
 test "the cost cell is the order, then the energy" {

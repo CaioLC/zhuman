@@ -80,6 +80,7 @@ pub const build_lane_width = capital_row_mod.lane_width;
 pub const buildCostOverflow = build_list_mod.costOverflow;
 pub const build_section = @import("./build_section.zig").build_section;
 pub const capital_row = capital_row_mod.capital_row;
+pub const build_table_tracks = capital_row_mod.tableTracks;
 pub const terminal = terminal_mod.terminal;
 pub const Terminal = terminal_mod.Shell;
 pub const shell = terminal_mod.shell;
@@ -173,7 +174,7 @@ pub const kv_line = readout_mod.kv_line;
 pub const kv_line_in = readout_mod.kv_line_in;
 pub const sentence = readout_mod.sentence;
 pub const divider = readout_mod.divider;
-// Fixed-lane tables
+// Track tables
 pub const table_header_cell = table_mod.header_cell;
 pub const table_cell = table_mod.cell;
 pub const sort_header_cell = table_mod.sort_header_cell;

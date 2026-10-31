@@ -400,7 +400,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const gi = ctx.res.catalog.goodIndex("sandals").?;
             if (ha.capital.quote(world, a[0], &ctx.res.catalog, gi)) |q| {
-                _ = try t.capital_row(stage, world, a[0], .{}, q, .ready);
+                // Act I's lanes; the stage owns the row's tracks, as the BUILD list does.
+                const tt = try t.build_table_tracks(ctx, .{});
+                _ = stage.with_tracks(tt.set);
+                _ = try t.capital_row(stage, world, a[0], tt, q, .ready);
             }
         } else {
             _ = try stage.text("na", "(needs a live player)");
@@ -466,12 +469,14 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "sort_header")) {
         // A sortable header row as BUILD's table builds it: click a label to sort, again to flip.
         const st = stage.state(uic.UiState.CatalogState);
-        const row = try t.table_row(stage, "hdr", 8, 6, 4);
+        const set = try uic.tracks(ctx, &.{ .{ .basis = .{ .px = 90 } }, .{ .basis = .{ .px = 90 } }, .{ .basis = .{ .px = 90 } } }, 8);
+        _ = stage.with_tracks(set);
+        const row = try t.table_row(stage, "hdr", set, 6, 4);
         const labels = [_][]const u8{ "RECIPE", "COST", "STATE" };
         var members: [labels.len]u64 = undefined;
         for (labels, 0..) |label, i| {
             const shown: t.SortShown = if (st.sort != i) .none else if (st.dir == .descending) .descending else .ascending;
-            const cell = try t.sort_header_cell(row, label, 90, label, shown, row.get().key);
+            const cell = try t.sort_header_cell(row, label, label, shown, row.get().key);
             members[i] = cell.key;
             if (cell.clicked) {
                 const next = t.nextSort(st.sort, if (st.dir == .none) .ascending else st.dir, i, .ascending);
@@ -537,19 +542,20 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "table")) {
         // The pieces BUILD's table composes: a header row of labels, and body rows of cells.
         const demo = try stage.div("table_demo");
-        _ = demo.with_flow(.{ .dir = .column });
-        const h = try t.table_row(demo, "header", 8, 6, 4);
-        try t.table_header_cell(h, "recipe", 150, "RECIPE");
-        try t.table_header_cell(h, "inputs", 110, "INPUTS");
-        try t.table_header_cell(h, "state", 90, "STATE");
-        const r1 = try t.table_row(demo, "r1", 8, 6, 5);
-        try t.table_cell(r1, "recipe", 150, "Reinforced Timber Frame", th.fg, false);
-        try t.table_cell(r1, "inputs", 110, "12mi 4me", th.dim, false);
-        try t.table_cell(r1, "state", 90, "ready", th.good, true);
-        const r2 = try t.table_row(demo, "r2", 8, 6, 5);
-        try t.table_cell(r2, "recipe", 150, "Kiln", th.fg, false);
-        try t.table_cell(r2, "inputs", 110, "30mi", th.dim, false);
-        try t.table_cell(r2, "state", 90, "reach 60%", th.warn, true);
+        const set = try uic.tracks(ctx, &.{ .{ .basis = .{ .px = 150 } }, .{ .basis = .{ .px = 110 } }, .{ .basis = .{ .px = 90 } } }, 8);
+        _ = demo.with_flow(.{ .dir = .column }).with_tracks(set);
+        const h = try t.table_row(demo, "header", set, 6, 4);
+        _ = try t.table_header_cell(h, "recipe", "RECIPE");
+        _ = try t.table_header_cell(h, "inputs", "INPUTS");
+        _ = try t.table_header_cell(h, "state", "STATE");
+        const r1 = try t.table_row(demo, "r1", set, 6, 5);
+        _ = try t.table_cell(r1, "recipe", "Reinforced Timber Frame", th.fg, false);
+        _ = try t.table_cell(r1, "inputs", "12mi 4me", th.dim, false);
+        _ = try t.table_cell(r1, "state", "ready", th.good, true);
+        const r2 = try t.table_row(demo, "r2", set, 6, 5);
+        _ = try t.table_cell(r2, "recipe", "Kiln", th.fg, false);
+        _ = try t.table_cell(r2, "inputs", "30mi", th.dim, false);
+        _ = try t.table_cell(r2, "state", "reach 60%", th.warn, true);
     } else if (eq(name, "browser_heading")) {
         const demo = try stage.div("heading_demo");
         _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
