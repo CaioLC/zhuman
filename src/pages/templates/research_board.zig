@@ -350,12 +350,11 @@ fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
 fn detailSection(parent: El, id: []const u8, heading: []const u8) !El {
     const th = parent.ctx.res.view.theme;
     const sec = try parent.div(id);
-    _ = sec.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
-    _ = try sec.spacer("above", 1, 11);
+    _ = sec.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start })
+        .with_style(.{style.pad_each(11, 0, 0, 0)});
     try hrule(sec, "rule", .{ .pct_of_parent = 1.0 });
-    _ = try sec.spacer("pad", 1, 8);
-    _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.dim }});
-    _ = try sec.spacer("gap", 1, 6);
+    _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.dim }})
+        .with_margin(8, 6);
     const list = try sec.div("list");
     _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
     return list;
@@ -413,15 +412,16 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const view = try parent.div(id);
     // Stacked (≤760) the detail drops under a 560px board and the view takes its height.
     const stack = @import("./terminal.zig").stacked(ctx);
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start });
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start })
+        .with_style(.{style.pad_each(4, 0, 0, 0)});
 
     // --- topbar: RESEARCH and its question | the chips and the search ----------------------
-    _ = try view.spacer("top_pad", 1, 4);
     const topbar_box = try view.div("topbar_box");
     // `.structure-topbar { align-items: end }`: a column packs the row at the box's foot (a
     // row's cross alignment only spans its own line).
     _ = topbar_box.with_size(.{ .pct_of_parent = 1.0 }, if (ctx.res.view.metrics.width_class.atMost(.w560)) .fit_children else .{ .fixed = 44 })
-        .with_flow(.{ .dir = .column, .main = .end, .cross = .start });
+        .with_flow(.{ .dir = .column, .main = .end, .cross = .start })
+        .with_margin(0, 8);
     const topbar = try topbar_box.div("topbar");
     // Below 560 the toolbar drops under the title and the question goes (`.structure-topbar`).
     const narrow = ctx.res.view.metrics.width_class.atMost(.w560);
@@ -455,7 +455,6 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const field = try uic.text_input_look(tools, "search", "find a technology", if (narrow) 110 else 136, query_owner, .{ .font = 10, .placeholder = th.line2, .pad_x = 6, .pad_y = 5 });
     _ = field;
     const query = std.mem.trim(u8, query_owner.state(uic.UiState.TextInputState).text(), " ");
-    _ = try view.spacer("top_gap", 1, 8);
     try hrule(view, "top_rule", .{ .pct_of_parent = 1.0 });
 
     // --- layout: the board pane | the detail aside -----------------------------------------
@@ -750,24 +749,26 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         try hrule(aside, "rule", .{ .pct_of_parent = 1.0 });
     } else {
         _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
-        _ = try aside.spacer("lead", detail_pad - 1, 1);
     }
     // Stacked, the detail spans the page under the board (`.structure-detail` in one column).
     const inner = if (stack) @import("./terminal.zig").stackedWidth(ctx) else detail_inner;
     const detail = try aside.div("detail");
-    _ = detail.with_size(.{ .fixed = inner }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip);
-    _ = try detail.spacer("top", 1, 11);
+    // Beside the board, 9px past the 1px rule make the 10px inset; the 11px top is padding.
+    _ = detail.with_size(.{ .fixed = inner }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip)
+        .with_margin(if (stack) 0 else detail_pad - 1, 0)
+        .with_style(.{style.pad_each(11, 0, 0, 0)});
     if (st.selected) |si| {
         const t = &cat.technologies[si];
         const k = kindOf(t.coord);
         const s = states[si];
         const ring = ringOf(t);
-        _ = (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }});
-        _ = try detail.spacer("k_gap", 1, 3);
-        _ = (try detail.text("name", t.name)).with_style(.{ style.heading, Style{ .text = th.fg } });
-        _ = try detail.spacer("n_gap", 1, 8);
+        _ = (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }})
+            .with_margin(0, 3);
+        _ = (try detail.text("name", t.name)).with_style(.{ style.heading, Style{ .text = th.fg } })
+            .with_margin(0, 8);
         const tags = try detail.div("tags");
-        _ = tags.with_size(.{ .fixed = inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5);
+        _ = tags.with_size(.{ .fixed = inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5)
+            .with_margin(0, 10);
         var tag_n: usize = 0;
         const tag_texts = [_][]const u8{
             if (k.hybrid) "HYBRID" else "PURE",
@@ -782,28 +783,25 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             _ = tag.with_size(.fit_children, .fit_children).with_style(.{ style.pad_sym(4, 1), Style{ .outline_color = th.line2 } });
             _ = (try tag.text("t", tt)).with_style(.{Style{ .font = 8, .tracking = 0.05, .text = th.dim }});
         }
-        _ = try detail.spacer("t_gap", 1, 10);
 
         // RESEARCH →, or what it lacks, between two rules.
         try hrule(detail, "a_rule", .{ .fixed = inner });
-        _ = try detail.spacer("a_pad", 1, 8);
         const deficit = try deficitText(a, b, t);
         const can = s == .available and deficit == null;
         const label = if (s == .researched) "RESEARCHED" else if (deficit) |d| try a.print("NEEDS {s}", .{d}) else "RESEARCH \u{2192}";
         const btn = try detail.div("research");
-        _ = btn.with_size(.{ .fixed = inner }, .{ .fixed = 34 });
+        _ = btn.with_size(.{ .fixed = inner }, .{ .fixed = 34 }).with_margin(8, 6);
         const bq = btn.control(.{ .enabled = can, .name = label, .role = .button });
         const lit = can and (bq.hovering or bq.focused or bq.held);
         _ = btn.with_style(.{Style{ .outline_color = if (!can) th.line2 else if (lit) th.acc else th.fg }});
         _ = (try (try centreIn(btn)).text("t", label)).with_style(.{ style.body, Style{ .text = if (!can) th.dim else if (lit) th.acc else th.fg } });
         if (can and bq.clicked) result.research = si;
-        _ = try detail.spacer("b_gap", 1, 6);
-        _ = (try detail.text("cost", try costText(a, t))).with_style(.{Style{ .font = 9, .text = th.dim }});
-        _ = try detail.spacer("c_pad", 1, 9);
+        _ = (try detail.text("cost", try costText(a, t))).with_style(.{Style{ .font = 9, .text = th.dim }})
+            .with_margin(0, 9);
         try hrule(detail, "c_rule", .{ .fixed = inner });
-        _ = try detail.spacer("c_gap", 1, 11);
 
-        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }})
+            .with_margin(11, 0);
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
         if (t.cost.len == 0) try detailRow(costs, 0, "Act I foundation", "paid");
@@ -830,25 +828,25 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         if (outs.len == 0) try detailRow(opens, row_n, "Act III frontier", "outside this board");
     } else {
-        _ = (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }});
-        _ = try detail.spacer("k_gap", 1, 3);
-        _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, Style{ .text = th.fg } });
-        _ = try detail.spacer("n_gap", 1, 8);
+        _ = (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }})
+            .with_margin(0, 3);
+        _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, Style{ .text = th.fg } })
+            .with_margin(0, 8);
         _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------
     try hrule(view, "foot_rule", .{ .pct_of_parent = 1.0 });
-    _ = try view.spacer("foot_pad", 1, 6);
     const foot = try view.div("foot");
     // `.start`, not `space_between`: the legend grows into what the hints leave, so the hints
     // still sit flush right, and a packed run keeps the 10px gap out of the legend's share.
     // `.act-two #view-research .structure-footer { min-height: 44px }` is a border box (the
     // prototype is `box-sizing: border-box`) over its 1px top border and 6px top pad, which sit
-    // outside the foot here as `foot_rule` and `foot_pad`. The foot is unpadded, so its floor
-    // is a content-box one: 44 - 6 = 38, as the board has always reserved (strictly 37 once
-    // the border is also taken out).
-    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_min(null, 38).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10);
+    // outside the foot here as `foot_rule` and the foot's 6px top margin. The foot is
+    // unpadded, so its floor is a content-box one: 44 - 6 = 38, as the board has always
+    // reserved (strictly 37 once the border is also taken out).
+    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_min(null, 38).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10)
+        .with_margin(6, 0);
     const legend = try foot.div("legend");
     // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave. Its grown width
     // is final before heights are solved, so the foot's fit height counts every legend line.

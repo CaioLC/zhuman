@@ -410,6 +410,21 @@ pub const Layout = struct {
     /// and ignored by the `space_*` main distributions (they compute their own spacing).
     /// A `fit_children` parent grows to include the gaps. Defaults to 0 — set via `with_gap`.
     gap: f32,
+    /// Main-axis **margins** of this node as an in-flow child (CSS `margin` along the
+    /// parent's main axis): extra space before (left in a row, top in a column) and after it,
+    /// added to whatever `gap` already separates it from its neighbours. `before` is the
+    /// physical leading edge and stays there under `reverse`, as CSS margins do. The packed
+    /// run counts every child at its **outer** extent (box plus margins): a `fit_children`
+    /// parent sums them, `grow`/`shrink` treat them as fixed space that never grows or
+    /// shrinks, wrap packing breaks lines on them, and the `space_*` modes distribute what the
+    /// outer extents leave. A margin at the run's start or end stays inside the parent's
+    /// content box, so a lone leading margin is a pad of one child, not of the parent.
+    ///
+    /// Ignored when the parent does not flow this node: an anchored (out-of-flow) node, and a
+    /// track cell, whose x comes from its tracks (asserted 0 in debug). There is no cross-axis
+    /// margin; a cross inset is the parent's padding. Defaults to 0. Set via `with_margin`.
+    margin_before: f32 = 0,
+    margin_after: f32 = 0,
     /// Screen origin for a *parentless* (root) node: where its top-left lands. Lets a
     /// second, independent tree — an overlay/tooltip layer — be placed anywhere on
     /// screen instead of stacking at (0,0). Ignored once a node has a parent (it's
@@ -487,6 +502,14 @@ pub const Layout = struct {
         var l = self;
         l.origin_x = x;
         l.origin_y = y;
+        return l;
+    }
+
+    /// Copy with the main-axis margins set — chains after `init`. See `margin_before`.
+    pub fn with_margin(self: Layout, before: f32, after: f32) Layout {
+        var l = self;
+        l.margin_before = before;
+        l.margin_after = after;
         return l;
     }
 
@@ -692,8 +715,31 @@ fn axis_rule(node: anytype, axis: Axis) size_mod.SizeRule {
     return if (axis == .x) node.size.w else node.size.h;
 }
 
-/// `fit_children` on one axis. On the **main** axis: sum of *in-flow* child extents plus
-/// one `gap` per adjacent pair — a `fit` parent wraps its spaced children exactly.
+/// The fixed space an in-flow child's margins add to its parent's main-axis run
+/// (`Layout.margin_before` + `margin_after`). Never grows or shrinks.
+fn margins(c: anytype) f32 {
+    return c.layout.margin_before + c.layout.margin_after;
+}
+
+/// An in-flow child's **outer** extent on its parent's main axis `main`: its border box plus
+/// its margins. Every walk that packs a run (`fit_axis`, `wrap_cross`, `stretch_children`,
+/// `distribute_grow`, `distribute_shrink`, `flow_place`) measures a child by this, so they
+/// agree on how much of the run each child takes.
+fn outer_main(c: anytype, main: Axis) f32 {
+    return extent(c, main) + margins(c);
+}
+
+/// How far child `c` advances a line being packed on `main`: its outer extent, plus `gap`
+/// unless it opens the line (`first`). The one step behind every line break (`wrap_cross`,
+/// `stretch_children`, `flow_place`), so the three break a wrapping run at the same children.
+fn pack_step(c: anytype, main: Axis, first: bool, gap: f32) f32 {
+    const om = outer_main(c, main);
+    return if (first) om else gap + om;
+}
+
+/// `fit_children` on one axis. On the **main** axis: sum of *in-flow* child outer extents
+/// (box plus `Layout.margin_*`) plus one `gap` per adjacent pair — a `fit` parent wraps its
+/// spaced children exactly.
 /// Anchored (out-of-flow) children are **excluded** from the main sum: they overlay,
 /// they don't size their parent — a progress bar anchored
 /// inside a tile must not make the tile grow/pulse with it (CSS absolute semantics). On
@@ -725,7 +771,7 @@ fn fit_axis(node: anytype, axis: Axis, main: Axis, resolved_main: ?f32) f32 {
     var flow_count: usize = 0;
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue; // overlays don't size their parent
-        acc += extent(c, axis);
+        acc += outer_main(c, axis);
         flow_count += 1;
     }
     if (flow_count > 1) acc += node.layout.gap * @as(f32, @floatFromInt(flow_count - 1));
@@ -790,8 +836,7 @@ fn wrap_cross(node: anytype, cross_axis: Axis, main: Axis, flow: Flow, resolved_
         while (j < n) {
             // Mirror `flow_place`'s child order: it reverses the in-flow list before packing.
             const c = nth_flow_child(node, if (flow.reverse) n - 1 - j else j);
-            const cm = extent(c, main);
-            const step = if (j == i) cm else gap + cm; // no leading gap on the first child
+            const step = pack_step(c, main, j == i, gap); // no leading gap on the first child
             if (j > i and run + step > main_size) break;
             run += step;
             cross_max = @max(cross_max, extent(c, cross_axis));
@@ -876,6 +921,8 @@ fn collect_auto(node: anytype, set: *TrackSet) void {
     var walk: CellWalk = .{};
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue;
+        // A cell's x comes from its tracks; a main-axis margin would mean nothing there.
+        std.debug.assert(margins(c) == 0);
         const s = walk.next(set, c);
         if (c.layout.cell_span != 1 or s.col >= set.tracks.len) continue;
         if (set.tracks[s.col].basis == .auto) set.auto_max[s.col] = @max(set.auto_max[s.col], extent(c, .x));
@@ -1048,8 +1095,7 @@ fn stretch_children(node: anytype, main: Axis) void {
         var line: f32 = 0;
         while (j < n) {
             const c = nth_flow_child(node, if (flow.reverse) n - 1 - j else j);
-            const cm = extent(c, main);
-            const step = if (j == i) cm else gap + cm;
+            const step = pack_step(c, main, j == i, gap);
             if (j > i and run + step > main_size) break;
             run += step;
             line = @max(line, extent(c, ca));
@@ -1096,7 +1142,8 @@ fn grow_weight(c: anytype) f32 {
 /// holds the grower at its minimum, and an all-zero sum leaves every grower there. With all
 /// weights 1 this is the plain equal share, bit for bit. Fixed siblings and minimums are
 /// never reduced here: if they exceed the parent the run overflows, unless
-/// `distribute_shrink` takes the overflow out of siblings that opted in.
+/// `distribute_shrink` takes the overflow out of siblings that opted in. Every in-flow
+/// child's margins (a grower's too) are fixed space taken off the top.
 fn distribute_grow(node: anytype, main: Axis) void {
     var flow_count: usize = 0;
     var grow_count: usize = 0;
@@ -1107,6 +1154,7 @@ fn distribute_grow(node: anytype, main: Axis) void {
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue;
         flow_count += 1;
+        fixed_sum += margins(c);
         if (is_grow(axis_rule(c, main))) {
             grow_count += 1;
             grow_padding += padding_extent(&c.size, main);
@@ -1198,8 +1246,9 @@ fn shrink_tally(node: anytype, main: Axis, ratio: f32) ShrinkTally {
 }
 
 /// Opt-in flex shrink (CSS `flex-shrink` with CSS's weighting) on a definite parent's main
-/// axis, run right after `distribute_grow`. When the in-flow children's border boxes plus
-/// spacing (`gap` only for the packed modes, as in `distribute_grow`) exceed the parent's
+/// axis, run right after `distribute_grow`. When the in-flow children's outer extents (border
+/// box plus margins, which never shrink) plus spacing (`gap` only for the packed modes, as in
+/// `distribute_grow`) exceed the parent's
 /// content box, the overflow comes out of the children with `Size.shrink > 0`, each in
 /// proportion to `shrink × base`, where `base` is its content extent after finalize and
 /// grow. Weighting by base means a wide column gives up more than a narrow one with the
@@ -1225,7 +1274,7 @@ fn distribute_shrink(node: anytype, main: Axis) void {
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue;
         flow_count += 1;
-        total += extent(c, main);
+        total += outer_main(c, main);
         if (shrinks(c, main)) shrinker_count += 1;
     }
     if (shrinker_count == 0) return;
@@ -1485,7 +1534,10 @@ fn track_stretch(node: anytype, set: *const TrackSet) void {
 /// box per its `Flow`. Breaks them into lines (one line unless `wrap`), distributes each line
 /// along the main axis (`flow.main`), aligns each child across it (`flow.cross`), and stacks
 /// the lines along the cross axis. Axis-generic: it works in (main, cross) and maps to (x, y)
-/// via `dir`, so a row and a column share every line of code.
+/// via `dir`, so a row and a column share every line of code. Each child takes its outer
+/// extent (`outer_main`) of the line: the cursor steps over its `margin_before`, places it,
+/// then steps over its box and `margin_after`, and the distribution shares what the outer
+/// extents leave (CSS distributes free space between margin boxes).
 fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!void {
     const flow = node.layout.flow;
     const m = main_axis(flow); // .x for a row, .y for a column
@@ -1505,15 +1557,14 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
         // -- gather this line [i, j): pack children until the box is full (when wrapping) --
         var j = i;
         var run: f32 = 0; // main extent incl. gaps so far — the wrap test
-        var main_sum: f32 = 0; // sum of child main extents (no gaps)
+        var main_sum: f32 = 0; // sum of child outer main extents (no gaps)
         var lc: LineCross = .{};
         while (j < kids.len) {
             const c = kids[j];
-            const cm = extent(c, m);
-            const step = if (j == i) cm else gap + cm; // no leading gap on the first child
+            const step = pack_step(c, m, j == i, gap); // no leading gap on the first child
             if (flow.wrap and j > i and run + step > main_size) break;
             run += step;
-            main_sum += cm;
+            main_sum += outer_main(c, m);
             lc.add(c, m);
             j += 1;
         }
@@ -1544,12 +1595,12 @@ fn flow_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node)) anyerror!v
         // -- place each child of the line --
         var cursor = lead;
         for (kids[i..j]) |c| {
-            const cm = extent(c, m);
+            cursor += c.layout.margin_before;
             const co = line_start + cross_within(flow, m, line_cross, c, lc.ascent);
             const xo = if (m == .x) cursor else co;
             const yo = if (m == .x) co else cursor;
             try place(c, alloc, .{ .x_offset = xo, .y_offset = yo });
-            cursor += cm + between;
+            cursor += extent(c, m) + c.layout.margin_after + between;
         }
 
         line_start += line_cross + gap; // wrapped lines are gap-separated on the cross axis

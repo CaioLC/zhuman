@@ -96,8 +96,8 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     const copy_color = if (available) th.fg else th.dim;
 
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
-    // line-2 edge. Padding is represented by in-flow lanes so percentage width remains the
-    // border-box width instead of acquiring content-box overflow.
+    // line-2 edge. Its 9px insets are the content row's padding, which the row's percentage
+    // width (a border box) takes out of the full-width share.
     const strip = try parent.div(id);
     _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
         .with_overflow(.clip)
@@ -113,29 +113,27 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     const content = try strip.div("content");
     _ = content.with_layout(.center)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center });
-
-    _ = try content.spacer("lead", market_pad_x, 1);
+        .with_flow(.{ .dir = .row, .cross = .center })
+        .with_style(.{style.pad_sym(market_pad_x, 0)});
 
     _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = signal_color }});
 
-    _ = try content.spacer("gap_one", market_gap, 1);
-
     const copy_lane = try content.div("copy_lane");
-    _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip);
+    _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip)
+        .with_margin(market_gap, 0);
     _ = (try copy_lane.text("copy", idn.copy))
         .with_style(.{Style{ .font = market_font, .text = copy_color }});
 
     const show_action = idn.action.len > 0 and (kind != .passerby or available);
-    if (show_action) _ = try content.spacer("gap_two", market_gap, 1);
 
     // Keep the action node keyed and returned in every phase so its dialog state cannot jump
-    // between owners as the passerby arrives or leaves. Only its visible label and hit area
-    // appear during a dealable visit.
+    // between owners as the passerby arrives or leaves. Only its visible label, hit area and
+    // leading 10px appear during a dealable visit; otherwise it is a 0-wide box with no margin.
     const act = try content.div("act");
     _ = act.with_size(if (show_action) .fit_children else .{ .fixed = 0 }, .fit_children)
-        .with_flow(.{ .dir = .row });
+        .with_flow(.{ .dir = .row })
+        .with_margin(if (show_action) market_gap else 0, 0);
     const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button });
     if (show_action) {
         const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
@@ -143,7 +141,6 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
             .with_style(.{Style{ .font = market_font, .text = action_color }});
     }
 
-    _ = try content.spacer("tail", market_pad_x, 1);
     return act;
 }
 
@@ -190,28 +187,24 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
     const content = try strip.div("content");
     _ = content.with_layout(.center)
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center });
-
-    _ = try content.spacer("lead", market_pad_x, 1);
+        .with_flow(.{ .dir = .row, .cross = .center })
+        .with_style(.{style.pad_sym(market_pad_x, 0)});
 
     _ = (try content.text("signal", idn.signal))
         .with_style(.{Style{ .font = market_font, .text = state_color }});
 
-    _ = try content.spacer("gap_one", market_gap, 1);
-
+    // The subject lane's margins are the 10px on either side of it; the trailing one stays
+    // without metadata, so the subject never runs into the right inset.
     const subject_lane = try content.div("subject_lane");
-    _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip);
+    _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip)
+        .with_margin(market_gap, market_gap);
     _ = (try subject_lane.text("subject", subject))
         .with_style(.{Style{ .font = market_font, .text = th.fg }});
-
-    _ = try content.spacer("gap_two", market_gap, 1);
 
     if (metadata.len > 0) {
         _ = (try content.text("metadata", metadata))
             .with_style(.{Style{ .font = market_font, .text = state_color }});
     }
-
-    _ = try content.spacer("tail", market_pad_x, 1);
 
     // Live announcement on a state change (idle→working→building). Composed from the same
     // subject the strip shows, so what is spoken matches what is drawn.

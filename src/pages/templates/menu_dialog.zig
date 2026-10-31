@@ -90,9 +90,9 @@ fn footerNote(menu: *const res_mod.MenuState) []const u8 {
 fn backHead(parent: El) !bool {
     const head = try parent.div("head");
     _ = head.with_size(.{ .fixed = dims(parent.ctx).inner }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .end, .cross = .center });
+        .with_flow(.{ .dir = .row, .main = .end, .cross = .center })
+        .with_margin(0, 11);
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
-    _ = try parent.spacer("head_gap", 1, 11);
     return back.consume(.clicked);
 }
 
@@ -152,20 +152,18 @@ fn quitScreen(parent: El, saves: *const res_mod.SaveSlots, session: Session) !Qu
     const copy_style = Style{ .font = 12, .text = th.fg };
 
     const first = try parent.div("stands");
-    _ = first.with_flow(.{ .dir = .row, .cross = .center });
+    _ = first.with_flow(.{ .dir = .row, .cross = .center }).with_margin(0, 4);
     _ = (try first.text("a", "The settlement stands at ")).with_style(.{copy_style});
     _ = (try first.text("when", try ctx.arena.print("Act {s} \u{00b7} Day {d}", .{ actNumeral(session.act), session.day })))
         .with_style(.{Style{ .font = 12, .text = th.warn }});
     _ = (try first.text("b", ".")).with_style(.{copy_style});
-    _ = try parent.spacer("line_gap", 1, 4);
 
     var dbuf: [64]u8 = undefined;
     const rest = if (saves.latest()) |i| blk: {
         const s = saves.slots[i];
         break :blk try ctx.arena.print("Your most recent save is slot {d}, {s} \u{2014} everything since then is lost.", .{ i + 1, describe(&dbuf, s.act, s.day, s.people) });
     } else "There is no save yet \u{2014} everything since the start is lost.";
-    _ = (try parent.text_fit("lost", rest, .{ .wrap = 52 * 7.2 })).with_style(.{copy_style});
-    _ = try parent.spacer("copy_gap", 1, 14);
+    _ = (try parent.text_fit("lost", rest, .{ .wrap = 52 * 7.2 })).with_style(.{copy_style}).with_margin(0, 14);
 
     const row = try parent.div("confirm");
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);

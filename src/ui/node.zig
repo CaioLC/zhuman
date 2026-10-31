@@ -1885,6 +1885,236 @@ test "weighted grow and shrink work on a column's main axis" {
     try std.testing.expectEqual(@as(f32, 200), g2.size.height);
 }
 
+test "margins: a row and a column add them to the gap on each side" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Row, gap 10: a at 0, b after 30 + 10 gap + 5 before, c after b + 7 after + 10 gap.
+    const root = try flex_row(a, 300);
+    root.layout.gap = 10;
+    const ka = try flex_kid(a, "a", root, .{ .fixed = 30 });
+    const kb = try flex_kid(a, "b", root, .{ .fixed = 20 });
+    kb.layout = kb.layout.with_margin(5, 7);
+    const kc = try flex_kid(a, "c", root, .{ .fixed = 20 });
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), ka.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 45), kb.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 82), kc.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 20), kb.size.width); // a margin never sizes the box
+    try std.testing.expectEqual(@as(f32, 0), kb.layout._global_y.?); // nor moves it across
+
+    // Column: a leading margin on the first child insets it inside the padded content box.
+    const col = try TestNode.create(a, "col");
+    _ = col.with_size(Size.initFixed(50, 300));
+    _ = col.with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    col.size.padding = features.Padding.initEach(4, 0, 0, 0);
+    const top = try TestNode.pcreate(a, "top", col);
+    _ = top.with_size(Size.initFixed(10, 20)).with_layout(.relative, null);
+    top.layout = top.layout.with_margin(6, 9);
+    const bottom = try TestNode.pcreate(a, "bottom", col);
+    _ = bottom.with_size(Size.initFixed(10, 20)).with_layout(.relative, null);
+
+    try col.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 10), top.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 39), bottom.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 0), top.layout._global_x.?);
+
+    // `center` and `end` pack the outer extents: 30 + 3 + 20 + 7 = 60 of 300.
+    root.layout.gap = 0;
+    kb.layout = kb.layout.with_margin(3, 7);
+    _ = kc.with_layout(.top_left, null); // anchored: its margins (none) and box leave the run
+    kc.layout = kc.layout.with_margin(50, 50); // ignored out of flow
+    root.layout.flow.main = .end;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 240), ka.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 273), kb.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 0), kc.layout._global_x.?);
+    root.layout.flow.main = .center;
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 120), ka.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 153), kb.layout._global_x.?);
+}
+
+test "margins: a fit_children parent sums them on the main axis only" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fit = try TestNode.create(a, "fit");
+    _ = fit.with_size(Size.init(.fit_children, .fit_children));
+    _ = fit.with_layout(.top_left, .{ .dir = .row, .cross = .start });
+    fit.layout.gap = 4;
+    const k1 = try flex_kid(a, "k1", fit, .{ .fixed = 30 });
+    k1.layout = k1.layout.with_margin(2, 0);
+    const k2 = try flex_kid(a, "k2", fit, .{ .fixed = 40 });
+    k2.layout = k2.layout.with_margin(0, 6);
+    const over = try flex_kid(a, "over", fit, .{ .fixed = 500 });
+    _ = over.with_layout(.top_left, null);
+    over.layout = over.layout.with_margin(100, 100); // out of flow: neither box nor margins count
+
+    try fit.set_global_pos(a);
+    // 2 + 30 + 4 + 40 + 6 = 82; the height is the plain cross max (no cross margin).
+    try std.testing.expectEqual(@as(f32, 82), fit.size.width);
+    try std.testing.expectEqual(@as(f32, 10), fit.size.height);
+    try std.testing.expectEqual(@as(f32, 2), k1.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 36), k2.layout._global_x.?);
+
+    // A column fits its height the same way.
+    const col = try TestNode.create(a, "col");
+    _ = col.with_size(Size.init(.fit_children, .fit_children));
+    _ = col.with_layout(.top_left, .{ .dir = .column, .cross = .start });
+    const c1 = try TestNode.pcreate(a, "c1", col);
+    _ = c1.with_size(Size.initFixed(10, 20)).with_layout(.relative, null);
+    c1.layout = c1.layout.with_margin(11, 8);
+    try col.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 39), col.size.height);
+    try std.testing.expectEqual(@as(f32, 10), col.size.width);
+}
+
+test "margins: grow takes them off the free space, a grower's own included" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 300 − 50 fixed − (10 + 20) margins − 10 gap = 210 for the grower.
+    const root = try flex_row(a, 300);
+    root.layout.gap = 10;
+    const fixed = try flex_kid(a, "fixed", root, .{ .fixed = 50 });
+    fixed.layout = fixed.layout.with_margin(10, 0);
+    const grower = try flex_kid(a, "grower", root, .grow);
+    grower.layout = grower.layout.with_margin(0, 20);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 210), grower.size.width);
+    try std.testing.expectEqual(@as(f32, 70), grower.layout._global_x.?);
+    // Its far edge plus its trailing margin lands exactly on the content box's end.
+    try std.testing.expectEqual(@as(f32, 300), grower.layout._global_x.? + grower.size.width + 20);
+
+    // Same as one padded lane: the margins reproduce lead/tail spacers bit for bit.
+    const spaced = try flex_row(a, 300);
+    _ = try flex_kid(a, "lead", spaced, .{ .fixed = 10 });
+    const g2 = try flex_kid(a, "g", spaced, .grow);
+    _ = try flex_kid(a, "tail", spaced, .{ .fixed = 20 });
+    const marg = try flex_row(a, 300);
+    const g3 = try flex_kid(a, "g", marg, .grow);
+    g3.layout = g3.layout.with_margin(10, 20);
+    try spaced.set_global_pos(a);
+    try marg.set_global_pos(a);
+    try std.testing.expectEqual(g2.size.width, g3.size.width);
+    try std.testing.expectEqual(g2.layout._global_x.?, g3.layout._global_x.?);
+}
+
+test "margins: shrink counts them as overflow and never shrinks them" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 200 + 200 + 20 margins = 420 in 300: 120 over, 60 from each box.
+    const root = try flex_row(a, 300);
+    const left = try flex_kid(a, "left", root, .{ .fixed = 200 });
+    left.size.shrink = 1;
+    left.layout = left.layout.with_margin(0, 20);
+    const right = try flex_kid(a, "right", root, .{ .fixed = 200 });
+    right.size.shrink = 1;
+
+    try root.set_global_pos(a);
+    try std.testing.expectApproxEqAbs(@as(f32, 140), left.size.width, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 140), right.size.width, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 160), right.layout._global_x.?, 0.001);
+}
+
+test "margins: wrap packing breaks lines on the outer extents" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 100 wide, gap 5: 40 + 5 + (5 + 40) = 90 fits; the third (outer 45) breaks.
+    const wrap = try TestNode.create(a, "wrap");
+    _ = wrap.with_size(Size.init(.{ .fixed = 100 }, .fit_children));
+    _ = wrap.with_layout(.top_left, .{ .dir = .row, .wrap = true, .cross = .stretch });
+    wrap.layout.gap = 5;
+    const w1 = try flex_kid(a, "w1", wrap, .{ .fixed = 40 });
+    const w2 = try flex_kid(a, "w2", wrap, .{ .fixed = 40 });
+    w2.layout = w2.layout.with_margin(5, 0);
+    const w3 = try TestNode.pcreate(a, "w3", wrap);
+    _ = w3.with_size(Size.init(.{ .fixed = 40 }, .{ .fixed = 20 })).with_layout(.relative, null);
+    w3.layout = w3.layout.with_margin(5, 0);
+    const w4 = try TestNode.pcreate(a, "w4", wrap);
+    _ = w4.with_size(Size.init(.{ .fixed = 40 }, .fit_children)).with_layout(.relative, null);
+
+    try wrap.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), w1.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 50), w2.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 0), w2.layout._global_y.?);
+    // Line 2 opens with w3's margin; w4 (outer 40) fits after it: 5 + 40 + 5 + 40 = 90.
+    try std.testing.expectEqual(@as(f32, 5), w3.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 15), w3.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 50), w4.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 15), w4.layout._global_y.?);
+    // wrap_cross counted the same two lines (10 + 5 + 20), and stretch raised w4 to its
+    // own line (20), not the first one's.
+    try std.testing.expectEqual(@as(f32, 35), wrap.size.height);
+    try std.testing.expectEqual(@as(f32, 20), w4.size.height);
+
+    // With one more px of margin the second child no longer fits on line 1.
+    w2.layout = w2.layout.with_margin(16, 0);
+    try wrap.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 16), w2.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 15), w2.layout._global_y.?);
+}
+
+test "margins: space_between shares what the outer extents leave" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Outer extents 50 + (10 + 50) = 110 of 300: 190 between the margin boxes.
+    const root = try flex_row(a, 300);
+    root.layout.flow.main = .space_between;
+    root.layout.gap = 99; // ignored by the space_* modes
+    const left = try flex_kid(a, "left", root, .{ .fixed = 50 });
+    const right = try flex_kid(a, "right", root, .{ .fixed = 50 });
+    right.layout = right.layout.with_margin(10, 0);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), left.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 250), right.layout._global_x.?);
+
+    // A trailing margin keeps the last box off the far edge, as in CSS.
+    right.layout = right.layout.with_margin(0, 10);
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 240), right.layout._global_x.?);
+
+    // space_evenly: 300 − 110 = 190 over 3 slots.
+    right.layout = right.layout.with_margin(10, 0);
+    root.layout.flow.main = .space_evenly;
+    try root.set_global_pos(a);
+    const u: f32 = 190.0 / 3.0;
+    try std.testing.expectApproxEqAbs(u, left.layout._global_x.?, 0.001);
+    try std.testing.expectApproxEqAbs(u + 50 + u + 10, right.layout._global_x.?, 0.001);
+}
+
+test "margins: a re-solve repeats exactly" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = try flex_row(a, 333);
+    root.layout.gap = 3;
+    root.size.padding = features.Padding.initEach(0, 7, 0, 9);
+    const k1 = try flex_kid(a, "k1", root, .grow);
+    k1.layout = k1.layout.with_margin(1.5, 2.25);
+    const k2 = try flex_kid(a, "k2", root, .{ .fixed = 120 });
+    k2.size.shrink = 1;
+    k2.layout = k2.layout.with_margin(4, 0);
+    const k3 = try flex_kid(a, "k3", root, .grow);
+    k3.size.grow_weight = 2;
+    k3.layout = k3.layout.with_margin(0, 11);
+
+    try root.set_global_pos(a);
+    const first = [_]f32{ k1.size.width, k1.layout._global_x.?, k2.size.width, k2.layout._global_x.?, k3.size.width, k3.layout._global_x.? };
+    try root.set_global_pos(a);
+    const second = [_]f32{ k1.size.width, k1.layout._global_x.?, k2.size.width, k2.layout._global_x.?, k3.size.width, k3.layout._global_x.? };
+    try std.testing.expectEqualSlices(f32, &first, &second);
+    // The run ends on the content box's far edge: a fixed width is the content box, from 9.
+    try std.testing.expectApproxEqAbs(@as(f32, 9 + 333), k3.layout._global_x.? + k3.size.width + 11, 0.001);
+}
+
 /// Records what `stamp_walk` handed it, standing in for a `Ctx` — the walk takes its
 /// sink as `anytype`, so its ordering and clip logic test without a context, a pool or
 /// a window. `slots` names the keys that have an interaction slot; every other key is

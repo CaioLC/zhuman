@@ -26,18 +26,16 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
 
-    // Keep the percentage width border-box safe: horizontal padding is represented by two
-    // in-flow lanes, so the outlined panel remains exactly 100% of its fluid grid column.
+    // The percentage width is a border box, so the horizontal padding comes out of it and the
+    // outlined panel remains exactly 100% of its fluid grid column.
     const panel = try parent.div(id);
     _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_h })
         .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{Style{ .outline_color = th.line2, .outline_style = .dashed }});
-    _ = try panel.spacer("lead", pad_x, 1);
+        .with_style(.{ Style{ .outline_color = th.line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
     const content = try panel.div("content");
     _ = content.with_size(.grow, .{ .fixed = tile_h - pad_top - pad_bottom })
         .with_flow(.{ .dir = .column }).with_gap(5)
         .with_style(.{style.pad_each(pad_top, 0, pad_bottom, 0)});
-    _ = try panel.spacer("tail", pad_x, 1);
 
     // Create the three prototype rows in visual order first. Their contents can be attached
     // after the slider resolves this frame's live value without changing sibling order.

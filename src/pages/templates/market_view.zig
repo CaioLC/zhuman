@@ -722,17 +722,17 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     _ = list.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{style.pad_each(3, 0, 8, 0)});
     _ = (try body.div("divider")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
-    // The slip's 10/15/13 insets are flow lanes, so its foot (PROPOSE) stays inside the body.
+    // The slip's 10/15/13 insets are padding inside border-box extents (the box's percentage
+    // height, the row's percentage width), so its foot (PROPOSE) stays inside the body.
     const slip_box = try body.div("slip_box");
-    _ = slip_box.with_size(.{ .fixed = slip_w }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column });
-    _ = try slip_box.spacer("top", 1, 10);
+    _ = slip_box.with_size(.{ .fixed = slip_w }, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column })
+        .with_style(.{style.pad_each(10, 0, 13, 0)});
     const slip_row = try slip_box.div("row");
-    _ = slip_row.with_size(.{ .fixed = slip_w }, .grow).with_flow(.{ .dir = .row });
-    _ = try slip_row.spacer("lead", pad_x, 1);
+    _ = slip_row.with_size(.{ .pct_of_parent = 1.0 }, .grow).with_flow(.{ .dir = .row })
+        .with_style(.{style.pad_each(0, 0, 0, pad_x)});
     const slip = try slip_row.div("slip");
     _ = slip.with_size(.{ .fixed = slip_inner }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
-    _ = try slip_box.spacer("bottom", 1, 13);
 
     // The rows the active list holds, before paging.
     var total: usize = 0;

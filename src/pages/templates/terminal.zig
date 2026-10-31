@@ -229,11 +229,10 @@ const footer_pad_bottom: f32 = 2;
 fn insetRegion(parent: El, id: []const u8, inset: f32) !El {
     const row = try parent.div(id);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start });
-    _ = try row.spacer("lead", inset, 1);
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{style.pad_sym(inset, 0)});
     const region = try row.div("content");
     _ = region.with_size(.grow, .fit_children);
-    _ = try row.spacer("tail", inset, 1);
     return region;
 }
 
@@ -248,19 +247,18 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     _ = content.with_layout(.top_left)
         .with_flow(.{ .dir = .column });
 
-    // Header: 48px total at the reference (15px top + 23px content + 10px bottom), with
-    // horizontal page insets represented as flow lanes so percentage sizing remains border-box
-    // safe in this layout engine.
+    // Header: 48px total at the reference (15px top + 23px content + 10px bottom), with the
+    // horizontal page insets as the band's padding (its percentage width is a border box, so
+    // they come out of the full width).
     const header_band = try content.div("shell_header_band");
     _ = header_band.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start });
-    _ = try header_band.spacer("lead", opts.page_pad, 1);
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{style.pad_sym(opts.page_pad, 0)});
     const header = try header_band.div("shell_header");
     // The header's content is one 17px line (23px) at the reference; it grows only when the
     // stockline wraps.
     _ = header.with_size(.grow, .fit_children)
         .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
-    _ = try header_band.spacer("tail", opts.page_pad, 1);
 
     // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.
     // The underway Act I surface owns its own market/activity strips, so these regions are absent
@@ -275,23 +273,22 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         null;
 
     // The page-grid row owns all remaining height after the header and optional reserved footer.
-    // Its authored 12px/10px vertical and page-width horizontal insets are real flow lanes; the
-    // body therefore has a definite height and cannot extend underneath the logger.
+    // Its authored 12px/10px vertical and page-width horizontal insets are the band's and the
+    // row's padding, inside their border-box (grow, percentage) extents; the body therefore
+    // has a definite height and cannot extend underneath the logger.
     const stack = stacked(content.ctx) and opts.scroll;
     const grid_band = try content.div("shell_grid_band");
     _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
-        .with_flow(.{ .dir = .column });
-    _ = try grid_band.spacer("top", 1, grid_pad_top);
+        .with_flow(.{ .dir = .column })
+        .with_style(.{style.pad_each(grid_pad_top, 0, grid_pad_bottom, 0)});
     const grid_row = try grid_band.div("row");
     _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
-        .with_flow(.{ .dir = .row, .cross = .start });
-    _ = try grid_row.spacer("lead", opts.page_pad, 1);
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{style.pad_sym(opts.page_pad, 0)});
     const grid = try grid_row.div("shell_grid");
     // Stacked, the grid is one column: the rail above the surface (`.page-grid: 1fr`).
     _ = grid.with_size(.grow, if (stack) .fit_children else .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = if (stack) .column else .row, .cross = .start }).with_gap(opts.section_gap);
-    _ = try grid_row.spacer("tail", opts.page_pad, 1);
-    _ = try grid_band.spacer("bottom", 1, grid_pad_bottom);
 
     const rail = if (opts.rail) blk: {
         const r = try grid.div("shell_rail");
@@ -328,22 +325,22 @@ pub fn footer_band(content: El, page_pad: f32) !El {
     const band = try content.div("shell_footer_band");
     _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(page_pad) })
         .with_flow(.{ .dir = .column });
+    // The bottom page margin is the row's trailing margin inside the band's fixed height.
     const row = try band.div("row");
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
-        .with_flow(.{ .dir = .row, .cross = .start });
-    _ = try row.spacer("lead", page_pad, 1);
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_margin(0, page_pad)
+        .with_style(.{style.pad_sym(page_pad, 0)});
+    // The frame's fixed height is a content box, so it is the 86px frame less its own 4px/2px
+    // padding; the outline still draws the full 86px border box.
     const frame = try row.div("frame");
-    _ = frame.with_size(.grow, .{ .fixed = footer_height })
+    _ = frame.with_size(.grow, .{ .fixed = footer_height - footer_pad_top - footer_pad_bottom })
         .with_flow(.{ .dir = .column })
         .with_overflow(.clip)
-        .with_style(.{Style{ .outline_color = th.line2 }});
-    _ = try frame.spacer("top", 1, footer_pad_top);
+        .with_style(.{ Style{ .outline_color = th.line2 }, style.pad_each(footer_pad_top, 0, footer_pad_bottom, 0) });
     const f = try frame.div("shell_footer");
     _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
         .with_overflow(.clip);
-    _ = try frame.spacer("bottom", 1, footer_pad_bottom);
-    _ = try row.spacer("tail", page_pad, 1);
-    _ = try band.spacer("margin", 1, page_pad);
     return f;
 }
 

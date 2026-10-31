@@ -166,6 +166,20 @@ pub const El = struct {
         return self;
     }
 
+    /// Main-axis margins of this node in its parent's run (CSS `margin` along the parent's
+    /// flow), in **logical** px scaled to device px by the frame scale: `before` is the
+    /// space ahead of it (left in a row, top in a column), `after` the space behind it. They
+    /// add to the parent's gap on that side, a `fit_children` parent includes them, and
+    /// `grow`/`shrink` treat them as fixed space. The per-sibling spacing a uniform
+    /// `with_gap` can't express (`.with_margin(0, 8)` under a heading). Ignored on an
+    /// anchored node and on a track cell; there is no cross-axis margin (pad the parent).
+    pub fn with_margin(self: El, before: f32, after: f32) El {
+        const s = self.ctx.res.view.scale;
+        self.node.layout.margin_before = view.dp(before, s);
+        self.node.layout.margin_after = view.dp(after, s);
+        return self;
+    }
+
     /// Per-axis size rule — `.fit_children`, `.grow`, `.{ .fixed = 240 }`,
     /// `.{ .pct_of_parent = 1 }`, …. A **fixed** extent is a *logical* px value scaled to
     /// device px by the frame scale; `content`/`pct`/`grow`/`fit_children` are

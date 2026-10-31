@@ -123,12 +123,13 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .with_size(.{ .fixed = 2 }, .{ .pct_of_parent = 1.0 })
         .with_style(.{Style{ .fill = tone }});
 
-    // Exact bar columns without content-box padding drift:
-    // 10px inset | flexible disclosure | 10px | 132px CTA | 5px inset.
+    // Bar columns: 12px inset (2px rail + 10px) | flexible disclosure | 10px | 132px CTA |
+    // 5px inset. The insets are padding, which the percentage width (a border box) takes out
+    // of the card's width; the 10px is the CTA lane's leading margin.
     const bar = try outer.div("bar");
     _ = bar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = bar_h })
-        .with_flow(.{ .dir = .row, .cross = .center });
-    _ = try bar.spacer("lead", bar_left, bar_h);
+        .with_flow(.{ .dir = .row, .cross = .center })
+        .with_style(.{style.pad_each(0, bar_right, 0, bar_left)});
 
     const disclosure_lane = try bar.div("disclosure_lane");
     _ = disclosure_lane.with_size(.grow, .{ .fixed = bar_h })
@@ -178,11 +179,10 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
 
     var clicked = false;
     if (goal.action.len > 0) {
-        _ = try bar.spacer("action_gap", bar_gap, bar_h);
-
         const action_lane = try bar.div("action_lane");
         _ = action_lane.with_size(.{ .fixed = action_w }, .{ .fixed = bar_h })
-            .with_flow(.{ .dir = .column, .main = .center });
+            .with_flow(.{ .dir = .column, .main = .center })
+            .with_margin(bar_gap, 0);
         const action = try action_lane.div("action");
         _ = action.with_size(.{ .fixed = action_w }, .{ .fixed = action_h })
             .with_offset(0, bar_control_offset_y);
@@ -194,7 +194,6 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .with_style(.{Style{ .font = 9, .text = action_color }});
         clicked = ready and aq.clicked;
     }
-    _ = try bar.spacer("tail", bar_right, bar_h);
 
     if (disclosure_state.expanded) {
         const details = try outer.div("details");
@@ -204,17 +203,16 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
             .with_style(.{Style{ .fill = th.line }});
 
-        // Horizontal spacer nodes reproduce 12px/10px CSS padding without percentage-width
-        // content-box overflow. Vertical padding remains a harmless style inset.
+        // The row's padding is the 14px (2px rail + 12px) / 10px CSS inset; its percentage
+        // width is a border box, so the padding comes out of the card's width.
         const detail_row = try details.div("row");
         _ = detail_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_flow(.{ .dir = .row });
-        _ = try detail_row.spacer("lead", detail_left, 1);
+            .with_flow(.{ .dir = .row })
+            .with_style(.{style.pad_each(0, detail_right, 0, detail_left)});
         const content = try detail_row.div("content");
         _ = content.with_size(.grow, .fit_children)
             .with_flow(.{ .dir = .column }).with_gap(4)
             .with_style(.{style.pad_each(6, 0, 8, 0)});
-        _ = try detail_row.spacer("tail", detail_right, 1);
 
         if (goal.kicker.len > 0 or goal.cost.len > 0) {
             const head = try content.div("head");

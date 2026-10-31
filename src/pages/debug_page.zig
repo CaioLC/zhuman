@@ -534,13 +534,11 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "readout")) {
         // The readout panel with every primitive inside it, as HOLDINGS composes them.
         const p = try t.readout_panel(stage, "rp", 214, .{ .up = 10, .right = 16, .down = 9, .left = 10 });
-        _ = try t.readout_heading(p, "heading", "HOLDINGS", "2 KINDS, 3");
-        _ = try p.spacer("heading_gap", 1, 8);
+        _ = (try t.readout_heading(p, "heading", "HOLDINGS", "2 KINDS, 3")).with_margin(0, 8);
         try t.kv_line(p, "sandals", "Sandals \u{00d7}2", "forage costs less", th.dim);
         try t.kv_line(p, "hatchet", "Hatchet", "unlocks Split wood", th.dim);
         try t.divider(p, "divider", 9, 7);
-        _ = try t.section_label(p, "margins_title", "MARGINS");
-        _ = try p.spacer("margins_gap", 1, 8);
+        _ = (try t.section_label(p, "margins_title", "MARGINS")).with_margin(0, 8);
         try t.kv_line(p, "forage", "Forage", "1.7e \u{2192} 1.4e", th.good);
         try t.sentence(p, "coverage", "Food lasts ", "3.2d", ".", th.fg);
     } else if (eq(name, "table")) {

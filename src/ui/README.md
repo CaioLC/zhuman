@@ -403,6 +403,18 @@ Two orthogonal axes, both Unity-inspired:
   anchored alike): `place` bases every child against the parent's *content* box, so
   `.start` packs at the leading padding, `.end` against the trailing padding, and an
   anchored `.center` centres within the inset box.
+- **`margin_before`/`margin_after`** — a flowed child's own main-axis margins (CSS
+  `margin` along the parent's flow; `El.with_margin(before, after)`), for the uneven
+  spacing between siblings a uniform `gap` can't express. A margin adds to the gap on that
+  side. The run measures every child at its **outer** extent, box plus margins, in every
+  walk that packs it: a `fit_children` parent sums them, `grow`/`shrink` treat them as
+  fixed space (never grown, never shrunk), wrap packing breaks lines on them, and the
+  `space_*` modes share out what the outer extents leave, as CSS distributes free space
+  between margin boxes. `before` is the physical leading edge (left/top) and stays there
+  under `reverse`. Main axis only: a cross-axis inset is the parent's padding. An anchored
+  node and a track cell ignore their margins (a cell's x is its tracks'; asserted 0).
+  Padding vs margin: a lead/tail inset of the whole run is the parent's padding; space
+  between two particular siblings is a margin on one of them.
 - **`origin`** — a *root's* screen position (where its top-left lands). Defaults to
   (0,0), so the main tree fills from the corner. The host can render **multiple roots**
   (`root.set_global_pos()` + `root.iterate()` per tree) and float a second one — an
@@ -447,7 +459,7 @@ Every node picks a `SizeRule` **per axis** (mandatory — width and height size
 independently): `fixed`, `content`, `pct_of_parent`, `grow`, or `fit_children`.
 `grow` is meaningful for an in-flow child on its parent's main axis: under a definite
 parent, growers divide the content-box remainder after fixed siblings, their own padding,
-and packed-mode gaps, in proportion to `Size.grow_weight` (CSS `flex-grow`; default 1,
+every child's margins, and packed-mode gaps, in proportion to `Size.grow_weight` (CSS `flex-grow`; default 1,
 the equal share; 0 never grows). Each starts at its minimum; a max-capped grower releases
 its unused share to the others, by weight. The weight is a `Size` field rather than a
 `grow` payload, so a plain `.grow` keeps meaning weight 1. At root, out of flow, on the
@@ -455,7 +467,7 @@ cross axis, or under an indefinite parent, `grow` falls back to measured content
 
 Shrink is opt-in: `Size.shrink` (CSS `flex-shrink`) defaults to 0 rather than CSS's 1, so
 an over-constrained run overflows deterministically, as authored, unless a child asks to
-give. When a definite, non-wrapping parent's in-flow children plus gaps exceed its content
+give. When a definite, non-wrapping parent's in-flow children (with their margins) plus gaps exceed its content
 box, children with `shrink > 0` (and a non-`grow` main rule) give up the overflow in
 proportion to `shrink × content extent`, so a wide column gives more than a narrow one with
 the same factor. Padding never shrinks, and no child goes below its main-axis minimum (CSS

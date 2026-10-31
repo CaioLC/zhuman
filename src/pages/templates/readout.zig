@@ -82,8 +82,7 @@ pub fn divider(parent: El, id: []const u8, above: f32, below: f32) !void {
     const th = parent.ctx.res.view.theme;
     const wrap = try parent.div(id);
     _ = wrap.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column });
-    _ = try wrap.spacer("above", 1, above);
     const line = try wrap.div("line");
-    _ = line.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }});
-    _ = try wrap.spacer("below", 1, below);
+    _ = line.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }})
+        .with_margin(above, below);
 }

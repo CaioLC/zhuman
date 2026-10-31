@@ -74,18 +74,16 @@ fn hrule(parent: El, id: []const u8, color: uic.Color) !void {
         .with_style(.{Style{ .fill = color }});
 }
 
-/// A full-width band in the column, its 15px insets as flow lanes (a fixed or percentage size
-/// is a content box here, so padding would push it past the column). Returns the inner row.
+/// A full-width band in the column with 15px side insets (its percentage width is a border
+/// box, so the padding comes out of the column's width). Returns the inner row.
 fn band(parent: El, id: []const u8, pad_y: f32) !El {
     const b = try parent.div(id);
     _ = b.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_sym(0, pad_y)});
-    _ = try b.spacer("lead", pad_x, 1);
+        .with_style(.{style.pad_sym(pad_x, pad_y)});
     const inner = try b.div("inner");
     _ = inner.with_size(.grow, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    _ = try b.spacer("tail", pad_x, 1);
     return inner;
 }
 
@@ -187,10 +185,10 @@ fn panelHead(parent: El, title: []const u8) !bool {
     const th = parent.ctx.res.view.theme;
     const head = try parent.div("panel_head");
     _ = head.with_size(.{ .fixed = panel_w }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(12);
+        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(12)
+        .with_margin(0, 16);
     _ = (try head.text("title", title)).with_style(.{Style{ .font = 26, .tracking = -0.04, .text = th.fg }});
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
-    _ = try parent.spacer("head_gap", 1, 16);
     return back.consume(.clicked);
 }
 
@@ -207,11 +205,12 @@ fn credits(parent: El) !void {
     _ = (try p2.text_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap })).with_style(.{Style{ .font = 12, .text = th.fg }});
     _ = (try col.text_fit("p3", "Named after a long book by Ludwig von Mises. You don't have to read it.", .{ .wrap = wrap })).with_style(.{copy});
 
-    _ = try col.spacer("meta_gap", 1, 1);
+    // 1px over the column's 11px gap above the meta block, and 9px over the meta column's
+    // 3px gap between its rule and the first row.
     const meta = try col.div("meta");
-    _ = meta.with_size(.{ .fixed = wrap }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
+    _ = meta.with_size(.{ .fixed = wrap }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3)
+        .with_margin(1 + 11, 0);
     try hrule(meta, "rule", th.line);
-    _ = try meta.spacer("pad", 1, 9);
     const rows = [_][2][]const u8{
         .{ "Design and code", "Caio Lacerda de Castro" },
         .{ "Built with", "Zig and SDL3, no engine" },
@@ -219,7 +218,8 @@ fn credits(parent: El) !void {
     };
     for (rows, 0..) |r, i| {
         const row = try meta.item("m", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center });
+        _ = row.with_flow(.{ .dir = .row, .cross = .center })
+            .with_margin(if (i == 0) @as(f32, 9 + 3) else 0, 0);
         _ = (try row.text("k", r[0])).with_style(.{Style{ .font = 10, .text = th.dim }});
         _ = (try row.text("v", try parent.ctx.arena.print(" \u{00b7} {s}", .{r[1]}))).with_style(.{Style{ .font = 10, .text = th.line2 }});
     }
@@ -250,8 +250,8 @@ pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
         .with_flow(.{ .dir = .column, .main = .center, .cross = .start });
     const lane = try middle.div("lane");
     _ = lane.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start });
-    _ = try lane.spacer("lead", body_left, 1);
+        .with_flow(.{ .dir = .row, .cross = .start })
+        .with_style(.{style.pad_each(0, pad_x, 0, body_left)});
     const body = try lane.div(@tagName(screen.*));
     _ = body.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
     switch (screen.*) {
@@ -283,7 +283,6 @@ pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
             if (try panelHead(body, "Credits")) screen.* = .menu else try credits(body);
         },
     }
-    _ = try lane.spacer("tail", pad_x, 1);
 
     try attractFoot(column, a);
     // The side columns are anchored out of flow, painted after the bands.

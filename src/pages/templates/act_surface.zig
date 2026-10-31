@@ -120,11 +120,10 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     if (selected >= opts.labels.len) selected = 0;
 
     const nav = try surface.div("nav");
-    _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height });
+    _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height }).with_margin(0, opts.nav_gap);
     const tabs = try tabs_mod.tabs_named(nav, "tabs", opts.nav_name, opts.labels, &selected);
     _ = tabs.el.with_layout(.bottom_left);
     surface.state(uic.UiState.TabsState).active = tabs.active; // existing slot: no growth
-    _ = try surface.spacer("nav_gap", 1, opts.nav_gap);
 
     const focus = std.mem.findScalar(usize, opts.focus_views, tabs.active) != null;
     var market_action: ?El = null;
@@ -133,11 +132,11 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
         _ = try surface.spacer("market_gap", 1, market_to_activity);
         const a = opts.activity;
         _ = try market_strip_mod.activity_strip(surface, "activity", a.state, a.subject, a.metadata, a.last);
-        _ = try surface.spacer("activity_gap", 1, activity_to_section);
     }
 
     const view = try surface.div("view");
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.grow_h(parent.ctx));
+    _ = view.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.grow_h(parent.ctx))
+        .with_margin(if (focus) 0 else activity_to_section, 0);
     const owner = owners[tabs.active];
     if (opts.initial_query) |q| {
         const ed = owner.state(uic.UiState.TextInputState);

@@ -81,9 +81,8 @@ fn mainPanel(parent: El, c: Content, col_w: f32) !void {
     const content_w = col_w - main_pad.left - main_pad.right;
     const panel = try readout.readout_panel(parent, "panel", content_w, main_pad);
     const heading_box = try panel.div("heading_box");
-    _ = heading_box.with_size(.{ .fixed = content_w - heading_inset }, .fit_children);
+    _ = heading_box.with_size(.{ .fixed = content_w - heading_inset }, .fit_children).with_margin(0, 8);
     _ = try readout.readout_heading(heading_box, "heading", "HOLDINGS", c.count);
-    _ = try panel.spacer("heading_gap", 1, 8);
     if (c.roster.len == 0) {
         _ = (try panel.text("none", c.empty_roster))
             .with_style(.{ style.body, Style{ .text = th.line2 } });
@@ -91,16 +90,14 @@ fn mainPanel(parent: El, c: Content, col_w: f32) !void {
         try lines(panel, "roster", c.roster, 3);
     }
     try readout.divider(panel, "divider", 9, 7);
-    _ = try readout.section_label(panel, "section_title", c.section_title);
-    _ = try panel.spacer("section_gap", 1, 8);
+    _ = (try readout.section_label(panel, "section_title", c.section_title)).with_margin(0, 8);
     try lines(panel, "section", c.section, 4);
 }
 
 fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
     const th = parent.ctx.res.view.theme;
     const panel = try readout.readout_panel(parent, "body", col_w - body_pad.left - body_pad.right, body_pad);
-    _ = try readout.section_label(panel, "title", "BODY");
-    _ = try panel.spacer("gap", 1, 1);
+    _ = (try readout.section_label(panel, "title", "BODY")).with_margin(0, 1);
     if (c.body_note) |note| {
         _ = (try panel.text("note", note)).with_style(.{Style{ .font = 11, .text = th.dim }});
         return;
