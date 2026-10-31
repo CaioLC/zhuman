@@ -19,12 +19,13 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
 **Screens lay out; templates paint.** A screen places nodes — `div`, `spacer`, `item`, the
-`with_size`/`with_flow`/`with_gap`/`with_layout` chain — and composes the shelf, and that is
-all it does with `El`. A styled node or a text leaf is a template's, down to the one-line
+`with_size`/`with_flow`/`with_gap`/`with_layout` chain, or `box`/`leaf`/`set` with an empty
+style spec `.{}` — and composes the shelf, and that is all it does with `El`. A styled node or a text leaf is a template's, down to the one-line
 readouts (`pages/templates/copy.zig`: the catalog summary, the empty-list message, a curtain's
 headline and lede), because a style chosen in a screen is art direction the shelf cannot see
-and the next screen copies or drifts from. `tools/boundary_check.sh` fails on `with_style` or a
-text node in any file under `src/pages/` outside `templates/`; the debug page (the template
+and the next screen copies or drifts from. `tools/boundary_check.sh` fails on `with_style`, a
+text or `label` node, or a `box`/`leaf`/`set` whose style spec is not `.{}`, in any file under
+`src/pages/` outside `templates/`; the debug page (the template
 audit harness) paints by design and are exempt.
 
 The foundation owns the **roles** a widget paints from; the game owns the **values**. So
@@ -635,12 +636,39 @@ returns an **`El`**: `{ ctx, node }`, a handle that carries the ctx so style and
 chain onto it, and so a child names only its id and its content:
 
 ```zig
-const header = try root.div("header");
-_ = header.with_layout(.top_left)                        // its own anchor in the parent
-          .with_flow(.{ .dir = .row, .cross = .center }) // how its children arrange
-          .with_gap(6);
-_ = try header.text("title", "BUILD").with_style(.{ h1, red }); // style — a fragment fold
+const header = try root.box("header", .{
+    .anchor = .top_left,                        // its own anchor in the parent
+    .flow = .{ .dir = .row, .cross = .center }, // how its children arrange
+    .gap = 6,
+}, .{});                                        // its style spec: none
+try header.label("title", "BUILD", .{ h1, red }); // style — a fragment fold
 ```
+
+**Placement at construction (`Props`).** Every placement setter has a `Props` field (`anchor`,
+`flow`, `w`/`h`, `min`/`max`/`pct_less` per axis, `margin`, `gap`, `overflow`, `offset`, `grow`,
+`shrink`, `opacity`, `tracks`, `in_tracks`, `at`, plus `pass_through`), and a set field is
+written by the very setter it names, so the scaling is the setters' (only a `.fixed` size rule
+scales; `gap`, `margin`, the bounds and `offset` are logical px). The style spec is a separate
+last argument, not a field: a spec is a comptime tuple that may hold `fn(*UiCtx, *Node) Style`
+fragments (`style.panel`, `btn_primary`), which no runtime struct field can carry, and it
+applies after the props, as a trailing `with_style` did (so a style `gap` wins over `.gap`).
+Device-px placement (`with_size_px`, `with_offset_px`) has no field; it stays an explicit call.
+
+| You want | Use |
+|---|---|
+| a container you keep (children, a `control`, a query) | `box(id, props, spec)`, `boxi(id, i, props, spec)` for the `i`-th item |
+| a childless box never touched again (a rule, a bar, a swatch, a `.grow` push) | `leaf(id, props, spec)`, `leafi(id, i, props, spec)` |
+| a styled text node never touched again | `label(id, str, spec)`, `label_fit(id, str, fit, spec)` |
+| a text node you read or place afterwards | `text`/`text_fit`, then `set` or setters |
+| placement or style on a handle that already exists | `set(props, spec)` |
+| a value decided after the node exists, or used inline | `div`/`item` and the `with_*` chain |
+
+`leaf`, `label` and `set` return nothing, so a statement needs no `_ =`. Two orderings carry
+over from the chain. A control's own look comes after its `control` call, because a `hot` lift
+reads the control's interaction: build the row with `box`, call `control`, then
+`row.set(.{}, .{ ...hot... })`; its children (`label`s with a lift) come after `control` too.
+And `text_fit` applies its fit before any props or style, so `.fill` followed by `.w` overrides
+the fit's width rule, exactly as `text_fit(...).with_size(...)` did.
 
 **A method on `El` describes this one node; a function describes a composition.** The
 content leaves are methods on the parent handle — `div`, `text`, `image`, `sprite`, `svg`,
@@ -686,7 +714,8 @@ click frame.
 
 Three more hooks name things the raw node left implicit. `track()` is the keep-alive read:
 query a node only so it owns a slot and its rect is stamped — a scroll view's content probe,
-the modal scrim and box, the tooltip. `state(T)` is the node's pooled slot, the home of a
+the modal scrim and box, the tooltip. `probe()` is the void geometry probe,
+`pass_through()` then `track()`: stamped, read back next frame, never a hit target. `state(T)` is the node's pooled slot, the home of a
 template's logical state unless the caller passes a pointer. `retain_child(id, T)` keeps a
 hidden direct child's slot alive from its always-built owner, without building the child.
 

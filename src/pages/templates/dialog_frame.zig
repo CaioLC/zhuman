@@ -55,36 +55,33 @@ pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
 
     // Header: 13px over, 10px under, the kicker over the title on the left and the × on the right.
     // The extra 16px off the fixed width is the engine's text/control overhang at this size.
-    const header = try m.box.div("header");
-    _ = header.with_size(.{ .fixed = opts.width - 2 * pad_x - 16 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center })
-        .with_style(.{style.pad_each(13, pad_x, 10, pad_x)});
-    const heading = try header.div("heading");
-    _ = heading.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
-    _ = (try heading.text("kicker", opts.kicker))
-        .with_style(.{ style.small, Style{ .font = 10, .tracking = 0.08, .ink = .warn } });
-    _ = (try heading.text("title", opts.title))
-        .with_style(.{ style.heading, style.ink(.fg) });
+    const header = try m.box.box("header", .{
+        .w = .{ .fixed = opts.width - 2 * pad_x - 16 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .center },
+    }, .{style.pad_each(13, pad_x, 10, pad_x)});
+    const heading = try header.box("heading", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
+    try heading.label("kicker", opts.kicker, .{ style.small, Style{ .font = 10, .tracking = 0.08, .ink = .warn } });
+    try heading.label("title", opts.title, .{ style.heading, style.ink(.fg) });
 
-    const close = try header.div("close");
-    _ = close.with_size(.{ .fixed = close_size }, .{ .fixed = close_size })
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+    const close = try header.box("close", .{
+        .w = .{ .fixed = close_size }, .h = .{ .fixed = close_size },
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
     _ = close.control(.{ .name = opts.close_name, .role = .icon_button });
-    _ = (try close.text("glyph", "\u{00d7}"))
-        .with_style(.{Style{ .font = 18, .ink = .dim, .hot = .{ .ink = .acc } }});
+    try close.label("glyph", "\u{00d7}", .{Style{ .font = 18, .ink = .dim, .hot = .{ .ink = .acc } }});
     const close_clicked = close.consume(.clicked);
     try modal_mod.rule(m.box, "header_rule", opts.width);
 
-    const body = try m.box.div("body");
-    _ = body.with_size(.{ .fixed = opts.width }, if (opts.body_height) |h| .{ .fixed = h } else .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_overflow(.clip);
+    const body = try m.box.box("body", .{
+        .w = .{ .fixed = opts.width }, .h = if (opts.body_height) |h| .{ .fixed = h } else .fit_children,
+        .flow = .{ .dir = .column, .cross = .start }, .overflow = .clip,
+    }, .{});
 
     try modal_mod.rule(m.box, "footer_rule", opts.width);
-    const footer = try m.box.div("footer");
-    _ = footer.with_size(.{ .fixed = inner_width }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(12)
-        .with_style(.{style.pad_sym(pad_x, 9)});
+    const footer = try m.box.box("footer", .{
+        .w = .{ .fixed = inner_width }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .center }, .gap = 12,
+    }, .{style.pad_sym(pad_x, 9)});
 
     return .{
         .modal = m,
@@ -99,6 +96,5 @@ pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
 
 /// The footer's note (`.dialog-note`): small dim prose, wrapped short of the actions.
 pub fn dialog_note(footer: El, id: []const u8, note: []const u8, wrap: f32) !void {
-    _ = (try footer.text_fit(id, note, .{ .wrap = wrap }))
-        .with_style(.{style.fine_print});
+    try footer.label_fit(id, note, .{ .wrap = wrap }, .{style.fine_print});
 }

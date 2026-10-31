@@ -151,9 +151,11 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     const ctx = parent.ctx;
     const cat = &ctx.res.catalog;
 
-    const section = try parent.div(id);
-    _ = section.with_size(.{ .pct_of_parent = 1.0 }, if (scroll != null) @import("./terminal.zig").fill_h(ctx) else .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
+    const section = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 },
+        .h = if (scroll != null) @import("./terminal.zig").fill_h(ctx) else .fit_children,
+        .flow = .{ .dir = .column, .cross = .start }, .gap = section_gap,
+    }, .{});
 
     // The heading counts the verbs the actor holds — the same set the summary counts against.
     var buf: [max_verbs]Entry = undefined;
@@ -173,8 +175,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     // The tiles' host: the pane itself, or a scroll viewport filling the height left under
     // the summary.
     const host = if (scroll) |st| blk: {
-        const area = try section.div("results");
-        _ = area.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
+        const area = try section.box("results", .{ .w = .{ .pct_of_parent = 1.0 }, .h = @import("./terminal.zig").grow_h(ctx) }, .{});
         const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false, .name = "Available actions; scroll for more" }, st);
         break :blk sv.content;
     } else section;
@@ -186,8 +187,10 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
     // Keyed by the verb's id, so focus follows it as the query changes.
     for (shown, 0..) |ent, pos| {
         if (try action_tile_mod.action_tile(grid.lanes[pos % 2], world, e, ent.ai, ent.rec.id, shelf.density)) |tl| {
-            _ = tl.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_tile_mod.height(shelf.density) })
-                .with_flow(.{ .dir = .column, .main = .center });
+            tl.el.set(.{
+                .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_tile_mod.height(shelf.density) },
+                .flow = .{ .dir = .column, .main = .center },
+            }, .{});
             if (tl.clicked) actions.begin(world, e, ctx.res, ent.ai);
         }
     }

@@ -18,34 +18,32 @@ pub const Names = struct { less: []const u8, more: []const u8 };
 
 fn stepButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     const th = parent.ctx.res.view.theme;
-    const b = try parent.div(id);
-    _ = b.with_size(.{ .fixed = button_w }, .{ .fixed = button_h })
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+    const b = try parent.box(id, .{
+        .w = .{ .fixed = button_w }, .h = .{ .fixed = button_h },
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
     const lit = enabled and (q.hot());
     const line = if (!enabled) th.line else if (lit) th.acc else th.line2;
     const text = if (!enabled) th.line2 else if (lit) th.acc else th.fg;
-    _ = b.with_style(.{Style{ .outline_color = line }});
-    _ = (try b.text("g", glyph)).with_style(.{Style{ .font = 12, .text = text }});
+    b.set(.{}, .{Style{ .outline_color = line }});
+    try b.label("g", glyph, .{Style{ .font = 12, .text = text }});
     return q.clicked;
 }
 
 /// Build the stepper and return `value` after this frame's clicks, clamped to `[min, max]`.
 pub fn quantity_stepper(parent: El, id: []const u8, value: u32, min: u32, max: u32, names: Names) !u32 {
     const ctx = parent.ctx;
-    const row = try parent.div(id);
-    _ = row.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
-        // The two rules on `.stepper` cascade: the group keeps its `line-2` box.
-        .with_style(.{ Style{ .outline_ink = .line2 }, style.pad(2) });
+    // The two rules on `.stepper` cascade: the group keeps its `line-2` box.
+    const row = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 2 }, .{ Style{ .outline_ink = .line2 }, style.pad(2) });
     var v = std.math.clamp(value, min, @max(min, max));
     if (try stepButton(row, "less", "\u{2212}", names.less, v > min)) v -= 1;
     // The count is display text (a `{d}` alone reads as a formatted id to the boundary check).
-    const count = try row.div("count");
-    _ = count.with_size(.{ .fixed = count_w }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-    _ = (try count.text("n", try ctx.arena.print("{}", .{v})))
-        .with_style(.{ Style{ .font = 12, .ink = .fg }, style.pad_sym(0, 2) });
+    const count = try row.box("count", .{
+        .w = .{ .fixed = count_w }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
+    try count.label("n", try ctx.arena.print("{}", .{v}), .{ Style{ .font = 12, .ink = .fg }, style.pad_sym(0, 2) });
     if (try stepButton(row, "more", "+", names.more, v < max)) v += 1;
     return v;
 }

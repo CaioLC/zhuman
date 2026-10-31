@@ -95,9 +95,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
         // terminal's own bg and clip; the page is one scroll view, so its regions take their
         // natural heights and the whole page scrolls (`stacked`).
         const capped = !opts.scroll and opts.max_h > 0 and opts.max_h < m.terminal.h;
-        _ = root.with_layout(.top_left)
-            .with_style(.{Style{ .fill = if (capped) ground else th.bg }})
-            .with_overflow(.clip);
+        root.set(.{ .anchor = .top_left, .overflow = .clip }, .{Style{ .fill = if (capped) ground else th.bg }});
         if (capped) {
             // A capped screen (the title's `min(700px, 100vh)`) sits at the top of the window
             // on the ground, as the prototype's unframed `.title-screen` does.
@@ -114,7 +112,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
     }
 
     // Framed: the window is the terminal ground; the terminal is a centered, capped box.
-    _ = root.with_layout(.top_left).with_style(.{Style{ .fill = ground }});
+    root.set(.{ .anchor = .top_left }, .{Style{ .fill = ground }});
 
     // The terminal rect in device px (metrics.terminal is logical — scale once).
     const tx = uic.view.dp(m.terminal.x, scale);
@@ -227,12 +225,10 @@ const footer_pad_top: f32 = 4;
 const footer_pad_bottom: f32 = 2;
 
 fn insetRegion(parent: El, id: []const u8, inset: f32) !El {
-    const row = try parent.div(id);
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{style.pad_sym(inset, 0)});
-    const region = try row.div("content");
-    _ = region.with_size(.grow, .fit_children);
+    const row = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .start },
+    }, .{style.pad_sym(inset, 0)});
+    const region = try row.box("content", .{ .w = .grow, .h = .fit_children }, .{});
     return region;
 }
 
@@ -244,21 +240,18 @@ fn footerBandHeight(page_pad: f32) f32 {
 /// `shell` uses the terminal content box; the debug shelf uses this seam to audit one complete
 /// 900×820 page without creating a second root or duplicating the region geometry.
 pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
-    _ = content.with_layout(.top_left)
-        .with_flow(.{ .dir = .column });
+    content.set(.{ .anchor = .top_left, .flow = .{ .dir = .column } }, .{});
 
     // Header: 48px total at the reference (15px top + 23px content + 10px bottom), with the
     // horizontal page insets as the band's padding (its percentage width is a border box, so
     // they come out of the full width).
-    const header_band = try content.div("shell_header_band");
-    _ = header_band.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{style.pad_sym(opts.page_pad, 0)});
+    const header_band = try content.box("shell_header_band", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .start },
+    }, .{style.pad_sym(opts.page_pad, 0)});
     const header = try header_band.div("shell_header");
     // The header's content is one 17px line (23px) at the reference; it grows only when the
     // stockline wraps.
-    _ = header.with_size(.grow, .fit_children)
-        .with_style(.{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
+    header.set(.{ .w = .grow, .h = .fit_children }, .{style.pad_each(header_pad_top, 0, header_pad_bottom, 0)});
 
     // Teaching-mode context strips remain shell-owned and horizontally aligned to the page.
     // The underway Act I surface owns its own market/activity strips, so these regions are absent
@@ -277,27 +270,32 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
     // row's padding, inside their border-box (grow, percentage) extents; the body therefore
     // has a definite height and cannot extend underneath the logger.
     const stack = stacked(content.ctx) and opts.scroll;
-    const grid_band = try content.div("shell_grid_band");
-    _ = grid_band.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
-        .with_flow(.{ .dir = .column })
-        .with_style(.{style.pad_each(grid_pad_top, 0, grid_pad_bottom, 0)});
-    const grid_row = try grid_band.div("row");
-    _ = grid_row.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow)
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{style.pad_sym(opts.page_pad, 0)});
+    const grid_band = try content.box("shell_grid_band", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = if (stack) .fit_children else .grow, .flow = .{ .dir = .column },
+    }, .{style.pad_each(grid_pad_top, 0, grid_pad_bottom, 0)});
+    const grid_row = try grid_band.box("row", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = if (stack) .fit_children else .grow,
+        .flow = .{ .dir = .row, .cross = .start },
+    }, .{style.pad_sym(opts.page_pad, 0)});
     const grid = try grid_row.div("shell_grid");
     // Stacked, the grid is one column: the rail above the surface (`.page-grid: 1fr`).
-    _ = grid.with_size(.grow, if (stack) .fit_children else .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = if (stack) .column else .row, .cross = .start }).with_gap(opts.section_gap);
+    grid.set(.{
+        .w = .grow, .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = if (stack) .column else .row, .cross = .start }, .gap = opts.section_gap,
+    }, .{});
 
     const rail = if (opts.rail) blk: {
-        const r = try grid.div("shell_rail");
-        _ = r.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .fit_children, if (stack) .fit_children else .{ .pct_of_parent = 1.0 });
+        const r = try grid.box("shell_rail", .{
+            .w = if (stack) .{ .pct_of_parent = 1.0 } else .fit_children,
+            .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+        }, .{});
         break :blk r;
     } else null;
 
-    const body = try grid.div("shell_body");
-    _ = body.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .grow, if (stack) .fit_children else .{ .pct_of_parent = 1.0 });
+    const body = try grid.box("shell_body", .{
+        .w = if (stack) .{ .pct_of_parent = 1.0 } else .grow,
+        .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+    }, .{});
 
     // Footer: reserve its complete 86px frame plus bottom page margin in normal flow. The
     // previous absolute child did not subtract itself from the growing grid, allowing workspace
@@ -321,25 +319,22 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
 /// must be the column's last row: a page that builds it late (after its body, once it knows
 /// the active view) leaves it off on a focus view, and the page grid takes the height back.
 pub fn footer_band(content: El, page_pad: f32) !El {
-    const band = try content.div("shell_footer_band");
-    _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(page_pad) })
-        .with_flow(.{ .dir = .column });
+    const band = try content.box("shell_footer_band", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = footerBandHeight(page_pad) },
+        .flow = .{ .dir = .column },
+    }, .{});
     // The bottom page margin is the row's trailing margin inside the band's fixed height.
-    const row = try band.div("row");
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footer_height })
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_margin(0, page_pad)
-        .with_style(.{style.pad_sym(page_pad, 0)});
+    const row = try band.box("row", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = footer_height },
+        .flow = .{ .dir = .row, .cross = .start }, .margin = .{ .after = page_pad },
+    }, .{style.pad_sym(page_pad, 0)});
     // The frame's fixed height is a content box, so it is the 86px frame less its own 4px/2px
     // padding; the outline still draws the full 86px border box.
-    const frame = try row.div("frame");
-    _ = frame.with_size(.grow, .{ .fixed = footer_height - footer_pad_top - footer_pad_bottom })
-        .with_flow(.{ .dir = .column })
-        .with_overflow(.clip)
-        .with_style(.{ Style{ .outline_ink = .line2 }, style.pad_each(footer_pad_top, 0, footer_pad_bottom, 0) });
-    const f = try frame.div("shell_footer");
-    _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
-        .with_overflow(.clip);
+    const frame = try row.box("frame", .{
+        .w = .grow, .h = .{ .fixed = footer_height - footer_pad_top - footer_pad_bottom },
+        .flow = .{ .dir = .column }, .overflow = .clip,
+    }, .{ Style{ .outline_ink = .line2 }, style.pad_each(footer_pad_top, 0, footer_pad_bottom, 0) });
+    const f = try frame.box("shell_footer", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .grow, .overflow = .clip }, .{});
     return f;
 }
 

@@ -172,16 +172,15 @@ fn firstTakeable(a: std.mem.Allocator, book: Book, list: []const *const Lot) !u3
 }
 
 fn headRow(parent: El, heads: Heads, set: *uic.TrackSet) !void {
-    const row = try parent.div("head");
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
-        .with_style(.{style.pad_each(10, pad_x, 7, pad_x)});
+    const row = try parent.box("head", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .in_tracks = set,
+    }, .{style.pad_each(10, pad_x, 7, pad_x)});
     const s = style.eyebrow_dim;
-    _ = (try row.text_fit("lot", heads.lot, .{ .cell_fill = .clip })).with_style(.{s});
-    _ = (try row.text_fit("price", heads.price, .{ .cell_fill = .clip })).with_style(.{s});
-    const corner = try row.div("corner");
-    _ = corner.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .main = .end });
-    _ = (try corner.text("t", heads.corner)).with_style(.{s});
+    try row.label_fit("lot", heads.lot, .{ .cell_fill = .clip }, .{s});
+    try row.label_fit("price", heads.price, .{ .cell_fill = .clip }, .{s});
+    const corner = try row.box("corner", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
+    try corner.label("t", heads.corner, .{s});
 }
 
 /// One ledger row (`.ledger-row`). Returns its click and key.
@@ -190,32 +189,34 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
     const th = ctx.res.view.theme;
     const a = ctx.arena;
     const refused = try book.refusal(a, lot);
-    const row = try parent.item("lot", lot.id);
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
-        .with_style(.{style.pad_each(6, pad_x, 6, pad_x)});
+    const row = try parent.boxi("lot", lot.id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .in_tracks = set,
+    }, .{style.pad_each(6, pad_x, 6, pad_x)});
     const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null });
     const hot = q.hover_focus();
     // Selected: a line2 rule round the row on the panel fill; hover: the fill alone.
-    _ = row.with_style(.{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (chosen or hot) .panel else .bg }});
+    row.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (chosen or hot) .panel else .bg }});
 
-    const item = try row.div("item");
-    _ = item.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
+    const item = try row.box("item", .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 1,
+    }, .{});
     const lot_ink = if (chosen) th.acc else if (refused != null) th.dim else th.fg;
-    _ = (try item.text_fit("lot", lot.lot, .{ .cell_fill = .ellipsis })).with_style(.{Style{ .font = 13, .text = lot_ink }});
-    _ = (try item.text_fit("sub", try book.subLine(a, lot), .{ .cell_fill = .ellipsis })).with_style(.{style.caption_faint});
+    try item.label_fit("lot", lot.lot, .{ .cell_fill = .ellipsis }, .{Style{ .font = 13, .text = lot_ink }});
+    try item.label_fit("sub", try book.subLine(a, lot), .{ .cell_fill = .ellipsis }, .{style.caption_faint});
 
-    _ = (try row.text_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell_fill = .clip }))
-        .with_style(.{Style{ .font = 12, .ink = if (refused != null) .line2 else .fg }});
+    try row.label_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell_fill = .clip }, .{Style{ .font = 12, .ink = if (refused != null) .line2 else .fg }});
 
     // Narrow, the corner takes its own line under the lot (`.row-corner { grid-column: 1 / -1 }`).
-    const corner = try row.div("corner");
-    _ = corner.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .main = if (ln.narrow) .start else .end });
+    const corner = try row.box("corner", .{
+        .w = .fit_children, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = if (ln.narrow) .start else .end },
+    }, .{});
     if (ln.narrow) _ = corner.at_track(0, El.all_tracks);
     if (refused) |r| {
-        _ = (try corner.text("t", r.short)).with_style(.{Style{ .font = 10, .ink = .danger }});
+        try corner.label("t", r.short, .{Style{ .font = 10, .ink = .danger }});
     } else {
-        _ = (try corner.text("t", try book.lotsCorner(a, lot))).with_style(.{style.caption});
+        try corner.label("t", try book.lotsCorner(a, lot), .{style.caption});
     }
     return .{ .clicked = q.clicked, .key = row.get().key };
 }
@@ -223,29 +224,26 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
 /// `THIS VISIT −5 coin · +6 water`, or `THIS VISIT nothing traded yet`.
 fn visitLedger(parent: El, visit: []const Delta) !void {
     const ctx = parent.ctx;
-    const row = try parent.div("visit");
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
-    _ = (try row.text("label", "THIS VISIT")).with_style(.{style.eyebrow_dim});
+    const row = try parent.box("visit", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 9 }, .{});
+    try row.label("label", "THIS VISIT", .{style.eyebrow_dim});
     var any = false;
     for (visit) |d| if (@abs(d.n) > 0.001) {
         any = true;
     };
     if (!any) {
-        _ = (try row.text("none", "nothing traded yet")).with_style(.{style.caption_faint});
+        try row.label("none", "nothing traded yet", .{style.caption_faint});
         return;
     }
-    const deltas = try row.div("deltas");
-    _ = deltas.with_flow(.{ .dir = .row, .cross = .center });
+    const deltas = try row.box("deltas", .{ .flow = .{ .dir = .row, .cross = .center } }, .{});
     var first = true;
     for (visit, 0..) |d, i| {
         if (@abs(d.n) <= 0.001) continue;
-        const cell = try deltas.item("d", i);
-        _ = cell.with_flow(.{ .dir = .row, .cross = .center });
+        const cell = try deltas.boxi("d", i, .{ .flow = .{ .dir = .row, .cross = .center } }, .{});
         if (!first) _ = (try cell.text("sep", " \u{00b7} ")).with_style(.{Style{ .font = 10, .ink = .fg }});
         first = false;
         const sign = if (d.n < 0) "\u{2212}" else "+";
         const text = try ctx.arena.print("{s}{s} {s}", .{ sign, try book_mod.fmtNum(ctx.arena, @abs(d.n)), d.key });
-        _ = (try cell.text("t", text)).with_style(.{Style{ .font = 10, .ink = if (d.n < 0) .warn else .good }});
+        try cell.label("t", text, .{Style{ .font = 10, .ink = if (d.n < 0) .warn else .good }});
     }
 }
 
@@ -270,10 +268,10 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     }
 
     // --- tabs, and the lot search once a direction is busy --------------------------------
-    const tab_band = try frame.body.div("tab_band");
-    _ = tab_band.with_size(.{ .fixed = frame.inner_width }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(7)
-        .with_style(.{style.pad_each(9, pad_x, 0, pad_x)});
+    const tab_band = try frame.body.box("tab_band", .{
+        .w = .{ .fixed = frame.inner_width }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .gap = 7,
+    }, .{style.pad_each(9, pad_x, 0, pad_x)});
     const previous_mode = st.mode;
     _ = try tabs_mod.tabs_named(tab_band, "modes", "Trade direction", &.{ "BUY", "SELL" }, &st.mode);
     const mode = modeOf(st);
@@ -286,7 +284,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     const editor = frame.modal.box.state(uic.UiState.TextInputState);
     if (busy or editor.len > 0) {
         const field = try uic.text_input_look(tab_band, "search", "search lots", 80, frame.modal.box, .{ .font = 10, .placeholder = th.line2 });
-        _ = field.with_size(.grow, .fit_children);
+        field.set(.{ .w = .grow, .h = .fit_children }, .{});
         query = frame.modal.box.state(uic.UiState.TextInputState).text();
     }
 
@@ -304,20 +302,22 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     if (st.page >= n_pages) st.page = @intCast(n_pages - 1);
 
     // --- the ledger | the slip ------------------------------------------------------------
-    const trade_body = try frame.body.div("trade_body");
-    _ = trade_body.with_size(.{ .fixed = ln.width }, .{ .fixed = if (ln.narrow) narrow_rows_h + 1 + body_h else body_h })
-        .with_flow(.{ .dir = if (ln.narrow) .column else .row, .cross = .start });
+    const trade_body = try frame.body.box("trade_body", .{
+        .w = .{ .fixed = ln.width }, .h = .{ .fixed = if (ln.narrow) narrow_rows_h + 1 + body_h else body_h },
+        .flow = .{ .dir = if (ln.narrow) .column else .row, .cross = .start },
+    }, .{});
 
-    const ledger = try trade_body.div("ledger");
-    _ = ledger.with_size(.{ .fixed = ln.ledger_w }, if (ln.narrow) .{ .fixed = narrow_rows_h } else .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .column, .cross = .start });
+    const ledger = try trade_body.box("ledger", .{
+        .w = .{ .fixed = ln.ledger_w },
+        .h = if (ln.narrow) .{ .fixed = narrow_rows_h } else .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = .column, .cross = .start },
+    }, .{});
     // One column set for the head and every row (`grid-template-columns` on both): the ledger
     // is their common ancestor, the rows sitting in the scroll view's content below it.
     const set = try ledgerTracks(ctx, ln);
-    _ = ledger.with_tracks(set);
+    ledger.set(.{ .tracks = set }, .{});
     if (!ln.narrow) try headRow(ledger, if (mode == .buy) identity.buy_head else identity.sell_head, set);
-    const rows_area = try ledger.div("rows_area");
-    _ = rows_area.with_size(.{ .pct_of_parent = 1.0 }, .grow);
+    const rows_area = try ledger.box("rows_area", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .grow }, .{});
     // Narrow, the rows get their height outright: a parent-high scroll view takes its content's
     // height on a stacked page, and the dialog's rows must still scroll in their own box.
     const rows = try scroll_mod.scroll_view(rows_area, "rows", .{ .height = if (ln.narrow) narrow_rows_h else 0, .framed = false, .gap = 0, .name = "lots" }, null);
@@ -325,7 +325,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     var first_row: ?u64 = null;
     if (list.len == 0) {
         const msg = if (query.len > 0) "No lot matches that search." else "Nothing to offer in this direction.";
-        _ = (try rows.content.text("empty", msg)).with_style(.{ style.note, style.pad_sym(pad_x, 14) });
+        try rows.content.label("empty", msg, .{ style.note, style.pad_sym(pad_x, 14) });
     } else {
         const start = @as(usize, st.page) * per_page;
         const end = @min(list.len, start + per_page);
@@ -339,8 +339,10 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         }
     }
 
-    _ = (try trade_body.div("divider")).with_size(if (ln.narrow) .{ .fixed = ln.width } else .{ .fixed = 1 }, if (ln.narrow) .{ .fixed = 1 } else .{ .pct_of_parent = 1.0 })
-        .with_style(.{style.rule_fill});
+    try trade_body.leaf("divider", .{
+        .w = if (ln.narrow) .{ .fixed = ln.width } else .{ .fixed = 1 },
+        .h = if (ln.narrow) .{ .fixed = 1 } else .{ .pct_of_parent = 1.0 },
+    }, .{style.rule_fill});
 
     const chosen = book.byId(st.selected);
     const slip = try slip_mod.deal_slip(trade_body, "slip", book, chosen, st.lots, .{
@@ -354,8 +356,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 
     // --- footer: the visit ledger, then the paginator and LEAVE ---------------------------
     try visitLedger(frame.footer, visit);
-    const actions = try frame.footer.div("actions");
-    _ = actions.with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    const actions = try frame.footer.box("actions", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 10 }, .{});
     if (busy) st.page = @intCast(try paginator_mod.paginator(actions, "pages", st.page, list.len, per_page));
     const leave = try button_mod.button_variant(actions, "leave", "LEAVE", true, .secondary);
 

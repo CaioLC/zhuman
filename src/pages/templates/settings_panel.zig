@@ -46,14 +46,12 @@ const difficulty_notes = [_][]const u8{
 
 /// One `.setting` row: the label, and the field column the caller fills.
 fn settingRow(parent: El, id: []const u8, label: []const u8, width: f32) !El {
-    const row = try parent.div(id);
-    _ = row.with_size(.{ .fixed = width }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start }).with_gap(row_gap);
-    _ = (try row.text_fit("label", label, .{ .cell = .{ .mode = .clip, .width = label_w } }))
-        .with_style(.{ style.eyebrow_dim, style.pad_each(4, 0, 0, 0) });
-    const field = try row.div("field");
-    _ = field.with_size(.grow, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
+    const row = try parent.box(id, .{
+        .w = .{ .fixed = width }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .start },
+        .gap = row_gap,
+    }, .{});
+    try row.label_fit("label", label, .{ .cell = .{ .mode = .clip, .width = label_w } }, .{ style.eyebrow_dim, style.pad_each(4, 0, 0, 0) });
+    const field = try row.box("field", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 4 }, .{});
     return field;
 }
 
@@ -61,64 +59,62 @@ fn settingRow(parent: El, id: []const u8, label: []const u8, width: f32) !El {
 /// clicked this frame.
 pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected: ?usize) !?usize {
     const th = parent.ctx.res.view.theme;
-    const group = try parent.div(id);
-    _ = group.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(5);
+    const group = try parent.box(id, .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 5,
+    }, .{});
     var clicked: ?usize = null;
     for (labels, 0..) |label, i| {
-        const b = try group.item("c", i);
-        _ = b.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
+        const b = try group.boxi("c", i, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
         const on = selected == i;
         const q = b.control(.{ .name = label, .role = .radio, .checked = on, .selected = on });
         if (q.clicked) clicked = i;
         const hot = q.hover_focus();
         const line = if (on) th.acc else if (hot) th.line2 else th.line;
         const text = if (on) th.acc else if (hot) th.fg else th.dim;
-        _ = (try b.text("lbl", label)).with_style(.{ Style{ .font = 11, .text = text }, style.pad_sym(9, 3) });
-        _ = b.with_style(.{Style{ .outline_color = line }});
+        try b.label("lbl", label, .{ Style{ .font = 11, .text = text }, style.pad_sym(9, 3) });
+        b.set(.{}, .{Style{ .outline_color = line }});
     }
     return clicked;
 }
 
 /// A `.setting-note`: line2 prose, with an optional run of dim `.b` segments after it.
 fn note(parent: El, id: []const u8, text: []const u8) !void {
-    _ = (try parent.text(id, text)).with_style(.{style.caption_faint});
+    try parent.label(id, text, .{style.caption_faint});
 }
 
 /// DIFFICULTY's note: its sentence, then the two multipliers it names, in dim.
 fn difficultyNote(parent: El, d: Settings.Difficulty) !void {
     const ctx = parent.ctx;
     try note(parent, "note", difficulty_notes[@intFromEnum(d)]);
-    const terms = try parent.div("terms");
-    _ = terms.with_flow(.{ .dir = .row, .cross = .center });
+    const terms = try parent.box("terms", .{ .flow = .{ .dir = .row, .cross = .center } }, .{});
     const quiet = style.caption_faint;
     const loud = style.caption;
-    _ = (try terms.text("a", "Inputs cost ")).with_style(.{quiet});
-    _ = (try terms.text("cost", try ctx.arena.print("\u{00d7}{d:.2}", .{d.cost()}))).with_style(.{loud});
-    _ = (try terms.text("b", ", yields return ")).with_style(.{quiet});
-    _ = (try terms.text("yield", try ctx.arena.print("\u{00d7}{d:.2}", .{d.yield()}))).with_style(.{loud});
-    _ = (try terms.text("c", ".")).with_style(.{quiet});
+    try terms.label("a", "Inputs cost ", .{quiet});
+    try terms.label("cost", try ctx.arena.print("\u{00d7}{d:.2}", .{d.cost()}), .{loud});
+    try terms.label("b", ", yields return ", .{quiet});
+    try terms.label("yield", try ctx.arena.print("\u{00d7}{d:.2}", .{d.yield()}), .{loud});
+    try terms.label("c", ".", .{quiet});
 }
 
 /// A `.level`: the slider filling the lane, then its value as a percentage.
 fn level(parent: El, id: []const u8, label: []const u8, value: *f32) !void {
     const ctx = parent.ctx;
-    const row = try parent.div(id);
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    const lane = try row.div("lane");
-    _ = lane.with_size(.grow, .fit_children);
+    const row = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .gap = 10,
+    }, .{});
+    const lane = try row.box("lane", .{ .w = .grow, .h = .fit_children }, .{});
     const s = try slider_mod.slider(lane, .{ .id = "range", .label = label, .value = value.*, .min = 0, .max = 100, .step = 1 });
     value.* = s.value;
-    _ = (try row.text_fit("out", try ctx.arena.print("{d:.0}%", .{s.value}), .{ .cell = .{ .mode = .clip, .width = level_out_w } }))
-        .with_style(.{Style{ .font = 11, .ink = .fg }});
+    try row.label_fit("out", try ctx.arena.print("{d:.0}%", .{s.value}), .{ .cell = .{ .mode = .clip, .width = level_out_w } }, .{Style{ .font = 11, .ink = .fg }});
 }
 
 pub fn settings_panel(parent: El, id: []const u8, s: *Settings, opts: Options) !Changed {
     var changed: Changed = .{};
-    const panel = try parent.div(id);
-    _ = panel.with_size(.{ .fixed = opts.width }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
+    const panel = try parent.box(id, .{
+        .w = .{ .fixed = opts.width }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+        .gap = panel_gap,
+    }, .{});
 
     {
         const f = try settingRow(panel, "difficulty", "DIFFICULTY", opts.width);

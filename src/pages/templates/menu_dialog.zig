@@ -88,10 +88,10 @@ fn footerNote(menu: *const res_mod.MenuState) []const u8 {
 
 /// The sub-screens' head: BACK at the right (`.menu-dialog .panel-head`). Returns its click.
 fn backHead(parent: El) !bool {
-    const head = try parent.div("head");
-    _ = head.with_size(.{ .fixed = dims(parent.ctx).inner }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .end, .cross = .center })
-        .with_margin(0, 11);
+    const head = try parent.box("head", .{
+        .w = .{ .fixed = dims(parent.ctx).inner }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .end, .cross = .center }, .margin = .{ .after = 11 },
+    }, .{});
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
     return back.consume(.clicked);
 }
@@ -100,25 +100,23 @@ fn backHead(parent: El) !bool {
 fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bool {
     const ctx = parent.ctx;
     const enabled = saving or slot.filled;
-    const row = try parent.item("slot", i);
-    _ = row.with_size(.{ .fixed = dims(ctx).inner - 18 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(11)
-        .with_style(.{style.pad_sym(9, 8)});
+    const row = try parent.boxi("slot", i, .{
+        .w = .{ .fixed = dims(ctx).inner - 18 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .cross = .center }, .gap = 11,
+    }, .{style.pad_sym(9, 8)});
     var dbuf: [64]u8 = undefined;
     const what = if (slot.filled) describe(&dbuf, slot.act, slot.day, slot.people) else "empty";
     const verb = if (saving) (if (slot.filled) "OVERWRITE" else "SAVE HERE") else if (slot.filled) "LOAD" else "";
     var nbuf: [16]u8 = undefined;
     const q = row.control(.{ .enabled = enabled, .name = std.mem.print(&nbuf, "Slot {d}", .{i + 1}) catch "Slot", .role = .button, .value = what });
     const hot = enabled and (q.hover_focus());
-    _ = row.with_style(.{Style{ .outline_ink = if (hot) .line2 else .line, .fill_ink = if (hot) .panel else .bg }});
+    row.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .line, .fill_ink = if (hot) .panel else .bg }});
 
-    _ = (try row.text_fit("id", std.mem.print(&nbuf, "SLOT {d}", .{i + 1}) catch "SLOT", .{ .cell = .{ .mode = .clip, .width = slot_id_w } }))
-        .with_style(.{style.eyebrow_dim});
-    const what_box = try row.div("what_box");
-    _ = what_box.with_size(.grow, .fit_children);
-    _ = (try what_box.text("what", what)).with_style(.{Style{ .font = 12, .ink = if (enabled) .fg else .line2 }});
+    try row.label_fit("id", std.mem.print(&nbuf, "SLOT {d}", .{i + 1}) catch "SLOT", .{ .cell = .{ .mode = .clip, .width = slot_id_w } }, .{style.eyebrow_dim});
+    const what_box = try row.box("what_box", .{ .w = .grow, .h = .fit_children }, .{});
+    try what_box.label("what", what, .{Style{ .font = 12, .ink = if (enabled) .fg else .line2 }});
     if (verb.len > 0) {
-        _ = (try row.text("verb", verb)).with_style(.{Style{ .font = 10, .tracking = 0.07, .ink = if (enabled) .acc else .line2 }});
+        try row.label("verb", verb, .{Style{ .font = 10, .tracking = 0.07, .ink = if (enabled) .acc else .line2 }});
     }
     return q.clicked;
 }
@@ -128,8 +126,7 @@ fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, 
         menu.screen = .menu;
         return;
     }
-    const list = try parent.div("slots");
-    _ = list.with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
+    const list = try parent.box("slots", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 5 }, .{});
     for (saves.slots, 0..) |slot, i| {
         if (!try slotRow(list, i, slot, saving)) continue;
         var buf: [40]u8 = undefined;
@@ -149,22 +146,19 @@ fn quitScreen(parent: El, saves: *const res_mod.SaveSlots, session: Session) !Qu
     const ctx = parent.ctx;
     const copy_style = Style{ .font = 12, .ink = .fg };
 
-    const first = try parent.div("stands");
-    _ = first.with_flow(.{ .dir = .row, .cross = .center }).with_margin(0, 4);
-    _ = (try first.text("a", "The settlement stands at ")).with_style(.{copy_style});
-    _ = (try first.text("when", try ctx.arena.print("Act {s} \u{00b7} Day {d}", .{ actNumeral(session.act), session.day })))
-        .with_style(.{Style{ .font = 12, .ink = .warn }});
-    _ = (try first.text("b", ".")).with_style(.{copy_style});
+    const first = try parent.box("stands", .{ .flow = .{ .dir = .row, .cross = .center }, .margin = .{ .after = 4 } }, .{});
+    try first.label("a", "The settlement stands at ", .{copy_style});
+    try first.label("when", try ctx.arena.print("Act {s} \u{00b7} Day {d}", .{ actNumeral(session.act), session.day }), .{Style{ .font = 12, .ink = .warn }});
+    try first.label("b", ".", .{copy_style});
 
     var dbuf: [64]u8 = undefined;
     const rest = if (saves.latest()) |i| blk: {
         const s = saves.slots[i];
         break :blk try ctx.arena.print("Your most recent save is slot {d}, {s} \u{2014} everything since then is lost.", .{ i + 1, describe(&dbuf, s.act, s.day, s.people) });
     } else "There is no save yet \u{2014} everything since the start is lost.";
-    _ = (try parent.text_fit("lost", rest, .{ .wrap = 52 * 7.2 })).with_style(.{copy_style}).with_margin(0, 14);
+    (try parent.text_fit("lost", rest, .{ .wrap = 52 * 7.2 })).set(.{ .margin = .{ .after = 14 } }, .{copy_style});
 
-    const row = try parent.div("confirm");
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
+    const row = try parent.box("confirm", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 9 }, .{});
     const quit = try button_mod.button_variant(row, "quit", "QUIT TO MENU", true, .danger);
     const save_first = try button_mod.button_variant(row, "save_first", "SAVE FIRST", true, .secondary);
     const cancel = try button_mod.button_variant(row, "cancel", "CANCEL", true, .secondary);
@@ -186,18 +180,16 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
     });
 
     // `.menu-dialog .dialog-body`: 14px over, 15px aside, 16px under.
-    const body = try frame.body.div("content");
-    _ = body.with_size(.{ .fixed = dims(ctx).inner }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{style.pad_each(14, frame_mod.pad_x, 16, frame_mod.pad_x)});
+    const body = try frame.body.box("content", .{
+        .w = .{ .fixed = dims(ctx).inner }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+    }, .{style.pad_each(14, frame_mod.pad_x, 16, frame_mod.pad_x)});
 
     var resumed = frame.close_clicked;
     var quit = false;
     var changed: settings_mod.Changed = .{};
     var initial_focus: ?u64 = null;
     // A body keyed by the screen, so a screen's controls never inherit another's focus/state.
-    const screen_box = try body.div(@tagName(shown));
-    _ = screen_box.with_flow(.{ .dir = .column, .cross = .start });
+    const screen_box = try body.box(@tagName(shown), .{ .flow = .{ .dir = .column, .cross = .start } }, .{});
     switch (shown) {
         .menu => {
             const list = try menu_list_mod.menu_list(screen_box, "menu", &.{

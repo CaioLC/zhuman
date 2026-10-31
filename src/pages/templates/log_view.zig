@@ -89,29 +89,27 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         .{ .basis = .{ .fr = 1 } },
     }, stamp_gap);
     // The content spans the viewport (the gutter is outside it), so a row's `1.0` is definite.
-    _ = view.content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_tracks(tracks);
+    view.content.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .tracks = tracks }, .{});
 
     var i: usize = 0;
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
         const newest = i == 0;
-        const row = try view.content.item("log", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks)
-            .with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = row_h })
-            .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
+        const row = try view.content.boxi("log", i, .{
+            .flow = .{ .dir = .row, .cross = .center }, .in_tracks = tracks, .w = .{ .pct_of_parent = 1.0 },
+            .h = .{ .fixed = row_h },
+        }, .{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
         // The game-time stamp — clipped at its track, so message text lines up down the feed.
         var sbuf: [24]u8 = undefined;
         const stamp = timeStamp(&sbuf, entry.at, ctx.res.config.secs_per_day);
-        _ = (try row.text_fit("at", stamp, .{ .cell_fill = .clip }))
-            .with_style(.{ style.small, style.muted });
+        try row.label_fit("at", stamp, .{ .cell_fill = .clip }, .{ style.small, style.muted });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
         // toward `dim` unless their tone already carries meaning. A free leaf in the `fr`
         // track: a message longer than the track runs on and the viewport cuts it at its edge.
         // `style.toneRole`: `good` maps to the dedicated `good` role, not the accent.
         const tone_ink = style.toneRole(entry.tone);
         const ink: style.ThemeRole = if (newest) tone_ink else if (entry.tone == .normal) .dim else tone_ink;
-        _ = (try row.text("m", entry.text()))
-            .with_style(.{ style.small, Style{ .ink = ink } });
+        try row.label("m", entry.text(), .{ style.small, Style{ .ink = ink } });
     }
 }
 

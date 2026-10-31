@@ -32,11 +32,10 @@ pub const Curtain = struct { el: El, clicked: bool };
 pub fn curtain(parent: El, id: []const u8, opts: Options) !Curtain {
     const th = parent.ctx.res.view.theme;
     const col = if (opts.title) |title| try panel_mod.panel(parent, id, title) else blk: {
-        const c = try parent.div(id);
-        _ = c.with_flow(.{ .dir = .column, .cross = .center }).with_gap(10);
+        const c = try parent.box(id, .{ .flow = .{ .dir = .column, .cross = .center }, .gap = 10 }, .{});
         break :blk c;
     };
-    _ = col.with_layout(.center);
+    col.set(.{ .anchor = .center }, .{});
 
     if (opts.figure) |fig| try figure_mod.figure(col, "figure", fig, opts.figure_color orelse th.danger);
     // Stable ids across beats: the leaves persist and re-source their text.

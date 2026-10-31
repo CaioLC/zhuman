@@ -20,14 +20,9 @@ pub const Pad = struct { up: f32, right: f32, down: f32, left: f32 };
 /// The bordered panel: a column that fits its children, `content_width` wide. The engine's
 /// fixed sizes are content boxes, so the caller derives the width from its rail minus `pad`.
 pub fn readout_panel(parent: El, id: []const u8, content_width: f32, pad: Pad) !El {
-    const panel = try parent.div(id);
-    _ = panel.with_size(.{ .fixed = content_width }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{
-        Style{ .outline_ink = .line },
-        style.solid,
-        style.pad_each(pad.up, pad.right, pad.down, pad.left),
-    });
+    const panel = try parent.box(id, .{
+        .w = .{ .fixed = content_width }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+    }, .{ Style{ .outline_ink = .line }, style.solid, style.pad_each(pad.up, pad.right, pad.down, pad.left) });
     return panel;
 }
 
@@ -39,9 +34,10 @@ pub fn section_label(parent: El, id: []const u8, text: []const u8) !El {
 /// A panel's heading row: the section label on the left and an optional count on the right,
 /// on one baseline.
 pub fn readout_heading(parent: El, id: []const u8, title: []const u8, count: ?[]const u8) !El {
-    const heading = try parent.div(id);
-    _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
+    const heading = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline },
+    }, .{});
     _ = try section_label(heading, "title", title);
     if (count) |c| _ = try section_label(heading, "count", c);
     return heading;
@@ -50,12 +46,10 @@ pub fn readout_heading(parent: El, id: []const u8, title: []const u8, count: ?[]
 /// A readout line filled into `row`, a node the caller keyed: body-size primary copy on the
 /// left and an 11px readout in `right_color` on the right, on one baseline.
 pub fn kv_line_in(row: El, left: []const u8, right: []const u8, right_color: Color) !void {
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try row.text("label", left)).with_style(.{ style.body, style.ink(.fg) });
-    const tail = try row.div("tail");
-    _ = tail.with_layout(.center_right);
-    _ = (try tail.text("value", right)).with_style(.{Style{ .font = 11, .text = right_color }});
+    row.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .baseline } }, .{});
+    try row.label("label", left, .{ style.body, style.ink(.fg) });
+    const tail = try row.box("tail", .{ .anchor = .center_right }, .{});
+    try tail.label("value", right, .{Style{ .font = 11, .text = right_color }});
 }
 
 /// A readout line under its own id.
@@ -65,19 +59,17 @@ pub fn kv_line(parent: El, id: []const u8, left: []const u8, right: []const u8, 
 
 /// One sentence of dim 11px prose around a live value in `value_color`.
 pub fn sentence(parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: Color) !void {
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .baseline });
-    _ = (try row.text("prefix", prefix)).with_style(.{style.note});
-    _ = (try row.text("value", value)).with_style(.{Style{ .font = 11, .text = value_color }});
-    _ = (try row.text("suffix", suffix)).with_style(.{style.note});
+    const row = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .baseline } }, .{});
+    try row.label("prefix", prefix, .{style.note});
+    try row.label("value", value, .{Style{ .font = 11, .text = value_color }});
+    try row.label("suffix", suffix, .{style.note});
 }
 
 /// A 1px hairline across the panel, `above` px under the block before it and `below` px over
 /// the next.
 pub fn divider(parent: El, id: []const u8, above: f32, below: f32) !void {
-    const wrap = try parent.div(id);
-    _ = wrap.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column });
-    const line = try wrap.div("line");
-    _ = line.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 }).with_style(.{style.rule_fill})
-        .with_margin(above, below);
+    const wrap = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
+    try wrap.leaf("line", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 1 }, .margin = .{ .before = above, .after = below },
+    }, .{style.rule_fill});
 }

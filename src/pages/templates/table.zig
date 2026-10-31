@@ -18,9 +18,8 @@ const Color = uic.Color;
 
 /// A column label over its lane. Returns the cell.
 pub fn header_cell(parent: El, id: []const u8, label: []const u8) !El {
-    const box = try parent.div(id);
-    _ = box.with_size(.fit_children, .fit_children);
-    _ = (try box.text("t", label)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = .line2 }});
+    const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children }, .{});
+    try box.label("t", label, .{Style{ .font = 9, .tracking = 0.07, .ink = .line2 }});
     return box;
 }
 
@@ -37,8 +36,7 @@ pub const SortShown = enum { none, ascending, descending };
 pub const SortCell = struct { el: El, key: u64, clicked: bool };
 
 pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: SortShown, group: u64) !SortCell {
-    const box = try parent.div(id);
-    _ = box.with_size(.fit_children, .fit_children);
+    const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children }, .{});
     const q = box.control(.{
         .name = label,
         .role = .button,
@@ -55,7 +53,7 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
         .ascending => std.mem.print(&buf, "{s} \u{2191}", .{label}) catch label,
         .descending => std.mem.print(&buf, "{s} \u{2193}", .{label}) catch label,
     };
-    _ = (try box.text("t", text)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .hot = .{ .ink = .acc } }});
+    try box.label("t", text, .{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .hot = .{ .ink = .acc } }});
     return .{ .el = box, .key = box.get().key, .clicked = q.clicked };
 }
 
@@ -63,13 +61,13 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
 /// the downstream lanes out of line. `right` anchors the readout to the lane's right edge.
 /// Returns the cell.
 pub fn cell(parent: El, id: []const u8, text: []const u8, color: Color, right: bool) !El {
-    const box = try parent.div(id);
-    _ = box.with_size(.fit_children, .fit_children);
+    const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children }, .{});
     // The anchored inner spans the cell, so the text elides at the track.
-    const inner = try box.div("i");
-    _ = inner.with_layout(if (right) .center_right else .center_left).with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
-    _ = (try inner.text_fit("t", text, .{ .cell_fill = .ellipsis }))
-        .with_style(.{Style{ .font = 11, .text = color }}); // `.build-row { font-size: 11px }`
+    const inner = try box.box("i", .{
+        .anchor = if (right) .center_right else .center_left, .w = .{ .pct_of_parent = 1.0 },
+        .h = .fit_children,
+    }, .{});
+    try inner.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{Style{ .font = 11, .text = color }}); // `.build-row { font-size: 11px }`
     return box;
 }
 
@@ -77,8 +75,6 @@ pub fn cell(parent: El, id: []const u8, text: []const u8, color: Color, right: b
 /// the set's gap apart), centered on the cross axis, padded `pad_x` at the sides and `pad_y`
 /// above and below. The caller appends cells and may make it a control.
 pub fn table_row(parent: El, id: []const u8, set: *uic.TrackSet, pad_x: f32, pad_y: f32) !El {
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
-        .with_style(.{style.pad_sym(pad_x, pad_y)});
+    const row = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .center }, .in_tracks = set }, .{style.pad_sym(pad_x, pad_y)});
     return row;
 }

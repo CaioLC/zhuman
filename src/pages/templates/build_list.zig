@@ -335,9 +335,10 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
 
     // The header and the rows (in the scroll view's content) share one set of column tracks;
     // the list is their common ancestor.
-    const outer = try parent.div(id);
-    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx))
-        .with_flow(.{ .dir = .column }).with_gap(6).with_tracks(set);
+    const outer = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = @import("./terminal.zig").grow_h(ctx),
+        .flow = .{ .dir = .column }, .gap = 6, .tracks = set,
+    }, .{});
 
     // --- the controls bar: search only; the table's column headers sort -------------------
     const controls = try cc.catalog_controls(outer, "build_ctl", cc.recipes_placeholder, catalog_state, search_owner);
@@ -350,8 +351,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // Built before sorting so a header click re-sorts this same frame.
     var sbuf: [40]u8 = undefined;
     const summary = std.mem.print(&sbuf, "{d} of {d} recipes shown", .{ entries.len, shelfTotal(world, e, cat, shelf) }) catch "?";
-    _ = (try outer.text("summary", summary))
-        .with_style(.{ style.small, style.muted });
+    try outer.label("summary", summary, .{ style.small, style.muted });
 
     // `CatalogState` opens with sort 0 (state) and dir `none`; `none` reads as the sort's
     // natural direction, so the blank list opens on STATE ↓ (nearest first).
@@ -380,8 +380,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // The view takes what the controls, summary, header and milestone leave. It spans the
     // list less the gutter it keeps for its track, so it never covers a lane, appears only on
     // overflow, and never narrows the rows when it does; the rows span the view.
-    const view = try outer.div("rows_view");
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
+    const view = try outer.box("rows_view", .{ .w = .{ .pct_of_parent = 1.0 }, .h = @import("./terminal.zig").grow_h(ctx) }, .{});
     const sv = try scroll_view_mod.scroll_view(view, "scroll", .{
         .gutter = row_mod.scroll_gutter,
         .height = 0,
@@ -393,8 +392,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
 
     if (entries.len == 0) {
         const msg = if (blank) try ctx.arena.print("Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
-        _ = (try rows.text("empty", msg))
-            .with_style(.{ style.body, style.faint });
+        try rows.label("empty", msg, .{ style.body, style.faint });
     }
 
     for (entries) |ent| {

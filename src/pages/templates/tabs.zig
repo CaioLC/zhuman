@@ -46,8 +46,7 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*us
 pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
     const ctx = parent.ctx;
 
-    const bar = try parent.div(id);
-    _ = bar.with_flow(.{ .dir = .row }).with_gap(10);
+    const bar = try parent.box(id, .{ .flow = .{ .dir = .row }, .gap = 10 }, .{});
     const bar_key = bar.get().key;
 
     const st = bar.state(TabsState);

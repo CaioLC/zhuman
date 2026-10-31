@@ -56,8 +56,7 @@ pub fn slider(parent: El, opts: Options) !Slider {
     const model = SliderModel{ .min = opts.min, .max = opts.max, .step = opts.step };
     var value = model.snap(opts.value);
 
-    const control = try parent.div(opts.id);
-    _ = control.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = control_h });
+    const control = try parent.box(opts.id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = control_h } }, .{});
     const key = control.get().key;
     ctx.res.commands.registerRange(key);
 
@@ -152,15 +151,11 @@ pub fn slider(parent: El, opts: Options) !Slider {
             .pass_through();
 
         const fill = try thumb.polygon("fill", &diamond, th.bg, 1.0);
-        _ = fill.with_layout(.top_left)
-            .with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
-            .pass_through();
+        fill.set(.{ .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 }, .pass_through = true }, .{});
 
         const edge_color = if (!opts.enabled) th.dim else if (focused or q.hovering or state.dragging) th.acc else th.fg;
         const edge = try thumb.polyline("edge", &diamond, thumb_half_stroke, true, .butt, edge_color, 1.0);
-        _ = edge.with_layout(.top_left)
-            .with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
-            .pass_through();
+        edge.set(.{ .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 }, .pass_through = true }, .{});
     }
 
     return .{ .value = value, .el = control };

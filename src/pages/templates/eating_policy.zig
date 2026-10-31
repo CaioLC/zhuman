@@ -27,27 +27,26 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
 
     // The percentage width is a border box, so the horizontal padding comes out of it and the
     // outlined panel remains exactly 100% of its fluid grid column.
-    const panel = try parent.div(id);
-    _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_h })
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{ Style{ .outline_ink = .line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
-    const content = try panel.div("content");
-    _ = content.with_size(.grow, .{ .fixed = tile_h - pad_top - pad_bottom })
-        .with_flow(.{ .dir = .column }).with_gap(5)
-        .with_style(.{style.pad_each(pad_top, 0, pad_bottom, 0)});
+    const panel = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = tile_h }, .flow = .{ .dir = .row, .cross = .start },
+    }, .{ Style{ .outline_ink = .line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
+    const content = try panel.box("content", .{
+        .w = .grow, .h = .{ .fixed = tile_h - pad_top - pad_bottom }, .flow = .{ .dir = .column }, .gap = 5,
+    }, .{style.pad_each(pad_top, 0, pad_bottom, 0)});
 
     // Create the three prototype rows in visual order first. Their contents can be attached
     // after the slider resolves this frame's live value without changing sibling order.
-    const head = try content.div("head");
-    _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
+    const head = try content.box("head", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between },
+        .gap = 8,
+    }, .{});
 
-    const range_slot = try content.div("range");
-    _ = range_slot.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 18 });
+    const range_slot = try content.box("range", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 18 } }, .{});
 
-    const scale_row = try content.div("scale");
-    _ = scale_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
+    const scale_row = try content.box("scale", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between },
+        .gap = 8,
+    }, .{});
 
     const range = try slider_mod.slider(range_slot, .{
         .id = "control",
@@ -62,22 +61,14 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     const rate = eating.rate(new_value);
     const word = eating.word(new_value);
 
-    _ = (try head.text("title", "EATING POLICY")).with_style(.{
-        Style{ .font = 10, .tracking = 0.06, .ink = .dim },
-    });
+    try head.label("title", "EATING POLICY", .{ Style{ .font = 10, .tracking = 0.06, .ink = .dim } });
 
     var output_buf: [48]u8 = undefined;
     const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
-    _ = (try head.text("value", output)).with_style(.{
-        Style{ .font = 10, .ink = if (enabled) .acc else .dim },
-    });
+    try head.label("value", output, .{ Style{ .font = 10, .ink = if (enabled) .acc else .dim } });
 
-    _ = (try scale_row.text("min", "meager")).with_style(.{
-        Style{ .font = 9, .ink = .line2 },
-    });
-    _ = (try scale_row.text("max", "lavish")).with_style(.{
-        Style{ .font = 9, .ink = .line2 },
-    });
+    try scale_row.label("min", "meager", .{ Style{ .font = 9, .ink = .line2 } });
+    try scale_row.label("max", "lavish", .{ Style{ .font = 9, .ink = .line2 } });
 
     // Replace the generic numeric semantic value published by `slider` with the prototype's
     // richer aria-valuetext. Duplicate-key publication updates in place, preserving order.

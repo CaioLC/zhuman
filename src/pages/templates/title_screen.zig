@@ -70,20 +70,16 @@ const inks = Inks{
 };
 
 fn hrule(parent: El, id: []const u8, color: uic.Color) !void {
-    _ = (try parent.div(id)).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-        .with_style(.{Style{ .fill = color }});
+    try parent.leaf(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 1 } }, .{Style{ .fill = color }});
 }
 
 /// A full-width band in the column with 15px side insets (its percentage width is a border
 /// box, so the padding comes out of the column's width). Returns the inner row.
 fn band(parent: El, id: []const u8, pad_y: f32) !El {
-    const b = try parent.div(id);
-    _ = b.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_sym(pad_x, pad_y)});
-    const inner = try b.div("inner");
-    _ = inner.with_size(.grow, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    const b = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+    }, .{style.pad_sym(pad_x, pad_y)});
+    const inner = try b.box("inner", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 10 }, .{});
     return inner;
 }
 
@@ -92,32 +88,30 @@ fn attractTop(parent: El, a: Attract) !void {
     const top = try band(parent, "attract_top", 11);
     // `.start`, not `space_between`: the stocks grow into the rest, so the run context still
     // sits flush right, and a packed run keeps the 14px gap out of the stocks' share.
-    _ = top.with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(14);
+    top.set(.{ .flow = .{ .dir = .row, .main = .start, .cross = .start }, .gap = 14 }, .{});
     const left = try top.div("stocks");
     // `.attract-stock { flex-wrap: wrap }`: the stocks take what the run context leaves and
     // wrap rather than run under it. The grown width is final before heights are solved, so
     // the fit height counts every wrapped line.
-    _ = left.with_size(.grow, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center, .wrap = true }).with_gap(13);
+    left.set(.{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center, .wrap = true }, .gap = 13 }, .{});
     for (a.stocks, 0..) |s, i| {
-        _ = (try (try left.item("s", i)).text("t", s)).with_style(.{Style{ .font = 11, .ink = .line2 }});
+        try (try left.item("s", i)).label("t", s, .{Style{ .font = 11, .ink = .line2 }});
     }
     const run = try top.text("run", a.run);
-    _ = run.with_style(.{Style{ .font = 11, .tracking = 0.04, .ink = .line2 }});
+    run.set(.{}, .{Style{ .font = 11, .tracking = 0.04, .ink = .line2 }});
     try hrule(parent, "top_rule", th.line);
 }
 
 fn attractStrip(parent: El, a: Attract) !void {
     const th = parent.ctx.res.view.theme;
     const strip = try band(parent, "attract_strip", 7);
-    _ = strip.with_flow(.{ .dir = .row, .main = .start, .cross = .center });
-    const lead = try strip.div("lead");
-    _ = lead.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    strip.set(.{ .flow = .{ .dir = .row, .main = .start, .cross = .center } }, .{});
+    const lead = try strip.box("lead", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 10 }, .{});
     const quiet = Style{ .font = 11, .ink = .line2 };
-    _ = (try lead.text("dot", "\u{25cf}")).with_style(.{Style{ .font = 11, .text = inks.mid }});
-    _ = (try lead.text("signal", a.strip_signal)).with_style(.{quiet});
-    _ = (try lead.text("copy", a.strip_copy)).with_style(.{quiet});
-    _ = (try strip.text("tail", "TRADE \u{2192}")).with_style(.{Style{ .font = 11, .tracking = 0.06, .ink = .line2 }});
+    try lead.label("dot", "\u{25cf}", .{Style{ .font = 11, .text = inks.mid }});
+    try lead.label("signal", a.strip_signal, .{quiet});
+    try lead.label("copy", a.strip_copy, .{quiet});
+    try strip.label("tail", "TRADE \u{2192}", .{Style{ .font = 11, .tracking = 0.06, .ink = .line2 }});
     try hrule(parent, "strip_rule", th.line);
 }
 
@@ -125,67 +119,67 @@ fn attractFoot(parent: El, a: Attract) !void {
     const th = parent.ctx.res.view.theme;
     try hrule(parent, "foot_rule", th.line);
     const foot_band = try band(parent, "attract_foot", 10);
-    const foot = try foot_band.div("lines");
-    _ = foot.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
+    const foot = try foot_band.box("lines", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
     const tones = [_]uic.Color{ th.dim, inks.mid, th.line2 };
     for (a.log, 0..) |l, i| {
-        const row = try foot.item("l", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
-        _ = (try row.text_fit("t", l.time, .{ .cell = .{ .mode = .clip, .width = 5 * 6.6 } }))
-            .with_style(.{Style{ .font = 11, .text = inks.faint }});
-        _ = (try row.text("m", l.text)).with_style(.{Style{ .font = 11, .text = tones[@min(i, tones.len - 1)] }});
+        const row = try foot.boxi("l", i, .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 9 }, .{});
+        try row.label_fit("t", l.time, .{ .cell = .{ .mode = .clip, .width = 5 * 6.6 } }, .{Style{ .font = 11, .text = inks.faint }});
+        try row.label("m", l.text, .{Style{ .font = 11, .text = tones[@min(i, tones.len - 1)] }});
     }
 }
 
 /// The work column and the holdings column, anchored at the screen's upper right.
 fn attractSide(parent: El, a: Attract) !void {
-    const work = try parent.div("attract_work");
-    _ = work.with_layout(.top_right).with_offset(-pad_x, 108)
-        .with_size(.{ .fixed = side_w }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(9);
+    const work = try parent.box("attract_work", .{
+        .anchor = .top_right, .offset = .{ .x = -pad_x, .y = 108 }, .w = .{ .fixed = side_w },
+        .h = .fit_children, .flow = .{ .dir = .column }, .gap = 9,
+    }, .{});
     for (a.work, 0..) |w, i| {
-        const row = try work.item("w", i);
-        _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column }).with_gap(3);
-        const top = try row.div("top");
-        _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_flow(.{ .dir = .row, .main = .space_between });
-        _ = (try top.text("name", w.name)).with_style(.{Style{ .font = 10, .text = inks.head }});
-        _ = (try top.text("pct", w.pct)).with_style(.{Style{ .font = 10, .text = inks.head }});
-        const bar = try row.div("bar");
-        _ = bar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 2 })
-            .with_flow(.{ .dir = .row })
-            .with_style(.{Style{ .fill = inks.rule }});
-        _ = (try bar.div("fill")).with_size(.{ .pct_of_parent = std.math.clamp(w.fraction, 0, 1) }, .{ .fixed = 2 })
-            .with_style(.{Style{ .fill = inks.fill }});
+        const row = try work.boxi("w", i, .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 3,
+        }, .{});
+        const top = try row.box("top", .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+            .flow = .{ .dir = .row, .main = .space_between },
+        }, .{});
+        try top.label("name", w.name, .{Style{ .font = 10, .text = inks.head }});
+        try top.label("pct", w.pct, .{Style{ .font = 10, .text = inks.head }});
+        const bar = try row.box("bar", .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 2 }, .flow = .{ .dir = .row },
+        }, .{Style{ .fill = inks.rule }});
+        try bar.leaf("fill", .{
+            .w = .{ .pct_of_parent = std.math.clamp(w.fraction, 0, 1) }, .h = .{ .fixed = 2 },
+        }, .{Style{ .fill = inks.fill }});
     }
 
-    const rail = try parent.div("attract_rail");
-    _ = rail.with_layout(.top_right).with_offset(-pad_x, 236)
-        .with_size(.{ .fixed = side_w }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(3);
-    const head = try rail.div("head");
-    _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between })
-        .with_style(.{style.pad_each(0, 0, 4, 0)});
-    _ = (try head.text("title", "HOLDINGS")).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
-    _ = (try head.text("count", a.rail_count)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
+    const rail = try parent.box("attract_rail", .{
+        .anchor = .top_right, .offset = .{ .x = -pad_x, .y = 236 }, .w = .{ .fixed = side_w },
+        .h = .fit_children, .flow = .{ .dir = .column }, .gap = 3,
+    }, .{});
+    const head = try rail.box("head", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between },
+    }, .{style.pad_each(0, 0, 4, 0)});
+    try head.label("title", "HOLDINGS", .{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
+    try head.label("count", a.rail_count, .{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
     try hrule(rail, "head_rule", inks.rule);
     for (a.rail, 0..) |r, i| {
-        const row = try rail.item("r", i);
-        _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
-        _ = (try row.text("label", r.label)).with_style(.{style.caption_faint});
-        _ = (try row.text("value", r.value)).with_style(.{Style{ .font = 10, .text = inks.deep }});
+        const row = try rail.boxi("r", i, .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+            .flow = .{ .dir = .row, .main = .space_between }, .gap = 8,
+        }, .{});
+        try row.label("label", r.label, .{style.caption_faint});
+        try row.label("value", r.value, .{Style{ .font = 10, .text = inks.deep }});
     }
 }
 
 /// `.panel-head`: the screen's title and BACK. Returns BACK's click.
 fn panelHead(parent: El, title: []const u8) !bool {
-    const head = try parent.div("panel_head");
-    _ = head.with_size(.{ .fixed = panel_w }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(12)
-        .with_margin(0, 16);
-    _ = (try head.text("title", title)).with_style(.{Style{ .font = 26, .tracking = -0.04, .ink = .fg }});
+    const head = try parent.box("panel_head", .{
+        .w = .{ .fixed = panel_w }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .center }, .gap = 12,
+        .margin = .{ .after = 16 },
+    }, .{});
+    try head.label("title", title, .{Style{ .font = 26, .tracking = -0.04, .ink = .fg }});
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
     return back.consume(.clicked);
 }
@@ -194,20 +188,19 @@ fn credits(parent: El) !void {
     const th = parent.ctx.res.view.theme;
     const wrap: f32 = 56 * 7.2;
     const copy = Style{ .font = 12, .ink = .dim };
-    const col = try parent.div("credits");
-    _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(11);
-    _ = (try col.text_fit("p1", "A game about what people do when they cannot have everything.", .{ .wrap = wrap })).with_style(.{copy});
-    const p2 = try col.div("p2");
-    _ = p2.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
-    _ = (try p2.text_fit("a", "You begin alone, and every hour you spend is an hour you did not spend on something else. That is the whole difficulty. Later there are others, and you will find they are better than you at some things \u{2014}", .{ .wrap = wrap })).with_style(.{copy});
-    _ = (try p2.text_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap })).with_style(.{Style{ .font = 12, .ink = .fg }});
-    _ = (try col.text_fit("p3", "Named after a long book by Ludwig von Mises. You don't have to read it.", .{ .wrap = wrap })).with_style(.{copy});
+    const col = try parent.box("credits", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 11 }, .{});
+    try col.label_fit("p1", "A game about what people do when they cannot have everything.", .{ .wrap = wrap }, .{copy});
+    const p2 = try col.box("p2", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
+    try p2.label_fit("a", "You begin alone, and every hour you spend is an hour you did not spend on something else. That is the whole difficulty. Later there are others, and you will find they are better than you at some things \u{2014}", .{ .wrap = wrap }, .{copy});
+    try p2.label_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap }, .{Style{ .font = 12, .ink = .fg }});
+    try col.label_fit("p3", "Named after a long book by Ludwig von Mises. You don't have to read it.", .{ .wrap = wrap }, .{copy});
 
     // 1px over the column's 11px gap above the meta block, and 9px over the meta column's
     // 3px gap between its rule and the first row.
-    const meta = try col.div("meta");
-    _ = meta.with_size(.{ .fixed = wrap }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3)
-        .with_margin(1 + 11, 0);
+    const meta = try col.box("meta", .{
+        .w = .{ .fixed = wrap }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 3,
+        .margin = .{ .before = 1 + 11 },
+    }, .{});
     try hrule(meta, "rule", th.line);
     const rows = [_][2][]const u8{
         .{ "Design and code", "Caio Lacerda de Castro" },
@@ -215,11 +208,12 @@ fn credits(parent: El) !void {
         .{ "Typeface", "JetBrains Mono" },
     };
     for (rows, 0..) |r, i| {
-        const row = try meta.item("m", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center })
-            .with_margin(if (i == 0) @as(f32, 9 + 3) else 0, 0);
-        _ = (try row.text("k", r[0])).with_style(.{style.caption});
-        _ = (try row.text("v", try parent.ctx.arena.print(" \u{00b7} {s}", .{r[1]}))).with_style(.{style.caption_faint});
+        const row = try meta.boxi("m", i, .{
+            .flow = .{ .dir = .row, .cross = .center },
+            .margin = .{ .before = if (i == 0) @as(f32, 9 + 3) else 0 },
+        }, .{});
+        try row.label("k", r[0], .{style.caption});
+        try row.label("v", try parent.ctx.arena.print(" \u{00b7} {s}", .{r[1]}), .{style.caption_faint});
     }
 }
 
@@ -235,26 +229,26 @@ pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
     ctx.res.commands.registerEscape(sh.root.get().key);
     if (sh.root.query().dismissed and screen.* != .menu) screen.* = .menu;
 
-    const column = try sh.content.div("column");
-    _ = column.with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .column, .cross = .start });
+    const column = try sh.content.box("column", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = .column, .cross = .start },
+    }, .{});
     try attractTop(column, a);
     try attractStrip(column, a);
 
     // The body band fills the height between the bands and centres the menu column in it
     // (`.title-body { align-content: center }`), 56px in from the left.
-    const middle = try column.div("middle");
-    _ = middle.with_size(.{ .pct_of_parent = 1.0 }, .grow)
-        .with_flow(.{ .dir = .column, .main = .center, .cross = .start });
-    const lane = try middle.div("lane");
-    _ = lane.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{style.pad_each(0, pad_x, 0, body_left)});
-    const body = try lane.div(@tagName(screen.*));
-    _ = body.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
+    const middle = try column.box("middle", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .grow,
+        .flow = .{ .dir = .column, .main = .center, .cross = .start },
+    }, .{});
+    const lane = try middle.box("lane", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .start },
+    }, .{style.pad_each(0, pad_x, 0, body_left)});
+    const body = try lane.box(@tagName(screen.*), .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start } }, .{});
     switch (screen.*) {
         .menu => {
-            _ = (try body.text("wordmark", "Human Action")).with_style(.{Style{ .font = 46, .tracking = -0.06, .ink = .fg }});
+            try body.label("wordmark", "Human Action", .{Style{ .font = 46, .tracking = -0.06, .ink = .fg }});
             const list = try menu_list_mod.menu_list(body, "menu", &.{
                 .{ .id = "continue", .label = "Continue", .enabled = false, .why = "no settlement in progress" },
                 .{ .id = "new", .label = "New game" },

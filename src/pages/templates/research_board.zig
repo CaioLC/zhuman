@@ -292,16 +292,18 @@ fn domainText(a: std.mem.Allocator, k: Kind, sep: []const u8, lower: bool) ![]co
 // ---- small chrome --------------------------------------------------------------------------
 
 fn hrule(parent: El, id: []const u8, w: ui_size) !void {
-    _ = (try parent.div(id)).with_size(w, .{ .fixed = 1 }).with_style(.{style.rule_fill});
+    try parent.leaf(id, .{ .w = w, .h = .{ .fixed = 1 } }, .{style.rule_fill});
 }
 const ui_size = uic.SizeRule;
 
 /// Centre content in `box` on both axes: a column packs it at the vertical middle (a row's
 /// cross alignment only spans its line), and a full-width row centres it across.
 fn centreIn(box: El) !El {
-    _ = box.with_flow(.{ .dir = .column, .main = .center, .cross = .start });
-    const row = try box.div("centre");
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+    box.set(.{ .flow = .{ .dir = .column, .main = .center, .cross = .start } }, .{});
+    const row = try box.box("centre", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
     return row;
 }
 
@@ -313,47 +315,48 @@ fn centred(parent: El, id: []const u8, i: usize, str: []const u8, x: f32, y: f32
     const box = try parent.item(id, i);
     _ = box.with_layout(.top_left).with_offset_px(x - w / 2, y - h / 2).with_size_px(.{ .fixed = w }, .{ .fixed = h })
 ;
-    _ = (try (try centreIn(box)).text("t", str)).with_style(.{Style{ .font = font, .text = ink, .tracking = tracking }});
+    try (try centreIn(box)).label("t", str, .{Style{ .font = font, .text = ink, .tracking = tracking }});
 }
 
 /// A `.board-view-button`. Returns its click.
 fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, enabled: bool, min_w: f32, rest: Color, value: ?[]const u8) !bool {
     const th = parent.ctx.res.view.theme;
-    const b = try parent.div(id);
-    _ = b.with_size(.{ .fixed = min_w }, .{ .fixed = 22 });
+    const b = try parent.box(id, .{ .w = .{ .fixed = min_w }, .h = .{ .fixed = 22 } }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value });
     const hot = enabled and (q.hover_focus());
-    _ = b.with_style(.{Style{ .outline_ink = if (hot) .line2 else .bg }});
-    _ = (try (try centreIn(b)).text("t", label)).with_style(.{Style{ .font = 10, .text = if (hot) th.fg else rest }});
+    b.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .bg }});
+    try (try centreIn(b)).label("t", label, .{Style{ .font = 10, .text = if (hot) th.fg else rest }});
     if (!enabled) _ = b.with_opacity(0.32);
     return q.clicked and enabled;
 }
 
 /// A `.chip`. Returns its click.
 fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
-    const b = try parent.div(id);
-    _ = b.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
+    const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
-    _ = (try b.text("t", label)).with_style(.{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+    try b.label("t", label, .{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     return q.clicked;
 }
 
 fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
-    const row = try parent.item("row", i);
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(6);
-    _ = (try row.text("name", name)).with_style(.{Style{ .font = 9, .ink = .fg }});
-    _ = (try row.text("value", value)).with_style(.{style.fine_print});
+    const row = try parent.boxi("row", i, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline }, .gap = 6,
+    }, .{});
+    try row.label("name", name, .{Style{ .font = 9, .ink = .fg }});
+    try row.label("value", value, .{style.fine_print});
 }
 
 fn detailSection(parent: El, id: []const u8, heading: []const u8) !El {
-    const sec = try parent.div(id);
-    _ = sec.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{style.pad_each(11, 0, 0, 0)});
+    const sec = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+    }, .{style.pad_each(11, 0, 0, 0)});
     try hrule(sec, "rule", .{ .pct_of_parent = 1.0 });
-    _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = .dim }})
-        .with_margin(8, 6);
-    const list = try sec.div("list");
-    _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
+    (try sec.text("h", heading)).set(.{ .margin = .{ .before = 8, .after = 6 } }, .{Style{ .font = 9, .tracking = 0.07, .ink = .dim }});
+    const list = try sec.box("list", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+        .gap = 5,
+    }, .{});
     return list;
 }
 
@@ -409,42 +412,54 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const view = try parent.div(id);
     // Stacked (≤760) the detail drops under a 560px board and the view takes its height.
     const stack = @import("./terminal.zig").stacked(ctx);
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start })
-        .with_style(.{style.pad_each(4, 0, 0, 0)});
+    view.set(.{
+        .w = .{ .pct_of_parent = 1.0 }, .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = .column, .cross = .start },
+    }, .{style.pad_each(4, 0, 0, 0)});
 
     // --- topbar: RESEARCH and its question | the chips and the search ----------------------
     const topbar_box = try view.div("topbar_box");
     // `.structure-topbar { align-items: end }`: a column packs the row at the box's foot (a
     // row's cross alignment only spans its own line).
-    _ = topbar_box.with_size(.{ .pct_of_parent = 1.0 }, if (ctx.res.view.metrics.width_class.atMost(.w560)) .fit_children else .{ .fixed = 44 })
-        .with_flow(.{ .dir = .column, .main = .end, .cross = .start })
-        .with_margin(0, 8);
+    topbar_box.set(.{
+        .w = .{ .pct_of_parent = 1.0 },
+        .h = if (ctx.res.view.metrics.width_class.atMost(.w560)) .fit_children else .{ .fixed = 44 },
+        .flow = .{ .dir = .column, .main = .end, .cross = .start }, .margin = .{ .after = 8 },
+    }, .{});
     const topbar = try topbar_box.div("topbar");
     // Below 560 the toolbar drops under the title and the question goes (`.structure-topbar`).
     const narrow = ctx.res.view.metrics.width_class.atMost(.w560);
     if (narrow) {
-        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(8);
+        topbar.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 8 }, .{});
     } else {
-        _ = topbar.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
+        topbar.set(.{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+            .flow = .{ .dir = .row, .main = .space_between, .cross = .center },
+        }, .{});
     }
     const title = try topbar.div("title");
     // The title takes what the tools leave and clips its question (`.structure-title p`
     // ellipsizes), so a narrow surface never runs it under the chips.
-    _ = title.with_size(if (narrow) .fit_children else .grow, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12).with_overflow(.clip);
+    title.set(.{
+        .w = if (narrow) .fit_children else .grow, .h = .fit_children,
+        .flow = .{ .dir = .row, .cross = .baseline }, .gap = 12, .overflow = .clip,
+    }, .{});
     const h = try title.text("h", "RESEARCH");
-    _ = h.with_style(.{ style.heading, style.ink(.fg) });
+    h.set(.{}, .{ style.heading, style.ink(.fg) });
     if (!narrow) {
         // `.structure-title p { text-overflow: ellipsis }`: the question is a cell of what the
         // heading leaves. It grows into the title row's remainder after the heading and the
         // row's 12px gap, and reserves no width of its own, so it never widens the title.
         const question = "What exists, and what does it take?";
         const p_style = style.note;
-        _ = (try title.text_fit("p", question, .{ .cell_fill = .ellipsis })).with_style(.{p_style}).with_size(.grow, .content);
+        (try title.text_fit("p", question, .{ .cell_fill = .ellipsis })).set(.{ .w = .grow, .h = .content }, .{p_style});
     }
-    const tools = try topbar.div("tools");
-    _ = tools.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
-    const chips = try tools.div("chips");
-    _ = chips.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
+    const tools = try topbar.box("tools", .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 9,
+    }, .{});
+    const chips = try tools.box("chips", .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 8,
+    }, .{});
     const filter: Filter = @enumFromInt(@min(st.filter, 2));
     if (try chip(chips, "researched", "researched", filter == .researched)) st.filter = @intFromEnum(Filter.researched);
     if (try chip(chips, "available", "available", filter == .available)) st.filter = @intFromEnum(Filter.available);
@@ -455,12 +470,19 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     try hrule(view, "top_rule", .{ .pct_of_parent = 1.0 });
 
     // --- layout: the board pane | the detail aside -----------------------------------------
-    const layout = try view.div("layout");
-    _ = layout.with_size(.{ .pct_of_parent = 1.0 }, if (stack) .fit_children else .grow).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start }).with_gap(12);
-    const pane = try layout.div("pane");
-    _ = pane.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .grow, if (stack) .{ .fixed = 560 } else .{ .pct_of_parent = 1.0 }).with_overflow(.clip);
-    const aside = try layout.div("aside");
-    _ = aside.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = detail_w }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = if (stack) .column else .row, .cross = .start });
+    const layout = try view.box("layout", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = if (stack) .fit_children else .grow,
+        .flow = .{ .dir = if (stack) .column else .row, .cross = .start }, .gap = 12,
+    }, .{});
+    const pane = try layout.box("pane", .{
+        .w = if (stack) .{ .pct_of_parent = 1.0 } else .grow,
+        .h = if (stack) .{ .fixed = 560 } else .{ .pct_of_parent = 1.0 }, .overflow = .clip,
+    }, .{});
+    const aside = try layout.box("aside", .{
+        .w = if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = detail_w },
+        .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = if (stack) .column else .row, .cross = .start },
+    }, .{});
 
     // The pane is the board's one focus stop: arrows walk the tiles, Escape clears.
     const pq = pane.control(.{ .name = "Research board", .role = .group, .cursor = .grab });
@@ -473,14 +495,17 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     if (pq.focused and st.selected != null) ctx.res.commands.registerEscape(pane.get().key);
     if (pq.dismissed) st.selected = null;
 
-    _ = (try pane.gradient("ground", .vertical, &.{
+    (try pane.gradient("ground", .vertical, &.{
         .{ .pos = 0, .color = pane_top },
         .{ .pos = 0.56, .color = pane_mid },
         .{ .pos = 1, .color = pane_low },
-    }, 1.0)).with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 }).pass_through();
-    const edge = try pane.div("edge");
-    _ = edge.with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 })
-        .with_style(.{Style{ .outline_color = if (pq.focus_visible) th.acc else pane_edge }});
+    }, 1.0)).set(.{
+        .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+        .pass_through = true,
+    }, .{});
+    try pane.leaf("edge", .{
+        .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+    }, .{Style{ .outline_color = if (pq.focus_visible) th.acc else pane_edge }});
 
     // Which tiles the filter and the search leave lit.
     var faded: [roster.max_techs]bool = @splat(false);
@@ -554,8 +579,10 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const panning = st.drag.active and st.drag.crossed;
 
         // Sector labels, then the hub, then the tiles.
-        const labels = try pane.div("sectors");
-        _ = labels.with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 }).pass_through();
+        const labels = try pane.box("sectors", .{
+            .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+            .pass_through = true,
+        }, .{});
         const sector_font = 9 * cam.unit() / scale;
         for (0..6) |w| {
             const ang = @as(f32, @floatFromInt(w)) * 60 * std.math.pi / 180.0;
@@ -566,14 +593,17 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
 
         const side = box_units * cam.unit();
         const px_unit = scale / side; // one screen px in a box's unit square
-        const tiles = try pane.div("tiles");
-        _ = tiles.with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 });
+        const tiles = try pane.box("tiles", .{ .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 } }, .{});
         {
             const hub = try tiles.div("hub");
             _ = hub.with_layout(.top_left).with_offset_px(cam.x(center) - side / 2, cam.y(center) - side / 2).with_size_px(.{ .fixed = side }, .{ .fixed = side }).pass_through();
             const pts = hexPts(visible_size);
-            _ = (try hub.polygon("fill", &pts, hub_fill, 1)).with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 });
-            _ = (try hub.polyline("edge", &pts, 0.675 * px_unit, true, .butt, hub_edge, 1)).with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 });
+            (try hub.polygon("fill", &pts, hub_fill, 1)).set(.{
+                .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+            }, .{});
+            (try hub.polyline("edge", &pts, 0.675 * px_unit, true, .butt, hub_edge, 1)).set(.{
+                .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
+            }, .{});
         }
 
         var out_buf: [6]u16 = undefined;
@@ -588,7 +618,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const tile = try tiles.item("tile", i);
             _ = tile.with_layout(.top_left).with_offset_px(cam.x(p.x) - side / 2, cam.y(p.y) - side / 2).with_size_px(.{ .fixed = side }, .{ .fixed = side });
             // The filter and search fade rides `board_s` (`.tech-tile { transition: opacity }`).
-            _ = tile.with_opacity(tweened(ctx, tile.get().key ^ 0xfade, &st.fade_prev[i], if (faded[i]) 0.11 else 1));
+            tile.set(.{ .opacity = tweened(ctx, tile.get().key ^ 0xfade, &st.fade_prev[i], if (faded[i]) 0.11 else 1) }, .{});
             const live = s != .locked;
             var hot = false;
             if (live) {
@@ -619,11 +649,12 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             };
             const stroke = if (is_out) th.warn else if (selected or hot) th.fg else baseStroke(ctx, k);
             const full: uic.SizeRule = .{ .pct_of_parent = 1.0 };
-            _ = (try tile.polygon("fill", &fill_pts, baseFill(ctx, k), fill_op)).with_layout(.top_left).with_size(full, full).pass_through();
+            (try tile.polygon("fill", &fill_pts, baseFill(ctx, k), fill_op)).set(.{
+                .anchor = .top_left, .w = full, .h = full, .pass_through = true,
+            }, .{});
             if (is_out) {
                 // `stroke-dasharray: 2 2`, edge by edge.
-                const dashes = try tile.div("dashes");
-                _ = dashes.with_layout(.top_left).with_size(full, full).pass_through();
+                const dashes = try tile.box("dashes", .{ .anchor = .top_left, .w = full, .h = full, .pass_through = true }, .{});
                 const edge_px = visible_size * cam.unit();
                 const per_edge: usize = @max(1, @as(usize, @intFromFloat(edge_px / (4 * scale))));
                 var n: usize = 0;
@@ -637,13 +668,16 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
                             .{ .x = v0.x + (v1.x - v0.x) * t0, .y = v0.y + (v1.y - v0.y) * t0 },
                             .{ .x = v0.x + (v1.x - v0.x) * t1, .y = v0.y + (v1.y - v0.y) * t1 },
                         };
-                        _ = (try (try dashes.item("d", n)).with_layout(.top_left).with_size(full, full).polyline("l", &seg, stroke_w / 2 * px_unit, false, .butt, stroke, 1))
-                            .with_layout(.top_left).with_size(full, full);
+                        (try (try dashes.item("d", n)).with_layout(.top_left).with_size(full, full).polyline("l", &seg, stroke_w / 2 * px_unit, false, .butt, stroke, 1)).set(.{
+                            .anchor = .top_left, .w = full, .h = full,
+                        }, .{});
                         n += 1;
                     }
                 }
             } else {
-                _ = (try tile.polyline("edge", &fill_pts, stroke_w / 2 * px_unit, true, .butt, stroke, if (s == .locked) 0.52 else 1)).with_layout(.top_left).with_size(full, full).pass_through();
+                (try tile.polyline("edge", &fill_pts, stroke_w / 2 * px_unit, true, .butt, stroke, if (s == .locked) 0.52 else 1)).set(.{
+                    .anchor = .top_left, .w = full, .h = full, .pass_through = true,
+                }, .{});
             }
 
             // The resource rails: a full loop on a pure tile, a half on each side of a hybrid.
@@ -651,20 +685,21 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             if (k.hybrid) {
                 for (0..2) |ri| {
                     const pts = hybridRail(k.res[ri], k.res[1 - ri]);
-                    _ = (try (try tile.item("rail", ri)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, false, .butt, wedgeColor(ctx, k.res[ri]), rail_op))
-                        .with_layout(.top_left).with_size(full, full).pass_through();
+                    (try (try tile.item("rail", ri)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, false, .butt, wedgeColor(ctx, k.res[ri]), rail_op)).set(.{
+                        .anchor = .top_left, .w = full, .h = full, .pass_through = true,
+                    }, .{});
                 }
             } else {
                 const pts = hexPts(rail_size);
-                _ = (try (try tile.item("rail", 0)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, true, .butt, wedgeColor(ctx, k.res[0]), rail_op))
-                    .with_layout(.top_left).with_size(full, full).pass_through();
+                (try (try tile.item("rail", 0)).with_layout(.top_left).with_size(full, full).polyline("l", &pts, 1.1 * px_unit, true, .butt, wedgeColor(ctx, k.res[0]), rail_op)).set(.{
+                    .anchor = .top_left, .w = full, .h = full, .pass_through = true,
+                }, .{});
             }
 
             // The label: hidden on a locked silhouette.
             if (live and t.short.len > 0) {
-                const lab = try tile.div("label");
-                _ = lab.with_layout(.top_left).with_size(full, full).pass_through();
-                _ = (try (try centreIn(lab)).text("t", t.short)).with_style(.{Style{ .font = label_font, .tracking = -0.045, .text = if (s == .researched) label_researched else if (s == .available) label_available else label_default }});
+                const lab = try tile.box("label", .{ .anchor = .top_left, .w = full, .h = full, .pass_through = true }, .{});
+                try (try centreIn(lab)).label("t", t.short, .{Style{ .font = label_font, .tracking = -0.045, .text = if (s == .researched) label_researched else if (s == .available) label_available else label_default }});
             }
 
             // The material dots, and the research marker on an established tile.
@@ -684,17 +719,19 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             for (mats, 0..) |w, mi| {
                 const dx = start_x + @as(f32, @floatFromInt(mi)) * spacing;
                 const pts = circlePts(dx, 16, 2);
-                const dot = try tile.item("dot", mi);
-                _ = dot.with_layout(.top_left).with_size(full, full).pass_through();
-                _ = (try dot.polygon("f", &pts, wedgeColor(ctx, w), dot_op)).with_layout(.top_left).with_size(full, full);
-                _ = (try dot.polyline("e", &pts, 0.375 * px_unit, true, .butt, marker_edge, dot_op)).with_layout(.top_left).with_size(full, full);
+                const dot = try tile.boxi("dot", mi, .{ .anchor = .top_left, .w = full, .h = full, .pass_through = true }, .{});
+                (try dot.polygon("f", &pts, wedgeColor(ctx, w), dot_op)).set(.{ .anchor = .top_left, .w = full, .h = full }, .{});
+                (try dot.polyline("e", &pts, 0.375 * px_unit, true, .butt, marker_edge, dot_op)).set(.{
+                    .anchor = .top_left, .w = full, .h = full,
+                }, .{});
             }
             if (s == .researched) {
                 const pts = circlePts(17, -16, 2.6);
-                const mark = try tile.div("researched");
-                _ = mark.with_layout(.top_left).with_size(full, full).pass_through();
-                _ = (try mark.polygon("f", &pts, marker_edge, 1)).with_layout(.top_left).with_size(full, full);
-                _ = (try mark.polyline("e", &pts, 0.325 * px_unit, true, .butt, research_edge, 1)).with_layout(.top_left).with_size(full, full);
+                const mark = try tile.box("researched", .{ .anchor = .top_left, .w = full, .h = full, .pass_through = true }, .{});
+                (try mark.polygon("f", &pts, marker_edge, 1)).set(.{ .anchor = .top_left, .w = full, .h = full }, .{});
+                (try mark.polyline("e", &pts, 0.325 * px_unit, true, .butt, research_edge, 1)).set(.{
+                    .anchor = .top_left, .w = full, .h = full,
+                }, .{});
             }
         }
 
@@ -715,23 +752,22 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             _ = tip.with_layout(.top_left).with_offset_px(lx, ly).with_size(.fit_children, .fit_children)
                 .with_flow(.{ .dir = .column, .cross = .start })
                 .with_style(.{ style.pad_sym(7, 5), Style{ .fill_ink = .panel, .outline_ink = .dim } }).pass_through();
-            _ = (try tip.text("name", t.name)).with_style(.{Style{ .font = 9, .ink = .acc }});
-            _ = (try tip.text("line", try a.print("ring {} \u{00b7} {s} \u{00b7} {s}", .{ ringOf(t), try domainText(a, k, " + ", true), @tagName(states[hi]) }))).with_style(.{Style{ .font = 9, .ink = .fg }});
+            try tip.label("name", t.name, .{Style{ .font = 9, .ink = .acc }});
+            try tip.label("line", try a.print("ring {} \u{00b7} {s} \u{00b7} {s}", .{ ringOf(t), try domainText(a, k, " + ", true), @tagName(states[hi]) }), .{Style{ .font = 9, .ink = .fg }});
         }
     }
 
     // The zoom controls, over the board's top-right corner.
     {
-        const bar = try pane.div("camera");
-        _ = bar.with_layout(.top_right).with_offset(-7, 7).with_size(.fit_children, .fit_children)
-            .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
-            .with_style(.{ style.pad(2), Style{ .fill_ink = .bg, .outline_ink = .line2 } });
+        const bar = try pane.box("camera", .{
+            .anchor = .top_right, .offset = .{ .x = -7, .y = 7 }, .w = .fit_children, .h = .fit_children,
+            .flow = .{ .dir = .row, .cross = .center }, .gap = 2,
+        }, .{ style.pad(2), Style{ .fill_ink = .bg, .outline_ink = .line2 } });
         // The zoom buttons speak the level they leave the board at (`output aria-live`).
         const pct = try a.print("{}%", .{@as(u32, @intFromFloat(@round(st.zoom * 100)))});
         if (try viewButton(bar, "out", "-", "Zoom out", st.zoom > min_zoom + 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom - zoom_step, center, center);
-        const level = try bar.div("level");
-        _ = level.with_size(.{ .fixed = 37 }, .{ .fixed = 22 });
-        _ = (try (try centreIn(level)).text("t", pct)).with_style(.{style.fine_print});
+        const level = try bar.box("level", .{ .w = .{ .fixed = 37 }, .h = .{ .fixed = 22 } }, .{});
+        try (try centreIn(level)).label("t", pct, .{style.fine_print});
         if (try viewButton(bar, "in", "+", "Zoom in", st.zoom < max_zoom - 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom + zoom_step, center, center);
         const moved = @abs(st.zoom - 1) >= 0.001 or @abs(st.pan_x) >= 0.001 or @abs(st.pan_y) >= 0.001;
         if (try viewButton(bar, "reset", "reset", "Reset board pan and zoom", moved, 35, th.line2, null)) {
@@ -745,27 +781,30 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     if (stack) {
         try hrule(aside, "rule", .{ .pct_of_parent = 1.0 });
     } else {
-        _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{style.rule_fill});
+        try aside.leaf("rule", .{ .w = .{ .fixed = 1 }, .h = .{ .pct_of_parent = 1.0 } }, .{style.rule_fill});
     }
     // Stacked, the detail spans the page under the board (`.structure-detail` in one column).
     const inner = if (stack) @import("./terminal.zig").stackedWidth(ctx) else detail_inner;
     const detail = try aside.div("detail");
     // Beside the board, 9px past the 1px rule make the 10px inset; the 11px top is padding.
-    _ = detail.with_size(.{ .fixed = inner }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start }).with_overflow(.clip)
-        .with_margin(if (stack) 0 else detail_pad - 1, 0)
-        .with_style(.{style.pad_each(11, 0, 0, 0)});
+    detail.set(.{
+        .w = .{ .fixed = inner }, .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
+        .flow = .{ .dir = .column, .cross = .start }, .overflow = .clip,
+        .margin = .{ .before = if (stack) 0 else detail_pad - 1 },
+    }, .{style.pad_each(11, 0, 0, 0)});
     if (st.selected) |si| {
         const t = &cat.technologies[si];
         const k = kindOf(t.coord);
         const s = states[si];
         const ring = ringOf(t);
-        _ = (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).with_style(.{Style{ .font = 9, .tracking = 0.08, .ink = .dim }})
-            .with_margin(0, 3);
-        _ = (try detail.text("name", t.name)).with_style(.{ style.heading, style.ink(.fg) })
-            .with_margin(0, 8);
-        const tags = try detail.div("tags");
-        _ = tags.with_size(.{ .fixed = inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5)
-            .with_margin(0, 10);
+        (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).set(.{
+            .margin = .{ .after = 3 },
+        }, .{Style{ .font = 9, .tracking = 0.08, .ink = .dim }});
+        (try detail.text("name", t.name)).set(.{ .margin = .{ .after = 8 } }, .{ style.heading, style.ink(.fg) });
+        const tags = try detail.box("tags", .{
+            .w = .{ .fixed = inner }, .h = .fit_children,
+            .flow = .{ .dir = .row, .wrap = true, .cross = .center }, .gap = 5, .margin = .{ .after = 10 },
+        }, .{});
         var tag_n: usize = 0;
         const tag_texts = [_][]const u8{
             if (k.hybrid) "HYBRID" else "PURE",
@@ -777,8 +816,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             if (tt.len == 0) continue;
             const tag = try tags.item("tag", tag_n);
             tag_n += 1;
-            _ = tag.with_size(.fit_children, .fit_children).with_style(.{ style.pad_sym(4, 1), Style{ .outline_ink = .line2 } });
-            _ = (try tag.text("t", tt)).with_style(.{Style{ .font = 8, .tracking = 0.05, .ink = .dim }});
+            tag.set(.{ .w = .fit_children, .h = .fit_children }, .{ style.pad_sym(4, 1), Style{ .outline_ink = .line2 } });
+            try tag.label("t", tt, .{Style{ .font = 8, .tracking = 0.05, .ink = .dim }});
         }
 
         // RESEARCH →, or what it lacks, between two rules.
@@ -786,19 +825,18 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const deficit = try deficitText(a, b, t);
         const can = s == .available and deficit == null;
         const label = if (s == .researched) "RESEARCHED" else if (deficit) |d| try a.print("NEEDS {s}", .{d}) else "RESEARCH \u{2192}";
-        const btn = try detail.div("research");
-        _ = btn.with_size(.{ .fixed = inner }, .{ .fixed = 34 }).with_margin(8, 6);
+        const btn = try detail.box("research", .{
+            .w = .{ .fixed = inner }, .h = .{ .fixed = 34 }, .margin = .{ .before = 8, .after = 6 },
+        }, .{});
         const bq = btn.control(.{ .enabled = can, .name = label, .role = .button });
         const lit = can and (bq.hot());
-        _ = btn.with_style(.{Style{ .outline_ink = if (!can) .line2 else if (lit) .acc else .fg }});
-        _ = (try (try centreIn(btn)).text("t", label)).with_style(.{ style.body, Style{ .ink = if (!can) .dim else if (lit) .acc else .fg } });
+        btn.set(.{}, .{Style{ .outline_ink = if (!can) .line2 else if (lit) .acc else .fg }});
+        try (try centreIn(btn)).label("t", label, .{ style.body, Style{ .ink = if (!can) .dim else if (lit) .acc else .fg } });
         if (can and bq.clicked) result.research = si;
-        _ = (try detail.text("cost", try costText(a, t))).with_style(.{style.fine_print})
-            .with_margin(0, 9);
+        (try detail.text("cost", try costText(a, t))).set(.{ .margin = .{ .after = 9 } }, .{style.fine_print});
         try hrule(detail, "c_rule", .{ .fixed = inner });
 
-        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{style.caption})
-            .with_margin(11, 0);
+        (try detail.text_fit("copy", t.effect, .fill)).set(.{ .margin = .{ .before = 11 } }, .{style.caption});
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
         if (t.cost.len == 0) try detailRow(costs, 0, "Act I foundation", "paid");
@@ -825,11 +863,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         if (outs.len == 0) try detailRow(opens, row_n, "Act III frontier", "outside this board");
     } else {
-        _ = (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).with_style(.{Style{ .font = 9, .tracking = 0.08, .ink = .dim }})
-            .with_margin(0, 3);
-        _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, style.ink(.fg) })
-            .with_margin(0, 8);
-        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill)).with_style(.{style.caption});
+        (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).set(.{
+            .margin = .{ .after = 3 },
+        }, .{Style{ .font = 9, .tracking = 0.08, .ink = .dim }});
+        (try detail.text("name", "Research board")).set(.{ .margin = .{ .after = 8 } }, .{ style.heading, style.ink(.fg) });
+        try detail.label_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill, .{style.caption});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------
@@ -842,20 +880,26 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     // outside the foot here as `foot_rule` and the foot's 6px top margin. The foot is
     // unpadded, so its floor is a content-box one: 44 - 6 = 38, as the board has always
     // reserved (strictly 37 once the border is also taken out).
-    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_min(null, 38).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10)
-        .with_margin(6, 0);
+    foot.set(.{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .min = .{ .h = 38 },
+        .flow = .{ .dir = .row, .main = .start, .cross = .start }, .gap = 10, .margin = .{ .before = 6 },
+    }, .{});
     const legend = try foot.div("legend");
     // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave. Its grown width
     // is final before heights are solved, so the foot's fit height counts every legend line.
-    _ = legend.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(6);
+    legend.set(.{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .wrap = true, .cross = .center }, .gap = 6 }, .{});
     for (wedge_res, 0..) |r, w| {
-        const entry = try legend.item("r", w);
-        _ = entry.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(4);
-        _ = (try entry.div("dot")).with_size(.{ .fixed = 7 }, .{ .fixed = 7 }).with_style(.{Style{ .fill = wedgeColor(ctx, @intCast(w)) }}).with_opacity(0.8);
-        _ = (try entry.text("t", try std.ascii.allocUpperString(a, r.labelIn(2)))).with_style(.{Style{ .font = 8.5, .ink = .dim }});
+        const entry = try legend.boxi("r", w, .{
+            .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 4,
+        }, .{});
+        try entry.leaf("dot", .{
+            .w = .{ .fixed = 7 }, .h = .{ .fixed = 7 }, .opacity = 0.8,
+        }, .{Style{ .fill = wedgeColor(ctx, @intCast(w)) }});
+        try entry.label("t", try std.ascii.allocUpperString(a, r.labelIn(2)), .{Style{ .font = 8.5, .ink = .dim }});
     }
-    const hints = try foot.div("hints");
-    _ = hints.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
+    const hints = try foot.box("hints", .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 10,
+    }, .{});
     var counts = [3]u32{ 0, 0, 0 };
     for (states) |s| counts[@intFromEnum(s)] += 1;
     const status = if (st.selected) |si| blk: {
@@ -873,9 +917,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         break :blk try a.print("{s} selected \u{00b7} {} researched \u{00b7} {} available", .{ name, counts[2], counts[1] });
     } else "Select an available or researched technology";
-    _ = (try hints.text("status", status)).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
-    _ = (try hints.text("pan", "Wheel zoom / drag pan")).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
-    _ = (try hints.text("keys", "Arrows move \u{00b7} Esc clears")).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
+    try hints.label("status", status, .{Style{ .font = 8.5, .ink = .line2 }});
+    try hints.label("pan", "Wheel zoom / drag pan", .{Style{ .font = 8.5, .ink = .line2 }});
+    try hints.label("keys", "Arrows move \u{00b7} Esc clears", .{Style{ .font = 8.5, .ink = .line2 }});
 
     return result;
 }

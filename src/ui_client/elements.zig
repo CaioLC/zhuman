@@ -1,13 +1,20 @@
 //! **Elements** — the *content* layer, plus the **`El` handle** that makes composition
 //! fluent. A content element creates a node and sets *what* is in it (a string, a texture,
 //! an svg). It returns an `El` (`{ ctx, node }`), a tiny host handle carrying `ctx` so
-//! style + placement chain right onto it:
+//! style + placement go right onto it, at construction or after:
 //!
-//!   const header = try root.div("header");
-//!   _ = header.with_layout(.top_left)                     // own anchor within the parent
-//!             .with_flow(.{ .dir = .row, .cross = .center }) // arrange children
-//!             .with_gap(6)
-//!             .with_style(.{ h1, red });                  // style — declarative fragment fold
+//!   const header = try root.box("header", .{
+//!       .anchor = .top_left,                         // own anchor within the parent
+//!       .flow = .{ .dir = .row, .cross = .center },  // arrange children
+//!       .gap = 6,
+//!   }, .{style.panel});                              // style — declarative fragment fold
+//!   try header.label("title", "BUILD", .{style.heading});
+//!
+//! `box`/`boxi` (a `div`/`item` plus `Props` and a style spec) build a container you keep;
+//! `leaf`/`label`/`label_fit` build a node you never touch again and return nothing, so no
+//! `_ =` is needed. `set(props, spec)` is the same application onto a handle that already
+//! exists (a template's return, a row styled after its `control`). The chainable `with_*`
+//! setters stay: `Props` applies through them, and a chain still suits a value used inline.
 //!
 //! Content leaves default their anchor to **`.relative`** (they are always children — roots
 //! come from `el.root`, which stays `.top_left`), so flowed layout is the zero-config case.
@@ -83,6 +90,63 @@ pub const TextFit = union(enum) {
     pub const CellMode = enum { clip, ellipsis };
 };
 
+/// A node's placement, given at construction (`El.box`, `El.boxi`, `El.leaf`) or onto an
+/// existing handle (`El.set`) instead of a setter chain. Every field is optional and an unset
+/// one leaves the node as it was; each set field is written by the very `with_*` setter it
+/// names, so the units and scaling are the setters' own: `w`/`h` are `with_size` rules (only a
+/// `.fixed` extent scales), `gap`, `margin`, `min`, `max`, `pct_less` and `offset` are logical
+/// px scaled to device px, `grow`/`shrink`/`opacity` are unitless. The setters write disjoint
+/// fields, so their order does not matter. Device-px placement (`with_size_px`,
+/// `with_offset_px`) has no field: it is derived from stamped geometry and stays explicit.
+///
+///   .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row }, .gap = 8 }
+pub const Props = struct {
+    /// `with_layout`: the node's own anchor in its parent.
+    anchor: ?ui.Anchor = null,
+    /// `with_flow`: how the node arranges its in-flow children.
+    flow: ?ui.Flow = null,
+    /// The width half of `with_size`; it sets only this axis.
+    w: ?ui.SizeRule = null,
+    /// The height half of `with_size`; it sets only this axis.
+    h: ?ui.SizeRule = null,
+    /// `with_min(min.w, min.h)`: content-box lower bounds, a null axis kept.
+    min: Axes = .{},
+    /// `with_max(max.w, max.h)`: content-box upper bounds, a null axis kept.
+    max: Axes = .{},
+    /// `with_pct_less(pct_less.w, pct_less.h)`: px a `pct_of_parent` axis leaves out.
+    pct_less: Axes = .{},
+    /// `with_margin(before, after)`: main-axis margins; an unset side is 0, as the setter's.
+    margin: ?Margin = null,
+    /// `with_gap`: spacing between in-flow children. A `gap` in the style spec, applied after
+    /// the props, wins over it.
+    gap: ?f32 = null,
+    /// `with_overflow`.
+    overflow: ?ui.features.Overflow = null,
+    /// `with_offset(x, y)`: a logical displacement from where the anchor or flow put it.
+    offset: ?Offset = null,
+    /// `with_grow`: the `.grow` weight.
+    grow: ?f32 = null,
+    /// `with_shrink`: the main-axis shrink factor.
+    shrink: ?f32 = null,
+    /// `with_opacity`: the subtree's visual opacity.
+    opacity: ?f32 = null,
+    /// `with_tracks`: declare this node the owner of a shared column-track set.
+    tracks: ?*ui.TrackSet = null,
+    /// `in_tracks`: lay this row's children out by a set's columns.
+    in_tracks: ?*ui.TrackSet = null,
+    /// `at_track(at.col, at.span)`: place this cell of an `in_tracks` row.
+    at: ?At = null,
+    /// `pass_through()`: take the node out of hit-testing (a decoration layer, a probe).
+    pass_through: bool = false,
+
+    /// A per-axis bound; a null axis is left as it was.
+    pub const Axes = struct { w: ?f32 = null, h: ?f32 = null };
+    pub const Margin = struct { before: f32 = 0, after: f32 = 0 };
+    pub const Offset = struct { x: f32 = 0, y: f32 = 0 };
+    /// `col` null takes the next visible track; `span` 1 is a plain cell.
+    pub const At = struct { col: ?u16 = null, span: u16 = 1 };
+};
+
 /// A fluent handle over a built node: the node plus the `ctx` needed to style it. Returned
 /// by every element constructor. Placement methods write the engine `Layout`/`Size` fields
 /// directly; `with_style` folds a style spec. `.get()` drops to the raw `*Node`.
@@ -108,7 +172,8 @@ pub const El = struct {
     /// The keep-alive read: query this node only so it owns an interaction slot and its rect
     /// is stamped — for a node whose flags nobody reads. A scroll view's content probe (read
     /// back next frame for the clamp), the modal scrim and box (a stamped root occludes the
-    /// trees beneath it), the tooltip box. Says what `_ = x.query()` left implicit.
+    /// trees beneath it), the tooltip box. Says what `_ = x.query()` left implicit. Chainable;
+    /// a pass-through geometry probe is the void `probe()`.
     pub fn track(self: El) El {
         _ = self.node.query(self.ctx);
         return self;
@@ -192,6 +257,35 @@ pub const El = struct {
         return self;
     }
 
+    /// Apply placement `props` and then the style `spec` (see `style.apply`; `.{}` for none)
+    /// to this node, exactly as the setter chain would: each set field goes through the
+    /// `with_*` setter it names, then `with_style(spec)`, then `pass_through()`. The void form
+    /// for a node built elsewhere (a template's return, a `polygon`), or styled only after its
+    /// `control` ran (a `hot` lift reads the control's interaction, so a row's own look comes
+    /// after `control`). A node built here and never touched again takes `box`/`leaf` instead.
+    pub fn set(self: El, props: Props, spec: anytype) void {
+        if (props.anchor) |a| _ = self.with_layout(a);
+        if (props.flow) |f| _ = self.with_flow(f);
+        // `with_size` per axis, so a `Props` may set just one of them.
+        if (props.w) |w| self.node.size.w = scaleRule(w, self.ctx.res.view.scale);
+        if (props.h) |h| self.node.size.h = scaleRule(h, self.ctx.res.view.scale);
+        _ = self.with_min(props.min.w, props.min.h);
+        _ = self.with_max(props.max.w, props.max.h);
+        _ = self.with_pct_less(props.pct_less.w, props.pct_less.h);
+        if (props.margin) |m| _ = self.with_margin(m.before, m.after);
+        if (props.gap) |g| _ = self.with_gap(g);
+        if (props.overflow) |o| _ = self.with_overflow(o);
+        if (props.offset) |o| _ = self.with_offset(o.x, o.y);
+        if (props.grow) |g| _ = self.with_grow(g);
+        if (props.shrink) |f| _ = self.with_shrink(f);
+        if (props.opacity) |o| _ = self.with_opacity(o);
+        if (props.tracks) |t| _ = self.with_tracks(t);
+        if (props.in_tracks) |t| _ = self.in_tracks(t);
+        if (props.at) |at| _ = self.at_track(at.col, at.span);
+        if (comptime !emptySpec(@TypeOf(spec))) _ = self.with_style(spec);
+        if (props.pass_through) _ = self.pass_through();
+    }
+
     /// Per-axis size rule from **device-px** values that must **not** be scaled again:
     /// extents derived from stamped geometry (`.rect`/`.prior_geometry`) or a
     /// parent's resolved `size.*.fixed`, which are already device px. Authored logical
@@ -260,8 +354,8 @@ pub const El = struct {
     /// Declare a shared column-track set (from `tracks`) on this node, the common ancestor of
     /// every row that lays out by it: a table's head and its rows, at whatever depths. The
     /// node itself keeps its own flow. Every `in_tracks` row of `set` must be built under it.
-    pub fn with_tracks(self: El, set: *ui.TrackSet) El {
-        self.node.layout.track_owner = set;
+    pub fn with_tracks(self: El, track_set: *ui.TrackSet) El {
+        self.node.layout.track_owner = track_set;
         return self;
     }
 
@@ -273,8 +367,8 @@ pub const El = struct {
     /// behind the cursor, or a span past the last track) opens a new line, spaced by the set's
     /// row gap (`tracks_gaps`); `flow.cross` aligns the cells of each line and `with_gap` is
     /// not read (the set has its own gaps). Each row keeps its own key, control and role.
-    pub fn in_tracks(self: El, set: *ui.TrackSet) El {
-        self.node.layout.track_row = set;
+    pub fn in_tracks(self: El, track_set: *ui.TrackSet) El {
+        self.node.layout.track_row = track_set;
         return self;
     }
 
@@ -343,6 +437,13 @@ pub const El = struct {
         return self;
     }
 
+    /// The geometry probe, as one void call: `pass_through()` then `track()`. The node owns
+    /// a slot and is stamped (its rect reads back next frame) but never takes or blocks a hit
+    /// — a scroll view's content, a clip window read for its size.
+    pub fn probe(self: El) void {
+        _ = self.pass_through().track();
+    }
+
     /// Refine this node's rectangular hit box with a static host-supplied predicate.
     /// The engine still applies clipping, paint order, pass-through, and bubbling.
     /// The callback receives the stamped global rect and point, so it can derive local
@@ -372,6 +473,47 @@ pub const El = struct {
         return .{ .ctx = self.ctx, .node = node };
     }
 
+    /// A `div` with its placement and look given at construction: `div(id)` then
+    /// `set(props, spec)`. Use it for a container you keep the handle to (it gets children, a
+    /// `control`, a query); `.{}` for an empty spec. Reach for `div` plus setters only when the
+    /// placement is decided after the node exists, and for a childless box you never touch
+    /// again take `leaf`.
+    ///
+    ///   const top = try row.box("top", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+    ///       .flow = .{ .dir = .row, .cross = .center }, .gap = 8 }, .{});
+    ///
+    /// The style is a separate argument, not a `Props` field, because a spec is a comptime
+    /// tuple of `Style` values and `fn(*UiCtx, *Node) Style` fragments (`style.panel`,
+    /// `btn_primary`), which no runtime struct field can hold. A `hot` lift in it needs a
+    /// control on an ancestor already; a node that is itself the control is styled with
+    /// `set` after its `control` call.
+    pub fn box(self: El, id: []const u8, props: Props, spec: anytype) !El {
+        const b = try self.div(id);
+        b.set(props, spec);
+        return b;
+    }
+
+    /// `item(id, i)` with its placement and look given at construction — `box` for the
+    /// `i`-th repeated child.
+    pub fn boxi(self: El, id: []const u8, i: usize, props: Props, spec: anytype) !El {
+        const b = try self.item(id, i);
+        b.set(props, spec);
+        return b;
+    }
+
+    /// A childless `box` built and never touched again: a hairline rule, a progress bar, a
+    /// swatch, a `.grow` push. Returns nothing, so the call is a statement.
+    ///
+    ///   try col.leaf("rule", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 1 } }, .{style.rule_fill});
+    pub fn leaf(self: El, id: []const u8, props: Props, spec: anytype) !void {
+        _ = try self.box(id, props, spec);
+    }
+
+    /// `leaf` for the `i`-th repeated child (`boxi` whose handle is dropped): a meter segment.
+    pub fn leafi(self: El, id: []const u8, i: usize, props: Props, spec: anytype) !void {
+        _ = try self.boxi(id, i, props, spec);
+    }
+
     /// A fixed-size empty box that only takes up space (logical px). Non-interactive by
     /// construction: nothing queries it, so it owns no interaction slot and neither takes nor
     /// blocks a hit — no pass-through declaration needed.
@@ -395,8 +537,8 @@ pub const El = struct {
     /// hit target agree with the drawn glyphs by construction. `.fill` and `.cell_fill` also set
     /// the width rule and opt the node into the solve's measure — see `TextFit`.
     pub fn text_fit(self: El, id: []const u8, str: []const u8, fit: TextFit) !El {
-        const leaf = try self.text(id, str);
-        const st = leaf.node.state(self.ctx, cb.UiState.TextState);
+        const fit_leaf = try self.text(id, str);
+        const st = fit_leaf.node.state(self.ctx, cb.UiState.TextState);
         const scale = self.ctx.res.view.scale;
         switch (fit) {
             .free => st.fit = .free,
@@ -405,8 +547,8 @@ pub const El = struct {
                 // Measured one line here (the width seed); the solve's measurer wraps it at
                 // the resolved width and writes the height (`text.heightForWidth`).
                 st.fit = .{ .fill = 0 };
-                leaf.node.size.w = .{ .pct_of_parent = 1.0 };
-                leaf.node.size.measure_h = true;
+                fit_leaf.node.size.w = .{ .pct_of_parent = 1.0 };
+                fit_leaf.node.size.measure_h = true;
             },
             .cell => |c| {
                 std.debug.assert(c.width >= 0);
@@ -420,7 +562,7 @@ pub const El = struct {
                 // A `.clip` cell also routes through the engine's `Layout.overflow = .clip`, so any
                 // decoration subtree is cropped to the cell and hit-testing rejects outside it; the
                 // leaf's own glyphs are cropped renderer-scoped in `text.draw`.
-                if (c.mode == .clip) leaf.node.layout.overflow = .clip;
+                if (c.mode == .clip) fit_leaf.node.layout.overflow = .clip;
             },
             .cell_fill => |mode| {
                 // No reserved width (`remeasure` writes `data_width = 0`); the solve's measurer
@@ -433,14 +575,31 @@ pub const El = struct {
                     },
                     .width = 0,
                 } };
-                leaf.node.size.w = .{ .pct_of_parent = 1.0 };
-                leaf.node.size.measure_h = true;
-                if (mode == .clip) leaf.node.layout.overflow = .clip;
+                fit_leaf.node.size.w = .{ .pct_of_parent = 1.0 };
+                fit_leaf.node.size.measure_h = true;
+                if (mode == .clip) fit_leaf.node.layout.overflow = .clip;
             },
             .vertical => st.fit = .vertical,
         }
-        feat.text.remeasure(self.ctx, leaf.node);
-        return leaf;
+        feat.text.remeasure(self.ctx, fit_leaf.node);
+        return fit_leaf;
+    }
+
+    /// A styled text leaf built and never touched again: `text(id, str)` then
+    /// `with_style(spec)`, returning nothing. Most labels are this. Keep `text` for a leaf you
+    /// read or place afterwards (`set` gives a returned leaf its placement in one call).
+    ///
+    ///   try row.label("name", name, .{ style.small, style.muted });
+    pub fn label(self: El, id: []const u8, str: []const u8, spec: anytype) !void {
+        const t = try self.text(id, str);
+        if (comptime !emptySpec(@TypeOf(spec))) _ = t.with_style(spec);
+    }
+
+    /// `label` with a measurement constraint: `text_fit(id, str, fit)` then `with_style(spec)`,
+    /// in that order (the style re-measures at the fit), returning nothing.
+    pub fn label_fit(self: El, id: []const u8, str: []const u8, fit: TextFit, spec: anytype) !void {
+        const t = try self.text_fit(id, str, fit);
+        if (comptime !emptySpec(@TypeOf(spec))) _ = t.with_style(spec);
     }
 
     /// A whole-texture image node, sized to the texture.
@@ -500,6 +659,11 @@ fn child(parent: El, id: []const u8) !*Node {
     const node = try Node.pcreate(parent.ctx.arena, id, parent.node);
     node.layout.anchor = .relative; // children flow by default; override with `with_layout`
     return node;
+}
+
+/// Whether a style spec is the empty tuple `.{}` (`set`/`label` then skip `with_style`).
+fn emptySpec(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and @typeInfo(T).@"struct".field_names.len == 0;
 }
 
 /// Scale a `SizeRule`'s **fixed** extent from logical to device px; leave

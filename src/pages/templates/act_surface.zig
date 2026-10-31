@@ -98,14 +98,13 @@ pub const Result = struct {
 /// `Result.view`.
 pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     std.debug.assert(opts.labels.len > 0 and opts.labels.len <= max_views);
-    const surface = try parent.div(id);
-    _ = surface.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.fill_h(parent.ctx))
-        .with_flow(.{ .dir = .column, .cross = .start })
-        .with_overflow(.clip);
+    const surface = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = terminal_mod.fill_h(parent.ctx),
+        .flow = .{ .dir = .column, .cross = .start }, .overflow = .clip,
+    }, .{});
 
     // Per-view owners, every slot touched each frame so none is pruned while hidden.
-    const owners_root = try surface.div("view_state");
-    _ = owners_root.with_size(.{ .fixed = 0 }, .{ .fixed = 0 });
+    const owners_root = try surface.box("view_state", .{ .w = .{ .fixed = 0 }, .h = .{ .fixed = 0 } }, .{});
     var owners: [max_views]El = undefined;
     for (opts.labels, 0..) |_, i| {
         owners[i] = try owners_root.item("view", i);
@@ -119,24 +118,26 @@ pub fn act_surface(parent: El, id: []const u8, opts: Options) !Result {
     if (opts.initial_view) |v| selected = v;
     if (selected >= opts.labels.len) selected = 0;
 
-    const nav = try surface.div("nav");
-    _ = nav.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = nav_height }).with_margin(0, opts.nav_gap);
+    const nav = try surface.box("nav", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = nav_height }, .margin = .{ .after = opts.nav_gap },
+    }, .{});
     const tabs = try tabs_mod.tabs_named(nav, "tabs", opts.nav_name, opts.labels, &selected);
-    _ = tabs.el.with_layout(.bottom_left);
+    tabs.el.set(.{ .anchor = .bottom_left }, .{});
     surface.state(uic.UiState.TabsState).active = tabs.active; // existing slot: no growth
 
     const focus = std.mem.findScalar(usize, opts.focus_views, tabs.active) != null;
     var market_action: ?El = null;
     if (!focus) {
         market_action = try market_strip_mod.market_strip(surface, "market", opts.market, opts.market_available);
-        _ = try surface.spacer("market_gap", 1, market_to_activity);
+        try surface.leaf("market_gap", .{ .w = .{ .fixed = 1 }, .h = .{ .fixed = market_to_activity } }, .{});
         const a = opts.activity;
         _ = try market_strip_mod.activity_strip(surface, "activity", a.state, a.subject, a.metadata, a.last);
     }
 
-    const view = try surface.div("view");
-    _ = view.with_size(.{ .pct_of_parent = 1.0 }, terminal_mod.grow_h(parent.ctx))
-        .with_margin(if (focus) 0 else activity_to_section, 0);
+    const view = try surface.box("view", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = terminal_mod.grow_h(parent.ctx),
+        .margin = .{ .before = if (focus) 0 else activity_to_section },
+    }, .{});
     const owner = owners[tabs.active];
     if (opts.initial_query) |q| {
         const ed = owner.state(uic.UiState.TextInputState);

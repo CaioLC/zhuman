@@ -15,15 +15,16 @@ const El = el.El;
 /// title's baseline (the prototype's `.surface-heading`), and `subtitle` under both. The
 /// heading fills its parent's width, so the count sits at the parent's right edge.
 pub fn browser_heading(parent: El, id: []const u8, title: []const u8, subtitle: []const u8, count: []const u8) !El {
-    const heading = try parent.div(id);
-    _ = heading.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start });
-    const top = try heading.div("top");
-    _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(12);
-    _ = (try top.text("title", title)).with_style(.{ style.h3, style.ink(.fg) });
-    _ = (try top.text("count", count)).with_style(.{ style.eyebrow, style.muted });
-    _ = (try heading.text("subtitle", subtitle)).with_style(.{style.note});
+    const heading = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+    }, .{});
+    const top = try heading.box("top", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline }, .gap = 12,
+    }, .{});
+    try top.label("title", title, .{ style.h3, style.ink(.fg) });
+    try top.label("count", count, .{ style.eyebrow, style.muted });
+    try heading.label("subtitle", subtitle, .{style.note});
     return heading;
 }
 
@@ -35,16 +36,13 @@ pub const Lanes = struct { grid: El, lanes: [2]El };
 /// Two growing columns `gap` apart, or one column at the compact breakpoint. The grid fills
 /// the parent's width; `gap` also spaces the tiles within a lane.
 pub fn tile_lanes(parent: El, id: []const u8, compact: bool, gap: f32) !Lanes {
-    const grid = try parent.div(id);
-    _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    const grid = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children }, .{});
     if (compact) {
-        _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(gap);
+        grid.set(.{ .flow = .{ .dir = .column, .cross = .start }, .gap = gap }, .{});
         return .{ .grid = grid, .lanes = .{ grid, grid } };
     }
-    _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(gap);
-    const left = try grid.div("left");
-    _ = left.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(gap);
-    const right = try grid.div("right");
-    _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(gap);
+    grid.set(.{ .flow = .{ .dir = .row, .cross = .start }, .gap = gap }, .{});
+    const left = try grid.box("left", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = gap }, .{});
+    const right = try grid.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = gap }, .{});
     return .{ .grid = grid, .lanes = .{ left, right } };
 }

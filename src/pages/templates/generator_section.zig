@@ -129,18 +129,19 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
     );
     // A regular tile stands as tall as the prototype's (`min-height: 82px` plus the state
     // line: 87px outer); a compact one fits its content, which already matches.
-    _ = tile.el.with_size(.{ .pct_of_parent = 1.0 }, if (density == .regular) .{ .fixed = generator_regular_h } else .fit_children)
-        .with_flow(.{ .dir = .column, .main = .center });
+    tile.el.set(.{
+        .w = .{ .pct_of_parent = 1.0 },
+        .h = if (density == .regular) .{ .fixed = generator_regular_h } else .fit_children,
+        .flow = .{ .dir = .column, .main = .center },
+    }, .{});
 
     // Nested control, anchored out of flow in the lower-right corner so it never grows the tile.
     // Right/bottom padding mirror the tile's inner padding (12 x 6 regular, 8 x 5 compact, with
     // the box's 1px bottom inset), aligning the label with the content edge. Pointer hit testing
     // selects this topmost child rather than also collecting the parent tile.
-    const toggle = try tile.el.div("toggle");
-    _ = toggle.with_layout(.bottom_right)
-        .with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row })
-        .with_style(.{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
+    const toggle = try tile.el.box("toggle", .{
+        .anchor = .bottom_right, .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row },
+    }, .{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
     if (toggle.query().clicked) capital.toggle_generator(world, e, cat, gi);
     const is_on = !world.get(e, comp.Generators).?.off[gi];
     _ = toggle.control(.{
@@ -148,8 +149,7 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
         .role = .checkbox,
         .checked = is_on,
     });
-    _ = (try toggle.text("label", if (is_on) "● ON" else "○ OFF"))
-        .with_style(.{ style.small, Style{ .ink = if (is_on) .good else .dim, .hot = .{ .ink = .acc } } });
+    try toggle.label("label", if (is_on) "● ON" else "○ OFF", .{ style.small, Style{ .ink = if (is_on) .good else .dim, .hot = .{ .ink = .acc } } });
 
     if (tile.clicked) _ = capital.collect_generator(world, e, ctx.res, gi);
 }
@@ -166,31 +166,28 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, s
     const act = ha.migration.actOf(world, e);
     const gap = if (shelf.density == .compact) compact_grid_gap else grid_gap;
 
-    const section = try parent.div(id);
-    _ = section.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(section_gap);
+    const section = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+        .gap = section_gap,
+    }, .{});
 
     var count_buf: [24]u8 = undefined;
     const count_text = std.mem.print(&count_buf, "{d} OWNED", .{count}) catch "OWNED";
     _ = try browser.browser_heading(section, "heading", "GENERATORS", shelf.subtitle, count_text);
 
     if (count == 0) {
-        _ = (try section.text("empty", "Build a generator to begin accumulating."))
-            .with_style(.{ style.body, style.faint });
+        try section.label("empty", "Build a generator to begin accumulating.", .{ style.body, style.faint });
         return section;
     }
 
-    const grid = try section.div("grid");
-    _ = grid.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    const grid = try section.box("grid", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children }, .{});
     const lanes: [2]El = if (compact) blk: {
-        _ = grid.with_flow(.{ .dir = .column, .cross = .start }).with_gap(gap);
+        grid.set(.{ .flow = .{ .dir = .column, .cross = .start }, .gap = gap }, .{});
         break :blk .{ grid, grid };
     } else blk: {
-        _ = grid.with_flow(.{ .dir = .row, .cross = .start }).with_gap(gap);
-        const left = try grid.div("left");
-        _ = left.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(gap);
-        const right = try grid.div("right");
-        _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .column }).with_gap(gap);
+        grid.set(.{ .flow = .{ .dir = .row, .cross = .start }, .gap = gap }, .{});
+        const left = try grid.box("left", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column }, .gap = gap }, .{});
+        const right = try grid.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column }, .gap = gap }, .{});
         break :blk .{ left, right };
     };
 

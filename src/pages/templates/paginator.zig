@@ -12,13 +12,14 @@ const El = uic.elements.El;
 const now_w: f32 = 6 * 6.6;
 
 fn pageButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, enabled: bool) !bool {
-    const b = try parent.div(id);
-    _ = b.with_size(.{ .fixed = 22 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
+    const b = try parent.box(id, .{
+        .w = .{ .fixed = 22 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
     const lit = enabled and (q.hot());
-    _ = b.with_style(.{Style{ .outline_ink = if (!enabled) .line else if (lit) .acc else .line2 }});
-    _ = (try b.text("g", glyph)).with_style(.{ Style{ .font = 11, .ink = if (!enabled) .line2 else if (lit) .acc else .fg }, style.pad_sym(0, 2) });
+    b.set(.{}, .{Style{ .outline_ink = if (!enabled) .line else if (lit) .acc else .line2 }});
+    try b.label("g", glyph, .{ Style{ .font = 11, .ink = if (!enabled) .line2 else if (lit) .acc else .fg }, style.pad_sym(0, 2) });
     return q.clicked;
 }
 
@@ -33,16 +34,13 @@ pub fn paginator(parent: El, id: []const u8, page: usize, total: usize, per: usi
     const ctx = parent.ctx;
     const n = pages(total, per);
     var p = @min(page, n - 1);
-    const row = try parent.div(id);
-    _ = row.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).with_gap(7);
+    const row = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 7 }, .{});
     const start = p * per;
     const shown = @min(per, total -| start);
     const range = if (total == 0) "0 of 0" else try ctx.arena.print("{d}\u{2013}{d} of {d}", .{ start + 1, start + shown, total });
-    _ = (try row.text("range", range)).with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
+    try row.label("range", range, .{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     if (try pageButton(row, "prev", "\u{2039}", "Previous page", p > 0)) p -= 1;
-    _ = (try row.text_fit("now", try ctx.arena.print("{d} / {d}", .{ p + 1, n }), .{ .cell = .{ .mode = .clip, .width = now_w } }))
-        .with_style(.{Style{ .font = 11, .ink = .fg }});
+    try row.label_fit("now", try ctx.arena.print("{d} / {d}", .{ p + 1, n }), .{ .cell = .{ .mode = .clip, .width = now_w } }, .{Style{ .font = 11, .ink = .fg }});
     if (try pageButton(row, "next", "\u{203a}", "Next page", p + 1 < n)) p += 1;
     return p;
 }

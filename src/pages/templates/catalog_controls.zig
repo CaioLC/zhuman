@@ -39,9 +39,9 @@ pub const recipes_placeholder = "Search recipes \u{00B7} type:tool out:food stat
 /// likewise the search editor lives on `search_owner` when given.
 pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, state: ?*CatalogState, search_owner: ?El) !Catalog {
     const ctx = parent.ctx;
-    const bar = try parent.div(id);
-    _ = bar.with_flow(.{ .dir = .row, .cross = .center })
-        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
+    const bar = try parent.box(id, .{
+        .flow = .{ .dir = .row, .cross = .center }, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+    }, .{});
     const st = state orelse bar.state(CatalogState);
 
     // The field spans the catalog's width (the prototype's `.build-query-field`), so the
@@ -49,14 +49,13 @@ pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, sta
     // rather than taking 100% of it: a percentage is the content box, so the field's own side
     // padding would push its edge and the `/` hint past the catalog's clip.
     const field = try uic.text_input(bar, "search", placeholder, 200, search_owner);
-    _ = field.with_size(.grow, .fit_children);
+    field.set(.{ .w = .grow, .h = .fit_children }, .{});
     const field_key = field.get().key;
     const editor = (search_owner orelse field).state(uic.UiState.TextInputState);
     // The `/` shortcut hint at the field's right edge while it is empty and unfocused (the
     // prototype's `<kbd>/</kbd>`); the clear `✕` takes that corner once there is text.
     if (editor.len == 0 and !ctx.isFocused(field_key)) {
-        _ = (try field.text("kbd", "/")).with_layout(.center_right)
-            .with_style(.{ style.pad_sym(6, 0), style.faint });
+        (try field.text("kbd", "/")).set(.{ .anchor = .center_right }, .{ style.pad_sym(6, 0), style.faint });
     }
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty): the dismiss is routed to the focused field.

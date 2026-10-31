@@ -107,50 +107,45 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
         // The 36×124 restore control exactly fills this box. Keep overflow visible in the
         // collapsed branch so its 1px fg/acc outline is painted; clipping is only needed while
         // expanded content exists and would otherwise leak across the animated rail width.
-        _ = box.with_size(.{ .fixed = w }, .{ .fixed = restore_outer_height })
-            .with_overflow(.visible);
+        box.set(.{ .w = .{ .fixed = w }, .h = .{ .fixed = restore_outer_height }, .overflow = .visible }, .{});
 
         // CSS counterpart: `.holdings-restore` — 36x124 border-box, 7px/9px vertical
         // padding, 8px gap, and centered children. Each glyph sits in a full-width row below:
         // the engine's column cross-line is intrinsically child-sized, while row main-axis
         // centering resolves against the definite 36px lane just like CSS `align-items:center`.
-        _ = toggle.with_layout(.top_left)
-            .with_size(.{ .fixed = restore_width }, .{ .fixed = restore_content_height })
-            .with_flow(.{ .dir = .column, .main = .start, .cross = .center })
-            .with_gap(8)
-            .with_style(.{
-            toggle_chrome,
-            style.pad_each(restore_pad_top, 0, restore_pad_bottom, 0),
-        });
-        const chevron_lane = try toggle.div("chevron_lane");
-        _ = chevron_lane.with_size(.{ .fixed = restore_width }, .fit_children)
-            .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-        _ = (try chevron_lane.text("chevron", "\u{203A}"))
-            .with_style(.{Style{ .text = toggle_color, .font = 16 }});
+        toggle.set(.{
+            .anchor = .top_left, .w = .{ .fixed = restore_width }, .h = .{ .fixed = restore_content_height },
+            .flow = .{ .dir = .column, .main = .start, .cross = .center }, .gap = 8,
+        }, .{ toggle_chrome, style.pad_each(restore_pad_top, 0, restore_pad_bottom, 0) });
+        const chevron_lane = try toggle.box("chevron_lane", .{
+            .w = .{ .fixed = restore_width }, .h = .fit_children,
+            .flow = .{ .dir = .row, .main = .center, .cross = .center },
+        }, .{});
+        try chevron_lane.label("chevron", "\u{203A}", .{Style{ .text = toggle_color, .font = 16 }});
 
-        const label_lane = try toggle.div("label_lane");
-        _ = label_lane.with_size(.{ .fixed = restore_width }, .fit_children)
-            .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-        _ = (try label_lane.text_fit("label", opts.label, .vertical))
-            .with_style(.{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }});
+        const label_lane = try toggle.box("label_lane", .{
+            .w = .{ .fixed = restore_width }, .h = .fit_children,
+            .flow = .{ .dir = .row, .main = .center, .cross = .center },
+        }, .{});
+        try label_lane.label_fit("label", opts.label, .vertical, .{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }});
         return .{ .collapsed = true, .body = null };
     }
 
-    _ = box.with_size(if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = w }, if (stack) .fit_children else .{ .pct_of_parent = 1.0 })
-        .with_overflow(.clip);
-    _ = body.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(ha.tokens.gap.stack);
+    box.set(.{
+        .w = if (stack) .{ .pct_of_parent = 1.0 } else .{ .fixed = w },
+        .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 }, .overflow = .clip,
+    }, .{});
+    body.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = ha.tokens.gap.stack }, .{});
 
     // CSS counterpart: `.holdings-toggle` — a 24x26 box at the expanded panel's upper-right.
     // Its chevron is independently centered in both axes; the old right-anchored bare text
     // had neither the correct box nor a definite height against which to center.
-    _ = toggle.with_layout(.top_right)
-        .with_offset(if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2, 0)
-        .with_size(.{ .fixed = collapse_width }, .{ .fixed = collapse_height })
-        .with_style(.{toggle_chrome});
-    _ = (try toggle.text("chevron", "\u{2039}"))
-        .with_layout(.center)
-        .with_style(.{Style{ .text = toggle_color, .font = 16 }});
+    toggle.set(.{
+        .anchor = .top_right,
+        .offset = .{ .x = if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2 },
+        .w = .{ .fixed = collapse_width }, .h = .{ .fixed = collapse_height },
+    }, .{toggle_chrome});
+    (try toggle.text("chevron", "\u{2039}")).set(.{ .anchor = .center }, .{Style{ .text = toggle_color, .font = 16 }});
 
     return .{ .collapsed = false, .body = body };
 }

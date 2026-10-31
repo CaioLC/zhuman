@@ -151,8 +151,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
 
     // The merchant dialog's open/mode/selection persists on an always-built node, surviving
     // view switches (a focus view hides the strip, never the deal).
-    const trade_owner = try regions.body.div("a2_trade_state");
-    _ = trade_owner.with_size(.{ .fixed = 0 }, .{ .fixed = 0 });
+    const trade_owner = try regions.body.box("a2_trade_state", .{ .w = .{ .fixed = 0 }, .h = .{ .fixed = 0 } }, .{});
 
     // --- the body: the shared act surface, then the active view ----------------------------
     const s = try t.act_surface(regions.body, "a2_surface", .{
@@ -472,8 +471,7 @@ fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.
     const stall_owner = try s.owner.div("stall_query");
     // Stacked (≤760) the page scrolls as one, so the view gets a definite height of its own.
     const host = if (t.stacked(ctx)) blk: {
-        const box = try s.view.div("a2_market_box");
-        _ = box.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 640 });
+        const box = try s.view.box("a2_market_box", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 640 } }, .{});
         break :blk box;
     } else s.view;
     const r = try t.market_view(host, "a2_market", m, st, player, s.owner, stall_owner);

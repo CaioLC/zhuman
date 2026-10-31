@@ -78,7 +78,7 @@ fn shownAt(class: uic.view.WidthClass) [columns.len]bool {
 
 /// Place a cell of the header or a row on its lane's track, covering `span` lanes.
 fn place(cell_el: El, lane: Lane, span: u16) void {
-    _ = cell_el.at_track(@intCast(@backingInt(lane)), span);
+    cell_el.set(.{ .at = .{ .col = @intCast(@backingInt(lane)), .span = span } }, .{});
 }
 
 /// One act's lane widths in logical px. Every act fills the canonical 594px expanded content
@@ -231,7 +231,7 @@ pub const Header = struct {
 pub fn capital_header(parent: El, id: []const u8, set: *uic.TrackSet, sort: ?HeaderSort) !Header {
     const ctx = parent.ctx;
     const header = try table.table_row(parent, id, set, row_pad_x, 4);
-    _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_pct_less(scroll_gutter, null);
+    header.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .pct_less = .{ .w = scroll_gutter } }, .{});
     const group = header.get().key;
     var clicked: ?usize = null;
     var members: [columns.len]u64 = undefined;
@@ -272,14 +272,11 @@ const cell = table.cell;
 /// visible glyphs are bounded. A **secondary type** sub-label rides under the name in
 /// dim/small — the recipe's kind (`recipeType`).
 fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8, color: Color) !El {
-    const box = try parent.div(id);
-    _ = box.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
-    _ = box.with_gap(1);
-    _ = (try box.text_fit("t", text, .{ .cell_fill = .ellipsis }))
-        .with_style(.{Style{ .font = name_font, .text = color }});
+    const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start } }, .{});
+    box.set(.{ .gap = 1 }, .{});
+    try box.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{Style{ .font = name_font, .text = color }});
     if (secondary.len > 0) {
-        _ = (try box.text_fit("ty", secondary, .{ .cell_fill = .ellipsis }))
-            .with_style(.{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .ink = .line2 }});
+        try box.label_fit("ty", secondary, .{ .cell_fill = .ellipsis }, .{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .ink = .line2 }});
     }
     return box;
 }
@@ -378,10 +375,8 @@ pub fn capital_row(
     // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded
     // roster that moves it to another index.
     // One hairline above each row (`.build-row { border-top }`), then the row.
-    const wrap = try parent.div(rec.id);
-    _ = wrap.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column });
-    _ = (try wrap.div("rule")).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-        .with_style(.{style.rule_fill});
+    const wrap = try parent.box(rec.id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
+    try wrap.leaf("rule", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 1 } }, .{style.rule_fill});
     const row = try wrap.div("row");
     const hot = kind == .ready;
     const row_key = row.get().key;
@@ -399,9 +394,10 @@ pub fn capital_row(
     const faint: Color = if (kind == .ready or kind == .building) th.fg else th.dim;
 
     // The row's lanes are the header's: the same tracks, so the same widths and visibility.
-    _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
-        .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .hot = .{ .fill_ink = .panel } } }); // the row is enabled only when ready
+    row.set(.{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .in_tracks = set,
+    }, .{ style.pad_sym(row_pad_x, 6), Style{ .hot = .{ .fill_ink = .panel } } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
     place(try name_cell(row, "nm", rec.name, recipeType(rec), lit), .recipe, 1);
@@ -421,11 +417,9 @@ pub fn capital_row(
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
     // A blocked row has no corner action, so its state spans the empty corner lane too (and
     // no corner cell is built): a technology name can outrun the STATE lane alone.
-    const state = try row.div("st");
-    _ = state.with_size(.fit_children, .fit_children);
+    const state = try row.box("st", .{ .w = .fit_children, .h = .fit_children }, .{});
     place(state, .state, if (kind == .blocked) 2 else 1);
-    const state_in = try state.div("i");
-    _ = state_in.with_layout(.center_left).with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
+    const state_in = try state.box("i", .{ .anchor = .center_left, .flow = .{ .dir = .row, .cross = .center }, .gap = 6 }, .{});
     // The blocked text elides at the span, so its box must be the cell's.
     if (kind == .blocked) _ = state_in.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
 
@@ -443,8 +437,7 @@ pub fn capital_row(
             const wants = if (q.standing == .tech) techName(cat, rec) else needsName(cat, rec);
             const txt = std.mem.print(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
             // Elided at the STATE + corner span.
-            _ = (try state_in.text_fit("blocked", txt, .{ .cell_fill = .ellipsis }))
-                .with_style(.{ row_type, style.ink(.danger) });
+            try state_in.label_fit("blocked", txt, .{ .cell_fill = .ellipsis }, .{ row_type, style.ink(.danger) });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
             .with_style(.{ row_type, style.ink(.danger) }),
@@ -454,7 +447,7 @@ pub fn capital_row(
             const left = busy.remaining / ctx.res.config.secs_per_day;
             const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
-            _ = (try state_in.text("time", txt)).with_style(.{ row_type, style.ink(.fg) });
+            try state_in.label("time", txt, .{ row_type, style.ink(.fg) });
         },
         .reach => {
             // How far the first line of the order is: `31/48m`.
@@ -466,7 +459,7 @@ pub fn capital_row(
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
-            _ = (try state_in.text("biomass", txt)).with_style(.{ row_type, Style{ .text = faint } });
+            try state_in.label("biomass", txt, .{ row_type, Style{ .text = faint } });
         },
     }
 
@@ -476,11 +469,9 @@ pub fn capital_row(
     var cancelled = false;
     var cancel_key: ?u64 = null;
     if (kind != .blocked) {
-        const action = try row.div("ac");
-        _ = action.with_size(.fit_children, .fit_children);
+        const action = try row.box("ac", .{ .w = .fit_children, .h = .fit_children }, .{});
         place(action, .corner, 1);
-        const action_in = try action.div("i");
-        _ = action_in.with_layout(.center_right);
+        const action_in = try action.box("i", .{ .anchor = .center_right }, .{});
 
         switch (kind) {
             .ready => _ = (try action_in.text("build", "Build \u{2192}"))
@@ -490,16 +481,14 @@ pub fn capital_row(
                 if (q.ready()) {
                     const more = try action_in.div("more");
                     _ = more.control(.{ .name = "Build +1", .role = .button });
-                    _ = (try more.text("t", "Build +1"))
-                        .with_style(.{ Style{ .font = row_font, .ink = .dim, .hot = .{ .ink = .acc } } });
+                    try more.label("t", "Build +1", .{ Style{ .font = row_font, .ink = .dim, .hot = .{ .ink = .acc } } });
                     build_more = more.consume(.clicked);
                 }
             },
             .building => {
                 const x = try action_in.div("cancel");
                 _ = x.control(.{ .name = "Cancel build", .role = .icon_button });
-                _ = (try x.text("t", "\u{00d7}"))
-                    .with_style(.{ style.h3, Style{ .ink = .line2, .hot = .{ .ink = .danger } } });
+                try x.label("t", "\u{00d7}", .{ style.h3, Style{ .ink = .line2, .hot = .{ .ink = .danger } } });
                 cancelled = x.consume(.clicked);
                 cancel_key = x.get().key;
             },
@@ -528,13 +517,10 @@ pub fn capital_row(
 /// A thin progress bar (a build in progress) — continuous fill. Fixed width so the numbers
 /// beside it stay in a column.
 fn meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
-    const track = try parent.div(id);
-    _ = track.with_size(.{ .fixed = 34 }, .{ .fixed = 3 })
-        .with_style(.{style.rule_fill});
-    const fill = try track.div("f");
-    _ = fill.with_layout(.top_left)
-        .with_size(.{ .fixed = 34 * std.math.clamp(frac, 0, 1) }, .{ .fixed = 3 })
-        .with_style(.{Style{ .fill = color }});
+    const track = try parent.box(id, .{ .w = .{ .fixed = 34 }, .h = .{ .fixed = 3 } }, .{style.rule_fill});
+    try track.leaf("f", .{
+        .anchor = .top_left, .w = .{ .fixed = 34 * std.math.clamp(frac, 0, 1) }, .h = .{ .fixed = 3 },
+    }, .{Style{ .fill = color }});
 }
 
 /// The **3-segment reach meter**: three fixed cells that light in sequence as `frac`
@@ -544,14 +530,13 @@ fn meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
 fn reach_meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const track = try parent.div(id);
-    _ = track.with_size(.{ .fixed = 34 }, .{ .fixed = 4 }).with_flow(.{ .dir = .row }).with_gap(2);
+    const track = try parent.box(id, .{ .w = .{ .fixed = 34 }, .h = .{ .fixed = 4 }, .flow = .{ .dir = .row }, .gap = 2 }, .{});
     const lit_segments = reachSegments(frac);
     var s: usize = 0;
     while (s < 3) : (s += 1) {
-        const seg = try track.item("s", s);
-        _ = seg.with_size(.{ .fixed = 10 }, .{ .fixed = 4 })
-            .with_style(.{Style{ .fill = if (s < lit_segments) color else th.line }});
+        try track.leafi("s", s, .{
+            .w = .{ .fixed = 10 }, .h = .{ .fixed = 4 },
+        }, .{Style{ .fill = if (s < lit_segments) color else th.line }});
     }
 }
 

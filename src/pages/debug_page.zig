@@ -94,8 +94,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     const root = try el.root(ctx, "debug");
-    _ = root.with_layout(.top_left).with_flow(.{ .dir = .row })
-        .with_style(.{Style{ .fill_ink = .bg }});
+    root.set(.{ .anchor = .top_left, .flow = .{ .dir = .row } }, .{Style{ .fill_ink = .bg }});
 
     // Selection lives on a stable node's TabsState (`active` = the entry index); the modal's
     // open/closed lifecycle on a TradeState, so dismissing it reveals the audit index instead of
@@ -122,23 +121,20 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     // The whole page root is already `top_left`, so the padded wrap sits at the top-left; the
     // stage flows normally inside it (no extra absolute anchor, which would overlap siblings).
     // The selected template's name is shown highlighted in the right index, so no label here.
-    const stage_wrap = try root.div("stage_wrap");
-    _ = stage_wrap.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column }).with_gap(8)
-        .with_style(.{style.pad(16)});
-    const stage = try stage_wrap.div("stage");
-    _ = stage.with_flow(.{ .dir = .column }).with_gap(6);
+    const stage_wrap = try root.box("stage_wrap", .{
+        .w = .grow, .h = .{ .pct_of_parent = 1.0 }, .flow = .{ .dir = .column }, .gap = 8,
+    }, .{style.pad(16)});
+    const stage = try stage_wrap.box("stage", .{ .flow = .{ .dir = .column }, .gap = 6 }, .{});
 
     const overlay = try render_one(stage, world, entries[active], root.state(uic.UiState.TradeState));
     const sel = root.state(uic.UiState.TabsState);
     const audit_trade = root.state(uic.UiState.TradeState);
 
     // --- the clickable index: a thin column anchored on the RIGHT --------------------------
-    const index = try root.div("index");
-    _ = index.with_size(.{ .fixed = 150 }, .{ .pct_of_parent = 1.0 })
-        .with_flow(.{ .dir = .column }).with_gap(2)
-        .with_style(.{ Style{ .fill_ink = .panel }, style.pad_sym(10, 10) });
-    _ = (try index.text("ihdr", "TEMPLATES"))
-        .with_style(.{ style.small, style.muted });
+    const index = try root.box("index", .{
+        .w = .{ .fixed = 150 }, .h = .{ .pct_of_parent = 1.0 }, .flow = .{ .dir = .column }, .gap = 2,
+    }, .{ Style{ .fill_ink = .panel }, style.pad_sym(10, 10) });
+    try index.label("ihdr", "TEMPLATES", .{ style.small, style.muted });
     for (entries, 0..) |name, i| {
         const item = try index.item("e", i);
         // Selection changes on the click before the lifecycle publishes it, so the published
@@ -152,7 +148,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
         const on = i == sel.active;
         const iq = item.control(.{ .name = name, .role = .button, .selected = on });
         const c = if (on) th.acc else if (iq.hover_focus()) th.fg else th.dim;
-        _ = (try item.text("t", name)).with_style(.{ style.small, Style{ .text = c } });
+        try item.label("t", name, .{ style.small, Style{ .text = c } });
     }
 
     var roots: std.ArrayList(*Node) = .empty;
@@ -174,7 +170,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.button(stage, "b_off", "Disabled", false);
     } else if (eq(name, "panel")) {
         const p = try t.panel(stage, "p", "Panel Title");
-        _ = try p.text("body", "panel body content");
+        try p.label("body", "panel body content", .{});
     } else if (eq(name, "figure")) {
         try t.figure(stage, "dead", t.fig_dead, th.danger);
     } else if (eq(name, "stock_token")) {
@@ -188,13 +184,11 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.stockline(stage, "sl", &stocks, false);
     } else if (eq(name, "runline")) {
         // Act I (no energy flow) above Act II (the `⚡ +gen/−consumed` rate).
-        const col = try stage.div("runs");
-        _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+        const col = try stage.box("runs", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 10 }, .{});
         _ = try t.runline(col, "run", .{ .act_label = "Act I", .day = 3 });
         _ = try t.runline(col, "run2", .{ .gen = 12, .consumed = 9, .act_label = "Act II", .day = 43 });
     } else if (eq(name, "header")) {
-        const demo = try stage.div("header_demo");
-        _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
+        const demo = try stage.box("header_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
         const stocks = [_]t.Stock{
             .{ .abbrev = "VI", .full = "Vigor", .value = 10, .max = 10 },
             .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
@@ -209,8 +203,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "tabs")) {
         _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "slider")) {
-        const demo = try stage.div("slider_demo");
-        _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
+        const demo = try stage.box("slider_demo", .{ .w = .{ .fixed = 300 }, .h = .fit_children }, .{});
         _ = try t.slider(demo, .{
             .id = "sld",
             .label = "Eating policy",
@@ -222,8 +215,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "rail")) {
         // Production supplies a definite page-grid rail region. Mirror it here so one
         // interactive instance can be inspected in both states via its own toggle.
-        const demo = try stage.div("rail_demo");
-        _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 300 });
+        const demo = try stage.box("rail_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 300 } }, .{});
         const r = try t.rail(demo, .{ .id = "rail", .label = "HOUSEHOLD" });
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
     } else if (eq(name, "holdings")) {
@@ -242,41 +234,42 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             }
             if (world.get(a[0], comp.Metabolism)) |met| met.rate = 0.5;
 
-            const demo = try stage.div("holdings_demo");
-            _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
+            const demo = try stage.box("holdings_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
             const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOUSEHOLD" });
             if (r.body) |body| _ = try t.holdings(body, "content", try act_one_holdings.content(ctx, world, a[0]));
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
             const forage = ctx.res.catalog.actionIndex("forage").?;
             // Both densities, sized as their sections size them: Act I's regular grid tile
             // above Act II's compact catalog tile.
-            const col = try stage.div("densities");
-            _ = col.with_size(.{ .fixed = 300 }, .fit_children)
-                .with_flow(.{ .dir = .column, .cross = .start }).with_gap(10);
+            const col = try stage.box("densities", .{
+                .w = .{ .fixed = 300 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+                .gap = 10,
+            }, .{});
             inline for (.{ .{ "at", t.ActionDensity.regular }, .{ "atc", t.ActionDensity.compact } }) |d| {
                 if (try t.action_tile(col, world, a[0], forage, d[0], d[1])) |tl| {
-                    _ = tl.el.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = t.actionTileHeight(d[1]) })
-                        .with_flow(.{ .dir = .column, .main = .center });
+                    tl.el.set(.{
+                        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = t.actionTileHeight(d[1]) },
+                        .flow = .{ .dir = .column, .main = .center },
+                    }, .{});
                     if (tl.clicked) actions.begin(world, a[0], ctx.res, forage);
                 }
             }
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
             // The live debug player starts with only the two innate verbs. Own the three tools
             // that grant the rest, so the assembly audit shows the complete five-verb reference.
             fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            const demo = try stage.div("actions_demo");
-            _ = demo.with_size(.{ .fixed = 620 }, .fit_children);
+            const demo = try stage.box("actions_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
             _ = try t.actions_section(demo, world, a[0], "actions", @import("./templates/act_one_surface.zig").actions_shelf, null, null, null);
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "build_section")) {
         if (player.get()) |a| {
@@ -285,11 +278,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
             // The pane fills a definite height and scrolls only its table, and spans a
             // definite width: the framed content lane.
-            const demo = try stage.div("build_demo");
-            _ = demo.with_size(.{ .fixed = t.build_lane_width }, .{ .fixed = 560 });
+            const demo = try stage.box("build_demo", .{ .w = .{ .fixed = t.build_lane_width }, .h = .{ .fixed = 560 } }, .{});
             _ = try t.build_section(demo, world, a[0], "build", @import("./templates/act_one_surface.zig").build_shelf, null, null, null);
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_one_surface")) {
         if (player.get()) |a| {
@@ -299,8 +291,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
             // The surface fills its parent's height (its views scroll inside), so the demo
             // gives it a definite one, as the workspace's content lane does in production.
-            const demo = try stage.div("surface_demo");
-            _ = demo.with_size(.{ .fixed = 652 }, .{ .fixed = 560 });
+            const demo = try stage.box("surface_demo", .{ .w = .{ .fixed = 652 }, .h = .{ .fixed = 560 } }, .{});
             _ = try t.act_one_surface(demo, world, a[0], "surface", .{
                 .activity = .{
                     .state = .working,
@@ -310,7 +301,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 },
             });
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_one_workspace")) {
         if (player.get()) |a| {
@@ -320,8 +311,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
 
-            const demo = try stage.div("workspace_demo");
-            _ = demo.with_size(.{ .fixed = 926 }, .{ .fixed = 700 });
+            const demo = try stage.box("workspace_demo", .{ .w = .{ .fixed = 926 }, .h = .{ .fixed = 700 } }, .{});
             _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
                 .holdings = try act_one_holdings.content(ctx, world, a[0]),
                 .surface = .{ .activity = .{
@@ -332,7 +322,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 } },
             });
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_one_page")) {
         if (player.get()) |a| {
@@ -347,10 +337,9 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 vigor.v = 14;
             }
 
-            const demo = try stage.div("act_one_page_demo");
-            _ = demo.with_size(.{ .fixed = 900 }, .{ .fixed = 820 })
-                .with_overflow(.clip)
-                .with_style(.{Style{ .fill_ink = .bg }});
+            const demo = try stage.box("act_one_page_demo", .{
+                .w = .{ .fixed = 900 }, .h = .{ .fixed = 820 }, .overflow = .clip,
+            }, .{Style{ .fill_ink = .bg }});
             const regions = try t.shell_content(demo, demo, .{
                 .id = "act_one_page",
                 .act = .act_one,
@@ -391,11 +380,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // action, while this page owns stable open state and renders the dialog last.
             return auditTradeOverlay(ctx, audit_trade);
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "eating_policy")) {
-        const demo = try stage.div("eating_policy_demo");
-        _ = demo.with_size(.{ .fixed = 300 }, .fit_children);
+        const demo = try stage.box("eating_policy_demo", .{ .w = .{ .fixed = 300 }, .h = .fit_children }, .{});
         _ = try t.eating_policy(demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
@@ -404,22 +392,21 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 // Act I's lanes; the demo owns the row's tracks, as the BUILD list does, and is
                 // the framed table's width (the lane less the scroll gutter), which the row spans.
                 const set = try t.build_table_tracks(ctx, .{});
-                const demo = try stage.div("capital_row_demo");
-                _ = demo.with_size(.{ .fixed = t.build_lane_width - t.build_scroll_gutter }, .fit_children)
-                    .with_flow(.{ .dir = .column }).with_tracks(set);
+                const demo = try stage.box("capital_row_demo", .{
+                    .w = .{ .fixed = t.build_lane_width - t.build_scroll_gutter }, .h = .fit_children,
+                    .flow = .{ .dir = .column }, .tracks = set,
+                }, .{});
                 _ = try t.capital_row(demo, world, a[0], set, q, .ready);
             }
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "catalog_controls")) {
         // The field spans its parent, so the audit gives it a catalog-sized width.
-        const demo = try stage.div("cc_demo");
-        _ = demo.with_size(.{ .fixed = 560 }, .fit_children);
+        const demo = try stage.box("cc_demo", .{ .w = .{ .fixed = 560 }, .h = .fit_children }, .{});
         _ = try t.catalog_controls(demo, "cc", t.recipes_placeholder, null, null);
     } else if (eq(name, "milestone_goal")) {
-        const demo = try stage.div("milestone_demo");
-        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         var resource_label_buf: [16]u8 = undefined;
         const resource_label = std.ascii.upperString(&resource_label_buf, ha.roster.Resource.biomass.labelIn(act));
         const requirements = [_]t.MilestoneRequirement{
@@ -441,12 +428,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             .action = "LOCKED",
         });
     } else if (eq(name, "market_strip")) {
-        const demo = try stage.div("market_demo");
-        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const demo = try stage.box("market_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         _ = try t.market_strip(demo, "ms", .passerby, true);
     } else if (eq(name, "activity_strip")) {
-        const demo = try stage.div("activity_demo");
-        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const demo = try stage.box("activity_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         _ = try t.activity_strip(demo, "as", .idle, "no work in progress", "ready", .idle);
     } else if (eq(name, "trade_dialog")) {
         return auditTradeOverlay(ctx, audit_trade);
@@ -456,25 +441,24 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         const a = player.get() orelse return null;
         return try coin_merchant(ctx, world, a[0], "merchant", audit_trade);
     } else if (eq(name, "menu_dialog")) {
-        _ = try stage.text("note", "The session menu opens over this page; reselect the entry to reopen it.");
+        try stage.label("note", "The session menu opens over this page; reselect the entry to reopen it.", .{});
     } else if (eq(name, "curtain")) {
-        const demo = try stage.div("curtain_demo");
-        _ = demo.with_size(.{ .fixed = 520 }, .{ .fixed = 260 });
+        const demo = try stage.box("curtain_demo", .{ .w = .{ .fixed = 520 }, .h = .{ .fixed = 260 } }, .{});
         _ = try t.curtain(demo, "c", .{ .title = "ACT I", .line = "You have a house to live in.", .note = "Room enough for four under one roof.", .button = "Continue" });
     } else if (eq(name, "speed_stepper")) {
         _ = try t.speed_stepper(stage, "speed");
-        _ = try stage.text("hint", "<< / >> step PAUSE, 1x, 2x, 3x; arrows, Home and End when focused.");
+        try stage.label("hint", "<< / >> step PAUSE, 1x, 2x, 3x; arrows, Home and End when focused.", .{});
     } else if (eq(name, "scroll_view")) {
         const sv = try t.scroll_view(stage, "sv", .{ .width = 300, .height = 140 }, null);
         for (0..20) |i| {
             var buf: [24]u8 = undefined;
-            _ = try (try sv.content.item("row", i)).text("t", std.mem.print(&buf, "row {d}", .{i}) catch "row");
+            try (try sv.content.item("row", i)).label("t", std.mem.print(&buf, "row {d}", .{i}) catch "row", .{});
         }
     } else if (eq(name, "sort_header")) {
         // A sortable header row as BUILD's table builds it: click a label to sort, again to flip.
         const st = stage.state(uic.UiState.CatalogState);
         const set = try uic.tracks(ctx, &.{ .{ .basis = .{ .px = 90 } }, .{ .basis = .{ .px = 90 } }, .{ .basis = .{ .px = 90 } } }, 8);
-        _ = stage.with_tracks(set);
+        stage.set(.{ .tracks = set }, .{});
         const row = try t.table_row(stage, "hdr", set, 6, 4);
         const labels = [_][]const u8{ "RECIPE", "COST", "STATE" };
         var members: [labels.len]u64 = undefined;
@@ -492,37 +476,34 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // Own the two generator goods so both rows show.
             fixtureGoods(world, a[0], ctx, &.{ .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
-            const demo = try stage.div("gen_demo");
-            _ = demo.with_size(.{ .fixed = 594 }, .fit_children);
+            const demo = try stage.box("gen_demo", .{ .w = .{ .fixed = 594 }, .h = .fit_children }, .{});
             _ = try t.generator_section(demo, world, a[0], "gens", .{ .through_act = 1 });
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_two_holdings")) {
         if (player.get()) |a| {
-            const demo = try stage.div("a2h_demo");
-            _ = demo.with_size(.{ .fixed = ha.tokens.rail.expanded }, .{ .fixed = 400 });
+            const demo = try stage.box("a2h_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
             // As the Act II rail composes it: the Household column with the eating policy.
             _ = try t.household(demo, world, a[0], "content", try act_two_holdings.content(ctx, world, a[0]));
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_two_actions")) {
         // The shared ACTIONS pane with Act II's shelf. The debug actor has not crossed the
         // curtain, so it holds no Act II verb: this shows the pane's empty state.
         if (player.get()) |a| {
-            const demo = try stage.div("a2a_demo");
-            _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+            const demo = try stage.box("a2a_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
             _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null, null);
         } else {
-            _ = try stage.text("na", "(needs a live player)");
+            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "tooltip")) {
         // An overlay root: the tooltip is its own tree, returned as the frame's second root so
         // it floats above the stage and the index. Placed just under its anchor label, in device
         // px, and kept inside the terminal by its prior-frame size, as a production caller does
         // (null until it has been laid out once, when a zero size pins nothing).
-        _ = try stage.text("anchor", "a control the tooltip describes");
+        try stage.label("anchor", "a control the tooltip describes", .{});
         const tip = try uic.tooltip(ctx, "tip", "Vigor \u{00b7} 7 / 10");
         const s = ctx.res.view.scale;
         const prior = tip.prior_geometry();
@@ -534,18 +515,18 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "readout")) {
         // The readout panel with every primitive inside it, as HOLDINGS composes them.
         const p = try t.readout_panel(stage, "rp", 214, .{ .up = 10, .right = 16, .down = 9, .left = 10 });
-        _ = (try t.readout_heading(p, "heading", "HOLDINGS", "2 KINDS, 3")).with_margin(0, 8);
+        (try t.readout_heading(p, "heading", "HOLDINGS", "2 KINDS, 3")).set(.{ .margin = .{ .after = 8 } }, .{});
         try t.kv_line(p, "sandals", "Sandals \u{00d7}2", "forage costs less", th.dim);
         try t.kv_line(p, "hatchet", "Hatchet", "unlocks Split wood", th.dim);
         try t.divider(p, "divider", 9, 7);
-        _ = (try t.section_label(p, "margins_title", "MARGINS")).with_margin(0, 8);
+        (try t.section_label(p, "margins_title", "MARGINS")).set(.{ .margin = .{ .after = 8 } }, .{});
         try t.kv_line(p, "forage", "Forage", "1.7e \u{2192} 1.4e", th.good);
         try t.sentence(p, "coverage", "Food lasts ", "3.2d", ".", th.fg);
     } else if (eq(name, "table")) {
         // The pieces BUILD's table composes: a header row of labels, and body rows of cells.
         const demo = try stage.div("table_demo");
         const set = try uic.tracks(ctx, &.{ .{ .basis = .{ .px = 150 } }, .{ .basis = .{ .px = 110 } }, .{ .basis = .{ .px = 90 } } }, 8);
-        _ = demo.with_flow(.{ .dir = .column }).with_tracks(set);
+        demo.set(.{ .flow = .{ .dir = .column }, .tracks = set }, .{});
         const h = try t.table_row(demo, "header", set, 6, 4);
         _ = try t.table_header_cell(h, "recipe", "RECIPE");
         _ = try t.table_header_cell(h, "inputs", "INPUTS");
@@ -559,25 +540,22 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.table_cell(r2, "inputs", "30mi", th.dim, false);
         _ = try t.table_cell(r2, "state", "reach 60%", th.warn, true);
     } else if (eq(name, "browser_heading")) {
-        const demo = try stage.div("heading_demo");
-        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const demo = try stage.box("heading_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         _ = try t.browser_heading(demo, "bh", "ACTIONS", "What will the settlement do now?", "20 VERBS");
     } else if (eq(name, "tile_lanes")) {
-        const demo = try stage.div("lanes_demo");
-        _ = demo.with_size(.{ .fixed = 608 }, .fit_children);
+        const demo = try stage.box("lanes_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         const grid = try t.tile_lanes(demo, "grid", false, 10);
         _ = try t.button(grid.lanes[0], "a", "first tile, left lane", true);
         _ = try t.button(grid.lanes[1], "b", "second tile, right lane", true);
         _ = try t.button(grid.lanes[0], "c", "third tile, left again", true);
     } else if (eq(name, "copy")) {
-        const demo = try stage.div("copy_demo");
-        _ = demo.with_flow(.{ .dir = .column }).with_gap(6);
+        const demo = try stage.box("copy_demo", .{ .flow = .{ .dir = .column }, .gap = 6 }, .{});
         _ = try t.headline(demo, "h", "Two others asked to move in.");
         _ = try t.lede(demo, "l", "You are not alone here anymore. Act I ends, and the settlement begins with whoever walked in.", 320);
         _ = try t.summary_line(demo, "s", "20 of 20 actions shown");
         _ = try t.empty_line(demo, "e", "No action matches your search.");
     } else {
-        _ = try stage.text("unknown", "(unknown template)");
+        try stage.label("unknown", "(unknown template)", .{});
     }
     return null;
 }

@@ -94,10 +94,9 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const readiness = if (goal.readiness.len > 0) goal.readiness else pres.readiness;
     const ready = goal.state == .ready;
 
-    const outer = try parent.div(id);
-    _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column })
-        .with_overflow(.clip);
+    const outer = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .overflow = .clip,
+    }, .{});
 
     // State wash and 2px semantic rail paint behind the in-flow content and do not participate
     // in sizing. Ready/done are 11% good; locked/unfunded are 8% danger, fading at 76%.
@@ -109,26 +108,22 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .{ .pos = 0.76, .color = alpha(tone, 0) },
         .{ .pos = 1, .color = alpha(tone, 0) },
     }, 1.0);
-    _ = wash.with_layout(.top_left).with_size(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 1.0 });
-    _ = (try outer.div("state_rail")).with_layout(.top_left)
-        .with_size(.{ .fixed = 2 }, .{ .pct_of_parent = 1.0 })
-        .with_style(.{Style{ .fill = tone }});
+    wash.set(.{ .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 } }, .{});
+    try outer.leaf("state_rail", .{ .anchor = .top_left, .w = .{ .fixed = 2 }, .h = .{ .pct_of_parent = 1.0 } }, .{Style{ .fill = tone }});
 
     // Bar columns: 12px inset (2px rail + 10px) | flexible disclosure | 10px | 132px CTA |
     // 5px inset. The insets are padding, which the percentage width (a border box) takes out
     // of the card's width; the 10px is the CTA lane's leading margin.
-    const bar = try outer.div("bar");
-    _ = bar.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = bar_h })
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_each(0, bar_right, 0, bar_left)});
+    const bar = try outer.box("bar", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = bar_h }, .flow = .{ .dir = .row, .cross = .center },
+    }, .{style.pad_each(0, bar_right, 0, bar_left)});
 
-    const disclosure_lane = try bar.div("disclosure_lane");
-    _ = disclosure_lane.with_size(.grow, .{ .fixed = bar_h })
-        .with_flow(.{ .dir = .column, .main = .center });
-    const disclosure = try disclosure_lane.div("disclosure");
-    _ = disclosure.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_h })
-        .with_offset(0, bar_control_offset_y)
-        .with_style(.{Style{ .fill_ink = .bg }});
+    const disclosure_lane = try bar.box("disclosure_lane", .{
+        .w = .grow, .h = .{ .fixed = bar_h }, .flow = .{ .dir = .column, .main = .center },
+    }, .{});
+    const disclosure = try disclosure_lane.box("disclosure", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_h }, .offset = .{ .y = bar_control_offset_y },
+    }, .{Style{ .fill_ink = .bg }});
     const disclosure_state = disclosure.state(DisclosureState);
     if (goal.expand) |x| disclosure_state.expanded = x;
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
@@ -139,109 +134,90 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     // text leaves sit directly in the fixed-height parent, this engine centers them only within
     // their intrinsic line band; the anchored group gives Shelter, details, and the CTA one
     // shared vertical center while preserving the flexible summary column.
-    const disclosure_content = try disclosure.div("content");
-    _ = disclosure_content.with_layout(.center)
-        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_gap(summary_gap);
-    _ = (try disclosure_content.text("title", goal.title))
-        .with_style(.{Style{ .font = 15, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
-    _ = (try disclosure_content.text("readiness", readiness))
-        .with_style(.{Style{ .font = 9, .text = tone }});
+    const disclosure_content = try disclosure.box("content", .{
+        .anchor = .center, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .cross = .center }, .gap = summary_gap,
+    }, .{});
+    try disclosure_content.label("title", goal.title, .{Style{ .font = 15, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+    try disclosure_content.label("readiness", readiness, .{Style{ .font = 9, .text = tone }});
 
     // The compact column is the only flexible summary field and clips before it can displace
     // the affordance or fixed action button.
-    const compact = try disclosure_content.div("compact");
-    _ = compact.with_size(.grow, .fit_children)
-        .with_overflow(.clip);
-    _ = (try compact.text("text", goal.summary))
-        .with_style(.{style.fine_print});
+    const compact = try disclosure_content.box("compact", .{ .w = .grow, .h = .fit_children, .overflow = .clip }, .{});
+    try compact.label("text", goal.summary, .{style.fine_print});
 
-    const affordance = try disclosure_content.div("affordance");
-    _ = affordance.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_gap(ha.tokens.gap.inline_);
-    _ = (try affordance.text("word", if (disclosure_state.expanded) "close" else "details"))
-        .with_style(.{style.fine_print});
-    _ = (try affordance.text("arrow", if (disclosure_state.expanded) "\u{2191}" else "\u{2193}"))
-        .with_style(.{style.fine_print});
+    const affordance = try disclosure_content.box("affordance", .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
+        .gap = ha.tokens.gap.inline_,
+    }, .{});
+    try affordance.label("word", if (disclosure_state.expanded) "close" else "details", .{style.fine_print});
+    try affordance.label("arrow", if (disclosure_state.expanded) "\u{2191}" else "\u{2193}", .{style.fine_print});
 
     var clicked = false;
     if (goal.action.len > 0) {
-        const action_lane = try bar.div("action_lane");
-        _ = action_lane.with_size(.{ .fixed = action_w }, .{ .fixed = bar_h })
-            .with_flow(.{ .dir = .column, .main = .center })
-            .with_margin(bar_gap, 0);
-        const action = try action_lane.div("action");
-        _ = action.with_size(.{ .fixed = action_w }, .{ .fixed = action_h })
-            .with_offset(0, bar_control_offset_y);
+        const action_lane = try bar.box("action_lane", .{
+            .w = .{ .fixed = action_w }, .h = .{ .fixed = bar_h },
+            .flow = .{ .dir = .column, .main = .center }, .margin = .{ .before = bar_gap },
+        }, .{});
+        const action = try action_lane.box("action", .{
+            .w = .{ .fixed = action_w }, .h = .{ .fixed = action_h },
+            .offset = .{ .y = bar_control_offset_y },
+        }, .{});
         const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button });
         // Disabled (`!ready`) never lifts, so the dim rest holds under the pointer.
         const action_ink: style.ThemeRole = if (ready) .fg else .dim;
-        _ = action.with_style(.{Style{ .outline_ink = action_ink, .hot = .{ .outline_ink = .acc, .when = .hover_focus } }});
-        _ = (try action.text("label", goal.action))
-            .with_layout(.center)
-            .with_style(.{Style{ .font = 9, .ink = action_ink, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+        action.set(.{}, .{Style{ .outline_ink = action_ink, .hot = .{ .outline_ink = .acc, .when = .hover_focus } }});
+        (try action.text("label", goal.action)).set(.{
+            .anchor = .center,
+        }, .{Style{ .font = 9, .ink = action_ink, .hot = .{ .ink = .acc, .when = .hover_focus } }});
         clicked = ready and aq.clicked;
     }
 
     if (disclosure_state.expanded) {
-        const details = try outer.div("details");
-        _ = details.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_flow(.{ .dir = .column });
-        const divider = try details.div("divider");
-        _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-            .with_style(.{style.rule_fill});
+        const details = try outer.box("details", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
+        try details.leaf("divider", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = 1 } }, .{style.rule_fill});
 
         // The row's padding is the 14px (2px rail + 12px) / 10px CSS inset; its percentage
         // width is a border box, so the padding comes out of the card's width.
-        const detail_row = try details.div("row");
-        _ = detail_row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-            .with_flow(.{ .dir = .row })
-            .with_style(.{style.pad_each(0, detail_right, 0, detail_left)});
-        const content = try detail_row.div("content");
-        _ = content.with_size(.grow, .fit_children)
-            .with_flow(.{ .dir = .column }).with_gap(4)
-            .with_style(.{style.pad_each(6, 0, 8, 0)});
+        const detail_row = try details.box("row", .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row },
+        }, .{style.pad_each(0, detail_right, 0, detail_left)});
+        const content = try detail_row.box("content", .{
+            .w = .grow, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 4,
+        }, .{style.pad_each(6, 0, 8, 0)});
 
         if (goal.kicker.len > 0 or goal.cost.len > 0) {
-            const head = try content.div("head");
-            _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-                .with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline });
+            const head = try content.box("head", .{
+                .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+                .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline },
+            }, .{});
             if (goal.kicker.len > 0) {
                 const kicker_color = if (goal.state == .done) th.good else th.acc;
-                _ = (try head.text("kicker", goal.kicker))
-                    .with_style(.{Style{ .font = 9, .tracking = 0.08, .text = kicker_color }});
+                try head.label("kicker", goal.kicker, .{Style{ .font = 9, .tracking = 0.08, .text = kicker_color }});
             }
             if (goal.cost.len > 0) {
-                _ = (try head.text("cost", goal.cost))
-                    .with_style(.{style.fine_print});
+                try head.label("cost", goal.cost, .{style.fine_print});
             }
         }
 
         if (goal.copy.len > 0) {
-            _ = (try content.text_fit("copy", goal.copy, .{ .wrap = detail_wrap_w }))
-                .with_style(.{Style{ .font = 10, .ink = .fg }});
+            try content.label_fit("copy", goal.copy, .{ .wrap = detail_wrap_w }, .{Style{ .font = 10, .ink = .fg }});
         }
 
         if (goal.requirements.len > 0) {
-            const requirements = try content.div("requirements");
-            _ = requirements.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-                .with_flow(.{ .dir = .row, .wrap = true, .cross = .center })
-                .with_gap(13);
+            const requirements = try content.box("requirements", .{
+                .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+                .flow = .{ .dir = .row, .wrap = true, .cross = .center }, .gap = 13,
+            }, .{});
             for (goal.requirements, 0..) |requirement, i| {
-                const token = try requirements.item("r", i);
-                _ = token.with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(4);
-                _ = (try token.text("label", requirement.label))
-                    .with_style(.{Style{ .font = 8.5, .ink = .line2 }});
-                _ = (try token.text("value", requirement.value))
-                    .with_style(.{Style{ .font = 8.5, .ink = if (requirement.met) .good else .danger }});
+                const token = try requirements.boxi("r", i, .{ .flow = .{ .dir = .row, .cross = .baseline }, .gap = 4 }, .{});
+                try token.label("label", requirement.label, .{Style{ .font = 8.5, .ink = .line2 }});
+                try token.label("value", requirement.value, .{Style{ .font = 8.5, .ink = if (requirement.met) .good else .danger }});
             }
         }
 
         if (goal.explanation.len > 0) {
-            _ = (try content.text("explanation", goal.explanation))
-                .with_style(.{style.fine_print});
+            try content.label("explanation", goal.explanation, .{style.fine_print});
         }
     }
 

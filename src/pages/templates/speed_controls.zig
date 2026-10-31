@@ -19,9 +19,8 @@ pub fn menu_control(parent: El, id: []const u8) !El {
     const menu = try parent.div(id);
     if (menu.query().clicked) ctx.res.menu.show(&ctx.res.playback);
     _ = menu.control(.{ .name = "Open menu", .role = .button });
-    _ = menu.with_size(.fit_children, .fit_children);
-    _ = (try menu.text("label", "MENU"))
-        .with_style(.{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .hot = .{ .ink = .acc } }, style.pad_sym(4, 2) });
+    menu.set(.{ .w = .fit_children, .h = .fit_children }, .{});
+    try menu.label("label", "MENU", .{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .hot = .{ .ink = .acc } }, style.pad_sym(4, 2) });
     return menu;
 }
 
@@ -38,9 +37,7 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const pb = &ctx.res.playback;
-    const box = try parent.div(id);
-    _ = box.with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
-        .with_size(.fit_children, .fit_children);
+    const box = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 2, .w = .fit_children, .h = .fit_children }, .{});
     ctx.res.commands.registerRange(box.get().key);
 
     // Keyboard commands land on the focused range owner; apply them before publishing.
@@ -66,10 +63,11 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
         .cursor = .default,
     });
     const color = if (lvl == 0) th.warn else th.fg;
-    _ = value_cell.with_size(.{ .fixed = level_cell_w }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-    _ = (try value_cell.text("label", level_labels[lvl]))
-        .with_style(.{ Style{ .font = 10, .tracking = 0.04, .text = color }, style.pad_sym(2, 2) });
+    value_cell.set(.{
+        .w = .{ .fixed = level_cell_w }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .center, .cross = .center },
+    }, .{});
+    try value_cell.label("label", level_labels[lvl], .{ Style{ .font = 10, .tracking = 0.04, .text = color }, style.pad_sym(2, 2) });
     return box;
 }
 
@@ -77,8 +75,7 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
 /// order: the stepper itself is the keyboard owner.
 fn chevron(box: El, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     const q = box.control(.{ .name = name, .role = .button, .enabled = enabled, .focusable = false });
-    _ = box.with_size(.fit_children, .fit_children);
-    _ = (try box.text("glyph", glyph))
-        .with_style(.{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .hot = .{ .ink = .acc } }, style.pad_sym(3, 2) });
+    box.set(.{ .w = .fit_children, .h = .fit_children }, .{});
+    try box.label("glyph", glyph, .{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .hot = .{ .ink = .acc } }, style.pad_sym(3, 2) });
     return q.clicked;
 }

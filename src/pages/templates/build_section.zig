@@ -44,15 +44,17 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
     // The table plus its reserved scroll gutter, so the track never covers a lane. A wider
     // parent leaves its slack outside the section; a narrower one than the lanes' floors is
     // overflowed.
-    _ = section.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").fill_h(ctx))
-        .with_min(ext.min + gutter, null).with_max(ext.max + gutter, null)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
+    section.set(.{
+        .w = .{ .pct_of_parent = 1.0 }, .h = @import("./terminal.zig").fill_h(ctx),
+        .min = .{ .w = ext.min + gutter }, .max = .{ .w = ext.max + gutter },
+        .flow = .{ .dir = .column, .cross = .start }, .gap = 7,
+    }, .{});
 
     var count_buf: [24]u8 = undefined;
     const count = std.mem.print(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
     const heading_box = try section.div("heading_box");
     // Over the table: the count ends where the lanes do.
-    _ = heading_box.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_pct_less(gutter, null);
+    heading_box.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .pct_less = .{ .w = gutter } }, .{});
     _ = try browser_mod.browser_heading(heading_box, "heading", "BUILD", shelf.subtitle, count);
 
     _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, set, catalog, search_owner, scroll);

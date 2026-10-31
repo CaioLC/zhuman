@@ -35,18 +35,16 @@ pub const Result = struct {
 
 pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options) !Result {
     const th = parent.ctx.res.view.theme;
-    const list = try parent.div(id);
-    _ = list.with_size(.fit_children, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(1)
-        .with_style(.{style.pad_each(opts.top, 0, 0, 0)});
+    const list = try parent.box(id, .{
+        .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 1,
+    }, .{style.pad_each(opts.top, 0, 0, 0)});
 
     var clicked: ?usize = null;
     var first_key: ?u64 = null;
     for (items, 0..) |item, i| {
-        const row = try list.div(item.id);
-        _ = row.with_size(.fit_children, .fit_children)
-            .with_flow(.{ .dir = .row, .cross = .center }).with_gap(14)
-            .with_style(.{style.pad_sym(0, 5)});
+        const row = try list.box(item.id, .{
+            .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 14,
+        }, .{style.pad_sym(0, 5)});
         const q = row.control(.{ .enabled = item.enabled, .name = item.label, .role = .button });
         if (first_key == null) first_key = row.get().key;
         if (q.clicked) clicked = i;
@@ -55,13 +53,10 @@ pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options)
         const label_color = if (!item.enabled) th.line2 else if (lit) th.fg else th.dim;
 
         // The mark keeps its 2ch lane at rest, drawn in the ground colour, so labels align.
-        _ = (try row.text_fit("mark", "\u{203a}", .{ .cell = .{ .mode = .clip, .width = 2 * 0.6 * opts.font } }))
-            .with_style(.{Style{ .font = opts.font, .text = mark_color }});
-        _ = (try row.text("label", item.label))
-            .with_style(.{Style{ .font = opts.font, .tracking = -0.02, .text = label_color }});
+        try row.label_fit("mark", "\u{203a}", .{ .cell = .{ .mode = .clip, .width = 2 * 0.6 * opts.font } }, .{Style{ .font = opts.font, .text = mark_color }});
+        try row.label("label", item.label, .{Style{ .font = opts.font, .tracking = -0.02, .text = label_color }});
         if (!item.enabled and item.why.len > 0) {
-            _ = (try row.text("why", item.why))
-                .with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = .line2 }});
+            try row.label("why", item.why, .{Style{ .font = 10, .tracking = 0.06, .ink = .line2 }});
         }
     }
     return .{ .clicked = clicked, .first_key = first_key };

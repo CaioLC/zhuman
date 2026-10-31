@@ -25,7 +25,8 @@
 #
 #   4. Pages lay out; only templates paint. A page (a file under `src/pages/` outside
 #      `templates/`) places nodes — `div`, `spacer`, `with_size`/`with_flow`/`with_gap`/
-#      `with_layout` — and composes the shelf; a styled or text node belongs to a template
+#      `with_layout`, or `box`/`leaf`/`set` with an empty style spec `.{}` — and composes the
+#      shelf; a styled, text or `label` node belongs to a template
 #      (`src/pages/templates/copy.zig` holds the prose leaves), because a style chosen in a
 #      page is art direction that drifts. The debug page is exempt:
 #      the audit harness paints by design. Any hit fails the check.
@@ -45,16 +46,20 @@ if [ -n "$hits" ]; then
     status=1
 fi
 
-paint='\.with_style\(|\.text(_fit)?\('
+paint='\.with_style\(|\.text(_fit)?\(|\.label(_fit)?\('
 pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig)
 hits=$(grep -nE "$paint" $pages | grep -vE '^[^:]+:[0-9]+:\s*//')
+# A `Props` constructor or `set` paints when its style spec (the last argument) is not `.{}`.
+# A call wrapped over lines is flagged at its first line, so keep a page's calls on one.
+styled=$(grep -nE '\.(box|boxi|leaf|leafi|set)\(.*\.\{' $pages | grep -vE '^[^:]+:[0-9]+:\s*//' | grep -vE ', \.\{\}\);\s*(//.*)?$')
+hits=$(printf '%s\n%s' "$hits" "$styled" | grep -v '^$')
 if [ -n "$hits" ]; then
     echo "boundary: a page paints (a styled or text node belongs to a template):"
     echo "$hits"
     status=1
 fi
 
-inventory='\.pass_through\(\)|setPassThrough\(|prior_geometry\(|\.rect\((parent\.)?ctx\)|rectOf\(|priorGeometry(Of)?\(|with_size_px\(|with_offset_px\(|view\.dp\(|capturePointer\(|releasePointerCapture\(|semantics\.publish\(|cursor\.request\(|requestFocus\(|consumeFlag\('
+inventory='\.pass_through\(\)|\.pass_through = true|\.probe\(\)|setPassThrough\(|prior_geometry\(|\.rect\((parent\.)?ctx\)|rectOf\(|priorGeometry(Of)?\(|with_size_px\(|with_offset_px\(|view\.dp\(|capturePointer\(|releasePointerCapture\(|semantics\.publish\(|cursor\.request\(|requestFocus\(|consumeFlag\('
 # Components that own geometry or a host service, the game's dialog shell, and the debug page
 # (its tooltip fixture is placed and clamped like a production tooltip). A template test file
 # (`*_test.zig`) reads stamped geometry to aim its synthetic pointer.

@@ -240,6 +240,7 @@ test {
     _ = @import("./profile.zig");
     _ = @import("./layout_dump.zig");
     _ = @import("./dpi_test.zig");
+    _ = @import("./elements_props_test.zig");
     _ = @import("./replay.zig");
     _ = @import("./journey.zig");
     _ = @import("./frame_lifecycle_test.zig");

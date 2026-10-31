@@ -101,54 +101,46 @@ pub fn tile(
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
-    _ = box.with_flow(.{ .dir = .column })
-        .with_style(.{ Style{ .outline_color = chrome }, style.pad_each(0, 0, 1, 0) });
+    box.set(.{ .flow = .{ .dir = .column } }, .{ Style{ .outline_color = chrome }, style.pad_each(0, 0, 1, 0) });
 
-    const inner = try box.div("inner");
-    _ = inner.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2)
-        .with_style(.{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
+    const inner = try box.box("inner", .{
+        .flow = .{ .dir = .column, .cross = .start }, .gap = 2,
+    }, .{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
 
     const lit = can or running; // dimmed tiles flatten everything onto the chrome
 
-    _ = (try inner.text("name", name)).with_style(.{ name_role, Style{ .text = chrome } });
+    try inner.label("name", name, .{ name_role, Style{ .text = chrome } });
 
     // An optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.
     if (state.len > 0) {
-        _ = (try inner.text("state", state))
-            .with_style(.{ style.small, Style{ .ink = if (running) .acc else if (!enabled) .dim else .dim } });
+        try inner.label("state", state, .{ style.small, Style{ .ink = if (running) .acc else if (!enabled) .dim else .dim } });
     }
 
     // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and
     // the expected payoff. Center-aligned across (the icon box has no baseline). Disabled ⟹
     // everything takes the dim chrome, one flat scan-off signal.
-    const row = try inner.div("info");
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(6);
+    const row = try inner.box("info", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 6 }, .{});
 
-    _ = (try row.text("cost", cost_txt))
-        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
+    try row.label("cost", cost_txt, .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
     // The middot joins the price segment and the duration, so additional input costs
     // stay in the price segment *before* the middot.
-    _ = (try row.text("mid", "\u{00B7}"))
-        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
-    _ = (try row.text("dur", duration_txt))
-        .with_style(.{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
+    try row.label("mid", "\u{00B7}", .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
+    try row.label("dur", duration_txt, .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
 
     // Recolor the icon raster's ink through the style fold's `tint` field rather
     // than poking `render_data.svg` — same last-fragment-wins path as every other look.
-    _ = (try row.svg("kind", info.kind_icon(kind), if (compact) icon_px - 2 else icon_px))
-        .with_style(.{Style{ .tint = if (lit) th.dim else chrome }});
+    (try row.svg("kind", info.kind_icon(kind), if (compact) icon_px - 2 else icon_px)).set(.{}, .{Style{ .tint = if (lit) th.dim else chrome }});
 
-    _ = (try row.text("yield", yield_txt))
-        .with_style(.{ metric_role, Style{ .text = if (lit) th.fg else chrome } });
+    try row.label("yield", yield_txt, .{ metric_role, Style{ .text = if (lit) th.fg else chrome } });
 
     // The underbar: full tile width × progress, a percentage of the box it is anchored in
     // (an out-of-flow child resolves against its parent's final size, so it never resizes
     // the tile and needs no prior-frame rect).
     if (progress) |p| {
-        _ = (try box.div("bar")).with_layout(.bottom_left)
-            .with_size(.{ .pct_of_parent = std.math.clamp(p, 0, 1) }, .{ .fixed = 3 })
-            .with_style(.{Style{ .fill_ink = .acc }});
+        try box.leaf("bar", .{
+            .anchor = .bottom_left, .w = .{ .pct_of_parent = std.math.clamp(p, 0, 1) }, .h = .{ .fixed = 3 },
+        }, .{Style{ .fill_ink = .acc }});
     }
 
     return .{ .el = box, .clicked = !running and can and q.clicked };

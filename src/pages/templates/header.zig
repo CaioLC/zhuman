@@ -32,9 +32,10 @@ pub const Header = struct {
 /// Assemble the full-width HUD header as one intrinsic-height row. Stocks own the left; run
 /// context, the speed stepper (pause..3×), and the menu share the right group in that order.
 pub fn header(parent: El, id: []const u8, options: Options) !Header {
-    const root = try parent.div(id);
-    _ = root.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
+    const root = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .center },
+    }, .{});
 
     const stocks = try stock_mod.stockline(root, "stocks", options.stocks, options.compact_stocks);
     // The stockline takes what the run context leaves, 12px clear of it, and wraps when it
@@ -43,12 +44,11 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     // Its grown width is final before any height is solved, so its fit height counts every
     // line it wraps to.
     const stack = @import("./terminal.zig").stacked(parent.ctx);
-    _ = root.with_flow(.{ .dir = .row, .main = .start, .cross = if (stack) .start else .center }).with_gap(12);
+    root.set(.{ .flow = .{ .dir = .row, .main = .start, .cross = if (stack) .start else .center }, .gap = 12 }, .{});
     stocks.get().layout.flow.wrap = true;
-    _ = stocks.with_size(.grow, .fit_children);
+    stocks.set(.{ .w = .grow, .h = .fit_children }, .{});
 
-    const right = try root.div("right");
-    _ = right.with_flow(.{ .dir = .row, .cross = .center }).with_gap(12);
+    const right = try root.box("right", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 12 }, .{});
     const run = try run_mod.runline(right, "run", options.run);
     const speed: ?El = if (options.show_speed) try speed_mod.speed_stepper(right, "speed") else null;
     const menu = try speed_mod.menu_control(right, "menu");

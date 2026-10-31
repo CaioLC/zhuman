@@ -101,7 +101,8 @@ const Overlay = struct {
             const node = try Node.create(ctx.arena, "tip");
             node.layout.anchor = .top_left;
             const tip = El{ .ctx = ctx, .node = node };
-            _ = tip.with_size(.{ .fixed = 300 }, .{ .fixed = 60 }).track().pass_through();
+            tip.set(.{ .w = .{ .fixed = 300 }, .h = .{ .fixed = 60 } }, .{});
+            tip.probe();
             roots[1] = tip.get();
             n = 2;
         }
@@ -175,13 +176,13 @@ const Nested = struct {
         const root = try el.root(ctx, "root");
         const frame = try box(root, "frame", 0, 0, 300, 200);
         const outer = try scroll_mod.scroll_view(frame, "outer", .{ .width = 300, .height = 200, .gap = 0, .framed = false }, null);
-        _ = (try outer.content.div("lead")).with_size(.{ .fixed = 300 }, .{ .fixed = 40 });
+        try outer.content.leaf("lead", .{ .w = .{ .fixed = 300 }, .h = .{ .fixed = 40 } }, .{});
         const inner = try scroll_mod.scroll_view(outer.content, "inner", .{ .width = 300, .height = 100, .gap = 0, .framed = false }, null);
         for (0..10) |i| {
             const row = (try inner.content.item("row", i)).with_size(.{ .fixed = 280 }, .{ .fixed = 30 });
             if (row.control(.{ .name = "row", .role = .button }).clicked) self.clicked[i] += 1;
         }
-        _ = (try outer.content.div("tail")).with_size(.{ .fixed = 300 }, .{ .fixed = 300 });
+        try outer.content.leaf("tail", .{ .w = .{ .fixed = 300 }, .h = .{ .fixed = 300 } }, .{});
         self.outer = outer.outer.state(uic.UiState.ScrollState).offset;
         self.inner = inner.outer.state(uic.UiState.ScrollState).offset;
         return list(ctx, &.{root.get()});

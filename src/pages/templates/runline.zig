@@ -37,37 +37,33 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
     const ctx = parent.ctx;
     var buf: [48]u8 = undefined;
 
-    const row = try parent.div(id);
-    _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
+    const row = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 8 }, .{});
 
     // Energy rate segment — only when there is a flow (Act II): `⚡ +gen/−consumed`, the
     // prototype's `.energy-rate` — dim bolt and slash, generated in `acc`, consumed in `warn`.
     // It is a rate, not a stockpile, so it never takes the stockline's `LABEL: value` form.
     if (run.gen != 0 or run.consumed != 0) {
-        const energy = try row.div("energy");
-        _ = energy.with_flow(.{ .dir = .row, .cross = .center }).with_gap(3)
-            .with_style(.{style.pad_each(0, 12 - 8, 0, 0)}); // 12px before the act label
-        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ runType(ctx), style.muted });
+        const energy = try row.box("energy", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 3 }, .{style.pad_each(0, 12 - 8, 0, 0)});
+        // 12px before the act label
+        try energy.label("bolt", "\u{26A1}", .{ runType(ctx), style.muted });
         var gbuf: [16]u8 = undefined;
         var cbuf: [16]u8 = undefined;
         const gen_txt = std.mem.print(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
         const use_txt = std.mem.print(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
-        _ = (try energy.text("gen", gen_txt)).with_style(.{ runType(ctx), style.ink(.acc) });
-        _ = (try energy.text("slash", "/")).with_style(.{ runType(ctx), style.muted });
-        _ = (try energy.text("use", use_txt)).with_style(.{ runType(ctx), style.ink(.warn) });
+        try energy.label("gen", gen_txt, .{ runType(ctx), style.ink(.acc) });
+        try energy.label("slash", "/", .{ runType(ctx), style.muted });
+        try energy.label("use", use_txt, .{ runType(ctx), style.ink(.warn) });
     }
 
     // Act label — optional context, dropped when compact; the middot follows it.
     if (!run.compact) {
         const atxt = std.mem.print(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
-        _ = (try row.text("act", atxt))
-            .with_style(.{ runType(ctx), style.muted });
+        try row.label("act", atxt, .{ runType(ctx), style.muted });
     }
 
     // Day — the functional counter, always shown, in fg.
     const dtxt = std.mem.print(&buf, "Day {d}", .{run.day}) catch "?";
-    _ = (try row.text("day", dtxt))
-        .with_style(.{ runType(ctx), style.ink(.fg) });
+    try row.label("day", dtxt, .{ runType(ctx), style.ink(.fg) });
 
     return row;
 }

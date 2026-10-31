@@ -32,8 +32,7 @@ pub fn button_variant(parent: El, id: []const u8, label: []const u8, enabled: bo
 
     // Outer clickable box: flows, lays its label out horizontally, and hugs it (fit).
     // No content of its own — just the outline chrome.
-    const outer = try parent.div(id);
-    _ = outer.with_flow(.{ .dir = .row }).with_size(.fit_children, .fit_children);
+    const outer = try parent.box(id, .{ .flow = .{ .dir = .row }, .w = .fit_children, .h = .fit_children }, .{});
 
     // The whole box is the control; its authority remains the caller's `enabled`. The lifecycle
     // (focus, activation, disabled consumption, state and semantics, cursor) is one call.
@@ -55,8 +54,8 @@ pub fn button_variant(parent: El, id: []const u8, label: []const u8, enabled: bo
         else => style.body,
     };
     const pad = if (variant == .back) style.pad_sym(8, 3) else style.pad_sym(8, 4);
-    _ = (try outer.text("lbl", label)).with_style(.{ label_style, pad, Style{ .text = text } });
-    _ = outer.with_style(.{Style{ .outline_color = line }});
+    try outer.label("lbl", label, .{ label_style, pad, Style{ .text = text } });
+    outer.set(.{}, .{Style{ .outline_color = line }});
 
     return outer;
 }

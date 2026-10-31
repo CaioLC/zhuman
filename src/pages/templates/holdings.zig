@@ -53,9 +53,7 @@ pub const Content = struct {
 };
 
 fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
-    const col = try parent.div(id);
-    _ = col.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(gap);
+    const col = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = gap }, .{});
     for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, style.toneColor(parent.ctx, l.tone));
 }
 
@@ -66,31 +64,29 @@ const heading_inset: f32 = 16;
 fn mainPanel(parent: El, c: Content, col_w: f32) !void {
     const content_w = col_w - main_pad.left - main_pad.right;
     const panel = try readout.readout_panel(parent, "panel", content_w, main_pad);
-    const heading_box = try panel.div("heading_box");
-    _ = heading_box.with_size(.{ .fixed = content_w - heading_inset }, .fit_children).with_margin(0, 8);
+    const heading_box = try panel.box("heading_box", .{
+        .w = .{ .fixed = content_w - heading_inset }, .h = .fit_children, .margin = .{ .after = 8 },
+    }, .{});
     _ = try readout.readout_heading(heading_box, "heading", "HOLDINGS", c.count);
     if (c.roster.len == 0) {
-        _ = (try panel.text("none", c.empty_roster))
-            .with_style(.{ style.body, style.faint });
+        try panel.label("none", c.empty_roster, .{ style.body, style.faint });
     } else {
         try lines(panel, "roster", c.roster, 3);
     }
     try readout.divider(panel, "divider", 9, 7);
-    _ = (try readout.section_label(panel, "section_title", c.section_title)).with_margin(0, 8);
+    (try readout.section_label(panel, "section_title", c.section_title)).set(.{ .margin = .{ .after = 8 } }, .{});
     try lines(panel, "section", c.section, 4);
 }
 
 fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
     const panel = try readout.readout_panel(parent, "body", col_w - body_pad.left - body_pad.right, body_pad);
-    _ = (try readout.section_label(panel, "title", "BODY")).with_margin(0, 1);
+    (try readout.section_label(panel, "title", "BODY")).set(.{ .margin = .{ .after = 1 } }, .{});
     if (c.body_note) |note| {
-        _ = (try panel.text("note", note)).with_style(.{style.note});
+        try panel.label("note", note, .{style.note});
         return;
     }
     // `.body-panel` sets its sentences at 11px on a 1.35 line, no gap between them.
-    const list = try panel.div("list");
-    _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .column }).with_gap(0);
+    const list = try panel.box("list", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 0 }, .{});
     for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, style.toneColor(parent.ctx, s.tone));
 }
 
@@ -113,21 +109,24 @@ pub fn holdings(parent: El, id: []const u8, c: Content) !El {
         const total = sc.total;
         const two_up = sc.two_up;
         const col_w = sc.col_w;
-        const column = try parent.div(id);
-        _ = column.with_size(.{ .fixed = total }, .fit_children)
-            .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
-        const panels = try column.div("panels");
-        _ = panels.with_size(.{ .fixed = total }, .fit_children)
-            .with_flow(.{ .dir = if (two_up) .row else .column, .cross = .start }).with_gap(if (two_up) stacked_gap else panel_gap);
+        const column = try parent.box(id, .{
+            .w = .{ .fixed = total }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+            .gap = panel_gap,
+        }, .{});
+        const panels = try column.box("panels", .{
+            .w = .{ .fixed = total }, .h = .fit_children,
+            .flow = .{ .dir = if (two_up) .row else .column, .cross = .start },
+            .gap = if (two_up) stacked_gap else panel_gap,
+        }, .{});
         try mainPanel(panels, c, col_w);
         try bodyPanel(panels, c, col_w);
-        const foot = try column.div("foot");
-        _ = foot.with_size(.{ .fixed = col_w }, .fit_children).with_flow(.{ .dir = .column });
+        const foot = try column.box("foot", .{ .w = .{ .fixed = col_w }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
         return foot;
     }
-    const column = try parent.div(id);
-    _ = column.with_size(.{ .fixed = column_width }, .fit_children)
-        .with_flow(.{ .dir = .column, .cross = .start }).with_gap(panel_gap);
+    const column = try parent.box(id, .{
+        .w = .{ .fixed = column_width }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+        .gap = panel_gap,
+    }, .{});
     try mainPanel(column, c, column_width);
     try bodyPanel(column, c, column_width);
     return column;

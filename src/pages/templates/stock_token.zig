@@ -131,8 +131,7 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     // token is only as wide as `abbrev + value`. On hover/focus the label swaps to the full
     // form, so **only that token grows** and its neighbors stay tight. Two tinted leaves: a
     // **dim** label (`VIGOR:`) beside the semantic value (`14.2/15`).
-    _ = box.with_flow(.{ .dir = .row, .cross = .center }).with_gap(ha.tokens.gap.inline_)
-        .with_size(.fit_children, .fit_children);
+    box.set(.{ .flow = .{ .dir = .row, .cross = .center }, .gap = ha.tokens.gap.inline_, .w = .fit_children, .h = .fit_children }, .{});
 
     var buf: [64]u8 = undefined;
     const label = if (reveal) s.full else s.abbrev;
@@ -168,17 +167,14 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
 fn sep(parent: El, i: usize, compact: bool) !void {
     const slot = try parent.item("sep", i);
     const size: Style = if (compact) .{ .font = compact_font } else .{};
-    _ = (try slot.text("t", "|"))
-        .with_style(.{ lineType(parent.ctx), size, style.faint });
+    try slot.label("t", "|", .{ lineType(parent.ctx), size, style.faint });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
 /// row `El` (shelf convention). Membership/order is entirely the caller's `stocks` slice;
 /// `compact` is the long-line form (see the module doc).
 pub fn stockline(parent: El, id: []const u8, stocks: []const Stock, compact: bool) !El {
-    const bar = try parent.div(id);
-    _ = bar.with_flow(.{ .dir = .row, .cross = .center })
-        .with_gap(if (compact) compact_gap else line_gap);
+    const bar = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .center }, .gap = if (compact) compact_gap else line_gap }, .{});
     for (stocks, 0..) |s, i| {
         if (i > 0) try sep(bar, i, compact);
         try stock_token_in(try bar.item("tok", i), s, compact);

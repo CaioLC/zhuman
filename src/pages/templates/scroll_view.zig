@@ -86,16 +86,18 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     // Stacked (≤760) the whole page is the scroll view: a parent-high view has no height to
     // fill, so it takes its content's and lets the page scroll it.
     if (fill_h and @import("./terminal.zig").stacked(ctx)) {
-        const outer = try parent.div(id);
-        _ = outer.with_flow(.{ .dir = .row, .cross = .start })
-            .with_size(if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .fit_children)
-            .with_pct_less(opts.gutter, null); // no track here: the whole gutter is kept
-        const viewport = try outer.div("viewport");
-        _ = viewport.with_flow(.{ .dir = .column, .cross = .start })
-            .with_size(if (fill) .grow else .{ .fixed = opts.width }, .fit_children);
+        const outer = try parent.box(id, .{
+            .flow = .{ .dir = .row, .cross = .start },
+            .w = if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .h = .fit_children,
+            .pct_less = .{ .w = opts.gutter },
+        }, .{});
+        // no track here: the whole gutter is kept
+        const viewport = try outer.box("viewport", .{
+            .flow = .{ .dir = .column, .cross = .start }, .w = if (fill) .grow else .{ .fixed = opts.width },
+            .h = .fit_children,
+        }, .{});
         if (opts.framed) _ = viewport.with_style(.{Style{ .outline_ink = .line2 }});
-        const content = try viewport.div("content");
-        _ = content.with_flow(.{ .dir = .column }).with_gap(opts.gap);
+        const content = try viewport.box("content", .{ .flow = .{ .dir = .column }, .gap = opts.gap }, .{});
         if (fill) _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
         const st = state orelse outer.state(ScrollState);
         if (st.dragging) uic.cancelScrollThumb(ctx, st);
@@ -104,28 +106,27 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     const outer = try parent.div(id);
     // Top-aligned: the default baseline cross-alignment would place the viewport by its
     // content's first baseline and shift it against the track.
-    _ = outer.with_flow(.{ .dir = .row, .cross = .start });
-    _ = outer.with_size(
-        if (fill) .{ .pct_of_parent = 1.0 } else .fit_children,
-        if (fill_h) .{ .pct_of_parent = 1.0 } else if (fill) .{ .fixed = opts.height } else .fit_children,
-    );
+    outer.set(.{ .flow = .{ .dir = .row, .cross = .start } }, .{});
+    outer.set(.{
+        .w = if (fill) .{ .pct_of_parent = 1.0 } else .fit_children,
+        .h = if (fill_h) .{ .pct_of_parent = 1.0 } else if (fill) .{ .fixed = opts.height } else .fit_children,
+    }, .{});
 
     const viewport = try outer.div("viewport");
     // Top-anchored column: the default row/baseline flow would align an overflowing content
     // column by its baseline and start it part-way scrolled.
-    _ = viewport.with_overflow(.clip).with_flow(.{ .dir = .column, .cross = .start });
+    viewport.set(.{ .overflow = .clip, .flow = .{ .dir = .column, .cross = .start } }, .{});
     if (opts.framed) _ = viewport.with_style(.{Style{ .outline_ink = .line2 }});
-    _ = viewport.with_size(
-        if (fill) .grow else .{ .fixed = opts.width },
-        if (fill or fill_h) .{ .pct_of_parent = 1.0 } else .{ .fixed = opts.height },
-    );
+    viewport.set(.{
+        .w = if (fill) .grow else .{ .fixed = opts.width },
+        .h = if (fill or fill_h) .{ .pct_of_parent = 1.0 } else .{ .fixed = opts.height },
+    }, .{});
 
-    const content = try viewport.div("content");
-    _ = content.with_flow(.{ .dir = .column }).with_gap(opts.gap);
+    const content = try viewport.box("content", .{ .flow = .{ .dir = .column }, .gap = opts.gap }, .{});
     if (fill) _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
     // The probe covers the viewport, so it must not take the hit; tracked so its rect resolves.
     const content_h = if (content.get().rect(ctx)) |r| r.h else 0;
-    _ = content.pass_through().track();
+    content.probe();
 
     const st = state orelse outer.state(ScrollState);
 
@@ -191,7 +192,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         } else if (thumb_q.hovering) {
             ctx.res.cursor.request(.grab);
         }
-        _ = thumb.with_style(.{Style{ .fill_ink = if (st.dragging) .acc else .line2 }});
+        thumb.set(.{}, .{Style{ .fill_ink = if (st.dragging) .acc else .line2 }});
     } else if (st.dragging) {
         uic.cancelScrollThumb(ctx, st);
     }

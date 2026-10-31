@@ -86,46 +86,37 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
     // line-2 edge. Its 9px insets are the content row's padding, which the row's percentage
     // width (a border box) takes out of the full-width share.
-    const strip = try parent.div(id);
-    _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
-        .with_overflow(.clip)
-        .with_style(.{Style{
-        .outline_ink = .line2,
-        .outline_width = 1,
-        .outline_style = .dashed,
-    }});
+    const strip = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = market_h }, .overflow = .clip,
+    }, .{Style{ .outline_ink = .line2, .outline_width = 1, .outline_style = .dashed }});
 
     // Anchor one full-width, fit-height row at the strip center. Signal, copy, and action all
     // use the same 12px font, but copy/action live in wrapper lanes; box centering avoids mixing
     // a direct text baseline with wrapper references and gives all three columns one center line.
-    const content = try strip.div("content");
-    _ = content.with_layout(.center)
-        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_sym(market_pad_x, 0)});
+    const content = try strip.box("content", .{
+        .anchor = .center, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .cross = .center },
+    }, .{style.pad_sym(market_pad_x, 0)});
 
-    _ = (try content.text("signal", idn.signal))
-        .with_style(.{Style{ .font = market_font, .text = signal_color }});
+    try content.label("signal", idn.signal, .{Style{ .font = market_font, .text = signal_color }});
 
-    const copy_lane = try content.div("copy_lane");
-    _ = copy_lane.with_size(.grow, .fit_children).with_overflow(.clip)
-        .with_margin(market_gap, 0);
-    _ = (try copy_lane.text("copy", idn.copy))
-        .with_style(.{Style{ .font = market_font, .text = copy_color }});
+    const copy_lane = try content.box("copy_lane", .{
+        .w = .grow, .h = .fit_children, .overflow = .clip, .margin = .{ .before = market_gap },
+    }, .{});
+    try copy_lane.label("copy", idn.copy, .{Style{ .font = market_font, .text = copy_color }});
 
     const show_action = idn.action.len > 0 and (kind != .passerby or available);
 
     // Keep the action node keyed and returned in every phase so its dialog state cannot jump
     // between owners as the passerby arrives or leaves. Only its visible label, hit area and
     // leading 10px appear during a dealable visit; otherwise it is a 0-wide box with no margin.
-    const act = try content.div("act");
-    _ = act.with_size(if (show_action) .fit_children else .{ .fixed = 0 }, .fit_children)
-        .with_flow(.{ .dir = .row })
-        .with_margin(if (show_action) market_gap else 0, 0);
+    const act = try content.box("act", .{
+        .w = if (show_action) .fit_children else .{ .fixed = 0 }, .h = .fit_children,
+        .flow = .{ .dir = .row }, .margin = .{ .before = if (show_action) market_gap else 0 },
+    }, .{});
     const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button });
     if (show_action) {
-        _ = (try act.text("label", idn.action))
-            .with_style(.{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` lift
+        try act.label("label", idn.action, .{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` lift
     }
 
     return act;
@@ -159,37 +150,29 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
     const idn = activityIdentity(state);
     const state_color = style.toneColor(ctx, idn.tone);
 
-    const strip = try parent.div(id);
-    _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
-        .with_overflow(.clip)
-        .with_style(.{Style{
-        .outline_ink = .line2,
-        .outline_width = 1,
-        .outline_style = .dashed,
-    }});
+    const strip = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = market_h }, .overflow = .clip,
+    }, .{Style{ .outline_ink = .line2, .outline_width = 1, .outline_style = .dashed }});
 
     // Every visible field is 12px. Center their boxes rather than mixing direct-text and
     // wrapper baselines, the same correction used by market_strip.
-    const content = try strip.div("content");
-    _ = content.with_layout(.center)
-        .with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_sym(market_pad_x, 0)});
+    const content = try strip.box("content", .{
+        .anchor = .center, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .cross = .center },
+    }, .{style.pad_sym(market_pad_x, 0)});
 
-    _ = (try content.text("signal", idn.signal))
-        .with_style(.{Style{ .font = market_font, .text = state_color }});
+    try content.label("signal", idn.signal, .{Style{ .font = market_font, .text = state_color }});
 
     // The subject lane's margins are the 10px on either side of it; the trailing one stays
     // without metadata, so the subject never runs into the right inset.
-    const subject_lane = try content.div("subject_lane");
-    _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip)
-        .with_margin(market_gap, market_gap);
-    _ = (try subject_lane.text("subject", subject))
-        .with_style(.{Style{ .font = market_font, .ink = .fg }});
+    const subject_lane = try content.box("subject_lane", .{
+        .w = .grow, .h = .fit_children, .overflow = .clip,
+        .margin = .{ .before = market_gap, .after = market_gap },
+    }, .{});
+    try subject_lane.label("subject", subject, .{Style{ .font = market_font, .ink = .fg }});
 
     if (metadata.len > 0) {
-        _ = (try content.text("metadata", metadata))
-            .with_style(.{Style{ .font = market_font, .text = state_color }});
+        try content.label("metadata", metadata, .{Style{ .font = market_font, .text = state_color }});
     }
 
     // Live announcement on a state change (idle→working→building). Composed from the same
