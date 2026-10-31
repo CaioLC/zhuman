@@ -292,7 +292,7 @@ fn domainText(a: std.mem.Allocator, k: Kind, sep: []const u8, lower: bool) ![]co
 // ---- small chrome --------------------------------------------------------------------------
 
 fn hrule(parent: El, id: []const u8, w: ui_size) !void {
-    _ = (try parent.div(id)).with_size(w, .{ .fixed = 1 }).with_style(.{Style{ .fill = parent.ctx.res.view.theme.line }});
+    _ = (try parent.div(id)).with_size(w, .{ .fixed = 1 }).with_style(.{style.rule_fill});
 }
 const ui_size = uic.SizeRule;
 
@@ -322,8 +322,8 @@ fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, e
     const b = try parent.div(id);
     _ = b.with_size(.{ .fixed = min_w }, .{ .fixed = 22 });
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value });
-    const hot = enabled and (q.hovering or q.focused);
-    _ = b.with_style(.{Style{ .outline_color = if (hot) th.line2 else th.bg }});
+    const hot = enabled and (q.hover_focus());
+    _ = b.with_style(.{Style{ .outline_ink = if (hot) .line2 else .bg }});
     _ = (try (try centreIn(b)).text("t", label)).with_style(.{Style{ .font = 10, .text = if (hot) th.fg else rest }});
     if (!enabled) _ = b.with_opacity(0.32);
     return q.clicked and enabled;
@@ -331,29 +331,26 @@ fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, e
 
 /// A `.chip`. Returns its click.
 fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
-    const th = parent.ctx.res.view.theme;
     const b = try parent.div(id);
     _ = b.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
-    _ = (try b.text("t", label)).with_style(.{Style{ .font = 11, .text = if (pressed or q.hovering or q.focused) th.acc else th.dim }});
+    _ = (try b.text("t", label)).with_style(.{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     return q.clicked;
 }
 
 fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
     const row = try parent.item("row", i);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .baseline }).with_gap(6);
-    _ = (try row.text("name", name)).with_style(.{Style{ .font = 9, .text = th.fg }});
-    _ = (try row.text("value", value)).with_style(.{Style{ .font = 9, .text = th.dim }});
+    _ = (try row.text("name", name)).with_style(.{Style{ .font = 9, .ink = .fg }});
+    _ = (try row.text("value", value)).with_style(.{style.fine_print});
 }
 
 fn detailSection(parent: El, id: []const u8, heading: []const u8) !El {
-    const th = parent.ctx.res.view.theme;
     const sec = try parent.div(id);
     _ = sec.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{style.pad_each(11, 0, 0, 0)});
     try hrule(sec, "rule", .{ .pct_of_parent = 1.0 });
-    _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.dim }})
+    _ = (try sec.text("h", heading)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = .dim }})
         .with_margin(8, 6);
     const list = try sec.div("list");
     _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(5);
@@ -435,13 +432,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     // ellipsizes), so a narrow surface never runs it under the chips.
     _ = title.with_size(if (narrow) .fit_children else .grow, .fit_children).with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(12).with_overflow(.clip);
     const h = try title.text("h", "RESEARCH");
-    _ = h.with_style(.{ style.heading, Style{ .text = th.fg } });
+    _ = h.with_style(.{ style.heading, style.ink(.fg) });
     if (!narrow) {
         // `.structure-title p { text-overflow: ellipsis }`: the question is a cell of what the
         // heading leaves. It grows into the title row's remainder after the heading and the
         // row's 12px gap, and reserves no width of its own, so it never widens the title.
         const question = "What exists, and what does it take?";
-        const p_style = Style{ .font = 11, .text = th.dim };
+        const p_style = style.note;
         _ = (try title.text_fit("p", question, .{ .cell_fill = .ellipsis })).with_style(.{p_style}).with_size(.grow, .content);
     }
     const tools = try topbar.div("tools");
@@ -717,9 +714,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const ly = @max(4 * scale, anchor.y + 12 * scale);
             _ = tip.with_layout(.top_left).with_offset_px(lx, ly).with_size(.fit_children, .fit_children)
                 .with_flow(.{ .dir = .column, .cross = .start })
-                .with_style(.{ style.pad_sym(7, 5), Style{ .fill = th.panel, .outline_color = th.dim } }).pass_through();
-            _ = (try tip.text("name", t.name)).with_style(.{Style{ .font = 9, .text = th.acc }});
-            _ = (try tip.text("line", try a.print("ring {} \u{00b7} {s} \u{00b7} {s}", .{ ringOf(t), try domainText(a, k, " + ", true), @tagName(states[hi]) }))).with_style(.{Style{ .font = 9, .text = th.fg }});
+                .with_style(.{ style.pad_sym(7, 5), Style{ .fill_ink = .panel, .outline_ink = .dim } }).pass_through();
+            _ = (try tip.text("name", t.name)).with_style(.{Style{ .font = 9, .ink = .acc }});
+            _ = (try tip.text("line", try a.print("ring {} \u{00b7} {s} \u{00b7} {s}", .{ ringOf(t), try domainText(a, k, " + ", true), @tagName(states[hi]) }))).with_style(.{Style{ .font = 9, .ink = .fg }});
         }
     }
 
@@ -728,13 +725,13 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const bar = try pane.div("camera");
         _ = bar.with_layout(.top_right).with_offset(-7, 7).with_size(.fit_children, .fit_children)
             .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
-            .with_style(.{ style.pad(2), Style{ .fill = th.bg, .outline_color = th.line2 } });
+            .with_style(.{ style.pad(2), Style{ .fill_ink = .bg, .outline_ink = .line2 } });
         // The zoom buttons speak the level they leave the board at (`output aria-live`).
         const pct = try a.print("{}%", .{@as(u32, @intFromFloat(@round(st.zoom * 100)))});
         if (try viewButton(bar, "out", "-", "Zoom out", st.zoom > min_zoom + 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom - zoom_step, center, center);
         const level = try bar.div("level");
         _ = level.with_size(.{ .fixed = 37 }, .{ .fixed = 22 });
-        _ = (try (try centreIn(level)).text("t", pct)).with_style(.{Style{ .font = 9, .text = th.dim }});
+        _ = (try (try centreIn(level)).text("t", pct)).with_style(.{style.fine_print});
         if (try viewButton(bar, "in", "+", "Zoom in", st.zoom < max_zoom - 0.001, 22, th.dim, pct)) zoomAbout(st, st.zoom + zoom_step, center, center);
         const moved = @abs(st.zoom - 1) >= 0.001 or @abs(st.pan_x) >= 0.001 or @abs(st.pan_y) >= 0.001;
         if (try viewButton(bar, "reset", "reset", "Reset board pan and zoom", moved, 35, th.line2, null)) {
@@ -748,7 +745,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     if (stack) {
         try hrule(aside, "rule", .{ .pct_of_parent = 1.0 });
     } else {
-        _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
+        _ = (try aside.div("rule")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{style.rule_fill});
     }
     // Stacked, the detail spans the page under the board (`.structure-detail` in one column).
     const inner = if (stack) @import("./terminal.zig").stackedWidth(ctx) else detail_inner;
@@ -762,9 +759,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const k = kindOf(t.coord);
         const s = states[si];
         const ring = ringOf(t);
-        _ = (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }})
+        _ = (try detail.text("kicker", try a.print("RING {} \u{00b7} {s}", .{ ring, eras[@min(ring, 4)] }))).with_style(.{Style{ .font = 9, .tracking = 0.08, .ink = .dim }})
             .with_margin(0, 3);
-        _ = (try detail.text("name", t.name)).with_style(.{ style.heading, Style{ .text = th.fg } })
+        _ = (try detail.text("name", t.name)).with_style(.{ style.heading, style.ink(.fg) })
             .with_margin(0, 8);
         const tags = try detail.div("tags");
         _ = tags.with_size(.{ .fixed = inner }, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(5)
@@ -780,8 +777,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             if (tt.len == 0) continue;
             const tag = try tags.item("tag", tag_n);
             tag_n += 1;
-            _ = tag.with_size(.fit_children, .fit_children).with_style(.{ style.pad_sym(4, 1), Style{ .outline_color = th.line2 } });
-            _ = (try tag.text("t", tt)).with_style(.{Style{ .font = 8, .tracking = 0.05, .text = th.dim }});
+            _ = tag.with_size(.fit_children, .fit_children).with_style(.{ style.pad_sym(4, 1), Style{ .outline_ink = .line2 } });
+            _ = (try tag.text("t", tt)).with_style(.{Style{ .font = 8, .tracking = 0.05, .ink = .dim }});
         }
 
         // RESEARCH →, or what it lacks, between two rules.
@@ -792,15 +789,15 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const btn = try detail.div("research");
         _ = btn.with_size(.{ .fixed = inner }, .{ .fixed = 34 }).with_margin(8, 6);
         const bq = btn.control(.{ .enabled = can, .name = label, .role = .button });
-        const lit = can and (bq.hovering or bq.focused or bq.held);
-        _ = btn.with_style(.{Style{ .outline_color = if (!can) th.line2 else if (lit) th.acc else th.fg }});
-        _ = (try (try centreIn(btn)).text("t", label)).with_style(.{ style.body, Style{ .text = if (!can) th.dim else if (lit) th.acc else th.fg } });
+        const lit = can and (bq.hot());
+        _ = btn.with_style(.{Style{ .outline_ink = if (!can) .line2 else if (lit) .acc else .fg }});
+        _ = (try (try centreIn(btn)).text("t", label)).with_style(.{ style.body, Style{ .ink = if (!can) .dim else if (lit) .acc else .fg } });
         if (can and bq.clicked) result.research = si;
-        _ = (try detail.text("cost", try costText(a, t))).with_style(.{Style{ .font = 9, .text = th.dim }})
+        _ = (try detail.text("cost", try costText(a, t))).with_style(.{style.fine_print})
             .with_margin(0, 9);
         try hrule(detail, "c_rule", .{ .fixed = inner });
 
-        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }})
+        _ = (try detail.text_fit("copy", t.effect, .fill)).with_style(.{style.caption})
             .with_margin(11, 0);
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
@@ -828,11 +825,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         if (outs.len == 0) try detailRow(opens, row_n, "Act III frontier", "outside this board");
     } else {
-        _ = (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).with_style(.{Style{ .font = 9, .tracking = 0.08, .text = th.dim }})
+        _ = (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).with_style(.{Style{ .font = 9, .tracking = 0.08, .ink = .dim }})
             .with_margin(0, 3);
-        _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, Style{ .text = th.fg } })
+        _ = (try detail.text("name", "Research board")).with_style(.{ style.heading, style.ink(.fg) })
             .with_margin(0, 8);
-        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try detail.text_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill)).with_style(.{style.caption});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------
@@ -855,7 +852,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const entry = try legend.item("r", w);
         _ = entry.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(4);
         _ = (try entry.div("dot")).with_size(.{ .fixed = 7 }, .{ .fixed = 7 }).with_style(.{Style{ .fill = wedgeColor(ctx, @intCast(w)) }}).with_opacity(0.8);
-        _ = (try entry.text("t", try std.ascii.allocUpperString(a, r.labelIn(2)))).with_style(.{Style{ .font = 8.5, .text = th.dim }});
+        _ = (try entry.text("t", try std.ascii.allocUpperString(a, r.labelIn(2)))).with_style(.{Style{ .font = 8.5, .ink = .dim }});
     }
     const hints = try foot.div("hints");
     _ = hints.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
@@ -876,9 +873,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         break :blk try a.print("{s} selected \u{00b7} {} researched \u{00b7} {} available", .{ name, counts[2], counts[1] });
     } else "Select an available or researched technology";
-    _ = (try hints.text("status", status)).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
-    _ = (try hints.text("pan", "Wheel zoom / drag pan")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
-    _ = (try hints.text("keys", "Arrows move \u{00b7} Esc clears")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
+    _ = (try hints.text("status", status)).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
+    _ = (try hints.text("pan", "Wheel zoom / drag pan")).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
+    _ = (try hints.text("keys", "Arrows move \u{00b7} Esc clears")).with_style(.{Style{ .font = 8.5, .ink = .line2 }});
 
     return result;
 }

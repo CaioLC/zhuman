@@ -100,10 +100,10 @@ fn attractTop(parent: El, a: Attract) !void {
     _ = left.with_size(.grow, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center, .wrap = true }).with_gap(13);
     for (a.stocks, 0..) |s, i| {
-        _ = (try (try left.item("s", i)).text("t", s)).with_style(.{Style{ .font = 11, .text = th.line2 }});
+        _ = (try (try left.item("s", i)).text("t", s)).with_style(.{Style{ .font = 11, .ink = .line2 }});
     }
     const run = try top.text("run", a.run);
-    _ = run.with_style(.{Style{ .font = 11, .tracking = 0.04, .text = th.line2 }});
+    _ = run.with_style(.{Style{ .font = 11, .tracking = 0.04, .ink = .line2 }});
     try hrule(parent, "top_rule", th.line);
 }
 
@@ -113,11 +113,11 @@ fn attractStrip(parent: El, a: Attract) !void {
     _ = strip.with_flow(.{ .dir = .row, .main = .start, .cross = .center });
     const lead = try strip.div("lead");
     _ = lead.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    const quiet = Style{ .font = 11, .text = th.line2 };
+    const quiet = Style{ .font = 11, .ink = .line2 };
     _ = (try lead.text("dot", "\u{25cf}")).with_style(.{Style{ .font = 11, .text = inks.mid }});
     _ = (try lead.text("signal", a.strip_signal)).with_style(.{quiet});
     _ = (try lead.text("copy", a.strip_copy)).with_style(.{quiet});
-    _ = (try strip.text("tail", "TRADE \u{2192}")).with_style(.{Style{ .font = 11, .tracking = 0.06, .text = th.line2 }});
+    _ = (try strip.text("tail", "TRADE \u{2192}")).with_style(.{Style{ .font = 11, .tracking = 0.06, .ink = .line2 }});
     try hrule(parent, "strip_rule", th.line);
 }
 
@@ -139,7 +139,6 @@ fn attractFoot(parent: El, a: Attract) !void {
 
 /// The work column and the holdings column, anchored at the screen's upper right.
 fn attractSide(parent: El, a: Attract) !void {
-    const th = parent.ctx.res.view.theme;
     const work = try parent.div("attract_work");
     _ = work.with_layout(.top_right).with_offset(-pad_x, 108)
         .with_size(.{ .fixed = side_w }, .fit_children)
@@ -175,19 +174,18 @@ fn attractSide(parent: El, a: Attract) !void {
         const row = try rail.item("r", i);
         _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
             .with_flow(.{ .dir = .row, .main = .space_between }).with_gap(8);
-        _ = (try row.text("label", r.label)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+        _ = (try row.text("label", r.label)).with_style(.{style.caption_faint});
         _ = (try row.text("value", r.value)).with_style(.{Style{ .font = 10, .text = inks.deep }});
     }
 }
 
 /// `.panel-head`: the screen's title and BACK. Returns BACK's click.
 fn panelHead(parent: El, title: []const u8) !bool {
-    const th = parent.ctx.res.view.theme;
     const head = try parent.div("panel_head");
     _ = head.with_size(.{ .fixed = panel_w }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(12)
         .with_margin(0, 16);
-    _ = (try head.text("title", title)).with_style(.{Style{ .font = 26, .tracking = -0.04, .text = th.fg }});
+    _ = (try head.text("title", title)).with_style(.{Style{ .font = 26, .tracking = -0.04, .ink = .fg }});
     const back = try button_mod.button_variant(head, "back", "BACK", true, .back);
     return back.consume(.clicked);
 }
@@ -195,14 +193,14 @@ fn panelHead(parent: El, title: []const u8) !bool {
 fn credits(parent: El) !void {
     const th = parent.ctx.res.view.theme;
     const wrap: f32 = 56 * 7.2;
-    const copy = Style{ .font = 12, .text = th.dim };
+    const copy = Style{ .font = 12, .ink = .dim };
     const col = try parent.div("credits");
     _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(11);
     _ = (try col.text_fit("p1", "A game about what people do when they cannot have everything.", .{ .wrap = wrap })).with_style(.{copy});
     const p2 = try col.div("p2");
     _ = p2.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
     _ = (try p2.text_fit("a", "You begin alone, and every hour you spend is an hour you did not spend on something else. That is the whole difficulty. Later there are others, and you will find they are better than you at some things \u{2014}", .{ .wrap = wrap })).with_style(.{copy});
-    _ = (try p2.text_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap })).with_style(.{Style{ .font = 12, .text = th.fg }});
+    _ = (try p2.text_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap })).with_style(.{Style{ .font = 12, .ink = .fg }});
     _ = (try col.text_fit("p3", "Named after a long book by Ludwig von Mises. You don't have to read it.", .{ .wrap = wrap })).with_style(.{copy});
 
     // 1px over the column's 11px gap above the meta block, and 9px over the meta column's
@@ -220,8 +218,8 @@ fn credits(parent: El) !void {
         const row = try meta.item("m", i);
         _ = row.with_flow(.{ .dir = .row, .cross = .center })
             .with_margin(if (i == 0) @as(f32, 9 + 3) else 0, 0);
-        _ = (try row.text("k", r[0])).with_style(.{Style{ .font = 10, .text = th.dim }});
-        _ = (try row.text("v", try parent.ctx.arena.print(" \u{00b7} {s}", .{r[1]}))).with_style(.{Style{ .font = 10, .text = th.line2 }});
+        _ = (try row.text("k", r[0])).with_style(.{style.caption});
+        _ = (try row.text("v", try parent.ctx.arena.print(" \u{00b7} {s}", .{r[1]}))).with_style(.{style.caption_faint});
     }
 }
 
@@ -256,7 +254,7 @@ pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
     _ = body.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
     switch (screen.*) {
         .menu => {
-            _ = (try body.text("wordmark", "Human Action")).with_style(.{Style{ .font = 46, .tracking = -0.06, .text = th.fg }});
+            _ = (try body.text("wordmark", "Human Action")).with_style(.{Style{ .font = 46, .tracking = -0.06, .ink = .fg }});
             const list = try menu_list_mod.menu_list(body, "menu", &.{
                 .{ .id = "continue", .label = "Continue", .enabled = false, .why = "no settlement in progress" },
                 .{ .id = "new", .label = "New game" },

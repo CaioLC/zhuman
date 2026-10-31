@@ -84,6 +84,8 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
     // board's pane) is a container focus stop that draws its own edge instead, as the
     // prototype's focusable regions set `outline: none`.
     node.render_data.focus_ring = focused and opts.role != .group;
+    // Mark the interaction owner, so a descendant's `Style.hot` lift resolves against it.
+    node.render_data.control = true;
 
     var sem = semantics.SemanticNode{ .key = key, .role = opts.role };
     _ = sem.setLabel(opts.name);

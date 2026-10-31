@@ -95,7 +95,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
 
     const root = try el.root(ctx, "debug");
     _ = root.with_layout(.top_left).with_flow(.{ .dir = .row })
-        .with_style(.{Style{ .fill = th.bg }});
+        .with_style(.{Style{ .fill_ink = .bg }});
 
     // Selection lives on a stable node's TabsState (`active` = the entry index); the modal's
     // open/closed lifecycle on a TradeState, so dismissing it reveals the audit index instead of
@@ -136,9 +136,9 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
     const index = try root.div("index");
     _ = index.with_size(.{ .fixed = 150 }, .{ .pct_of_parent = 1.0 })
         .with_flow(.{ .dir = .column }).with_gap(2)
-        .with_style(.{ Style{ .fill = th.panel }, style.pad_sym(10, 10) });
+        .with_style(.{ Style{ .fill_ink = .panel }, style.pad_sym(10, 10) });
     _ = (try index.text("ihdr", "TEMPLATES"))
-        .with_style(.{ style.small, Style{ .text = th.dim } });
+        .with_style(.{ style.small, style.muted });
     for (entries, 0..) |name, i| {
         const item = try index.item("e", i);
         // Selection changes on the click before the lifecycle publishes it, so the published
@@ -151,7 +151,7 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
         }
         const on = i == sel.active;
         const iq = item.control(.{ .name = name, .role = .button, .selected = on });
-        const c = if (on) th.acc else if (iq.hovering or iq.focused) th.fg else th.dim;
+        const c = if (on) th.acc else if (iq.hover_focus()) th.fg else th.dim;
         _ = (try item.text("t", name)).with_style(.{ style.small, Style{ .text = c } });
     }
 
@@ -350,7 +350,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             const demo = try stage.div("act_one_page_demo");
             _ = demo.with_size(.{ .fixed = 900 }, .{ .fixed = 820 })
                 .with_overflow(.clip)
-                .with_style(.{Style{ .fill = th.bg }});
+                .with_style(.{Style{ .fill_ink = .bg }});
             const regions = try t.shell_content(demo, demo, .{
                 .id = "act_one_page",
                 .act = .act_one,

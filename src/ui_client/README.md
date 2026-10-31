@@ -755,7 +755,7 @@ hover color reads `node.query(ctx)` on the node it was just handed).
 *look* every template composes from, so a call site names an intent, not a color: surfaces
 (`panel`, `section_heading`), the button family (`btn_primary`/`btn_secondary`/`btn_text`/
 `btn_icon`/`btn_link` — a shared `btn_ink` maps published state → color: `dim` disabled,
-`acc` on held/hover/focus-visible, else the variant's resting ink), `tab`/`chip`/`tag`,
+`acc` when `Interaction.hot()` (held/hover/focus-visible), else the variant's resting ink), `tab`/`chip`/`tag`,
 semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the roles
 including `good`), interaction chrome (`row_hover`, `disabled_chrome`, `selected_chrome`, `provisional` the
 dim-dashed placeholder box; the keyboard focus ring is not a fragment: `control` sets
@@ -800,6 +800,61 @@ straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` /
 `with_size` / `with_overflow`. Style composes because a button's look is genuinely built
 from reusable pieces; placement does not, because a node sits in exactly one place.
 
+### Ink, roles and the hot lift
+
+**Theme-relative ink.** Every color slot has a *role* twin that names a `Theme` field
+(`style.ThemeRole`, which is `theme.Role`, one tag per field: `bg`, `panel`, `line`, `line2`,
+`dim`, `fg`, `acc`, `warn`, `danger`, `good`):
+
+| concrete `Color` | role twin     |
+| ---------------- | ------------- |
+| `text`           | `ink`         |
+| `tint`           | `tint_ink`    |
+| `fill`           | `fill_ink`    |
+| `outline_color`  | `outline_ink` |
+
+`resolve` reads the live `ctx.res.view.theme` for a role, so `Style{ .ink = .dim }` paints the
+pixels `Style{ .text = th.dim }` did and a template needs no `const th = ...theme` line to say
+it. A slot and its twin fold as one: whichever a later fragment sets wins (a fragment that
+sets both resolves to the role). `resolve` returns a *concrete* `Style` (roles and the lift
+are gone, only the four `Color` fields remain), so fragment functions and existing call
+sites that pass `Color`s keep compiling and can migrate one literal at a time. A spec with no
+roles and no lift never reads `ctx`.
+
+**Named role fragments.** The literals templates repeated are fragments named by meaning. Each
+sets exactly the fields of the literal it replaced, with no added tracking or transform:
+`muted` (dim ink), `faint` (`line2` ink), `ink(.role)` (any one role), `eyebrow_dim` (10px,
++0.07em, dim; it keeps source case, unlike the 11px uppercase `eyebrow`), `note` (11px dim),
+`caption` (10px dim), `caption_faint` (10px `line2`), `fine_print` (9px dim), and `rule_fill`
+(a hairline's `line` fill). `roleColor(ctx, role)` gives the `Color` for a site that needs a
+value (a gradient stop, a helper that takes a color).
+
+**One tone mapping.** Templates keep their own `Tone` enums (`holdings`, `log`, `market_strip`,
+`milestone_goal`, `stock_token`), and they all map a tag to the role of the same name, with
+`normal` → `fg` and `accent` → `acc`. `style.toneRole(tone)` is that mapping for any of them
+(resolved at comptime; a tag with no role is a compile error), `style.toneColor(ctx, tone)` its
+color and `style.tone(t)` its ink fragment.
+
+**The hot predicate.** `Interaction.hot()` is `held or hovering or focus_visible`: the
+prototype's `:hover, :focus-visible` lift plus the native press latch (a press that began on
+the control stays lit while dragged off it). `Interaction.hover_focus()` drops the latch, for
+the controls that never lit during that gesture. `control` publishes `focus_visible` equal to
+`focused`, so on a control's result the two focus bits are interchangeable. The predicates read
+`focus_visible` because that is the CSS state they mirror. The `btn_*` fragments use `hot`;
+`tab`, `chip` and `row_hover` use `hover_focus`.
+
+**The hot lift.** `Style.hot` is a `Lift`: the role inks to use while the owning control is hot,
+`.{ .ink = .dim, .hot = .{ .ink = .acc } }` for the old `if (q.hot()) th.acc else th.dim`
+(`.when = .hover_focus` picks the other predicate). It folds field-wise. The *owner* is the
+styled node itself or its nearest ancestor that `control` ran on: `control` sets
+`render_data.control`, and `resolve` walks `node.parent` to the first marked node and reads that
+node's interaction this frame. A disabled owner never lifts (the `btn_ink` rule), so a site
+whose ternary also gated on the same `enabled` collapses into the lift. Templates call
+`control()` on a row before they build its children, which is what makes the owner's state
+available when a child is styled. A lift with no owner panics in safe builds. A site whose
+choice mixes in other facts (a disabled control that still lifts, a lit color shared with a
+`Color` parameter) keeps the explicit form, `.ink = if (q.hot()) .acc else .dim`.
+
 ## Color: roles here, values in the game (`theme.zig`)
 
 `Theme` is ten named roles — `bg`, `panel`, `line`, `line2`, `dim`, `fg`, `acc`, `warn`,
@@ -813,7 +868,8 @@ A game supplies values by assigning a whole `Theme` onto `res.view.theme`; this 
 never learns those palettes exist. Here that is `ha.palette` (`src/palette.zig`), whose
 `theme` values are art direction and live outside this folder.
 Templates name `uic.Theme` / `uic.Color` for the *types* and read the live values off
-`ctx.res.view.theme` — none of them imports the palette module.
+`ctx.res.view.theme`, or name a role (`Style{ .ink = .dim }`, `theme.Role`) that `style.resolve`
+reads off it — none of them imports the palette module. `theme.color(t, role)` is the lookup.
 
 The typography contract lives in `type.zig` as one role table — body `14`, small `11`,
 heading `21` at `−0.04em`, and the uppercase eyebrow `11` at `+0.07em` — all regular weight,

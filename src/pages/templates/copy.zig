@@ -8,25 +8,21 @@ const ha = @import("ha");
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
-const Style = style.Style;
 const El = el.El;
 
 /// A catalog's count line under its controls — `20 of 20 actions shown` — small and dim.
 pub fn summary_line(parent: El, id: []const u8, text: []const u8) !El {
-    const th = parent.ctx.res.view.theme;
-    return (try parent.text(id, text)).with_style(.{ style.small, Style{ .text = th.dim } });
+    return (try parent.text(id, text)).with_style(.{ style.small, style.muted });
 }
 
 /// What a list says when nothing matches: body size in the quiet `line2`.
 pub fn empty_line(parent: El, id: []const u8, text: []const u8) !El {
-    const th = parent.ctx.res.view.theme;
-    return (try parent.text(id, text)).with_style(.{ style.body, Style{ .text = th.line2 } });
+    return (try parent.text(id, text)).with_style(.{ style.body, style.faint });
 }
 
 /// A curtain's one spoken line: h2 in the foreground.
 pub fn headline(parent: El, id: []const u8, text: []const u8) !El {
-    const th = parent.ctx.res.view.theme;
-    return (try parent.text(id, text)).with_style(.{ style.h2, Style{ .text = th.fg } });
+    return (try parent.text(id, text)).with_style(.{ style.h2, style.ink(.fg) });
 }
 
 /// The prose measure of a curtain dialog, logical px: the width a `lede` wraps at so a note
@@ -36,7 +32,6 @@ pub const prose_measure: f32 = 320;
 /// The dim paragraph under a headline. With a `measure`, the prose wraps on word boundaries
 /// at that logical width instead of stretching its panel to one long line.
 pub fn lede(parent: El, id: []const u8, text: []const u8, measure: ?f32) !El {
-    const th = parent.ctx.res.view.theme;
     const node = if (measure) |w| try parent.text_fit(id, text, .{ .wrap = w }) else try parent.text(id, text);
-    return node.with_style(.{ style.body, Style{ .text = th.dim } });
+    return node.with_style(.{ style.body, style.muted });
 }

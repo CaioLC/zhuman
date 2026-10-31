@@ -13,9 +13,7 @@ const ha = @import("ha");
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
-const Style = style.Style;
 const El = el.El;
-const Color = uic.Color;
 
 const readout = @import("./readout.zig");
 
@@ -54,22 +52,11 @@ pub const Content = struct {
     body_note: ?[]const u8 = null,
 };
 
-fn toneColor(th: uic.Theme, tone: Tone) Color {
-    return switch (tone) {
-        .fg => th.fg,
-        .dim => th.dim,
-        .good => th.good,
-        .warn => th.warn,
-        .danger => th.danger,
-    };
-}
-
 fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
-    const th = parent.ctx.res.view.theme;
     const col = try parent.div(id);
     _ = col.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(gap);
-    for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, toneColor(th, l.tone));
+    for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, style.toneColor(parent.ctx, l.tone));
 }
 
 /// The heading's right inset inside the panel's content box (`.panel-heading`'s 16px), which
@@ -77,7 +64,6 @@ fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
 const heading_inset: f32 = 16;
 
 fn mainPanel(parent: El, c: Content, col_w: f32) !void {
-    const th = parent.ctx.res.view.theme;
     const content_w = col_w - main_pad.left - main_pad.right;
     const panel = try readout.readout_panel(parent, "panel", content_w, main_pad);
     const heading_box = try panel.div("heading_box");
@@ -85,7 +71,7 @@ fn mainPanel(parent: El, c: Content, col_w: f32) !void {
     _ = try readout.readout_heading(heading_box, "heading", "HOLDINGS", c.count);
     if (c.roster.len == 0) {
         _ = (try panel.text("none", c.empty_roster))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
+            .with_style(.{ style.body, style.faint });
     } else {
         try lines(panel, "roster", c.roster, 3);
     }
@@ -95,18 +81,17 @@ fn mainPanel(parent: El, c: Content, col_w: f32) !void {
 }
 
 fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
-    const th = parent.ctx.res.view.theme;
     const panel = try readout.readout_panel(parent, "body", col_w - body_pad.left - body_pad.right, body_pad);
     _ = (try readout.section_label(panel, "title", "BODY")).with_margin(0, 1);
     if (c.body_note) |note| {
-        _ = (try panel.text("note", note)).with_style(.{Style{ .font = 11, .text = th.dim }});
+        _ = (try panel.text("note", note)).with_style(.{style.note});
         return;
     }
     // `.body-panel` sets its sentences at 11px on a 1.35 line, no gap between them.
     const list = try panel.div("list");
     _ = list.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .column }).with_gap(0);
-    for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, toneColor(th, s.tone));
+    for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, style.toneColor(parent.ctx, s.tone));
 }
 
 /// The stacked column: one panel's width and whether HOLDINGS and BODY sit side by side.

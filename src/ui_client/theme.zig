@@ -61,6 +61,18 @@ pub const Theme = struct {
     good: Color = rgb(120, 170, 110),
 };
 
+/// A theme role by name — one tag per `Theme` field (`bg`, `panel`, `line`, `line2`, `dim`,
+/// `fg`, `acc`, `warn`, `danger`, `good`), derived from the struct so the two cannot drift.
+/// A style names a role and resolves it against the live theme at apply time (`color`).
+pub const Role = std.meta.FieldEnum(Theme);
+
+/// The color `t` assigns to role `r`.
+pub fn color(t: Theme, r: Role) Color {
+    return switch (r) {
+        inline else => |tag| @field(t, @tagName(tag)),
+    };
+}
+
 /// Per-channel linear blend from `a` toward `b` by `t` (0..1, clamped), alpha included.
 /// The building block for a whole-theme blend, and reused directly by pulsing color
 /// readouts (a heartbeat). A free function because SDL's `Color` cannot carry methods.
@@ -83,6 +95,14 @@ test "mix: t=0 is a, t=1 is b, midpoint averages, out-of-range clamps" {
     try std.testing.expectEqual(Color{ .r = 50, .g = 100, .b = 25, .a = 128 }, mix(a, b, 0.5));
     try std.testing.expectEqual(a, mix(a, b, -1)); // clamps below 0
     try std.testing.expectEqual(b, mix(a, b, 2)); // clamps above 1
+}
+
+test "Role mirrors every Theme field and color reads the named field" {
+    const t: Theme = .{};
+    try std.testing.expectEqual(@typeInfo(Theme).@"struct".field_names.len, @typeInfo(Role).@"enum".field_names.len);
+    try std.testing.expectEqual(t.line2, color(t, .line2));
+    try std.testing.expectEqual(t.acc, color(t, .acc));
+    try std.testing.expectEqual(t.good, color(t, .good));
 }
 
 test "Theme is fully defaulted — the foundation renders with no palette installed" {

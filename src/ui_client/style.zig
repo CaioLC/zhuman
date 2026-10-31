@@ -62,6 +62,54 @@ pub const Style = struct {
     outline_style: ?cb.LineStyle = null,
     padding: ?ui.Padding = null,
     gap: ?f32 = null,
+
+    // —— Theme-relative ink ————————————————————————————————————————————————————————————
+    // Each color slot has a *role* twin that names a `Theme` field instead of a concrete
+    // `Color`; `resolve` reads the live `ctx.res.view.theme` for it. A slot and its twin fold
+    // as one: whichever a later fragment sets wins, and a fragment that sets both resolves to
+    // the role. So `Style{ .text = th.dim }` and `Style{ .ink = .dim }` paint the same
+    // pixels, and a call site migrates by dropping its `th`.
+
+    /// Glyph ink by role — the twin of `text`.
+    ink: ?ThemeRole = null,
+    /// Texture ink by role — the twin of `tint`.
+    tint_ink: ?ThemeRole = null,
+    /// Fill by role — the twin of `fill`.
+    fill_ink: ?ThemeRole = null,
+    /// Border color by role — the twin of `outline_color` (and, like it, turns the border on).
+    outline_ink: ?ThemeRole = null,
+
+    /// **Hot lift**: the inks to use while the owning control is hot. The owner is the
+    /// nearest node, this one or an ancestor, that `control` ran on (`render_data.control`),
+    /// read at resolve time; a disabled owner never lifts. `.{ .ink = .dim, .hot = .{ .ink =
+    /// .acc } }` is the old `if (q.hot()) th.acc else th.dim`. Folds field-wise like the rest.
+    hot: ?Lift = null,
+};
+
+/// A theme role by name (`.fg`, `.dim`, `.line`, `.line2`, `.acc`, `.warn`, `.danger`,
+/// `.good`, `.panel`, `.bg`) — one tag per `Theme` field.
+pub const ThemeRole = theme.Role;
+
+/// The inks a `Style.hot` lift swaps in, and the predicate that decides "hot".
+pub const Lift = struct {
+    ink: ?ThemeRole = null,
+    tint_ink: ?ThemeRole = null,
+    fill_ink: ?ThemeRole = null,
+    outline_ink: ?ThemeRole = null,
+    /// Unset means `.hot`.
+    when: ?When = null,
+};
+
+/// Which owner interaction counts as hot: `Interaction.hot` (held, hovered or focus-visible)
+/// or `Interaction.hover_focus` (the same without the press latch).
+pub const When = enum { hot, hover_focus };
+
+/// The (concrete color, role) field pairs that fold as one slot.
+const ink_slots = [_]struct { []const u8, []const u8 }{
+    .{ "text", "ink" },
+    .{ "tint", "tint_ink" },
+    .{ "fill", "fill_ink" },
+    .{ "outline_color", "outline_ink" },
 };
 
 // A bright-red debug outline around any node. `Color` is SDL's `SDL_Color` — u8 fields on
@@ -129,6 +177,66 @@ pub const solid: Style = .{ .outline_style = .solid };
 pub const dashed: Style = .{ .outline_style = .dashed };
 pub const dotted: Style = .{ .outline_style = .dotted };
 
+// --- Ink and named role fragments -----------------------------------------------
+// Theme-relative looks named by what they mean, for the literals templates repeated. Each
+// sets exactly the fields the literal it replaces set (no tracking or transform is added),
+// so swapping one in never moves a pixel.
+
+/// Glyph ink by role, as a fragment: `style.ink(.fg)`.
+pub fn ink(r: ThemeRole) Style {
+    return .{ .ink = r };
+}
+/// Secondary text: `dim` ink.
+pub const muted: Style = .{ .ink = .dim };
+/// Tertiary text, quieter than `muted`: `line2` ink.
+pub const faint: Style = .{ .ink = .line2 };
+/// A tracked 10px dim caps label (`SIDE`, `AFTER`, a slip's field head). Unlike `eyebrow`
+/// (11px, uppercased by transform) it keeps its source case and the 10px size.
+pub const eyebrow_dim: Style = .{ .font = 10, .tracking = 0.07, .ink = .dim };
+/// An 11px dim note: a subtitle, an empty-list message, a sentence's prose around a value.
+pub const note: Style = .{ .font = 11, .ink = .dim };
+/// A 10px dim caption: a sub-line, an effect line, a corner count.
+pub const caption: Style = .{ .font = 10, .ink = .dim };
+/// A 10px `line2` caption, one step quieter than `caption`.
+pub const caption_faint: Style = .{ .font = 10, .ink = .line2 };
+/// 9px dim fine print: a cost, a percentage, a requirement value.
+pub const fine_print: Style = .{ .font = 9, .ink = .dim };
+/// A hairline rule or divider's fill (`line`). Geometry (1px wide or tall) stays on the node.
+pub const rule_fill: Style = .{ .fill_ink = .line };
+
+/// The color the live theme gives role `r`, for a site that needs a `Color` value rather
+/// than a style field (a mesh vertex, a helper that takes a color).
+pub fn roleColor(ctx: *UiCtx, r: ThemeRole) Color {
+    return theme.color(ctx.res.view.theme, r);
+}
+
+/// **The one tone mapping.** Each template keeps its own `Tone` enum (its tags are part of
+/// its public API), and every one of them maps a tag to the theme role of the same name, with
+/// two spellings: `normal` is `fg` and `accent` is `acc`. A tag with no matching role is a
+/// compile error, so a new tone cannot silently fall through.
+pub fn toneRole(value: anytype) ThemeRole {
+    return switch (value) {
+        inline else => |t| comptime roleOfTone(@tagName(t)),
+    };
+}
+
+fn roleOfTone(comptime name: []const u8) ThemeRole {
+    if (std.mem.eql(u8, name, "normal")) return .fg;
+    if (std.mem.eql(u8, name, "accent")) return .acc;
+    return std.meta.stringToEnum(ThemeRole, name) orelse
+        @compileError("tone `" ++ name ++ "` names no theme role");
+}
+
+/// A tone's live color (`toneRole` resolved against the theme).
+pub fn toneColor(ctx: *UiCtx, value: anytype) Color {
+    return roleColor(ctx, toneRole(value));
+}
+
+/// A tone as a glyph-ink fragment.
+pub fn tone(t: anytype) Style {
+    return .{ .ink = toneRole(t) };
+}
+
 // === Primitive style/state fragments ===========================================
 //
 // The shared vocabulary of *look* every template composes from — surfaces, section labels,
@@ -171,7 +279,7 @@ pub fn section_heading(ctx: *UiCtx, _: *Node) Style {
 /// focus-visible, else the resting color `rest`. The one place button state → color lives.
 fn btn_ink(q: UiCtx.Interaction, t: theme.Theme, rest: Color) Color {
     if (q.disabled) return t.dim;
-    if (q.held or q.hovering or q.focus_visible) return t.acc;
+    if (q.hot()) return t.acc;
     return rest;
 }
 
@@ -218,7 +326,7 @@ pub fn tab(ctx: *UiCtx, node: *Node) Style {
     const t = ctx.res.view.theme;
     const q = node.query(ctx);
     if (q.selected) return .{ .text = t.acc, .outline_color = t.acc, .outline_width = 1 };
-    return .{ .text = if (q.hovering or q.focus_visible) t.fg else t.dim };
+    return .{ .text = if (q.hover_focus()) t.fg else t.dim };
 }
 
 /// A chip — a small filled `panel` pill with `line` edge and `fg` ink; `selected` accents its
@@ -226,9 +334,9 @@ pub fn tab(ctx: *UiCtx, node: *Node) Style {
 pub fn chip(ctx: *UiCtx, node: *Node) Style {
     const t = ctx.res.view.theme;
     const q = node.query(ctx);
-    const edge = if (q.selected or q.hovering or q.focus_visible) t.acc else t.line;
-    const ink = if (q.selected) t.acc else t.fg;
-    return .{ .fill = t.panel, .outline_color = edge, .outline_width = 1, .text = ink };
+    const edge = if (q.selected or q.hover_focus()) t.acc else t.line;
+    const glyph = if (q.selected) t.acc else t.fg;
+    return .{ .fill = t.panel, .outline_color = edge, .outline_width = 1, .text = glyph };
 }
 
 // —— Semantic state text ————————————————————————————————————————————————————————————————
@@ -256,7 +364,7 @@ pub fn state_muted(ctx: *UiCtx, _: *Node) Style {
 /// the node's own interaction, so it works on any keyed row.
 pub fn row_hover(ctx: *UiCtx, node: *Node) Style {
     const q = node.query(ctx);
-    if (q.hovering or q.focus_visible) return .{ .fill = ctx.res.view.theme.panel };
+    if (q.hover_focus()) return .{ .fill = ctx.res.view.theme.panel };
     return .{};
 }
 
@@ -307,20 +415,85 @@ pub fn legend_dot(comptime which: Resource) fn (*UiCtx, *Node) Style {
     }.frag;
 }
 
-/// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold.
+/// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold. A
+/// color slot and its role twin fold as one slot (a later fragment's either one replaces an
+/// earlier one's other), and `hot` folds field-wise.
 fn merge(out: *Style, frag: Style) void {
     inline for (@typeInfo(Style).@"struct".field_names) |name| {
+        if (comptime std.mem.eql(u8, name, "hot")) continue;
         if (@field(frag, name)) |v| @field(out, name) = v;
+    }
+    inline for (ink_slots) |slot| {
+        if (@field(frag, slot[1]) != null) {
+            @field(out, slot[0]) = null; // the role wins within one fragment
+        } else if (@field(frag, slot[0]) != null) {
+            @field(out, slot[1]) = null;
+        }
+    }
+    if (frag.hot) |h| {
+        var lift = out.hot orelse Lift{};
+        inline for (@typeInfo(Lift).@"struct".field_names) |name| {
+            if (@field(h, name)) |v| @field(lift, name) = v;
+        }
+        out.hot = lift;
     }
 }
 
 /// Fold a style spec into a single `Style`. `spec` is one fragment or a (possibly nested)
 /// tuple of fragments; each fragment is a `Style` value or a `fn(*UiCtx, *Node) Style`
 /// (called with the node, so it can read interaction/theme). Later fragments win per field.
+///
+/// The result is **concrete**: a `hot` lift is applied (or dropped) against the owning
+/// control's interaction, then every role twin is resolved to its color through the live
+/// theme, so the returned `Style` carries only `text`/`tint`/`fill`/`outline_color` and
+/// never `ink`/`*_ink`/`hot`. A spec with no roles and no lift never reads `ctx`.
 pub fn resolve(ctx: *UiCtx, node: *Node, spec: anytype) Style {
     var out: Style = .{};
     fold(ctx, node, &out, spec);
+    if (out.hot) |lift| {
+        if (liftActive(ctx, node, lift)) {
+            inline for (ink_slots) |slot| {
+                if (@field(lift, slot[1])) |r| {
+                    @field(out, slot[1]) = r;
+                    @field(out, slot[0]) = null;
+                }
+            }
+        }
+        out.hot = null;
+    }
+    inline for (ink_slots) |slot| {
+        if (@field(out, slot[1])) |r| {
+            @field(out, slot[0]) = theme.color(ctx.res.view.theme, r);
+            @field(out, slot[1]) = null;
+        }
+    }
     return out;
+}
+
+/// The control whose interaction a `hot` lift on `node` reads: `node` itself or its nearest
+/// ancestor that `control` ran on. Null when there is none.
+pub fn controlOwner(node: *Node) ?*Node {
+    var n: ?*Node = node;
+    while (n) |cur| : (n = cur.parent) {
+        if (cur.render_data.control) return cur;
+    }
+    return null;
+}
+
+/// Whether `lift` applies to `node` this frame: its owner is enabled and hot by `lift.when`.
+/// The owner must already have run `control` — call it on the row before styling the row's
+/// children, as the templates do. A lift with no owner is a template bug (a safety panic).
+fn liftActive(ctx: *UiCtx, node: *Node, lift: Lift) bool {
+    const owner = controlOwner(node) orelse {
+        if (std.debug.runtime_safety) @panic("Style.hot: no control owner; call control() on the node or an ancestor before styling it");
+        return false;
+    };
+    const q = owner.query(ctx);
+    if (q.disabled) return false;
+    return switch (lift.when orelse .hot) {
+        .hot => q.hot(),
+        .hover_focus => q.hover_focus(),
+    };
 }
 
 fn fold(ctx: *UiCtx, node: *Node, out: *Style, frag: anytype) void {
@@ -722,4 +895,187 @@ test "later fragment overrides a variant field (precedence)" {
     const s = resolve(&f.ctx, n, .{ btn_primary, Style{ .text = red } });
     try std.testing.expectEqual(red, s.text.?);
     try std.testing.expectEqual(f.resources.view.theme.fg, s.outline_color.?);
+}
+
+// ---- theme-relative ink, role fragments, tones, the hot lift ---------------------
+
+test "ink: a role resolves to the live theme color, the same as the concrete literal" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("ink");
+    const by_role = resolve(&f.ctx, n, Style{ .ink = .dim, .fill_ink = .line, .outline_ink = .acc, .tint_ink = .good });
+    const by_color = resolve(&f.ctx, n, Style{ .text = th.dim, .fill = th.line, .outline_color = th.acc, .tint = th.good });
+    try std.testing.expectEqual(by_color, by_role);
+    // The result is concrete: no role twin or lift survives resolution.
+    try std.testing.expectEqual(@as(?ThemeRole, null), by_role.ink);
+    try std.testing.expectEqual(@as(?Lift, null), by_role.hot);
+}
+
+test "ink: a slot and its role twin fold as one, last fragment wins either way" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const red: Color = .{ .r = 200, .g = 0, .b = 0, .a = 255 };
+    const n = try f.node("twin");
+    // role then color: the color wins.
+    try std.testing.expectEqual(red, resolve(&f.ctx, n, .{ muted, Style{ .text = red } }).text.?);
+    // color then role: the role wins.
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, n, .{ Style{ .text = red }, ink(.acc) }).text.?);
+    // both in one fragment: the role wins.
+    try std.testing.expectEqual(th.fg, resolve(&f.ctx, n, Style{ .text = red, .ink = .fg }).text.?);
+    // a role leaves unrelated slots alone.
+    const s = resolve(&f.ctx, n, .{ Style{ .fill = red }, muted });
+    try std.testing.expectEqual(red, s.fill.?);
+    try std.testing.expectEqual(th.dim, s.text.?);
+}
+
+test "ink: a spec without roles or a lift never reads ctx" {
+    const plain = resolve(undefined, undefined, .{ h2, stroke_w(2) });
+    try std.testing.expectEqual(@as(?f32, 28), plain.font);
+}
+
+test "role fragments set exactly the literal's fields" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("roles");
+    const eq = std.testing.expectEqual;
+    try eq(resolve(&f.ctx, n, Style{ .font = 10, .tracking = 0.07, .text = th.dim }), resolve(&f.ctx, n, eyebrow_dim));
+    try eq(resolve(&f.ctx, n, Style{ .font = 11, .text = th.dim }), resolve(&f.ctx, n, note));
+    try eq(resolve(&f.ctx, n, Style{ .font = 10, .text = th.dim }), resolve(&f.ctx, n, caption));
+    try eq(resolve(&f.ctx, n, Style{ .font = 10, .text = th.line2 }), resolve(&f.ctx, n, caption_faint));
+    try eq(resolve(&f.ctx, n, Style{ .font = 9, .text = th.dim }), resolve(&f.ctx, n, fine_print));
+    try eq(resolve(&f.ctx, n, Style{ .text = th.dim }), resolve(&f.ctx, n, muted));
+    try eq(resolve(&f.ctx, n, Style{ .text = th.line2 }), resolve(&f.ctx, n, faint));
+    try eq(resolve(&f.ctx, n, Style{ .fill = th.line }), resolve(&f.ctx, n, rule_fill));
+    // `eyebrow_dim` is not `eyebrow`: no uppercase transform, 10px not 11px.
+    try eq(@as(?typ.Transform, null), eyebrow_dim.transform);
+}
+
+test "toneRole: every template tone maps to the same-named role, normal=fg, accent=acc" {
+    const eq = std.testing.expectEqual;
+    const Holdings = enum { fg, dim, good, warn, danger };
+    const Log = enum { dim, normal, good, warn, danger };
+    const Strip = enum { dim, accent, good, warn, danger };
+    const Milestone = enum { danger, good };
+    const Stock = enum { normal, warn, danger, accent };
+    try eq(ThemeRole.fg, toneRole(Holdings.fg));
+    try eq(ThemeRole.dim, toneRole(Holdings.dim));
+    try eq(ThemeRole.fg, toneRole(Log.normal));
+    try eq(ThemeRole.good, toneRole(Log.good));
+    try eq(ThemeRole.acc, toneRole(Strip.accent));
+    try eq(ThemeRole.warn, toneRole(Strip.warn));
+    try eq(ThemeRole.danger, toneRole(Milestone.danger));
+    try eq(ThemeRole.good, toneRole(Milestone.good));
+    try eq(ThemeRole.acc, toneRole(Stock.accent));
+    try eq(ThemeRole.fg, toneRole(Stock.normal));
+
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    try eq(th.warn, toneColor(&f.ctx, Stock.warn));
+    try eq(th.acc, resolve(&f.ctx, try f.node("tone"), tone(Strip.accent)).text.?);
+}
+
+// A control owner and a text child under it, as a template builds them: `control` marks the
+// row, the child carries the lift and resolves against the row's published interaction.
+const HotRig = struct {
+    row: *Node,
+    child: *Node,
+    fn init(f: *KitFixture, key: []const u8) !HotRig {
+        const row = try f.node(key);
+        row.render_data.control = true;
+        const child = try Node.create(f.arena.allocator(), "t");
+        child.parent = row;
+        return .{ .row = row, .child = child };
+    }
+    fn set(r: HotRig, f: *KitFixture, held: bool, hovering: bool, focused: bool) void {
+        f.ctx.setFlag(r.row.key, .held, held);
+        f.ctx.setFlag(r.row.key, .hovering, hovering);
+        f.ctx.setFlag(r.row.key, .focused, focused);
+        f.ctx.setFlag(r.row.key, .focus_visible, focused); // `control` publishes them equal
+    }
+};
+
+test "hot lift: resolves to the color each old ternary picked, for all three predicate forms" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const r = try HotRig.init(f, "row");
+
+    const hot_spec = Style{ .ink = .dim, .hot = .{ .ink = .acc } };
+    const hf_spec = Style{ .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } };
+    for (0..8) |bits| {
+        const held = bits & 1 != 0;
+        const hovering = bits & 2 != 0;
+        const focused = bits & 4 != 0;
+        r.set(f, held, hovering, focused);
+        // `held or hovering or focused` → `.hot`
+        const old_hot = if (held or hovering or focused) th.acc else th.dim;
+        try std.testing.expectEqual(old_hot, resolve(&f.ctx, r.child, hot_spec).text.?);
+        // `hovering or focused` → `.when = .hover_focus`
+        const old_hf = if (hovering or focused) th.acc else th.fg;
+        try std.testing.expectEqual(old_hf, resolve(&f.ctx, r.child, hf_spec).text.?);
+        // `held or hovering` on a control that can never be focused (`focusable = false`, the
+        // speed chevrons) → `.hot`, since `focused` is always false there.
+        if (!focused) {
+            const old_hh = if (held or hovering) th.acc else th.dim;
+            try std.testing.expectEqual(old_hh, resolve(&f.ctx, r.child, hot_spec).text.?);
+        }
+    }
+}
+
+test "hot lift: the owner is the nearest control; a disabled owner never lifts; fill lifts too" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const outer = try HotRig.init(f, "outer");
+    // A nested control inside the outer row (a build row's +1 corner): its child reads it.
+    const inner = try Node.create(f.arena.allocator(), "inner");
+    inner.parent = outer.row;
+    inner.render_data.control = true;
+    const label = try Node.create(f.arena.allocator(), "label");
+    label.parent = inner;
+    outer.set(f, false, true, false); // outer hovered, inner not
+    const spec = Style{ .ink = .dim, .hot = .{ .ink = .acc } };
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, label, spec).text.?);
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, outer.child, spec).text.?);
+    try std.testing.expectEqual(inner, controlOwner(label).?);
+
+    // The owner's own style: `node` itself is the owner.
+    const row_spec = Style{ .hot = .{ .fill_ink = .panel } };
+    try std.testing.expectEqual(th.panel, resolve(&f.ctx, outer.row, row_spec).fill.?);
+    outer.set(f, false, false, false);
+    try std.testing.expectEqual(@as(?Color, null), resolve(&f.ctx, outer.row, row_spec).fill);
+
+    // Disabled: hovered but no lift.
+    outer.set(f, false, true, false);
+    f.ctx.setFlag(outer.row.key, .disabled, true);
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, outer.child, spec).text.?);
+}
+
+test "hot lift folds field-wise; a later concrete color still overrides the resting ink" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const r = try HotRig.init(f, "fw");
+    const spec = .{ Style{ .ink = .dim, .hot = .{ .ink = .acc } }, Style{ .hot = .{ .outline_ink = .line2 } } };
+    r.set(f, false, false, false);
+    const rest = resolve(&f.ctx, r.child, spec);
+    try std.testing.expectEqual(th.dim, rest.text.?);
+    try std.testing.expectEqual(@as(?Color, null), rest.outline_color);
+    r.set(f, false, true, false);
+    const lit = resolve(&f.ctx, r.child, spec);
+    try std.testing.expectEqual(th.acc, lit.text.?);
+    try std.testing.expectEqual(th.line2, lit.outline_color.?);
+}
+
+test "Interaction.hot and hover_focus differ only for a press dragged off the control" {
+    const I = UiCtx.Interaction;
+    try std.testing.expect((I{ .held = true }).hot());
+    try std.testing.expect(!(I{ .held = true }).hover_focus());
+    try std.testing.expect((I{ .hovering = true }).hot() and (I{ .hovering = true }).hover_focus());
+    try std.testing.expect((I{ .focus_visible = true }).hot() and (I{ .focus_visible = true }).hover_focus());
+    try std.testing.expect(!(I{}).hot() and !(I{}).hover_focus());
 }

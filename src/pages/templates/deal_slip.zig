@@ -44,13 +44,12 @@ pub const Result = struct {
 };
 
 fn label(parent: El, id: []const u8, text: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
-    _ = (try parent.text(id, text)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+    _ = (try parent.text(id, text)).with_style(.{style.eyebrow_dim});
 }
 
 fn hrule(parent: El, id: []const u8) !void {
     _ = (try parent.div(id)).with_size(.{ .fixed = inner }, .{ .fixed = 1 })
-        .with_style(.{Style{ .fill = parent.ctx.res.view.theme.line }});
+        .with_style(.{style.rule_fill});
 }
 
 /// The slip's full-width call to action (`.primary-action.slip-action`).
@@ -60,7 +59,7 @@ fn action(parent: El, text: []const u8, enabled: bool) !struct { clicked: bool, 
     _ = b.with_size(.{ .fixed = inner }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
     const q = b.control(.{ .enabled = enabled, .name = text, .role = .button });
-    const lit = enabled and (q.hovering or q.focused or q.held);
+    const lit = enabled and (q.hot());
     const line = if (!enabled) th.line else if (lit) th.acc else th.fg;
     const ink = if (!enabled) th.line2 else if (lit) th.acc else th.fg;
     _ = b.with_style(.{Style{ .outline_color = line }});
@@ -78,11 +77,11 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     _ = slip.with_size(.{ .fixed = inner }, .{ .fixed = opts.height - 10 - 13 })
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(10)
         .with_style(.{style.pad_each(10, pad_x, 13, pad_x)});
-    _ = (try slip.text("heading", "THE DEAL")).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = (try slip.text("heading", "THE DEAL")).with_style(.{ style.eyebrow, style.muted });
 
     const l = lot orelse {
         _ = (try slip.text_fit("placeholder", "Pick a lot on the left.", .fill))
-            .with_style(.{Style{ .font = 11, .text = th.dim }});
+            .with_style(.{style.note});
         return .{ .lots = lots, .settle = false, .cta_key = null };
     };
 
@@ -94,11 +93,11 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     // slip's content width (a fitted column would leave them one line wide).
     const head = try slip.div("lot");
     _ = head.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
-    _ = (try head.text_fit("name", l.lot, .fill)).with_style(.{Style{ .font = 14, .text = th.fg }});
-    _ = (try head.text_fit("effect", l.effect, .fill)).with_style(.{Style{ .font = 10, .text = th.dim }});
+    _ = (try head.text_fit("name", l.lot, .fill)).with_style(.{Style{ .font = 14, .ink = .fg }});
+    _ = (try head.text_fit("effect", l.effect, .fill)).with_style(.{style.caption});
 
     if (refused) |r| {
-        _ = (try slip.text_fit("refusal", r.long, .fill)).with_style(.{Style{ .font = 11, .text = th.danger }});
+        _ = (try slip.text_fit("refusal", r.long, .fill)).with_style(.{Style{ .font = 11, .ink = .danger }});
     } else {
         // LOTS − n + of {max}, between two rules.
         try hrule(slip, "qty_top");
@@ -109,7 +108,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         n = try stepper_mod.quantity_stepper(qty, "stepper", n, 1, @max(1, max), .{ .less = "One lot fewer", .more = "One lot more" });
         const fill = try qty.div("fill");
         _ = fill.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .main = .end });
-        _ = (try fill.text("max", try a.print("of {d}", .{max}))).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try fill.text("max", try a.print("of {d}", .{max}))).with_style(.{style.caption});
         try hrule(slip, "qty_bottom");
 
         // YOU GIVE / YOU RECEIVE.
@@ -121,7 +120,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
             _ = term.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
             try label(term, "dt", if (giving) opts.give_label else "YOU RECEIVE");
             const text = try Book.fmtLong(a, if (giving) l.price else l.receive, n, !giving);
-            _ = (try term.text_fit("dd", text, .fill)).with_style(.{Style{ .font = 13, .text = th.fg }});
+            _ = (try term.text_fit("dd", text, .fill)).with_style(.{Style{ .font = 13, .ink = .fg }});
         }
 
         // AFTER: before → after on only the stocks the deal touches.
@@ -137,9 +136,9 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
             const key_box = try r.div("key");
             _ = key_box.with_size(.grow, .fit_children);
             _ = (try key_box.text_fit("k", try std.ascii.allocUpperString(a, row.key), .{ .cell = .{ .mode = .ellipsis, .width = inner - 90 } }))
-                .with_style(.{Style{ .font = 12, .tracking = 0.04, .text = th.dim }});
-            _ = (try r.text("from", try book_mod.fmtNum(a, row.before))).with_style(.{Style{ .font = 12, .text = th.line2 }});
-            _ = (try r.text("arrow", "\u{2192}")).with_style(.{Style{ .font = 12, .text = th.line2 }});
+                .with_style(.{Style{ .font = 12, .tracking = 0.04, .ink = .dim }});
+            _ = (try r.text("from", try book_mod.fmtNum(a, row.before))).with_style(.{Style{ .font = 12, .ink = .line2 }});
+            _ = (try r.text("arrow", "\u{2192}")).with_style(.{Style{ .font = 12, .ink = .line2 }});
             const to = try r.text("to", try book_mod.fmtNum(a, row.after));
             const target = if (row.after < 0) th.danger else switch (row.sign()) {
                 .down => th.warn,
@@ -154,7 +153,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         }
     }
     if (refused == null and l.consequence.len > 0) {
-        _ = (try slip.text_fit("consequence", l.consequence, .fill)).with_style(.{Style{ .font = 10, .text = th.acc }});
+        _ = (try slip.text_fit("consequence", l.consequence, .fill)).with_style(.{Style{ .font = 10, .ink = .acc }});
     }
 
     // The call to action sits at the slip's foot (`.slip-action { margin-top: auto }`).

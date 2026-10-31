@@ -22,7 +22,7 @@ fn stepButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, e
     _ = b.with_size(.{ .fixed = button_w }, .{ .fixed = button_h })
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
-    const lit = enabled and (q.hovering or q.focused or q.held);
+    const lit = enabled and (q.hot());
     const line = if (!enabled) th.line else if (lit) th.acc else th.line2;
     const text = if (!enabled) th.line2 else if (lit) th.acc else th.fg;
     _ = b.with_style(.{Style{ .outline_color = line }});
@@ -33,12 +33,11 @@ fn stepButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, e
 /// Build the stepper and return `value` after this frame's clicks, clamped to `[min, max]`.
 pub fn quantity_stepper(parent: El, id: []const u8, value: u32, min: u32, max: u32, names: Names) !u32 {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const row = try parent.div(id);
     _ = row.with_size(.fit_children, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(2)
         // The two rules on `.stepper` cascade: the group keeps its `line-2` box.
-        .with_style(.{ Style{ .outline_color = th.line2 }, style.pad(2) });
+        .with_style(.{ Style{ .outline_ink = .line2 }, style.pad(2) });
     var v = std.math.clamp(value, min, @max(min, max));
     if (try stepButton(row, "less", "\u{2212}", names.less, v > min)) v -= 1;
     // The count is display text (a `{d}` alone reads as a formatted id to the boundary check).
@@ -46,7 +45,7 @@ pub fn quantity_stepper(parent: El, id: []const u8, value: u32, min: u32, max: u
     _ = count.with_size(.{ .fixed = count_w }, .fit_children)
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
     _ = (try count.text("n", try ctx.arena.print("{}", .{v})))
-        .with_style(.{ Style{ .font = 12, .text = th.fg }, style.pad_sym(0, 2) });
+        .with_style(.{ Style{ .font = 12, .ink = .fg }, style.pad_sym(0, 2) });
     if (try stepButton(row, "more", "+", names.more, v < max)) v += 1;
     return v;
 }

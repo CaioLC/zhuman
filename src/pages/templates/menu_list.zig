@@ -50,7 +50,7 @@ pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options)
         const q = row.control(.{ .enabled = item.enabled, .name = item.label, .role = .button });
         if (first_key == null) first_key = row.get().key;
         if (q.clicked) clicked = i;
-        const lit = item.enabled and (q.hovering or q.focused);
+        const lit = item.enabled and (q.hover_focus());
         const mark_color = if (lit) th.acc else th.bg;
         const label_color = if (!item.enabled) th.line2 else if (lit) th.fg else th.dim;
 
@@ -61,7 +61,7 @@ pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options)
             .with_style(.{Style{ .font = opts.font, .tracking = -0.02, .text = label_color }});
         if (!item.enabled and item.why.len > 0) {
             _ = (try row.text("why", item.why))
-                .with_style(.{Style{ .font = 10, .tracking = 0.06, .text = th.line2 }});
+                .with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = .line2 }});
         }
     }
     return .{ .clicked = clicked, .first_key = first_key };

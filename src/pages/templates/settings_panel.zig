@@ -46,12 +46,11 @@ const difficulty_notes = [_][]const u8{
 
 /// One `.setting` row: the label, and the field column the caller fills.
 fn settingRow(parent: El, id: []const u8, label: []const u8, width: f32) !El {
-    const th = parent.ctx.res.view.theme;
     const row = try parent.div(id);
     _ = row.with_size(.{ .fixed = width }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .start }).with_gap(row_gap);
     _ = (try row.text_fit("label", label, .{ .cell = .{ .mode = .clip, .width = label_w } }))
-        .with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = th.dim }, style.pad_each(4, 0, 0, 0) });
+        .with_style(.{ style.eyebrow_dim, style.pad_each(4, 0, 0, 0) });
     const field = try row.div("field");
     _ = field.with_size(.grow, .fit_children)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(4);
@@ -72,7 +71,7 @@ pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected:
         const on = selected == i;
         const q = b.control(.{ .name = label, .role = .radio, .checked = on, .selected = on });
         if (q.clicked) clicked = i;
-        const hot = q.hovering or q.focused;
+        const hot = q.hover_focus();
         const line = if (on) th.acc else if (hot) th.line2 else th.line;
         const text = if (on) th.acc else if (hot) th.fg else th.dim;
         _ = (try b.text("lbl", label)).with_style(.{ Style{ .font = 11, .text = text }, style.pad_sym(9, 3) });
@@ -83,19 +82,17 @@ pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected:
 
 /// A `.setting-note`: line2 prose, with an optional run of dim `.b` segments after it.
 fn note(parent: El, id: []const u8, text: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
-    _ = (try parent.text(id, text)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+    _ = (try parent.text(id, text)).with_style(.{style.caption_faint});
 }
 
 /// DIFFICULTY's note: its sentence, then the two multipliers it names, in dim.
 fn difficultyNote(parent: El, d: Settings.Difficulty) !void {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     try note(parent, "note", difficulty_notes[@intFromEnum(d)]);
     const terms = try parent.div("terms");
     _ = terms.with_flow(.{ .dir = .row, .cross = .center });
-    const quiet = Style{ .font = 10, .text = th.line2 };
-    const loud = Style{ .font = 10, .text = th.dim };
+    const quiet = style.caption_faint;
+    const loud = style.caption;
     _ = (try terms.text("a", "Inputs cost ")).with_style(.{quiet});
     _ = (try terms.text("cost", try ctx.arena.print("\u{00d7}{d:.2}", .{d.cost()}))).with_style(.{loud});
     _ = (try terms.text("b", ", yields return ")).with_style(.{quiet});
@@ -106,7 +103,6 @@ fn difficultyNote(parent: El, d: Settings.Difficulty) !void {
 /// A `.level`: the slider filling the lane, then its value as a percentage.
 fn level(parent: El, id: []const u8, label: []const u8, value: *f32) !void {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const row = try parent.div(id);
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
@@ -115,7 +111,7 @@ fn level(parent: El, id: []const u8, label: []const u8, value: *f32) !void {
     const s = try slider_mod.slider(lane, .{ .id = "range", .label = label, .value = value.*, .min = 0, .max = 100, .step = 1 });
     value.* = s.value;
     _ = (try row.text_fit("out", try ctx.arena.print("{d:.0}%", .{s.value}), .{ .cell = .{ .mode = .clip, .width = level_out_w } }))
-        .with_style(.{Style{ .font = 11, .text = th.fg }});
+        .with_style(.{Style{ .font = 11, .ink = .fg }});
 }
 
 pub fn settings_panel(parent: El, id: []const u8, s: *Settings, opts: Options) !Changed {

@@ -99,7 +99,6 @@ fn backHead(parent: El) !bool {
 /// One `.slot` row. Returns its click.
 fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bool {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const enabled = saving or slot.filled;
     const row = try parent.item("slot", i);
     _ = row.with_size(.{ .fixed = dims(ctx).inner - 18 }, .fit_children)
@@ -110,16 +109,16 @@ fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bo
     const verb = if (saving) (if (slot.filled) "OVERWRITE" else "SAVE HERE") else if (slot.filled) "LOAD" else "";
     var nbuf: [16]u8 = undefined;
     const q = row.control(.{ .enabled = enabled, .name = std.mem.print(&nbuf, "Slot {d}", .{i + 1}) catch "Slot", .role = .button, .value = what });
-    const hot = enabled and (q.hovering or q.focused);
-    _ = row.with_style(.{Style{ .outline_color = if (hot) th.line2 else th.line, .fill = if (hot) th.panel else th.bg }});
+    const hot = enabled and (q.hover_focus());
+    _ = row.with_style(.{Style{ .outline_ink = if (hot) .line2 else .line, .fill_ink = if (hot) .panel else .bg }});
 
     _ = (try row.text_fit("id", std.mem.print(&nbuf, "SLOT {d}", .{i + 1}) catch "SLOT", .{ .cell = .{ .mode = .clip, .width = slot_id_w } }))
-        .with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+        .with_style(.{style.eyebrow_dim});
     const what_box = try row.div("what_box");
     _ = what_box.with_size(.grow, .fit_children);
-    _ = (try what_box.text("what", what)).with_style(.{Style{ .font = 12, .text = if (enabled) th.fg else th.line2 }});
+    _ = (try what_box.text("what", what)).with_style(.{Style{ .font = 12, .ink = if (enabled) .fg else .line2 }});
     if (verb.len > 0) {
-        _ = (try row.text("verb", verb)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = if (enabled) th.acc else th.line2 }});
+        _ = (try row.text("verb", verb)).with_style(.{Style{ .font = 10, .tracking = 0.07, .ink = if (enabled) .acc else .line2 }});
     }
     return q.clicked;
 }
@@ -148,14 +147,13 @@ const QuitChoice = enum { none, quit, save_first, cancel };
 
 fn quitScreen(parent: El, saves: *const res_mod.SaveSlots, session: Session) !QuitChoice {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
-    const copy_style = Style{ .font = 12, .text = th.fg };
+    const copy_style = Style{ .font = 12, .ink = .fg };
 
     const first = try parent.div("stands");
     _ = first.with_flow(.{ .dir = .row, .cross = .center }).with_margin(0, 4);
     _ = (try first.text("a", "The settlement stands at ")).with_style(.{copy_style});
     _ = (try first.text("when", try ctx.arena.print("Act {s} \u{00b7} Day {d}", .{ actNumeral(session.act), session.day })))
-        .with_style(.{Style{ .font = 12, .text = th.warn }});
+        .with_style(.{Style{ .font = 12, .ink = .warn }});
     _ = (try first.text("b", ".")).with_style(.{copy_style});
 
     var dbuf: [64]u8 = undefined;

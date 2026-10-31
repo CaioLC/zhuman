@@ -29,7 +29,6 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const Color = uic.Color;
 
 /// Semantic tone for the numeric value. Labels remain dim in every state. `accent` is the
 /// medium of exchange (`.stock-value.accent` on Coin).
@@ -58,15 +57,6 @@ pub const Stock = struct {
     max: ?f32 = null,
     tone: Tone = .normal,
 };
-
-fn valueColor(th: uic.Theme, tone: Tone) Color {
-    return switch (tone) {
-        .normal => th.fg,
-        .warn => th.warn,
-        .danger => th.danger,
-        .accent => th.acc,
-    };
-}
 
 /// Build one stock token into `parent`. The token sizes to its content (abbrev + value),
 /// swapping to the full label while hovered/focused so only it grows. Its tone applies only to
@@ -128,13 +118,12 @@ fn formatStock(buf: []u8, s: Stock, detailed: bool) []const u8 {
 /// Fill `box` as a stock token. `stockline` hands it an `item`, so a loop needs no ids.
 /// `compact` rests the token at the compact size until it is hovered or focused.
 fn stock_token_in(box: El, s: Stock, compact: bool) !void {
-    const th = box.ctx.res.view.theme;
     var detail_buf: [64]u8 = undefined;
     const detail = formatStock(&detail_buf, s, true);
     // A focusable readout, not a control: the full label is its accessible name and the
     // detailed value its spoken value; hovering it is not an affordance, so no pointer cursor.
     const q = box.control(.{ .name = s.full, .role = .text, .value = detail, .cursor = .default });
-    const reveal = q.hovering or q.focused;
+    const reveal = q.hover_focus();
     var compact_buf: [64]u8 = undefined;
     const value = if (reveal) detail else formatStock(&compact_buf, s, false);
 
@@ -168,9 +157,9 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
         break :blk .{ .font = px };
     } else .{};
     const lbl = (try box.text("l", label_txt))
-        .with_style(.{ lineType(box.ctx), size, Style{ .text = th.dim } });
+        .with_style(.{ lineType(box.ctx), size, style.muted });
     const val = (try box.text("v", value))
-        .with_style(.{ lineType(box.ctx), size, Style{ .text = valueColor(th, s.tone) } });
+        .with_style(.{ lineType(box.ctx), size, style.tone(s.tone) });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like its label
     _ = lbl;
 }
@@ -180,7 +169,7 @@ fn sep(parent: El, i: usize, compact: bool) !void {
     const slot = try parent.item("sep", i);
     const size: Style = if (compact) .{ .font = compact_font } else .{};
     _ = (try slot.text("t", "|"))
-        .with_style(.{ lineType(parent.ctx), size, Style{ .text = parent.ctx.res.view.theme.line2 } });
+        .with_style(.{ lineType(parent.ctx), size, style.faint });
 }
 
 /// The stockline: a row of tokens in the act descriptor's order, `|`-separated. Returns the
@@ -197,11 +186,11 @@ pub fn stockline(parent: El, id: []const u8, stocks: []const Stock, compact: boo
     return bar;
 }
 
-test "stock value tones use foreground, warning, and danger roles" {
-    const th = uic.Theme{};
-    try std.testing.expectEqual(th.fg, valueColor(th, .normal));
-    try std.testing.expectEqual(th.warn, valueColor(th, .warn));
-    try std.testing.expectEqual(th.danger, valueColor(th, .danger));
+test "stock value tones use foreground, warning, danger and accent roles" {
+    try std.testing.expectEqual(style.ThemeRole.fg, style.toneRole(Tone.normal));
+    try std.testing.expectEqual(style.ThemeRole.warn, style.toneRole(Tone.warn));
+    try std.testing.expectEqual(style.ThemeRole.danger, style.toneRole(Tone.danger));
+    try std.testing.expectEqual(style.ThemeRole.acc, style.toneRole(Tone.accent));
 }
 
 test "stock amounts truncate compactly and at one decimal" {

@@ -104,7 +104,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
             const box = try root.div("terminal_box");
             _ = box.with_layout(.top_left)
                 .with_size_px(.{ .fixed = uic.view.dp(m.terminal.w, scale) }, .{ .fixed = uic.view.dp(opts.max_h, scale) })
-                .with_style(.{Style{ .fill = th.bg, .outline_color = opts.outline orelse th.line2 }})
+                .with_style(.{Style{ .fill_ink = .bg, .outline_color = opts.outline orelse th.line2 }})
                 .with_overflow(.clip);
             return .{ .root = root, .content = box };
         }
@@ -138,7 +138,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
     _ = box.with_layout(.top_left)
         .with_size_px(.{ .fixed = tw }, .{ .fixed = twh })
         .with_offset_px(tx, ty)
-        .with_style(.{Style{ .fill = th.bg, .outline_color = opts.outline orelse th.line2 }})
+        .with_style(.{Style{ .fill_ink = .bg, .outline_color = opts.outline orelse th.line2 }})
         .with_overflow(.clip);
 
     return .{ .root = root, .content = box };
@@ -321,7 +321,6 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
 /// must be the column's last row: a page that builds it late (after its body, once it knows
 /// the active view) leaves it off on a focus view, and the page grid takes the height back.
 pub fn footer_band(content: El, page_pad: f32) !El {
-    const th = content.ctx.res.view.theme;
     const band = try content.div("shell_footer_band");
     _ = band.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = footerBandHeight(page_pad) })
         .with_flow(.{ .dir = .column });
@@ -337,7 +336,7 @@ pub fn footer_band(content: El, page_pad: f32) !El {
     _ = frame.with_size(.grow, .{ .fixed = footer_height - footer_pad_top - footer_pad_bottom })
         .with_flow(.{ .dir = .column })
         .with_overflow(.clip)
-        .with_style(.{ Style{ .outline_color = th.line2 }, style.pad_each(footer_pad_top, 0, footer_pad_bottom, 0) });
+        .with_style(.{ Style{ .outline_ink = .line2 }, style.pad_each(footer_pad_top, 0, footer_pad_bottom, 0) });
     const f = try frame.div("shell_footer");
     _ = f.with_size(.{ .pct_of_parent = 1.0 }, .grow)
         .with_overflow(.clip);

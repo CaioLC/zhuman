@@ -50,7 +50,6 @@ pub const Frame = struct {
 };
 
 pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
-    const th = ctx.res.view.theme;
     const m = try modal_mod.modal(ctx, opts.id, opts.title, opts.width);
     const inner_width = opts.width - 2 * pad_x;
 
@@ -63,16 +62,16 @@ pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
     const heading = try header.div("heading");
     _ = heading.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
     _ = (try heading.text("kicker", opts.kicker))
-        .with_style(.{ style.small, Style{ .font = 10, .tracking = 0.08, .text = th.warn } });
+        .with_style(.{ style.small, Style{ .font = 10, .tracking = 0.08, .ink = .warn } });
     _ = (try heading.text("title", opts.title))
-        .with_style(.{ style.heading, Style{ .text = th.fg } });
+        .with_style(.{ style.heading, style.ink(.fg) });
 
     const close = try header.div("close");
     _ = close.with_size(.{ .fixed = close_size }, .{ .fixed = close_size })
         .with_flow(.{ .dir = .row, .main = .center, .cross = .center });
-    const q = close.control(.{ .name = opts.close_name, .role = .icon_button });
+    _ = close.control(.{ .name = opts.close_name, .role = .icon_button });
     _ = (try close.text("glyph", "\u{00d7}"))
-        .with_style(.{Style{ .font = 18, .text = if (q.held or q.hovering or q.focused) th.acc else th.dim }});
+        .with_style(.{Style{ .font = 18, .ink = .dim, .hot = .{ .ink = .acc } }});
     const close_clicked = close.consume(.clicked);
     try modal_mod.rule(m.box, "header_rule", opts.width);
 
@@ -100,7 +99,6 @@ pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
 
 /// The footer's note (`.dialog-note`): small dim prose, wrapped short of the actions.
 pub fn dialog_note(footer: El, id: []const u8, note: []const u8, wrap: f32) !void {
-    const th = footer.ctx.res.view.theme;
     _ = (try footer.text_fit(id, note, .{ .wrap = wrap }))
-        .with_style(.{Style{ .font = 9, .text = th.dim }});
+        .with_style(.{style.fine_print});
 }

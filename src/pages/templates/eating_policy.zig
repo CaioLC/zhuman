@@ -24,14 +24,13 @@ const pad_bottom: f32 = 8;
 /// BODY). The returned policy value is live; callers map it to their persisted metabolism rate.
 pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     // The percentage width is a border box, so the horizontal padding comes out of it and the
     // outlined panel remains exactly 100% of its fluid grid column.
     const panel = try parent.div(id);
     _ = panel.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = tile_h })
         .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{ Style{ .outline_color = th.line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
+        .with_style(.{ Style{ .outline_ink = .line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
     const content = try panel.div("content");
     _ = content.with_size(.grow, .{ .fixed = tile_h - pad_top - pad_bottom })
         .with_flow(.{ .dir = .column }).with_gap(5)
@@ -64,20 +63,20 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     const word = eating.word(new_value);
 
     _ = (try head.text("title", "EATING POLICY")).with_style(.{
-        Style{ .font = 10, .tracking = 0.06, .text = th.dim },
+        Style{ .font = 10, .tracking = 0.06, .ink = .dim },
     });
 
     var output_buf: [48]u8 = undefined;
     const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
     _ = (try head.text("value", output)).with_style(.{
-        Style{ .font = 10, .text = if (enabled) th.acc else th.dim },
+        Style{ .font = 10, .ink = if (enabled) .acc else .dim },
     });
 
     _ = (try scale_row.text("min", "meager")).with_style(.{
-        Style{ .font = 9, .text = th.line2 },
+        Style{ .font = 9, .ink = .line2 },
     });
     _ = (try scale_row.text("max", "lavish")).with_style(.{
-        Style{ .font = 9, .text = th.line2 },
+        Style{ .font = 9, .ink = .line2 },
     });
 
     // Replace the generic numeric semantic value published by `slider` with the prototype's

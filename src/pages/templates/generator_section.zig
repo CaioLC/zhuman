@@ -143,14 +143,13 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
         .with_style(.{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
     if (toggle.query().clicked) capital.toggle_generator(world, e, cat, gi);
     const is_on = !world.get(e, comp.Generators).?.off[gi];
-    const tq = toggle.control(.{
+    _ = toggle.control(.{
         .name = if (is_on) "Turn generator off" else "Turn generator on",
         .role = .checkbox,
         .checked = is_on,
     });
-    const toggle_color = if (tq.hovering or tq.held or tq.focused) ctx.res.view.theme.acc else if (is_on) ctx.res.view.theme.good else ctx.res.view.theme.dim;
     _ = (try toggle.text("label", if (is_on) "● ON" else "○ OFF"))
-        .with_style(.{ style.small, Style{ .text = toggle_color } });
+        .with_style(.{ style.small, Style{ .ink = if (is_on) .good else .dim, .hot = .{ .ink = .acc } } });
 
     if (tile.clicked) _ = capital.collect_generator(world, e, ctx.res, gi);
 }
@@ -161,7 +160,6 @@ const generator_regular_h: f32 = 87;
 
 pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const cat = &ctx.res.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     const count = ownedCount(world, e, cat, shelf);
@@ -178,7 +176,7 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, s
 
     if (count == 0) {
         _ = (try section.text("empty", "Build a generator to begin accumulating."))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
+            .with_style(.{ style.body, style.faint });
         return section;
     }
 

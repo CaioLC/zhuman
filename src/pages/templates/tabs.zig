@@ -45,7 +45,6 @@ pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*us
 /// `tabs` with the strip's accessible name (the prototype's `nav aria-label`).
 pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row }).with_gap(10);
@@ -71,7 +70,7 @@ pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const 
         // A tab is a single-selection member registered under the strip's roving group: its
         // label is the authoritative chip text, `selected` mirrors the active index, and the
         // group key links it back to the strip.
-        const q = chip.control(.{ .name = label, .role = .radio, .selected = is_active, .roving_group = bar_key });
+        _ = chip.control(.{ .name = label, .role = .radio, .selected = is_active, .roving_group = bar_key });
         if (member_len < member_keys.len) {
             member_keys[member_len] = chip_key;
             member_len += 1;
@@ -79,10 +78,9 @@ pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const 
         // Interaction wins over the resting state (as `button` does): hover/held/focus lifts to
         // accent even for the **active** tab, so hovering the active tab changes its color too;
         // a resting active tab is fg, a resting inactive tab is dim.
-        const c = if (q.held or q.hovering or q.focused) th.acc else if (is_active) th.fg else th.dim;
         const lbl = (try chip.text("l", label))
-            .with_style(.{ style.body, Style{ .text = c }, style.pad_sym(6, 2) });
-        if (is_active) _ = chip.with_style(.{Style{ .outline_color = c }});
+            .with_style(.{ style.body, Style{ .ink = if (is_active) .fg else .dim, .hot = .{ .ink = .acc } }, style.pad_sym(6, 2) });
+        if (is_active) _ = chip.with_style(.{Style{ .outline_ink = .fg, .hot = .{ .outline_ink = .acc } }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the
         // strip baseline-aligns wherever it sits (the chip baseline-adopt pattern).
         chip.get().size.baseline = lbl.get().size.baseline_off();

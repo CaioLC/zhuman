@@ -97,7 +97,7 @@ pub fn tile(
         .focusable = focusRegistrationEnabled(enabled, running, was_focused),
         .value = value,
     });
-    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.held or q.hovering or q.focused) th.acc else th.fg;
+    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.hot()) th.acc else th.fg;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
@@ -116,7 +116,7 @@ pub fn tile(
     // "working"). Dim, small — it qualifies the tile without competing with the name.
     if (state.len > 0) {
         _ = (try inner.text("state", state))
-            .with_style(.{ style.small, Style{ .text = if (running) th.acc else if (!enabled) th.dim else th.dim } });
+            .with_style(.{ style.small, Style{ .ink = if (running) .acc else if (!enabled) .dim else .dim } });
     }
 
     // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and
@@ -148,7 +148,7 @@ pub fn tile(
     if (progress) |p| {
         _ = (try box.div("bar")).with_layout(.bottom_left)
             .with_size(.{ .pct_of_parent = std.math.clamp(p, 0, 1) }, .{ .fixed = 3 })
-            .with_style(.{Style{ .fill = th.acc }});
+            .with_style(.{Style{ .fill_ink = .acc }});
     }
 
     return .{ .el = box, .clicked = !running and can and q.clicked };

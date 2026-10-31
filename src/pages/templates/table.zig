@@ -18,10 +18,9 @@ const Color = uic.Color;
 
 /// A column label over its lane. Returns the cell.
 pub fn header_cell(parent: El, id: []const u8, label: []const u8) !El {
-    const th = parent.ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.fit_children, .fit_children);
-    _ = (try box.text("t", label)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = th.line2 }});
+    _ = (try box.text("t", label)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = .line2 }});
     return box;
 }
 
@@ -38,7 +37,6 @@ pub const SortShown = enum { none, ascending, descending };
 pub const SortCell = struct { el: El, key: u64, clicked: bool };
 
 pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: SortShown, group: u64) !SortCell {
-    const th = parent.ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.fit_children, .fit_children);
     const q = box.control(.{
@@ -57,8 +55,7 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
         .ascending => std.mem.print(&buf, "{s} \u{2191}", .{label}) catch label,
         .descending => std.mem.print(&buf, "{s} \u{2193}", .{label}) catch label,
     };
-    const color = if (q.hovering or q.held or q.focused) th.acc else if (shown != .none) th.fg else th.line2;
-    _ = (try box.text("t", text)).with_style(.{Style{ .font = 9, .tracking = 0.07, .text = color }});
+    _ = (try box.text("t", text)).with_style(.{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .hot = .{ .ink = .acc } }});
     return .{ .el = box, .key = box.get().key, .clicked = q.clicked };
 }
 

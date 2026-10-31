@@ -125,6 +125,8 @@ const glyph_w: f32 = 6.6;
 
 /// The row's type (`.build-row`): 11px, the name 12px, its kind 8px uppercase.
 const row_font: f32 = 11;
+/// The state and action lanes' type: `row_font` with no other field set.
+const row_type: Style = .{ .font = row_font };
 const name_font: f32 = 12;
 const kind_font: f32 = 8;
 
@@ -270,8 +272,6 @@ const cell = table.cell;
 /// visible glyphs are bounded. A **secondary type** sub-label rides under the name in
 /// dim/small — the recipe's kind (`recipeType`).
 fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8, color: Color) !El {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const box = try parent.div(id);
     _ = box.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column, .cross = .start });
     _ = box.with_gap(1);
@@ -279,7 +279,7 @@ fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8
         .with_style(.{Style{ .font = name_font, .text = color }});
     if (secondary.len > 0) {
         _ = (try box.text_fit("ty", secondary, .{ .cell_fill = .ellipsis }))
-            .with_style(.{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .text = th.line2 }});
+            .with_style(.{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .ink = .line2 }});
     }
     return box;
 }
@@ -381,7 +381,7 @@ pub fn capital_row(
     const wrap = try parent.div(rec.id);
     _ = wrap.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column });
     _ = (try wrap.div("rule")).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-        .with_style(.{Style{ .fill = th.line }});
+        .with_style(.{style.rule_fill});
     const row = try wrap.div("row");
     const hot = kind == .ready;
     const row_key = row.get().key;
@@ -389,7 +389,7 @@ pub fn capital_row(
     // same enabled fact the build click gates on.
     const ctl = row.control(.{ .enabled = hot, .name = rec.name, .role = .tile });
     const lit: Color = switch (kind) {
-        .ready => if (ctl.held or ctl.hovering or ctl.focused) th.acc else th.fg,
+        .ready => if (ctl.hot()) th.acc else th.fg,
         .building => th.fg,
         // `.build-row.blocked/.owned .good-name` dim; every other name reads fg.
         .owned, .blocked => th.dim,
@@ -401,7 +401,7 @@ pub fn capital_row(
     // The row's lanes are the header's: the same tracks, so the same widths and visibility.
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
-        .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
+        .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .hot = .{ .fill_ink = .panel } } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
     place(try name_cell(row, "nm", rec.name, recipeType(rec), lit), .recipe, 1);
@@ -431,12 +431,12 @@ pub fn capital_row(
 
     switch (kind) {
         .ready => _ = (try state_in.text("ready", "ready"))
-            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.acc } }),
+            .with_style(.{ row_type, style.ink(.acc) }),
         .owned => _ = (try state_in.text("owned", "owned"))
-            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.line2 } }),
+            .with_style(.{ row_type, style.faint }),
         // The order is on hand; only the hands are taken. Says so instead of a full meter.
         .busy => _ = (try state_in.text("busy", "hands busy"))
-            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.warn } }),
+            .with_style(.{ row_type, style.ink(.warn) }),
         .blocked => {
             var nbuf: [40]u8 = undefined;
             // Waiting on research names the technology; otherwise the verb or tool it needs.
@@ -444,17 +444,17 @@ pub fn capital_row(
             const txt = std.mem.print(&nbuf, "needs {s}", .{wants}) catch "needs a tool";
             // Elided at the STATE + corner span.
             _ = (try state_in.text_fit("blocked", txt, .{ .cell_fill = .ellipsis }))
-                .with_style(.{ Style{ .font = row_font }, Style{ .text = th.danger } });
+                .with_style(.{ row_type, style.ink(.danger) });
         },
         .locked => _ = (try state_in.text("locked", "conditions"))
-            .with_style(.{ Style{ .font = row_font }, Style{ .text = th.danger } }),
+            .with_style(.{ row_type, style.ink(.danger) }),
         .building => {
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
             const left = busy.remaining / ctx.res.config.secs_per_day;
             const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
-            _ = (try state_in.text("time", txt)).with_style(.{ Style{ .font = row_font }, Style{ .text = th.fg } });
+            _ = (try state_in.text("time", txt)).with_style(.{ row_type, style.ink(.fg) });
         },
         .reach => {
             // How far the first line of the order is: `31/48m`.
@@ -466,7 +466,7 @@ pub fn capital_row(
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
-            _ = (try state_in.text("biomass", txt)).with_style(.{ Style{ .font = row_font }, Style{ .text = faint } });
+            _ = (try state_in.text("biomass", txt)).with_style(.{ row_type, Style{ .text = faint } });
         },
     }
 
@@ -484,22 +484,22 @@ pub fn capital_row(
 
         switch (kind) {
             .ready => _ = (try action_in.text("build", "Build \u{2192}"))
-                .with_style(.{ Style{ .font = row_font }, Style{ .text = lit } }),
+                .with_style(.{ row_type, Style{ .text = lit } }),
             .owned => {
                 // Another unit is stock; offered whenever the quote would accept it.
                 if (q.ready()) {
                     const more = try action_in.div("more");
-                    const mq = more.control(.{ .name = "Build +1", .role = .button });
+                    _ = more.control(.{ .name = "Build +1", .role = .button });
                     _ = (try more.text("t", "Build +1"))
-                        .with_style(.{ Style{ .font = row_font }, Style{ .text = if (mq.held or mq.hovering or mq.focused) th.acc else th.dim } });
+                        .with_style(.{ Style{ .font = row_font, .ink = .dim, .hot = .{ .ink = .acc } } });
                     build_more = more.consume(.clicked);
                 }
             },
             .building => {
                 const x = try action_in.div("cancel");
-                const xq = x.control(.{ .name = "Cancel build", .role = .icon_button });
+                _ = x.control(.{ .name = "Cancel build", .role = .icon_button });
                 _ = (try x.text("t", "\u{00d7}"))
-                    .with_style(.{ style.h3, Style{ .text = if (xq.held or xq.hovering or xq.focused) th.danger else th.line2 } });
+                    .with_style(.{ style.h3, Style{ .ink = .line2, .hot = .{ .ink = .danger } } });
                 cancelled = x.consume(.clicked);
                 cancel_key = x.get().key;
             },
@@ -528,11 +528,9 @@ pub fn capital_row(
 /// A thin progress bar (a build in progress) — continuous fill. Fixed width so the numbers
 /// beside it stay in a column.
 fn meter(parent: El, id: []const u8, frac: f32, color: Color) !void {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const track = try parent.div(id);
     _ = track.with_size(.{ .fixed = 34 }, .{ .fixed = 3 })
-        .with_style(.{Style{ .fill = th.line }});
+        .with_style(.{style.rule_fill});
     const fill = try track.div("f");
     _ = fill.with_layout(.top_left)
         .with_size(.{ .fixed = 34 * std.math.clamp(frac, 0, 1) }, .{ .fixed = 3 })

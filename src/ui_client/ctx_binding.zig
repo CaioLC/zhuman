@@ -598,6 +598,24 @@ pub const Interaction = packed struct {
     selected: bool = false,
     checked: bool = false,
 
+    /// The **hot** predicate: the control is engaged by the pointer (hovered, or held by a
+    /// press that began on it, even if the pointer has since dragged off) or by the keyboard
+    /// (focus-visible). The one lift condition `style.btn_*`, the `Style.hot` lift and the
+    /// templates share, matching the prototype's `:hover, :focus-visible` rules plus the press
+    /// latch. Reads `focus_visible`, the CSS state the lift mirrors; `control` publishes it
+    /// equal to `focused`, so on a control the two are interchangeable.
+    pub fn hot(self: @This()) bool {
+        return self.held or self.hovering or self.focus_visible;
+    }
+
+    /// `hot` without the press latch: hovered or focus-visible only, the literal prototype
+    /// `:hover, :focus-visible` lift. It differs from `hot` exactly while a press that began
+    /// on the control is dragged off it (`held` without `hovering`) on an unfocused control;
+    /// the sites that never lit for that gesture keep this form so their pixels do not change.
+    pub fn hover_focus(self: @This()) bool {
+        return self.hovering or self.focus_visible;
+    }
+
     pub const transient = [_][]const u8{
         "hovering",
         "pressed",
@@ -709,6 +727,12 @@ pub const RenderData = struct {
     /// after the node's subtree, outside the box, under the ancestors' clip (inset when that
     /// clip would cut it).
     focus_ring: bool = false,
+
+    /// Set by `control` on the node it runs the lifecycle for: "this node owns an
+    /// interaction". Not a paint aspect — `style.resolve` walks up from a styled node to the
+    /// nearest marked ancestor (or the node itself) to resolve a `Style.hot` lift against
+    /// that control's interaction. Rebuilt with the tree every frame.
+    control: bool = false,
 };
 
 /// Concrete node type for this host, bound to the host's `RenderData`. Persistent

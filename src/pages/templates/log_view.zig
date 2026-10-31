@@ -18,8 +18,6 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const Theme = uic.Theme;
-const Color = uic.Color;
 const Log = ha.log.Log;
 const Tone = ha.log.Tone;
 
@@ -29,18 +27,6 @@ const footer_row_pad_x: f32 = 5;
 const footer_content_gap: f32 = 0;
 /// Gap between the stamp column and the message column, logical px.
 const stamp_gap: f32 = 8;
-
-/// Map a log entry's tone to the current theme's matching color role (host policy).
-/// `good` maps to the dedicated `good` role, not the accent, so a gain reads as a gain.
-fn log_tone_color(t: Theme, tone: Tone) Color {
-    return switch (tone) {
-        .dim => t.dim,
-        .normal => t.fg,
-        .good => t.good,
-        .warn => t.warn,
-        .danger => t.danger,
-    };
-}
 
 /// The game-time stamp for an entry pushed at `at` game-seconds: `D{day} {hh}:{mm}`, with the
 /// day counted from 1 as the header does and the time of day from the day's fraction of 24h.
@@ -76,7 +62,6 @@ fn line_height(ctx: *UiCtx) f32 {
 /// `width` is the logical px total footprint, scrollbar gutter included.
 pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines: usize) !void {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     const flines: f32 = @floatFromInt(lines);
     // Rows are exactly one line high, so `lines` rows fill the viewport with no partial row.
@@ -118,14 +103,15 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         var sbuf: [24]u8 = undefined;
         const stamp = timeStamp(&sbuf, entry.at, ctx.res.config.secs_per_day);
         _ = (try row.text_fit("at", stamp, .{ .cell_fill = .clip }))
-            .with_style(.{ style.small, Style{ .text = th.dim } });
+            .with_style(.{ style.small, style.muted });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
         // toward `dim` unless their tone already carries meaning. A free leaf in the `fr`
         // track: a message longer than the track runs on and the viewport cuts it at its edge.
-        const tone_color = log_tone_color(th, entry.tone);
-        const ink = if (newest) tone_color else if (entry.tone == .normal) th.dim else tone_color;
+        // `style.toneRole`: `good` maps to the dedicated `good` role, not the accent.
+        const tone_ink = style.toneRole(entry.tone);
+        const ink: style.ThemeRole = if (newest) tone_ink else if (entry.tone == .normal) .dim else tone_ink;
         _ = (try row.text("m", entry.text()))
-            .with_style(.{ style.small, Style{ .text = ink } });
+            .with_style(.{ style.small, Style{ .ink = ink } });
     }
 }
 

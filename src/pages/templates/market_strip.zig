@@ -21,23 +21,11 @@ const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
-const UiCtx = uic.UiCtx;
 const El = el.El;
 
 /// A semantic tone — the role a strip's color projects to. Kept as an enum (not a `Color`) so
-/// the identity maps stay pure and testable; `toneColor` resolves it against the live theme.
+/// the identity maps stay pure and testable; `style.toneColor` resolves it against the live theme.
 pub const Tone = enum { dim, accent, good, warn, danger };
-
-fn toneColor(ctx: *UiCtx, tone: Tone) uic.Color {
-    const th = ctx.res.view.theme;
-    return switch (tone) {
-        .dim => th.dim,
-        .accent => th.acc,
-        .good => th.good,
-        .warn => th.warn,
-        .danger => th.danger,
-    };
-}
 
 // —— MarketStrip ————————————————————————————————————————————————————————————————————————
 
@@ -92,7 +80,7 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     var idn = marketIdentity(kind);
     // The merchant's cart on the river road: the strip says so until it is back.
     if (kind == .merchant and !available) idn.copy = "away downriver \u{00B7} back with fresh stock.";
-    const signal_color = if (available) toneColor(ctx, idn.tone) else th.dim;
+    const signal_color = if (available) style.toneColor(ctx, idn.tone) else th.dim;
     const copy_color = if (available) th.fg else th.dim;
 
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
@@ -102,7 +90,7 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
         .with_overflow(.clip)
         .with_style(.{Style{
-        .outline_color = th.line2,
+        .outline_ink = .line2,
         .outline_width = 1,
         .outline_style = .dashed,
     }});
@@ -136,9 +124,8 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
         .with_margin(if (show_action) market_gap else 0, 0);
     const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button });
     if (show_action) {
-        const action_color = if (aq.hovering or aq.held or aq.focused) th.acc else th.dim;
         _ = (try act.text("label", idn.action))
-            .with_style(.{Style{ .font = market_font, .text = action_color }});
+            .with_style(.{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` lift
     }
 
     return act;
@@ -169,15 +156,14 @@ pub fn activityIdentity(state: ActivityState) ActivityIdentity {
 /// from `last`, emit a live announcement ("Building shelter") and return the state to remember.
 pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject: []const u8, metadata: []const u8, last: ActivityState) !ActivityState {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const idn = activityIdentity(state);
-    const state_color = toneColor(ctx, idn.tone);
+    const state_color = style.toneColor(ctx, idn.tone);
 
     const strip = try parent.div(id);
     _ = strip.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = market_h })
         .with_overflow(.clip)
         .with_style(.{Style{
-        .outline_color = th.line2,
+        .outline_ink = .line2,
         .outline_width = 1,
         .outline_style = .dashed,
     }});
@@ -199,7 +185,7 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
     _ = subject_lane.with_size(.grow, .fit_children).with_overflow(.clip)
         .with_margin(market_gap, market_gap);
     _ = (try subject_lane.text("subject", subject))
-        .with_style(.{Style{ .font = market_font, .text = th.fg }});
+        .with_style(.{Style{ .font = market_font, .ink = .fg }});
 
     if (metadata.len > 0) {
         _ = (try content.text("metadata", metadata))

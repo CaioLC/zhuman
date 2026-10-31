@@ -16,14 +16,12 @@ const Playback = ha.res.Playback;
 /// Open the session menu. The menu owns the temporary pause it introduces.
 pub fn menu_control(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const menu = try parent.div(id);
     if (menu.query().clicked) ctx.res.menu.show(&ctx.res.playback);
-    const q = menu.control(.{ .name = "Open menu", .role = .button });
-    const color = if (q.hovering or q.held or q.focused) th.acc else th.dim;
+    _ = menu.control(.{ .name = "Open menu", .role = .button });
     _ = menu.with_size(.fit_children, .fit_children);
     _ = (try menu.text("label", "MENU"))
-        .with_style(.{ Style{ .font = 9, .tracking = 0.04, .text = color }, style.pad_sym(4, 2) });
+        .with_style(.{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .hot = .{ .ink = .acc } }, style.pad_sym(4, 2) });
     return menu;
 }
 
@@ -78,11 +76,9 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
 /// One `<<`/`>>` pointer target. Returns whether it was clicked this frame. Kept out of Tab
 /// order: the stepper itself is the keyboard owner.
 fn chevron(box: El, glyph: []const u8, name: []const u8, enabled: bool) !bool {
-    const th = box.ctx.res.view.theme;
     const q = box.control(.{ .name = name, .role = .button, .enabled = enabled, .focusable = false });
-    const color = if (!enabled) th.line2 else if (q.hovering or q.held) th.acc else th.dim;
     _ = box.with_size(.fit_children, .fit_children);
     _ = (try box.text("glyph", glyph))
-        .with_style(.{ Style{ .font = 10, .text = color }, style.pad_sym(3, 2) });
+        .with_style(.{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .hot = .{ .ink = .acc } }, style.pad_sym(3, 2) });
     return q.clicked;
 }

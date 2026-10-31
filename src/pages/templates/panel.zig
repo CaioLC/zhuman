@@ -13,12 +13,10 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 pub fn panel(parent: El, id: []const u8, title: []const u8) !El {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     const outer = try parent.div(id);
     _ = outer.with_flow(.{ .dir = .column }).with_size(.fit_children, .fit_children)
-        .with_style(.{ Style{ .outline_color = th.line }, style.pad(12), style.gap(8) });
+        .with_style(.{ Style{ .outline_ink = .line }, style.pad(12), style.gap(8) });
 
     const ttl = try outer.text("title", title);
     // A panel title is the prototype's **eyebrow / section-heading** — 11px,
@@ -26,7 +24,7 @@ pub fn panel(parent: El, id: []const u8, title: []const u8) !El {
     // carries the size + uppercase transform + in-band tracking; the theme `dim` color is
     // the panel's chrome. The caller passes a normal-case title (e.g. "Actions"); the role's
     // transform uppercases it at apply time, so call sites stay readable.
-    _ = ttl.with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = ttl.with_style(.{ style.eyebrow, style.muted });
 
     return outer;
 }

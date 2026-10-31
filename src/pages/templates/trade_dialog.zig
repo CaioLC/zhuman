@@ -172,12 +172,11 @@ fn firstTakeable(a: std.mem.Allocator, book: Book, list: []const *const Lot) !u3
 }
 
 fn headRow(parent: El, heads: Heads, set: *uic.TrackSet) !void {
-    const th = parent.ctx.res.view.theme;
     const row = try parent.div("head");
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
         .with_style(.{style.pad_each(10, pad_x, 7, pad_x)});
-    const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
+    const s = style.eyebrow_dim;
     _ = (try row.text_fit("lot", heads.lot, .{ .cell_fill = .clip })).with_style(.{s});
     _ = (try row.text_fit("price", heads.price, .{ .cell_fill = .clip })).with_style(.{s});
     const corner = try row.div("corner");
@@ -196,27 +195,27 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
         .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
         .with_style(.{style.pad_each(6, pad_x, 6, pad_x)});
     const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null });
-    const hot = q.hovering or q.focused;
+    const hot = q.hover_focus();
     // Selected: a line2 rule round the row on the panel fill; hover: the fill alone.
-    _ = row.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (chosen or hot) th.panel else th.bg }});
+    _ = row.with_style(.{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (chosen or hot) .panel else .bg }});
 
     const item = try row.div("item");
     _ = item.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
     const lot_ink = if (chosen) th.acc else if (refused != null) th.dim else th.fg;
     _ = (try item.text_fit("lot", lot.lot, .{ .cell_fill = .ellipsis })).with_style(.{Style{ .font = 13, .text = lot_ink }});
-    _ = (try item.text_fit("sub", try book.subLine(a, lot), .{ .cell_fill = .ellipsis })).with_style(.{Style{ .font = 10, .text = th.line2 }});
+    _ = (try item.text_fit("sub", try book.subLine(a, lot), .{ .cell_fill = .ellipsis })).with_style(.{style.caption_faint});
 
     _ = (try row.text_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell_fill = .clip }))
-        .with_style(.{Style{ .font = 12, .text = if (refused != null) th.line2 else th.fg }});
+        .with_style(.{Style{ .font = 12, .ink = if (refused != null) .line2 else .fg }});
 
     // Narrow, the corner takes its own line under the lot (`.row-corner { grid-column: 1 / -1 }`).
     const corner = try row.div("corner");
     _ = corner.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .main = if (ln.narrow) .start else .end });
     if (ln.narrow) _ = corner.at_track(0, El.all_tracks);
     if (refused) |r| {
-        _ = (try corner.text("t", r.short)).with_style(.{Style{ .font = 10, .text = th.danger }});
+        _ = (try corner.text("t", r.short)).with_style(.{Style{ .font = 10, .ink = .danger }});
     } else {
-        _ = (try corner.text("t", try book.lotsCorner(a, lot))).with_style(.{Style{ .font = 10, .text = th.dim }});
+        _ = (try corner.text("t", try book.lotsCorner(a, lot))).with_style(.{style.caption});
     }
     return .{ .clicked = q.clicked, .key = row.get().key };
 }
@@ -224,16 +223,15 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
 /// `THIS VISIT −5 coin · +6 water`, or `THIS VISIT nothing traded yet`.
 fn visitLedger(parent: El, visit: []const Delta) !void {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const row = try parent.div("visit");
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(9);
-    _ = (try row.text("label", "THIS VISIT")).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+    _ = (try row.text("label", "THIS VISIT")).with_style(.{style.eyebrow_dim});
     var any = false;
     for (visit) |d| if (@abs(d.n) > 0.001) {
         any = true;
     };
     if (!any) {
-        _ = (try row.text("none", "nothing traded yet")).with_style(.{Style{ .font = 10, .text = th.line2 }});
+        _ = (try row.text("none", "nothing traded yet")).with_style(.{style.caption_faint});
         return;
     }
     const deltas = try row.div("deltas");
@@ -243,11 +241,11 @@ fn visitLedger(parent: El, visit: []const Delta) !void {
         if (@abs(d.n) <= 0.001) continue;
         const cell = try deltas.item("d", i);
         _ = cell.with_flow(.{ .dir = .row, .cross = .center });
-        if (!first) _ = (try cell.text("sep", " \u{00b7} ")).with_style(.{Style{ .font = 10, .text = th.fg }});
+        if (!first) _ = (try cell.text("sep", " \u{00b7} ")).with_style(.{Style{ .font = 10, .ink = .fg }});
         first = false;
         const sign = if (d.n < 0) "\u{2212}" else "+";
         const text = try ctx.arena.print("{s}{s} {s}", .{ sign, try book_mod.fmtNum(ctx.arena, @abs(d.n)), d.key });
-        _ = (try cell.text("t", text)).with_style(.{Style{ .font = 10, .text = if (d.n < 0) th.warn else th.good }});
+        _ = (try cell.text("t", text)).with_style(.{Style{ .font = 10, .ink = if (d.n < 0) .warn else .good }});
     }
 }
 
@@ -327,7 +325,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     var first_row: ?u64 = null;
     if (list.len == 0) {
         const msg = if (query.len > 0) "No lot matches that search." else "Nothing to offer in this direction.";
-        _ = (try rows.content.text("empty", msg)).with_style(.{ Style{ .font = 11, .text = th.dim }, style.pad_sym(pad_x, 14) });
+        _ = (try rows.content.text("empty", msg)).with_style(.{ style.note, style.pad_sym(pad_x, 14) });
     } else {
         const start = @as(usize, st.page) * per_page;
         const end = @min(list.len, start + per_page);
@@ -342,7 +340,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
     }
 
     _ = (try trade_body.div("divider")).with_size(if (ln.narrow) .{ .fixed = ln.width } else .{ .fixed = 1 }, if (ln.narrow) .{ .fixed = 1 } else .{ .pct_of_parent = 1.0 })
-        .with_style(.{Style{ .fill = th.line }});
+        .with_style(.{style.rule_fill});
 
     const chosen = book.byId(st.selected);
     const slip = try slip_mod.deal_slip(trade_body, "slip", book, chosen, st.lots, .{

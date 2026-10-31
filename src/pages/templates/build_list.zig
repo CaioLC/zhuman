@@ -33,7 +33,6 @@ const query = ha.query;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
-const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 const World = ha.world.World;
@@ -332,7 +331,6 @@ pub fn sortEntries(entries: []Entry, sort: Sort, dir: Direction) void {
 /// the table (header and rows) spans it less the scroll gutter.
 pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, set: *uic.TrackSet, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const cat = &ctx.res.catalog;
 
     // The header and the rows (in the scroll view's content) share one set of column tracks;
@@ -353,7 +351,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     var sbuf: [40]u8 = undefined;
     const summary = std.mem.print(&sbuf, "{d} of {d} recipes shown", .{ entries.len, shelfTotal(world, e, cat, shelf) }) catch "?";
     _ = (try outer.text("summary", summary))
-        .with_style(.{ style.small, Style{ .text = th.dim } });
+        .with_style(.{ style.small, style.muted });
 
     // `CatalogState` opens with sort 0 (state) and dir `none`; `none` reads as the sort's
     // natural direction, so the blank list opens on STATE ↓ (nearest first).
@@ -396,7 +394,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     if (entries.len == 0) {
         const msg = if (blank) try ctx.arena.print("Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
         _ = (try rows.text("empty", msg))
-            .with_style(.{ style.body, Style{ .text = th.line2 } });
+            .with_style(.{ style.body, style.faint });
     }
 
     for (entries) |ent| {

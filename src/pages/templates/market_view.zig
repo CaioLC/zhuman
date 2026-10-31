@@ -80,7 +80,7 @@ fn word(ctx: *uic.UiCtx, i: usize) ![]const u8 {
 
 fn hrule(parent: El, id: []const u8) !void {
     _ = (try parent.div(id)).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-        .with_style(.{Style{ .fill = parent.ctx.res.view.theme.line }});
+        .with_style(.{style.rule_fill});
 }
 
 /// A full-width list row with 15px side insets: `outer` is the interactive box (a `pct` width
@@ -124,13 +124,12 @@ fn run(parent: El, id: []const u8, font: f32, pieces: []const struct { []const u
 
 /// A `.seg` button. Returns its click.
 fn segButton(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
-    const th = parent.ctx.res.view.theme;
     const b = try parent.div(id);
     _ = b.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
-    const hot = q.hovering or q.focused;
-    _ = b.with_style(.{Style{ .outline_color = if (pressed) th.line2 else th.bg }});
-    _ = (try b.text("t", label)).with_style(.{ Style{ .font = 11, .text = if (pressed or hot) th.fg else th.dim }, style.pad_sym(7, 3) });
+    const hot = q.hover_focus();
+    _ = b.with_style(.{Style{ .outline_ink = if (pressed) .line2 else .bg }});
+    _ = (try b.text("t", label)).with_style(.{ Style{ .font = 11, .ink = if (pressed or hot) .fg else .dim }, style.pad_sym(7, 3) });
     return q.clicked;
 }
 
@@ -225,7 +224,7 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     const th = ctx.res.view.theme;
     const lr = try listRow(parent, "you", null, 8);
     const row = lr.inner;
-    _ = lr.outer.with_style(.{Style{ .fill = th.panel, .outline_color = th.line2 }});
+    _ = lr.outer.with_style(.{Style{ .fill_ink = .panel, .outline_ink = .line2 }});
     const q = lr.outer.control(.{ .name = "Your stall", .role = .button });
     var live: u32 = 0;
     var sells: std.ArrayList(u8) = .empty;
@@ -244,12 +243,12 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     }
     const top = try row.div("top");
     _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
-    _ = (try top.text("name", "You")).with_style(.{Style{ .font = 13, .text = th.acc }});
-    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, p.trade))).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = th.dim }});
+    _ = (try top.text("name", "You")).with_style(.{Style{ .font = 13, .ink = .acc }});
+    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, p.trade))).with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     const right = try top.div("right");
     _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .main = .end });
     const posts = if (live > 0) try ctx.arena.print("{d} POSTS LIVE", .{live}) else "NOTHING POSTED";
-    _ = (try right.text("posts", posts)).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = if (live > 0) th.dim else th.warn }});
+    _ = (try right.text("posts", posts)).with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = if (live > 0) .dim else .warn }});
     if (live > 0) {
         try run(row, "line", 11, &.{
             .{ "Sells ", th.dim },
@@ -272,16 +271,16 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
     const row = lr.inner;
     const name = try ctx.arena.print("{s} {s}", .{ a.firstName(), a.lastName() });
     const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen });
-    const hot = q.hovering or q.focused;
-    _ = lr.outer.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (hot) th.panel else th.bg }});
+    const hot = q.hover_focus();
+    _ = lr.outer.with_style(.{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
     const top = try row.div("top");
     _ = top.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(8);
-    _ = (try top.text("name", name)).with_style(.{Style{ .font = 13, .text = if (chosen) th.acc else if (!match) th.dim else th.fg }});
-    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, @tagName(a.trade)))).with_style(.{Style{ .font = 10, .tracking = 0.06, .text = th.dim }});
+    _ = (try top.text("name", name)).with_style(.{Style{ .font = 13, .ink = if (chosen) .acc else if (!match) .dim else .fg }});
+    _ = (try top.text("trade", try std.ascii.allocUpperString(ctx.arena, @tagName(a.trade)))).with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     const right = try top.div("right");
     _ = right.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .main = .end });
     _ = (try right.text("match", if (match) "WANTS WHAT YOU HOLD" else "nothing you hold"))
-        .with_style(.{Style{ .font = 10, .tracking = 0.06, .text = if (match) th.good else th.line2 }});
+        .with_style(.{Style{ .font = 10, .tracking = 0.06, .ink = if (match) .good else .line2 }});
     try run(row, "line", 11, &.{
         .{ "Sells ", th.dim },
         .{ try sellSummary(ctx, a, words), th.fg },
@@ -306,10 +305,10 @@ fn goodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, i: usize, cho
     const row = lr.inner;
     _ = row.with_flow(.{ .dir = .row, .cross = .start }).in_tracks(tracks);
     const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen });
-    const hot = q.hovering or q.focused;
-    _ = lr.outer.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (hot) th.panel else th.bg }});
+    const hot = q.hover_focus();
+    _ = lr.outer.with_style(.{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
     _ = (try row.text_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell_fill = .clip }))
-        .with_style(.{Style{ .font = 13, .tracking = 0.04, .text = if (chosen) th.acc else th.fg }});
+        .with_style(.{Style{ .font = 13, .tracking = 0.04, .ink = if (chosen) .acc else .fg }});
     const col = try row.div("col");
     _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
     const off = m.offered(i);
@@ -351,12 +350,11 @@ const stall_gap: f32 = 10;
 
 /// The stall's table head (`.stall-head`).
 fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
-    const th = parent.ctx.res.view.theme;
     const lr = try listRow(parent, "stall_head", null, 0);
     _ = lr.outer.with_style(.{style.pad_each(9, pad_x, 7, pad_x)});
     const row = lr.inner;
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks);
-    const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
+    const s = style.eyebrow_dim;
     const item = try row.div("item");
     _ = (try item.text("t", "ITEM")).with_style(.{s});
     inline for (.{ .{ "qty", if (selling) "POSTED" else "WANTED" }, .{ "price", "PRICE" } }) |c| {
@@ -371,24 +369,23 @@ fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
 
 fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling: bool, p: Player, words: []const []const u8) !void {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const a = ctx.arena;
     const post = if (selling) &m.sell_posts[i] else &m.buy_posts[i];
     if (post.price == 0) post.price = nb.base[i];
     const lr = try listRow(parent, "stall", i, 6);
-    _ = lr.outer.with_style(.{Style{ .fill = if (post.qty > 0) th.panel else th.bg }});
+    _ = lr.outer.with_style(.{Style{ .fill_ink = if (post.qty > 0) .panel else .bg }});
     const row = lr.inner;
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks);
     const item = try row.div("item");
     _ = item.with_flow(.{ .dir = .column, .cross = .start }).with_gap(1);
-    _ = (try item.text("name", try book_mod.title(a, words[i]))).with_style(.{Style{ .font = 13, .text = if (post.qty > 0) th.acc else th.dim }});
+    _ = (try item.text("name", try book_mod.title(a, words[i]))).with_style(.{Style{ .font = 13, .ink = if (post.qty > 0) .acc else .dim }});
     const sub = if (selling)
         try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] })
     else blk: {
         const off = m.offered(i);
         break :blk try a.print("{d} offered by {d}", .{ off.units, off.by });
     };
-    _ = (try item.text("sub", sub)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+    _ = (try item.text("sub", sub)).with_style(.{style.caption_faint});
     const cap: u32 = if (selling) @intFromFloat(@floor(p.spare(i))) else 99;
     const qty_cell = try row.div("qty");
     _ = qty_cell.with_flow(.{ .dir = .row, .main = .center });
@@ -400,32 +397,28 @@ fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling:
     const who = try row.div("who");
     _ = who.with_flow(.{ .dir = .row, .main = .end });
     const text = if (post.qty == 0) "not posted" else try a.print("{d} {s}", .{ takers, if (selling) "would buy" else "would sell" });
-    _ = (try who.text("t", text)).with_style(.{Style{ .font = 10, .text = if (post.qty > 0 and takers > 0) th.good else th.line2 }});
+    _ = (try who.text("t", text)).with_style(.{Style{ .font = 10, .ink = if (post.qty > 0 and takers > 0) .good else .line2 }});
 }
 
 // ---- the slip -----------------------------------------------------------------------------
 
 fn slipHeading(parent: El, text: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
-    _ = (try parent.text("heading", text)).with_style(.{ style.eyebrow, Style{ .text = th.dim } });
+    _ = (try parent.text("heading", text)).with_style(.{ style.eyebrow, style.muted });
 }
 
 fn placeholder(parent: El, id: []const u8, text: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
-    _ = (try parent.text_fit(id, text, .fill)).with_style(.{Style{ .font = 11, .text = th.dim }});
+    _ = (try parent.text_fit(id, text, .fill)).with_style(.{style.note});
 }
 
 fn sideHead(parent: El, left: []const u8, right: []const u8) !void {
-    const th = parent.ctx.res.view.theme;
     const row = try parent.div("side_head");
     _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between });
-    _ = (try row.text("l", left)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
-    _ = (try row.text("r", right)).with_style(.{Style{ .font = 10, .text = th.line2 }});
+    _ = (try row.text("l", left)).with_style(.{style.eyebrow_dim});
+    _ = (try row.text("r", right)).with_style(.{style.caption_faint});
 }
 
 /// A `.line`: a name, then a value or a stepper. Returns the name's click.
 fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bool) !bool {
-    const th = parent.ctx.res.view.theme;
     const row = try parent.item("line", i);
     _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(6);
     var clicked = false;
@@ -433,11 +426,11 @@ fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bo
     if (clickable) {
         const q = n.control(.{ .name = name, .role = .button });
         clicked = q.clicked;
-        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .text = if (q.hovering or q.focused) th.acc else th.fg }});
+        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     } else {
-        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .text = th.fg }});
+        _ = (try n.text("t", name)).with_style(.{Style{ .font = 12, .ink = .fg }});
     }
-    _ = (try row.text("v", value)).with_style(.{Style{ .font = 12, .text = th.fg }});
+    _ = (try row.text("v", value)).with_style(.{Style{ .font = 12, .ink = .fg }});
     return clicked;
 }
 
@@ -512,9 +505,9 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     const who = try slip.div("who");
     // Full slip width, so the wrapped line below fills it (a fitted column would not wrap it).
     _ = who.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
-    _ = (try who.text("name", try a.print("{s} {s}", .{ agent.firstName(), agent.lastName() }))).with_style(.{Style{ .font = 14, .text = th.fg }});
+    _ = (try who.text("name", try a.print("{s} {s}", .{ agent.firstName(), agent.lastName() }))).with_style(.{Style{ .font = 14, .ink = .fg }});
     _ = (try who.text_fit("small", try a.print("{s} \u{00b7} buys {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true) }), .fill))
-        .with_style(.{Style{ .font = 10, .text = th.dim }});
+        .with_style(.{style.caption});
 
     // YOU GIVE (spare only): what it buys that the player has spare, and coin.
     inline for (.{ .{ "give", "YOU GIVE", "spare only" }, .{ "take", "YOU RECEIVE", "theirs" } }) |side| {
@@ -535,7 +528,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
             const row = try box.item("line", i);
             _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between, .cross = .center }).with_gap(6);
             const name = if (is_coin) "Coin" else try book_mod.title(a, words[i]);
-            _ = (try row.text("n", name)).with_style(.{Style{ .font = 12, .text = if (bundle[i] > 0) th.fg else th.line2 }});
+            _ = (try row.text("n", name)).with_style(.{Style{ .font = 12, .ink = if (bundle[i] > 0) .fg else .line2 }});
             bundle[i] = @intCast(try stepper_mod.quantity_stepper(row, "stepper", bundle[i], 0, cap, .{ .less = "Less", .more = "More" }));
         }
         if (!any) try placeholder(box, "none", if (giving) "Nothing spare they buy." else "Nothing to receive.");
@@ -561,8 +554,8 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     if (rows) {
         const after = try slip.div("after");
         _ = after.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
-        _ = (try after.div("rule")).with_size(.{ .fixed = slip_inner }, .{ .fixed = 1 }).with_style(.{Style{ .fill = th.line }});
-        _ = (try after.text("head", "AFTER")).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+        _ = (try after.div("rule")).with_size(.{ .fixed = slip_inner }, .{ .fixed = 1 }).with_style(.{style.rule_fill});
+        _ = (try after.text("head", "AFTER")).with_style(.{style.eyebrow_dim});
         for (0..nb.bundle_len) |i| {
             if (st.give[i] == 0 and st.take[i] == 0) continue;
             const before: f32 = if (i == nb.coin) p.coin else p.held[i];
@@ -571,10 +564,10 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
             _ = r.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(5);
             const key = try r.div("key");
             _ = key.with_size(.grow, .fit_children);
-            _ = (try key.text("k", try std.ascii.allocUpperString(a, if (i == nb.coin) "coin" else words[i]))).with_style(.{Style{ .font = 12, .tracking = 0.04, .text = th.dim }});
-            _ = (try r.text("from", try book_mod.fmtNum(a, before))).with_style(.{Style{ .font = 12, .text = th.line2 }});
-            _ = (try r.text("arrow", "\u{2192}")).with_style(.{Style{ .font = 12, .text = th.line2 }});
-            _ = (try r.text("to", try book_mod.fmtNum(a, value))).with_style(.{Style{ .font = 12, .text = if (value < before) th.warn else if (value > before) th.good else th.fg }});
+            _ = (try key.text("k", try std.ascii.allocUpperString(a, if (i == nb.coin) "coin" else words[i]))).with_style(.{Style{ .font = 12, .tracking = 0.04, .ink = .dim }});
+            _ = (try r.text("from", try book_mod.fmtNum(a, before))).with_style(.{Style{ .font = 12, .ink = .line2 }});
+            _ = (try r.text("arrow", "\u{2192}")).with_style(.{Style{ .font = 12, .ink = .line2 }});
+            _ = (try r.text("to", try book_mod.fmtNum(a, value))).with_style(.{Style{ .font = 12, .ink = if (value < before) .warn else if (value > before) .good else .fg }});
         }
     }
 
@@ -583,9 +576,9 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     const b = try slip.div("propose");
     _ = b.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .center });
     const q = b.control(.{ .enabled = accept, .name = "Propose", .role = .button });
-    const lit = accept and (q.hovering or q.focused or q.held);
-    _ = b.with_style(.{Style{ .outline_color = if (!accept) th.line else if (lit) th.acc else th.fg }});
-    _ = (try b.text("t", "PROPOSE \u{2192}")).with_style(.{ style.body, Style{ .text = if (!accept) th.line2 else if (lit) th.acc else th.fg }, style.pad_sym(8, 7) });
+    const lit = accept and (q.hot());
+    _ = b.with_style(.{Style{ .outline_ink = if (!accept) .line else if (lit) .acc else .fg }});
+    _ = (try b.text("t", "PROPOSE \u{2192}")).with_style(.{ style.body, Style{ .ink = if (!accept) .line2 else if (lit) .acc else .fg }, style.pad_sym(8, 7) });
     if (accept and q.clicked) {
         const deal = Settled{ .give = st.give, .take = st.take };
         m.settle(k, st.give, st.take);
@@ -598,7 +591,6 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
 
 fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8) !void {
     const ctx = slip.ctx;
-    const th = ctx.res.view.theme;
     const a = ctx.arena;
     try slipHeading(slip, "YOUR STALL");
     var live: u32 = 0;
@@ -620,20 +612,20 @@ fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8
     const over = @as(f32, @floatFromInt(committed)) > p.coin;
     const who = try slip.div("who");
     _ = who.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
-    _ = (try who.text("n", try a.print("{d} post{s} live", .{ live, if (live == 1) "" else "s" }))).with_style(.{Style{ .font = 14, .text = th.fg }});
-    _ = (try who.text("s", "neighbours trade against these prices")).with_style(.{Style{ .font = 10, .text = th.dim }});
+    _ = (try who.text("n", try a.print("{d} post{s} live", .{ live, if (live == 1) "" else "s" }))).with_style(.{Style{ .font = 14, .ink = .fg }});
+    _ = (try who.text("s", "neighbours trade against these prices")).with_style(.{style.caption});
     const tally = try slip.div("tally");
     _ = tally.with_flow(.{ .dir = .column, .cross = .start }).with_gap(3);
     inline for (.{ .{ "sell", "SELLING", false }, .{ "buy", "BUYING", true } }) |r| {
         const row = try tally.div(r[0]);
         _ = row.with_size(.{ .fixed = slip_inner }, .fit_children).with_flow(.{ .dir = .row, .main = .space_between });
-        _ = (try row.text("l", r[1])).with_style(.{Style{ .font = 11, .text = th.dim }});
+        _ = (try row.text("l", r[1])).with_style(.{style.note});
         const value = if (r[2]) try a.print("{d} items \u{00b7} {d} of {d:.0} coin", .{ buy_items, committed, p.coin }) else try a.print("{d} items \u{00b7} {d} units", .{ sell_items, sell_units });
-        _ = (try row.text("v", value)).with_style(.{Style{ .font = 11, .text = if (r[2] and over) th.danger else th.fg }});
+        _ = (try row.text("v", value)).with_style(.{Style{ .font = 11, .ink = if (r[2] and over) .danger else .fg }});
     }
     if (over) {
         _ = (try slip.text_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .fill))
-            .with_style(.{Style{ .font = 10, .text = th.danger }});
+            .with_style(.{Style{ .font = 10, .ink = .danger }});
     }
     inline for (.{ .{ "posted_sell", "POSTED TO SELL", true }, .{ "posted_buy", "POSTED TO BUY", false } }) |side| {
         const posts = if (side[2]) &m.sell_posts else &m.buy_posts;
@@ -672,7 +664,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     const head = try band(view, "head", 11, 9);
     _ = head.with_flow(.{ .dir = .row, .main = .space_between, .cross = .center });
     _ = (try head.text("title", if (st.stall) "What will you post?" else "Who will trade with you?"))
-        .with_style(.{ style.heading, Style{ .text = th.fg } });
+        .with_style(.{ style.heading, style.ink(.fg) });
     const sub_slot = try head.div("sub");
     try hrule(view, "head_rule");
 
@@ -686,7 +678,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     _ = seg.with_flow(.{ .dir = .row, .cross = .center }).with_gap(2);
     const mode = activeGroup(st, m.n);
     if (st.stall) {
-        _ = (try seg.text("label", "SIDE")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = th.dim }, style.pad_each(0, 4, 0, 0) });
+        _ = (try seg.text("label", "SIDE")).with_style(.{ style.eyebrow_dim, style.pad_each(0, 4, 0, 0) });
         if (try segButton(seg, "selling", "SELLING", st.side == 0)) {
             st.side = 0;
             st.page = 0;
@@ -696,7 +688,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
             st.page = 0;
         }
     } else {
-        _ = (try seg.text("label", "BY")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = th.dim }, style.pad_each(0, 4, 0, 0) });
+        _ = (try seg.text("label", "BY")).with_style(.{ style.eyebrow_dim, style.pad_each(0, 4, 0, 0) });
         if (try segButton(seg, "person", "PERSON", mode == .person)) {
             st.group = 1;
             st.page = 0;
@@ -709,9 +701,9 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     const stall_button = try controls.div("stall");
     _ = stall_button.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row });
     const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall });
-    const lit = st.stall or sq.hovering or sq.focused;
-    _ = stall_button.with_style(.{Style{ .outline_color = if (lit) th.acc else th.line2, .fill = if (st.stall) th.panel else th.bg }});
-    _ = (try stall_button.text("t", "YOUR STALL")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .text = if (lit) th.acc else th.dim }, style.pad_sym(8, 3) });
+    const lit = st.stall or sq.hover_focus();
+    _ = stall_button.with_style(.{Style{ .outline_ink = if (lit) .acc else .line2, .fill_ink = if (st.stall) .panel else .bg }});
+    _ = (try stall_button.text("t", "YOUR STALL")).with_style(.{ Style{ .font = 10, .tracking = 0.07, .ink = if (lit) .acc else .dim }, style.pad_sym(8, 3) });
     var toggle_stall = sq.clicked;
     try hrule(view, "controls_rule");
 
@@ -721,7 +713,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     const list = try body.div("list");
     _ = list.with_size(.grow, .{ .pct_of_parent = 1.0 }).with_flow(.{ .dir = .column, .cross = .start })
         .with_style(.{style.pad_each(3, 0, 8, 0)});
-    _ = (try body.div("divider")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{Style{ .fill = th.line }});
+    _ = (try body.div("divider")).with_size(.{ .fixed = 1 }, .{ .pct_of_parent = 1.0 }).with_style(.{style.rule_fill});
     // The slip's 10/15/13 insets are padding inside border-box extents (the box's percentage
     // height, the row's percentage width), so its foot (PROPOSE) stays inside the body.
     const slip_box = try body.div("slip_box");
@@ -799,7 +791,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
             }
         }
         if (slice.len == 0) {
-            _ = (try list.text("empty", "Nothing matches that query.")).with_style(.{ Style{ .font = 11, .text = th.dim }, style.pad_sym(pad_x, 16) });
+            _ = (try list.text("empty", "Nothing matches that query.")).with_style(.{ style.note, style.pad_sym(pad_x, 16) });
         }
         switch (st.pick_kind) {
             1 => result.settled = try agentSlip(slip, m, st.pick, st, p, &words),
@@ -816,7 +808,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
         try a.print("{d} item{s} \u{00b7} {s}", .{ total, if (total == 1) "" else "s", if (st.side == 0) "your inventory" else "offered by neighbours" })
     else
         try a.print("{d} of {d} neighbours \u{00b7} by {s}{s}", .{ visible_people, m.n, @tagName(mode), if (st.group == 0) " (natural)" else "" });
-    _ = (try sub_slot.text("t", sub)).with_style(.{Style{ .font = 10, .tracking = 0.07, .text = th.dim }});
+    _ = (try sub_slot.text("t", sub)).with_style(.{style.eyebrow_dim});
 
     // --- foot: friction and pages ------------------------------------------------------------
     try hrule(view, "foot_rule");

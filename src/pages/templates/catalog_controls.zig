@@ -18,7 +18,6 @@ const uic = ha.ui_client;
 const el = uic.elements;
 const El = el.El;
 const style = uic.style;
-const Style = style.Style;
 const CatalogState = uic.UiState.CatalogState;
 const Direction = CatalogState.Direction;
 
@@ -40,7 +39,6 @@ pub const recipes_placeholder = "Search recipes \u{00B7} type:tool out:food stat
 /// likewise the search editor lives on `search_owner` when given.
 pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, state: ?*CatalogState, search_owner: ?El) !Catalog {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const bar = try parent.div(id);
     _ = bar.with_flow(.{ .dir = .row, .cross = .center })
         .with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
@@ -58,7 +56,7 @@ pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, sta
     // prototype's `<kbd>/</kbd>`); the clear `✕` takes that corner once there is text.
     if (editor.len == 0 and !ctx.isFocused(field_key)) {
         _ = (try field.text("kbd", "/")).with_layout(.center_right)
-            .with_style(.{ style.pad_sym(6, 0), Style{ .text = th.line2 } });
+            .with_style(.{ style.pad_sym(6, 0), style.faint });
     }
     // Escape clears a non-empty field (the field's own outside/Escape focus-clear still applies
     // when empty): the dismiss is routed to the focused field.

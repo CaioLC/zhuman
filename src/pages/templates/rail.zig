@@ -90,7 +90,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // persistent focus must not latch the rail in its hover color after the pointer leaves.
     const toggle_color = if (q.held or q.hovering) th.acc else th.fg;
     const toggle_chrome = Style{
-        .fill = th.bg,
+        .fill_ink = .bg,
         .outline_color = toggle_color,
         .outline_width = 1,
     };

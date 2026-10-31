@@ -14,7 +14,6 @@ const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
-const UiCtx = uic.UiCtx;
 const El = el.El;
 const Color = uic.Color;
 const DisclosureState = uic.UiState.DisclosureState;
@@ -31,14 +30,6 @@ pub fn presentationOf(state: Lifecycle) Presentation {
         .unfunded => .{ .tone = .danger, .readiness = "inputs short" },
         .ready => .{ .tone = .good, .readiness = "ready" },
         .done => .{ .tone = .good, .readiness = "done" },
-    };
-}
-
-fn toneColor(ctx: *UiCtx, tone: Tone) Color {
-    const th = ctx.res.view.theme;
-    return switch (tone) {
-        .danger => th.danger,
-        .good => th.good,
     };
 }
 
@@ -99,7 +90,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const pres = presentationOf(goal.state);
-    const tone = toneColor(ctx, pres.tone);
+    const tone = style.toneColor(ctx, pres.tone);
     const readiness = if (goal.readiness.len > 0) goal.readiness else pres.readiness;
     const ready = goal.state == .ready;
 
@@ -137,15 +128,13 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const disclosure = try disclosure_lane.div("disclosure");
     _ = disclosure.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = action_h })
         .with_offset(0, bar_control_offset_y)
-        .with_style(.{Style{ .fill = th.bg }});
+        .with_style(.{Style{ .fill_ink = .bg }});
     const disclosure_state = disclosure.state(DisclosureState);
     if (goal.expand) |x| disclosure_state.expanded = x;
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (disclosure.query().clicked) disclosure_state.expanded = !disclosure_state.expanded;
-    const dq = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded });
-    const disclosure_focused = dq.focused;
+    _ = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded });
 
-    const title_color = if (dq.hovering or disclosure_focused) th.acc else th.fg;
     // Center the complete disclosure composition against the definite 28px control box. If the
     // text leaves sit directly in the fixed-height parent, this engine centers them only within
     // their intrinsic line band; the anchored group gives Shelter, details, and the CTA one
@@ -156,7 +145,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .with_flow(.{ .dir = .row, .cross = .center })
         .with_gap(summary_gap);
     _ = (try disclosure_content.text("title", goal.title))
-        .with_style(.{Style{ .font = 15, .text = title_color }});
+        .with_style(.{Style{ .font = 15, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     _ = (try disclosure_content.text("readiness", readiness))
         .with_style(.{Style{ .font = 9, .text = tone }});
 
@@ -166,16 +155,16 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     _ = compact.with_size(.grow, .fit_children)
         .with_overflow(.clip);
     _ = (try compact.text("text", goal.summary))
-        .with_style(.{Style{ .font = 9, .text = th.dim }});
+        .with_style(.{style.fine_print});
 
     const affordance = try disclosure_content.div("affordance");
     _ = affordance.with_size(.fit_children, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center })
         .with_gap(ha.tokens.gap.inline_);
     _ = (try affordance.text("word", if (disclosure_state.expanded) "close" else "details"))
-        .with_style(.{Style{ .font = 9, .text = th.dim }});
+        .with_style(.{style.fine_print});
     _ = (try affordance.text("arrow", if (disclosure_state.expanded) "\u{2191}" else "\u{2193}"))
-        .with_style(.{Style{ .font = 9, .text = th.dim }});
+        .with_style(.{style.fine_print});
 
     var clicked = false;
     if (goal.action.len > 0) {
@@ -187,11 +176,12 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         _ = action.with_size(.{ .fixed = action_w }, .{ .fixed = action_h })
             .with_offset(0, bar_control_offset_y);
         const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button });
-        const action_color = if (!ready) th.dim else if (aq.hovering or aq.focused) th.acc else th.fg;
-        _ = action.with_style(.{Style{ .outline_color = action_color }});
+        // Disabled (`!ready`) never lifts, so the dim rest holds under the pointer.
+        const action_ink: style.ThemeRole = if (ready) .fg else .dim;
+        _ = action.with_style(.{Style{ .outline_ink = action_ink, .hot = .{ .outline_ink = .acc, .when = .hover_focus } }});
         _ = (try action.text("label", goal.action))
             .with_layout(.center)
-            .with_style(.{Style{ .font = 9, .text = action_color }});
+            .with_style(.{Style{ .font = 9, .ink = action_ink, .hot = .{ .ink = .acc, .when = .hover_focus } }});
         clicked = ready and aq.clicked;
     }
 
@@ -201,7 +191,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .with_flow(.{ .dir = .column });
         const divider = try details.div("divider");
         _ = divider.with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
-            .with_style(.{Style{ .fill = th.line }});
+            .with_style(.{style.rule_fill});
 
         // The row's padding is the 14px (2px rail + 12px) / 10px CSS inset; its percentage
         // width is a border box, so the padding comes out of the card's width.
@@ -225,13 +215,13 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             }
             if (goal.cost.len > 0) {
                 _ = (try head.text("cost", goal.cost))
-                    .with_style(.{Style{ .font = 9, .text = th.dim }});
+                    .with_style(.{style.fine_print});
             }
         }
 
         if (goal.copy.len > 0) {
             _ = (try content.text_fit("copy", goal.copy, .{ .wrap = detail_wrap_w }))
-                .with_style(.{Style{ .font = 10, .text = th.fg }});
+                .with_style(.{Style{ .font = 10, .ink = .fg }});
         }
 
         if (goal.requirements.len > 0) {
@@ -243,15 +233,15 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
                 const token = try requirements.item("r", i);
                 _ = token.with_flow(.{ .dir = .row, .cross = .baseline }).with_gap(4);
                 _ = (try token.text("label", requirement.label))
-                    .with_style(.{Style{ .font = 8.5, .text = th.line2 }});
+                    .with_style(.{Style{ .font = 8.5, .ink = .line2 }});
                 _ = (try token.text("value", requirement.value))
-                    .with_style(.{Style{ .font = 8.5, .text = if (requirement.met) th.good else th.danger }});
+                    .with_style(.{Style{ .font = 8.5, .ink = if (requirement.met) .good else .danger }});
             }
         }
 
         if (goal.explanation.len > 0) {
             _ = (try content.text("explanation", goal.explanation))
-                .with_style(.{Style{ .font = 9, .text = th.dim }});
+                .with_style(.{style.fine_print});
         }
     }
 

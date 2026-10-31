@@ -35,7 +35,6 @@ fn runType(ctx: *UiCtx) Style {
 /// Build the runline into `parent`, right-anchored by the caller. Returns the row `El`.
 pub fn runline(parent: El, id: []const u8, run: Run) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     var buf: [48]u8 = undefined;
 
     const row = try parent.div(id);
@@ -48,27 +47,27 @@ pub fn runline(parent: El, id: []const u8, run: Run) !El {
         const energy = try row.div("energy");
         _ = energy.with_flow(.{ .dir = .row, .cross = .center }).with_gap(3)
             .with_style(.{style.pad_each(0, 12 - 8, 0, 0)}); // 12px before the act label
-        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ runType(ctx), Style{ .text = th.dim } });
+        _ = (try energy.text("bolt", "\u{26A1}")).with_style(.{ runType(ctx), style.muted });
         var gbuf: [16]u8 = undefined;
         var cbuf: [16]u8 = undefined;
         const gen_txt = std.mem.print(&gbuf, "+{d}", .{@round(run.gen)}) catch "+?";
         const use_txt = std.mem.print(&cbuf, "\u{2212}{d}", .{@round(run.consumed)}) catch "\u{2212}?";
-        _ = (try energy.text("gen", gen_txt)).with_style(.{ runType(ctx), Style{ .text = th.acc } });
-        _ = (try energy.text("slash", "/")).with_style(.{ runType(ctx), Style{ .text = th.dim } });
-        _ = (try energy.text("use", use_txt)).with_style(.{ runType(ctx), Style{ .text = th.warn } });
+        _ = (try energy.text("gen", gen_txt)).with_style(.{ runType(ctx), style.ink(.acc) });
+        _ = (try energy.text("slash", "/")).with_style(.{ runType(ctx), style.muted });
+        _ = (try energy.text("use", use_txt)).with_style(.{ runType(ctx), style.ink(.warn) });
     }
 
     // Act label — optional context, dropped when compact; the middot follows it.
     if (!run.compact) {
         const atxt = std.mem.print(&buf, "{s} \u{00B7}", .{run.act_label}) catch run.act_label;
         _ = (try row.text("act", atxt))
-            .with_style(.{ runType(ctx), Style{ .text = th.dim } });
+            .with_style(.{ runType(ctx), style.muted });
     }
 
     // Day — the functional counter, always shown, in fg.
     const dtxt = std.mem.print(&buf, "Day {d}", .{run.day}) catch "?";
     _ = (try row.text("day", dtxt))
-        .with_style(.{ runType(ctx), Style{ .text = th.fg } });
+        .with_style(.{ runType(ctx), style.ink(.fg) });
 
     return row;
 }

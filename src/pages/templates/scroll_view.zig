@@ -78,7 +78,6 @@ fn innerWheel(ctx: *UiCtx, vkey: u64) bool {
 /// owner's slot keeps the offset while the view is hidden); null means the view keeps its own.
 pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollState) !ScrollView {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const scale = ctx.res.view.scale;
 
     const fill = opts.width <= 0;
@@ -94,7 +93,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         const viewport = try outer.div("viewport");
         _ = viewport.with_flow(.{ .dir = .column, .cross = .start })
             .with_size(if (fill) .grow else .{ .fixed = opts.width }, .fit_children);
-        if (opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.line2 }});
+        if (opts.framed) _ = viewport.with_style(.{Style{ .outline_ink = .line2 }});
         const content = try viewport.div("content");
         _ = content.with_flow(.{ .dir = .column }).with_gap(opts.gap);
         if (fill) _ = content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children);
@@ -115,7 +114,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     // Top-anchored column: the default row/baseline flow would align an overflowing content
     // column by its baseline and start it part-way scrolled.
     _ = viewport.with_overflow(.clip).with_flow(.{ .dir = .column, .cross = .start });
-    if (opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.line2 }});
+    if (opts.framed) _ = viewport.with_style(.{Style{ .outline_ink = .line2 }});
     _ = viewport.with_size(
         if (fill) .grow else .{ .fixed = opts.width },
         if (fill or fill_h) .{ .pct_of_parent = 1.0 } else .{ .fixed = opts.height },
@@ -154,7 +153,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         if (vq.scroll_page_down) st.offset += @max(line, view_h - line);
         if (vq.scroll_top) st.offset = 0;
         if (vq.scroll_bottom) st.offset = max_offset;
-        if (vq.focus_visible and opts.framed) _ = viewport.with_style(.{Style{ .outline_color = th.acc }});
+        if (vq.focus_visible and opts.framed) _ = viewport.with_style(.{Style{ .outline_ink = .acc }});
         // A newly focused control inside the view is scrolled into it, once.
         if (ctx.focusedKey()) |fk| {
             if (fk != vkey and st.revealed != fk and ctx.isStampedDescendant(fk, vkey)) {
@@ -175,7 +174,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         const track = try outer.div("track");
         _ = track.with_flow(.{ .dir = .column })
             .with_size_px(.{ .fixed = gutter }, .{ .fixed = view_h })
-            .with_style(.{Style{ .fill = th.line }});
+            .with_style(.{style.rule_fill});
 
         const thumb_h = @min(view_h, @max(uic.view.dp(min_thumb, scale), view_h * view_h / content_h));
         const thumb_travel = view_h - thumb_h;
@@ -192,7 +191,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         } else if (thumb_q.hovering) {
             ctx.res.cursor.request(.grab);
         }
-        _ = thumb.with_style(.{Style{ .fill = if (st.dragging) th.acc else th.line2 }});
+        _ = thumb.with_style(.{Style{ .fill_ink = if (st.dragging) .acc else .line2 }});
     } else if (st.dragging) {
         uic.cancelScrollThumb(ctx, st);
     }
