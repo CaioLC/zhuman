@@ -327,9 +327,10 @@ pub fn sortEntries(entries: []Entry, sort: Sort, dir: Direction) void {
 /// Build the list. `catalog_state` and `search_owner` are the catalog state and the node holding the
 /// search editor when the caller owns them (an always-built owner, so a hidden BUILD tab
 /// keeps its query and sort); null lets the controls keep their own. `scroll` is the rows'
-/// scroll offset on the same terms. `tt` is the table's tracks for `shelf.widths` at this
-/// width (`capital_row.tableTracks`). The list fills its parent's remaining height.
-pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, tt: row_mod.TableTracks, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
+/// scroll offset on the same terms. `set` is the table's tracks for `shelf.widths` at this
+/// width (`capital_row.tableTracks`). The list fills its parent's width and remaining height;
+/// the table (header and rows) spans it less the scroll gutter.
+pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, set: *uic.TrackSet, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const cat = &ctx.res.catalog;
@@ -338,7 +339,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     // the list is their common ancestor.
     const outer = try parent.div(id);
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx))
-        .with_flow(.{ .dir = .column }).with_gap(6).with_tracks(tt.set);
+        .with_flow(.{ .dir = .column }).with_gap(6).with_tracks(set);
 
     // --- the controls bar: search only; the table's column headers sort -------------------
     const controls = try cc.catalog_controls(outer, "build_ctl", cc.recipes_placeholder, catalog_state, search_owner);
@@ -361,7 +362,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     const cur_sort: Sort = @fromBackingInt(@intCast(st.sort));
     const cur_dir: Direction = if (st.dir != .none) st.dir else naturalDir(cur_sort);
     // The column header stays put above the scrolling rows.
-    const header = try capital_header(outer, "header", tt, .{
+    const header = try capital_header(outer, "header", set, .{
         .keys = .{ @backingInt(Sort.name), @backingInt(Sort.inputs), @backingInt(Sort.time), null, @backingInt(Sort.state), null },
         .active = st.sort,
         .dir = if (cur_dir == .descending) .descending else .ascending,
@@ -378,12 +379,13 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     sortEntries(entries, eff_sort, eff_dir);
 
     // --- the rows: the only part that scrolls ----------------------------------------------
-    // The view takes what the controls, summary, header and milestone leave; the track sits in
-    // the gutter right of the table, so it never covers a lane and appears only on overflow.
+    // The view takes what the controls, summary, header and milestone leave. It spans the
+    // list less the gutter it keeps for its track, so it never covers a lane, appears only on
+    // overflow, and never narrows the rows when it does; the rows span the view.
     const view = try outer.div("rows_view");
     _ = view.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").grow_h(ctx));
     const sv = try scroll_view_mod.scroll_view(view, "scroll", .{
-        .width = tt.width,
+        .gutter = row_mod.scroll_gutter,
         .height = 0,
         .framed = false,
         .gap = 0,
@@ -400,7 +402,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     for (entries) |ent| {
         // Keyed by the recipe's id, not its sorted position, so a row's focus and state follow
         // the recipe through a re-sort or a filter change.
-        const r = try capital_row(rows, world, e, tt, ent.q, ent.kind);
+        const r = try capital_row(rows, world, e, set, ent.q, ent.kind);
         // The lifecycle is the simulation's. A ready/owned click pays through `begin`; the
         // cancel corner runs the existing refund path. No UI timers.
         if (r.clicked_build) capital.begin(world, e, ctx.res, ent.q.gi);

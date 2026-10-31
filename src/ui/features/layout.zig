@@ -660,6 +660,10 @@ fn padding_extent(s: *const Size, axis: Axis) f32 {
     return if (axis == .x) s.padding.left + s.padding.right else s.padding.up + s.padding.down;
 }
 
+fn pct_less(s: *const Size, axis: Axis) f32 {
+    return if (axis == .x) s.pct_less_width else s.pct_less_height;
+}
+
 fn min_extent(s: *const Size, axis: Axis) f32 {
     return @max(0, if (axis == .x) s.min_width else s.min_height);
 }
@@ -1258,14 +1262,16 @@ fn distribute_shrink(node: anytype, main: Axis) void {
 /// it. A definite `pct_of_parent` sizes the whole box instead, as `grow` does: the fraction
 /// is taken of the parent's content box and the node's own padding comes out of that share,
 /// so `1.0` plus padding fills the parent rather than overflowing it by the padding. Padding
-/// wider than the share leaves 0 content (the box is then just the padding). Min/max still
-/// bound the content box. The indefinite fallback is `content_seed`, a content size.
+/// wider than the share leaves 0 content (the box is then just the padding). A percentage's
+/// `Size.pct_less_*` comes off the share before the padding does (CSS `calc(p% − Npx)`).
+/// Min/max still bound the content box. The indefinite fallback is `content_seed`, a content
+/// size.
 fn finalize_axis(s: *const Size, axis: Axis, rule: size_mod.SizeRule, content_seed: f32, pass1_inner: f32, p_def: bool, p_inner: f32) f32 {
     const raw = switch (rule) {
         .fixed => |n| n,
         .content => content_seed,
         .fit_children => pass1_inner,
-        .pct_of_parent => |f| if (p_def) @max(0, p_inner * f - padding_extent(s, axis)) else content_seed,
+        .pct_of_parent => |f| if (p_def) @max(0, p_inner * f - pct_less(s, axis) - padding_extent(s, axis)) else content_seed,
         .grow => content_seed,
     };
     return constrain_inner(s, axis, raw);

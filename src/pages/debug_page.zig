@@ -283,9 +283,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
-            // The pane fills a definite height and scrolls only its table.
+            // The pane fills a definite height and scrolls only its table, and spans a
+            // definite width: the framed content lane.
             const demo = try stage.div("build_demo");
-            _ = demo.with_size(.fit_children, .{ .fixed = 560 });
+            _ = demo.with_size(.{ .fixed = t.build_lane_width }, .{ .fixed = 560 });
             _ = try t.build_section(demo, world, a[0], "build", @import("./templates/act_one_surface.zig").build_shelf, null, null, null);
         } else {
             _ = try stage.text("na", "(needs a live player)");
@@ -400,10 +401,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             const gi = ctx.res.catalog.goodIndex("sandals").?;
             if (ha.capital.quote(world, a[0], &ctx.res.catalog, gi)) |q| {
-                // Act I's lanes; the stage owns the row's tracks, as the BUILD list does.
-                const tt = try t.build_table_tracks(ctx, .{});
-                _ = stage.with_tracks(tt.set);
-                _ = try t.capital_row(stage, world, a[0], tt, q, .ready);
+                // Act I's lanes; the demo owns the row's tracks, as the BUILD list does, and is
+                // the framed table's width (the lane less the scroll gutter), which the row spans.
+                const set = try t.build_table_tracks(ctx, .{});
+                const demo = try stage.div("capital_row_demo");
+                _ = demo.with_size(.{ .fixed = t.build_lane_width - t.build_scroll_gutter }, .fit_children)
+                    .with_flow(.{ .dir = .column }).with_tracks(set);
+                _ = try t.capital_row(demo, world, a[0], set, q, .ready);
             }
         } else {
             _ = try stage.text("na", "(needs a live player)");

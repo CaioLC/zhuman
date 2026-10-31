@@ -58,6 +58,13 @@ pub const Size = struct {
     min_height: f32 = 0,
     max_width: ?f32 = null,
     max_height: ?f32 = null,
+    /// Per-axis px a `pct_of_parent` rule leaves out of its share (CSS `calc(p% − Npx)`): the
+    /// fraction is taken of the parent's content box, this comes off it, then the node's own
+    /// padding, then min/max clamp the content box. A box that ends a fixed distance short of
+    /// its parent's edge (a table beside a scrollbar gutter) takes it; ignored by every other
+    /// rule and by the indefinite fallback. Defaults to 0.
+    pct_less_width: f32 = 0,
+    pct_less_height: f32 = 0,
     /// Main-axis growth factor (CSS `flex-grow`), read only when this node's rule on its
     /// parent's main axis is `.grow`: growers split the free space in proportion to their
     /// weights, so weights 1 and 2 take a third and two thirds. Defaults to 1, the equal

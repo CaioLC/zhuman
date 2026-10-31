@@ -28,23 +28,33 @@ pub const Shelf = build_list_mod.Shelf;
 /// The section fills its parent's height, which must be definite: the heading, search,
 /// summary and column header stay put, and only the table's rows scroll — the milestone stays
 /// pinned below them.
+///
+/// It spans its parent's width, which must be definite too, held to the table's bounds
+/// (`capital_row.Extent`) plus the scroll gutter: framed that is the 594px lane; stacked, the
+/// page's surface. Everything inside takes its width from the section, and the engine solves
+/// the tracks against the rows' own width.
 pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    // The table's tracks at this width's surface; the list below lays out by them.
-    const tt = try row_mod.tableTracks(ctx, shelf.widths);
-    const width = tt.width;
+    // The table's tracks at this width class; the list below lays out by them.
+    const set = try row_mod.tableTracks(ctx, shelf.widths);
+    const ext = row_mod.tableExtent(ctx, shelf.widths);
+    const gutter = row_mod.scroll_gutter;
 
     const section = try parent.div(id);
-    // The table plus its reserved scroll gutter, so the track never covers a lane.
-    _ = section.with_size(.{ .fixed = width + row_mod.scroll_gutter }, @import("./terminal.zig").fill_h(ctx))
+    // The table plus its reserved scroll gutter, so the track never covers a lane. A wider
+    // parent leaves its slack outside the section; a narrower one than the lanes' floors is
+    // overflowed.
+    _ = section.with_size(.{ .pct_of_parent = 1.0 }, @import("./terminal.zig").fill_h(ctx))
+        .with_min(ext.min + gutter, null).with_max(ext.max + gutter, null)
         .with_flow(.{ .dir = .column, .cross = .start }).with_gap(7);
 
     var count_buf: [24]u8 = undefined;
     const count = std.mem.print(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
     const heading_box = try section.div("heading_box");
-    _ = heading_box.with_size(.{ .fixed = width }, .fit_children);
+    // Over the table: the count ends where the lanes do.
+    _ = heading_box.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_pct_less(gutter, null);
     _ = try browser_mod.browser_heading(heading_box, "heading", "BUILD", shelf.subtitle, count);
 
-    _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, tt, catalog, search_owner, scroll);
+    _ = try build_list_mod.build_list(section, world, e, "buildlist", shelf, set, catalog, search_owner, scroll);
     return section;
 }

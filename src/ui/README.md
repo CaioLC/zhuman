@@ -472,6 +472,11 @@ Each axis also has a content-box minimum (default 0) and optional maximum; paddi
 added after clamping, and minimum wins a conflicting min/max pair. Constraints apply to
 every rule.
 
+A `pct_of_parent` axis can also leave a fixed amount out of its share, `Size.pct_less_*`
+(CSS `calc(p% − Npx)`; `El.with_pct_less`): the fraction of the parent's content box, less
+that, less the node's own padding, then clamped. A table that ends where a sibling's
+scrollbar gutter begins is `1.0` less the gutter, with no width threaded down to it.
+
 The *intrinsic content size* is host policy — the host **measures it at build** (text
 metrics, a sprite's dims) and stores it on the node as `data_width`/`data_height`;
 the `content` rule sizes to those, and the host renderer draws to them. The *rule*

@@ -491,6 +491,52 @@ test "pct_of_parent resolves against a definite (fixed) parent" {
     try std.testing.expectEqual(@as(f32, 100), child.size.height);
 }
 
+test "pct_less: a percentage ends that many px short; padding, then min/max, come after" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const root = try TestNode.create(a, "root");
+    _ = root.with_size(Size.initFixed(600, 400)).with_layout(.top_left, .{ .dir = .column, .cross = .start });
+
+    // calc(100% − 8px) wide, calc(50% − 10px) high, with 6px side padding inside the box.
+    const inset = try TestNode.pcreate(a, "inset", root);
+    _ = inset.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .{ .pct_of_parent = 0.5 })).with_layout(.relative, null);
+    inset.size.pct_less_width = 8;
+    inset.size.pct_less_height = 10;
+    inset.size.padding = features.Padding.initEach(0, 6, 0, 6);
+    const fill = try TestNode.pcreate(a, "fill", inset);
+    _ = fill.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })).with_layout(.relative, null);
+
+    // The max bounds the content box left after the less and the padding.
+    const capped = try TestNode.pcreate(a, "capped", root);
+    _ = capped.with_size(Size.init(.{ .pct_of_parent = 1.0 }, .{ .fixed = 10 })).with_layout(.relative, null);
+    capped.size.pct_less_width = 8;
+    capped.size.max_width = 500;
+
+    // Every other rule ignores it.
+    const fixed = try TestNode.pcreate(a, "fixed", root);
+    _ = fixed.with_size(Size.initFixed(120, 10)).with_layout(.relative, null);
+    fixed.size.pct_less_width = 8;
+
+    // Under an indefinite parent the percentage falls back to content, untouched by the less.
+    const fit = try TestNode.pcreate(a, "fit", root);
+    _ = fit.with_size(Size.init(.fit_children, .fit_children)).with_layout(.relative, null);
+    const seed = try TestNode.pcreate(a, "seed", fit);
+    _ = seed.with_size(Size.initContent(40, 10)).with_layout(.relative, null);
+    seed.size.w = .{ .pct_of_parent = 1.0 };
+    seed.size.pct_less_width = 8;
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 592), inset.size.width); // 600 − 8, padding inside
+    try std.testing.expectEqual(@as(f32, 580), fill.size.width); // 592 − 2 × 6
+    try std.testing.expectEqual(@as(f32, 6), fill.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 190), inset.size.height); // 0.5 × 400 − 10
+    try std.testing.expectEqual(@as(f32, 500), capped.size.width);
+    try std.testing.expectEqual(@as(f32, 120), fixed.size.width);
+    try std.testing.expectEqual(@as(f32, 40), seed.size.width);
+}
+
 test "fit_children sums on the main axis, maxes on the cross" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

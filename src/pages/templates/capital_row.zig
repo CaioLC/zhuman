@@ -170,50 +170,41 @@ fn trackSpec(lw: Widths, shown: [columns.len]bool) [columns.len]uic.Track {
     return spec;
 }
 
-/// The width the table fits, logical px. Framed, the 594px lane, which every act's widths
-/// fill exactly, so nothing shrinks. Stacked (≤760), the page's surface: the window less the
-/// page padding and the page's scrollbar.
-fn surface(ctx: *UiCtx) f32 {
-    const terminal = @import("./terminal.zig");
-    return if (terminal.stacked(ctx)) terminal.stackedWidth(ctx) else lane_width;
-}
+/// The table's border-box width bounds, logical px: the section clamps its parent's width to
+/// them (the scroll gutter on top), and everything inside takes its width from the section.
+/// `max` is every shown lane at its width, the gaps between them and the row padding: what the
+/// tracks need before any free space. No track is `fr`, so on a wider surface (stacked at 760,
+/// or Act II's 600px framed view) the slack stays outside the table, and the hairlines and the
+/// hover fill stop where the lanes do. `min` is the same with the lanes that give way at their
+/// floors: on a surface narrower than that the table overflows instead of pressing a lane
+/// past its floor. Between the two the engine shrinks the tracks against the row's own width.
+pub const Extent = struct { min: f32, max: f32 };
 
-/// A row's border box, logical px, once `spec` is solved for a `surface_w` surface: the row's
-/// content box there is the surface less the scroll gutter and the row padding. It is the
-/// solved tracks, the gaps between the visible ones and the padding, so it never exceeds the
-/// lanes' own widths (no track is `fr`; slack stays outside the row) and never goes under their
-/// floors (what the floors cannot absorb overflows the surface).
-fn solvedWidth(spec: []const uic.Track, surface_w: f32) f32 {
-    var auto_max: [columns.len]f32 = @splat(0);
-    var widths: [columns.len]f32 = undefined;
-    var set: uic.TrackSet = .{ .tracks = spec, .col_gap = row_gap, .auto_max = &auto_max, .widths = &widths };
-    set.solve(surface_w - scroll_gutter - 2 * row_pad_x);
-    var sum: f32 = 0;
+fn extentOf(spec: []const uic.Track) Extent {
+    var max: f32 = 0;
+    var min: f32 = 0;
     var shown: f32 = 0;
-    for (spec, widths) |t, w| if (!t.hidden) {
-        sum += w;
+    for (spec) |t| if (!t.hidden) {
+        max += t.basis.px;
+        min += if (t.shrink_order != null) t.min else t.basis.px;
         shown += 1;
     };
-    return sum + (shown - 1) * row_gap + 2 * row_pad_x;
+    const rest = (shown - 1) * row_gap + 2 * row_pad_x;
+    return .{ .min = min + rest, .max = max + rest };
 }
 
-/// One frame's BUILD table: the column tracks the header and every row lay out by (the caller
-/// declares `set` on their common ancestor, `El.with_tracks`), and the width of a row.
-pub const TableTracks = struct {
-    set: *uic.TrackSet,
-    /// A row's (and the header's) border box, logical px: the tracks solved for this width's
-    /// surface, their gaps and the row padding. The engine solves the same tracks against the
-    /// row's content box, which is this less the padding, so the two agree. The rows sit in the
-    /// scroll view's content-sized column and the surface is a window measure, not a laid-out
-    /// box, so nothing above them has this width to take a percentage of: the section, its
-    /// heading, the header, each row's wrap and the scroll view are sized from it.
-    width: f32,
-};
-
-/// The BUILD table's tracks for the act's lane widths `lw` at this frame's width.
-pub fn tableTracks(ctx: *UiCtx, lw: Widths) !TableTracks {
+/// The BUILD table's width bounds for the act's lane widths `lw` at this frame's width class.
+pub fn tableExtent(ctx: *UiCtx, lw: Widths) Extent {
     const spec = trackSpec(lw, shownAt(ctx.res.view.metrics.width_class));
-    return .{ .set = try uic.tracks(ctx, &spec, row_gap), .width = solvedWidth(&spec, surface(ctx)) };
+    return extentOf(&spec);
+}
+
+/// The BUILD table's column tracks for the act's lane widths `lw` at this frame's width class.
+/// The header and every row lay out by them (the caller declares the set on their common
+/// ancestor, `El.with_tracks`), and the engine solves them against each row's content box.
+pub fn tableTracks(ctx: *UiCtx, lw: Widths) !*uic.TrackSet {
+    const spec = trackSpec(lw, shownAt(ctx.res.view.metrics.width_class));
+    return uic.tracks(ctx, &spec, row_gap);
 }
 
 /// How the header sorts: the caller's sort key for each lane (in `columns` order; null for a
@@ -233,11 +224,12 @@ pub const Header = struct {
 /// Column labels on the same tracks as every capital row: the table's header row, one cell
 /// per lane visible at this width. With `sort`, each sortable lane's label is a sort control
 /// wearing the active column's arrow, and the header row is their roving group (one Tab
-/// stop). `tt` is this frame's table (`tableTracks`).
-pub fn capital_header(parent: El, id: []const u8, tt: TableTracks, sort: ?HeaderSort) !Header {
+/// stop). `set` is this frame's tracks (`tableTracks`). The header spans its parent less the
+/// scroll gutter, the width the rows below it get from the scroll view.
+pub fn capital_header(parent: El, id: []const u8, set: *uic.TrackSet, sort: ?HeaderSort) !Header {
     const ctx = parent.ctx;
-    const header = try table.table_row(parent, id, tt.set, row_pad_x, 4);
-    _ = header.with_size(.{ .fixed = tt.width - 2 * row_pad_x }, .fit_children);
+    const header = try table.table_row(parent, id, set, row_pad_x, 4);
+    _ = header.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_pct_less(scroll_gutter, null);
     const group = header.get().key;
     var clicked: ?usize = null;
     var members: [columns.len]u64 = undefined;
@@ -368,11 +360,12 @@ pub fn recipeType(rec: *const roster.Good) []const u8 {
 
 /// One row over a recipe's quote. `kind` decides the colors and what the last two columns
 /// say; the caller has already decided the row belongs on screen at all (see `build_list`).
+/// The row spans `parent` (the scroll view's content column) and lays out by `set`.
 pub fn capital_row(
     parent: El,
     world: *World,
     e: Entity,
-    tt: TableTracks,
+    set: *uic.TrackSet,
     q: capital.Quote,
     kind: Kind,
 ) !Row {
@@ -386,7 +379,7 @@ pub fn capital_row(
     // roster that moves it to another index.
     // One hairline above each row (`.build-row { border-top }`), then the row.
     const wrap = try parent.div(rec.id);
-    _ = wrap.with_size(.{ .fixed = tt.width }, .fit_children).with_flow(.{ .dir = .column });
+    _ = wrap.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .column });
     _ = (try wrap.div("rule")).with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = 1 })
         .with_style(.{Style{ .fill = th.line }});
     const row = try wrap.div("row");
@@ -407,7 +400,7 @@ pub fn capital_row(
 
     // The row's lanes are the header's: the same tracks, so the same widths and visibility.
     _ = row.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
-        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tt.set)
+        .with_flow(.{ .dir = .row, .cross = .center }).in_tracks(set)
         .with_style(.{ style.pad_sym(row_pad_x, 6), Style{ .fill = if (kind == .ready and (ctl.held or ctl.hovering or ctl.focused)) th.panel else null } });
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
@@ -600,6 +593,25 @@ fn solveFor(spec: []const uic.Track, surface_w: f32) [columns.len]f32 {
     return widths;
 }
 
+/// A row's border box, logical px, for `widths` solved from `spec`: the visible tracks, the
+/// gaps between them and the row padding.
+fn rowWidth(spec: []const uic.Track, widths: [columns.len]f32) f32 {
+    var sum: f32 = 0;
+    var shown: f32 = 0;
+    for (spec, widths) |t, w| if (!t.hidden) {
+        sum += w;
+        shown += 1;
+    };
+    return sum + (shown - 1) * row_gap + 2 * row_pad_x;
+}
+
+/// The table width the section's clamp gives on a `surface_w` surface (`Extent`): the
+/// surface less the scroll gutter, held to the table's bounds.
+fn clampedTable(spec: []const uic.Track, surface_w: f32) f32 {
+    const ext = extentOf(spec);
+    return std.math.clamp(surface_w - scroll_gutter, ext.min, ext.max);
+}
+
 /// The lane widths and table width the BUILD table had before it laid out by tracks
 /// (`capital_row.fitted` and `tableWidth`, restated as the oracle): framed the act's widths;
 /// stacked, the excess over the surface out of WHAT CHANGES (if shown), then the recipe name,
@@ -646,11 +658,13 @@ test "framed, every act's tracks fill the lane exactly and nothing shrinks" {
         const spec = trackSpec(lw, shownAt(.full));
         const want = oldFitted(lw, shownAt(.full), false, lane_width);
         try std.testing.expectEqualSlices(f32, &want.lanes, &solveFor(&spec, lane_width));
-        try std.testing.expectEqual(lane_width - scroll_gutter, solvedWidth(&spec, lane_width));
+        try std.testing.expectEqual(lane_width - scroll_gutter, rowWidth(&spec, solveFor(&spec, lane_width)));
+        try std.testing.expectEqual(lane_width - scroll_gutter, extentOf(&spec).max);
+        try std.testing.expectEqual(lane_width - scroll_gutter, clampedTable(&spec, lane_width));
     }
 }
 
-test "stacked, the solved tracks and table width are the old fitted lanes at every surface" {
+test "stacked, the solved tracks and the clamped table width are the old fitted lanes at every surface" {
     for ([_]Widths{ .{}, act_two_widths }) |lw| {
         for ([_]uic.view.WidthClass{ .w760, .w560, .w440 }) |class| {
             const shown = shownAt(class);
@@ -659,15 +673,25 @@ test "stacked, the solved tracks and table width are the old fitted lanes at eve
             var surface_w: f32 = 260;
             while (surface_w <= 760) : (surface_w += 1) {
                 const want = oldFitted(lw, shown, true, surface_w);
-                try std.testing.expectEqualSlices(f32, &want.lanes, &solveFor(&spec, surface_w));
-                try std.testing.expectEqual(want.table, solvedWidth(&spec, surface_w));
+                const solved = solveFor(&spec, surface_w);
+                try std.testing.expectEqualSlices(f32, &want.lanes, &solved);
+                try std.testing.expectEqual(want.table, rowWidth(&spec, solved));
+                // The section's clamp gives the row that width, so the engine's solve against
+                // the row's content box is the solve above.
+                try std.testing.expectEqual(want.table, clampedTable(&spec, surface_w));
             }
         }
     }
     // Spot values, Act II at 560 (window 560: the 534 surface): WHAT CHANGES gives 10.
     const spec = trackSpec(act_two_widths, shownAt(.w560));
     try std.testing.expectEqualSlices(f32, &.{ 118, 112, 0, 122, 76, 54 }, &solveFor(&spec, 534));
-    try std.testing.expectEqual(@as(f32, 526), solvedWidth(&spec, 534));
+    try std.testing.expectEqual(@as(f32, 526), clampedTable(&spec, 534));
+    // Act I at 440 (TIME and WHAT CHANGES dropped): 358 at most, the slack outside; 274 + 36
+    // at the floors, which a 320 window's 294 surface cannot hold.
+    const a1_440 = extentOf(&trackSpec(.{}, shownAt(.w440)));
+    try std.testing.expectEqual(@as(f32, 358), a1_440.max);
+    try std.testing.expectEqual(@as(f32, 310), a1_440.min);
+    try std.testing.expectEqual(@as(f32, 310), clampedTable(&trackSpec(.{}, shownAt(.w440)), 294));
 }
 
 test "a lane dropped at a width class is a hidden track" {

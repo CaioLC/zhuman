@@ -1,7 +1,9 @@
 //! `scroll_view` — the one scroll component: a clipped viewport over a column the caller
 //! appends rows to, with a wheel-scrolled, thumb-dragged offset persisted in `ScrollState`.
 //! The viewport is either a fixed `height` high or, at 0, as high as its parent, whose height
-//! must then be definite; and either a fixed `width` wide or, at 0, as wide as its parent.
+//! must then be definite; and either a fixed `width` wide or, at 0, as wide as its parent
+//! (less a reserved `gutter`). A parent-wide view's content column spans the viewport, so its
+//! width is definite: a row inside can be `pct_of_parent = 1.0` of it.
 //!
 //! The clamp needs the content height, but this frame's rows are not laid out yet, so the
 //! content box reads its own prior-frame rect — a pass-through geometry probe, `track`ed so
@@ -36,6 +38,12 @@ pub const content_gap: f32 = 4.0;
 pub const Options = struct {
     /// Viewport width in logical px; `0` fills the parent's width.
     width: f32 = 0,
+    /// A parent-wide view (`width = 0`) only: room kept right of the viewport whether or not
+    /// the track shows, logical px, at least `scrollbar_w`. The track takes its first
+    /// `scrollbar_w` when it appears and the rest stays outside the view, so the viewport (and
+    /// every row in it) keeps one width as the content starts or stops overflowing (CSS
+    /// `scrollbar-gutter: stable`). 0, the default: the track takes its room from the viewport.
+    gutter: f32 = 0,
     /// Viewport height in logical px; `0` fills the parent's height.
     height: f32,
     /// Draw the viewport's hairline frame. A catalog region inside a surface goes without.
@@ -75,12 +83,14 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
 
     const fill = opts.width <= 0;
     const fill_h = opts.height <= 0;
+    std.debug.assert(opts.gutter == 0 or (fill and opts.gutter >= scrollbar_w));
     // Stacked (≤760) the whole page is the scroll view: a parent-high view has no height to
     // fill, so it takes its content's and lets the page scroll it.
     if (fill_h and @import("./terminal.zig").stacked(ctx)) {
         const outer = try parent.div(id);
         _ = outer.with_flow(.{ .dir = .row, .cross = .start })
-            .with_size(if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .fit_children);
+            .with_size(if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .fit_children)
+            .with_pct_less(opts.gutter, null); // no track here: the whole gutter is kept
         const viewport = try outer.div("viewport");
         _ = viewport.with_flow(.{ .dir = .column, .cross = .start })
             .with_size(if (fill) .grow else .{ .fixed = opts.width }, .fit_children);
@@ -156,6 +166,9 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
         } else st.revealed = null;
     }
     st.offset = std.math.clamp(st.offset, 0, max_offset);
+
+    // A reserved gutter lies outside the outer box, less the track's share once it shows.
+    if (opts.gutter > 0) _ = outer.with_pct_less(if (max_offset > 0) opts.gutter - scrollbar_w else opts.gutter, null);
 
     if (max_offset > 0) {
         const gutter = uic.view.dp(scrollbar_w, scale);

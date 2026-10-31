@@ -214,6 +214,18 @@ pub const El = struct {
         return self;
     }
 
+    /// Per-axis px a `pct_of_parent` axis leaves out of its share (CSS `calc(p% − Npx)`), in
+    /// **logical** px scaled to device px by the frame scale; a null axis keeps its current
+    /// value (0 by default). `.with_size(.{ .pct_of_parent = 1.0 }, …).with_pct_less(8, null)`
+    /// ends 8px short of the parent's content box; the node's own padding still comes out of
+    /// what is left, and min/max still bound the content box. Other rules ignore it.
+    pub fn with_pct_less(self: El, w: ?f32, h: ?f32) El {
+        const s = self.ctx.res.view.scale;
+        if (w) |v| self.node.size.pct_less_width = view.dp(v, s);
+        if (h) |v| self.node.size.pct_less_height = view.dp(v, s);
+        return self;
+    }
+
     /// Growth weight for a `.grow` main axis (CSS `flex-grow`): growers split the parent's
     /// free space in proportion, so `with_grow(2)` takes twice a plain `.grow` sibling's
     /// share. `0` holds the node at its minimum. Unitless, so not scaled.
