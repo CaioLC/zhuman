@@ -188,6 +188,32 @@ pub const El = struct {
         return self;
     }
 
+    /// Per-axis lower bound (CSS `min-width`/`min-height`) in **logical** px, scaled to device
+    /// px by the frame scale; a null axis keeps its current bound. Pass `null, 38` to floor
+    /// only the height. The bound applies to the **content box** whatever the rule, and padding
+    /// is added after the clamp, so a padded node is `min + padding` tall at least: a CSS
+    /// `box-sizing: border-box` min-height converts by subtracting the node's own padding. A
+    /// border-box rule (`pct_of_parent`, `grow`) takes its padding out of its share first, so
+    /// a min can push the box past that share. A min above the max wins (`Size.min_*`).
+    pub fn with_min(self: El, w: ?f32, h: ?f32) El {
+        const s = self.ctx.res.view.scale;
+        if (w) |v| self.node.size.min_width = view.dp(v, s);
+        if (h) |v| self.node.size.min_height = view.dp(v, s);
+        return self;
+    }
+
+    /// Per-axis upper bound (CSS `max-width`/`max-height`) in **logical** px, scaled to device
+    /// px by the frame scale; a null axis keeps its current bound (unbounded by default).
+    /// Like `with_min` it bounds the **content box**: padding is added after the clamp, so a
+    /// CSS border-box max converts by subtracting the node's own padding. A min above the max
+    /// still wins.
+    pub fn with_max(self: El, w: ?f32, h: ?f32) El {
+        const s = self.ctx.res.view.scale;
+        if (w) |v| self.node.size.max_width = view.dp(v, s);
+        if (h) |v| self.node.size.max_height = view.dp(v, s);
+        return self;
+    }
+
     /// Growth weight for a `.grow` main axis (CSS `flex-grow`): growers split the parent's
     /// free space in proportion, so `with_grow(2)` takes twice a plain `.grow` sibling's
     /// share. `0` holds the node at its minimum. Unitless, so not scaled.

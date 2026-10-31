@@ -843,13 +843,16 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const foot = try view.div("foot");
     // `.start`, not `space_between`: the legend grows into what the hints leave, so the hints
     // still sit flush right, and a packed run keeps the 10px gap out of the legend's share.
-    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10);
+    // `.act-two #view-research .structure-footer { min-height: 44px }` is a border box (the
+    // prototype is `box-sizing: border-box`) over its 1px top border and 6px top pad, which sit
+    // outside the foot here as `foot_rule` and `foot_pad`. The foot is unpadded, so its floor
+    // is a content-box one: 44 - 6 = 38, as the board has always reserved (strictly 37 once
+    // the border is also taken out).
+    _ = foot.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_min(null, 38).with_flow(.{ .dir = .row, .main = .start, .cross = .start }).with_gap(10);
     const legend = try foot.div("legend");
     // `.structure-footer: 1fr auto`: the legend wraps in what the hints leave. Its grown width
     // is final before heights are solved, so the foot's fit height counts every legend line.
     _ = legend.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .wrap = true, .cross = .center }).with_gap(6);
-    _ = foot.pass_through().track();
-    const foot_g = foot.prior_geometry();
     for (wedge_res, 0..) |r, w| {
         const entry = try legend.item("r", w);
         _ = entry.with_size(.fit_children, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(4);
@@ -878,9 +881,6 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     _ = (try hints.text("status", status)).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
     _ = (try hints.text("pan", "Wheel zoom / drag pan")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
     _ = (try hints.text("keys", "Arrows move \u{00b7} Esc clears")).with_style(.{Style{ .font = 8.5, .text = th.line2 }});
-    // `.structure-footer { min-height }`: a one-line foot still reserves its 38px.
-    const foot_h: f32 = if (foot_g) |g| g.rect.h / scale else 0;
-    if (foot_h < 38) _ = try view.spacer("foot_floor", 1, 38 - foot_h);
 
     return result;
 }
