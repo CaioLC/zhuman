@@ -27,6 +27,8 @@ const sv = @import("./scroll_view.zig");
 
 const footer_row_pad_x: f32 = 5;
 const footer_content_gap: f32 = 0;
+/// Gap between the stamp column and the message column, logical px.
+const stamp_gap: f32 = 8;
 
 /// Map a log entry's tone to the current theme's matching color role (host policy).
 /// `good` maps to the dedicated `good` role, not the accent, so a gain reads as a gain.
@@ -93,22 +95,33 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
     // The page announces the log's new lines (`act_page.announceLog`), shown or not; the
     // feed itself is the visible history.
 
+    // One column set for every row: the stamp, then the message. The stamp track is a `px`
+    // track at the widest-case stamp, not `auto`: `auto` would take the widest stamp in the
+    // feed, narrower than the `D000 00:00` the column reserves, so the messages would shift
+    // as the days grow.
+    const tracks = try uic.tracks(ctx, &.{
+        .{ .basis = .{ .px = stamp_width(ctx) } },
+        .{ .basis = .{ .fr = 1 } },
+    }, stamp_gap);
+    // The content spans the viewport (the gutter is outside it), so a row's `1.0` is definite.
+    _ = view.content.with_size(.{ .pct_of_parent = 1.0 }, .fit_children).with_tracks(tracks);
+
     var i: usize = 0;
-    const stamp_w = stamp_width(ctx);
     while (i < feed.count) : (i += 1) {
         const entry = feed.get(i);
         const newest = i == 0;
         const row = try view.content.item("log", i);
-        _ = row.with_flow(.{ .dir = .row, .cross = .center }).with_gap(8)
-            .with_size(.{ .fixed = @max(0, col_w - footer_row_pad_x * 2) }, .{ .fixed = row_h })
+        _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks)
+            .with_size(.{ .pct_of_parent = 1.0 }, .{ .fixed = row_h })
             .with_style(.{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
-        // The game-time stamp — a fixed cell so message text lines up down the feed.
+        // The game-time stamp — clipped at its track, so message text lines up down the feed.
         var sbuf: [24]u8 = undefined;
         const stamp = timeStamp(&sbuf, entry.at, ctx.res.config.secs_per_day);
-        _ = (try row.text_fit("at", stamp, .{ .cell = .{ .mode = .clip, .width = stamp_w } }))
+        _ = (try row.text_fit("at", stamp, .{ .cell_fill = .clip }))
             .with_style(.{ style.small, Style{ .text = th.dim } });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
-        // toward `dim` unless their tone already carries meaning.
+        // toward `dim` unless their tone already carries meaning. A free leaf in the `fr`
+        // track: a message longer than the track runs on and the viewport cuts it at its edge.
         const tone_color = log_tone_color(th, entry.tone);
         const ink = if (newest) tone_color else if (entry.tone == .normal) th.dim else tone_color;
         _ = (try row.text("m", entry.text()))

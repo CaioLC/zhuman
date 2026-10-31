@@ -83,30 +83,27 @@ fn hrule(parent: El, id: []const u8) !void {
         .with_style(.{Style{ .fill = parent.ctx.res.view.theme.line }});
 }
 
-/// A full-width list row whose 15px insets are flow lanes: `outer` is the interactive box (a
-/// `pct` width plus padding would overrun the list here), `inner` the content column.
+/// A full-width list row with 15px side insets: `outer` is the interactive box (a `pct` width
+/// sizes the border box, so the padding comes out of the list's width), `inner` the content
+/// column.
 fn listRow(parent: El, id: []const u8, index: ?usize, pad_y: f32) !struct { outer: El, inner: El } {
     const outer = if (index) |i| try parent.item(id, i) else try parent.div(id);
     _ = outer.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .start })
-        .with_style(.{style.pad_each(pad_y, 0, pad_y, 0)});
-    _ = try outer.spacer("lead", pad_x, 1);
+        .with_style(.{style.pad_each(pad_y, pad_x, pad_y, pad_x)});
     const inner = try outer.div("inner");
     _ = inner.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
-    _ = try outer.spacer("tail", pad_x, 1);
     return .{ .outer = outer, .inner = inner };
 }
 
-/// A padded full-width band (insets as flow lanes). Returns the inner row.
+/// A padded full-width band (15px side insets inside its `pct` border box). Returns the inner row.
 fn band(parent: El, id: []const u8, up: f32, down: f32) !El {
     const b = try parent.div(id);
     _ = b.with_size(.{ .pct_of_parent = 1.0 }, .fit_children)
         .with_flow(.{ .dir = .row, .cross = .center })
-        .with_style(.{style.pad_each(up, 0, down, 0)});
-    _ = try b.spacer("lead", pad_x, 1);
+        .with_style(.{style.pad_each(up, pad_x, down, pad_x)});
     const inner = try b.div("inner");
     _ = inner.with_size(.grow, .fit_children).with_flow(.{ .dir = .row, .cross = .center }).with_gap(10);
-    _ = try b.spacer("tail", pad_x, 1);
     return inner;
 }
 
@@ -293,20 +290,28 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
     return q.clicked;
 }
 
-fn goodRow(parent: El, m: *const nb.Market, i: usize, chosen: bool, p: Player, words: []const []const u8) !bool {
+/// The goods list's columns (`.good-row`): `11ch minmax(0, 1fr)`, gap 10. Every good row lays
+/// out by one set, declared on the list.
+const good_tracks = [_]uic.Track{
+    .{ .basis = .{ .px = 11 * 8.6 } },
+    .{ .basis = .{ .fr = 1 } },
+};
+const good_gap: f32 = 10;
+
+fn goodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, i: usize, chosen: bool, p: Player, words: []const []const u8) !bool {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const a = ctx.arena;
     const lr = try listRow(parent, "good", i, 7);
     const row = lr.inner;
-    _ = row.with_flow(.{ .dir = .row, .cross = .start }).with_gap(10);
+    _ = row.with_flow(.{ .dir = .row, .cross = .start }).in_tracks(tracks);
     const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen });
     const hot = q.hovering or q.focused;
     _ = lr.outer.with_style(.{Style{ .fill = if (chosen or hot) th.panel else th.bg, .outline_color = if (chosen) th.line2 else if (hot) th.panel else th.bg }});
-    _ = (try row.text_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell = .{ .mode = .clip, .width = 11 * 8.6 } }))
+    _ = (try row.text_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell_fill = .clip }))
         .with_style(.{Style{ .font = 13, .tracking = 0.04, .text = if (chosen) th.acc else th.fg }});
     const col = try row.div("col");
-    _ = col.with_size(.grow, .fit_children).with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
+    _ = col.with_flow(.{ .dir = .column, .cross = .start }).with_gap(2);
     const off = m.offered(i);
     const want = m.wanted(i);
     const my_sell = m.sell_posts[i].qty;
@@ -348,7 +353,7 @@ const stall_gap: f32 = 10;
 fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
     const th = parent.ctx.res.view.theme;
     const lr = try listRow(parent, "stall_head", null, 0);
-    _ = lr.outer.with_style(.{style.pad_each(9, 0, 7, 0)});
+    _ = lr.outer.with_style(.{style.pad_each(9, pad_x, 7, pad_x)});
     const row = lr.inner;
     _ = row.with_flow(.{ .dir = .row, .cross = .center }).in_tracks(tracks);
     const s = Style{ .font = 10, .tracking = 0.07, .text = th.dim };
@@ -779,8 +784,11 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
                 }
             }
         } else {
+            // One column set for every good row (`grid-template-columns` on `.good-row`).
+            const tracks = try uic.tracks(ctx, &good_tracks, good_gap);
+            _ = list.with_tracks(tracks);
             for (slice) |i| {
-                if (try goodRow(list, m, i, st.pick_kind == 2 and st.pick == i, p, &words)) {
+                if (try goodRow(list, tracks, m, i, st.pick_kind == 2 and st.pick == i, p, &words)) {
                     if (st.pick_kind == 2 and st.pick == i) st.pick_kind = 0 else {
                         st.pick_kind = 2;
                         st.pick = @intCast(i);
