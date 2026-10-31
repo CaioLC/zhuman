@@ -2735,3 +2735,159 @@ test "tracks: a re-solve resets the set, so it repeats exactly and follows chang
     try std.testing.expectEqual(@as(f32, 30), set.auto_max[0]);
     try std.testing.expectEqual(@as(f32, 82), r2.size.width); // 30 + 0 + 40 + 2 × 6
 }
+
+// ---- ENGINE-06c: multi-line participants (CSS implicit grid rows) ------------------------
+
+const all_tracks: u16 = std.math.maxInt(u16);
+
+test "tracks: a span-all cell after the others takes line 2 at x 0, full width, row_gap above it" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The narrow trade ledger: `minmax(0,1fr) 92px`, `gap: 2px 9px`, corner `1 / -1`.
+    const spec = [_]Track{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 92 } } };
+    const set = try track_set(a, &spec, 9);
+    set.row_gap = 2;
+    const root = try track_owner(a, 400, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    const item = try track_cell(a, "item", row, 10, 30);
+    const price = try track_cell(a, "price", row, 10, 12);
+    const corner = try track_cell(a, "corner", row, 10, 14);
+    corner.layout.cell_col = 0;
+    corner.layout.cell_span = all_tracks;
+    const next = try track_row(a, "next", root, set, .{ .pct_of_parent = 1.0 });
+    _ = try track_cell(a, "n0", next, 1, 5);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 299, 92 }, set.widths);
+    try std.testing.expectEqual(@as(f32, 0), item.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 308), price.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 0), corner.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 400), corner.size.width); // 299 + 9 + 92
+    try std.testing.expectEqual(@as(f32, 32), corner.layout._global_y.?); // line 1 (30) + row_gap
+    // The fit_children height is line 1 + row_gap + line 2, and the next row starts there.
+    try std.testing.expectEqual(@as(f32, 46), row.size.height);
+    try std.testing.expectEqual(@as(f32, 46), next.layout._global_y.?);
+}
+
+test "tracks: an explicit col behind the cursor opens a new line, each line on its own baseline" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .{ .px = 60 } }, .{ .basis = .{ .px = 70 } } };
+    const set = try track_set(a, &spec, 10);
+    set.row_gap = 2;
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .fit_children);
+    row.layout.flow.cross = .baseline;
+    const big = try track_cell(a, "big", row, 1, 20); // ascent 16, descent 4
+    big.size.baseline = 4;
+    const small = try track_cell(a, "small", row, 1, 10); // ascent 8
+    small.size.baseline = 2;
+    const back = try track_cell(a, "back", row, 1, 12); // col 1 < cursor 2: line 2
+    back.layout.cell_col = 1;
+    back.size.baseline = 3; // ascent 9
+    const tail = try track_cell(a, "tail", row, 1, 6); // implicit after it: line 2, track 2
+    const same = try track_cell(a, "same", row, 1, 4); // explicit col 0 behind 3: line 3
+    same.layout.cell_col = 0;
+
+    try root.set_global_pos(a);
+    // Line 1: baseline at 16 from the top, 20 deep.
+    try std.testing.expectEqual(@as(f32, 0), big.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 8), small.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 60), small.layout._global_x.?);
+    // Line 2 starts at 22 (20 + 2): baseline at 9, 12 deep; the hole at track 0 stays empty.
+    try std.testing.expectEqual(@as(f32, 60), back.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 22), back.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 130), tail.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 25), tail.layout._global_y.?); // 22 + 9 − 6
+    // Line 3 at 22 + 12 + 2 = 36.
+    try std.testing.expectEqual(@as(f32, 0), same.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 36), same.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 40), row.size.height); // 20 + 2 + 12 + 2 + 4
+    try std.testing.expectEqual(@as(f32, 200), row.size.width); // Σ base + gaps, lines or not
+}
+
+test "tracks: center aligns within each line, and a surplus implicit cell wraps to track 0" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .px = 50 } }, .{ .basis = .{ .px = 60 } } };
+    const set = try track_set(a, &spec, 10);
+    set.row_gap = 5;
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    row.layout.flow.cross = .center;
+    const tall = try track_cell(a, "tall", row, 1, 30);
+    const short = try track_cell(a, "short", row, 1, 10);
+    const third = try track_cell(a, "third", row, 1, 8); // no track left: line 2, track 0
+    const fourth = try track_cell(a, "fourth", row, 1, 4);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 0), tall.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 10), short.layout._global_y.?); // (30 − 10) / 2
+    try std.testing.expectEqual(@as(f32, 0), third.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 35), third.layout._global_y.?); // 30 + 5
+    try std.testing.expectEqual(@as(f32, 60), fourth.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 37), fourth.layout._global_y.?); // 35 + (8 − 4) / 2
+    try std.testing.expectEqual(@as(f32, 43), row.size.height); // 30 + 5 + 8
+}
+
+test "tracks: auto stays the widest non-spanning cell per track across lines" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .auto }, .{ .basis = .auto } };
+    const set = try track_set(a, &spec, 0);
+    const root = try track_owner(a, 600, set);
+    const row = try track_row(a, "row", root, set, .fit_children);
+    _ = try track_cell(a, "a", row, 30, 10);
+    _ = try track_cell(a, "b", row, 40, 10);
+    const wide = try track_cell(a, "wide", row, 500, 10); // its own line, ignored by auto
+    wide.layout.cell_span = all_tracks;
+    const d = try track_cell(a, "d", row, 50, 10); // line 3, track 0: the widest there
+    const e = try track_cell(a, "e", row, 20, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqualSlices(f32, &.{ 50, 40 }, set.auto_max);
+    try std.testing.expectEqual(@as(f32, 90), row.size.width);
+    try std.testing.expectEqual(@as(f32, 90), wide.size.width);
+    try std.testing.expectEqual(@as(f32, 10), wide.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 0), d.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 20), d.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 50), e.layout._global_x.?);
+    try std.testing.expectEqual(@as(f32, 30), row.size.height);
+}
+
+test "tracks: stretch fills each line, and a multi-line re-solve repeats exactly" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = [_]Track{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 40 } } };
+    const set = try track_set(a, &spec, 4);
+    set.row_gap = 2;
+    const root = try track_owner(a, 300, set);
+    const row = try track_row(a, "row", root, set, .{ .pct_of_parent = 1.0 });
+    row.layout.flow.cross = .stretch;
+    const short = try track_cell(a, "short", row, 1, 10);
+    const tall = try track_cell(a, "tall", row, 1, 20);
+    const corner = try track_cell(a, "corner", row, 1, 5);
+    corner.layout.cell_col = 0;
+    corner.layout.cell_span = all_tracks;
+    const single = try track_row(a, "single", root, set, .{ .pct_of_parent = 1.0 });
+    single.size.h = .{ .fixed = 50 };
+    single.layout.flow.cross = .stretch;
+    const lone = try track_cell(a, "lone", single, 1, 10);
+
+    try root.set_global_pos(a);
+    try std.testing.expectEqual(@as(f32, 20), short.size.height); // raised to line 1
+    try std.testing.expectEqual(@as(f32, 5), corner.size.height); // line 2 is its own 5
+    try std.testing.expectEqual(@as(f32, 22), corner.layout._global_y.?);
+    try std.testing.expectEqual(@as(f32, 27), row.size.height);
+    try std.testing.expectEqual(@as(f32, 50), lone.size.height); // one line: the content box
+    const first = [_]f32{ set.widths[0], corner.size.width, corner.layout._global_y.?, row.size.height, short.size.height, tall.layout._global_x.? };
+    try root.set_global_pos(a);
+    const again = [_]f32{ set.widths[0], corner.size.width, corner.layout._global_y.?, row.size.height, short.size.height, tall.layout._global_x.? };
+    try std.testing.expectEqualSlices(f32, &first, &again);
+    try std.testing.expectEqual(@as(f32, 300), corner.size.width);
+}

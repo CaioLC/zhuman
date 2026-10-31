@@ -182,6 +182,7 @@ pub const SizeRule = @import("ui").SizeRule; // one axis's size rule, for helper
 pub const Track = @import("ui").Track; // one column of a shared track set (`tracks`)
 pub const TrackSet = @import("ui").TrackSet; // shared table columns: `El.with_tracks`/`in_tracks`
 pub const tracks = elements.tracks; // a frame-arena `TrackSet` from logical-px tracks
+pub const tracks_gaps = elements.tracks_gaps; // `tracks` with a row gap between implicit lines
 pub const icon_sprite = ctx_binding.icon_sprite;
 
 // draw

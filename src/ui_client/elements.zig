@@ -216,9 +216,11 @@ pub const El = struct {
     /// Lay this row's in-flow children out by `set`'s columns (CSS `grid-template-columns`
     /// repeated on each row): each child is a cell whose width and x come from the tracks,
     /// and whose descendants see that width as definite (`.fill` text, a `1.0` child). The
-    /// row must be a non-wrapping `.dir = .row` flow under the set's `with_tracks` owner;
-    /// `flow.cross` still aligns the cells vertically and `with_gap` is not read (the set has
-    /// its own gap). Each row keeps its own key, control and role.
+    /// row must be a non-wrapping, non-reversed `.dir = .row` flow under the set's
+    /// `with_tracks` owner. A cell that doesn't fit on the current line (an `at_track` col
+    /// behind the cursor, or a span past the last track) opens a new line, spaced by the set's
+    /// row gap (`tracks_gaps`); `flow.cross` aligns the cells of each line and `with_gap` is
+    /// not read (the set has its own gaps). Each row keeps its own key, control and role.
     pub fn in_tracks(self: El, set: *ui.TrackSet) El {
         self.node.layout.track_row = set;
         return self;
@@ -226,12 +228,16 @@ pub const El = struct {
 
     /// Place this cell of an `in_tracks` row explicitly: start at track `col` (null takes the
     /// next visible track) and cover `span` tracks plus the gaps between them. A plain cell
-    /// needs no call.
+    /// needs no call. `at_track(0, all_tracks)` is CSS `grid-column: 1 / -1`: after any other
+    /// cell it takes a line of its own, full width.
     pub fn at_track(self: El, col: ?u16, span: u16) El {
         self.node.layout.cell_col = col;
         self.node.layout.cell_span = span;
         return self;
     }
+
+    /// A span that covers every track from its start (clamped to the set).
+    pub const all_tracks: u16 = std.math.maxInt(u16);
 
     /// Displace this node in **logical** px (scales to device px) from wherever its
     /// anchor or its parent's flow put it. `.center` plus a computed delta is polar placement
@@ -460,6 +466,12 @@ fn scaleRule(rule: ui.SizeRule, scale: f32) ui.SizeRule {
 ///
 ///   const set = try el.tracks(ctx, &.{ .{ .basis = .{ .fr = 1 } }, .{ .basis = .{ .px = 86 } } }, 10);
 pub fn tracks(ctx: *UiCtx, spec: []const ui.Track, col_gap: f32) !*ui.TrackSet {
+    return tracks_gaps(ctx, spec, col_gap, 0);
+}
+
+/// `tracks` with a `row_gap` (logical px, scaled like `col_gap`) between the implicit lines of
+/// a participant whose cells don't fit on one line (CSS `gap: <row> <column>`).
+pub fn tracks_gaps(ctx: *UiCtx, spec: []const ui.Track, col_gap: f32, row_gap: f32) !*ui.TrackSet {
     const s = ctx.res.view.scale;
     const a = ctx.arena;
     const scaled = try a.alloc(ui.Track, spec.len);
@@ -476,6 +488,7 @@ pub fn tracks(ctx: *UiCtx, spec: []const ui.Track, col_gap: f32) !*ui.TrackSet {
     set.* = .{
         .tracks = scaled,
         .col_gap = view.dp(col_gap, s),
+        .row_gap = view.dp(row_gap, s),
         .auto_max = try a.alloc(f32, spec.len),
         .widths = try a.alloc(f32, spec.len),
     };

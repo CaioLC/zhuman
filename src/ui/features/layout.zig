@@ -163,6 +163,10 @@ pub const TrackSet = struct {
     tracks: []const Track,
     /// Space between adjacent visible tracks, px.
     col_gap: f32,
+    /// Space between the implicit lines of one participant, px (CSS `row-gap`; `gap: 2px 9px`
+    /// is row 2, column 9). It belongs to the set, beside `col_gap`, so every participant's
+    /// lines are spaced alike; the participant's own `Layout.gap` is not read.
+    row_gap: f32 = 0,
     /// Per track, the widest non-spanning cell seen this solve (`auto` tracks only).
     auto_max: []f32,
     /// Per track, the width solved for `solved_for`.
@@ -300,19 +304,11 @@ pub const TrackSet = struct {
         }
     }
 
-    /// Where cell `c` sits, given the track `cursor` after the previous cell: an explicit
-    /// `cell_col` moves the cursor, otherwise the next visible track. Both clamp to the set,
-    /// so a surplus cell lands past the last track with no width (asserted in debug).
-    fn slot(self: *const TrackSet, cursor: usize, c: anytype) Slot {
-        const n = self.tracks.len;
-        var col: usize = if (c.layout.cell_col) |k| k else cursor;
-        if (c.layout.cell_col == null) {
-            while (col < n and self.tracks[col].hidden) col += 1;
-        }
-        std.debug.assert(col < n); // more cells than tracks, or cell_col out of range
-        col = @min(col, n);
-        const span = @min(@max(1, @as(usize, c.layout.cell_span)), n - col);
-        return .{ .col = col, .span = span };
+    /// The first visible track at or after `col` (`tracks.len` when there is none).
+    fn first_visible(self: *const TrackSet, col: usize) usize {
+        var k = col;
+        while (k < self.tracks.len and self.tracks[k].hidden) k += 1;
+        return k;
     }
 
     /// The x of track `col` from the participant's content left: every earlier visible
@@ -340,12 +336,50 @@ pub const TrackSet = struct {
     }
 };
 
+/// Where one cell sits: its first track, how many tracks it covers, and which implicit line
+/// of its participant it is on (0 is the first).
 const Slot = struct {
     col: usize,
     span: usize,
+    line: usize,
+};
 
-    fn end(self: Slot) usize {
-        return self.col + self.span;
+/// Placement over a participant's in-flow cells, in order: CSS grid auto-placement with
+/// implicit rows (`grid-auto-flow: row`, not dense). The cursor is the track after the
+/// previous cell. A cell starts a new line, at the line's first track, when
+///   - its explicit `cell_col` is lower than the cursor (CSS moves to the next row rather
+///     than back), or
+///   - it is placed implicitly and its span does not fit in the tracks left on the line
+///     (a surplus cell after the last track, or `span = all` after any cell).
+/// Neither breaks a line that holds no cell yet: a span wider than the set, or one past its
+/// end from an explicit `cell_col`, is clamped to the tracks left. An explicit `cell_col` at
+/// or past the last track is a template error (asserted in debug). Every walk over the cells
+/// (`collect_auto`, `size_cells`, `TrackLines`, `track_place`) steps this same sequence, so
+/// they agree on every slot and every line.
+const CellWalk = struct {
+    col: usize = 0,
+    line: usize = 0,
+
+    fn next(self: *CellWalk, set: *const TrackSet, c: anytype) Slot {
+        const n = set.tracks.len;
+        const want = @max(1, @as(usize, c.layout.cell_span));
+        const started = self.col > 0; // the current line holds a cell
+        var col: usize = undefined;
+        if (c.layout.cell_col) |k| {
+            col = k;
+            if (started and col < self.col) self.line += 1;
+        } else {
+            col = set.first_visible(self.col);
+            if (started and col + want > n) {
+                self.line += 1;
+                col = set.first_visible(0);
+            }
+        }
+        std.debug.assert(col < n); // cell_col out of range, or every track hidden
+        col = @min(col, n);
+        const span = @min(want, n - col);
+        self.col = col + span;
+        return .{ .col = col, .span = span, .line = self.line };
     }
 };
 
@@ -413,15 +447,19 @@ pub const Layout = struct {
     track_owner: ?*TrackSet = null,
     /// Makes this node a track **participant**: its in-flow children are cells, sized and
     /// placed on the x axis by the shared `TrackSet` instead of by `grow`/`shrink`/`main`.
-    /// Must be a non-wrapping, non-reversed `.row` (asserted in debug) under the set's owner.
-    /// The y axis (cross alignment, `fit_cross`, stretch) works as for any row.
+    /// Must be a non-reversed `.row` under the set's owner. Cells that don't fit on the
+    /// current line start a new one (CSS implicit grid rows, see `CellWalk`), so `flow.wrap`
+    /// would mean nothing here and is asserted off in debug: lines come from the slots, never
+    /// from widths. On y each line is aligned by `flow.cross` like one flow line (baseline-
+    /// aware); lines stack with the set's `row_gap`.
     track_row: ?*TrackSet = null,
     /// As a cell of a participant: the track this cell starts in. Null (the default) takes
     /// the next visible track after the previous cell; an explicit index moves the cursor,
-    /// so skipped tracks are left empty.
+    /// so skipped tracks are left empty, and one lower than the cursor starts a new line.
     cell_col: ?u16 = null,
     /// As a cell of a participant: how many tracks this cell covers, from `cell_col`. Its
-    /// width is the covered visible tracks plus the gaps between them. Defaults to 1.
+    /// width is the covered visible tracks plus the gaps between them; a span past the last
+    /// track is clamped (`maxInt(u16)` is CSS `1 / -1` from track 0). Defaults to 1.
     cell_span: u16 = 1,
     _global_x: ?f32,
     _global_y: ?f32,
@@ -667,6 +705,8 @@ fn axis_rule(node: anytype, axis: Axis) size_mod.SizeRule {
 fn fit_axis(node: anytype, axis: Axis, main: Axis, resolved_main: ?f32) f32 {
     const flow = node.layout.flow;
     if (axis != main) {
+        // A track participant's lines come from its slots, not from `wrap` (asserted off).
+        if (node.layout.track_row) |set| return track_cross(node, set);
         if (flow.wrap) {
             if (wrap_cross(node, axis, main, flow, resolved_main)) |h| return h;
         }
@@ -827,12 +867,12 @@ fn recalculate_size(node: anytype) void {
 fn collect_auto(node: anytype, set: *TrackSet) void {
     std.debug.assert(set.open); // a participant must be a descendant of its set's owner
     const flow = node.layout.flow;
-    std.debug.assert(flow.dir == .row and !flow.wrap and !flow.reverse); // multi-line rows: not yet
-    var cursor: usize = 0;
+    // Lines are implicit (`CellWalk`): `wrap` has no meaning on a participant.
+    std.debug.assert(flow.dir == .row and !flow.wrap and !flow.reverse);
+    var walk: CellWalk = .{};
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue;
-        const s = set.slot(cursor, c);
-        cursor = s.end();
+        const s = walk.next(set, c);
         if (c.layout.cell_span != 1 or s.col >= set.tracks.len) continue;
         if (set.tracks[s.col].basis == .auto) set.auto_max[s.col] = @max(set.auto_max[s.col], extent(c, .x));
     }
@@ -942,11 +982,10 @@ fn is_cell(node: anytype, c: anytype, axis: Axis) bool {
 /// own padding inside, its min/max on the content box).
 fn size_cells(node: anytype, set: *TrackSet) void {
     set.solve(inner_extent(node, .x));
-    var cursor: usize = 0;
+    var walk: CellWalk = .{};
     for (node.children.items) |c| {
         if (c.layout.anchor != .relative) continue;
-        const s = set.slot(cursor, c);
-        cursor = s.end();
+        const s = walk.next(set, c);
         set_inner_extent(c, .x, @max(0, set.span_width(s) - padding_extent(&c.size, .x)));
     }
 }
@@ -978,10 +1017,12 @@ fn stretch_to(c: anytype, axis: Axis, line: f32) void {
 /// them (flow order, `reverse`, `gap`, against the content-box main extent) and each child
 /// takes its own line's max. `place`'s line extents come out unchanged, because no child
 /// grows past the line it was measured in. A row-wrap stretches in the y pass against final
-/// widths; a column-wrap stretches in the x pass, so it packs against bottom-up heights.
+/// widths; a column-wrap stretches in the x pass, so it packs against bottom-up heights. A
+/// track participant takes its lines from its slots instead (`track_stretch`).
 fn stretch_children(node: anytype, main: Axis) void {
     const ca = cross(main);
     const flow = node.layout.flow;
+    if (node.layout.track_row) |set| return track_stretch(node, set);
     if (!flow.wrap) {
         const line = inner_extent(node, ca);
         for (node.children.items) |c| {
@@ -1309,7 +1350,8 @@ fn place(node: anytype, alloc: Allocator, info: ?ChildrenPosInfo) anyerror!void 
 
 /// The cross extent of one line of children, and its shared baseline: the plain max of the
 /// children's cross extents, or for a baseline row the deepest ascent plus the deepest
-/// descent when that is larger. `flow_place` keeps one per line; `track_place` one for its row.
+/// descent when that is larger. `flow_place` keeps one per line; `TrackLines` one per line
+/// of a track participant.
 const LineCross = struct {
     max: f32 = 0,
     ascent: f32 = 0,
@@ -1331,24 +1373,105 @@ const LineCross = struct {
     }
 };
 
-/// Place a track participant's in-flow `kids`: each cell at its track's x (the visible
-/// tracks before it plus their gaps) and across the row by `flow.cross`, exactly as
-/// `flow_place` aligns one line. `flow.main` is not read: free space the tracks don't take
-/// stays after the last track. The tracks are solved again for this row's width, which is
-/// free when it matches the last solve and keeps rows of different widths correct.
+/// Place a track participant's in-flow `kids` line by line (`TrackLines`): each cell at its
+/// track's x (the visible tracks before it plus their gaps) and across its line by
+/// `flow.cross`, exactly as `flow_place` aligns one line; each line starts at the previous
+/// line's cross extent plus the set's `row_gap`. `flow.main` is not read: free space the
+/// tracks don't take stays after the last track. The tracks are solved again for this row's
+/// width, which is free when it matches the last solve and keeps rows of different widths
+/// correct.
 fn track_place(node: anytype, alloc: Allocator, kids: []@TypeOf(node), set: *TrackSet) anyerror!void {
     const flow = node.layout.flow;
     set.solve(inner_extent(node, .x));
-    var lc: LineCross = .{};
-    for (kids) |c| lc.add(c, .x);
-    const line_cross = lc.line(flow);
-    var cursor: usize = 0;
-    for (kids) |c| {
-        const s = set.slot(cursor, c);
-        cursor = s.end();
-        const xo = set.x_of(s.col);
-        const yo = cross_within(flow, .x, line_cross, c, lc.ascent);
-        try place(c, alloc, .{ .x_offset = xo, .y_offset = yo });
+    var lines = TrackLines(@TypeOf(node)){ .set = set, .kids = kids };
+    var walk: CellWalk = .{}; // the same steps `lines` takes, so the same slots
+    var line_start: f32 = 0;
+    while (lines.next()) |ln| {
+        const line_cross = ln.lc.line(flow);
+        for (kids[ln.start..ln.end]) |c| {
+            const s = walk.next(set, c);
+            const xo = set.x_of(s.col);
+            const yo = line_start + cross_within(flow, .x, line_cross, c, ln.lc.ascent);
+            try place(c, alloc, .{ .x_offset = xo, .y_offset = yo });
+        }
+        line_start += line_cross + set.row_gap;
+    }
+}
+
+/// A participant's cells, one implicit line at a time: each `next` returns the next line's
+/// range `[start, end)` of `kids` and its `LineCross`. Anchored children inside the range are
+/// skipped (they are not cells and never break a line). The one line walk behind the
+/// participant's height (`track_cross`), its stretch (`track_stretch`) and its placement
+/// (`track_place`), so the three can't disagree on which cells share a line.
+fn TrackLines(comptime N: type) type {
+    return struct {
+        set: *const TrackSet,
+        kids: []const N,
+        walk: CellWalk = .{},
+        i: usize = 0,
+
+        const Line = struct { start: usize, end: usize, lc: LineCross };
+
+        fn next(self: *@This()) ?Line {
+            while (self.i < self.kids.len and self.kids[self.i].layout.anchor != .relative) self.i += 1;
+            if (self.i >= self.kids.len) return null;
+            const start = self.i;
+            var lc: LineCross = .{};
+            var line: ?usize = null;
+            while (self.i < self.kids.len) : (self.i += 1) {
+                const c = self.kids[self.i];
+                if (c.layout.anchor != .relative) continue;
+                const before = self.walk;
+                const s = self.walk.next(self.set, c);
+                if (line) |l| {
+                    if (s.line != l) {
+                        self.walk = before; // this cell opens the next line; step it again there
+                        break;
+                    }
+                }
+                line = s.line;
+                lc.add(c, .x);
+            }
+            return .{ .start = start, .end = self.i, .lc = lc };
+        }
+    };
+}
+
+/// A track participant's `fit_children` height: Σ over its lines of the line's cross extent
+/// (`LineCross`, so a baseline row counts ascent + descent per line), plus `row_gap` between
+/// lines. An anchored child still raises it to its own height, as `fit_cross` does, so one
+/// line reproduces `fit_cross` exactly.
+fn track_cross(node: anytype, set: *const TrackSet) f32 {
+    const flow = node.layout.flow;
+    var lines = TrackLines(@TypeOf(node)){ .set = set, .kids = node.children.items };
+    var total: f32 = 0;
+    var count: usize = 0;
+    while (lines.next()) |ln| {
+        total += ln.lc.line(flow);
+        count += 1;
+    }
+    if (count > 1) total += set.row_gap * @as(f32, @floatFromInt(count - 1));
+    var anchored: f32 = 0;
+    for (node.children.items) |c| {
+        if (c.layout.anchor != .relative) anchored = @max(anchored, c.size.height);
+    }
+    return @max(total, anchored);
+}
+
+/// `cross = .stretch` on a participant. One line stretches to the participant's content box,
+/// as a non-wrapping row does; with several lines each cell stretches to its own line's
+/// extent, as a wrapping run does (no `align-content`: a taller participant keeps its slack
+/// after the last line).
+fn track_stretch(node: anytype, set: *const TrackSet) void {
+    var counting = TrackLines(@TypeOf(node)){ .set = set, .kids = node.children.items };
+    var count: usize = 0;
+    while (counting.next()) |_| count += 1;
+    var lines = TrackLines(@TypeOf(node)){ .set = set, .kids = node.children.items };
+    while (lines.next()) |ln| {
+        const line = if (count == 1) inner_extent(node, .y) else ln.lc.line(node.layout.flow);
+        for (node.children.items[ln.start..ln.end]) |c| {
+            if (stretches(node, c, .y)) stretch_to(c, .y, line);
+        }
     }
 }
 

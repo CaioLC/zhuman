@@ -559,10 +559,19 @@ its own key, hover and role. The prototypes align them by repeating one
   assert (the set is only "open" while pass 1 is inside the owner); in release it would
   read stale scratch. The owner lays its own children out by the tracks only if it is also
   a participant.
-- `Layout.track_row` marks a **participant**: a non-wrapping, non-reversed `.row`
-  (asserted in debug) whose in-flow children are cells. `Layout.cell_col` places a cell
-  explicitly (it moves the cursor; skipped tracks stay empty) and `cell_span` covers
-  several tracks. Anchored children of a participant ignore the tracks.
+- `Layout.track_row` marks a **participant**: a non-reversed `.row` whose in-flow children
+  are cells. `Layout.cell_col` places a cell explicitly (it moves the cursor; skipped tracks
+  stay empty) and `cell_span` covers several tracks (clamped to the set, so `maxInt(u16)`
+  from track 0 is CSS `1 / -1`). Anchored children of a participant ignore the tracks.
+- **Implicit lines** (CSS implicit grid rows, `grid-auto-flow: row`): a cell whose slot does
+  not fit the rest of the current line starts a new one at the first visible track. That is
+  an explicit `cell_col` lower than the cursor, or an implicit cell whose span runs past the
+  last track (a surplus cell, or a full-width span after any cell). A line with no cell yet
+  never breaks; its span clamps instead. The lines are spaced by `TrackSet.row_gap` (the
+  set's, beside `col_gap`, so CSS `gap: 2px 9px` is `row_gap = 2`, `col_gap = 9`; `tracks_gaps`
+  scales it). `flow.wrap` on a participant is asserted off in debug: lines come from the
+  slots, never from widths, so a wrap flag would promise width-driven breaking that does
+  not happen.
 
 The pass hooks:
 
@@ -580,11 +589,16 @@ The pass hooks:
    them, its own padding inside and min/max on its content box, and its x counts as
    **definite** for its descendants, as a stretched axis does, so `.fill`/`.cell_fill` text
    and percentage grandchildren resolve against the track before the measurer runs.
-3. The y passes are unchanged: a participant is a row whose height is its cells' max (or
-   ascent + descent for a baseline row).
+3. The y passes: a participant's `fit_children` height is Σ over its lines of the line's
+   cross extent (the cells' max, or ascent + descent for a baseline row), plus `row_gap`
+   between lines; one line is exactly a plain row's height. With `.stretch`, one line fills
+   the participant's content box as a plain row does, and several lines each fill their own
+   extent as a wrapping run does. Height, stretch and placement walk the lines with one
+   helper (`TrackLines` over `CellWalk`), so they agree on which cells share a line.
 4. `place`: a cell's x is the visible tracks before it plus their gaps, from the
-   participant's content left; y comes from `flow.cross` through the line logic
-   `flow_place` uses. `offset` and the parent's scroll fold apply as usual.
+   participant's content left; each line starts at the previous line's extent plus
+   `row_gap`, and y within it comes from `flow.cross` through the line logic `flow_place`
+   uses. `offset` and the parent's scroll fold apply as usual.
 
 **`shrink_order` vs CSS.** A CSS grid that overflows shrinks its flexible tracks toward
 their `minmax` floors together. The prototypes' BUILD table instead gives way in a fixed
@@ -597,9 +611,8 @@ orders give way first, each to its `min`; tracks of one order share in proportio
 **Hidden tracks** are 0 wide, drop one adjacent gap, and are skipped by implicit placement
 (a responsive column dropped at a width class).
 
-**Deferred: multi-line participants.** A span that doesn't fit wrapping onto its own line
-(the trade dialog's narrow corner, `grid-column: 1 / -1`) is not modeled yet; `flow.wrap` on
-a participant asserts in debug.
+The trade dialog's narrow ledger uses implicit lines: its corner is `at_track(0, all_tracks)`,
+so it takes line 2 at full width under the lot and the price.
 
 ### Five-pass frame profiling
 
