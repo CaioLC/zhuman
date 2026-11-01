@@ -65,7 +65,7 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
 
     var output_buf: [48]u8 = undefined;
     const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
-    try head.label("value", output, .{ Style{ .font = 10, .ink = if (enabled) .acc else .dim } });
+    try head.label("value", output, .{ Style{ .font = 10, .ink = .acc, .verdict = style.verdict.when(!enabled, .inactive) } });
 
     try scale_row.label("min", "meager", .{ Style{ .font = 9, .ink = .line2 } });
     try scale_row.label("max", "lavish", .{ Style{ .font = 9, .ink = .line2 } });

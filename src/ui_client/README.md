@@ -884,7 +884,7 @@ color and `style.tone(t)` its ink fragment.
 | `worse`     | `danger` | a margin moved the bad way                                      |
 | `flat`      | `fg`     | a value at its baseline                                         |
 | `absent`    | `line2`  | an empty readout: no takers, a zero line, nothing you hold      |
-| `inactive`  | `dim`    | the name of a thing not engaged (an unposted good, a non-matching person, a strip while its merchant is away) |
+| `inactive`  | `dim`    | the name of a thing not engaged (an unposted good, a non-matching person, a strip while its merchant is away, a readout under a disabled control) |
 | `refused`   | `line2`  | a term the counterparty refuses                                 |
 | `over`      | `danger` | past a limit: over budget, a negative balance after a deal      |
 | `low`       | `danger` | a threshold breached: food lasts under two days, food at 0      |

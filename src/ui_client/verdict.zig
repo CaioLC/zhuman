@@ -35,7 +35,7 @@ pub const Verdict = enum {
     /// An empty readout: no takers, a zero line, nothing you hold.
     absent,
     /// The name of a thing not engaged: an unposted good, a non-matching person, a strip while
-    /// its merchant is away.
+    /// its merchant is away, a readout under a disabled control.
     inactive,
     /// A term the counterparty refuses.
     refused,

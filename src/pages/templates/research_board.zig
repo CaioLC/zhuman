@@ -543,7 +543,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     }, .{});
     try pane.leaf("edge", .{
         .anchor = .top_left, .w = .{ .pct_of_parent = 1.0 }, .h = .{ .pct_of_parent = 1.0 },
-    }, .{Style{ .outline_color = if (pq.focus_visible) th.acc else pane_edge }});
+    }, .{Style{ .outline_color = pane_edge, .on = &.{.{ .when = .focus_visible, .outline_ink = .acc }} }}); // the pane is the owner
 
     // Which tiles the filter and the search leave lit.
     var faded: [roster.max_techs]bool = @splat(false);
