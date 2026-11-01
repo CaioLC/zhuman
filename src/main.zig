@@ -386,6 +386,10 @@ pub fn main(process: std.process.Init) !void {
         // 3. the handlers: every frame, paused or not and housed or not, so an intent the UI wrote
         // during the last build applies now and its outcome is in the world this frame's build reads.
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.labor.labor);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.build.build);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.build.cancel);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_toggle);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_collect);
         // 4. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
@@ -402,11 +406,8 @@ pub fn main(process: std.process.Init) !void {
             ecs.run(&app.world, &app.resources.game, sys.metabolize); // continuous eating / starvation
             ecs.run(&app.world, &app.resources.game, sys.resolve_busy); // work in progress ticks/completes
             ecs.run(&app.world, &app.resources.game, sys.track_reach); // newly in-reach recipes → one log
-            // Advance the Passerby encounter on the sim clock (arrival/departure logs,
-            // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
-            // run, so it ticks directly rather than over a per-entity query.
-            _ = ha.sim.rules.market.tick(&app.resources.game.sim.encounter, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
-            ha.sim.rules.capital.run_generators(&app.world, &app.resources.game); // collectable capital accumulates
+            ecs.run(&app.world, &app.resources.game, ha.sim.systems.passerby.passerby); // the encounter clock → Arrived / Departed
+            ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators); // collectable capital accumulates
             ecs.run(&app.world, &app.resources.game, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources.game, sys.despawn_dead); // reap Dead entities
         }

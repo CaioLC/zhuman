@@ -15,15 +15,48 @@ const roster = @import("../data/roster.zig");
 /// Run last in the frame, after every writer of a fact.
 pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void {
     var begun = ev.reader(events.WorkBegun, .log);
-    while (begun.next()) |f| {
-        if (f.weary) sim.log.push(.warn, "You feel weak. Work will yield less.");
-        switch (f.doing) {
-            .labor => {
-                var buf: [64]u8 = undefined;
-                sim.log.push(.dim, actions.paymentText(&buf, cat, f.energy, f.paid, f.act));
-            },
-            .build => {},
+    while (begun.next()) |f| switch (f.doing) {
+        // The feed shows labor's debit the moment the work begins; a build begins silently.
+        .labor => {
+            if (f.weary) sim.log.push(.warn, "You feel weak. Work will yield less.");
+            var buf: [64]u8 = undefined;
+            sim.log.push(.dim, actions.paymentText(&buf, cat, f.energy, f.paid, f.act));
+        },
+        .build => {},
+    };
+
+    var cancelled = ev.reader(events.BuildCancelled, .log);
+    while (cancelled.next()) |f| {
+        var nbuf: [48]u8 = undefined;
+        var buf: [96]u8 = undefined;
+        const lines = f.refund.slice();
+        sim.log.push(.warn, std.mem.print(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
+            capital.lowerName(cat.goods[f.gi].name, &nbuf),
+            f.refund.total(),
+            if (lines.len > 0) actions.itemWordOf(cat, lines[0].item, f.act) else "units",
+        }) catch "You gave up on the build.");
+    }
+
+    var collected = ev.reader(events.Collected, .log);
+    while (collected.next()) |f| {
+        var buf: [120]u8 = undefined;
+        var wr = std.Io.Writer.fixed(&buf);
+        wr.print("{s} cycle collected", .{cat.goods[f.gi].name}) catch {};
+        if (f.receipt.len > 0 or f.vigor > 0) {
+            wr.writeAll(": ") catch {};
+            var wrote = false;
+            for (f.receipt.slice()) |d| {
+                if (wrote) wr.writeAll(", ") catch {};
+                wr.print("{d:.1} {s}", .{ d.qty, actions.itemWordOf(cat, d.item, f.act) }) catch {};
+                wrote = true;
+            }
+            if (f.vigor > 0) {
+                if (wrote) wr.writeAll(", ") catch {};
+                wr.print("+{d:.1} vigor", .{f.vigor}) catch {};
+            }
         }
+        wr.writeAll(".") catch {};
+        sim.log.push(.good, wr.buffered());
     }
 
     var ran_out = ev.reader(events.FoodRanOut, .log);
@@ -74,12 +107,26 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
         sim.log.push(.good, std.mem.print(&buf, "A new recipe is within reach: {s}.", .{capital.lowerName(cat.goods[f.gi].name, &nbuf)}) catch "A new recipe is within reach.");
     }
 
+    var arrived = ev.reader(events.Arrived, .log);
+    while (arrived.next()) |f| sim.log.push(.good, switch (f.who) {
+        .passerby => "A passerby stops, and opens a satchel of odds and ends.",
+        .merchant => "The merchant's cart is back, restocked from downriver.",
+    });
+
+    var departed = ev.reader(events.Departed, .log);
+    while (departed.next()) |f| sim.log.push(.dim, switch (f.who) {
+        .passerby => "The passerby shoulders the satchel and moves on.",
+        .merchant => "The merchant packs the cart and takes the river road.",
+    });
+
     var died = ev.reader(events.Died, .log);
     while (died.next()) |_| sim.log.push(.danger, "You perished, cold and starved.");
 
     // Read and passed over: no line describes them.
     var changed = ev.reader(events.GoodsChanged, .log);
     while (changed.next()) |_| {}
+    var refused = ev.reader(events.Refused, .log);
+    while (refused.next()) |_| {}
 }
 
 // ============================ Tests ==========================================
@@ -121,7 +168,7 @@ test "WorkBegun: the payment line, the weariness warning before it, nothing for 
     var paid = @import("../rules/ledger.zig").Receipt{};
     paid.add(.{ .resource = .biomass }, 1);
     rig.emit(events.WorkBegun{ .agent = 0, .doing = .{ .labor = forage }, .weary = true, .energy = 4, .paid = paid, .act = 1 });
-    rig.emit(events.WorkBegun{ .agent = 0, .doing = .{ .build = 0 }, .energy = 2 });
+    rig.emit(events.WorkBegun{ .agent = 0, .doing = .{ .build = 0 }, .weary = true, .energy = 2 });
     rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try testing.expectEqualStrings("You feel weak. Work will yield less.", rig.line(1));
@@ -180,6 +227,43 @@ test "WorkDone: the labor receipt, a miss, a first build, a repeat build; WorkLo
     try expectLine(&rig, 2, .good, cat.goods[spear].copy.built);
     try expectLine(&rig, 1, .good, "Another sandals. You have 2.");
     try expectLine(&rig, 0, .dim, "The work came to nothing.");
+}
+
+test "a cancelled build names its salvage; a collected cycle lists its yield and vigor" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    const cat = &rig.res.catalog;
+    const ledger = @import("../rules/ledger.zig");
+    var refund = ledger.Receipt{};
+    refund.add(.{ .resource = .biomass }, 5);
+    var crop = ledger.Receipt{};
+    crop.add(.{ .resource = .food }, 2);
+    rig.emit(events.BuildCancelled{ .agent = 0, .gi = cat.goodIndex("spear").?, .refund = refund, .act = 1 });
+    rig.emit(events.BuildCancelled{ .agent = 0, .gi = cat.goodIndex("spear").? });
+    rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").?, .receipt = crop, .vigor = 0.5 });
+    rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").? });
+    rig.run();
+    try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
+    try expectLine(&rig, 3, .warn, "You gave up on the spear. Salvaged 5 materials.");
+    try expectLine(&rig, 2, .warn, "You gave up on the spear. Salvaged 0 units.");
+    try expectLine(&rig, 1, .good, "Garden bed cycle collected: 2.0 food, +0.5 vigor.");
+    try expectLine(&rig, 0, .good, "Garden bed cycle collected.");
+}
+
+test "arrivals and departures of the passerby and the merchant; Refused says nothing" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.Arrived{ .who = .passerby });
+    rig.emit(events.Arrived{ .who = .merchant });
+    rig.emit(events.Departed{ .who = .passerby });
+    rig.emit(events.Departed{ .who = .merchant });
+    rig.emit(events.Refused{ .agent = 0, .intent = .begin_build, .reason = .busy });
+    rig.run();
+    try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
+    try expectLine(&rig, 3, .good, "A passerby stops, and opens a satchel of odds and ends.");
+    try expectLine(&rig, 2, .good, "The merchant's cart is back, restocked from downriver.");
+    try expectLine(&rig, 1, .dim, "The passerby shoulders the satchel and moves on.");
+    try expectLine(&rig, 0, .dim, "The merchant packs the cart and takes the river road.");
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {

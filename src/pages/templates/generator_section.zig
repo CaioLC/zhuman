@@ -155,13 +155,14 @@ pub const toggle_label = Style{ .ink = .dim, .on = &.{ .{ .when = .checked, .ink
 /// toggle, a pointer release or Enter/Space on its focus, is routed to the toggle and bubbles
 /// to the tile, so:
 ///
-/// - the toggle flips its fact on the click before its lifecycle publishes `checked`, so the
-///   published state, the accessible name and the label (from the returned value) are
-///   current on the click frame, as `tabs` and `rail` do;
+/// - the toggle writes `ToggleGenerator` on the click and reads the state that intent asks for
+///   before its lifecycle publishes `checked`, so the published state, the accessible name and
+///   the label (from the returned value) are current on the click frame, as `tabs` and `rail`
+///   do; the handler applies it before the next build;
 /// - the flip is gated by the same `enabled` the lifecycle receives, so a click the lifecycle
 ///   would consume as disabled can never flip it;
 /// - the toggle then consumes its click, and the tile is re-queried after it, as
-///   `capital_row` does: only a click on the tile body collects.
+///   `capital_row` does: only a click on the tile body writes `CollectGenerator`.
 ///
 /// Returns whether the generator is on after this frame's activation.
 fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) bool {
@@ -169,8 +170,8 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
     // A generator can always be paused or resumed. The flip and the lifecycle share this gate.
     const enabled = true;
     const flip = enabled and toggle.query().clicked;
-    if (flip) capital.toggle_generator(world, e, &ctx.res.game.catalog, gi);
-    const is_on = !world.get(e, comp.Generators).?.off[gi];
+    if (flip) _ = ctx.res.game.events.writer(ha.sim.events.ToggleGenerator).push(.{ .agent = e, .gi = gi });
+    const is_on = !world.get(e, comp.Generators).?.off[gi] != flip;
     const q = toggle.control(.{
         .enabled = enabled,
         .name = if (is_on) "Turn generator off" else "Turn generator on",
@@ -183,7 +184,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
     _ = toggle.consume(.clicked);
     // The tile's lifecycle gated its own click on readiness (a disabled tile consumed it);
     // read it again now that the toggle has taken its click.
-    if (tile.query().clicked) _ = capital.collect_generator(world, e, &ctx.res.game, gi);
+    if (tile.query().clicked) _ = ctx.res.game.events.writer(ha.sim.events.CollectGenerator).push(.{ .agent = e, .gi = gi });
     return is_on;
 }
 
@@ -315,6 +316,11 @@ const GenFixture = struct {
         self.tile_collect_click = tile.query().clicked;
         self.tile_key = tile.get().key;
         self.toggle_key = toggle.get().key;
+        // The next frame's handler stage, as the host runs it between builds, so a test reads
+        // the world the next build sees.
+        ctx.res.game.events.update();
+        ha.sim.ecs.run(self.world, &ctx.res.game, ha.sim.systems.generators.generators_toggle);
+        ha.sim.ecs.run(self.world, &ctx.res.game, ha.sim.systems.generators.generators_collect);
         const out = try ctx.arena.alloc(*Node, 1);
         out[0] = root.get();
         return out;

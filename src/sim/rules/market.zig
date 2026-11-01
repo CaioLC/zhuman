@@ -98,16 +98,15 @@ pub const Schedule = struct {
     },
 };
 
-/// What a tick did — so the caller logs/announces without this module reaching into the log
-/// itself (it does, for convenience, but the event is also returned for the UI announcer).
+/// What a tick did. The passerby system turns it into an `Arrived` or `Departed` fact.
 pub const Event = enum { none, arrived, departed };
 
-/// Advance the encounter by `dt` seconds against `sched`, logging arrival/departure. Deterministic
-/// and clock-driven: the same elapsed time always produces the same transitions, and nothing here
-/// reads the calendar day. Returns the transition that fired this tick (`none` if still within a
-/// phase). A phase can only advance one step per tick; `dt` is a frame delta, far smaller than any
-/// phase, so that is never a real limit.
-pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Log) Event {
+/// Advance the encounter by `dt` seconds against `sched`. Deterministic and clock-driven: the
+/// same elapsed time always produces the same transitions, and nothing here reads the calendar
+/// day. Returns the transition that fired this tick (`none` if still within a phase). A phase can
+/// only advance one step per tick; `dt` is a frame delta, far smaller than any phase, so that is
+/// never a real limit.
+pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32) Event {
     enc.remaining -= dt;
     if (enc.remaining > 0) return .none;
 
@@ -119,20 +118,18 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, log: *logmod.Lo
             return .none; // approaching is not yet an event the player can act on
         },
         .approaching => {
-            // Arrival: a new visit. Bump identity, refill the satchel, announce.
+            // Arrival: a new visit. Bump identity, refill the satchel.
             enc.phase = .present;
             enc.id += 1;
             enc.remaining = sched.linger_days * spd;
             enc.stock = sched.satchel;
             enc.visit = @splat(0);
-            log.push(.good, "A passerby stops, and opens a satchel of odds and ends.");
             return .arrived;
         },
         .present => {
             // The visit ended — they move on.
             enc.phase = .departed;
             enc.remaining = sched.depart_days * spd;
-            log.push(.dim, "The passerby shoulders the satchel and moves on.");
             return .departed;
         },
         .departed => {
@@ -366,53 +363,48 @@ const testing = std.testing;
 const secs_per_day: f32 = 120.0; // an arbitrary clock for the tests
 
 test "encounter walks absent → approaching → present → departed → absent on the clock" {
-    var log = logmod.Log{};
     var enc = Encounter{}; // absent, remaining 0, id 0
     const sched = Schedule{};
 
     // First tick from a zeroed absent state: remaining hits 0 immediately → approaching.
-    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day, &log));
+    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day));
     try testing.expectEqual(Phase.approaching, enc.phase);
     try testing.expectEqual(@as(u32, 0), enc.id); // not a visit yet
 
-    // Burn the approach window → present (an arrival: id bumps, satchel fills, one log).
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, &log);
+    // Burn the approach window → present (an arrival: id bumps, satchel fills).
+    try testing.expectEqual(Event.arrived, tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day));
     try testing.expectEqual(Phase.present, enc.phase);
     try testing.expectEqual(@as(u32, 1), enc.id);
     try testing.expect(enc.dealable());
     try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass));
-    try testing.expectEqual(@as(usize, 1), log.count); // exactly the arrival line
 
-    // Burn the linger window → departed (a second log).
-    _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, &log);
+    // Burn the linger window → departed.
+    try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day));
     try testing.expectEqual(Phase.departed, enc.phase);
     try testing.expect(!enc.dealable());
-    try testing.expectEqual(@as(usize, 2), log.count);
 
-    // Burn the depart beat → absent (satchel cleared, no new log).
-    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, &log);
+    // Burn the depart beat → absent (satchel cleared, no event).
+    try testing.expectEqual(Event.none, tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day));
     try testing.expectEqual(Phase.absent, enc.phase);
     try testing.expectEqual(@as(u16, 0), enc.stockOf(.biomass));
-    try testing.expectEqual(@as(usize, 2), log.count);
 }
 
 test "each visit bumps a stable identity and refills the satchel" {
-    var log = logmod.Log{};
     var enc = Encounter{};
     const sched = Schedule{};
 
     // Run a full cycle to the first arrival.
-    _ = tick(&enc, 0.001, sched, secs_per_day, &log); // → approaching
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, &log); // → present (id 1)
+    _ = tick(&enc, 0.001, sched, secs_per_day); // → approaching
+    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present (id 1)
     try testing.expectEqual(@as(u32, 1), enc.id);
 
     // Spend some stock this visit, then complete the cycle back to a second arrival.
     enc.take(.biomass, 5);
     try testing.expectEqual(@as(u16, 15), enc.stockOf(.biomass));
-    _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, &log); // → departed
-    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, &log); // → absent
-    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day, &log); // → approaching
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, &log); // → present (id 2)
+    _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day); // → departed
+    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day); // → absent
+    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day); // → approaching
+    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present (id 2)
 
     try testing.expectEqual(@as(u32, 2), enc.id); // a *different* passerby
     try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass)); // the satchel refilled

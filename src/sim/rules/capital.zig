@@ -34,6 +34,7 @@ const World = world.World;
 const Entity = world.Entity;
 const Resources = res_mod.Resources;
 const Catalog = roster.Catalog;
+const Reason = events.Refused.Reason;
 
 // --- the quote ---------------------------------------------------------------------------
 
@@ -164,17 +165,34 @@ pub fn capacity(w: *World, e: Entity, cat: *const Catalog) u32 {
 
 /// Begin building `gi`: pay the price and the build order upfront and start the work — the
 /// good, and whatever it does, arrives only when `finish` resolves, `requires.hours` later.
-/// Refuses silently when the quote is not ready. Dying mid-build loses the work.
-pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) void {
+/// Emits `WorkBegun` and returns null; when the quote is not ready it changes nothing and
+/// returns why. Dying mid-build loses the work.
+pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
     const cat = &res.catalog;
-    const q = quote(w, e, cat, gi) orelse return;
-    if (!q.ready()) return;
+    if (gi >= cat.goods.len) return .unavailable;
+    const q = quote(w, e, cat, gi) orelse return .unavailable;
+    if (!q.ready()) return switch (q.standing) {
+        .ready => unreachable,
+        inline else => |t| @field(Reason, @tagName(t)),
+    };
     const price = q.rec.requires.?;
-    w.get(e, comp.Vigor).?.v -= price.energy;
-    ledger.pay(w, e, cat, roster.Lines.only(q.rec.input, .once).slice(), 1);
+    const order = roster.Lines.only(q.rec.input, .once);
+    const vigor = w.get(e, comp.Vigor).?;
+    const frac_before = vigor.v / vigor.max;
+    vigor.v -= price.energy;
+    ledger.pay(w, e, cat, order.slice(), 1);
+    _ = res.events.writer(events.WorkBegun).push(.{
+        .agent = e,
+        .doing = .{ .build = gi },
+        .weary = res.config.condition(frac_before) == .alive and res.config.condition(vigor.v / vigor.max) != .alive,
+        .energy = price.energy,
+        .paid = ledger.receiptOf(cat, order.slice(), 1),
+        .act = migration.actOf(w, e),
+    });
     const total = res_mod.hours_to_secs(price.hours, res.config.secs_per_day);
     // quality is a labor concept — a build either completes or it doesn't, so lock 1.
     w.add(e, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total, .quality = 1 });
+    return null;
 }
 
 /// Completion of a build: own the lot, settle its effect if this is the first unit (a repeat
@@ -242,34 +260,21 @@ pub fn break_one(w: *World, e: Entity, res: *Resources, gi: u16) void {
 /// four-day build with an emptying larder, not an undo. The refund is flat rather than
 /// prorated because the order is charged in full at `begin` and nothing draws it down over
 /// time. Refuses on a labor verb (half-foraging is not a thing you can take materials back
-/// from). Returns whether it cancelled.
-pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
-    const busy = w.get(e, comp.Busy) orelse return false;
+/// from) and on an idle body, returning `nothing_to_cancel`; otherwise emits `BuildCancelled`
+/// with what came back and returns null.
+pub fn cancel_build(w: *World, e: Entity, res: *Resources) ?Reason {
+    const busy = w.get(e, comp.Busy) orelse return .nothing_to_cancel;
     const gi = switch (busy.doing) {
         .build => |g| g,
-        .labor => return false,
+        .labor => return .nothing_to_cancel,
     };
     const cat = &res.catalog;
-    const rec = &cat.goods[gi];
-    var salvaged: f32 = 0;
-    var first: ?[]const u8 = null;
-    for (rec.input) |l| {
-        if (l.per != .once) continue;
-        const back = l.n * res.config.cancel_refund;
-        _ = ledger.give(w, e, cat, l.item, back);
-        salvaged += back;
-        if (first == null) first = l.item;
-    }
+    const order = roster.Lines.only(cat.goods[gi].input, .once);
+    const refund = ledger.receiptOf(cat, order.slice(), res.config.cancel_refund);
+    for (order.slice()) |l| _ = ledger.give(w, e, cat, l.item, l.n * res.config.cancel_refund);
     w.remove(e, comp.Busy);
-    var nbuf: [48]u8 = undefined;
-    var buf: [96]u8 = undefined;
-    const msg = std.mem.print(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
-        lowerName(rec.name, &nbuf),
-        salvaged,
-        if (first) |item| actions.itemWord(cat, item, migration.actOf(w, e)) else "units",
-    }) catch "You gave up on the build.";
-    res.sim.log.push(.warn, msg);
-    return true;
+    _ = res.events.writer(events.BuildCancelled).push(.{ .agent = e, .gi = gi, .refund = refund, .act = migration.actOf(w, e) });
+    return null;
 }
 
 /// Every change of ownership ends here: the body and larder take the goods' contribution.
@@ -377,21 +382,32 @@ pub fn run_generators(w: *World, res: *Resources) void {
     }
 }
 
-/// Toggle accumulation. Turning a generator off preserves its accumulated progress.
-pub fn toggle_generator(w: *World, e: Entity, cat: *const Catalog, gi: u16) void {
-    if (cat.goods[gi].generator == null) return;
-    const goods = w.get(e, comp.Goods) orelse return;
-    if (goods.count[gi] == 0) return;
+/// Toggle accumulation. Turning a generator off preserves its accumulated progress. Returns
+/// `unavailable`, changing nothing, for a good that is not an owned generator.
+pub fn toggle_generator(w: *World, e: Entity, cat: *const Catalog, gi: u16) ?Reason {
+    if (gi >= cat.goods.len or cat.goods[gi].generator == null) return .unavailable;
+    const goods = w.get(e, comp.Goods) orelse return .unavailable;
+    if (goods.count[gi] == 0) return .unavailable;
     const state = ensureGenerators(w, e);
     state.off[gi] = !state.off[gi];
+    return null;
 }
 
-/// Atomically pay collection energy/upkeep, realize the cycle yield, and restart accumulation.
-/// This never creates or inspects `Busy`, so collecting does not interrupt other work.
-pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
+/// Atomically pay collection energy/upkeep, realize the cycle yield, restart accumulation and
+/// emit `Collected`. This never creates or inspects `Busy`, so collecting does not interrupt
+/// other work. Returns why it refused (`unavailable` for a good that is not an owned
+/// generator, else the quote's standing), changing nothing, or null.
+pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
     const cat = &res.catalog;
-    const q = generator_quote(w, e, cat, res.config, gi) orelse return false;
-    if (!q.ready()) return false;
+    if (gi >= cat.goods.len) return .unavailable;
+    const q = generator_quote(w, e, cat, res.config, gi) orelse return .unavailable;
+    switch (q.standing) {
+        .ready => {},
+        .charging => return .not_ready,
+        .off => return .off,
+        .energy => return .energy,
+        .short => return .short,
+    }
 
     const vigor = w.get(e, comp.Vigor).?;
     vigor.v -= q.spec.energy;
@@ -400,26 +416,8 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
     const restored = @min(q.spec.vigor, vigor.max - vigor.v);
     vigor.v += restored;
     ensureGenerators(w, e).progress[gi] = 0;
-
-    var buf: [120]u8 = undefined;
-    var wr = std.Io.Writer.fixed(&buf);
-    wr.print("{s} cycle collected", .{q.rec.name}) catch {};
-    if (receipt.len > 0 or restored > 0) {
-        wr.writeAll(": ") catch {};
-        var wrote = false;
-        for (receipt.slice()) |d| {
-            if (wrote) wr.writeAll(", ") catch {};
-            wr.print("{d:.1} {s}", .{ d.qty, actions.itemWordOf(cat, d.item, migration.actOf(w, e)) }) catch {};
-            wrote = true;
-        }
-        if (restored > 0) {
-            if (wrote) wr.writeAll(", ") catch {};
-            wr.print("+{d:.1} vigor", .{restored}) catch {};
-        }
-    }
-    wr.writeAll(".") catch {};
-    res.sim.log.push(.good, wr.buffered());
-    return true;
+    _ = res.events.writer(events.Collected).push(.{ .agent = e, .gi = gi, .receipt = receipt, .vigor = restored, .act = migration.actOf(w, e) });
+    return null;
 }
 
 // ============================ Tests ==========================================
@@ -472,7 +470,7 @@ test "build pays upfront and starts the work; finish owns the spear and grants t
     const e = spawn_test_agent(&w, order); // exactly the order — spendable to 0
     try testing.expect(!heldVerb(&w, e, cat, "hunt")); // no spear, no verb
 
-    begin(&w, e, &res, rod);
+    try testing.expect(begin(&w, e, &res, rod) == null);
 
     // Paid and busy — the spear doesn't exist until the work completes.
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear"));
@@ -502,20 +500,20 @@ test "begin refuses when unaffordable or busy; the quote says why" {
 
     try testing.expectEqual(Standing.short, quote(&w, e, cat, rod).?.standing);
     try testing.expectEqualStrings("biomass", quote(&w, e, cat, rod).?.short.?.item);
-    begin(&w, e, &res, rod);
+    try testing.expectEqual(Reason.short, begin(&w, e, &res, rod).?);
     try testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
 
     w.get(e, comp.InventoryBiomass).?.v = order + 12;
-    begin(&w, e, &res, rod); // starts the build
+    _ = begin(&w, e, &res, rod); // starts the build
     try testing.expectEqual(Standing.busy, quote(&w, e, cat, rod).?.standing);
-    begin(&w, e, &res, rod); // busy — must refuse, not double-pay
+    try testing.expectEqual(Reason.busy, begin(&w, e, &res, rod).?); // must refuse, not double-pay
     try testing.expectEqual(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v); // paid once
 
     w.remove(e, comp.Busy);
     finish(&w, e, &res, rod);
     try testing.expectEqual(@as(u32, 1), quote(&w, e, cat, rod).?.count); // owned, and still buildable
-    begin(&w, e, &res, rod); // 12 materials short of a second
+    _ = begin(&w, e, &res, rod); // 12 materials short of a second
     try testing.expect(!w.has(e, comp.Busy));
 }
 
@@ -530,14 +528,14 @@ test "a repeat build is stock: the count rises, the effect does not" {
     const goods = w.get(e, comp.Goods).?;
     const base = effects.verb(cat, goods, forage).?.requires.energy;
 
-    begin(&w, e, &res, sandals);
+    _ = begin(&w, e, &res, sandals);
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
     const once = effects.verb(cat, goods, forage).?.requires.energy;
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "sandals"));
     try testing.expect(once < base); // the first pair is capital in use
 
-    begin(&w, e, &res, sandals);
+    _ = begin(&w, e, &res, sandals);
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
     try testing.expectEqual(@as(u32, 2), count(&w, e, cat, "sandals"));
@@ -569,14 +567,14 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
 
     // No hatchet ⟹ no Split wood ⟹ gloves have nothing to improve.
     try testing.expectEqual(Standing.needs, quote(&w, e, cat, gloves).?.standing);
-    begin(&w, e, &res, gloves);
+    try testing.expectEqual(Reason.needs, begin(&w, e, &res, gloves).?);
     try testing.expect(!w.has(e, comp.Busy)); // refused, not a panic
     try testing.expectEqual(@as(f32, 100), w.get(e, comp.InventoryBiomass).?.v); // unpaid
 
     acquire(&w, e, &res, hatchet, 1);
     try testing.expect(heldVerb(&w, e, cat, "chop_wood"));
     try testing.expect(needsMet(&w, e, cat, gloves));
-    begin(&w, e, &res, gloves);
+    _ = begin(&w, e, &res, gloves);
     try testing.expect(w.has(e, comp.Busy));
     w.remove(e, comp.Busy);
 
@@ -608,7 +606,7 @@ test "a generator accumulates without moving resources and settles only when col
     run_generators(&w, &res); // ready, but still no automatic settlement
     try testing.expect(generator_quote(&w, e, &res.catalog, res.config, garden).?.ready());
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
-    try testing.expect(collect_generator(&w, e, &res, garden));
+    try testing.expect(collect_generator(&w, e, &res, garden) == null);
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
     try testing.expect(w.get(e, comp.InventoryFood).?.v > 0);
     try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
@@ -643,7 +641,7 @@ test "the shelter is offered only once its standing conditions are met" {
     try testing.expect(unlockMet(&w, e, cat, shelter));
     try testing.expect(!ownsMilestone(&w, e, cat, .act_one));
 
-    begin(&w, e, &res, shelter);
+    _ = begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
     try testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 16 - 12 energy
     try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v); // 100 - 60
@@ -667,7 +665,7 @@ test "each standing condition refuses the shelter on its own" {
         const e = spawn_settler(&w, cat);
         w.get(e, comp.Vigor).?.v = 7;
         try testing.expectEqual(Standing.unlock, quote(&w, e, cat, shelter).?.standing);
-        begin(&w, e, &res, shelter);
+        try testing.expectEqual(Reason.unlock, begin(&w, e, &res, shelter).?);
         try testing.expect(!w.has(e, comp.Busy));
     }
     // Boundary: an *absolute* 15, independent of `max`.
@@ -727,7 +725,7 @@ test "a recipe that names a technology waits on the board" {
     // Established: the recipe is offered, and `begin` runs.
     w.get(e, comp.Research).?.state[kilns] = .researched;
     try testing.expectEqual(Standing.ready, quote(&w, e, cat, oven).?.standing);
-    begin(&w, e, &res, oven);
+    _ = begin(&w, e, &res, oven);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(oven));
 }
 
@@ -752,10 +750,11 @@ test "cancel salvages half the build order, frees the body, and grants nothing" 
     const price = cat.goods[rod].requires.?;
     const e = spawn_test_agent(&w, order);
 
-    begin(&w, e, &res, rod);
+    _ = begin(&w, e, &res, rod);
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v); // paid in full
 
-    try testing.expect(cancel_build(&w, e, &res));
+    try testing.expect(cancel_build(&w, e, &res) == null);
+    logged(&w, &res);
     try testing.expect(!w.has(e, comp.Busy)); // the body is free again
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "spear")); // and owns nothing for the trouble
     try testing.expect(!heldVerb(&w, e, cat, "hunt"));
@@ -771,10 +770,10 @@ test "cancel refuses on labor, and on an idle body" {
     defer res.catalog.deinit();
     const e = spawn_test_agent(&w, 5);
 
-    try testing.expect(!cancel_build(&w, e, &res)); // nothing in progress
+    try testing.expectEqual(Reason.nothing_to_cancel, cancel_build(&w, e, &res).?); // nothing in progress
 
     w.add(e, comp.Busy{ .doing = .{ .labor = res.catalog.actionIndex("forage").? }, .total = 10, .remaining = 4, .quality = 1 });
-    try testing.expect(!cancel_build(&w, e, &res)); // `Busy` covers labor too
+    try testing.expectEqual(Reason.nothing_to_cancel, cancel_build(&w, e, &res).?); // `Busy` covers labor too
     try testing.expect(w.has(e, comp.Busy)); // still foraging
     try testing.expectEqual(@as(f32, 5), w.get(e, comp.InventoryBiomass).?.v);
 }

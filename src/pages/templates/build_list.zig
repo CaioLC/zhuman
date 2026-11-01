@@ -14,9 +14,10 @@
 //! shelf's authored total; the milestone remains outside it because it is the act goal rather
 //! than an ordinary recipe.
 //!
-//! **Build lifecycle:** starting a ready/owned row pays through `capital.begin`; the live
-//! `Busy` row renders its own progress/time and a cancel corner that calls
-//! `capital.cancel_build` (the refund path); completion is the simulation's — no UI-local timers.
+//! **Build lifecycle:** starting a ready/owned row writes `BeginBuild`, which the build handler
+//! pays through `capital.begin`; the live `Busy` row renders its own progress/time and a cancel
+//! corner that writes `CancelBuild` (`capital.cancel_build`, the refund path); completion is the
+//! simulation's — no UI-local timers.
 //!
 //! **Milestone:** the act's milestone good is not a row. It is a `milestone_goal` pinned
 //! below the list, **outside** the filter/sort, because it is how the act ends rather than an
@@ -399,10 +400,10 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
         // Keyed by the recipe's id, not its sorted position, so a row's focus and state follow
         // the recipe through a re-sort or a filter change.
         const r = try capital_row(rows, world, e, set, ent.q, ent.kind);
-        // The lifecycle is the simulation's. A ready/owned click pays through `begin`; the
-        // cancel corner runs the existing refund path. No UI timers.
-        if (r.clicked_build) capital.begin(world, e, &ctx.res.game, ent.q.gi);
-        if (r.clicked_cancel) _ = capital.cancel_build(world, e, &ctx.res.game);
+        // The lifecycle is the simulation's. A ready/owned click writes `BeginBuild`; the
+        // cancel corner writes `CancelBuild`, the refund path. No UI timers.
+        if (r.clicked_build) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = ent.q.gi });
+        if (r.clicked_cancel) _ = ctx.res.game.events.writer(ha.sim.events.CancelBuild).push(.{ .agent = e });
     }
 
     // --- the milestone, pinned below and outside the filter ------------------------------
@@ -519,7 +520,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     });
     // Raising the milestone is the same begin lifecycle; the transition itself happens when
     // the build completes in the simulation (no UI-local shortcut).
-    if (m.clicked) capital.begin(world, e, &ctx.res.game, gi);
+    if (m.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = gi });
 }
 
 // ============================ Tests =====================================================
