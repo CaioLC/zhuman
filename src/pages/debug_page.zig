@@ -199,7 +199,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             .run = .{ .act_label = "Act I", .day = 3 },
         });
     } else if (eq(name, "log_view")) {
-        try t.log_view(stage, "feed", &ctx.res.sim.log, 400, 4);
+        try t.log_view(stage, "feed", &ctx.res.game.sim.log, 400, 4);
     } else if (eq(name, "tabs")) {
         _ = try t.tabs(stage, "tabs", &.{ "ACTIONS", "BUILD" }, null);
     } else if (eq(name, "slider")) {
@@ -242,7 +242,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         }
     } else if (eq(name, "action_tile")) {
         if (player.get()) |a| {
-            const forage = ctx.res.catalog.actionIndex("forage").?;
+            const forage = ctx.res.game.catalog.actionIndex("forage").?;
             // Both densities, sized as their sections size them: Act I's regular grid tile
             // above Act II's compact catalog tile.
             const col = try stage.box("densities", .{
@@ -255,7 +255,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                         .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = t.actionTileHeight(d[1]) },
                         .flow = .{ .dir = .column, .main = .center },
                     }, .{});
-                    if (tl.clicked) actions.begin(world, a[0], ctx.res, forage);
+                    if (tl.clicked) actions.begin(world, a[0], &ctx.res.game, forage);
                 }
             }
         } else {
@@ -387,8 +387,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.eating_policy(demo, "ep", 50, true);
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
-            const gi = ctx.res.catalog.goodIndex("sandals").?;
-            if (ha.capital.quote(world, a[0], &ctx.res.catalog, gi)) |q| {
+            const gi = ctx.res.game.catalog.goodIndex("sandals").?;
+            if (ha.capital.quote(world, a[0], &ctx.res.game.catalog, gi)) |q| {
                 // Act I's lanes; the demo owns the row's tracks, as the BUILD list does, and is
                 // the framed table's width (the lane less the scroll gutter), which the row spans.
                 const set = try t.build_table_tracks(ctx, .{});
@@ -593,7 +593,7 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
 /// Debug-only holdings: set the counts of the named goods and settle, so the verbs they
 /// grant and the margins they move are derived exactly as in production.
 fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { []const u8, u32 }) void {
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     const goods = world.get(e, comp.Goods) orelse return;
     for (counts) |c| {
         if (cat.goodIndex(c[0])) |gi| goods.count[gi] = c[1];

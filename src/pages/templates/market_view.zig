@@ -73,7 +73,7 @@ fn activeGroup(st: *const MarketState, n: usize) Group {
 
 /// The player's word for item `i` (`food`, `cut stone`).
 fn word(ctx: *uic.UiCtx, i: usize) ![]const u8 {
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     if (ha.roster.Catalog.resource(nb.items[i])) |r| return r.wordIn(2);
     if (cat.good(nb.items[i])) |g| return std.ascii.allocLowerString(ctx.arena, g.name);
     return nb.items[i];

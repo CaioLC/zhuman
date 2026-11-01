@@ -8,6 +8,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 zig build run     # build and run
 zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
+zig build test-sim # the simulation alone: src/ecs + the sim files, no UI host, no SDL
 zig build         # build only
 sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, and neither engine (src/ui, src/ecs) imports anything outside its own package
 (cd src/ui && zig build test)    # the UI engine package on its own
@@ -16,7 +17,8 @@ sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geom
 
 `test-ui` compiles `src/ui/` + `src/ui_client/` in isolation — a faster loop that skips
 `main.zig`, `systems.zig` and `src/pages/`. Both test steps also run each engine package's own
-tests. All three targets are expected green; if one is
+tests. `test-sim` compiles the sim files and `src/ecs/` with no `sdl3`, `ui` or host import, and
+runs the ECS package's tests too. All four targets are expected green; if one is
 not, say so rather than working around it.
 
 Requires Zig 0.17.0+. SDL3 and SDL3_TTF are fetched via `build.zig.zon`.
@@ -67,7 +69,8 @@ the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this 
 `src/pages/` is the only tier that knows what a vigor bar is.
 
 ```
-src/world.zig, src/ecs.zig   the ECS instantiated over this game's components, tags, Resources
+src/world.zig, src/ecs.zig   the ECS instantiated over this game's components, tags, sim.Resources
+src/sim/res.zig              sim.Resources: what a system may reach, embedded in the host Resources as `game`
 src/ecs/                     the ECS engine — imports nothing from the game
 ```
 

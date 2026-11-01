@@ -64,7 +64,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // since owning the good that ends the act is the win condition; otherwise the live page.
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const a = player.get() orelse return try withMenu(ui_ctx, world, try p_gameover(ui_ctx, world));
-    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
+    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.game.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
     return try withMenu(ui_ctx, world, try p_act_one(ui_ctx, world, .{}));
 }
 
@@ -73,12 +73,12 @@ fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const act_now: u8 = if (player.get()) |a| ha.migration.actOf(world, a[0]) else 1;
     // A standing Exchange carries the settlement into Act III (a stub until Act III exists).
-    const act: u8 = if (act_now == 2 and ctx.res.sim.exchange.standing) 3 else act_now;
+    const act: u8 = if (act_now == 2 and ctx.res.game.sim.exchange.standing) 3 else act_now;
     return .{
         .act = act,
-        .day = 1 + @as(u64, @intFromFloat(ctx.res.sim.elapsed / ctx.res.config.secs_per_day)),
+        .day = 1 + @as(u64, @intFromFloat(ctx.res.game.sim.elapsed / ctx.res.game.config.secs_per_day)),
         // Population has no model yet (ACT2-01): Act II reads its fixture.
-        .people = if (act >= 2) @intFromFloat(act_two_fixtures.populationOf(&ctx.res.sim)) else 1,
+        .people = if (act >= 2) @intFromFloat(act_two_fixtures.populationOf(&ctx.res.game.sim)) else 1,
     };
 }
 

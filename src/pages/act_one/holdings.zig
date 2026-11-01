@@ -29,7 +29,7 @@ fn spareUnits(world: *World, e: Entity, cat: *const roster.Catalog) u32 {
 /// Project agent `e` into the rail's content for this frame.
 pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const a = ctx.arena;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
 
     // --- roster: owned goods in roster order, keyed by id ---------------------------------
     var owned: std.ArrayList(Line) = .empty;
@@ -107,7 +107,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const vigor = world.get(e, comp.Vigor) orelse return c;
     var body: std.ArrayList(Sentence) = .empty;
     // The eating policy reads its own word under BODY, so the body names only what it moves.
-    const rate = ctx.res.config.clampMetabolism(met.rate);
+    const rate = ctx.res.game.config.clampMetabolism(met.rate);
 
     const net = ha.systems.net_food_drawdown(met.base_rate, rate, 0);
     if (net <= vd.delta_eps) {
@@ -130,7 +130,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         .vigor_max = vigor.max,
         .base_rate = met.base_rate,
         .rate = rate,
-        .vigor_per_food = ctx.res.config.vigor_per_food,
+        .vigor_per_food = ctx.res.game.config.vigor_per_food,
     });
     try body.append(a, switch (projection.recovery) {
         .at_ceiling => Sentence{ .key = "recovery", .prefix = "Vigor is ", .value = "full", .suffix = ".", .tone = .good },

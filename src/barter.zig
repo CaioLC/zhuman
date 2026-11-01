@@ -19,7 +19,7 @@ const comp = @import("./components.zig");
 const migration = @import("./migration.zig");
 const market = @import("./market.zig");
 const capital = @import("./capital.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 const world = @import("./world.zig");
 
 const World = world.World;
@@ -146,11 +146,10 @@ const roster = @import("./roster.zig");
 const effects = @import("./effects.zig");
 
 fn test_res() !Resources {
-    var res: Resources = undefined;
-    res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
-    res.time = .{ .dt = 0 };
-    res.config = .{};
-    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
+    var res: Resources = .{
+        .sim = .{ .prng = std.Random.DefaultPrng.init(7) },
+        .catalog = try roster.load(testing.allocator, roster.shipped, null),
+    };
     // A present passerby with a stocked satchel.
     res.sim.encounter = .{ .phase = .present, .id = 1 };
     res.sim.encounter.stock = .{ 8, 20, 1, 1 };

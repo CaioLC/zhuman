@@ -158,13 +158,13 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .labels = &view_labels,
         .nav_name = "Act II surfaces",
         .focus_views = &focus_views,
-        .market = if (ctx.res.sim.exchange.standing) .exchange else .merchant,
-        .market_available = ctx.res.sim.exchange.standing or ctx.res.sim.merchant.dealable(),
+        .market = if (ctx.res.game.sim.exchange.standing) .exchange else .merchant,
+        .market_available = ctx.res.game.sim.exchange.standing or ctx.res.game.sim.merchant.dealable(),
         .activity = blk: {
             var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null);
             // A standing Exchange is what the idle settlement reports (`setActivity('idle',
             // 'Exchange standing', 'Act III open')`).
-            if (act.state == .idle and ctx.res.sim.exchange.standing) {
+            if (act.state == .idle and ctx.res.game.sim.exchange.standing) {
                 act.subject = "Exchange standing";
                 act.metadata = "Act III open";
             }
@@ -176,7 +176,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .initial_sort = opts.initial_sort,
     });
     if (s.market_action) |m| {
-        if ((m.query().clicked or opts.open_trade) and (ctx.res.sim.exchange.standing or ctx.res.sim.merchant.dealable()))
+        if ((m.query().clicked or opts.open_trade) and (ctx.res.game.sim.exchange.standing or ctx.res.game.sim.merchant.dealable()))
             trade_owner.state(uic.UiState.TradeState).open = true;
     }
     {
@@ -216,8 +216,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             var shelf = build_shelf;
             var raised = false;
             shelf.goal = try exchangeGoal(ctx, world, e);
-            if (opts.exchange_open or ctx.res.sim.exchange.reveal) shelf.goal.?.expand = true;
-            ctx.res.sim.exchange.reveal = false;
+            if (opts.exchange_open or ctx.res.game.sim.exchange.reveal) shelf.goal.?.expand = true;
+            ctx.res.game.sim.exchange.reveal = false;
             shelf.raised = &raised;
             _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
             if (raised) raiseExchange(ctx, world, e);
@@ -238,7 +238,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     return page.finish(.{
         .stocks = stocks[0..n],
         .compact_stocks = true,
-        .act_label = if (ctx.res.sim.exchange.standing) "Act III" else "Act II",
+        .act_label = if (ctx.res.game.sim.exchange.standing) "Act III" else "Act II",
         .gen = fx.energy_gen,
         .consumed = fx.energy_consumed,
         .log = !s.focus,
@@ -274,12 +274,12 @@ fn heldItem(world: *World, e: Entity, cat: *const ha.roster.Catalog, i: usize) f
 
 /// Move `n` of item `i` into (or, negative, out of) the agent's holdings.
 fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) void {
-    const item = ledger.item(&res.catalog, nb.items[i]) orelse return;
+    const item = ledger.item(&res.game.catalog, nb.items[i]) orelse return;
     switch (item) {
         .resource => |r| _ = ledger.move(world, e, r, n),
         .good => |gi| {
             const units: u32 = @intFromFloat(@abs(n));
-            if (n > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
+            if (n > 0) capital.acquire(world, e, &res.game, gi, units) else _ = capital.release(world, e, &res.game, gi, units);
         },
     }
 }
@@ -289,14 +289,14 @@ const exchange_cost = [_]struct { ha.roster.Resource, f32 }{ .{ .biomass, 80 }, 
 
 /// The settlement's population: the fixture's stand-in, or the stub override a fixture sets.
 fn population(ctx: *UiCtx) f32 {
-    return fx.populationOf(&ctx.res.sim);
+    return fx.populationOf(&ctx.res.game.sim);
 }
 
 /// The first ring-4 technology established, alphabetically (the prototype names one).
 fn ringFour(ctx: *UiCtx, world: *World, e: Entity) ?[]const u8 {
     const research = world.get(e, comp.Research) orelse return null;
     var best: ?[]const u8 = null;
-    for (ctx.res.catalog.technologies, 0..) |tech, i| {
+    for (ctx.res.game.catalog.technologies, 0..) |tech, i| {
         if (tech.coord.ring() != 4 or research.state[i] != .researched) continue;
         if (best == null or std.mem.order(u8, tech.name, best.?) == .lt) best = tech.name;
     }
@@ -326,7 +326,7 @@ test "the Exchange unlocks past 500 people with a ring-4 technology, and funds s
 /// people, unfunded until the biomass, minerals and metal are held, ready, then standing.
 fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
     const a = ctx.arena;
-    const standing = ctx.res.sim.exchange.standing;
+    const standing = ctx.res.game.sim.exchange.standing;
     const people = population(ctx);
     const four = ringFour(ctx, world, e);
     const research_met = four != null;
@@ -393,19 +393,19 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
 /// Raise the Exchange: pay its price from the ledger and stand it; the settlement reads as
 /// Act III from the next frame.
 fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
-    if (ctx.res.sim.exchange.standing) return;
+    if (ctx.res.game.sim.exchange.standing) return;
     for (exchange_cost) |c| if (ledger.balance(world, e, c[0]) < c[1]) return;
     for (exchange_cost) |c| _ = ledger.move(world, e, c[0], -c[1]);
-    ctx.res.sim.exchange.standing = true;
-    ctx.res.sim.exchange.reveal = true;
-    ctx.res.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
+    ctx.res.game.sim.exchange.standing = true;
+    ctx.res.game.sim.exchange.reveal = true;
+    ctx.res.game.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost
 /// from the ledger and establishes it through `grid/board`, which opens its outward neighbours.
 fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
     const board = ha.grid.board;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     const research = world.get(e, comp.Research) orelse {
         _ = try t.empty_state(s.view, "a2_research", "No research board", "The settlement has not crossed the curtain.");
         return;
@@ -445,25 +445,25 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t
     st.last = idx;
     st.newly = newly;
     const cost = try t.researchCostLine(ctx.arena, tech);
-    ctx.res.sim.log.push(.good, try ctx.arena.print("{s} is established. {s} paid.{s}", .{ tech.name, cost, suffix.items }));
+    ctx.res.game.sim.log.push(.good, try ctx.arena.print("{s} is established. {s} paid.{s}", .{ tech.name, cost, suffix.items }));
     // What it opens in BUILD and ACTIONS takes effect this frame (`capital.techMet`,
     // `actions.verbOf` read the board); say so once, now, since a tile is researched once.
     for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
-        ctx.res.sim.log.push(.normal, try ctx.arena.print("{s} can now be built.", .{g.name}));
+        ctx.res.game.sim.log.push(.normal, try ctx.arena.print("{s} can now be built.", .{g.name}));
     };
     for (cat.actions) |act| if (act.tech) |at| if (std.mem.eql(u8, at, tech.id)) {
-        ctx.res.sim.log.push(.normal, try ctx.arena.print("{s} is now open.", .{act.name}));
+        ctx.res.game.sim.log.push(.normal, try ctx.arena.print("{s} is now open.", .{act.name}));
     };
 }
 
 /// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the
 /// player's real stocks and goods.
 fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
-    const m = &ctx.res.sim.neighbours;
+    const m = &ctx.res.game.sim.neighbours;
     if (!m.seeded) m.seed(24);
     var player = t.MarketPlayer{ .trade = "forager", .held = undefined, .reserved = undefined, .coin = ledger.balance(world, e, .coin) };
     for (0..nb.item_count) |i| {
-        player.held[i] = heldItem(world, e, &ctx.res.catalog, i);
+        player.held[i] = heldItem(world, e, &ctx.res.game.catalog, i);
         player.reserved[i] = @min(player.held[i], reserve[i]);
     }
     const st = s.owner.state(uic.UiState.MarketState);
@@ -481,7 +481,7 @@ fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.
             if (deal.take[i] > 0) moveItem(world, e, ctx.res, i, @floatFromInt(deal.take[i]));
         }
         _ = ledger.move(world, e, .coin, @as(f32, @floatFromInt(deal.take[nb.coin])) - @as(f32, @floatFromInt(deal.give[nb.coin])));
-        ctx.res.sim.log.push(.good, "A neighbour takes your deal. Both sides settle.");
+        ctx.res.game.sim.log.push(.good, "A neighbour takes your deal. Both sides settle.");
     }
 }
 

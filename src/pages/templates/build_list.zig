@@ -331,7 +331,7 @@ pub fn sortEntries(entries: []Entry, sort: Sort, dir: Direction) void {
 /// the table (header and rows) spans it less the scroll gutter.
 pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, set: *uic.TrackSet, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
 
     // The header and the rows (in the scroll view's content) share one set of column tracks;
     // the list is their common ancestor.
@@ -401,8 +401,8 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
         const r = try capital_row(rows, world, e, set, ent.q, ent.kind);
         // The lifecycle is the simulation's. A ready/owned click pays through `begin`; the
         // cancel corner runs the existing refund path. No UI timers.
-        if (r.clicked_build) capital.begin(world, e, ctx.res, ent.q.gi);
-        if (r.clicked_cancel) _ = capital.cancel_build(world, e, ctx.res);
+        if (r.clicked_build) capital.begin(world, e, &ctx.res.game, ent.q.gi);
+        if (r.clicked_cancel) _ = capital.cancel_build(world, e, &ctx.res.game);
     }
 
     // --- the milestone, pinned below and outside the filter ------------------------------
@@ -421,7 +421,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
 /// recompute live from the record's `unlock`; `words` is the act's copy.
 fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: MilestoneCopy) !void {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     if (capital.ownsMilestone(world, e, cat, words.which)) return; // owning it raises the curtain — the act is over
     var found: ?u16 = null;
     for (cat.goods, 0..) |g, i| {
@@ -519,7 +519,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     });
     // Raising the milestone is the same begin lifecycle; the transition itself happens when
     // the build completes in the simulation (no UI-local shortcut).
-    if (m.clicked) capital.begin(world, e, ctx.res, gi);
+    if (m.clicked) capital.begin(world, e, &ctx.res.game, gi);
 }
 
 // ============================ Tests =====================================================
@@ -608,7 +608,7 @@ test "Act II: tech: finds recipes by technology; a build in progress pins first 
     // Establish the loom and begin the ropewalk: it is pinned above everything.
     w.get(e, comp.Research).?.state[cat.techIndex("loom_ropewalk").?] = .researched;
     const ropewalk = cat.goodIndex("ropewalk").?;
-    const total = ha.res.hours_to_secs(cat.goods[ropewalk].requires.?.hours, 20);
+    const total = ha.sim.hours_to_secs(cat.goods[ropewalk].requires.?.hours, 20);
     w.add(e, comp.Busy{ .doing = .{ .build = ropewalk }, .total = total, .remaining = total, .quality = 1 });
     for ([_]Sort{ .state, .inputs, .time, .name }) |s| {
         for ([_]Direction{ .ascending, .descending }) |d| {

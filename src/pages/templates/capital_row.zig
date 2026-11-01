@@ -390,7 +390,7 @@ pub fn capital_row(
 ) !Row {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     const rec = q.rec;
     const act = ha.migration.actOf(world, e);
 
@@ -460,7 +460,7 @@ pub fn capital_row(
         .building => {
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
-            const left = busy.remaining / ctx.res.config.secs_per_day;
+            const left = busy.remaining / ctx.res.game.config.secs_per_day;
             const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
             try state_in.label("time", txt, .{ row_type, style.ink(.fg) });

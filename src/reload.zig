@@ -23,7 +23,7 @@ const roster = @import("./roster.zig");
 const capital = @import("./capital.zig");
 const ecs = @import("./ecs.zig");
 const world = @import("./world.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 
 const World = world.World;
 const Entity = world.Entity;
@@ -243,11 +243,7 @@ const techs_b =
 ;
 
 fn rig(src: roster.Sources) !Resources {
-    var res: Resources = undefined;
-    res.sim = .{};
-    res.config = .{};
-    res.catalog = try roster.load(testing.allocator, src, null);
-    return res;
+    return .{ .catalog = try roster.load(testing.allocator, src, null) };
 }
 
 fn agent(w: *World) Entity {

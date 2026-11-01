@@ -101,7 +101,7 @@ pub fn log_view(parent: El, id: []const u8, feed: *const Log, width: f32, lines:
         }, .{style.pad_each(0, footer_row_pad_x, 0, footer_row_pad_x)});
         // The game-time stamp — clipped at its track, so message text lines up down the feed.
         var sbuf: [24]u8 = undefined;
-        const stamp = timeStamp(&sbuf, entry.at, ctx.res.config.secs_per_day);
+        const stamp = timeStamp(&sbuf, entry.at, ctx.res.game.config.secs_per_day);
         try row.label_fit("at", stamp, .{ .cell_fill = .clip }, .{ style.small, style.muted });
         // The message — tone-colored; the newest line is emphasized, older lines dim a step
         // toward `dim` unless their tone already carries meaning. A free leaf in the `fr`

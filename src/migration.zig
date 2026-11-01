@@ -30,7 +30,7 @@ const capital = @import("./capital.zig");
 const roster = @import("./roster.zig");
 const ledger = @import("./ledger.zig");
 const effects = @import("./effects.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 const world = @import("./world.zig");
 
 const World = world.World;
@@ -312,16 +312,13 @@ test "cross-act cost parity: same-named recipes have equal biomass costs" {
     try std.testing.expect(pairs > 0); // the garden bed is the canonical pair
 }
 
-/// A Resources with only the groups the build path touches initialized — the same minimal
-/// fixture `capital.zig`'s tests use. Loads the shipped catalog; caller must deinit.
+/// The simulation's resources with the shipped catalog — the same fixture `capital.zig`'s
+/// tests use. Caller must deinit the catalog.
 fn test_res() !res_mod.Resources {
-    const testing = std.testing;
-    var res: res_mod.Resources = undefined;
-    res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
-    res.time = .{ .dt = 0 };
-    res.config = .{};
-    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
-    return res;
+    return .{
+        .sim = .{ .prng = std.Random.DefaultPrng.init(7) },
+        .catalog = try roster.load(std.testing.allocator, roster.shipped, null),
+    };
 }
 
 /// The shipped roster — the technologies the curtain seeds `comp.Research` from. Loaded on its

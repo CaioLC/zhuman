@@ -123,8 +123,8 @@ pub fn build(b: *std.Build) void {
     });
     ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
     ui_test_mod.addImport("ui", ui_mod);
-    // `res.zig` carries the authored roster, and the UI tests compile `res.zig`, so the
-    // data files resolve here too.
+    // `res.zig` embeds `sim/res.zig`, which carries the authored roster, and the UI tests
+    // compile `res.zig`, so the data files resolve here too.
     ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
     ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
     ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
@@ -144,4 +144,23 @@ pub fn build(b: *std.Build) void {
     const run_ecs_tests = b.addRunArtifact(ecs_tests);
     test_step.dependOn(&run_ecs_tests.step);
     test_ui_step.dependOn(&run_ecs_tests.step);
+
+    // The simulation alone (`src/test_sim.zig`): the sim files and the `ecs` package, with no
+    // `sdl3`, no `ui` and no `ha`, so a sim file that reaches the host stops compiling here.
+    // `test` does not depend on it: the same tests already run under `ha_mod`.
+    const sim_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test_sim.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sim_test_mod.addImport("ecs", ecs_mod);
+    sim_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
+    sim_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
+    sim_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
+    const sim_tests = b.addTest(.{ .root_module = sim_test_mod, .use_llvm = true });
+    const run_sim_tests = b.addRunArtifact(sim_tests);
+
+    const test_sim_step = b.step("test-sim", "Run the simulation's unit tests alone (src/ecs + the sim files, no UI host, no SDL)");
+    test_sim_step.dependOn(&run_sim_tests.step);
+    test_sim_step.dependOn(&run_ecs_tests.step);
 }

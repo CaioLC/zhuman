@@ -55,7 +55,7 @@ fn termsOf(arena: std.mem.Allocator, cat: *const roster.Catalog, terms: []const 
 
 /// Move one side of `lots` lots: `sign` −1 pays out, +1 receives.
 fn moveSide(world: *World, e: Entity, res: *ha.res.Resources, terms: []const fx.MerchantTerm, lots: u32, sign: f32) void {
-    const cat = &res.catalog;
+    const cat = &res.game.catalog;
     for (terms) |term| {
         const item = ledger.item(cat, term.item) orelse continue;
         const n = term.n * @as(f32, @floatFromInt(lots));
@@ -63,7 +63,7 @@ fn moveSide(world: *World, e: Entity, res: *ha.res.Resources, terms: []const fx.
             .resource => |r| _ = ledger.move(world, e, r, sign * n),
             .good => |gi| {
                 const units: u32 = @intFromFloat(@round(n));
-                if (sign > 0) capital.acquire(world, e, res, gi, units) else _ = capital.release(world, e, res, gi, units);
+                if (sign > 0) capital.acquire(world, e, &res.game, gi, units) else _ = capital.release(world, e, &res.game, gi, units);
             },
         }
     }
@@ -72,8 +72,8 @@ fn moveSide(world: *World, e: Entity, res: *ha.res.Resources, terms: []const fx.
 /// Build the merchant dialog when `ts.open` and settle what it asks this frame. Returns the
 /// overlay root (or null when closed).
 pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: *TradeState) !?*Node {
-    const standing = ctx.res.sim.exchange.standing;
-    const visit_now = &ctx.res.sim.merchant;
+    const standing = ctx.res.game.sim.exchange.standing;
+    const visit_now = &ctx.res.game.sim.merchant;
     // The merchant's books belong to one visit: a return restocks the lots and starts a new tally.
     if (ts.visit_id != visit_now.id) {
         ts.taken = @splat(0);
@@ -84,7 +84,7 @@ pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: 
     if (!standing and !visit_now.dealable()) ts.open = false;
     if (!ts.open) return null;
     const a = ctx.arena;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
 
     // Balances: the stocks, then every good a lot names, once each.
     var balances: std.ArrayList(t.TradeBalance) = .empty;
@@ -144,7 +144,7 @@ pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: 
                     ts.visit[bi] += term.n * @as(f32, @floatFromInt(s.lots));
                 };
             }
-            ctx.res.sim.log.push(.good, try a.print("You trade {d} lot{s} of {s} with the merchant.", .{ s.lots, if (s.lots == 1) "" else "s", src.lot }));
+            ctx.res.game.sim.log.push(.good, try a.print("You trade {d} lot{s} of {s} with the merchant.", .{ s.lots, if (s.lots == 1) "" else "s", src.lot }));
             ts.settled = true;
         }
     }

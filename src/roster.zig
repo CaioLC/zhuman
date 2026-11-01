@@ -14,8 +14,8 @@
 //! pages.
 
 const std = @import("std");
-// A relative import, not `ha`: `res.zig` carries the catalog, and `test-ui` compiles `res.zig`
-// without the `ha` module.
+// A relative import, not `ha`: `sim/res.zig` carries the catalog, and `test-ui` and `test-sim`
+// compile it without the `ha` module.
 const dist = @import("./dist.zig");
 
 const Allocator = std.mem.Allocator;

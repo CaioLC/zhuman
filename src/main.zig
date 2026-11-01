@@ -209,7 +209,7 @@ const App = struct {
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
         self.world = ha.world.World.init();
         _ = spawn_player(&self.world);
-        self.resources.sim.log.push(.dim, opening_line);
+        self.resources.game.sim.log.push(.dim, opening_line);
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -369,11 +369,11 @@ pub fn main(process: std.process.Init) !void {
         // 1. update game resources. Host time always advances normally; simulation time alone
         // takes the selected playback multiplier (and later pause's zero multiplier).
         const real_dt = app.frame_capper.delay();
-        app.resources.time.real_dt = real_dt;
-        app.resources.time.dt = app.resources.playback.simulationDelta(real_dt);
+        app.resources.game.time.real_dt = real_dt;
+        app.resources.game.time.dt = app.resources.playback.simulationDelta(real_dt);
         // A changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
-        if (app.data_watch.poll(app.io, real_dt)) ha.reload.reload(app.io, &app.resources, &app.world);
+        if (app.data_watch.poll(app.io, real_dt)) ha.reload.reload(app.io, &app.resources.game, &app.world);
         // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at
@@ -385,31 +385,31 @@ pub fn main(process: std.process.Init) !void {
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
         const player = ecs.MaybeSingle(.{ ha.world.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
-        const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.catalog, .act_one) else false;
+        const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.game.catalog, .act_one) else false;
         // Skip the simulation stage entirely while paused or before a run (the title screen):
         // passing zero through systems is not sufficient because boundary-state systems (an
         // encounter at remaining=0, completed work, death/reach edge detectors) may still mutate
         // without consuming time.
-        if (!housed and app.resources.route == .game and app.resources.time.dt > 0) {
-            ecs.run(&app.world, &app.resources, sys.advance_clock); // run clock ticks while alive
-            ecs.run(&app.world, &app.resources, sys.update_food); // larder spoils
-            ecs.run(&app.world, &app.resources, sys.metabolize); // continuous eating / starvation
-            ecs.run(&app.world, &app.resources, sys.resolve_busy); // work in progress ticks/completes
-            ecs.run(&app.world, &app.resources, sys.track_reach); // newly in-reach recipes → one log
+        if (!housed and app.resources.route == .game and app.resources.game.time.dt > 0) {
+            ecs.run(&app.world, &app.resources.game, sys.advance_clock); // run clock ticks while alive
+            ecs.run(&app.world, &app.resources.game, sys.update_food); // larder spoils
+            ecs.run(&app.world, &app.resources.game, sys.metabolize); // continuous eating / starvation
+            ecs.run(&app.world, &app.resources.game, sys.resolve_busy); // work in progress ticks/completes
+            ecs.run(&app.world, &app.resources.game, sys.track_reach); // newly in-reach recipes → one log
             // Advance the Passerby encounter on the sim clock (arrival/departure logs,
             // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
             // run, so it ticks directly rather than over a per-entity query.
-            _ = ha.market.tick(&app.resources.sim.encounter, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
-            ha.capital.run_generators(&app.world, &app.resources); // collectable capital accumulates
-            ecs.run(&app.world, &app.resources, sys.mark_dead); // vigor at 0 → tag Dead
-            ecs.run(&app.world, &app.resources, sys.despawn_dead); // reap Dead entities
+            _ = ha.market.tick(&app.resources.game.sim.encounter, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
+            ha.capital.run_generators(&app.world, &app.resources.game); // collectable capital accumulates
+            ecs.run(&app.world, &app.resources.game, sys.mark_dead); // vigor at 0 → tag Dead
+            ecs.run(&app.world, &app.resources.game, sys.despawn_dead); // reap Dead entities
         }
         // Act II's systems are stubbed until its population model exists (ACT2-01), so the
         // household clock above stops at the curtain; the Coin Merchant's visits run on game
         // time here, and a standing Exchange replaces the cart.
-        if (housed and app.resources.route == .game and app.resources.time.dt > 0 and !app.resources.sim.exchange.standing) {
+        if (housed and app.resources.route == .game and app.resources.game.time.dt > 0 and !app.resources.game.sim.exchange.standing) {
             if (player.get()) |p| if (ha.migration.actOf(&app.world, p[0]) == 2) {
-                _ = ha.market.tickMerchant(&app.resources.sim.merchant, app.resources.time.dt, .{}, app.resources.config.secs_per_day, &app.resources.sim.log);
+                _ = ha.market.tickMerchant(&app.resources.game.sim.merchant, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
             };
         }
 
@@ -516,8 +516,8 @@ pub fn start_over(world: *ha.world.World, res: *ha.res.Resources) void {
     if (living.get()) |entry| world.despawn(entry[0]);
     res.playback.paused = false;
     _ = spawn_player(world);
-    res.sim.reset();
-    res.sim.log.push(.dim, opening_line);
+    res.game.sim.reset();
+    res.game.sim.log.push(.dim, opening_line);
 }
 
 // The pages are game content outside the `ha` library; the executable module is their test

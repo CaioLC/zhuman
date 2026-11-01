@@ -203,9 +203,9 @@ pub fn action_tile(
     density: Density,
 ) !?Tile {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     const act = ha.migration.actOf(world, e);
-    const q = ha.actions.quote(world, e, cat, ctx.res.config, ai) orelse return null;
+    const q = ha.actions.quote(world, e, cat, ctx.res.game.config, ai) orelse return null;
     const rec = cat.actions[ai];
     // One body, one act: any work in progress disables every tile; the one being
     // performed shows the underbar instead of dimming.

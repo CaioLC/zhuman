@@ -44,11 +44,11 @@ pub const Activity = struct {
 pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy) !Activity {
     const b = busy orelse return .{ .state = .idle, .subject = "no work in progress", .metadata = "ready", .last = .idle };
     const build = actions.is_build(b.doing);
-    const spd = ctx.res.config.secs_per_day;
+    const spd = ctx.res.game.config.secs_per_day;
     const state: market_strip_mod.ActivityState = if (build) .building else .working;
     return .{
         .state = state,
-        .subject = actions.doing_label(&ctx.res.catalog, b.doing),
+        .subject = actions.doing_label(&ctx.res.game.catalog, b.doing),
         .metadata = if (build)
             try ctx.arena.print("{d:.1}d left", .{b.remaining / spd})
         else

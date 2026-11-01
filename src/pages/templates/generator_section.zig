@@ -104,8 +104,8 @@ fn stateWord(q: capital.GeneratorQuote) []const u8 {
 
 fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
-    const q = capital.generator_quote(world, e, cat, ctx.res.config, gi) orelse return;
+    const cat = &ctx.res.game.catalog;
+    const q = capital.generator_quote(world, e, cat, ctx.res.game.config, gi) orelse return;
 
     var cost_buf: [40]u8 = undefined;
     var duration_buf: [12]u8 = undefined;
@@ -169,7 +169,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
     // A generator can always be paused or resumed. The flip and the lifecycle share this gate.
     const enabled = true;
     const flip = enabled and toggle.query().clicked;
-    if (flip) capital.toggle_generator(world, e, &ctx.res.catalog, gi);
+    if (flip) capital.toggle_generator(world, e, &ctx.res.game.catalog, gi);
     const is_on = !world.get(e, comp.Generators).?.off[gi];
     const q = toggle.control(.{
         .enabled = enabled,
@@ -183,7 +183,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
     _ = toggle.consume(.clicked);
     // The tile's lifecycle gated its own click on readiness (a disabled tile consumed it);
     // read it again now that the toggle has taken its click.
-    if (tile.query().clicked) _ = capital.collect_generator(world, e, ctx.res, gi);
+    if (tile.query().clicked) _ = capital.collect_generator(world, e, &ctx.res.game, gi);
     return is_on;
 }
 
@@ -193,7 +193,7 @@ const generator_regular_h: f32 = 87;
 
 pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     const count = ownedCount(world, e, cat, shelf);
     const act = ha.migration.actOf(world, e);
@@ -255,7 +255,7 @@ const GenRig = struct {
 
     fn setUp(self: *GenRig) !void {
         self.res = uic.replay.headlessResources();
-        self.res.catalog = try roster.load(testing.allocator, roster.shipped, null);
+        self.res.game.catalog = try roster.load(testing.allocator, roster.shipped, null);
         self.arena = std.heap.ArenaAllocator.init(testing.allocator);
         self.ui = UiCtx.init(&self.res, testing.allocator, self.arena.allocator());
         self.driver = uic.FrameDriver.init(&self.ui, &self.arena, testing.io, .none);
@@ -265,7 +265,7 @@ const GenRig = struct {
     fn tearDown(self: *GenRig) void {
         self.ui.deinit();
         self.arena.deinit();
-        self.res.catalog.deinit();
+        self.res.game.catalog.deinit();
     }
 
     /// An agent owning one garden bed whose cycle is complete: ready to collect.
@@ -278,7 +278,7 @@ const GenRig = struct {
             comp.Generators{},
             comp.Granted{},
         });
-        const gi: u16 = @intCast(self.res.catalog.goodIndex("garden_bed").?);
+        const gi: u16 = @intCast(self.res.game.catalog.goodIndex("garden_bed").?);
         self.world.get(e, comp.Goods).?.count[gi] = 1;
         self.world.get(e, comp.Generators).?.progress[gi] = 1e9;
         return .{ .world = &self.world, .e = e, .gi = gi };
@@ -308,7 +308,7 @@ const GenFixture = struct {
     pub fn build(self: *GenFixture, ctx: *UiCtx) anyerror!uic.Trees {
         const root = try el.root(ctx, "root");
         const tile = try place(root, "tile", 0, 0, 300, 87);
-        const ready = capital.generator_quote(self.world, self.e, &ctx.res.catalog, ctx.res.config, self.gi).?.ready();
+        const ready = capital.generator_quote(self.world, self.e, &ctx.res.game.catalog, ctx.res.game.config, self.gi).?.ready();
         self.tile_lifecycle_click = tile.control(.{ .enabled = ready, .name = "Garden bed", .role = .tile }).clicked;
         const toggle = try place(tile, "toggle", 240, 60, 60, 27);
         self.on = toggleAndCollect(tile, toggle, self.world, self.e, self.gi);

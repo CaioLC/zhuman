@@ -51,7 +51,7 @@ That yields the two praxeological margins the game is about: *labor vs. leisure*
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
 later* (act for food and materials now, or spend materials and hours on capital).
 
-Death is total: a start-over wipes everything accumulated (`res.sim.reset()`).
+Death is total: a start-over wipes everything accumulated (`res.game.sim.reset()`).
 
 The decision is split **`decide → act`**. The player is the only decider; the roadmap's AI
 deciders are meant to feed the same options.
@@ -116,10 +116,25 @@ in [`ecs/README.md`](ecs/README.md). This game instantiates it in two files:
 
 - `world.zig`: `World = ecs.World(components.zig, tags.zig)`, plus `Entity`, `MAX_ENTITIES`
   and `SparseSet`.
-- `ecs.zig`: the system params over that `World` and `Resources`. `Query(.{…})`, `Single`
+- `ecs.zig`: the system params over that `World` and `sim.Resources`. `Query(.{…})`, `Single`
   and `MaybeSingle` are over `*World` and yield `*T`; `ConstQuery`, `ConstSingle` and
   `ConstMaybeSingle` are over `*const World` and yield `*const T`. `With`, `Without`, `Maybe`
-  and `getMany` are the engine's; `run(world, res, system)` takes `*World` and `*Resources`.
+  and `getMany` are the engine's; `run(world, res, system)` takes `*World` and
+  `*sim.Resources`, so the host calls `ecs.run(&world, &res.game, system)`.
+
+**Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog }`: exactly what
+a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
+reach seen-set, the passerby, the merchant, the stub neighbours and Exchange; `reset` starts a
+fresh one), `config: Config` the tuning, `time: Time` this frame's real and simulation deltas,
+`catalog` the authored roster; `hours_to_secs` lives beside them. Every field has a default, so
+a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) embeds it as the
+field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
+title, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
+`ctx.res.game.config`, `ctx.res.game.catalog` directly, and hands `&ctx.res.game` to a rule
+(`actions.begin`, `capital.begin`, `barter.resolve`). `sim/root.zig` is the `sim` hub,
+re-exported by the library as `ha.sim`. `zig build test-sim` compiles the sim files and the
+`ecs` package with no `sdl3`, `ui` or host import (root: `test_sim.zig`), so a sim file that
+reaches the host fails it.
 
 **World.** One `SparseSet` per public decl of `components.zig` and `tags.zig`.
 `spawn(bundle)` takes a tuple of component *instances* and bare *tag types*; then `add`,
@@ -137,16 +152,17 @@ through comptime introspection:
 | `With(T)` / `Without(T)` | filter without fetching |
 | `Maybe(T)` | yields `?*T` |
 | `Entity` | yields the id; does not drive iteration |
-| `*Resources` / `*World` | taken directly |
-| `*Sim`, `*const Config`, `*const Time`, … | one **resource group**: any struct-typed field of `Resources` |
+| `*sim.Resources` / `*World` | taken directly |
+| `*Sim`, `*const Config`, `*const Time`, `*const roster.Catalog` | one **resource group**: any struct-typed field of `sim.Resources` |
 
-Prefer naming groups over taking `*Resources`: the signature then states what the system
-reaches, and the compiler holds it to that; `metabolize` has no `*Platform` param, so it
-cannot touch the renderer. `*const` vs `*` says whether it reads or writes, which is why
-`*const Config` (tuning) and `*Sim` (the run) read differently at a glance. The groups are
-derived from `Resources`' fields, so a new group needs no change in `ecs.zig`, and the
-engine's two guards apply (struct-typed fields only, distinct types). `resolve_busy` still
-takes `*Resources`, because it delegates to `finish_labor`/`finish_build`, which do too.
+Prefer naming groups over taking `*sim.Resources`: the signature then states what the system
+reaches, and the compiler holds it to that. No system can touch the renderer, the input or the
+view, because `run` is handed the simulation's resources, not the host's. `*const` vs `*` says
+whether it reads or writes, which is why `*const Config` (tuning) and `*Sim` (the run) read
+differently at a glance. The groups are derived from `sim.Resources`' fields, so a new group
+needs no change in `ecs.zig`, and the engine's two guards apply (struct-typed fields only,
+distinct types). `resolve_busy` takes `*sim.Resources`, because it delegates to
+`finish_labor`/`finish_build`, which do too.
 
 `ecs.getMany(world, entity, params)` is `Query`'s non-iterating sibling, for pulling several
 components off an entity you already have. It panics on a missing required component rather
@@ -358,7 +374,7 @@ components — the Act II ones opened at the curtain, none for coin until the si
 recognizes a medium of exchange — plus `comp.Goods` counts for a good item, with
 `short`/`pay`/`draw` over a list
 of lines. Per agent that leaves `Goods` (a count per catalog index) and `Granted`; the
-catalog itself sits on `Resources` as `catalog`, so a system declares `*const roster.Catalog`.
+catalog itself sits on `sim.Resources` as `catalog`, so a system declares `*const roster.Catalog`.
 
 **Validation.** `roster.load` refuses a file whole: a parse error carries its line and
 column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
@@ -408,14 +424,14 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
 | `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `run` (see `ecs/README.md`) |
 | `world.zig` | this game's `World`: the engine's over `components.zig` and `tags.zig` |
-| `ecs.zig` | the system params and `run` over this game's `World` and `Resources`, with the `Const` forms |
+| `ecs.zig` | the system params and `run` over this game's `World` and `sim.Resources`, with the `Const` forms |
 | `systems.zig` | the sim systems, in tick order |
 | `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
 | `capital.zig` | the build path, ownership and settling, the generator system |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
-| `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `res.zig` carries it |
+| `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
@@ -425,7 +441,10 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `barter.zig` | atomic resolution of a quote against the world |
 | `query.zig` | the catalog query parser |
 | `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band, and `kindLabel` for the glyphs' spoken names |
-| `res.zig` | `Resources`, grouped by who writes it: `platform`, `input`, `time`, `sim`, `config`, `view`, plus the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`). `Sim` carries the log, the reach seen-set and the passerby encounter |
+| `res.zig` | the host's `Resources`, grouped by who writes it: `platform`, `input`, `playback`, `menu`, `route`, `title`, `settings`, `saves`, `view`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game`, the embedded `sim.Resources` |
+| `sim/res.zig` | `sim.Resources { sim, config, time, catalog }`, what a system may reach, with `Sim`, `Config`, `Time`, `Condition` and `hours_to_secs`. `Sim` carries the clock, the log, the prng, the reach seen-set, the passerby and the merchant |
+| `sim/root.zig` | the `sim` hub, re-exported as `ha.sim`: `sim.Resources` and the types its fields hold |
+| `test_sim.zig` | the `test-sim` root: the sim files and `ecs` alone, with no UI host and no SDL |
 | `palette.zig` | the game's palette — the ten `Theme` roles, the terminal ground, and the six resource hues |
 | `tokens.zig` | the non-color design tokens, in logical px |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
@@ -433,8 +452,8 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`, the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
 | `root.zig` | the `ha` library root and its re-exports |
 
-`build.zig` makes the module import *itself* as `ha`, so library-internal files can
-`@import("ha")` rather than reaching across with relative paths. The UI engine is a package of
+Library files import their siblings by relative path; only `main.zig` and `pages/` import the
+library as `ha`, from the executable module. The UI engine is a package of
 its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to
 `ha` and to the UI tests as the module `ui`, and runs its tests in both test steps.
 

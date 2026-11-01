@@ -17,7 +17,7 @@ const roster = @import("./roster.zig");
 const effects = @import("./effects.zig");
 const ledger = @import("./ledger.zig");
 const migration = @import("./migration.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 const world = @import("./world.zig");
 
 const Resources = res_mod.Resources;
@@ -33,7 +33,7 @@ const Catalog = roster.Catalog;
 // (The linear slide was built once and reverted: constant band churn, and it felt bad.)
 
 /// The current yield multiplier for an agent's vigor — 1.0 while `.alive`, else
-/// `Config.weary_yield`. The thresholds live on `Config` (`res.zig`) so the sim, the
+/// `Config.weary_yield`. The thresholds live on `Config` (`sim/res.zig`) so the sim, the
 /// condition word and the vigor chip can't drift apart.
 pub fn yield_factor(vigor: *const comp.Vigor, cfg: res_mod.Config) f32 {
     return cfg.yield_of(cfg.condition(vigor.v / vigor.max));
@@ -209,15 +209,13 @@ fn paymentText(buf: []u8, cat: *const Catalog, v: effects.Verb, act: u8) []const
 
 const testing = std.testing;
 
-/// A Resources with only the groups the labor path touches (`sim`, `config`, `catalog`)
-/// initialized — `platform` stays undefined and untouched. The prng is seeded fixed so a
-/// test's draws are reproducible. The caller deinits the catalog.
+/// The simulation's resources with the shipped catalog. The prng is seeded fixed so a test's
+/// draws are reproducible. The caller deinits the catalog.
 fn test_res() !Resources {
-    var res: Resources = undefined;
-    res.sim = .{ .prng = std.Random.DefaultPrng.init(42) };
-    res.config = .{};
-    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
-    return res;
+    return .{
+        .sim = .{ .prng = std.Random.DefaultPrng.init(42) },
+        .catalog = try roster.load(testing.allocator, roster.shipped, null),
+    };
 }
 
 fn spawn_agent(w: *World, vigor: f32, materials: f32) Entity {

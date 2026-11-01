@@ -66,7 +66,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
             .holdings = try act_one_holdings.content(ctx, world, e),
             .initial_collapsed = opts.initial_collapsed,
             .surface = .{
-                .market_available = ctx.res.sim.encounter.dealable(),
+                .market_available = ctx.res.game.sim.encounter.dealable(),
                 .initial_view = opts.initial_view,
                 .initial_query = opts.initial_query,
                 .initial_sort = opts.initial_sort,
@@ -78,7 +78,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // The nested surface returns the phase-aware Passerby strip control; encounter eligibility
         // and modal state remain page responsibilities rather than presentation concerns.
         trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
-        if ((workspace.surface.market_action.consume(.clicked) or opts.open_trade) and ctx.res.sim.encounter.dealable()) {
+        if ((workspace.surface.market_action.consume(.clicked) or opts.open_trade) and ctx.res.game.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }
         if (opts.trade_mode) |mode| trade_ts.?.mode = mode;
@@ -200,8 +200,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     if (!ts.open) return null;
     const a = ctx.arena;
     const act = ha.migration.actOf(world, e);
-    const enc = &ctx.res.sim.encounter;
-    const cat = &ctx.res.catalog;
+    const enc = &ctx.res.game.sim.encounter;
+    const cat = &ctx.res.game.catalog;
 
     // Balances, in the dialog's order.
     var balances: [ware_order.len]t.TradeBalance = undefined;
@@ -262,7 +262,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     var visit: [ware_order.len]t.TradeDelta = undefined;
     for (ware_order, &visit) |ware, *d| d.* = .{ .key = wareKey(act, ware), .n = enc.visit[@backingInt(ware)] };
 
-    const days_left = enc.remaining / ctx.res.config.secs_per_day;
+    const days_left = enc.remaining / ctx.res.game.config.secs_per_day;
     const meta = try a.print("{d:.1} DAYS LEFT", .{days_left});
     const res = try t.trade_dialog(ctx, "trade", .passerby, meta, book, &visit, ts);
 
@@ -271,7 +271,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     if (res.settle) |s| {
         for (backed.items) |b| {
             if (b.quote.id != s.id) continue;
-            if (barter.resolve(world, e, ctx.res, &b.quote, @intCast(@min(s.lots, std.math.maxInt(u16)))).ok()) ts.settled = true;
+            if (barter.resolve(world, e, &ctx.res.game, &b.quote, @intCast(@min(s.lots, std.math.maxInt(u16)))).ok()) ts.settled = true;
         }
     }
     // Escape / × / LEAVE closes; so does the passerby leaving.

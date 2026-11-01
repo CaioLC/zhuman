@@ -26,7 +26,7 @@ const ledger = @import("./ledger.zig");
 const actions = @import("./actions.zig");
 const migration = @import("./migration.zig");
 const ecs = @import("./ecs.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 const world = @import("./world.zig");
 
 const World = world.World;
@@ -423,19 +423,16 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
 
 const testing = std.testing;
 
-/// A Resources with the groups the build path touches initialized — `platform` stays
-/// undefined. The caller deinits the catalog.
+/// The simulation's resources with the shipped catalog. The caller deinits the catalog.
 fn test_res() !Resources {
     return test_res_over(roster.shipped);
 }
 
 fn test_res_over(src: roster.Sources) !Resources {
-    var res: Resources = undefined;
-    res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
-    res.time = .{ .dt = 0 };
-    res.config = .{};
-    res.catalog = try roster.load(testing.allocator, src, null);
-    return res;
+    return .{
+        .sim = .{ .prng = std.Random.DefaultPrng.init(7) },
+        .catalog = try roster.load(testing.allocator, src, null),
+    };
 }
 
 fn spawn_test_agent(w: *World, materials: f32) Entity {

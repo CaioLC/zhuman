@@ -53,7 +53,7 @@ pub fn runwayTone(days: f32) Tone {
 /// Project agent `e`'s settlement into the rail's content for this frame.
 pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const a = ctx.arena;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
 
     var owned: std.ArrayList(Line) = .empty;
     var units: u32 = 0;
@@ -76,11 +76,11 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     };
 
     var body: std.ArrayList(Sentence) = .empty;
-    const people = fx.populationOf(&ctx.res.sim);
+    const people = fx.populationOf(&ctx.res.game.sim);
     try body.append(a, .{ .key = "population", .prefix = "Population ", .value = try a.print("{d:.0}", .{people}), .suffix = " under one roof.", .tone = .good });
 
     // The larder at the eating policy's rate: the rail's slider moves this line.
-    const rate = if (world.get(e, comp.Metabolism)) |m| ctx.res.config.clampMetabolism(m.rate) else 1;
+    const rate = if (world.get(e, comp.Metabolism)) |m| ctx.res.game.config.clampMetabolism(m.rate) else 1;
     if (larderDays(ledger.balance(world, e, .food), people, rate)) |d| {
         try body.append(a, .{ .key = "larder", .prefix = "Larder feeds all for ", .value = try a.print("{d:.1}d", .{d}), .suffix = ".", .tone = runwayTone(d) });
     }
@@ -91,7 +91,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     }
     // The hall's vigor reads the household's condition until each person carries their own.
     if (world.get(e, comp.Vigor)) |v| {
-        const cond = ctx.res.config.condition(v.v / v.max);
+        const cond = ctx.res.game.config.condition(v.v / v.max);
         try body.append(a, .{ .key = "vigor", .prefix = "Vigor across the hall: ", .value = switch (cond) {
             .alive => "rested",
             .weary => "weary",

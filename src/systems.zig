@@ -2,7 +2,7 @@ const std = @import("std");
 const comp = @import("./components.zig");
 const tag = @import("./tags.zig");
 const ecs = @import("./ecs.zig");
-const res_mod = @import("./res.zig");
+const res_mod = @import("./sim/res.zig");
 const world = @import("./world.zig");
 const actions = @import("./actions.zig");
 const capital = @import("./capital.zig");
@@ -214,14 +214,9 @@ pub fn track_reach(
 
 // ============================ Tests ==========================================
 
-/// A Resources with only the groups `metabolize` touches (`time`, `sim`, `config`)
-/// initialized — `platform` stays undefined and untouched.
+/// The simulation's resources with `time.dt` set; every other field is its default.
 fn test_res(dt: f32) Resources {
-    var res: Resources = undefined;
-    res.time = .{ .dt = dt };
-    res.sim = .{};
-    res.config = .{};
-    return res;
+    return .{ .time = .{ .dt = dt } };
 }
 
 test "resolve_busy ticks the work and resolves it exactly once, at completion" {

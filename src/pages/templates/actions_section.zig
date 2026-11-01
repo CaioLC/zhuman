@@ -112,7 +112,7 @@ const ActionRow = struct {
 };
 
 /// Every held verb of the shelf in authored order. Pure over world + catalog.
-pub fn held(world: *World, e: Entity, cat: *const roster.Catalog, cfg: ha.res.Config, shelf: Shelf, buf: []Entry) []Entry {
+pub fn held(world: *World, e: Entity, cat: *const roster.Catalog, cfg: ha.sim.Config, shelf: Shelf, buf: []Entry) []Entry {
     var n: usize = 0;
     for (cat.actions, 0..) |*rec, i| {
         if (!shelf.holds(rec)) continue;
@@ -149,7 +149,7 @@ pub fn filter(list: []Entry, query_text: []const u8) []Entry {
 /// the pane is content-high and the caller scrolls it whole (Act I's short roster).
 pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
-    const cat = &ctx.res.catalog;
+    const cat = &ctx.res.game.catalog;
 
     const section = try parent.box(id, .{
         .w = .{ .pct_of_parent = 1.0 },
@@ -159,7 +159,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
 
     // The heading counts the verbs the actor holds — the same set the summary counts against.
     var buf: [max_verbs]Entry = undefined;
-    const all = held(world, e, cat, ctx.res.config, shelf, &buf);
+    const all = held(world, e, cat, ctx.res.game.config, shelf, &buf);
     var count_buf: [16]u8 = undefined;
     const count = std.mem.print(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
     _ = try browser.browser_heading(section, "heading", "ACTIONS", shelf.subtitle, count);
@@ -191,7 +191,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
                 .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_tile_mod.height(shelf.density) },
                 .flow = .{ .dir = .column, .main = .center },
             }, .{});
-            if (tl.clicked) actions.begin(world, e, ctx.res, ent.ai);
+            if (tl.clicked) actions.begin(world, e, &ctx.res.game, ent.ai);
         }
     }
     return section;

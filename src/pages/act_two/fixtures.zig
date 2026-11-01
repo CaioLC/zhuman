@@ -14,7 +14,7 @@ pub const population: f32 = 48;
 
 /// The population the pages show: the stand-in, or the Exchange stub's override (a fixture
 /// reaching the Exchange's 500-people condition).
-pub fn populationOf(sim: *const @import("ha").res.Sim) f32 {
+pub fn populationOf(sim: *const @import("ha").sim.Sim) f32 {
     return sim.exchange.population orelse population;
 }
 
@@ -60,9 +60,9 @@ pub const merchant_lots = [_]MerchantLot{
 /// The merchant's days left in its stay: the visit's clock, or the full stay before its first
 /// tick. The dialog's kicker reads `MERCHANT · MARKET OPEN 2.4 DAYS`.
 pub fn merchantDaysLeft(res: *const ha.res.Resources) f32 {
-    const v = res.sim.merchant;
-    const left = if (v.remaining < 0) (ha.market.MerchantSchedule{}).stay_days * res.config.secs_per_day else v.remaining;
-    return left / res.config.secs_per_day;
+    const v = res.game.sim.merchant;
+    const left = if (v.remaining < 0) (ha.market.MerchantSchedule{}).stay_days * res.game.config.secs_per_day else v.remaining;
+    return left / res.game.config.secs_per_day;
 }
 /// The kicker's tail once the Exchange stands: the floor no longer leaves.
 pub const exchange_meta = "STANDING FLOOR";

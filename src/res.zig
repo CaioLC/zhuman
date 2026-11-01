@@ -1,18 +1,8 @@
 const std = @import("std");
 const sdl = @import("sdl3");
-const comp = @import("./components.zig");
-const logmod = @import("./log.zig");
-const marketmod = @import("./market.zig");
 const rostermod = @import("./roster.zig");
 const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
-
-/// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
-/// Action durations are authored in hours (`Requires.hours`) — human-readable on the
-/// tiles — and ticked in game-seconds (`Busy.remaining`).
-pub fn hours_to_secs(h: f32, secs_per_day: f32) f32 {
-    return h * secs_per_day / 24.0;
-}
 
 /// Host handles, set once in `Resources.init` and never written again. Read only by
 /// the UI — no sim system touches one.
@@ -46,14 +36,6 @@ pub const Platform = struct {
     pub fn bumpGeneration(self: *Platform) void {
         self.generation +|= 1;
     }
-};
-
-/// This frame's two timesteps, written by the host loop before systems run. `real_dt` drives
-/// host concerns such as roster watching and UI motion; `dt` is real time multiplied by the
-/// selected simulation speed, or zero while paused.
-pub const Time = struct {
-    real_dt: f32 = 0,
-    dt: f32 = 0,
 };
 
 /// Persistent host playback controls. They are not run state, so starting a fresh game keeps
@@ -262,133 +244,6 @@ pub const SaveSlots = struct {
 /// Host frame input state, fed by the event loop and shared by UI/ECS consumers.
 pub const Input = @import("./ui_client/input.zig").Input;
 
-/// How tired an agent is, in bands. One vocabulary for the condition word, the vigor
-/// chip's color, the "you feel weak" log lines and labor's yield penalty — they all key
-/// off the same two thresholds, so they read them through `Config.condition` rather than
-/// each carrying its own copy of the numbers.
-pub const Condition = enum { alive, weary, spent };
-
-/// Tuning knobs. Never written at runtime, and deliberately **not** part of `Sim`, so
-/// starting a fresh run doesn't discard a setting the player chose. Every value here is
-/// a first guess awaiting playtesting — which is why they're runtime fields rather than
-/// consts scattered across `actions.zig`, `systems.zig` and the templates.
-pub const Config = struct {
-    /// Game-seconds per in-game day — the tempo every per-day rate (metabolism,
-    /// starvation, spoilage-as-displayed) is expressed against, and the day counter's
-    /// divisor. Lives here (not `main.zig`) so library systems can convert per-day
-    /// rates to per-`dt` amounts.
-    secs_per_day: f32 = 20,
-
-    // —— condition bands ——
-    /// Vigor fraction at or below which an agent is SPENT.
-    spent_frac: f32 = 0.12,
-    /// Vigor fraction below which an agent is WEARY.
-    weary_frac: f32 = 0.35,
-    /// Yield multiplier once an agent is no longer `.alive`. A constant step, not a
-    /// linear slide — the slide was built once and reverted (band churn, felt bad).
-    weary_yield: f32 = 0.7,
-
-    // —— metabolism ——
-    /// Vigor drained per day once the larder is empty. ~2.5 days from a full tank to
-    /// death — the countdown that makes rationing a real decision.
-    starve_per_day: f32 = 4.0,
-    /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
-    vigor_per_food: f32 = 2.0,
-    /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar
-    /// multiplier the player sets continuously; the *range* and *default* are config (not UI
-    /// words), and `clampMetabolism` is the one place a rate is made legal. Normal is the
-    /// default (`1.0`); ration/feast are just points inside `[min, max]`.
-    metabolism_rate_min: f32 = 0.5,
-    metabolism_rate_max: f32 = 2.0,
-    metabolism_rate_default: f32 = 1.0,
-
-    // —— capital ——
-    /// Share of a cancelled build's materials that comes back. Flat, not prorated by
-    /// how far the work got: materials are spent in full at `capital.begin` and nothing
-    /// draws them down over time, so a time-proportional refund would imply a
-    /// consumption schedule the sim doesn't run. What it means is salvage — you take
-    /// back the stock you hadn't worked in yet. The energy and the hours are gone.
-    cancel_refund: f32 = 0.5,
-
-    /// Which band a vigor fraction falls in. The single definition of the two
-    /// thresholds; edge-crossing is a change in this value.
-    pub fn condition(self: Config, frac: f32) Condition {
-        if (frac <= self.spent_frac) return .spent;
-        if (frac < self.weary_frac) return .weary;
-        return .alive;
-    }
-
-    /// Labor's yield multiplier for an agent in this condition.
-    pub fn yield_of(self: Config, c: Condition) f32 {
-        return if (c == .alive) 1.0 else self.weary_yield;
-    }
-
-    /// Clamp a metabolism rate into the authoritative `[min, max]` band — the one
-    /// place a rate is made legal, used on migration/reset and by any UI that sets the rate.
-    pub fn clampMetabolism(self: Config, rate: f32) f32 {
-        return std.math.clamp(rate, self.metabolism_rate_min, self.metabolism_rate_max);
-    }
-};
-
-/// The run: everything the simulation writes that isn't a component. `reset` starts a
-/// fresh one — a new field added here is cleared by that call for free, which is the
-/// point of the grouping.
-pub const Sim = struct {
-    /// Seconds of game time elapsed this run — advanced while the actor lives (see
-    /// `advance_clock`). Drives the day counter.
-    elapsed: f32 = 0,
-    /// Newest-first event feed shown in the HUD log panel; one feed for the run.
-    log: logmod.Log = .{},
-    /// The player has successfully begun at least one action this run. Set by
-    /// `actions.begin_labor`; retained as run-progression memory even though the full Act-I
-    /// workspace is now visible from the first frame.
-    tutorial_done: bool = false,
-    /// The simulation's one source of chance — every uncertain outcome is rolled
-    /// against this. Held here so the player today and the AI deciders later draw
-    /// uncertainty from the same stream. Reached through `Resources.random()`.
-    prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0),
-    /// **Eligibility transition memory** — one bit per good, by catalog index, recording
-    /// whether the good's prerequisite has *already* been seen satisfied this run. The
-    /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
-    /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
-    /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
-    reach_seen: [rostermod.max_goods]bool = @splat(false),
-
-    /// **The Passerby encounter** — the run's one Act I counterparty as a clock-driven
-    /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite
-    /// per-visit satchel). Ticked each frame by `market.tick` off the sim clock (never a hardcoded
-    /// day); the UI reads it. Cleared by `reset` for a fresh run.
-    encounter: marketmod.Encounter = .{},
-
-    /// **The Act II Coin Merchant's visits** — present or away, a visit identity, the time left.
-    /// Ticked by `market.tickMerchant` in Act II; the merchant dialog and strip read it.
-    merchant: marketmod.MerchantVisit = .{},
-
-    /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this
-    /// deterministic stand-in until the population and market model exist (ACT2-01..09).
-    /// Seeded on first use; cleared by `reset` for a fresh run.
-    neighbours: @import("./neighbours.zig").Market = .{},
-
-    /// **The Exchange, stubbed** — Act II's milestone. `standing` once it is raised (the
-    /// settlement then reads as Act III); `population` overrides the page's stand-in
-    /// population until the population model exists (ACT2-01), so a fixture can reach every
-    /// state of the card. Cleared by `reset`.
-    exchange: Exchange = .{},
-
-    pub const Exchange = struct {
-        standing: bool = false,
-        population: ?f32 = null,
-        /// Raised this frame: the card opens its details on the next build (ACT2-18).
-        reveal: bool = false,
-    };
-
-    /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would
-    /// make every run replay the first one's luck.
-    pub fn reset(self: *Sim) void {
-        self.* = .{ .prng = self.prng };
-    }
-};
-
 /// This frame's resolved presentation values. Everything here is recomputed in
 /// `build_ui`'s prologue from sim state and the window; nothing persists across frames,
 /// and nothing outside the UI reads it. State that must survive a frame belongs in a
@@ -432,10 +287,9 @@ pub const View = struct {
     metrics: @import("./ui_client/view.zig").ViewMetrics = .{},
 };
 
-/// The host bundle, held by `Ctx` as `*Res` and passed to systems. One field per
-/// writer: `platform` is set at init, `input` and real/simulation `time` by the event loop,
-/// `playback` and the session-only `menu` by HUD/menu controls, `sim` by systems, `config` by
-/// nobody, and `view` by `build_ui`.
+/// The host bundle, held by `Ctx` as `*Res`. One field per writer: `platform` is set at init,
+/// `input` and `game.time` by the event loop, `playback` and the session-only `menu` by HUD/menu
+/// controls, `game` (the simulation's resources) by systems, and `view` by `build_ui`.
 pub const Resources = struct {
     platform: Platform,
     input: Input = .{},
@@ -471,7 +325,6 @@ pub const Resources = struct {
     /// drive a size/gap/opacity. Presentation only; no simulation system reads it. Bounded and
     /// non-allocating (POD), so it lives inline on `Resources`.
     tween: @import("./ui_client/tween.zig").Registry = .{},
-    time: Time = .{},
     playback: Playback = .{},
     menu: MenuState = .{},
     /// The top-level screen. A launch opens on the title; New game routes to the game.
@@ -479,14 +332,11 @@ pub const Resources = struct {
     title: TitleState = .{},
     settings: Settings = .{},
     saves: SaveSlots = .{},
-    sim: Sim,
-    config: Config = .{},
     view: View = .{},
-    /// The authored roster (`roster.zig`): loaded at init from `data/` where it has a file,
-    /// the shipped copy for the rest, and replaced only by `reload.swap`, between frames. A
-    /// system reads it as `*const roster.Catalog`. Defaults to no records, so a rig that builds
-    /// `Resources` by hand and never reads the roster needs nothing.
-    catalog: rostermod.Catalog = rostermod.Catalog.empty,
+    /// The simulation's resources (`sim/res.zig`): the run, the tuning, this frame's timesteps
+    /// and the authored roster. A system reaches only these, through `ecs.run(world, &res.game,
+    /// sys)`; the UI reads them as `res.game.*`.
+    game: @import("./sim/res.zig").Resources = .{},
     /// The process environment, owned by `main`'s `std.process.Init` and outliving every
     /// frame. Read through `env`; null (every variable unset) in a rig built by hand.
     environ: ?*const std.process.Environ.Map = null,
@@ -506,8 +356,7 @@ pub const Resources = struct {
         io.random(std.mem.asBytes(&seed));
         return .{
             .platform = .{ .font = f, .renderer = r, .window = w, .tex = tex, .icons = icons },
-            .sim = .{ .prng = std.Random.DefaultPrng.init(seed) },
-            .catalog = catalog,
+            .game = .{ .sim = .{ .prng = std.Random.DefaultPrng.init(seed) }, .catalog = catalog },
             .environ = environ,
         };
     }
@@ -521,12 +370,7 @@ pub const Resources = struct {
     pub fn deinit(self: *Resources) void {
         self.platform.tex.deinit();
         self.platform.icons.deinit();
-        self.catalog.deinit();
-    }
-
-    /// A `std.Random` over `sim.prng` — call `.float(f32)`, `.boolean()`, etc. on it.
-    pub fn random(self: *Resources) std.Random {
-        return self.sim.prng.random();
+        self.game.catalog.deinit();
     }
 };
 
@@ -552,13 +396,4 @@ test "Playback stepping up out of pause lands on 1x" {
     var p = Playback{ .speed = 3, .paused = true };
     p.step(1);
     try std.testing.expectEqual(@as(u8, 1), p.level());
-}
-
-test "Config.clampMetabolism bounds the rate into [min, max]" {
-    const cfg = Config{}; // min 0.5, max 2.0, default 1.0
-    try std.testing.expectApproxEqAbs(@as(f32, 1.0), cfg.clampMetabolism(1.0), 1e-6);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.5), cfg.clampMetabolism(0.1), 1e-6); // clamps low
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0), cfg.clampMetabolism(9.0), 1e-6); // clamps high
-    try std.testing.expectApproxEqAbs(@as(f32, 1.3), cfg.clampMetabolism(1.3), 1e-6); // in-band untouched
-    try std.testing.expectEqual(cfg.metabolism_rate_default, (comp.Metabolism{}).rate); // default matches component
 }

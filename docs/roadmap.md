@@ -88,7 +88,7 @@ This is the implementation order for the October 2026 gameplay pass. Each step l
 The goal: every game rule runs from the schedule and nothing outside `src/sim/` holds a mutable world. The design is [`feat-ecs.md`](feat-ecs.md); its steps land in this order, each a compiling commit with all three test targets and the boundary check green. Review stops after ECS-01, ECS-04 and ECS-05, which fix the engine API the later steps build on.
 
 - [x] **ECS-01 — The engine as a package.** `src/ecs/` with its manifest, wired beside `ui`: `World(comps, tags)`, `run` generic over the resources type, queries over `*World` or `*const World`; `src/world.zig` and `src/ecs.zig` instantiate it so every call site compiles unchanged; boundary tier 3 covers it.
-- [ ] **ECS-02 — `sim.Resources`.** Split out of the host's and embedded as `game`; the rename at the call sites; sim tests build it whole; the `test-sim` step.
+- [x] **ECS-02 — `sim.Resources`.** Split out of the host's and embedded as `game`; the rename at the call sites; sim tests build it whole; the `test-sim` step.
 - [ ] **ECS-03 — The folders.** The moves to `src/sim/`, `hex` split into topology and pixel math, `body.zig` and `eating.zig` to where they are read; nothing else changes.
 - [ ] **ECS-04 — Events.** `Events`, `EventWriter`, `EventReader` in the engine; `sim/events.zig`; handlers one intent family at a time, labor first and the ration slider last; the facts and `systems/log.zig`; the merchant stock onto `Sim.merchant`.
 - [ ] **ECS-05 — States and the schedule.** `States`, `Schedule`, `sim/state.zig`, `sim/schedule.zig`; `detect_shelter`, `act_ended`, `cross_curtain`, `new_run`; the main loop makes one call; the curtain dialog pauses through playback.

@@ -129,7 +129,7 @@ const Rig = struct {
     ctx: UiCtx,
 
     fn init(self: *Rig) void {
-        self.res = .{ .platform = undefined, .sim = .{} };
+        self.res = .{ .platform = undefined };
         self.arena = std.heap.ArenaAllocator.init(testing.allocator);
         self.ctx = UiCtx.init(&self.res, testing.allocator, self.arena.allocator());
         self.ctx.beginFrame();

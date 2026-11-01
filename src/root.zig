@@ -28,6 +28,7 @@ pub const market = @import("./market.zig");
 pub const neighbours = @import("./neighbours.zig");
 pub const barter = @import("./barter.zig");
 pub const res = @import("./res.zig");
+pub const sim = @import("./sim/root.zig");
 pub const world = @import("./world.zig");
 pub const ecs = @import("./ecs.zig");
 pub const systems = @import("./systems.zig");
@@ -57,6 +58,7 @@ test {
     _ = neighbours;
     _ = barter;
     _ = res;
+    _ = sim;
     _ = actions;
     _ = capital;
 

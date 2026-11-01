@@ -5,7 +5,7 @@
 //! here at comptime and generates one SparseSet per type. Any non-type
 //! decl (functions, consts, imports of types you don't want registered)
 //! will fail compilation.
-// Relative, like `res.zig`'s imports: `test-ui` compiles this file without `ha`.
+// Relative, like every sim file's imports: `test-ui` and `test-sim` compile this file without `ha`.
 const roster = @import("./roster.zig");
 
 // NOTE: These are components

@@ -51,7 +51,7 @@ pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf
     }, .{});
 
     var count_buf: [24]u8 = undefined;
-    const count = std.mem.print(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.catalog, shelf)}) catch "RECIPES";
+    const count = std.mem.print(&count_buf, "{d} RECIPES", .{build_list_mod.shelfTotal(world, e, &ctx.res.game.catalog, shelf)}) catch "RECIPES";
     const heading_box = try section.div("heading_box");
     // Over the table: the count ends where the lanes do.
     heading_box.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .pct_less = .{ .w = gutter } }, .{});

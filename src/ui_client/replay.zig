@@ -141,7 +141,7 @@ pub const Replay = struct {
 /// and `platform` left undefined because no renderer, font, or window exists. A headless
 /// build must therefore not create text, image, or svg content.
 pub fn headlessResources() Resources {
-    return .{ .platform = undefined, .sim = .{} };
+    return .{ .platform = undefined };
 }
 
 /// A headless `frame_mod.Host` over a fixture whose type declares

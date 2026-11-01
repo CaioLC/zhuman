@@ -128,7 +128,7 @@ pub const Spec = struct {
     market: ?uic.UiState.MarketState = null,
     /// The Exchange stub on the first frame (standing, a population override), and whether
     /// its card opens with the details showing (`screen = .act_two`, `view = 1`).
-    exchange: ha.res.Sim.Exchange = .{},
+    exchange: ha.sim.Sim.Exchange = .{},
     exchange_open: bool = false,
     /// The RESEARCH board's opening (`screen = .act_two`, `view = 3`).
     research: ?@import("./act_two/page.zig").ResearchSeed = null,
@@ -978,18 +978,18 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     // Clock: pin the elapsed game time to the start of the requested day, so the header's day
     // counter is deterministic. The production page derives `day = 1 + elapsed/secs_per_day`.
     const day_index: f32 = @floatFromInt(spec.day -| 1);
-    res.sim.elapsed = day_index * res.config.secs_per_day;
+    res.game.sim.elapsed = day_index * res.game.config.secs_per_day;
 
     // Encounter: seed the passerby's visit state. `present` is dealable with a full satchel;
     // `absent` is the dormant default. The visit `id` is fixed so a captured quote revalidates.
     switch (spec.encounter) {
-        .absent => res.sim.encounter = .{},
+        .absent => res.game.sim.encounter = .{},
         .present => {
             const sched = market.Schedule{};
-            res.sim.encounter = .{
+            res.game.sim.encounter = .{
                 .phase = .present,
                 .id = 1,
-                .remaining = sched.linger_days * res.config.secs_per_day,
+                .remaining = sched.linger_days * res.game.config.secs_per_day,
                 .stock = sched.satchel,
             };
         },
@@ -997,14 +997,14 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
 
     // Log: replace the run's history with the fixture's, so a long feed is reproducible.
     if (spec.log.len > 0) {
-        res.sim.log = .{};
+        res.game.sim.log = .{};
         for (spec.log) |line| {
             const day_start: f32 = @floatFromInt(line.day -| 1);
-            res.sim.log.now = day_start * res.config.secs_per_day + ha.res.hours_to_secs(line.hour, res.config.secs_per_day);
-            res.sim.log.push(line.tone, line.text);
+            res.game.sim.log.now = day_start * res.game.config.secs_per_day + ha.sim.hours_to_secs(line.hour, res.game.config.secs_per_day);
+            res.game.sim.log.push(line.tone, line.text);
         }
     }
-    res.sim.log.now = res.sim.elapsed;
+    res.game.sim.log.now = res.game.sim.elapsed;
 
     // Balances: write each requested component to its exact value, leaving the spawn baseline
     // for any field the spec left null. Owned goods are added only when the spec names a count.
@@ -1022,46 +1022,46 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
         if (world.get(player, comp.InventoryBiomass)) |stock| stock.v = mat;
     }
     if (b.metabolism) |rate| {
-        if (world.get(player, comp.Metabolism)) |met| met.rate = res.config.clampMetabolism(rate);
+        if (world.get(player, comp.Metabolism)) |met| met.rate = res.game.config.clampMetabolism(rate);
     }
 
     // Set goods counts in the Goods component if catalog is loaded
     if (world.get(player, comp.Goods)) |goods| {
         // Only update Goods if catalog is loaded (may not be in tests)
-        if (res.catalog.goods.len > 0) {
+        if (res.game.catalog.goods.len > 0) {
             // Use the goods list from balances
             for (b.goods) |pair| {
-                if (res.catalog.goodIndex(pair.id)) |gi| {
+                if (res.game.catalog.goodIndex(pair.id)) |gi| {
                     goods.count[gi] = pair.n;
                 }
             }
 
             // Apply effects and shadow typed components
-            ha.capital.settle(world, player, &res.catalog);
+            ha.capital.settle(world, player, &res.game.catalog);
         }
     }
     if (spec.settlement) |st| seedSettlement(res, world, player, st);
     // The merchant two fifths into its three-day stay, as the prototype reads (`2.4 DAYS`);
     // once, so the visit's clock runs from there.
-    if (res.sim.merchant.remaining < 0) res.sim.merchant.remaining = 2.4 * res.config.secs_per_day;
+    if (res.game.sim.merchant.remaining < 0) res.game.sim.merchant.remaining = 2.4 * res.game.config.secs_per_day;
     if (spec.building) |id| seedBuild(res, world, player, id);
     if (spec.working) |id| seedWork(res, world, player, id);
 }
 
 /// An action `id` in progress, two thirds done (the running tile's underbar).
 fn seedWork(res: *Resources, world: *World, player: Entity, id: []const u8) void {
-    const cat = &res.catalog;
+    const cat = &res.game.catalog;
     const ai = cat.actionIndex(id) orelse return;
-    const total = ha.res.hours_to_secs(cat.actions[ai].requires.hours, res.config.secs_per_day);
+    const total = ha.sim.hours_to_secs(cat.actions[ai].requires.hours, res.game.config.secs_per_day);
     if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
     world.add(player, comp.Busy{ .doing = .{ .labor = ai }, .total = total, .remaining = total / 3, .quality = 1 });
 }
 
 /// A build of `id` in progress, half done (Act I's BUILD row with its cancel corner).
 fn seedBuild(res: *Resources, world: *World, player: Entity, id: []const u8) void {
-    const cat = &res.catalog;
+    const cat = &res.game.catalog;
     const gi = cat.goodIndex(id) orelse return;
-    const total = ha.res.hours_to_secs(cat.goods[gi].requires.?.hours, res.config.secs_per_day);
+    const total = ha.sim.hours_to_secs(cat.goods[gi].requires.?.hours, res.game.config.secs_per_day);
     if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
     world.add(player, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total / 2, .quality = 1 });
 }
@@ -1070,7 +1070,7 @@ fn seedBuild(res: *Resources, world: *World, player: Entity, id: []const u8) voi
 /// plus the named tiles (promoting their outward neighbours), the exact stocks, and a build in
 /// progress half done. Idempotent like the rest of `seed`, which runs every frame.
 fn seedSettlement(res: *Resources, world: *World, player: Entity, st: Settlement) void {
-    const cat = &res.catalog;
+    const cat = &res.game.catalog;
     if (cat.technologies.len == 0) return;
     _ = ha.migration.migrate_to_act_two(world, player, cat);
     const research = world.get(player, comp.Research) orelse return;
@@ -1108,8 +1108,8 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     // there, and the controls own them after, so the seeded screen stays navigable.
     const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
-    if (first) ctx.res.sim.exchange = spec.exchange;
-    if (first and spec.merchant_away) ctx.res.sim.merchant = .{ .present = false, .remaining = ctx.res.config.secs_per_day };
+    if (first) ctx.res.game.sim.exchange = spec.exchange;
+    if (first and spec.merchant_away) ctx.res.game.sim.merchant = .{ .present = false, .remaining = ctx.res.game.config.secs_per_day };
     if (spec.reduced_motion) ctx.res.motion.reduced_motion = true;
     // The focus order exists once frame 1 has ended; Tab from there.
     if (ctx.frame == 2) for (0..spec.tab_presses) |_| {
@@ -1166,11 +1166,11 @@ const testing = std.testing;
 const spawn_player = @import("../main.zig").spawn_player;
 
 fn seedRig(spec: Spec) !struct { res: Resources, world: World, player: Entity } {
-    var res: Resources = .{ .platform = undefined, .sim = .{} };
+    var res: Resources = .{ .platform = undefined };
     // Load catalog for tests
     var diag: ha.roster.Diagnostics = .{};
-    res.catalog = try ha.roster.load(testing.allocator, ha.roster.shipped, &diag);
-    errdefer res.catalog.deinit();
+    res.game.catalog = try ha.roster.load(testing.allocator, ha.roster.shipped, &diag);
+    errdefer res.game.catalog.deinit();
 
     var world = World.init();
     const player = spawn_player(&world);
@@ -1213,9 +1213,9 @@ test "seed pins the game clock to the start of the requested day" {
     var rig = try seedRig(find("act_one_working").?); // day 19
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
-    const day = 1 + @as(u64, @intFromFloat(rig.res.sim.elapsed / rig.res.config.secs_per_day));
+    const day = 1 + @as(u64, @intFromFloat(rig.res.game.sim.elapsed / rig.res.game.config.secs_per_day));
     try testing.expectEqual(@as(u64, 19), day);
 }
 
@@ -1223,7 +1223,7 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     var rig = try seedRig(find("act_one_working").?);
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
     const e = rig.player;
 
@@ -1236,17 +1236,17 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
 
     // Check goods counts through Goods component
     const goods = rig.world.get(e, comp.Goods).?;
-    const sandals_gi = rig.res.catalog.goodIndex("sandals").?;
-    const hatchet_gi = rig.res.catalog.goodIndex("hatchet").?;
-    const root_cellar_gi = rig.res.catalog.goodIndex("root_cellar").?;
-    const leaf_bed_gi = rig.res.catalog.goodIndex("leaf_bed").?;
+    const sandals_gi = rig.res.game.catalog.goodIndex("sandals").?;
+    const hatchet_gi = rig.res.game.catalog.goodIndex("hatchet").?;
+    const root_cellar_gi = rig.res.game.catalog.goodIndex("root_cellar").?;
+    const leaf_bed_gi = rig.res.game.catalog.goodIndex("leaf_bed").?;
     try testing.expectEqual(@as(u32, 2), goods.count[sandals_gi]);
     try testing.expectEqual(@as(u32, 2), goods.count[hatchet_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[root_cellar_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[leaf_bed_gi]);
 
     // The owned tools grant the three verbs beyond the innate two.
-    const cat = &rig.res.catalog;
+    const cat = &rig.res.game.catalog;
     for ([_][]const u8{ "chop_wood", "fish", "hunt" }) |verb| {
         try testing.expect(ha.effects.held(cat, goods, cat.actionIndex(verb).?));
     }
@@ -1256,10 +1256,10 @@ test "an Act II fixture seeds a settlement holding every verb of the act" {
     var rig = try seedRig(find("act_two_actions").?);
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
     const e = rig.player;
-    const cat = &rig.res.catalog;
+    const cat = &rig.res.game.catalog;
     try testing.expect(ha.migration.is_migrated(&rig.world, e));
     try testing.expectEqual(@as(f32, 31), ha.ledger.balance(&rig.world, e, .biomass));
     try testing.expectEqual(@as(f32, 9), ha.ledger.balance(&rig.world, e, .water));
@@ -1279,7 +1279,7 @@ test "the default fixture leaves the spawn baseline untouched" {
     var rig = try seedRig(find("act_one_default").?);
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
     const e = rig.player;
     // No balances named → rested spawn vigor (10/10), the thin larder, empty stockpile.
@@ -1288,34 +1288,34 @@ test "the default fixture leaves the spawn baseline untouched" {
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
     // No goods specified → should have empty goods component
     const goods = rig.world.get(e, comp.Goods).?;
-    const sandals_gi = rig.res.catalog.goodIndex("sandals").?;
+    const sandals_gi = rig.res.game.catalog.goodIndex("sandals").?;
     try testing.expectEqual(@as(u32, 0), goods.count[sandals_gi]);
     // No passerby.
-    try testing.expect(!rig.res.sim.encounter.dealable());
+    try testing.expect(!rig.res.game.sim.encounter.dealable());
 }
 
 test "the passerby fixture seeds a dealable encounter with a full satchel" {
     var rig = try seedRig(find("act_one_passerby").?);
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
-    try testing.expect(rig.res.sim.encounter.dealable());
+    try testing.expect(rig.res.game.sim.encounter.dealable());
     const sched = market.Schedule{};
-    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.food)], rig.res.sim.encounter.stockOf(.food));
-    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.biomass)], rig.res.sim.encounter.stockOf(.biomass));
+    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.food)], rig.res.game.sim.encounter.stockOf(.food));
+    try testing.expectEqual(sched.satchel[@backingInt(market.Ware.biomass)], rig.res.game.sim.encounter.stockOf(.biomass));
 }
 
 test "the low-stock fixture reaches a danger-toned scarcity state" {
     var rig = try seedRig(find("act_one_low_stock").?);
     defer {
         rig.world.deinit();
-        rig.res.catalog.deinit();
+        rig.res.game.catalog.deinit();
     }
     const e = rig.player;
     const vigor = rig.world.get(e, comp.Vigor).?;
     // Weary/spent band and an empty larder — the danger tones the screenshot matrix wants.
-    try testing.expect(vigor.v / vigor.max <= rig.res.config.weary_frac);
+    try testing.expect(vigor.v / vigor.max <= rig.res.game.config.weary_frac);
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryFood).?.v);
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
 }
@@ -1330,10 +1330,10 @@ test "seeding is deterministic: the same spec yields identical state twice" {
         var rig = try seedRig(spec);
         defer {
             rig.world.deinit();
-            rig.res.catalog.deinit();
+            rig.res.game.catalog.deinit();
         }
         o.* = .{
-            .elapsed = rig.res.sim.elapsed,
+            .elapsed = rig.res.game.sim.elapsed,
             .vigor = rig.world.get(rig.player, comp.Vigor).?.v,
             .biomass = rig.world.get(rig.player, comp.InventoryBiomass).?.v,
         };

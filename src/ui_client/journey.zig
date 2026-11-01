@@ -149,7 +149,7 @@ const Rig = struct {
     ctx: UiCtx,
 
     fn init(self: *Rig) void {
-        self.res = .{ .platform = undefined, .sim = .{} };
+        self.res = .{ .platform = undefined };
         self.ctx = UiCtx.init(&self.res, testing.allocator, undefined);
     }
 
