@@ -8,9 +8,9 @@
 //! milestone's) are pinned the same way, each state against its old chain, with the control
 //! disabled where the state is not actionable.
 //!
-//! The scroll thumb's fill stays a ternary on `ScrollState.dragging`; the replay test at the end
-//! records why. On its own the thumb's `held` bit and the drag coincide, but a `.held` rule
-//! reads the nearest control, which for a scroll view nested in an overflowing one is the
+//! The scroll thumb's fill stays a ternary on `ScrollState.dragging`; the replay tests at the end
+//! record why. The thumb sits beside its viewport, not inside it, so on its own a rule on it has
+//! no control to read, and nested in an overflowing scroll view the nearest control is the
 //! enclosing viewport, held by any press inside it.
 
 const std = @import("std");
@@ -565,9 +565,9 @@ const ThumbFixture = struct {
     /// The thumb's own published `held` bit.
     held: bool = false,
     painted: ?Color = null,
-    /// `held_rule` resolved on the thumb.
+    /// `held_rule` resolved on the thumb, when it has an owner to read.
     by_rule: ?Color = null,
-    /// The node a rule on the thumb reads (null: the thumb's own slot).
+    /// The control a rule on the thumb reads; null when there is none.
     rule_owner: ?u64 = null,
 
     fn child(n: *Node, id: []const u8) ?*Node {
@@ -599,8 +599,10 @@ const ThumbFixture = struct {
             self.thumb_key = t.key;
             self.held = ctx.interactionOf(t.key).held;
             self.painted = t.render_data.fill;
-            self.by_rule = style.resolve(ctx, t, held_rule).fill;
             self.rule_owner = if (style.controlOwner(t)) |o| o.key else null;
+            // A rule needs an owner (`resolve` refuses without one), so the comparison exists
+            // only where the thumb has a control above it.
+            self.by_rule = if (self.rule_owner != null) style.resolve(ctx, t, held_rule).fill else null;
         }
         const out = try ctx.arena.alloc(*Node, 1);
         out[0] = root.get();
@@ -633,15 +635,16 @@ const ThumbRig = struct {
     }
 };
 
-/// The standalone thumb: its own slot owns its rules, and its `held` bit, its `dragging` state
-/// and a `.held` rule's fill agree with the painted fill at every step.
+/// The standalone thumb: no control above it, so a rule has nothing to read, while its `held`
+/// bit, its `dragging` state and the painted fill agree at every step.
 fn expectCoincide(rig: *ThumbRig, fx: *const ThumbFixture, dragging: bool) !void {
     const th = rig.res.view.theme;
     try std.testing.expect(fx.thumb_key != null);
+    try std.testing.expectEqual(@as(?u64, null), fx.rule_owner);
+    try std.testing.expectEqual(@as(?Color, null), fx.by_rule);
     try std.testing.expectEqual(dragging, fx.state.dragging);
     try std.testing.expectEqual(dragging, fx.held);
     try std.testing.expectEqual(@as(?Color, if (dragging) th.acc else th.line2), fx.painted);
-    try std.testing.expectEqual(fx.painted, fx.by_rule);
 }
 
 test "scroll thumb: held and dragging coincide through press, drag, release, focus loss and cancel" {

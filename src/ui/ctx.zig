@@ -268,17 +268,6 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return self.interactions.get(idx).flags;
         }
 
-        /// This key's interaction state **only if it owns a slot this frame**: a live slot
-        /// that something acquired (`interactionOf`, `setFlag`, …) since `beginFrame`. Null
-        /// for a key with no slot, and for a slot surviving only from the last frame and not
-        /// yet acquired in this one. The non-acquiring read: it never creates a slot and never
-        /// touches one, so peeking alone keeps nothing alive.
-        pub fn peekInteraction(self: *const Self, k: u64) ?IntFlags {
-            const idx = self.interactions.index.get(k) orelse return null;
-            const slot = &self.interactions.slots.items[idx];
-            if (!slot.live or slot.touched != self.frame) return null;
-            return slot.value.flags;
-        }
 
         /// The full geometry last stamped for key `k` by a prior frame's layout, or null
         /// for a missing/unstamped slot. This non-allocating read makes timing explicit:
@@ -513,32 +502,6 @@ fn tstamp(u: *TestCtx, k: u64, r: Rect, clip: ?Rect, parent: ?u64) void {
     _ = u.stampRect(k, r, clip, parent);
 }
 
-test "peekInteraction reads only a slot acquired this frame, and never acquires one" {
-    var u = TestCtx.init(undefined, std.testing.allocator, undefined);
-    defer u.deinit();
-    u.beginFrame();
-
-    const k = cache_mod.key(0, "peek");
-    try std.testing.expectEqual(@as(?TestFlags, null), u.peekInteraction(k));
-    try std.testing.expectEqual(@as(u32, 0), u.interactions.index.count()); // peeking made no slot
-
-    u.setFlag(k, .active, true);
-    try std.testing.expect(u.peekInteraction(k).?.active);
-
-    // Next frame the slot is still live (prune runs at `endFrame`) but nothing has acquired it.
-    u.endFrame();
-    u.beginFrame();
-    try std.testing.expectEqual(@as(?TestFlags, null), u.peekInteraction(k));
-    _ = u.interactionOf(k);
-    try std.testing.expect(u.peekInteraction(k).?.active); // the latched flag, read back
-
-    // A frame that only peeks lets the slot be pruned.
-    u.endFrame();
-    u.beginFrame();
-    _ = u.peekInteraction(k);
-    u.endFrame();
-    try std.testing.expect(!u.interactions.index.contains(k));
-}
 
 test "prior geometry is null until stamped and carries inherited clip" {
     var u = TestCtx.init(undefined, std.testing.allocator, undefined);

@@ -434,13 +434,12 @@ pub fn controlOwner(node: *Node) ?*Node {
     return null;
 }
 
-/// The interaction state rules on `node` read: its `controlOwner`'s, else the node's own
-/// slot when it already owns one this frame (`peekInteraction` — the lookup never creates a
-/// slot). Null when there is neither. The owner must already have run `control` — call it on
-/// the row before styling the row's children, as the templates do.
+/// The interaction state rules on `node` read: its `controlOwner`'s published interaction, or
+/// null when no control runs on the node or an ancestor. The owner must already have run
+/// `control` — call it on the row before styling the row's children, as the templates do.
 fn ruleOwner(ctx: *UiCtx, node: *Node) ?UiCtx.Interaction {
-    if (controlOwner(node)) |owner| return owner.query(ctx);
-    return ctx.peekInteraction(node.key);
+    const owner = controlOwner(node) orelse return null;
+    return owner.query(ctx);
 }
 
 fn fold(out: *Style, rules: *Rules, frag: anytype) void {
@@ -1082,32 +1081,19 @@ test "rules: a disabled owner holds only disabled, selected and checked" {
     try std.testing.expectEqual(th.dim, resolve(&f.ctx, r.child, dis_spec).text.?);
 }
 
-test "rules: with no control ancestor the owner is the node's own slot, if it has one" {
-    const f = try KitFixture.init();
-    defer f.deinit();
-    const th = f.resources.view.theme;
 
-    // A node that owns a slot this frame (something set or read its interaction) but that
-    // `control` never ran on: the rules read its own flags.
-    const n = try f.node("own");
-    f.ctx.setFlag(n.key, .hovering, true);
-    try std.testing.expectEqual(@as(?*Node, null), controlOwner(n));
-    try std.testing.expect(ruleOwner(&f.ctx, n).?.hovering);
-    const spec = Style{ .ink = .dim, .on = &.{.{ .when = .hovering, .ink = .acc }} };
-    try std.testing.expectEqual(th.acc, resolve(&f.ctx, n, spec).text.?);
-    f.ctx.setFlag(n.key, .hovering, false);
-    try std.testing.expectEqual(th.dim, resolve(&f.ctx, n, spec).text.?);
-}
-
-test "rules: no control ancestor and no slot is no owner, and the lookup creates no slot" {
+test "rules: with no control ancestor there is no owner, even for a node that owns a slot" {
     const f = try KitFixture.init();
     defer f.deinit();
     const parent = try f.node("plain_parent");
     const n = try Node.create(f.arena.allocator(), "orphan");
     n.parent = parent;
+    // A slot of its own (something set or read its interaction) is not a control.
+    f.ctx.setFlag(parent.key, .hovering, true);
     try std.testing.expectEqual(@as(?*Node, null), controlOwner(n));
     try std.testing.expectEqual(@as(?UiCtx.Interaction, null), ruleOwner(&f.ctx, n));
-    try std.testing.expect(!f.ctx.interactions.index.contains(n.key));
+    try std.testing.expectEqual(@as(?UiCtx.Interaction, null), ruleOwner(&f.ctx, parent));
+    try std.testing.expect(!f.ctx.interactions.index.contains(n.key)); // the lookup touched no slot
 }
 
 test "rules: a fifth rule from a runtime fragment is refused, the first four kept in order" {

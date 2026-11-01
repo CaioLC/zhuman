@@ -938,9 +938,9 @@ while the owner is hot. The conditions (`style.When`) read the owner's published
   on: `control` sets `render_data.control`, and `resolve` walks `node.parent` to the first
   marked node and reads that node's interaction this frame. Templates call `control()` on a
   row before they build its children, which is what makes the owner's state available when a
-  child is styled. With no marked node, the owner is the node's own interaction slot, but
-  only when the node already owns one this frame (the engine's non-acquiring
-  `peekInteraction`); with neither, a spec with rules panics in safe builds.
+  child is styled. With no marked node a spec with rules panics in safe builds: a rule reads a
+  control, and a node that is not one and has none above it (a scroll thumb beside its
+  viewport) keeps the explicit form.
 
 **Look tables.** A look chosen by a game state is data: a `std.EnumArray(State, Style)` from
 the state to its look, or to a struct of `Style`s when one state styles several nodes.
