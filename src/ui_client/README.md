@@ -852,9 +852,10 @@ from reusable pieces; placement does not, because a node sits in exactly one pla
 `resolve` reads the live `ctx.res.view.theme` for a role, so `Style{ .ink = .dim }` paints the
 pixels `Style{ .text = th.dim }` did and a template needs no `const th = ...theme` line to say
 it. A slot and its twin fold as one: whichever a later fragment sets wins (a fragment that
-sets both resolves to the role). `resolve` returns a *concrete* `Style` (roles and rules are
-gone, only the four `Color` fields remain), so a site that passes `Color`s and a site that
-names roles compose in one tuple. A spec with no roles and no rules never reads `ctx`.
+sets both resolves to the role). `resolve` returns a *concrete* `Style` (roles, verdicts and
+rules are gone, only the four `Color` fields remain), so a site that passes `Color`s and a site
+that names roles compose in one tuple. A spec with no roles, verdicts or rules never reads
+`ctx`.
 
 **Named role fragments.** The literals templates repeated are fragments named by meaning. Each
 sets exactly the fields of the literal it replaced, with no added tracking or transform:
@@ -869,6 +870,41 @@ value (a gradient stop, a helper that takes a color).
 `normal` → `fg` and `accent` → `acc`. `style.toneRole(tone)` is that mapping for any of them
 (resolved at comptime; a tag with no role is a compile error), `style.toneColor(ctx, tone)` its
 color and `style.tone(t)` its ink fragment.
+
+**Verdicts.** A colour chosen from game data is stated as what the value means, a
+`style.Verdict` (`verdict.zig`), and one table maps each meaning to a role:
+
+| verdict     | role     | meaning                                                         |
+| ----------- | -------- | --------------------------------------------------------------- |
+| `met`       | `good`   | a requirement satisfied, a match                                |
+| `unmet`     | `danger` | a requirement not satisfied                                     |
+| `gain`      | `good`   | a stock a trade raises                                          |
+| `spent`     | `warn`   | a stock a trade lowers (an outflow, not a loss)                 |
+| `better`    | `good`   | a margin moved the good way from its baseline                   |
+| `worse`     | `danger` | a margin moved the bad way                                      |
+| `flat`      | `fg`     | a value at its baseline                                         |
+| `absent`    | `line2`  | an empty readout: no takers, a zero line, nothing you hold      |
+| `inactive`  | `dim`    | the name of a thing not engaged (an unposted good, a non-matching person, a strip while its merchant is away) |
+| `refused`   | `line2`  | a term the counterparty refuses                                 |
+| `over`      | `danger` | past a limit: over budget, a negative balance after a deal      |
+| `low`       | `danger` | a threshold breached: food lasts under two days, food at 0      |
+| `attention` | `warn`   | a call to act: nothing posted, water running short              |
+
+The table is `verdict.Roles`, a struct with one defaulted field per verdict, and it lives on
+the view as `res.view.verdicts` beside `res.view.theme`; a game replaces it, or one field of
+it, the same way it replaces the palette. `Style.verdict` is glyph ink by meaning: it is the
+third member of the glyph slot with `text` and `ink`, so whichever a later fragment sets wins,
+and within one fragment a set verdict wins. A null verdict is unset, which makes the resting
+ink the default: `Style{ .ink = .fg, .verdict = verdict.when(over, .over) }` paints `fg`
+unless over. `resolve` maps a verdict through the view's table to a role, then through the
+theme to a colour; an active state rule's `ink` replaces it. `style.verdictColor(ctx, v)` is
+the colour for a site that needs a value (a tween's endpoint). The helpers are pure:
+`when(cond, v)` (v or null), `of(cond, yes, no)`, `trade(after, before)` (gain / spent /
+flat), `margin(live, base, .higher | .lower)` (better / worse / flat), and their delta forms
+`tradeDelta(d)` and `marginDelta(d, dir)`. Every comparison of two amounts uses one tolerance,
+`verdict.delta_eps = 0.001`: values that far apart or closer are `flat`. A page sets a
+readout's `verdict` field (`HoldingsLine`, `HoldingsSentence`, `Stock`) and the template paints
+it.
 
 **The hot predicate.** `Interaction.hot()` is `held or hovering or focus_visible`: the
 prototype's `:hover, :focus-visible` lift plus the native press latch (a press that began on

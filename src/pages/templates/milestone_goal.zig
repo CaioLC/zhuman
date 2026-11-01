@@ -13,6 +13,7 @@ const ha = @import("ha");
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
+const vd = style.verdict;
 const Style = style.Style;
 const El = el.El;
 const Color = uic.Color;
@@ -88,7 +89,6 @@ const detail_wrap_w: f32 = 560;
 /// only a `.ready` CTA reports `clicked`.
 pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const pres = presentationOf(goal.state);
     const tone = style.toneColor(ctx, pres.tone);
     const readiness = if (goal.readiness.len > 0) goal.readiness else pres.readiness;
@@ -192,8 +192,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
                 .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline },
             }, .{});
             if (goal.kicker.len > 0) {
-                const kicker_color = if (goal.state == .done) th.good else th.acc;
-                try head.label("kicker", goal.kicker, .{Style{ .font = 9, .tracking = 0.08, .text = kicker_color }});
+                try head.label("kicker", goal.kicker, .{Style{ .font = 9, .tracking = 0.08, .ink = .acc, .verdict = vd.when(goal.state == .done, .met) }});
             }
             if (goal.cost.len > 0) {
                 try head.label("cost", goal.cost, .{style.fine_print});
@@ -212,7 +211,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             for (goal.requirements, 0..) |requirement, i| {
                 const token = try requirements.boxi("r", i, .{ .flow = .{ .dir = .row, .cross = .baseline }, .gap = 4 }, .{});
                 try token.label("label", requirement.label, .{Style{ .font = 8.5, .ink = .line2 }});
-                try token.label("value", requirement.value, .{Style{ .font = 8.5, .ink = if (requirement.met) .good else .danger }});
+                try token.label("value", requirement.value, .{Style{ .font = 8.5, .verdict = vd.of(requirement.met, .met, .unmet) }});
             }
         }
 

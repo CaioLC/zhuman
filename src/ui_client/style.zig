@@ -79,6 +79,13 @@ pub const Style = struct {
     /// Border color by role — the twin of `outline_color` (and, like it, turns the border on).
     outline_ink: ?ThemeRole = null,
 
+    /// Glyph ink by **meaning**: a `Verdict` the live `ctx.res.view.verdicts` table maps to a
+    /// role. A third member of the glyph slot with `text` and `ink`: whichever a later fragment
+    /// sets wins, and within one fragment a set verdict wins, so
+    /// `Style{ .ink = .fg, .verdict = verdict.when(over, .over) }` paints fg unless over. A
+    /// null verdict is unset. An active state rule's `ink` replaces it.
+    verdict: ?Verdict = null,
+
     /// **State rules**: role inks that replace the resting ones while a condition holds on the
     /// owning control, `Style{ .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} }`. Unlike
     /// every other field, `on` *appends* across fragments in fold order; at most `max_rules`
@@ -110,13 +117,19 @@ pub const Rule = struct {
 /// fragments carrying it are comptime-known, and otherwise a safety panic (dropped in release).
 pub const max_rules = 4;
 
-/// The (concrete color, role) field pairs that fold as one slot.
-const ink_slots = [_]struct { []const u8, []const u8 }{
-    .{ "text", "ink" },
-    .{ "tint", "tint_ink" },
-    .{ "fill", "fill_ink" },
-    .{ "outline_color", "outline_ink" },
+/// The (concrete color, role, verdict) fields that fold as one slot. Only the glyph slot has
+/// a verdict member.
+const ink_slots = [_]struct { []const u8, []const u8, ?[]const u8 }{
+    .{ "text", "ink", "verdict" },
+    .{ "tint", "tint_ink", null },
+    .{ "fill", "fill_ink", null },
+    .{ "outline_color", "outline_ink", null },
 };
+
+/// The meanings vocabulary (`verdict.zig`): the `Verdict` enum, the `Roles` table on the view,
+/// and the pure helpers (`when`, `of`, `trade`, `margin`, `delta_eps`).
+pub const verdict = @import("./verdict.zig");
+pub const Verdict = verdict.Verdict;
 
 // A bright-red debug outline around any node. `Color` is SDL's `SDL_Color` — u8 fields on
 // a 0–255 scale, so the outline must be `a = 255` (opaque) and `r = 255` (full red); the
@@ -243,6 +256,13 @@ pub fn tone(t: anytype) Style {
     return .{ .ink = toneRole(t) };
 }
 
+/// The color the live view gives verdict `v`: its role in `ctx.res.view.verdicts`, then that
+/// role's color in the theme. For a site that needs a `Color` (a tween's endpoint, a helper
+/// that takes a color); a style names the verdict in its `verdict` field instead.
+pub fn verdictColor(ctx: *UiCtx, v: Verdict) Color {
+    return roleColor(ctx, verdict.role(ctx.res.view.verdicts, v));
+}
+
 // === Surfaces and state rules ===================================================
 //
 // Every fragment is a plain `Style` value, folded the same way. A static look (`panel`, the
@@ -280,31 +300,44 @@ const Rules = struct {
 };
 
 /// Copy each *set* field of `frag` onto `out` — the last-non-null-wins step of the fold — and
-/// append its rules. A color slot and its role twin fold as one slot (a later fragment's
-/// either one replaces an earlier one's other).
+/// append its rules. A color slot, its role twin and (for glyph ink) its verdict fold as one
+/// slot: a later fragment's any one replaces an earlier one's others, and within one fragment
+/// a verdict beats a role beats a color.
 fn merge(out: *Style, rules: *Rules, frag: Style) void {
     inline for (@typeInfo(Style).@"struct".field_names) |name| {
         if (comptime std.mem.eql(u8, name, "on")) continue;
         if (@field(frag, name)) |v| @field(out, name) = v;
     }
     inline for (ink_slots) |slot| {
-        if (@field(frag, slot[1]) != null) {
-            @field(out, slot[0]) = null; // the role wins within one fragment
+        const by_verdict = if (comptime slot[2]) |vf| @field(frag, vf) != null else false;
+        if (by_verdict) {
+            @field(out, slot[0]) = null;
+            @field(out, slot[1]) = null;
+        } else if (@field(frag, slot[1]) != null) {
+            @field(out, slot[0]) = null; // the role wins over the color within one fragment
+            clearVerdict(out, slot);
         } else if (@field(frag, slot[0]) != null) {
             @field(out, slot[1]) = null;
+            clearVerdict(out, slot);
         }
     }
     rules.append(frag.on);
+}
+
+/// Unset the verdict member of `slot` on `out`, for a slot that has one.
+inline fn clearVerdict(out: *Style, comptime slot: anytype) void {
+    if (comptime slot[2]) |vf| @field(out, vf) = null;
 }
 
 /// Fold a style spec into a single `Style`. `spec` is one `Style` or a (possibly nested)
 /// tuple of them. Later fragments win per field; `on` rules append in fold order.
 ///
 /// The result is **concrete**: the collected rules are applied in order against the owner's
-/// interaction (`ruleOwner`), each active rule writing its set inks over the result, then
-/// every role twin is resolved to its color through the live theme. The returned `Style`
-/// carries only `text`/`tint`/`fill`/`outline_color` and an empty `on`. A spec with no roles
-/// and no rules never reads `ctx` or `node`.
+/// interaction (`ruleOwner`), each active rule writing its set inks over the result, then a
+/// verdict resolves to its role through the live `ctx.res.view.verdicts` and every role twin
+/// to its color through the live theme. The returned `Style` carries only
+/// `text`/`tint`/`fill`/`outline_color` and an empty `on`. A spec with no roles, verdicts or
+/// rules never reads `ctx` or `node`.
 pub fn resolve(ctx: *UiCtx, node: *Node, spec: anytype) Style {
     comptime {
         if (knownRuleCount(@TypeOf(spec)) > max_rules)
@@ -316,6 +349,12 @@ pub fn resolve(ctx: *UiCtx, node: *Node, spec: anytype) Style {
     if (rules.refused != 0) refuseRules();
     if (rules.len != 0) applyRules(ctx, node, &out, rules.slice());
     inline for (ink_slots) |slot| {
+        if (comptime slot[2]) |vf| {
+            if (@field(out, vf)) |v| {
+                @field(out, slot[1]) = verdict.role(ctx.res.view.verdicts, v);
+                @field(out, vf) = null;
+            }
+        }
         if (@field(out, slot[1])) |r| {
             @field(out, slot[0]) = theme.color(ctx.res.view.theme, r);
             @field(out, slot[1]) = null;
@@ -350,8 +389,8 @@ fn knownRuleCount(comptime T: type) usize {
 }
 
 /// Apply `rules` in order over `out`: each rule whose condition holds on the owner replaces
-/// the slots it sets (a role wins over a concrete color), so a later active rule wins. A spec
-/// with rules and no owner is a template bug (a safety panic; release applies none).
+/// the slots it sets (a role wins over a concrete color or a verdict), so a later active rule
+/// wins. A spec with rules and no owner is a template bug (a safety panic; release applies none).
 fn applyRules(ctx: *UiCtx, node: *Node, out: *Style, rules: []const Rule) void {
     const q = ruleOwner(ctx, node) orelse {
         if (std.debug.runtime_safety) @panic("Style.on: no control owner; call control() on the node or an ancestor before styling it");
@@ -363,6 +402,7 @@ fn applyRules(ctx: *UiCtx, node: *Node, out: *Style, rules: []const Rule) void {
             if (@field(r, slot[1])) |lit| {
                 @field(out, slot[1]) = lit;
                 @field(out, slot[0]) = null;
+                clearVerdict(out, slot);
             }
         }
     }
@@ -793,6 +833,74 @@ test "toneRole: every template tone maps to the same-named role, normal=fg, acce
     const th = f.resources.view.theme;
     try eq(th.warn, toneColor(&f.ctx, Stock.warn));
     try eq(th.acc, resolve(&f.ctx, try f.node("tone"), tone(Strip.accent)).text.?);
+}
+
+test "verdict: resolves through the view's table to the theme's color" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("v");
+    const eq = std.testing.expectEqual;
+    inline for (@typeInfo(Verdict).@"enum".field_names) |name| {
+        const v = @field(Verdict, name);
+        const want = theme.color(th, verdict.role(.{}, v));
+        try eq(want, resolve(&f.ctx, n, Style{ .verdict = v }).text.?);
+        try eq(want, verdictColor(&f.ctx, v));
+    }
+    // Concrete: no verdict survives resolution.
+    try eq(@as(?Verdict, null), resolve(&f.ctx, n, Style{ .verdict = .over }).verdict);
+}
+
+test "verdict: folds with text and ink as one slot, last fragment wins, a null verdict is unset" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const red: Color = .{ .r = 200, .g = 0, .b = 0, .a = 255 };
+    const n = try f.node("vf");
+    const eq = std.testing.expectEqual;
+    // ink then verdict, verdict then ink, text then verdict, verdict then text.
+    try eq(th.danger, resolve(&f.ctx, n, .{ ink(.fg), Style{ .verdict = .over } }).text.?);
+    try eq(th.fg, resolve(&f.ctx, n, .{ Style{ .verdict = .over }, ink(.fg) }).text.?);
+    try eq(th.good, resolve(&f.ctx, n, .{ Style{ .text = red }, Style{ .verdict = .met } }).text.?);
+    try eq(red, resolve(&f.ctx, n, .{ Style{ .verdict = .met }, Style{ .text = red } }).text.?);
+    // Within one fragment the verdict wins over the ink and the color.
+    try eq(th.danger, resolve(&f.ctx, n, Style{ .ink = .fg, .verdict = verdict.when(true, .over) }).text.?);
+    try eq(th.danger, resolve(&f.ctx, n, Style{ .text = red, .ink = .fg, .verdict = .over }).text.?);
+    // A null verdict leaves the resting ink, in the same fragment or a later one.
+    try eq(th.fg, resolve(&f.ctx, n, Style{ .ink = .fg, .verdict = verdict.when(false, .over) }).text.?);
+    try eq(th.dim, resolve(&f.ctx, n, .{ muted, Style{ .verdict = null } }).text.?);
+    try eq(red, resolve(&f.ctx, n, .{ Style{ .text = red }, Style{ .font = 12, .verdict = null } }).text.?);
+    // A verdict touches only glyph ink.
+    const s = resolve(&f.ctx, n, .{ Style{ .fill_ink = .panel, .tint_ink = .acc }, Style{ .verdict = .low } });
+    try eq(th.panel, s.fill.?);
+    try eq(th.acc, s.tint.?);
+    try eq(th.danger, s.text.?);
+}
+
+test "verdict: an active state rule beats it, an inactive one leaves it" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const r = try HotRig.init(f, "vrule");
+    const spec = Style{ .ink = .fg, .verdict = .inactive, .on = &.{.{ .when = .selected, .ink = .acc }} };
+    try std.testing.expectEqual(th.dim, resolve(&f.ctx, r.child, spec).text.?);
+    f.ctx.setFlag(r.row.key, .selected, true);
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, r.child, spec).text.?);
+    // A rule from an earlier fragment still applies after a later fragment's verdict.
+    const split = .{ Style{ .ink = .fg, .on = &.{.{ .when = .selected, .ink = .acc }} }, Style{ .verdict = .inactive } };
+    try std.testing.expectEqual(th.acc, resolve(&f.ctx, r.child, split).text.?);
+}
+
+test "verdict: replacing the view's table changes the resolved color" {
+    const f = try KitFixture.init();
+    defer f.deinit();
+    const th = f.resources.view.theme;
+    const n = try f.node("vo");
+    try std.testing.expectEqual(th.warn, resolve(&f.ctx, n, Style{ .verdict = .spent }).text.?);
+    f.resources.view.verdicts = .{ .spent = .danger };
+    try std.testing.expectEqual(th.danger, resolve(&f.ctx, n, Style{ .verdict = .spent }).text.?);
+    try std.testing.expectEqual(th.danger, verdictColor(&f.ctx, .spent));
+    try std.testing.expectEqual(th.good, verdictColor(&f.ctx, .gain)); // the rest keep defaults
 }
 
 // A control owner and a text child under it, as a template builds them: `control` marks the

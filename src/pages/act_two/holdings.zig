@@ -1,6 +1,6 @@
 //! `act_two/holdings` — Act II's content for the shared `holdings` rail template (ACT2-15):
 //! every good the settlement owns (Act I's carried across the curtain beside Act II's) with its
-//! short copy, the per-day FLOWS (a positive flow `good`, a deficit `danger`), and the
+//! short copy, the per-day FLOWS (an inflow reads `better`, a deficit `worse`, no flow `flat`), and the
 //! **population-relevant** BODY projections: how many live under one roof, how long the larder
 //! feeds them at the eating policy's rate, when water runs short at its flow, and the hall's
 //! vigor. No decorative durability/maintenance meters: those systems do not exist.
@@ -16,6 +16,7 @@ const fx = @import("./fixtures.zig");
 const comp = ha.comp;
 const ledger = ha.ledger;
 const uic = ha.ui_client;
+const vd = uic.style.verdict;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
@@ -71,7 +72,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         .key = @tagName(f.resource),
         .label = f.resource.labelIn(2),
         .value = try flowText(a, f.per_day),
-        .tone = if (f.per_day >= 0) .good else .danger,
+        .verdict = vd.marginDelta(f.per_day, .higher),
     };
 
     var body: std.ArrayList(Sentence) = .empty;
@@ -84,7 +85,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         try body.append(a, .{ .key = "larder", .prefix = "Larder feeds all for ", .value = try a.print("{d:.1}d", .{d}), .suffix = ".", .tone = runwayTone(d) });
     }
     if (waterDays(ledger.balance(world, e, .water), fx.flowOf(.water))) |d| {
-        try body.append(a, .{ .key = "water", .prefix = "Water runs short in ", .value = try a.print("{d:.1}d", .{d}), .suffix = ".", .tone = if (d < 2) .danger else .warn });
+        try body.append(a, .{ .key = "water", .prefix = "Water runs short in ", .value = try a.print("{d:.1}d", .{d}), .suffix = ".", .verdict = vd.of(d < 2, .low, .attention) });
     } else {
         try body.append(a, .{ .key = "water", .prefix = "Water ", .value = "holds", .suffix = ".", .tone = .good });
     }

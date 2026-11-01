@@ -5,7 +5,7 @@
 //!
 //! The template owns presentation only. Each act projects its own domain state into a `Content`
 //! (`pages/act_one/holdings.zig`, `pages/act_two/holdings.zig`); the strings are the act's and
-//! the tones are semantic, so this file reads no world state.
+//! the tones and verdicts are semantic, so this file reads no world state.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -28,13 +28,21 @@ const panel_gap: f32 = 12;
 
 /// A value's semantic color. Labels stay `fg`/`dim`; only the value carries the tone.
 pub const Tone = enum { fg, dim, good, warn, danger };
+const Verdict = style.Verdict;
 
 /// One `label … value` line. `key` is its stable node id (a good's or verb's id, a resource
-/// tag) so a line keeps its identity as the list around it changes.
-pub const Line = struct { key: []const u8, label: []const u8, value: []const u8, tone: Tone = .dim };
+/// tag) so a line keeps its identity as the list around it changes. A set `verdict` (what the
+/// value means) paints the value instead of `tone`.
+pub const Line = struct { key: []const u8, label: []const u8, value: []const u8, tone: Tone = .dim, verdict: ?Verdict = null };
 
-/// One BODY sentence: dim prose around one live value.
-pub const Sentence = struct { key: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, tone: Tone = .fg };
+/// One BODY sentence: dim prose around one live value, in `verdict`'s color when set, else
+/// `tone`'s.
+pub const Sentence = struct { key: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, tone: Tone = .fg, verdict: ?Verdict = null };
+
+/// A value's color: its verdict's through the view's table, else its tone's.
+fn valueColor(ctx: *uic.UiCtx, tone: Tone, verdict: ?Verdict) uic.Color {
+    return if (verdict) |v| style.verdictColor(ctx, v) else style.toneColor(ctx, tone);
+}
 
 /// What one act shows in the column.
 pub const Content = struct {
@@ -54,7 +62,7 @@ pub const Content = struct {
 
 fn lines(parent: El, id: []const u8, items: []const Line, gap: f32) !void {
     const col = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = gap }, .{});
-    for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, style.toneColor(parent.ctx, l.tone));
+    for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, valueColor(parent.ctx, l.tone, l.verdict));
 }
 
 /// The heading's right inset inside the panel's content box (`.panel-heading`'s 16px), which
@@ -87,7 +95,7 @@ fn bodyPanel(parent: El, c: Content, col_w: f32) !void {
     }
     // `.body-panel` sets its sentences at 11px on a 1.35 line, no gap between them.
     const list = try panel.box("list", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 0 }, .{});
-    for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, style.toneColor(parent.ctx, s.tone));
+    for (c.body) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, valueColor(parent.ctx, s.tone, s.verdict));
 }
 
 /// The stacked column: one panel's width and whether HOLDINGS and BODY sit side by side.

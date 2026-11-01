@@ -57,7 +57,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // detailed number formatting.
         header_stocks = .{
             t.vigorStock(ctx, "VI", vigor),
-            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = food.v, .tone = if (food.v <= 0) .danger else .normal },
+            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = food.v, .verdict = uic.style.verdict.when(food.v <= 0, .low) },
             .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = biomass.v },
         };
         header_stock_count = header_stocks.len;

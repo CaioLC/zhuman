@@ -56,6 +56,9 @@ pub const Stock = struct {
     value: f32,
     max: ?f32 = null,
     tone: Tone = .normal,
+    /// What the value means (`low` for a stock at zero); when set it paints the value instead
+    /// of `tone`.
+    verdict: ?style.Verdict = null,
 };
 
 /// Build one stock token into `parent`. The token sizes to its content (abbrev + value),
@@ -158,7 +161,7 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     const lbl = (try box.text("l", label_txt))
         .with_style(.{ lineType(box.ctx), size, style.muted });
     const val = (try box.text("v", value))
-        .with_style(.{ lineType(box.ctx), size, style.tone(s.tone) });
+        .with_style(.{ lineType(box.ctx), size, style.tone(s.tone), Style{ .verdict = s.verdict } });
     box.get().size.baseline = val.get().size.baseline; // baseline-align the wrapper like its label
     _ = lbl;
 }

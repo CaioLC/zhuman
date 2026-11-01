@@ -136,7 +136,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
                 .abbrev = resource.abbrevIn(2),
                 .full = resource.labelIn(2),
                 .value = amount,
-                .tone = if (amount <= 0) .danger else .normal,
+                .verdict = uic.style.verdict.when(amount <= 0, .low),
             };
             n += 1;
         }

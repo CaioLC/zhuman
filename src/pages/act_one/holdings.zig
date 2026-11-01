@@ -10,6 +10,7 @@ const comp = ha.comp;
 const effects = ha.effects;
 const roster = ha.roster;
 const uic = ha.ui_client;
+const vd = uic.style.verdict;
 const World = ha.world.World;
 const Entity = ha.world.Entity;
 
@@ -50,12 +51,14 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         for (cat.actions, 0..) |rec, ai| {
             const live = effects.verb(cat, goods, ai) orelse continue;
             const base = rec.requires.energy;
-            if (@abs(live.requires.energy - base) < 0.001) continue;
+            // A lower energy cost is the better margin; an unmoved one shows no line.
+            const moved = vd.margin(live.requires.energy, base, .lower);
+            if (moved == .flat) continue;
             try margins.append(a, .{
                 .key = rec.id,
                 .label = rec.name,
                 .value = try a.print("{d:.1}e \u{2192} {d:.1}e", .{ base, live.requires.energy }),
-                .tone = if (live.requires.energy < base) .good else .danger,
+                .verdict = moved,
             });
         }
     }
@@ -65,14 +68,14 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
             .key = "quality",
             .label = "Food quality",
             .value = try a.print("{d} \u{2192} {d}", .{ q0, food.quality }),
-            .tone = if (food.quality > q0) .good else .danger,
+            .verdict = vd.margin(@floatFromInt(food.quality), @floatFromInt(q0), .higher),
         });
         const s0 = ha.baselines.food_spoils;
         try margins.append(a, .{
             .key = "spoilage",
             .label = "Food spoilage",
             .value = try a.print("{d:.2} \u{2192} {d:.2}/day", .{ s0, food.spoils }),
-            .tone = if (food.spoils < s0) .good else if (food.spoils > s0) .danger else .dim,
+            .verdict = vd.margin(food.spoils, s0, .lower),
         });
     }
     if (world.get(e, comp.Vigor)) |vigor| try margins.append(a, .{
@@ -107,7 +110,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     const rate = ctx.res.config.clampMetabolism(met.rate);
 
     const net = ha.systems.net_food_drawdown(met.base_rate, rate, 0);
-    if (net <= 0.001) {
+    if (net <= vd.delta_eps) {
         try body.append(a, .{ .key = "coverage", .prefix = "Larder ", .value = "holds", .suffix = ".", .tone = .good });
     } else {
         const days = food.v / net;
@@ -116,7 +119,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
             .prefix = "Food lasts ",
             .value = try a.print("{d:.1}d", .{days}),
             .suffix = ".",
-            .tone = if (days < 2) .danger else .fg,
+            .verdict = vd.when(days < 2, .low),
         });
     }
 

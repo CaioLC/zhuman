@@ -248,5 +248,6 @@ test {
     _ = a11y;
     _ = motion;
     _ = style;
+    _ = @import("./verdict.zig");
     _ = typography;
 }

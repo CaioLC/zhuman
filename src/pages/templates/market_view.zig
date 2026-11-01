@@ -13,6 +13,7 @@ const std = @import("std");
 const ha = @import("ha");
 const uic = ha.ui_client;
 const style = uic.style;
+const vd = style.verdict;
 const Style = style.Style;
 const El = uic.elements.El;
 const nb = ha.neighbours;
@@ -249,7 +250,7 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     try top.label("trade", try std.ascii.allocUpperString(ctx.arena, p.trade), .{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     const right = try top.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
     const posts = if (live > 0) try ctx.arena.print("{d} POSTS LIVE", .{live}) else "NOTHING POSTED";
-    try right.label("posts", posts, .{Style{ .font = 10, .tracking = 0.06, .ink = if (live > 0) .dim else .warn }});
+    try right.label("posts", posts, .{Style{ .font = 10, .tracking = 0.06, .ink = .dim, .verdict = vd.when(live == 0, .attention) }});
     if (live > 0) {
         try run(row, "line", 11, &.{
             .{ "Sells ", th.dim },
@@ -296,10 +297,11 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .gap = 8,
     }, .{});
-    try top.label("name", name, .{Style{ .font = 13, .ink = if (chosen) .acc else if (!match) .dim else .fg }});
+    // fg, dim (`inactive`) for a person who wants nothing you hold, accent while chosen.
+    try top.label("name", name, .{Style{ .font = 13, .ink = .fg, .verdict = vd.when(!match, .inactive), .on = &.{.{ .when = .selected, .ink = .acc }} }});
     try top.label("trade", try std.ascii.allocUpperString(ctx.arena, @tagName(a.trade)), .{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     const right = try top.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
-    try right.label("match", if (match) "WANTS WHAT YOU HOLD" else "nothing you hold", .{Style{ .font = 10, .tracking = 0.06, .ink = if (match) .good else .line2 }});
+    try right.label("match", if (match) "WANTS WHAT YOU HOLD" else "nothing you hold", .{Style{ .font = 10, .tracking = 0.06, .verdict = vd.of(match, .met, .absent) }});
     try run(row, "line", 11, &.{
         .{ "Sells ", th.dim },
         .{ try sellSummary(ctx, a, words), th.fg },
@@ -391,7 +393,7 @@ fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling:
     const row = lr.inner;
     row.set(.{ .flow = .{ .dir = .row, .cross = .center }, .in_tracks = tracks }, .{});
     const item = try row.box("item", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 1 }, .{});
-    try item.label("name", try book_mod.title(a, words[i]), .{Style{ .font = 13, .ink = if (post.qty > 0) .acc else .dim }});
+    try item.label("name", try book_mod.title(a, words[i]), .{Style{ .font = 13, .ink = .acc, .verdict = vd.when(post.qty == 0, .inactive) }});
     const sub = if (selling)
         try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] })
     else blk: {
@@ -407,7 +409,7 @@ fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling:
     const takers = if (selling) m.buyersFor(i, post.price) else m.sellersFor(i, post.price);
     const who = try row.box("who", .{ .flow = .{ .dir = .row, .main = .end } }, .{});
     const text = if (post.qty == 0) "not posted" else try a.print("{d} {s}", .{ takers, if (selling) "would buy" else "would sell" });
-    try who.label("t", text, .{Style{ .font = 10, .ink = if (post.qty > 0 and takers > 0) .good else .line2 }});
+    try who.label("t", text, .{Style{ .font = 10, .verdict = vd.of(post.qty > 0 and takers > 0, .met, .absent) }});
 }
 
 // ---- the slip -----------------------------------------------------------------------------
@@ -546,7 +548,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
                 .flow = .{ .dir = .row, .main = .space_between, .cross = .center }, .gap = 6,
             }, .{});
             const name = if (is_coin) "Coin" else try book_mod.title(a, words[i]);
-            try row.label("n", name, .{Style{ .font = 12, .ink = if (bundle[i] > 0) .fg else .line2 }});
+            try row.label("n", name, .{Style{ .font = 12, .ink = .fg, .verdict = vd.when(bundle[i] == 0, .absent) }});
             bundle[i] = @intCast(try stepper_mod.quantity_stepper(row, "stepper", bundle[i], 0, cap, .{ .less = "Less", .more = "More" }));
         }
         if (!any) try placeholder(box, "none", if (giving) "Nothing spare they buy." else "Nothing to receive.");
@@ -588,7 +590,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
             try key.label("k", try std.ascii.allocUpperString(a, if (i == nb.coin) "coin" else words[i]), .{Style{ .font = 12, .tracking = 0.04, .ink = .dim }});
             try r.label("from", try book_mod.fmtNum(a, before), .{Style{ .font = 12, .ink = .line2 }});
             try r.label("arrow", "\u{2192}", .{Style{ .font = 12, .ink = .line2 }});
-            try r.label("to", try book_mod.fmtNum(a, value), .{Style{ .font = 12, .ink = if (value < before) .warn else if (value > before) .good else .fg }});
+            try r.label("to", try book_mod.fmtNum(a, value), .{Style{ .font = 12, .verdict = vd.trade(value, before) }});
         }
     }
 
@@ -642,7 +644,7 @@ fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8
         }, .{});
         try row.label("l", r[1], .{style.note});
         const value = if (r[2]) try a.print("{d} items \u{00b7} {d} of {d:.0} coin", .{ buy_items, committed, p.coin }) else try a.print("{d} items \u{00b7} {d} units", .{ sell_items, sell_units });
-        try row.label("v", value, .{Style{ .font = 11, .ink = if (r[2] and over) .danger else .fg }});
+        try row.label("v", value, .{Style{ .font = 11, .ink = .fg, .verdict = vd.when(r[2] and over, .over) }});
     }
     if (over) {
         try slip.label_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .fill, .{Style{ .font = 10, .ink = .danger }});

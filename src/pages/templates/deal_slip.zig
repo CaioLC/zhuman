@@ -10,6 +10,7 @@ const std = @import("std");
 const ha = @import("ha");
 const uic = ha.ui_client;
 const style = uic.style;
+const vd = style.verdict;
 const Style = style.Style;
 const El = uic.elements.El;
 
@@ -146,11 +147,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
             try r.label("from", try book_mod.fmtNum(a, row.before), .{Style{ .font = 12, .ink = .line2 }});
             try r.label("arrow", "\u{2192}", .{Style{ .font = 12, .ink = .line2 }});
             const to = try r.text("to", try book_mod.fmtNum(a, row.after));
-            const target = if (row.after < 0) th.danger else switch (row.sign()) {
-                .down => th.warn,
-                .up => th.good,
-                .flat => th.fg,
-            };
+            const target = style.verdictColor(ctx, if (row.after < 0) .over else vd.trade(row.after, row.before));
             // The flash: a fresh settlement starts each value at warn and eases to its tone.
             const key = to.get().key;
             if (opts.flash) ctx.res.tween.from(key, 0, 1, flash_s);

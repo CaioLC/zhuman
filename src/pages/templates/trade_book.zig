@@ -240,11 +240,6 @@ pub const AfterRow = struct {
     key: []const u8,
     before: f32,
     after: f32,
-
-    pub const Sign = enum { down, up, flat };
-    pub fn sign(self: AfterRow) Sign {
-        return if (self.after < self.before) .down else if (self.after > self.before) .up else .flat;
-    }
 };
 
 /// A whole number without decimals, else one decimal (`11.6`, `8`).
@@ -326,8 +321,8 @@ test "notation and AFTER rows follow the prototype" {
     try testing.expectEqualStrings("Fishing rod \u{00d7}1", try Book.fmtLong(a, rod.receive, 1, true));
     const rows = try book.after(a, &rod, 1);
     try testing.expectEqual(@as(usize, 3), rows.len);
-    try testing.expectEqual(AfterRow.Sign.down, rows[0].sign());
-    try testing.expectEqual(AfterRow.Sign.up, rows[2].sign());
+    try testing.expect(rows[0].after < rows[0].before);
+    try testing.expect(rows[2].after > rows[2].before);
     try testing.expectEqualStrings("unlocks Fish \u{00b7} you hold 0 fishing rod", try book.subLine(a, &rod));
 }
 

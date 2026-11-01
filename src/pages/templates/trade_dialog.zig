@@ -13,6 +13,7 @@ const std = @import("std");
 const ha = @import("ha");
 const uic = ha.ui_client;
 const style = uic.style;
+const vd = style.verdict;
 const Style = style.Style;
 const El = uic.elements.El;
 const UiCtx = uic.UiCtx;
@@ -210,7 +211,7 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
     try item.label_fit("lot", lot.lot, .{ .cell_fill = .ellipsis }, .{Style{ .font = 13, .text = lot_ink }});
     try item.label_fit("sub", try book.subLine(a, lot), .{ .cell_fill = .ellipsis }, .{style.caption_faint});
 
-    try row.label_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell_fill = .clip }, .{Style{ .font = 12, .ink = if (refused != null) .line2 else .fg }});
+    try row.label_fit("price", try book.fmtShort(a, Book.counterpart(lot)), .{ .cell_fill = .clip }, .{Style{ .font = 12, .ink = .fg, .verdict = vd.when(refused != null, .refused) }});
 
     // Narrow, the corner takes its own line under the lot (`.row-corner { grid-column: 1 / -1 }`).
     const corner = try row.box("corner", .{
@@ -232,7 +233,7 @@ fn visitLedger(parent: El, visit: []const Delta) !void {
     const row = try parent.box("visit", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 9 }, .{});
     try row.label("label", "THIS VISIT", .{style.eyebrow_dim});
     var any = false;
-    for (visit) |d| if (@abs(d.n) > 0.001) {
+    for (visit) |d| if (vd.tradeDelta(d.n) != .flat) {
         any = true;
     };
     if (!any) {
@@ -242,13 +243,14 @@ fn visitLedger(parent: El, visit: []const Delta) !void {
     const deltas = try row.box("deltas", .{ .flow = .{ .dir = .row, .cross = .center } }, .{});
     var first = true;
     for (visit, 0..) |d, i| {
-        if (@abs(d.n) <= 0.001) continue;
+        const moved = vd.tradeDelta(d.n);
+        if (moved == .flat) continue;
         const cell = try deltas.boxi("d", i, .{ .flow = .{ .dir = .row, .cross = .center } }, .{});
         if (!first) _ = (try cell.text("sep", " \u{00b7} ")).with_style(.{Style{ .font = 10, .ink = .fg }});
         first = false;
         const sign = if (d.n < 0) "\u{2212}" else "+";
         const text = try ctx.arena.print("{s}{s} {s}", .{ sign, try book_mod.fmtNum(ctx.arena, @abs(d.n)), d.key });
-        try cell.label("t", text, .{Style{ .font = 10, .ink = if (d.n < 0) .warn else .good }});
+        try cell.label("t", text, .{Style{ .font = 10, .verdict = moved }});
     }
 }
 

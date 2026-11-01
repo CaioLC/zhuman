@@ -75,13 +75,11 @@ pub fn marketIdentity(kind: MarketKind) MarketIdentity {
 /// its content is fully lit. The passerby's trailing action is hidden while absent and restored
 /// while dealable; permanent venues retain their action link.
 pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: bool) !El {
-    const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     var idn = marketIdentity(kind);
     // The merchant's cart on the river road: the strip says so until it is back.
     if (kind == .merchant and !available) idn.copy = "away downriver \u{00B7} back with fresh stock.";
-    const signal_color = if (available) style.toneColor(ctx, idn.tone) else th.dim;
-    const copy_color = if (available) th.fg else th.dim;
+    // While nobody is there to deal with, signal and copy read `inactive`.
+    const away = Style{ .verdict = style.verdict.when(!available, .inactive) };
 
     // CSS counterpart: `.merchant-strip` — one full-width 32px border-box with a dashed
     // line-2 edge. Its 9px insets are the content row's padding, which the row's percentage
@@ -98,12 +96,12 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
         .flow = .{ .dir = .row, .cross = .center },
     }, .{style.pad_sym(market_pad_x, 0)});
 
-    try content.label("signal", idn.signal, .{Style{ .font = market_font, .text = signal_color }});
+    try content.label("signal", idn.signal, .{ Style{ .font = market_font }, style.tone(idn.tone), away });
 
     const copy_lane = try content.box("copy_lane", .{
         .w = .grow, .h = .fit_children, .overflow = .clip, .margin = .{ .before = market_gap },
     }, .{});
-    try copy_lane.label("copy", idn.copy, .{Style{ .font = market_font, .text = copy_color }});
+    try copy_lane.label("copy", idn.copy, .{ Style{ .font = market_font, .ink = .fg }, away });
 
     const show_action = idn.action.len > 0 and (kind != .passerby or available);
 

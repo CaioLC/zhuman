@@ -398,6 +398,9 @@ pub const View = struct {
     /// This frame's palette — `build_ui` installs one over the foundation's neutral
     /// defaults.
     theme: thememod.Theme = .{},
+    /// The role each verdict paints with (`ui_client/verdict.zig`). The foundation's table is
+    /// the default; a game replaces it here the way it replaces `theme`.
+    verdicts: @import("./ui_client/verdict.zig").Roles = .{},
     /// This frame's terminal **ground** — the near-black the framed terminal floats on
     /// (art direction, not a foundation `Theme` role; installed from `palette.ground` by
     /// `build_ui`). Defaults to the terminal `bg` so a view built before the prologue runs
