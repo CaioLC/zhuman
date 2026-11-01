@@ -532,13 +532,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.table_header_cell(h, "inputs", "INPUTS");
         _ = try t.table_header_cell(h, "state", "STATE");
         const r1 = try t.table_row(demo, "r1", set, 6, 5);
-        _ = try t.table_cell(r1, "recipe", "Reinforced Timber Frame", th.fg, false);
-        _ = try t.table_cell(r1, "inputs", "12mi 4me", th.dim, false);
-        _ = try t.table_cell(r1, "state", "ready", th.good, true);
+        _ = try t.table_cell(r1, "recipe", "Reinforced Timber Frame", style.ink(.fg), false);
+        _ = try t.table_cell(r1, "inputs", "12mi 4me", style.ink(.dim), false);
+        _ = try t.table_cell(r1, "state", "ready", style.ink(.good), true);
         const r2 = try t.table_row(demo, "r2", set, 6, 5);
-        _ = try t.table_cell(r2, "recipe", "Kiln", th.fg, false);
-        _ = try t.table_cell(r2, "inputs", "30mi", th.dim, false);
-        _ = try t.table_cell(r2, "state", "reach 60%", th.warn, true);
+        _ = try t.table_cell(r2, "recipe", "Kiln", style.ink(.fg), false);
+        _ = try t.table_cell(r2, "inputs", "30mi", style.ink(.dim), false);
+        _ = try t.table_cell(r2, "state", "reach 60%", style.ink(.warn), true);
     } else if (eq(name, "browser_heading")) {
         const demo = try stage.box("heading_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         _ = try t.browser_heading(demo, "bh", "ACTIONS", "What will the settlement do now?", "20 VERBS");

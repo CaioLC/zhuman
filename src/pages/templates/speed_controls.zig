@@ -4,6 +4,7 @@
 //! fresh runs; pause (the stepper's lowest position) freezes the complete simulation stage while
 //! host input, roster watching, rendering and UI motion continue on real frame time.
 
+const std = @import("std");
 const ha = @import("ha");
 
 const uic = ha.ui_client;
@@ -30,12 +31,25 @@ const level_names = [_][]const u8{ "Paused", "1× speed", "2× speed", "3× spee
 /// the chevrons.
 const level_cell_w: f32 = 36;
 
+/// Whether the simulation is stopped or moving, the readout's key.
+pub const Pace = enum { paused, running };
+
+/// The pace at a stepper position (pure): position 0 is pause.
+pub fn paceOf(level: u8) Pace {
+    return if (level == 0) .paused else .running;
+}
+
+/// The speed readout's ink by pace: a paused run calls attention in warn, a running one reads fg.
+pub const readout_looks = std.EnumArray(Pace, Style).init(.{
+    .paused = .{ .ink = .warn },
+    .running = .{ .ink = .fg },
+});
+
 /// The header's `<< {speed} >>` stepper over pause, 1×, 2×, 3×. One focus stop, published as a
 /// slider: arrows step, Home pauses, End jumps to 3×. The chevrons are pointer targets only
 /// (not extra Tab stops) and dim out at their bound.
 pub fn speed_stepper(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const pb = &ctx.res.playback;
     const box = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 2, .w = .fit_children, .h = .fit_children }, .{});
     ctx.res.commands.registerRange(box.get().key);
@@ -62,12 +76,11 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
         .value = level_names[lvl],
         .cursor = .default,
     });
-    const color = if (lvl == 0) th.warn else th.fg;
     value_cell.set(.{
         .w = .{ .fixed = level_cell_w }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
-    try value_cell.label("label", level_labels[lvl], .{ Style{ .font = 10, .tracking = 0.04, .text = color }, style.pad_sym(2, 2) });
+    try value_cell.label("label", level_labels[lvl], .{ Style{ .font = 10, .tracking = 0.04 }, readout_looks.get(paceOf(lvl)), style.pad_sym(2, 2) });
     return box;
 }
 
@@ -82,4 +95,13 @@ fn chevron(box: El, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     box.set(.{ .w = .fit_children, .h = .fit_children }, .{});
     try box.label("glyph", glyph, .{ Style{ .font = 10 }, chevron_glyph, style.pad_sym(3, 2) });
     return q.clicked;
+}
+
+test "paceOf and readout_looks: pause reads warn, every speed fg" {
+    try std.testing.expectEqual(Pace.paused, paceOf(0));
+    for (1..Playback.max_level + 1) |l| try std.testing.expectEqual(Pace.running, paceOf(@intCast(l)));
+    try std.testing.expectEqual(style.ThemeRole.warn, readout_looks.get(.paused).ink.?);
+    try std.testing.expectEqual(style.ThemeRole.fg, readout_looks.get(.running).ink.?);
+    try std.testing.expectEqual(@as(usize, 0), readout_looks.get(.paused).on.len);
+    try std.testing.expectEqual(@as(usize, 0), readout_looks.get(.running).on.len);
 }

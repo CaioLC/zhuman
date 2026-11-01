@@ -43,6 +43,51 @@ pub fn height(density: Density) f32 {
     };
 }
 
+/// What a tile is showing: an action you can take now, one you cannot afford, or the one the
+/// body is performing. Running wins over affordability: a running tile paints the same whether
+/// or not its price is still payable.
+pub const TileState = enum { ready, unaffordable, running };
+
+/// The tile's state from its two facts (pure).
+pub fn tileState(can: bool, running: bool) TileState {
+    if (running) return .running;
+    return if (can) .ready else .unaffordable;
+}
+
+/// The inks of one tile state: the box outline, the name, the optional state line, the metrics
+/// (`−2e · 4h`), the curve icon's tint and the payoff.
+pub const TileLook = struct { outline: Style, name: Style, state: Style, metric: Style, icon: Style, yield: Style };
+
+/// Every tile state's inks. An unaffordable tile flattens everything onto dim, one scan-off
+/// signal; a running one keeps the ready chrome and lights its state line. Only a ready tile is
+/// an enabled control, and its name lifts to accent while hot; the outline keeps its rest.
+pub const tile_looks = std.EnumArray(TileState, TileLook).init(.{
+    .ready = .{
+        .outline = .{ .outline_ink = .fg },
+        .name = .{ .ink = .fg, .on = &.{.{ .when = .hot, .ink = .acc }} },
+        .state = .{ .ink = .dim },
+        .metric = .{ .ink = .dim },
+        .icon = .{ .tint_ink = .dim },
+        .yield = .{ .ink = .fg },
+    },
+    .unaffordable = .{
+        .outline = .{ .outline_ink = .dim },
+        .name = .{ .ink = .dim },
+        .state = .{ .ink = .dim },
+        .metric = .{ .ink = .dim },
+        .icon = .{ .tint_ink = .dim },
+        .yield = .{ .ink = .dim },
+    },
+    .running = .{
+        .outline = .{ .outline_ink = .fg },
+        .name = .{ .ink = .fg },
+        .state = .{ .ink = .acc },
+        .metric = .{ .ink = .dim },
+        .icon = .{ .tint_ink = .dim },
+        .yield = .{ .ink = .fg },
+    },
+});
+
 /// An enabled action is an ordinary focus target. Once activation turns it into a running
 /// progress readout, retain it only while it already owns focus; moving away removes the inert
 /// tile from traversal on the next frame.
@@ -71,7 +116,6 @@ pub fn tile(
     density: Density,
 ) !Tile {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
     const running = progress != null;
     const compact = density == .compact;
     const name_role: Style = if (compact) style.body else style.h3;
@@ -98,44 +142,41 @@ pub fn tile(
         .value = value,
         .ring = false, // a large tile shows hover and focus on its name, not a second outline
     });
-    const chrome = if (running) th.fg else if (!enabled) th.dim else th.fg;
-    // Hover/focus lifts the name to accent; the outline keeps its resting colour.
-    const name_ink = if (enabled and q.hot()) th.acc else chrome;
+    // The look is the state's (`tile_looks`); the name's hover/focus lift is its rule, and the
+    // control publishes `disabled` on every other state.
+    const look = tile_looks.get(tileState(can, running));
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
-    box.set(.{ .flow = .{ .dir = .column } }, .{ Style{ .outline_color = chrome }, style.pad_each(0, 0, 1, 0) });
+    box.set(.{ .flow = .{ .dir = .column } }, .{ look.outline, style.pad_each(0, 0, 1, 0) });
 
     const inner = try box.box("inner", .{
         .flow = .{ .dir = .column, .cross = .start }, .gap = 2,
     }, .{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
 
-    const lit = can or running; // dimmed tiles flatten everything onto the chrome
-
-    try inner.label("name", name, .{ name_role, Style{ .text = name_ink } });
+    try inner.label("name", name, .{ name_role, look.name });
 
     // An optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.
     if (state.len > 0) {
-        try inner.label("state", state, .{ style.small, Style{ .ink = if (running) .acc else if (!enabled) .dim else .dim } });
+        try inner.label("state", state, .{ style.small, look.state });
     }
 
     // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and
-    // the expected payoff. Center-aligned across (the icon box has no baseline). Disabled ⟹
-    // everything takes the dim chrome, one flat scan-off signal.
+    // the expected payoff. Center-aligned across (the icon box has no baseline).
     const row = try inner.box("info", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 6 }, .{});
 
-    try row.label("cost", cost_txt, .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
+    try row.label("cost", cost_txt, .{ metric_role, look.metric });
     // The middot joins the price segment and the duration, so additional input costs
     // stay in the price segment *before* the middot.
-    try row.label("mid", "\u{00B7}", .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
-    try row.label("dur", duration_txt, .{ metric_role, Style{ .text = if (lit) th.dim else chrome } });
+    try row.label("mid", "\u{00B7}", .{ metric_role, look.metric });
+    try row.label("dur", duration_txt, .{ metric_role, look.metric });
 
     // Recolor the icon raster's ink through the style fold's `tint` field rather
     // than poking `render_data.svg` — same last-fragment-wins path as every other look.
-    (try row.svg("kind", info.kind_icon(kind), if (compact) icon_px - 2 else icon_px)).set(.{}, .{Style{ .tint = if (lit) th.dim else chrome }});
+    (try row.svg("kind", info.kind_icon(kind), if (compact) icon_px - 2 else icon_px)).set(.{}, .{look.icon});
 
-    try row.label("yield", yield_txt, .{ metric_role, Style{ .text = if (lit) th.fg else chrome } });
+    try row.label("yield", yield_txt, .{ metric_role, look.yield });
 
     // The underbar: full tile width × progress, a percentage of the box it is anchored in
     // (an out-of-flow child resolves against its parent's final size, so it never resizes
@@ -222,4 +263,41 @@ test "running action retains existing focus without becoming a new tab stop" {
     try std.testing.expect(focusRegistrationEnabled(false, true, true));
     try std.testing.expect(!focusRegistrationEnabled(false, true, false));
     try std.testing.expect(!focusRegistrationEnabled(false, false, true));
+}
+
+test "tileState: running wins over affordability" {
+    try std.testing.expectEqual(TileState.ready, tileState(true, false));
+    try std.testing.expectEqual(TileState.unaffordable, tileState(false, false));
+    try std.testing.expectEqual(TileState.running, tileState(true, true));
+    try std.testing.expectEqual(TileState.running, tileState(false, true));
+}
+
+test "tile_looks pins every state's inks" {
+    const R = style.ThemeRole;
+    const Row = struct { TileState, R, R, R, R, R, R };
+    // outline, name, state line, metrics, icon, yield
+    const want = [_]Row{
+        .{ .ready, .fg, .fg, .dim, .dim, .dim, .fg },
+        .{ .unaffordable, .dim, .dim, .dim, .dim, .dim, .dim },
+        .{ .running, .fg, .fg, .acc, .dim, .dim, .fg },
+    };
+    for (want) |w| {
+        const l = tile_looks.get(w[0]);
+        try std.testing.expectEqual(w[1], l.outline.outline_ink.?);
+        try std.testing.expectEqual(w[2], l.name.ink.?);
+        try std.testing.expectEqual(w[3], l.state.ink.?);
+        try std.testing.expectEqual(w[4], l.metric.ink.?);
+        try std.testing.expectEqual(w[5], l.icon.tint_ink.?);
+        try std.testing.expectEqual(w[6], l.yield.ink.?);
+        // Only the ready name carries a rule: hot lifts it to accent.
+        const rules = l.name.on;
+        if (w[0] == .ready) {
+            try std.testing.expectEqual(@as(usize, 1), rules.len);
+            try std.testing.expectEqual(style.When.hot, rules[0].when);
+            try std.testing.expectEqual(R.acc, rules[0].ink.?);
+        } else try std.testing.expectEqual(@as(usize, 0), rules.len);
+        inline for (.{ "outline", "state", "metric", "icon", "yield" }) |f| {
+            try std.testing.expectEqual(@as(usize, 0), @field(l, f).on.len);
+        }
+    }
 }

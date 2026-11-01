@@ -261,6 +261,28 @@ pub fn capital_header(parent: El, id: []const u8, set: *uic.TrackSet, sort: ?Hea
 /// whose order is on hand but whose builder's hands are taken by other work.
 pub const Kind = enum { ready, busy, reach, building, blocked, locked, owned };
 
+/// The inks of one row kind: the good's name (and a ready row's `Build →`), the row's own ink
+/// (the order, the days, a reach count) and the WHAT CHANGES sentence.
+pub const RowLook = struct { name: Style, ink: Style, effect: Style };
+
+fn rowLook(comptime name: style.ThemeRole, comptime ink: style.ThemeRole, comptime effect: style.ThemeRole) RowLook {
+    return .{ .name = .{ .ink = name }, .ink = .{ .ink = ink }, .effect = .{ .ink = effect } };
+}
+
+/// Every row kind's inks. A ready or building row reads fg throughout (`.build-row.ready`); the
+/// others dim their own ink, and a blocked or owned row dims its name and sentence too
+/// (`.build-row.blocked/.owned .good-name`). Only a ready row is an enabled control, and its
+/// name lifts to accent while hot.
+pub const row_looks = std.EnumArray(Kind, RowLook).init(.{
+    .ready = .{ .name = .{ .ink = .fg, .on = &.{.{ .when = .hot, .ink = .acc }} }, .ink = .{ .ink = .fg }, .effect = .{ .ink = .fg } },
+    .building = rowLook(.fg, .fg, .fg),
+    .reach = rowLook(.fg, .dim, .fg),
+    .busy = rowLook(.fg, .dim, .fg),
+    .locked = rowLook(.fg, .dim, .fg),
+    .blocked = rowLook(.dim, .dim, .dim),
+    .owned = rowLook(.dim, .dim, .dim),
+});
+
 pub const Row = struct { kind: Kind, reach: f32, clicked_build: bool, clicked_cancel: bool };
 
 /// A row's plain cell is the table's.
@@ -271,10 +293,10 @@ const cell = table.cell;
 /// every downstream column out of its lane. The box and hit geometry are the track; only the
 /// visible glyphs are bounded. A **secondary type** sub-label rides under the name in
 /// dim/small — the recipe's kind (`recipeType`).
-fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8, color: Color) !El {
+fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8, ink: Style) !El {
     const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start } }, .{});
     box.set(.{ .gap = 1 }, .{});
-    try box.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{Style{ .font = name_font, .text = color }});
+    try box.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{ Style{ .font = name_font }, ink });
     if (secondary.len > 0) {
         try box.label_fit("ty", secondary, .{ .cell_fill = .ellipsis }, .{Style{ .font = kind_font, .tracking = 0.06, .transform = .upper, .ink = .line2 }});
     }
@@ -322,7 +344,7 @@ pub fn orderChars(act: u8, rec: *const roster.Good) usize {
 
 /// The COST cell: the order then its energy on one line (`12m 4e`, the prototype's
 /// `.recipe-cost`), elided at the lane width when a long Act II order outruns it.
-fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, color: Color) !El {
+fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, ink: Style) !El {
     var obuf: [48]u8 = undefined;
     var ebuf: [12]u8 = undefined;
     var lbuf: [64]u8 = undefined;
@@ -332,7 +354,7 @@ fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, color
         std.mem.print(&lbuf, "{s} {s}", .{ order, energy }) catch order
     else
         energy;
-    return cell(parent, id, line, color, false);
+    return cell(parent, id, line, ink, false);
 }
 
 /// The word a recipe's row names its kind with, under the name and for `type:` — what the
@@ -383,15 +405,9 @@ pub fn capital_row(
     // The row is a composite tile: the good's name is its accessible name and `hot` is the
     // same enabled fact the build click gates on.
     const ctl = row.control(.{ .enabled = hot, .name = rec.name, .role = .tile, .ring = false });
-    const lit: Color = switch (kind) {
-        .ready => if (ctl.hot()) th.acc else th.fg,
-        .building => th.fg,
-        // `.build-row.blocked/.owned .good-name` dim; every other name reads fg.
-        .owned, .blocked => th.dim,
-        .reach, .busy, .locked => th.fg,
-    };
-    // The row's own ink: fg on a ready or building row, dim otherwise (`.build-row.ready`).
-    const faint: Color = if (kind == .ready or kind == .building) th.fg else th.dim;
+    // The kind's inks (`row_looks`); a ready name's hot lift is its rule, and every other kind
+    // publishes `disabled`.
+    const look = row_looks.get(kind);
 
     // The row's lanes are the header's: the same tracks, so the same widths and visibility.
     row.set(.{
@@ -400,18 +416,18 @@ pub fn capital_row(
     }, .{ style.pad_sym(row_pad_x, 6), Style{ .on = &.{.{ .when = .hot, .fill_ink = .panel }} } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
-    place(try name_cell(row, "nm", rec.name, recipeType(rec), lit), .recipe, 1);
+    place(try name_cell(row, "nm", rec.name, recipeType(rec), look.name), .recipe, 1);
 
-    place(try cost_cell(row, "co", act, rec, faint), .cost, 1);
+    place(try cost_cell(row, "co", act, rec, look.ink), .cost, 1);
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
         const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
-        place(try cell(row, "dy", days_txt, faint, false), .time, 1);
+        place(try cell(row, "dy", days_txt, look.ink, false), .time, 1);
     }
 
     if (col(.effect).visible(ctx)) {
-        place(try cell(row, "sa", rec.copy.effect, if (kind == .blocked or kind == .owned) th.dim else th.fg, false), .effect, 1);
+        place(try cell(row, "sa", rec.copy.effect, look.effect, false), .effect, 1);
     }
 
     // --- state column: readiness, reach/materials, ownership, or live progress ------------
@@ -459,7 +475,7 @@ pub fn capital_row(
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
-            try state_in.label("biomass", txt, .{ row_type, Style{ .text = faint } });
+            try state_in.label("biomass", txt, .{ row_type, look.ink });
         },
     }
 
@@ -475,7 +491,7 @@ pub fn capital_row(
 
         switch (kind) {
             .ready => _ = (try action_in.text("build", "Build \u{2192}"))
-                .with_style(.{ row_type, Style{ .text = lit } }),
+                .with_style(.{ row_type, look.name }),
             .owned => {
                 // Another unit is stock; offered whenever the quote would accept it.
                 if (q.ready()) {
@@ -547,6 +563,35 @@ pub fn reachSegments(frac: f32) usize {
     if (frac >= 2.0 / 3.0) return 2;
     if (frac >= 1.0 / 3.0) return 1;
     return 0;
+}
+
+test "row_looks pins every kind's inks" {
+    const R = style.ThemeRole;
+    // name, own ink, sentence
+    const want = std.EnumArray(Kind, [3]R).init(.{
+        .ready = .{ .fg, .fg, .fg },
+        .building = .{ .fg, .fg, .fg },
+        .reach = .{ .fg, .dim, .fg },
+        .busy = .{ .fg, .dim, .fg },
+        .locked = .{ .fg, .dim, .fg },
+        .blocked = .{ .dim, .dim, .dim },
+        .owned = .{ .dim, .dim, .dim },
+    });
+    for (std.enums.values(Kind)) |k| {
+        const l = row_looks.get(k);
+        const w = want.get(k);
+        try std.testing.expectEqual(w[0], l.name.ink.?);
+        try std.testing.expectEqual(w[1], l.ink.ink.?);
+        try std.testing.expectEqual(w[2], l.effect.ink.?);
+        try std.testing.expectEqual(@as(usize, 0), l.ink.on.len);
+        try std.testing.expectEqual(@as(usize, 0), l.effect.on.len);
+        // Only a ready name carries a rule: hot lifts it to accent.
+        if (k == .ready) {
+            try std.testing.expectEqual(@as(usize, 1), l.name.on.len);
+            try std.testing.expectEqual(style.When.hot, l.name.on[0].when);
+            try std.testing.expectEqual(R.acc, l.name.on[0].ink.?);
+        } else try std.testing.expectEqual(@as(usize, 0), l.name.on.len);
+    }
 }
 
 test "reachSegments quantizes reach into thirds" {

@@ -14,7 +14,6 @@ const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const El = el.El;
-const Color = uic.Color;
 
 /// A column label over its lane. Returns the cell.
 pub fn header_cell(parent: El, id: []const u8, label: []const u8) !El {
@@ -65,17 +64,17 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
 /// `selected`), accent while hot on every column, the active one included.
 pub const sort_label = Style{ .ink = .line2, .on = &.{ .{ .when = .selected, .ink = .fg }, .{ .when = .hot, .ink = .acc } } };
 
-/// A body cell: `text` in `color`, elided at its track's width so a long value never knocks
-/// the downstream lanes out of line. `right` anchors the readout to the lane's right edge.
-/// Returns the cell.
-pub fn cell(parent: El, id: []const u8, text: []const u8, color: Color, right: bool) !El {
+/// A body cell: `text` in `ink` (a look: a role, and any state rules on the row), elided at its
+/// track's width so a long value never knocks the downstream lanes out of line. `right` anchors
+/// the readout to the lane's right edge. Returns the cell.
+pub fn cell(parent: El, id: []const u8, text: []const u8, ink: Style, right: bool) !El {
     const box = try parent.box(id, .{ .w = .fit_children, .h = .fit_children }, .{});
     // The anchored inner spans the cell, so the text elides at the track.
     const inner = try box.box("i", .{
         .anchor = if (right) .center_right else .center_left, .w = .{ .pct_of_parent = 1.0 },
         .h = .fit_children,
     }, .{});
-    try inner.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{Style{ .font = 11, .text = color }}); // `.build-row { font-size: 11px }`
+    try inner.label_fit("t", text, .{ .cell_fill = .ellipsis }, .{ Style{ .font = 11 }, ink }); // `.build-row { font-size: 11px }`
     return box;
 }
 

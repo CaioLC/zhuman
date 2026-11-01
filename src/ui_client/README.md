@@ -911,9 +911,8 @@ prototype's `:hover, :focus-visible` lift plus the native press latch (a press t
 the control stays lit while dragged off it). `Interaction.hover_focus()` drops the latch, for
 the controls that never lit during that gesture. `control` publishes `focus_visible` as
 `focused` under keyboard modality, so a click's focus does not hold the lift once the pointer
-leaves. The predicates read
-`focus_visible` because that is the CSS state they mirror. A rule picks one with
-`.when = .hot` or `.when = .hover_focus`.
+leaves. The predicates read `focus_visible` because that is the CSS state they mirror. A rule
+picks one with `.when = .hot` or `.when = .hover_focus`.
 
 **State rules.** `Style.on` is a slice of `Rule`s, each a condition (`when`) and the role inks
 (`ink`, `tint_ink`, `fill_ink`, `outline_ink`) that replace the resting ones while it holds:
@@ -943,8 +942,31 @@ while the owner is hot. The conditions (`style.When`) read the owner's published
   only when the node already owns one this frame (the engine's non-acquiring
   `peekInteraction`); with neither, a spec with rules panics in safe builds.
 
-A site whose choice mixes in other facts (a disabled control that still lifts, a lit color
-shared with a `Color` parameter) keeps the explicit form, `.ink = if (q.hot()) .acc else .dim`.
+**Look tables.** A look chosen by a game state is data: a `std.EnumArray(State, Style)` from
+the state to its look, or to a struct of `Style`s when one state styles several nodes.
+
+- **Where.** Declared `pub` beside the template that uses it and named for what it is:
+  `button.looks`, `action_tile.tile_looks`, `capital_row.row_looks`, `milestone_goal.looks`,
+  `speed_controls.readout_looks`. A board that paints its own colours keeps `Color`s or roles
+  in the table instead (`research_board.label_inks`, `research_board.stroke_roles`).
+- **The key.** A pure function derives it from the template's facts
+  (`action_tile.tileState(can, running)`, `speed_controls.paceOf(level)`,
+  `research_board.tileStroke(out, lit)`), and the template writes `.{ looks.get(state) }`.
+  Per-node facts that are not control state are inputs to that function, not rules.
+- **Lifts.** A lift on the owner's control state rides the entry as an `on` rule: a ready
+  tile's or row's name lifts while hot, and the other states publish `disabled`.
+- **Tests.** Each table has a unit test beside it that pins every entry, and
+  `src/pages/templates/state_rules_test.zig` resolves the entries with rules in every pointer
+  and focus state against the chains they replaced.
+
+**What stays explicit.** A choice that mixes a control state with a game fact in one decision,
+picks a fill from a game fact (a verdict is glyph ink only), or follows geometry keeps the
+`if`: the market strip's TRADE label (it lifts while disabled), market_view's stall row fill
+(posted or not), trade_dialog's lot ink (chosen or refused), research_board's small-button
+label (its rest is a `Color` parameter), the slider thumb's edge while dragging, the scroll
+thumb (it sits beside its viewport, so a rule on it has no control to read on its own and
+reads an enclosing viewport when nested), and colours picked by index or geometry (the reach
+meter's segments, the window ground in `terminal.zig`).
 
 ## Color: roles here, values in the game (`theme.zig`)
 

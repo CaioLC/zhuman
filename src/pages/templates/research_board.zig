@@ -123,6 +123,32 @@ fn baseFill(ctx: *uic.UiCtx, k: Kind) Color {
     return uic.mix(baseStroke(ctx, k), neutral, 0.28);
 }
 
+/// What a tile's edge shows: its wedge colour, the lift of a selected or hovered tile, or the
+/// dashed warning of a tile the selection unlocks.
+pub const TileStroke = enum { wedge, lit, outward };
+
+/// A tile's edge from its two facts (pure): `out`, the selection unlocks it; `lit`, it is
+/// selected or hovered. The outward warning wins over the lift.
+pub fn tileStroke(out: bool, lit: bool) TileStroke {
+    if (out) return .outward;
+    return if (lit) .lit else .wedge;
+}
+
+/// Each edge's ink by role; `wedge` is null, the tile's own resource colour (`baseStroke`).
+pub const stroke_roles = std.EnumArray(TileStroke, ?style.ThemeRole).init(.{ .wedge = null, .lit = .fg, .outward = .warn });
+
+fn strokeColor(ctx: *uic.UiCtx, k: Kind, s: TileStroke) Color {
+    return if (stroke_roles.get(s)) |r| style.roleColor(ctx, r) else baseStroke(ctx, k);
+}
+
+/// A tile label's ink by its research state, the board's own inks (`.hex-label`): near-black
+/// on a researched tile's bright fill, white on an available one. A locked tile shows no label.
+pub const label_inks = std.EnumArray(roster.TechState, Color).init(.{
+    .locked = label_default,
+    .available = label_available,
+    .researched = label_researched,
+});
+
 /// A unit-square point `d` board units from the box centre at `deg` degrees.
 fn polar(deg: f32, radius: f32) uic.Point {
     const a = deg * std.math.pi / 180.0;
@@ -659,7 +685,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
                 .available => 1.25,
                 .researched => 1.35,
             };
-            const stroke = if (is_out) th.warn else if (selected or hot) th.fg else baseStroke(ctx, k);
+            const stroke = strokeColor(ctx, k, tileStroke(is_out, selected or hot));
             const full: uic.SizeRule = .{ .pct_of_parent = 1.0 };
             (try tile.polygon("fill", &fill_pts, baseFill(ctx, k), fill_op)).set(.{
                 .anchor = .top_left, .w = full, .h = full, .pass_through = true,
@@ -711,7 +737,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             // The label: hidden on a locked silhouette.
             if (live and t.short.len > 0) {
                 const lab = try tile.box("label", .{ .anchor = .top_left, .w = full, .h = full, .pass_through = true }, .{});
-                try (try centreIn(lab)).label("t", t.short, .{Style{ .font = label_font, .tracking = -0.045, .text = if (s == .researched) label_researched else if (s == .available) label_available else label_default }});
+                try (try centreIn(lab)).label("t", t.short, .{Style{ .font = label_font, .tracking = -0.045, .text = label_inks.get(s) }});
             }
 
             // The material dots, and the research marker on an established tile.
@@ -945,6 +971,22 @@ fn hexHit(rect: uic.Rect, x: f32, y: f32) bool {
     const half_w = radius * sqrt3 / 2;
     if (dx > half_w or dy > radius) return false;
     return dy <= radius - dx / sqrt3;
+}
+
+test "tileStroke: the outward warning wins over the lift" {
+    try std.testing.expectEqual(TileStroke.wedge, tileStroke(false, false));
+    try std.testing.expectEqual(TileStroke.lit, tileStroke(false, true));
+    try std.testing.expectEqual(TileStroke.outward, tileStroke(true, false));
+    try std.testing.expectEqual(TileStroke.outward, tileStroke(true, true));
+}
+
+test "stroke_roles and label_inks pin every entry" {
+    try std.testing.expectEqual(@as(?style.ThemeRole, null), stroke_roles.get(.wedge));
+    try std.testing.expectEqual(@as(?style.ThemeRole, .fg), stroke_roles.get(.lit));
+    try std.testing.expectEqual(@as(?style.ThemeRole, .warn), stroke_roles.get(.outward));
+    try std.testing.expectEqual(uic.rgb(0xd4, 0xce, 0xc0), label_inks.get(.locked));
+    try std.testing.expectEqual(uic.rgb(0xf2, 0xf4, 0xf6), label_inks.get(.available));
+    try std.testing.expectEqual(uic.rgb(0x15, 0x18, 0x1d), label_inks.get(.researched));
 }
 
 test "hybrid rails split the hex into two three-edge halves" {

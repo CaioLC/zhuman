@@ -4,7 +4,9 @@
 //! publish: held, hovering, focus (none, a click's focus, visible focus), and the site's
 //! `disabled`/`selected`/`checked` facts. Each `old*` function is the `if` chain the template
 //! used before its look was a rule, so a resolved colour that differs from it is a pixel that
-//! moved.
+//! moved. The look tables keyed by a game state (the action tile's, the BUILD row's, the
+//! milestone's) are pinned the same way, each state against its old chain, with the control
+//! disabled where the state is not actionable.
 //!
 //! The scroll thumb's fill stays a ternary on `ScrollState.dragging`; the replay test at the end
 //! records why. On its own the thumb's `held` bit and the drag coincide, but a `.held` rule
@@ -24,12 +26,15 @@ const El = el.El;
 const Color = uic.Color;
 const Interaction = UiCtx.Interaction;
 
+const action_tile = @import("./action_tile.zig");
 const button = @import("./button.zig");
+const capital_row = @import("./capital_row.zig");
 const deal_slip = @import("./deal_slip.zig");
 const generator_section = @import("./generator_section.zig");
 const market_view = @import("./market_view.zig");
 const menu_dialog = @import("./menu_dialog.zig");
 const menu_list = @import("./menu_list.zig");
+const milestone_goal = @import("./milestone_goal.zig");
 const paginator = @import("./paginator.zig");
 const quantity_stepper = @import("./quantity_stepper.zig");
 const rail = @import("./rail.zig");
@@ -63,10 +68,13 @@ const Publish = struct {
     selected: bool = false,
     /// `.checked = on`.
     checked: bool = false,
+    /// The control is always disabled: a tile or row whose game state is not actionable
+    /// (`.enabled = false` for every combination of the pointer and focus bits).
+    disabled: bool = false,
 };
 
 /// The colours a state paints, by role; null where the look leaves the slot unset.
-const Want = struct { text: ?Role = null, fill: ?Role = null, outline: ?Role = null };
+const Want = struct { text: ?Role = null, fill: ?Role = null, outline: ?Role = null, tint: ?Role = null };
 
 /// Which node the template styles: the control's own box, or a label inside it.
 const Target = enum { owner, child };
@@ -102,7 +110,7 @@ const Rig = struct {
     /// router's pointer bits, and return the interaction the template would have read.
     fn publish(self: *Rig, p: Publish, f: Facts) Interaction {
         const k = self.owner.key;
-        self.ctx.setFlag(k, .disabled, p.gate and !f.enabled);
+        self.ctx.setFlag(k, .disabled, p.disabled or (p.gate and !f.enabled));
         self.ctx.setFlag(k, .selected, p.selected and f.on);
         self.ctx.setFlag(k, .checked, p.checked and f.on);
         self.ctx.setFlag(k, .held, f.held);
@@ -138,9 +146,9 @@ const Rig = struct {
                             const ok = same(got.text, self.color(want.text)) and
                                 same(got.fill, self.color(want.fill)) and
                                 same(got.outline_color, self.color(want.outline)) and
-                                got.tint == null;
+                                same(got.tint, self.color(want.tint));
                             if (!ok) {
-                                std.debug.print("{s}: {any}\n  want {any}\n  got text={any} fill={any} outline={any}\n", .{ name, f, want, got.text, got.fill, got.outline_color });
+                                std.debug.print("{s}: {any}\n  want {any}\n  got text={any} fill={any} outline={any} tint={any}\n", .{ name, f, want, got.text, got.fill, got.outline_color, got.tint });
                                 return error.LookMovedAPixel;
                             }
                             states += 1;
@@ -330,6 +338,85 @@ fn oldSortLabel(f: Facts, q: Interaction) Want {
     return .{ .text = if (!q.disabled and q.hot()) .acc else if (f.on) .fg else .line2 };
 }
 
+// ---- the old game-state chains -----------------------------------------------------------------
+// These looks are keyed by a game state (a look table); the chains below picked the same colours
+// from the template's facts and the interaction `control()` returned.
+
+fn OldTile(comptime can: bool, comptime running: bool) type {
+    return struct {
+        // action_tile.zig `tile`: `enabled = !running and can`, `lit = can or running`,
+        //   chrome = if (running) fg else if (!enabled) dim else fg
+        //   name = if (enabled and q.hot()) acc else chrome; state = if (running) acc else dim
+        //   metric, icon tint = if (lit) dim else chrome; yield = if (lit) fg else chrome
+        const enabled = !running and can;
+        const lit = can or running;
+        const chrome: Role = if (running) .fg else if (!enabled) .dim else .fg;
+        fn outline(_: Facts, _: Interaction) Want {
+            return .{ .outline = chrome };
+        }
+        fn name(_: Facts, q: Interaction) Want {
+            return .{ .text = if (enabled and q.hot()) .acc else chrome };
+        }
+        fn state(_: Facts, _: Interaction) Want {
+            return .{ .text = if (running) .acc else if (!enabled) .dim else .dim };
+        }
+        fn metric(_: Facts, _: Interaction) Want {
+            return .{ .text = if (lit) .dim else chrome };
+        }
+        fn icon(_: Facts, _: Interaction) Want {
+            return .{ .tint = if (lit) .dim else chrome };
+        }
+        fn yield(_: Facts, _: Interaction) Want {
+            return .{ .text = if (lit) .fg else chrome };
+        }
+    };
+}
+
+fn OldCapitalRow(comptime kind: capital_row.Kind) type {
+    return struct {
+        // capital_row.zig: `lit` is a switch on kind, `.ready => if (ctl.hot()) acc else fg`,
+        //   building/reach/busy/locked fg, owned/blocked dim;
+        //   faint = if (ready or building) fg else dim; sentence = if (blocked or owned) dim else fg
+        fn name(_: Facts, q: Interaction) Want {
+            return .{ .text = switch (kind) {
+                .ready => if (q.hot()) .acc else .fg,
+                .building => .fg,
+                .owned, .blocked => .dim,
+                .reach, .busy, .locked => .fg,
+            } };
+        }
+        fn ink(_: Facts, _: Interaction) Want {
+            return .{ .text = if (kind == .ready or kind == .building) .fg else .dim };
+        }
+        fn effect(_: Facts, _: Interaction) Want {
+            return .{ .text = if (kind == .blocked or kind == .owned) .dim else .fg };
+        }
+    };
+}
+
+fn OldMilestone(comptime state: milestone_goal.Lifecycle) type {
+    return struct {
+        // milestone_goal.zig: `tone = toneColor(presentationOf(state).tone)`, danger while
+        //   locked/unfunded, good while ready/done; readiness `.text = tone`;
+        //   action_ink = if (ready) fg else dim, with `.on = hover_focus → acc` on the outline
+        //   and the label (the CTA publishes `.enabled = ready`).
+        const ready = state == .ready;
+        const tone: Role = switch (state) {
+            .locked, .unfunded => .danger,
+            .ready, .done => .good,
+        };
+        fn readiness(_: Facts, _: Interaction) Want {
+            return .{ .text = tone };
+        }
+        fn outline(_: Facts, q: Interaction) Want {
+            return .{ .outline = if (!q.disabled and q.hover_focus()) .acc else if (ready) .fg else .dim };
+        }
+        fn label(_: Facts, q: Interaction) Want {
+            return .{ .text = if (!q.disabled and q.hover_focus()) .acc else if (ready) .fg else .dim };
+        }
+    };
+}
+
 // ---- the looks -------------------------------------------------------------------------------
 
 test "state rules: every button variant paints what its ternary did, in every state" {
@@ -399,6 +486,66 @@ test "state rules: chips, choices, tabs, sort headers and the generator toggle" 
     _ = try rig.expectLook("tab label", tabs.tab_label, .child, .{ .selected = true }, oldTab);
     _ = try rig.expectLook("sort header label", table.sort_label, .child, .{ .selected = true }, oldSortLabel);
     _ = try rig.expectLook("generator toggle", generator_section.toggle_label, .child, .{ .checked = true }, oldGeneratorToggle);
+}
+
+test "look tables: every action tile state paints what its chain did, in every state" {
+    var rig: Rig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var n: usize = 0;
+    inline for (.{ .{ true, false }, .{ false, false }, .{ true, true }, .{ false, true } }) |c| {
+        const can = c[0];
+        const running = c[1];
+        const Old = OldTile(can, running);
+        const look = action_tile.tile_looks.get(action_tile.tileState(can, running));
+        // The tile's control publishes `.enabled = !running and can`.
+        const p = Publish{ .disabled = !Old.enabled };
+        const tag = comptime std.fmt.comptimePrint("tile can={} running={} ", .{ can, running });
+        n += try rig.expectLook(tag ++ "outline", look.outline, .owner, p, Old.outline);
+        n += try rig.expectLook(tag ++ "name", look.name, .child, p, Old.name);
+        n += try rig.expectLook(tag ++ "state", look.state, .child, p, Old.state);
+        n += try rig.expectLook(tag ++ "metric", look.metric, .child, p, Old.metric);
+        n += try rig.expectLook(tag ++ "icon", look.icon, .child, p, Old.icon);
+        n += try rig.expectLook(tag ++ "yield", look.yield, .child, p, Old.yield);
+    }
+    try std.testing.expectEqual(@as(usize, 4 * 6 * 12), n);
+}
+
+test "look tables: every BUILD row kind paints what its chain did, in every state" {
+    var rig: Rig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var n: usize = 0;
+    inline for (comptime std.enums.values(capital_row.Kind)) |kind| {
+        const Old = OldCapitalRow(kind);
+        const look = capital_row.row_looks.get(kind);
+        // The row's control publishes `.enabled = kind == .ready`.
+        const p = Publish{ .disabled = kind != .ready };
+        const tag = "row " ++ @tagName(kind) ++ " ";
+        n += try rig.expectLook(tag ++ "name", look.name, .child, p, Old.name);
+        n += try rig.expectLook(tag ++ "ink", look.ink, .child, p, Old.ink);
+        n += try rig.expectLook(tag ++ "sentence", look.effect, .child, p, Old.effect);
+    }
+    try std.testing.expectEqual(@as(usize, 7 * 3 * 12), n);
+}
+
+test "look tables: every milestone lifecycle paints what its chain did, in every state" {
+    var rig: Rig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var n: usize = 0;
+    inline for (comptime std.enums.values(milestone_goal.Lifecycle)) |state| {
+        const Old = OldMilestone(state);
+        const look = milestone_goal.looks.get(state);
+        try std.testing.expectEqual(Old.tone, look.tone);
+        // The CTA publishes `.enabled = state == .ready`.
+        const p = Publish{ .disabled = state != .ready };
+        const tag = "milestone " ++ @tagName(state) ++ " ";
+        n += try rig.expectLook(tag ++ "readiness", look.readiness, .child, p, Old.readiness);
+        n += try rig.expectLook(tag ++ "cta outline", look.action_outline, .owner, p, Old.outline);
+        n += try rig.expectLook(tag ++ "cta label", look.action_label, .child, p, Old.label);
+    }
+    try std.testing.expectEqual(@as(usize, 4 * 3 * 12), n);
 }
 
 // ---- the scroll thumb ------------------------------------------------------------------------

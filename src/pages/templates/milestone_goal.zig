@@ -20,19 +20,53 @@ const Color = uic.Color;
 const DisclosureState = uic.UiState.DisclosureState;
 
 pub const Lifecycle = enum { locked, unfunded, ready, done };
-pub const Tone = enum { danger, good };
-pub const Presentation = struct { tone: Tone, readiness: []const u8 };
+pub const Presentation = struct { readiness: []const u8 };
 
-/// The shared visual state follows the vetted CSS: locked/unfunded use the danger rail/wash;
-/// ready/done use the good rail/wash. Callers may provide a more specific readiness phrase.
+/// The readiness word each lifecycle shows. Callers may provide a more specific phrase.
 pub fn presentationOf(state: Lifecycle) Presentation {
     return switch (state) {
-        .locked => .{ .tone = .danger, .readiness = "locked" },
-        .unfunded => .{ .tone = .danger, .readiness = "inputs short" },
-        .ready => .{ .tone = .good, .readiness = "ready" },
-        .done => .{ .tone = .good, .readiness = "done" },
+        .locked => .{ .readiness = "locked" },
+        .unfunded => .{ .readiness = "inputs short" },
+        .ready => .{ .readiness = "ready" },
+        .done => .{ .readiness = "done" },
     };
 }
+
+/// The inks of one lifecycle: the rail and wash role with the wash's opening alpha, the
+/// readiness word, the CTA's outline and label, and the details' kicker.
+pub const Look = struct {
+    tone: style.ThemeRole,
+    wash_alpha: u8,
+    readiness: Style,
+    action_outline: Style,
+    action_label: Style,
+    kicker: Style,
+};
+
+fn lifecycleLook(comptime tone: style.ThemeRole, comptime ready: bool, comptime done: bool) Look {
+    const lift: []const style.Rule = if (ready) &.{.{ .when = .hover_focus, .ink = .acc }} else &.{};
+    const outline_lift: []const style.Rule = if (ready) &.{.{ .when = .hover_focus, .outline_ink = .acc }} else &.{};
+    const rest: style.ThemeRole = if (ready) .fg else .dim;
+    return .{
+        .tone = tone,
+        .wash_alpha = if (tone == .good) 28 else 20,
+        .readiness = .{ .ink = tone },
+        .action_outline = .{ .outline_ink = rest, .on = outline_lift },
+        .action_label = .{ .ink = rest, .on = lift },
+        .kicker = .{ .ink = .acc, .verdict = if (done) .met else null },
+    };
+}
+
+/// Every lifecycle's inks, following the vetted CSS: locked/unfunded use the danger rail and
+/// an 8% wash, ready/done the good rail and an 11% wash. Only a ready card's CTA is an enabled
+/// control, and it lifts to accent on hover or focus; the others rest dim. A done card's
+/// kicker reads `met`.
+pub const looks = std.EnumArray(Lifecycle, Look).init(.{
+    .locked = lifecycleLook(.danger, false, false),
+    .unfunded = lifecycleLook(.danger, false, false),
+    .ready = lifecycleLook(.good, true, false),
+    .done = lifecycleLook(.good, false, true),
+});
 
 fn alpha(c: Color, a: u8) Color {
     return .{ .r = c.r, .g = c.g, .b = c.b, .a = a };
@@ -90,7 +124,8 @@ const detail_wrap_w: f32 = 560;
 pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ctx = parent.ctx;
     const pres = presentationOf(goal.state);
-    const tone = style.toneColor(ctx, pres.tone);
+    const look = looks.get(goal.state);
+    const tone = style.roleColor(ctx, look.tone);
     const readiness = if (goal.readiness.len > 0) goal.readiness else pres.readiness;
     const ready = goal.state == .ready;
 
@@ -99,12 +134,11 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     }, .{});
 
     // State wash and 2px semantic rail paint behind the in-flow content and do not participate
-    // in sizing. Ready/done are 11% good; locked/unfunded are 8% danger, fading at 76%.
+    // in sizing. The wash opens at the look's alpha and fades out at 76%.
     // Anchored, they take percentages of the card's final (fitted) size, so they cover the
     // collapsed or expanded card in the frame it changes.
-    const wash_alpha: u8 = if (pres.tone == .good) 28 else 20;
     const wash = try outer.gradient("wash", .horizontal, &.{
-        .{ .pos = 0, .color = alpha(tone, wash_alpha) },
+        .{ .pos = 0, .color = alpha(tone, look.wash_alpha) },
         .{ .pos = 0.76, .color = alpha(tone, 0) },
         .{ .pos = 1, .color = alpha(tone, 0) },
     }, 1.0);
@@ -139,7 +173,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .flow = .{ .dir = .row, .cross = .center }, .gap = summary_gap,
     }, .{});
     try disclosure_content.label("title", goal.title, .{Style{ .font = 15, .ink = .fg, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
-    try disclosure_content.label("readiness", readiness, .{Style{ .font = 9, .text = tone }});
+    try disclosure_content.label("readiness", readiness, .{ Style{ .font = 9 }, look.readiness });
 
     // The compact column is the only flexible summary field and clips before it can displace
     // the affordance or fixed action button.
@@ -164,12 +198,11 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .offset = .{ .y = bar_control_offset_y },
         }, .{});
         const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button, .ring = false });
-        // Disabled (`!ready`) never lifts, so the dim rest holds under the pointer.
-        const action_ink: style.ThemeRole = if (ready) .fg else .dim;
-        action.set(.{}, .{Style{ .outline_ink = action_ink, .on = &.{.{ .when = .hover_focus, .outline_ink = .acc }} }});
+        // The lifecycle's CTA look: only a ready card's lifts; a disabled one rests dim.
+        action.set(.{}, .{look.action_outline});
         (try action.text("label", goal.action)).set(.{
             .anchor = .center,
-        }, .{Style{ .font = 9, .ink = action_ink, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
+        }, .{ Style{ .font = 9 }, look.action_label });
         clicked = ready and aq.clicked;
     }
 
@@ -192,7 +225,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
                 .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline },
             }, .{});
             if (goal.kicker.len > 0) {
-                try head.label("kicker", goal.kicker, .{Style{ .font = 9, .tracking = 0.08, .ink = .acc, .verdict = vd.when(goal.state == .done, .met) }});
+                try head.label("kicker", goal.kicker, .{ Style{ .font = 9, .tracking = 0.08 }, look.kicker });
             }
             if (goal.cost.len > 0) {
                 try head.label("cost", goal.cost, .{style.fine_print});
@@ -223,14 +256,46 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     return .{ .clicked = clicked, .expanded = disclosure_state.expanded };
 }
 
-test "milestone lifecycle maps to prototype danger/good states" {
-    try std.testing.expectEqual(Tone.danger, presentationOf(.locked).tone);
+test "milestone lifecycle readiness words" {
     try std.testing.expectEqualStrings("locked", presentationOf(.locked).readiness);
-    try std.testing.expectEqual(Tone.danger, presentationOf(.unfunded).tone);
     try std.testing.expectEqualStrings("inputs short", presentationOf(.unfunded).readiness);
-    try std.testing.expectEqual(Tone.good, presentationOf(.ready).tone);
     try std.testing.expectEqualStrings("ready", presentationOf(.ready).readiness);
-    try std.testing.expectEqual(Tone.good, presentationOf(.done).tone);
+    try std.testing.expectEqualStrings("done", presentationOf(.done).readiness);
+}
+
+test "milestone looks pin every lifecycle's inks" {
+    const R = style.ThemeRole;
+    const x = std.testing.expectEqual;
+    // tone, wash alpha, CTA rest, kicker verdict
+    const Row = struct { Lifecycle, R, u8, R, ?style.Verdict };
+    const want = [_]Row{
+        .{ .locked, .danger, 20, .dim, null },
+        .{ .unfunded, .danger, 20, .dim, null },
+        .{ .ready, .good, 28, .fg, null },
+        .{ .done, .good, 28, .dim, .met },
+    };
+    for (want) |w| {
+        const l = looks.get(w[0]);
+        try x(w[1], l.tone);
+        try x(w[2], l.wash_alpha);
+        try x(w[1], l.readiness.ink.?);
+        try x(w[3], l.action_outline.outline_ink.?);
+        try x(w[3], l.action_label.ink.?);
+        try x(R.acc, l.kicker.ink.?);
+        try x(w[4], l.kicker.verdict);
+        try x(@as(usize, 0), l.readiness.on.len);
+        try x(@as(usize, 0), l.kicker.on.len);
+        // Only the ready CTA carries rules: hover or focus lifts its outline and label to acc.
+        const n: usize = if (w[0] == .ready) 1 else 0;
+        try x(n, l.action_outline.on.len);
+        try x(n, l.action_label.on.len);
+        if (n == 1) {
+            try x(style.When.hover_focus, l.action_outline.on[0].when);
+            try x(R.acc, l.action_outline.on[0].outline_ink.?);
+            try x(style.When.hover_focus, l.action_label.on[0].when);
+            try x(R.acc, l.action_label.on[0].ink.?);
+        }
+    }
 }
 
 test "milestone bar dimensions preserve the audited control insets" {
