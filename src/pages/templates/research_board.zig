@@ -23,6 +23,7 @@ const El = uic.elements.El;
 const Color = uic.Color;
 const roster = ha.sim.data.roster;
 const hex = ha.sim.kernel.hex;
+const hex_pixel = @import("../hex_pixel.zig");
 const ResearchState = uic.UiState.ResearchState;
 
 // ---- the board's geometry, in board units (the prototype's 620×620 viewBox) ----------------
@@ -34,7 +35,6 @@ const rail_size: f32 = visible_size - 2.6;
 /// A tile's square box: twice the layout radius, so neighbours' boxes touch.
 const box_units: f32 = 2 * hex_size;
 const sector_radius: f32 = 274;
-const sqrt3: f32 = 1.7320508;
 
 const min_zoom: f32 = 0.75;
 const max_zoom: f32 = 2.5;
@@ -81,12 +81,8 @@ const Filter = enum(u8) { all = 0, available = 1, researched = 2 };
 
 // ---- pure board math ---------------------------------------------------------------------
 
-const Pt = struct { x: f32, y: f32 };
-
-fn axialToBoard(q: i32, r: i32) Pt {
-    const fq: f32 = @floatFromInt(q);
-    const fr: f32 = @floatFromInt(r);
-    return .{ .x = center + sqrt3 * hex_size * (fq + fr / 2), .y = center + 1.5 * hex_size * fr };
+fn axialToBoard(q: i32, r: i32) uic.Point {
+    return hex_pixel.toPixel(.{ .q = q, .r = r }, hex_size, center, center);
 }
 
 /// A tile's resource identity: one wedge (pure) or two adjacent (hybrid).
@@ -149,16 +145,11 @@ pub const label_inks = std.EnumArray(roster.TechState, Color).init(.{
     .researched = label_researched,
 });
 
-/// A unit-square point `d` board units from the box centre at `deg` degrees.
-fn polar(deg: f32, radius: f32) uic.Point {
-    const a = deg * std.math.pi / 180.0;
-    return .{ .x = 0.5 + @cos(a) * radius / box_units, .y = 0.5 + @sin(a) * radius / box_units };
-}
-
-/// The six vertices of a pointy-top hex of `radius`, from -30° clockwise.
+/// The six vertices of a pointy-top hex of `radius`, from -30° clockwise, in the tile's unit
+/// square.
 fn hexPts(radius: f32) [6]uic.Point {
-    var out: [6]uic.Point = undefined;
-    for (&out, 0..) |*p, i| p.* = polar(-30 + 60 * @as(f32, @floatFromInt(i)), radius);
+    var out = hex_pixel.vertexOffsets(radius);
+    for (&out) |*p| p.* = .{ .x = 0.5 + p.x / box_units, .y = 0.5 + p.y / box_units };
     return out;
 }
 
@@ -559,9 +550,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     }
 
     // Keyboard: arrows move the selection to the best-scoring lit tile in that direction.
-    const nav: ?Pt = if (pq.nav_left) .{ .x = -1, .y = 0 } else if (pq.nav_right) .{ .x = 1, .y = 0 } else if (pq.nav_up) .{ .x = 0, .y = -1 } else if (pq.nav_down) .{ .x = 0, .y = 1 } else null;
+    const nav: ?uic.Point = if (pq.nav_left) .{ .x = -1, .y = 0 } else if (pq.nav_right) .{ .x = 1, .y = 0 } else if (pq.nav_up) .{ .x = 0, .y = -1 } else if (pq.nav_down) .{ .x = 0, .y = 1 } else null;
     if (nav) |d| {
-        const from: Pt = if (st.selected) |s| axialToBoard(cat.technologies[s].coord.q, cat.technologies[s].coord.r) else .{ .x = center, .y = center };
+        const from: uic.Point = if (st.selected) |s| axialToBoard(cat.technologies[s].coord.q, cat.technologies[s].coord.r) else .{ .x = center, .y = center };
         var best: ?u16 = null;
         var best_score: f32 = std.math.inf(f32);
         for (cat.technologies, 0..) |t, i| {
@@ -781,7 +772,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const t = &cat.technologies[hi];
             const k = kindOf(t.coord);
             const tip = try pane.div("tooltip");
-            const anchor: Pt = if (hovered != null) .{ .x = pointer.position.x - r.x, .y = pointer.position.y - r.y } else blk: {
+            const anchor: uic.Point = if (hovered != null) .{ .x = pointer.position.x - r.x, .y = pointer.position.y - r.y } else blk: {
                 const p = axialToBoard(t.coord.q, t.coord.r);
                 break :blk .{ .x = cam.x(p.x), .y = cam.y(p.y) };
             };
@@ -966,11 +957,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
 fn hexHit(rect: uic.Rect, x: f32, y: f32) bool {
     if (rect.w <= 0) return false;
     const radius = rect.w / 2 * (visible_size / hex_size);
-    const dx = @abs(x - (rect.x + rect.w / 2));
-    const dy = @abs(y - (rect.y + rect.h / 2));
-    const half_w = radius * sqrt3 / 2;
-    if (dx > half_w or dy > radius) return false;
-    return dy <= radius - dx / sqrt3;
+    return hex_pixel.containsPoint(.{ .x = rect.x + rect.w / 2, .y = rect.y + rect.h / 2 }, radius, .{ .x = x, .y = y });
 }
 
 test "tileStroke: the outward warning wins over the lift" {

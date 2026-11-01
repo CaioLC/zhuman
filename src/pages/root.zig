@@ -129,6 +129,7 @@ fn fixtureRequested(res: *const ha.res.Resources) ?[]const u8 {
 test {
     _ = @import("./templates/root.zig");
     _ = @import("./fmt.zig");
+    _ = @import("./hex_pixel.zig");
     _ = @import("./play_game.zig");
     _ = @import("./debug_page.zig");
     _ = @import("./gameover.zig");
