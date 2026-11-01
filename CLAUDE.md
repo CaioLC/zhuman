@@ -66,7 +66,8 @@ src/ui/             the UI engine — imports nothing from the game
 path dependency and the code imports it as `@import("ui")`, so moving it to its own repository
 is swapping that path for a url. Nothing in it may name the game,
 the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this program;
-`src/pages/` is the only tier that knows what a vigor bar is.
+`src/pages/` is the only tier that knows what a vigor bar is. The pages write intents through
+`res.game.events` rather than calling a rule, and read the outcome in the world next frame.
 
 ```
 src/sim/                     the simulation: systems/ (the tick), rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)

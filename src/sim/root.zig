@@ -31,6 +31,7 @@ pub const systems = struct {
     pub const build = @import("./systems/build.zig");
     pub const generators = @import("./systems/generators.zig");
     pub const passerby = @import("./systems/passerby.zig");
+    pub const ration = @import("./systems/ration.zig");
     pub const log = @import("./systems/log.zig");
 };
 

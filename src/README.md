@@ -28,7 +28,8 @@ The resource model separates survival from accounting:
 
 **Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
 every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
-multiplier in `[0.5, 2.0]` (`1.0` at normal) that the Eating Policy slider sets; `Config` owns
+multiplier in `[0.5, 2.0]` (`1.0` at normal) that the Eating Policy slider sets through a
+`SetRation` intent; `Config` owns
 the range and default, and `Config.clampMetabolism` is the one place a rate is made legal. An
 empty larder drains vigor instead. Because labor's energy gate is strict — an action can never
 take vigor to zero — **starvation is the only path to death**.
@@ -84,8 +85,10 @@ Each frame:
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — host `real_dt` advances roster watching and the tween registry. `Playback`
-   derives simulation `time.dt` at pause/1×/2×/3×; the host skips the complete simulation stage
-   while paused, and only the scaled delta reaches ECS systems, the passerby, and generators.
+   derives simulation `time.dt` at pause/1×/2×/3×. The simulation stage then opens the frame's
+   events (`events.update()`), runs every handler (an intent applies while paused), runs the
+   tick systems only while the run is played and `dt > 0`, and runs the log system last (see
+   *The frame's systems, in order*).
 4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
    returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
    The command registry and the host **semantic snapshot** (`res.semantics`) both
@@ -120,16 +123,18 @@ and the system params over that `World` and `sim.Resources`. `Query(.{…})`, `S
 `getMany` are the engine's; `run(world, res, system)` takes `*World` and `*sim.Resources`, so
 the host calls `ecs.run(&world, &res.game, system)`.
 
-**Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog }`: exactly what
-a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
+**Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog, events }`:
+exactly what a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
 reach seen-set, the passerby, the merchant, the stub neighbours and Exchange; `reset` starts a
 fresh one), `config: Config` the tuning, `time: Time` this frame's real and simulation deltas,
-`catalog` the authored roster; `hours_to_secs` lives beside them. Every field has a default, so
+`catalog` the authored roster, `events` the intents and facts (*Events*, below); `hours_to_secs`
+lives beside them. Every field has a default, so
 a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) embeds it as the
 field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
 title, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
-`ctx.res.game.config`, `ctx.res.game.catalog` directly, and hands `&ctx.res.game` to a rule
-(`actions.begin`, `capital.begin`, `barter.resolve`). `sim/root.zig` is the `sim` namespace,
+`ctx.res.game.config`, `ctx.res.game.catalog` directly and writes intents through
+`ctx.res.game.events.writer(T)`; the trades that are not yet intents hand `&ctx.res.game` to
+their rule (`barter.resolve`, the Act II pages). `sim/root.zig` is the `sim` namespace,
 re-exported by the library as `ha.sim`; a caller spells the folder (`ha.sim.rules.actions`,
 `ha.sim.data.roster`). `zig build test-sim` compiles the sim files and the `ecs` package with
 no `sdl3`, `ui` or host import (root: `sim/root.zig`), so a sim file that reaches the host fails
@@ -152,7 +157,9 @@ through comptime introspection:
 | `Maybe(T)` | yields `?*T` |
 | `Entity` | yields the id; does not drive iteration |
 | `*sim.Resources` / `*World` | taken directly |
-| `*Sim`, `*const Config`, `*const Time`, `*const roster.Catalog` | one **resource group**: any struct-typed field of `sim.Resources` |
+| `*Sim`, `*const Config`, `*const Time`, `*const roster.Catalog`, `*Events` | one **resource group**: any struct-typed field of `sim.Resources` |
+| `EventWriter(T)` | appends `T` to the store on `sim.Resources.events` |
+| `EventReader(T, id)` | reads `T` with the cursor the store keeps for reader `id` |
 
 Prefer naming groups over taking `*sim.Resources`: the signature then states what the system
 reaches, and the compiler holds it to that. No system can touch the renderer, the input or the
@@ -186,19 +193,71 @@ every system: mutating the storage you are iterating is unsafe, so collect ids f
 after (`despawn_dead` is the pattern); and an entity that can be despawned must be read with
 `MaybeSingle`, or the UI build panics the frame it dies.
 
-## The tick, in order (`sim/systems/tick.zig`)
+## Events (`sim/events.zig`)
+
+The simulation's event store is the engine's `Events` (see [`ecs/README.md`](ecs/README.md))
+over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixed-size data that
+names agents, records and items by index and amounts by number, never by text.
+
+**Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, and, declared for the Act II handlers,
+`Research`, `RaiseExchange`, `MerchantDeal`, `NeighbourDeal`. The UI writes them through
+`ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
+decider will write the same events. A **handler** system reads one intent family and calls the
+rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
+the handler answers with `Refused{agent, intent, reason}`.
+
+**Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
+`GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
+`RecipeInReach`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
+A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
+`{ item: ledger.Item, qty }`.
+
+**The two-tick rule.** `events.update()` opens each frame and expires what was written before
+the previous frame began. An intent the UI writes during frame N's build is read by the
+handlers of frame N+1, and gone at the top of N+2; a fact a system writes is readable for the
+rest of its frame and the next.
+
+**Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
+`ration`, `passerby`, `log`. The store keeps one cursor per event type per id, so a handler
+reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
+itself, through `events.readerAt(T, &cursor)`.
+
+**The log.** `systems/log.zig` is the one reader that writes `Log`. It reads every fact with
+the `.log` cursor, in the order the frame writes the types, and words each with the rules' text
+helpers (`actions.paymentText`, `actions.receiptText`, `actions.itemWordOf`,
+`capital.lowerName`) and the catalog (the roster's authored `copy.built`). A fact no line
+describes, such as `GoodsChanged` or an upward `BandCrossed`, is passed over.
+
+## The frame's systems, in order (`sim/systems/`)
+
+`main.zig` runs these through `ecs.run`, after `events.update()`. The handlers run every frame,
+paused or not and housed or not:
+
+| System | Reads | Does |
+|---|---|---|
+| `labor.labor` | `BeginLabor` | `actions.begin`: pays and starts the work, `WorkBegun` |
+| `build.build` | `BeginBuild` | `capital.begin`: pays and starts the build, `WorkBegun` |
+| `build.cancel` | `CancelBuild` | `capital.cancel_build`: the salvage, `BuildCancelled` |
+| `generators.generators_toggle` | `ToggleGenerator` | `capital.toggle_generator` |
+| `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
+| `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
+
+The tick systems run only while the run is played and `dt > 0`, in this order:
 
 | System | Does |
 |---|---|
-| `advance_clock` | bumps `sim.elapsed`, only while a player exists |
-| `update_food` | spoils each larder toward zero at its own `spoils` rate |
-| `metabolize` | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; logs each band crossing once |
-| `resolve_busy` | ticks work in progress and dispatches its finish half at completion, then drops the `Busy` |
-| `track_reach` | logs `A new recipe is within reach: {name}.` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
-| `market.tick` | advances the passerby's clock (not an ECS system — one encounter per run, on `Sim`) |
-| `capital.run_generators` | pays each generator's upkeep and deposits its yields |
-| `mark_dead` | tags `Dead` at `vigor ≤ 0` and logs the death line |
-| `despawn_dead` | reaps them; the UI then shows the start-over screen |
+| `tick.advance_clock` | bumps `sim.elapsed`, only while a player exists |
+| `tick.update_food` | spoils each larder toward zero at its own `spoils` rate |
+| `tick.metabolize` | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` and `BandCrossed` once, on the crossing |
+| `tick.resolve_busy` | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
+| `tick.track_reach` | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `passerby.passerby` | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
+| `generators.generators` | matures every owned, enabled generator by `dt` (`capital.run_generators`) |
+| `tick.mark_dead` | tags `Dead` at `vigor ≤ 0`, `Died` |
+| `tick.despawn_dead` | reaps them; the UI then shows the start-over screen |
+
+Then, every frame and last, `log.log` turns the frame's facts into `Log` lines.
 
 Naming convention: `update_<component_snake_case>` drives one component.
 
@@ -226,11 +285,13 @@ and a `Standing` of `ready`, `busy`, `energy` or `short` with the first unpayabl
 **Labor resolves in two halves,** because actions take time:
 
 - `begin` — refuse unless the quote is ready (one body, one act; energy strict; inputs
-  payable); pay the energy and the input lines upfront; lock `quality` at the *advertised*
-  pre-payment vigor; add `comp.Busy{ .doing = .{ .labor = index } }`.
+  payable), returning the `Refused.Reason`; pay the energy and the input lines upfront; lock
+  `quality` at the *advertised* pre-payment vigor; add `comp.Busy{ .doing = .{ .labor = index } }`;
+  emit `WorkBegun`.
 - `finish` — draw each output line at the locked quality (**the spread is the risk**, there
-  is no separate success roll), deposit through `ledger.draw`, log the receipt built from
-  what landed. A verb lost mid-task — the rod sold while fishing — finishes as nothing.
+  is no separate success roll), deposit through `ledger.draw`, emit `WorkDone` with the
+  receipt of what landed. A verb lost mid-task — the rod sold while fishing — finishes as
+  nothing, `WorkLost`.
 
 Both take a catalog index; `systems.resolve_busy` dispatches on the busy marker's tag.
 The affordability gates are asymmetric on purpose — **energy is strict** (vigor must stay
@@ -256,7 +317,7 @@ paid for), `busy`, `energy`, `short`, `ready`.
 
 **Ownership moves through four doors and settles the same way each time.** `finish` adds the
 built lot; `acquire` adds a traded one; `release` takes units, spares first; `break_one` is
-`release` with the receipt line. On the way in from zero and on the way out to zero they
+`release` with `GoodBroke`. Each emits `GoodsChanged` when the count moves. On the way in from zero and on the way out to zero they
 *settle*: `effects.apply` moves the body and larder by the delta of what the owned goods now
 contribute — a raised ceiling fills what it adds, a lowered one only clamps. **Only the
 first unit carries the effect**: a second pair of sandals
@@ -273,7 +334,7 @@ freely (gloves and a chainsaw on the same verb).
 order and frees the body, while the energy and every hour already spent are gone. The refund
 is flat rather than prorated because the order is charged in full at `begin` and nothing
 draws it down over time. It refuses on a labor verb — half-foraging is not a thing you can
-take materials back from.
+take materials back from — and on an idle body, with `nothing_to_cancel`.
 
 `run_generators` ticks every owned good with `day` lines on every agent: if this tick's
 slice of the upkeep is payable, pay it and deposit the same slice of the flow. Both are
@@ -285,7 +346,8 @@ authored **per in-game day** and scaled by the frame's dt, so a flow reads as a 
 ## Passerby and barter (`sim/rules/market.zig`, `sim/rules/barter.zig`)
 
 **The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
-machine `absent → approaching → present → departed → absent`, ticked by `market.tick` off the
+machine `absent → approaching → present → departed → absent`, ticked by `market.tick` from
+the `passerby` system off the
 sim clock (never a calendar day). Each arrival bumps a monotonic `id` and refills a finite
 satchel of `Ware`s (food, materials, fish_hook, whetstone); stock does not regenerate until
 the next visit. `dealable()` is `phase == .present`, the only gate the UI reads, so hiding the
@@ -428,24 +490,31 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `res.zig` | the host `Resources`: `platform`, `input`, `view`, `playback`, `menu`, `route`, `title`, `settings`, `saves`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game: sim.Resources`, the simulation's resources embedded whole |
 | `palette.zig` | the game's palette — the ten `Theme` roles, the terminal ground, and the six resource hues |
 | `tokens.zig` | the non-color design tokens, in logical px |
-| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `run` (see `ecs/README.md`) |
+| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `Events`, `run` (see `ecs/README.md`) |
 
 `sim/` is the simulation: its root, the schema, the resources a system may reach, and the ECS bound to them.
 
 | File | Holds |
 |---|---|
-| `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.log`, `sim.baselines`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
+| `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `res.zig` | `sim.Resources { sim, config, time, catalog }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours and the Exchange; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
-| `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms |
+| `res.zig` | `sim.Resources { sim, config, time, catalog, events }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours and the Exchange; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
+| `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
 
-`sim/systems/` holds the systems the tick runs.
+`sim/systems/` holds the systems the frame runs.
 
 | File | Holds |
 |---|---|
 | `tick.zig` | the tick systems, in tick order |
+| `labor.zig` | the `BeginLabor` handler |
+| `build.zig` | the `BeginBuild` and `CancelBuild` handlers |
+| `generators.zig` | the `ToggleGenerator` and `CollectGenerator` handlers, and the `generators` update system |
+| `ration.zig` | the `SetRation` handler |
+| `passerby.zig` | the passerby's update system |
+| `log.zig` | the log system: every fact into its `Log` line |
 
 `sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule takes `*World` from its caller, a system or the UI's handler for a press.
 

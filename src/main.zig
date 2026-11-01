@@ -390,6 +390,7 @@ pub fn main(process: std.process.Init) !void {
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.build.cancel);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_toggle);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_collect);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.ration.ration);
         // 4. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
@@ -405,7 +406,7 @@ pub fn main(process: std.process.Init) !void {
             ecs.run(&app.world, &app.resources.game, sys.update_food); // larder spoils
             ecs.run(&app.world, &app.resources.game, sys.metabolize); // continuous eating / starvation
             ecs.run(&app.world, &app.resources.game, sys.resolve_busy); // work in progress ticks/completes
-            ecs.run(&app.world, &app.resources.game, sys.track_reach); // newly in-reach recipes → one log
+            ecs.run(&app.world, &app.resources.game, sys.track_reach); // newly in-reach recipes → RecipeInReach
             ecs.run(&app.world, &app.resources.game, ha.sim.systems.passerby.passerby); // the encounter clock → Arrived / Departed
             ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators); // collectable capital accumulates
             ecs.run(&app.world, &app.resources.game, sys.mark_dead); // vigor at 0 → tag Dead

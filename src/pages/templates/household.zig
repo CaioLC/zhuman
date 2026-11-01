@@ -14,13 +14,17 @@ const holdings_mod = @import("./holdings.zig");
 const eating_policy_mod = @import("./eating_policy.zig");
 const eating_mod = @import("../eating.zig");
 
-/// Build the column for agent `e` and write the slider's value back to its metabolism rate.
-/// An agent with no metabolism shows the policy disabled at normal.
+/// Build the column for agent `e`; when the slider's rate differs from its metabolism rate,
+/// write `SetRation`, which the ration handler applies before the next build. Only a change is
+/// written, so a still slider writes nothing. An agent with no metabolism shows the policy
+/// disabled at normal.
 pub fn household(parent: El, world: *World, e: Entity, id: []const u8, content: holdings_mod.Content) !El {
+    const ctx = parent.ctx;
     const column = try holdings_mod.holdings(parent, id, content);
     if (world.get(e, comp.Metabolism)) |met| {
         const value = try eating_policy_mod.eating_policy(column, "eating_policy", eating_mod.valueFromRate(met.rate), true);
-        met.rate = eating_mod.rate(value);
+        const rate = eating_mod.rate(value);
+        if (rate != met.rate) _ = ctx.res.game.events.writer(ha.sim.events.SetRation).push(.{ .agent = e, .rate = rate });
     } else {
         _ = try eating_policy_mod.eating_policy(column, "eating_policy", 50, false);
     }
