@@ -27,6 +27,8 @@ pub const baselines = @import("./baselines.zig");
 
 pub const systems = struct {
     pub const tick = @import("./systems/tick.zig");
+    pub const labor = @import("./systems/labor.zig");
+    pub const log = @import("./systems/log.zig");
 };
 
 pub const rules = struct {

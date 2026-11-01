@@ -141,8 +141,8 @@ pub fn filter(list: []Entry, query_text: []const u8) []Entry {
     return list[0..n];
 }
 
-/// Build the pane for agent `e`. A ready tile's click begins its verb. `catalog_state` and
-/// `search_owner` keep the query on an always-built owner when given.
+/// Build the pane for agent `e`. A ready tile's click writes `BeginLabor` for its verb.
+/// `catalog_state` and `search_owner` keep the query on an always-built owner when given.
 ///
 /// With `scroll` the pane fills its parent's height, which must be definite: the heading,
 /// search and summary stay put and only the tiles scroll (Act II's long catalog). Without it
@@ -191,7 +191,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
                 .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_tile_mod.height(shelf.density) },
                 .flow = .{ .dir = .column, .main = .center },
             }, .{});
-            if (tl.clicked) actions.begin(world, e, &ctx.res.game, ent.ai);
+            if (tl.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginLabor).push(.{ .agent = e, .ai = ent.ai });
         }
     }
     return section;

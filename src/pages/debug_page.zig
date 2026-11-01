@@ -23,7 +23,6 @@ const style = uic.style;
 const Style = style.Style;
 const El = el.El;
 const ecs = ha.sim.ecs;
-const actions = ha.sim.rules.actions;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 const Node = uic.Node;
@@ -255,7 +254,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                         .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = t.actionTileHeight(d[1]) },
                         .flow = .{ .dir = .column, .main = .center },
                     }, .{});
-                    if (tl.clicked) actions.begin(world, a[0], &ctx.res.game, forage);
+                    if (tl.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginLabor).push(.{ .agent = a[0], .ai = forage });
                 }
             }
         } else {

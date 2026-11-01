@@ -383,7 +383,10 @@ pub fn main(process: std.process.Init) !void {
         // 2. open the frame's events: what was written before the previous frame began expires,
         // and the intents the UI wrote during the last build stay readable through this frame.
         app.resources.game.events.update();
-        // 3. update game systems — but only while the run is still being played. A housed
+        // 3. the handlers: every frame, paused or not and housed or not, so an intent the UI wrote
+        // during the last build applies now and its outcome is in the world this frame's build reads.
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.labor.labor);
+        // 4. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
@@ -415,6 +418,9 @@ pub fn main(process: std.process.Init) !void {
                 _ = ha.sim.rules.market.tickMerchant(&app.resources.game.sim.merchant, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
             };
         }
+
+        // 5. the log, every frame and last: every fact written above becomes its line.
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.log.log);
 
         // UI + Render Stage: the canonical per-frame UI lifecycle, run by the frame driver.
         // The host callbacks wrap page build, the cursor apply, the clear/present around the

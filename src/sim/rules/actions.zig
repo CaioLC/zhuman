@@ -19,11 +19,13 @@ const ledger = @import("./ledger.zig");
 const migration = @import("../data/migration.zig");
 const res_mod = @import("../res.zig");
 const world = @import("../ecs.zig");
+const events = @import("../events.zig");
 
 const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
 const Catalog = roster.Catalog;
+const Reason = events.Refused.Reason;
 
 // --- labor quality: two levels, one constant step ---
 // An agent that isn't `.alive` yields `Config.weary_yield`; one that is yields full. A
@@ -99,12 +101,13 @@ pub fn quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai:
 
 /// The **begin** half: gate → pay → start the work. The yield resolves only at completion.
 /// Quality is locked here: the band the tile advertised at the click is the band the draw
-/// will use, even if the metabolism drains the body while working. Refuses silently when the
-/// quote is not ready.
-pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
+/// will use, even if the metabolism drains the body while working. Emits `WorkBegun` and
+/// returns null; when the quote is not ready it changes nothing and returns why.
+pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason {
     const cat = &res.catalog;
-    const q = quote(w, e, cat, res.config, ai) orelse return;
-    if (!q.ready()) return;
+    if (ai >= cat.actions.len) return .unavailable;
+    const q = quote(w, e, cat, res.config, ai) orelse return .unavailable;
+    if (!q.ready()) return refusal(q.standing);
     const vigor = w.get(e, comp.Vigor).?;
     const frac_before = vigor.v / vigor.max;
 
@@ -112,20 +115,30 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
     // kill — running the body to death takes starving it of the refill.
     vigor.v -= q.verb.requires.energy;
     ledger.pay(w, e, cat, q.verb.input.slice(), 1);
-    if (res.config.condition(frac_before) == .alive and
-        res.config.condition(vigor.v / vigor.max) != .alive)
-        res.sim.log.push(.warn, "You feel weak. Work will yield less.");
 
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
-    {
-        var buf: [64]u8 = undefined;
-        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb.requires.energy, ledger.receiptOf(cat, q.verb.input.slice(), 1), migration.actOf(w, e)));
-    }
+    _ = res.events.writer(events.WorkBegun).push(.{
+        .agent = e,
+        .doing = .{ .labor = ai },
+        .weary = res.config.condition(frac_before) == .alive and res.config.condition(vigor.v / vigor.max) != .alive,
+        .energy = q.verb.requires.energy,
+        .paid = ledger.receiptOf(cat, q.verb.input.slice(), 1),
+        .act = migration.actOf(w, e),
+    });
 
     const total = res_mod.hours_to_secs(q.verb.requires.hours, res.config.secs_per_day);
     w.add(e, comp.Busy{ .doing = .{ .labor = ai }, .total = total, .remaining = total, .quality = q.quality });
 
     res.sim.tutorial_done = true; // remember that this run has successfully begun an action
+    return null;
+}
+
+/// The refusal a quote's standing gives; the names match.
+fn refusal(s: Standing) Reason {
+    return switch (s) {
+        .ready => unreachable,
+        inline else => |t| @field(Reason, @tagName(t)),
+    };
 }
 
 /// The **finish** half: draw each output line at the quality locked at begin (the spread
@@ -223,6 +236,11 @@ fn test_res() !Resources {
     };
 }
 
+/// Word the facts the rules emitted, as the frame's log system does.
+fn logged(w: *World, res: *Resources) void {
+    world.run(w, res, @import("../systems/log.zig").log);
+}
+
 fn spawn_agent(w: *World, vigor: f32, materials: f32) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = vigor, .max = 10 },
@@ -241,7 +259,8 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     const e = spawn_agent(&w, 10, 0);
     const forage = res.catalog.actionIndex("forage").?;
 
-    begin(&w, e, &res, forage);
+    try testing.expect(begin(&w, e, &res, forage) == null);
+    logged(&w, &res);
 
     // Paid and busy — but nothing delivered yet.
     try testing.expectApproxEqAbs(@as(f32, 8.3), w.get(e, comp.Vigor).?.v, 1e-5); // 10 − 1.7 energy
@@ -255,7 +274,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     try testing.expect(res.sim.tutorial_done); // a successful begin sets run-progression memory
 
     // A second begin while busy must refuse, leaving no trace.
-    begin(&w, e, &res, forage);
+    try testing.expectEqual(Reason.busy, begin(&w, e, &res, forage).?);
     try testing.expectApproxEqAbs(@as(f32, 8.3), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
 
     finish(&w, e, &res, forage, b.quality);
@@ -303,7 +322,8 @@ test "begin warns once when its own toll crosses into weakness, and locks pre-pa
     const e = spawn_agent(&w, 4, 0); // 40% — paying 1.7 lands at 23%, across the WEARY line
     const forage = res.catalog.actionIndex("forage").?;
 
-    begin(&w, e, &res, forage);
+    _ = begin(&w, e, &res, forage);
+    logged(&w, &res);
     try testing.expectApproxEqAbs(@as(f32, 2.3), w.get(e, comp.Vigor).?.v, 1e-5); // 4 − 1.7
     try testing.expectEqual(@as(usize, 2), res.sim.log.count); // the weakness warning + payment
     // Quality was judged before paying: 40% was not weak, so the locked factor is 1.0.
@@ -317,7 +337,8 @@ test "begin refuses when energy would hit zero, leaving no trace" {
     const e = spawn_agent(&w, 1.7, 0); // exactly the price — strict gate must refuse
     const forage = res.catalog.actionIndex("forage").?;
 
-    begin(&w, e, &res, forage);
+    try testing.expectEqual(Reason.energy, begin(&w, e, &res, forage).?);
+    logged(&w, &res);
 
     try testing.expectApproxEqAbs(@as(f32, 1.7), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
     try testing.expect(!w.has(e, comp.Busy)); // no work started
@@ -332,7 +353,8 @@ test "an input is paid at begin and named in the payment line" {
     const e = spawn_agent(&w, 10, 3);
     w.get(e, comp.Goods).?.count[res.catalog.goodIndex("spear").?] = 1;
     const traps = res.catalog.actionIndex("hunt").?;
-    begin(&w, e, &res, traps);
+    _ = begin(&w, e, &res, traps);
+    logged(&w, &res);
     try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryBiomass).?.v); // the hunting supply
     try testing.expectEqualStrings("You spend 4.0e 1m to begin.", res.sim.log.get(0).text());
 }
