@@ -12,6 +12,7 @@
 const ecs = @import("ecs");
 const comp = @import("./components.zig");
 const ledger = @import("./rules/ledger.zig");
+const market = @import("./rules/market.zig");
 const neighbours = @import("./rules/neighbours.zig");
 const Condition = @import("./res.zig").Condition;
 
@@ -20,7 +21,7 @@ const Receipt = ledger.Receipt;
 
 /// Every scheduled reader, one stored cursor each per event type. A handler reads its intent
 /// family under its own id; `log` reads every fact.
-pub const ReaderId = enum { labor, build, generators, ration, passerby, log };
+pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, log };
 
 /// Who comes and goes on the sim clock.
 pub const Who = enum { passerby, merchant };
@@ -39,6 +40,8 @@ pub const ToggleGenerator = struct { agent: Entity, gi: u16 };
 pub const CollectGenerator = struct { agent: Entity, gi: u16 };
 /// Set the metabolism rate; the handler clamps it into the configured band.
 pub const SetRation = struct { agent: Entity, rate: f32 };
+/// Take `lots` of the passerby's offer `quote` (`barter.resolve`), every line scaled by `lots`.
+pub const Barter = struct { agent: Entity, quote: market.Quote, lots: u16 };
 /// Establish technology `ti` on the research board.
 pub const Research = struct { agent: Entity, ti: u16 };
 /// Raise the Exchange.
@@ -99,6 +102,16 @@ pub const Refused = struct {
         off,
         /// No build is in progress.
         nothing_to_cancel,
+        /// The counterparty has gone.
+        departed,
+        /// The offer was made by a visitor who is no longer the one here.
+        stale,
+        /// The counterparty has no more of it.
+        sold_out,
+        /// The agent cannot cover the price.
+        unaffordable,
+        /// The agent does not own the good it offers.
+        not_owned,
     };
 };
 
@@ -149,6 +162,20 @@ pub const GoodsChanged = struct { agent: Entity };
 
 /// Recipe `gi`'s prerequisite became satisfied for `agent`.
 pub const RecipeInReach = struct { agent: Entity, gi: u16 };
+
+/// `agent` traded with `with` in `direction`, moving `biomass_moved` materials (for a sell to
+/// the passerby, what it paid). A merchant trade names the lot by index in the merchant's
+/// records (`systems/merchant.zig`) and how many lots it took. `act` is the act the agent's
+/// words are in.
+pub const Traded = struct {
+    agent: Entity,
+    with: Who,
+    direction: market.Direction,
+    biomass_moved: f32 = 0,
+    lot: u32 = 0,
+    lots: u32 = 0,
+    act: u8 = 1,
+};
 
 /// A visitor arrived.
 pub const Arrived = struct { who: Who };

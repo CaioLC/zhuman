@@ -482,8 +482,9 @@ over the shell) when the Passerby strip's Hail is clicked and the `market.Encoun
 an `open` lifecycle flag) rides on the *stable* market-strip node so it survives the frame-arena
 rebuild; the dialog takes that state by pointer rather than owning it on the transient modal box.
 Offers are built in the page from live `market.Quote`s (buys from the passerby's satchel, sells
-from the diminishing schedule), and a confirmed offer routes to `barter.resolve` — so the header,
-Holdings rail, and log refresh the same frame because they read live world state after the resolve.
+from the diminishing schedule), and a confirmed offer is a `Barter` intent: the handler resolves
+it at the top of the next frame, and the page sets `TradeState.settled` when it reads the
+`Traded` fact back through the state's `heard` cursor.
 
 **Resize without state loss.** Because the UI is immediate-mode — `build_ui`'s
 prologue recomputes `ViewMetrics` every frame and the tree is rebuilt from the arena — a

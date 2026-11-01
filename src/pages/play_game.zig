@@ -87,8 +87,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // open. Offers are built from live `market.Quote`s — buys from the passerby's satchel
         // wares, sells from the diminishing schedule for the player's surplus/goods — so BUY/SELL
         // tabs, stock, preview, and both `YOU GIVE` directions are authoritative, and a confirmed
-        // offer routes straight to `ha.sim.rules.barter.resolve`. Header/Holdings/log refresh the same frame
-        // because they read live world state after the resolve.
+        // offer is a `Barter` intent, which the handler resolves at the top of the next frame.
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
@@ -193,7 +192,7 @@ fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequenc
 
 /// Build the trade dialog overlay when open: the passerby's satchel as BUY lots and the
 /// player's stocks and tools as SELL lots, each backed by a live `market.Quote`; a settlement
-/// routes to `barter.resolve` with its lot count. Returns the dialog's overlay root (or null
+/// writes a `Barter` intent with its lot count. Returns the dialog's overlay root (or null
 /// when closed).
 fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
     const ts = ts_opt orelse return null;
@@ -266,13 +265,17 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     const meta = try a.print("{d:.1} DAYS LEFT", .{days_left});
     const res = try t.trade_dialog(ctx, "trade", .passerby, meta, book, &visit, ts);
 
-    // Settle through the authoritative resolver; the header, HOLDINGS and the log read live
-    // state, so they move in this frame, and the slip flashes the new values next frame.
+    // A settlement is a `Barter` intent; the handler resolves it next frame, and the slip
+    // flashes the new values once its `Traded` fact is read here.
     if (res.settle) |s| {
         for (backed.items) |b| {
             if (b.quote.id != s.id) continue;
-            if (barter.resolve(world, e, &ctx.res.game, &b.quote, @intCast(@min(s.lots, std.math.maxInt(u16)))).ok()) ts.settled = true;
+            _ = ctx.res.game.events.writer(ha.sim.events.Barter).push(.{ .agent = e, .quote = b.quote, .lots = @intCast(@min(s.lots, std.math.maxInt(u16))) });
         }
+    }
+    const traded = ctx.res.game.events.readerAt(ha.sim.events.Traded, &ts.heard);
+    while (traded.next()) |f| {
+        if (f.with == .passerby and f.agent == e) ts.settled = true;
     }
     // Escape / × / LEAVE closes; so does the passerby leaving.
     if (res.dismissed or !enc.dealable()) ts.open = false;

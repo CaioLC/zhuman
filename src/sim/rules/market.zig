@@ -234,7 +234,6 @@ pub const Quote = struct {
     direction: Direction,
     give: Bundle,
     receive: Bundle,
-    effect: []const u8 = "",
     /// Units of this offer still available this visit (buy: the passerby's stock; sell: how many
     /// the player may sell before the schedule bottoms out). 0 ⇒ sold out.
     stock: u16 = 1,

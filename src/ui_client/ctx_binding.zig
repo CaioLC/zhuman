@@ -346,6 +346,9 @@ pub const UiState = struct {
         page: u32 = 0,
         /// The settlement's frame flag for the AFTER flash (cleared once read).
         settled: bool = false,
+        /// The page's cursor into the trade facts: a settlement is read back from the event
+        /// store, and `settled` set when it lands.
+        heard: u64 = 0,
         taken: [32]u16 = @splat(0),
         visit: [16]f32 = @splat(0),
         /// The Act II merchant visit `taken` and `visit` belong to; a new visit clears them.

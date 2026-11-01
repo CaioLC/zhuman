@@ -59,6 +59,18 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
         sim.log.push(.good, wr.buffered());
     }
 
+    var traded = ev.reader(events.Traded, .log);
+    while (traded.next()) |f| {
+        var buf: [96]u8 = undefined;
+        switch (f.with) {
+            .passerby => sim.log.push(.good, switch (f.direction) {
+                .buy => "You trade with the passerby.",
+                .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ f.biomass_moved, roster.Resource.biomass.wordIn(f.act) }) catch "You sell.",
+            }),
+            .merchant => {},
+        }
+    }
+
     var ran_out = ev.reader(events.FoodRanOut, .log);
     while (ran_out.next()) |_| sim.log.push(.warn, "Your food has run out.");
 
@@ -264,6 +276,17 @@ test "arrivals and departures of the passerby and the merchant; Refused says not
     try expectLine(&rig, 2, .good, "The merchant's cart is back, restocked from downriver.");
     try expectLine(&rig, 1, .dim, "The passerby shoulders the satchel and moves on.");
     try expectLine(&rig, 0, .dim, "The merchant packs the cart and takes the river road.");
+}
+
+test "Traded with the passerby: a buy, and a sell naming the materials paid in the act's word" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .buy, .biomass_moved = 4 });
+    rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .sell, .biomass_moved = 5, .act = 1 });
+    rig.run();
+    try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
+    try expectLine(&rig, 1, .good, "You trade with the passerby.");
+    try expectLine(&rig, 0, .good, "You sell to the passerby for 5 materials.");
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {

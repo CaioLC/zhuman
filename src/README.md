@@ -133,8 +133,8 @@ a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) em
 field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
 title, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
 `ctx.res.game.config`, `ctx.res.game.catalog` directly and writes intents through
-`ctx.res.game.events.writer(T)`; the trades that are not yet intents hand `&ctx.res.game` to
-their rule (`barter.resolve`, the Act II pages). `sim/root.zig` is the `sim` namespace,
+`ctx.res.game.events.writer(T)`; the Act II trades that are not yet intents hand
+`&ctx.res.game` to their rule from the page. `sim/root.zig` is the `sim` namespace,
 re-exported by the library as `ha.sim`; a caller spells the folder (`ha.sim.rules.actions`,
 `ha.sim.data.roster`). `zig build test-sim` compiles the sim files and the `ecs` package with
 no `sdl3`, `ui` or host import (root: `sim/root.zig`), so a sim file that reaches the host fails
@@ -200,7 +200,7 @@ over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixe
 names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
-`ToggleGenerator`, `CollectGenerator`, `SetRation`, and, declared for the Act II handlers,
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, and, declared for the Act II handlers,
 `Research`, `RaiseExchange`, `MerchantDeal`, `NeighbourDeal`. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
@@ -209,7 +209,7 @@ the handler answers with `Refused{agent, intent, reason}`.
 
 **Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
 `GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
-`RecipeInReach`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
+`RecipeInReach`, `Traded`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
 A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
 `{ item: ledger.Item, qty }`.
 
@@ -219,7 +219,7 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
 itself, through `events.readerAt(T, &cursor)`.
 
@@ -242,6 +242,7 @@ paused or not and housed or not:
 | `generators.generators_toggle` | `ToggleGenerator` | `capital.toggle_generator` |
 | `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
+| `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
 
 The tick systems run only while the run is played and `dt > 0`, in this order:
 
@@ -355,7 +356,7 @@ strip cannot change whether a passerby is here.
 
 **One transfer grammar.** A `Line{item, qty}` and a fixed-cap `Bundle` express both sides of
 any deal; a `Quote` carries the offer's stable `id`, the encounter `rev` it was captured
-under, its `Direction`, give/receive bundles, an effect preview, remaining `stock`, and
+under, its `Direction`, give/receive bundles, remaining `stock`, and
 `next_unit` — what the *following* unit of a sell would fetch, shown before confirmation.
 `Quote.refusal` is the single revalidation everyone shares, in precedence order: `departed`,
 then `stale` (the passerby changed), then `sold_out`, then `unaffordable`; every refusal has
@@ -367,12 +368,15 @@ to a positive floor, authored per ware: Food `2.5 / 0.75 / 0.5`, Materials `1.5 
 always beats discarding, and the first units pay well — while the satchel and the visit
 window cap how much can be dumped at the top price.
 
-**`barter.resolve` is all-or-nothing.** It revalidates the quote plus give-side ownership
-before touching anything, then moves both bundles: Food/Materials on the inventory
-components, a sold good through `capital.release` (its effect leaves with the last unit), a
-bought good through `capital.acquire` (its effect lands once; a repeat is stock), the
-satchel decremented, one log line pushed. A failed check mutates nothing and returns the
-reason. `market` stays world-free; `barter` is the only place a `Quote` meets an entity.
+**`barter.resolve` is all-or-nothing.** The `barter` handler calls it for each `Barter`
+intent. It revalidates the quote plus give-side ownership before touching anything, then moves
+both bundles: Food/Materials on the inventory components, a sold good through
+`capital.release` (its effect leaves with the last unit), a bought good through
+`capital.acquire` (its effect lands once; a repeat is stock), the satchel decremented, and one
+`Traded{ .with = .passerby }` emitted with the materials moved. A failed check mutates nothing
+and returns the `Refused.Reason`, a quote's `market.Refusal` mapped onto it by name
+(`barter.reasonOf`). `market` stays world-free; `barter` is the only place a `Quote` meets an
+entity.
 
 ## The authored roster (`sim/data/roster.zig`, `data/`)
 
@@ -513,6 +517,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `build.zig` | the `BeginBuild` and `CancelBuild` handlers |
 | `generators.zig` | the `ToggleGenerator` and `CollectGenerator` handlers, and the `generators` update system |
 | `ration.zig` | the `SetRation` handler |
+| `barter.zig` | the `Barter` handler |
 | `passerby.zig` | the passerby's update system |
 | `log.zig` | the log system: every fact into its `Log` line |
 
