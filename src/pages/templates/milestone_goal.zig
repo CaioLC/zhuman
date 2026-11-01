@@ -138,7 +138,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         .anchor = .center, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
         .flow = .{ .dir = .row, .cross = .center }, .gap = summary_gap,
     }, .{});
-    try disclosure_content.label("title", goal.title, .{Style{ .font = 15, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+    try disclosure_content.label("title", goal.title, .{Style{ .font = 15, .ink = .fg, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
     try disclosure_content.label("readiness", readiness, .{Style{ .font = 9, .text = tone }});
 
     // The compact column is the only flexible summary field and clips before it can displace
@@ -166,10 +166,10 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
         const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button, .ring = false });
         // Disabled (`!ready`) never lifts, so the dim rest holds under the pointer.
         const action_ink: style.ThemeRole = if (ready) .fg else .dim;
-        action.set(.{}, .{Style{ .outline_ink = action_ink, .hot = .{ .outline_ink = .acc, .when = .hover_focus } }});
+        action.set(.{}, .{Style{ .outline_ink = action_ink, .on = &.{.{ .when = .hover_focus, .outline_ink = .acc }} }});
         (try action.text("label", goal.action)).set(.{
             .anchor = .center,
-        }, .{Style{ .font = 9, .ink = action_ink, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+        }, .{Style{ .font = 9, .ink = action_ink, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
         clicked = ready and aq.clicked;
     }
 

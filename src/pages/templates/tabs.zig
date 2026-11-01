@@ -79,7 +79,7 @@ pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const 
         // dim. Only the active tab is outlined, always in fg (`.tab[aria-selected] { border:
         // fg }`), so the lift reads the same on every tab and no tab gains an outline on hover.
         const lbl = (try chip.text("l", label))
-            .with_style(.{ style.body, Style{ .ink = if (is_active) .fg else .dim, .hot = .{ .ink = .acc } }, style.pad_sym(6, 2) });
+            .with_style(.{ style.body, Style{ .ink = if (is_active) .fg else .dim, .on = &.{.{ .when = .hot, .ink = .acc }} }, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_ink = .fg }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the
         // strip baseline-aligns wherever it sits (the chip baseline-adopt pattern).

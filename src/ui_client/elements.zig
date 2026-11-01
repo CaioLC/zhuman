@@ -261,7 +261,7 @@ pub const El = struct {
     /// to this node, exactly as the setter chain would: each set field goes through the
     /// `with_*` setter it names, then `with_style(spec)`, then `pass_through()`. The void form
     /// for a node built elsewhere (a template's return, a `polygon`), or styled only after its
-    /// `control` ran (a `hot` lift reads the control's interaction, so a row's own look comes
+    /// `control` ran (a state rule reads the control's interaction, so a row's own look comes
     /// after `control`). A node built here and never touched again takes `box`/`leaf` instead.
     pub fn set(self: El, props: Props, spec: anytype) void {
         if (props.anchor) |a| _ = self.with_layout(a);
@@ -482,11 +482,11 @@ pub const El = struct {
     ///   const top = try row.box("top", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
     ///       .flow = .{ .dir = .row, .cross = .center }, .gap = 8 }, .{});
     ///
-    /// The style is a separate argument, not a `Props` field, because a spec is a comptime
-    /// tuple of `Style` values and `fn(*UiCtx, *Node) Style` fragments (`style.panel`,
-    /// `btn_primary`), which no runtime struct field can hold. A `hot` lift in it needs a
-    /// control on an ancestor already; a node that is itself the control is styled with
-    /// `set` after its `control` call.
+    /// The style is a separate argument, not a `Props` field, because a spec is a `Style` or a
+    /// (nested) tuple of them, whose type varies per call (`.{ style.panel, style.pad(3) }`)
+    /// and so fits no runtime struct field. A state rule (`Style.on`) in it reads a control on
+    /// an ancestor, which must already have run; a node that is itself the control is styled
+    /// with `set` after its `control` call.
     pub fn box(self: El, id: []const u8, props: Props, spec: anytype) !El {
         const b = try self.div(id);
         b.set(props, spec);

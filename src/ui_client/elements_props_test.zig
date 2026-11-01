@@ -163,7 +163,7 @@ test "box: the style spec applies after the props, as a trailing with_style does
         try expectSameNode(chain.get(), box.get());
         try expectEqual(@as(f32, 10 * s), box.get().layout.gap);
 
-        // A function fragment is resolved against the built node, as `with_style` resolves it.
+        // A role fragment resolves against the theme on the built node, as `with_style` resolves it.
         const fc = (try p.div("fc")).with_size(.grow, .fit_children).with_style(.{ style.panel, style.pad(3) });
         const fb = try p.box("fb", .{ .w = .grow, .h = .fit_children }, .{ style.panel, style.pad(3) });
         try expectSameNode(fc.get(), fb.get());

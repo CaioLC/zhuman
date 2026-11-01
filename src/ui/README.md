@@ -357,6 +357,9 @@ Slots are **lazy**: a store slot exists only after `acquire` — called by
 `interactionOf` (a `query` *read*) or `setFlag` (a direct write). `stampRect`,
 `priorGeometryOf`, and `mark` only ever touch *existing* slots, so a node nobody queries
 gets no slot, geometry, or hit-test — cost ≈ (queried nodes), not node count.
+`peekInteraction(k)` is the non-acquiring read of the flags: it returns them only when `k`
+owns a slot this frame (a live slot acquired since `beginFrame`) and null otherwise, and it
+never creates or touches a slot, so a peek alone keeps nothing alive.
 `priorGeometryOf` (via `node.priorGeometry`) reads the full global rect and inherited
 global clip stamped by a prior frame, without creating a slot; missing and unstamped slots
 return null. The explicit name matters because current-frame coordinates do not exist until

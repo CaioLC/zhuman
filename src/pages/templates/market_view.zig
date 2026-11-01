@@ -418,7 +418,7 @@ fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bo
     if (clickable) {
         const q = n.control(.{ .name = name, .role = .button, .ring = false });
         clicked = q.clicked;
-        try n.label("t", name, .{Style{ .font = 12, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+        try n.label("t", name, .{Style{ .font = 12, .ink = .fg, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
     } else {
         try n.label("t", name, .{Style{ .font = 12, .ink = .fg }});
     }

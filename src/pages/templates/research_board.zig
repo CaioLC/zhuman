@@ -334,7 +334,7 @@ fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, e
 fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
     const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed, .ring = false });
-    try b.label("t", label, .{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .hot = .{ .ink = .acc, .when = .hover_focus } }});
+    try b.label("t", label, .{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
     return q.clicked;
 }
 

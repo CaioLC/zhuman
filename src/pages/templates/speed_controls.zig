@@ -20,7 +20,7 @@ pub fn menu_control(parent: El, id: []const u8) !El {
     if (menu.query().clicked) ctx.res.menu.show(&ctx.res.playback);
     _ = menu.control(.{ .name = "Open menu", .role = .button, .ring = false });
     menu.set(.{ .w = .fit_children, .h = .fit_children }, .{});
-    try menu.label("label", "MENU", .{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .hot = .{ .ink = .acc } }, style.pad_sym(4, 2) });
+    try menu.label("label", "MENU", .{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} }, style.pad_sym(4, 2) });
     return menu;
 }
 
@@ -76,6 +76,6 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
 fn chevron(box: El, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     const q = box.control(.{ .name = name, .role = .button, .enabled = enabled, .focusable = false });
     box.set(.{ .w = .fit_children, .h = .fit_children }, .{});
-    try box.label("glyph", glyph, .{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .hot = .{ .ink = .acc } }, style.pad_sym(3, 2) });
+    try box.label("glyph", glyph, .{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .on = &.{.{ .when = .hot, .ink = .acc }} }, style.pad_sym(3, 2) });
     return q.clicked;
 }

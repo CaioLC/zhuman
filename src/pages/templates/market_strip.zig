@@ -116,7 +116,7 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
     }, .{});
     const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button, .ring = false });
     if (show_action) {
-        try act.label("label", idn.action, .{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` lift
+        try act.label("label", idn.action, .{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` rule
     }
 
     return act;

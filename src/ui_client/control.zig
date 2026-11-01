@@ -7,7 +7,7 @@
 //!
 //! The result is the node's interaction read **after** publication, so `focused`,
 //! `focus_visible`, `disabled`, `selected` and `checked` are the published bits — the same
-//! ones the `style.btn_*` fragments read off the node — and `clicked` is already false for a
+//! ones `Style.on` state rules read off the owner — and `clicked` is already false for a
 //! disabled control. Pointer and keyboard activation share `.clicked`: Enter/Space on the
 //! focused control mark the same flag a pointer release does. Nested consumption
 //! (`El.consume`) stays with the caller, since only it knows which descendant is the
@@ -91,7 +91,7 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
     // viewport, the research board's pane) is a container focus stop that draws its own edge
     // instead, as the prototype's focusable regions set `outline: none`.
     node.render_data.focus_ring = focus_visible and opts.ring and opts.role != .group;
-    // Mark the interaction owner, so a descendant's `Style.hot` lift resolves against it.
+    // Mark the interaction owner, so a descendant's `Style.on` state rules resolve against it.
     node.render_data.control = true;
 
     var sem = semantics.SemanticNode{ .key = key, .role = opts.role };

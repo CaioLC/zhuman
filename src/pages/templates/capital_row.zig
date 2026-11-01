@@ -397,7 +397,7 @@ pub fn capital_row(
     row.set(.{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .in_tracks = set,
-    }, .{ style.pad_sym(row_pad_x, 6), Style{ .hot = .{ .fill_ink = .panel } } }); // the row is enabled only when ready
+    }, .{ style.pad_sym(row_pad_x, 6), Style{ .on = &.{.{ .when = .hot, .fill_ink = .panel }} } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
     place(try name_cell(row, "nm", rec.name, recipeType(rec), lit), .recipe, 1);
@@ -481,14 +481,14 @@ pub fn capital_row(
                 if (q.ready()) {
                     const more = try action_in.div("more");
                     _ = more.control(.{ .name = "Build +1", .role = .button, .ring = false });
-                    try more.label("t", "Build +1", .{ Style{ .font = row_font, .ink = .dim, .hot = .{ .ink = .acc } } });
+                    try more.label("t", "Build +1", .{ Style{ .font = row_font, .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} } });
                     build_more = more.consume(.clicked);
                 }
             },
             .building => {
                 const x = try action_in.div("cancel");
                 _ = x.control(.{ .name = "Cancel build", .role = .icon_button, .ring = false });
-                try x.label("t", "\u{00d7}", .{ style.h3, Style{ .ink = .line2, .hot = .{ .ink = .danger } } });
+                try x.label("t", "\u{00d7}", .{ style.h3, Style{ .ink = .line2, .on = &.{.{ .when = .hot, .ink = .danger }} } });
                 cancelled = x.consume(.clicked);
                 cancel_key = x.get().key;
             },

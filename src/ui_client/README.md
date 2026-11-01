@@ -143,8 +143,8 @@ pointer release produces. A **nested** cancel/close inside a row activates by co
 `.clicked` (`El.consume`), which clears the flag on itself *and* its ancestors so the row
 doesn't also act — while leaving `hovering` untouched, so the ancestor stays hovered. Colors
 follow the state→role mapping — `dim` when disabled, `acc` on held/hover/focus-visible,
-else the resting ink — which the `style.btn_*` fragments encode for any control that composes
-them.
+else the resting ink — which a template writes as its resting ink plus a `.hot` state rule
+(`Style.on`, see *State rules* below).
 
 ## Ordered pointer routing and overlays
 
@@ -655,8 +655,8 @@ try header.label("title", "BUILD", .{ h1, red }); // style — a fragment fold
 `shrink`, `opacity`, `tracks`, `in_tracks`, `at`, plus `pass_through`), and a set field is
 written by the very setter it names, so the scaling is the setters' (only a `.fixed` size rule
 scales; `gap`, `margin`, the bounds and `offset` are logical px). The style spec is a separate
-last argument, not a field: a spec is a comptime tuple that may hold `fn(*UiCtx, *Node) Style`
-fragments (`style.panel`, `btn_primary`), which no runtime struct field can carry, and it
+last argument, not a field: a spec is a `Style` or a (nested) tuple of them, whose type varies
+per call (`.{ style.panel, style.pad(3) }`), so no runtime struct field can carry it, and it
 applies after the props, as a trailing `with_style` did (so a style `gap` wins over `.gap`).
 Device-px placement (`with_size_px`, `with_offset_px`) has no field; it stays an explicit call.
 
@@ -670,9 +670,9 @@ Device-px placement (`with_size_px`, `with_offset_px`) has no field; it stays an
 | a value decided after the node exists, or used inline | `div`/`item` and the `with_*` chain |
 
 `leaf`, `label` and `set` return nothing, so a statement needs no `_ =`. Two orderings carry
-over from the chain. A control's own look comes after its `control` call, because a `hot` lift
+over from the chain. A control's own look comes after its `control` call, because a state rule
 reads the control's interaction: build the row with `box`, call `control`, then
-`row.set(.{}, .{ ...hot... })`; its children (`label`s with a lift) come after `control` too.
+`row.set(.{}, .{ ...on... })`; its children (`label`s with rules) come after `control` too.
 And `text_fit` applies its fit before any props or style, so `.fill` followed by `.w` overrides
 the fit's width rule, exactly as `text_fit(...).with_size(...)` did.
 
@@ -778,33 +778,31 @@ one template's output feeds the next call with no unwrapping.
 ## Style: a fold of partials (`style.zig`)
 
 `Style` is a partial — every field optional — so an unset field means "leave whatever an
-earlier fragment or the default set". A **fragment** is a `Style` value, a nested tuple of
-fragments, or a `fn(*UiCtx, *Node) Style`. `resolve` folds a spec left to right,
-**last non-null wins**; `apply` writes the result onto the node.
+earlier fragment or the default set". A **fragment** is a `Style` value; a spec is one
+fragment or a (nested) tuple of them. `resolve` folds a spec left to right, **last non-null
+wins** for every field except `on`, whose state rules append (*State rules* below); `apply`
+writes the result onto the node.
 
-The function form is what lets one mechanism cover all three cases: static presets (`h1`),
-themed colors (they need `ctx.res.view.theme`), and interaction-aware chrome (a button's
-hover color reads `node.query(ctx)` on the node it was just handed).
+Fragments are plain values, so the three kinds of look are one mechanism: static presets
+(`h1`), themed colors (a role names a `Theme` field and resolves through the live theme), and
+interaction-aware chrome (a state rule names a condition on the owning control and the role
+inks that replace the resting ones while it holds).
 
-**The primitive fragment library.** `style.zig` ships the shared vocabulary of
-*look* every template composes from, so a call site names an intent, not a color: surfaces
-(`panel`, `section_heading`), the button family (`btn_primary`/`btn_secondary`/`btn_text`/
-`btn_icon`/`btn_link` — a shared `btn_ink` maps published state → color: `dim` disabled,
-`acc` when `Interaction.hot()` (held/hover/focus-visible), else the variant's resting ink), `tab`/`chip`/`tag`,
-semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the roles
-including `good`), interaction chrome (`row_hover`, `disabled_chrome`, `selected_chrome`, `provisional` the
-dim-dashed placeholder box; the keyboard focus ring is not a fragment: `control` sets
-`render_data.focus_ring` on a visibly focused control unless it passes `.ring = false`, and
-`draw.zig` strokes an `acc` hairline 3px outside its box, inset where the ancestors' clip would
-cut it. The ring is the fallback for a control whose chrome does not show focus: a tile, a row,
-a tab, a text button or a boxed button lifts its own label or outline on `hot()` and opts out,
-so a large element shows focus as a text highlight and only small boxed controls outline), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
-`legend_dot(.food)` keyed to the six `view.resources` hues). The **stateful** ones are the
-`fn(*UiCtx, *Node) Style` form — they read the node's published `Interaction` bits
-(`publishControlState` sets `disabled`/`focus_visible`/`selected`/…) and return the chrome for
-that state; the **static** ones are plain values. Every color is a `Theme` *role*, never a
-literal, so these live in the foundation (they encode role/interaction policy, not the game's
-values); precedence is the caller's — a later tuple fragment overrides one variant field.
+**The fragment library.** `style.zig` ships the shared vocabulary of *look* templates compose
+from, so a call site names an intent, not a color: the typography roles (`body`, `small`,
+`heading`, `eyebrow`, …), the named role fragments below (`muted`, `note`, `caption`, …), the
+outline shapers (`stroke_w`, `solid`/`dashed`/`dotted`), padding and gap (`pad`, `pad_sym`,
+`pad_each`, `gap`), and the one surface, `panel`, a value: `.{ .fill_ink = .panel,
+.outline_ink = .line, .outline_width = 1 }`. Every color is a `Theme` *role*, never a literal,
+so these live in the foundation (they encode role policy, not the game's values); precedence
+is the caller's — a later tuple fragment overrides one field.
+
+The keyboard focus ring is not a fragment: `control` sets `render_data.focus_ring` on a
+visibly focused control unless it passes `.ring = false`, and `draw.zig` strokes an `acc`
+hairline 3px outside its box, inset where the ancestors' clip would cut it. The ring is the
+fallback for a control whose chrome does not show focus: a tile, a row, a tab, a text button
+or a boxed button lifts its own label or outline on `hot()` and opts out, so a large element
+shows focus as a text highlight and only small boxed controls outline.
 
 Presence follows the layer. **Decoration** aspects (`fill`, `outline`) are present iff set.
 **Content** aspects are present because content was given, so unset style falls back to a
@@ -838,7 +836,7 @@ straight onto the node through `El`'s `with_layout` / `with_flow` / `with_gap` /
 `with_size` / `with_overflow`. Style composes because a button's look is genuinely built
 from reusable pieces; placement does not, because a node sits in exactly one place.
 
-### Ink, roles and the hot lift
+### Ink, roles and state rules
 
 **Theme-relative ink.** Every color slot has a *role* twin that names a `Theme` field
 (`style.ThemeRole`, which is `theme.Role`, one tag per field: `bg`, `panel`, `line`, `line2`,
@@ -854,10 +852,9 @@ from reusable pieces; placement does not, because a node sits in exactly one pla
 `resolve` reads the live `ctx.res.view.theme` for a role, so `Style{ .ink = .dim }` paints the
 pixels `Style{ .text = th.dim }` did and a template needs no `const th = ...theme` line to say
 it. A slot and its twin fold as one: whichever a later fragment sets wins (a fragment that
-sets both resolves to the role). `resolve` returns a *concrete* `Style` (roles and the lift
-are gone, only the four `Color` fields remain), so fragment functions and existing call
-sites that pass `Color`s keep compiling and can migrate one literal at a time. A spec with no
-roles and no lift never reads `ctx`.
+sets both resolves to the role). `resolve` returns a *concrete* `Style` (roles and rules are
+gone, only the four `Color` fields remain), so a site that passes `Color`s and a site that
+names roles compose in one tuple. A spec with no roles and no rules never reads `ctx`.
 
 **Named role fragments.** The literals templates repeated are fragments named by meaning. Each
 sets exactly the fields of the literal it replaced, with no added tracking or transform:
@@ -879,20 +876,39 @@ the control stays lit while dragged off it). `Interaction.hover_focus()` drops t
 the controls that never lit during that gesture. `control` publishes `focus_visible` as
 `focused` under keyboard modality, so a click's focus does not hold the lift once the pointer
 leaves. The predicates read
-`focus_visible` because that is the CSS state they mirror. The `btn_*` fragments use `hot`;
-`tab`, `chip` and `row_hover` use `hover_focus`.
+`focus_visible` because that is the CSS state they mirror. A rule picks one with
+`.when = .hot` or `.when = .hover_focus`.
 
-**The hot lift.** `Style.hot` is a `Lift`: the role inks to use while the owning control is hot,
-`.{ .ink = .dim, .hot = .{ .ink = .acc } }` for the old `if (q.hot()) th.acc else th.dim`
-(`.when = .hover_focus` picks the other predicate). It folds field-wise. The *owner* is the
-styled node itself or its nearest ancestor that `control` ran on: `control` sets
-`render_data.control`, and `resolve` walks `node.parent` to the first marked node and reads that
-node's interaction this frame. A disabled owner never lifts (the `btn_ink` rule), so a site
-whose ternary also gated on the same `enabled` collapses into the lift. Templates call
-`control()` on a row before they build its children, which is what makes the owner's state
-available when a child is styled. A lift with no owner panics in safe builds. A site whose
-choice mixes in other facts (a disabled control that still lifts, a lit color shared with a
-`Color` parameter) keeps the explicit form, `.ink = if (q.hot()) .acc else .dim`.
+**State rules.** `Style.on` is a slice of `Rule`s, each a condition (`when`) and the role inks
+(`ink`, `tint_ink`, `fill_ink`, `outline_ink`) that replace the resting ones while it holds:
+`Style{ .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} }` paints `dim` at rest and `acc`
+while the owner is hot. The conditions (`style.When`) read the owner's published
+`Interaction`: `hot` and `hover_focus` are its two predicates, and `hovering`, `focused`,
+`focus_visible`, `held`, `disabled`, `selected` and `checked` are its bits.
+
+- **Folding.** `on` *appends* across fragments in fold order; every other field stays
+  last-non-null-wins. One spec carries at most four rules (`style.max_rules`): the fold
+  collects them into a fixed buffer of four. A fifth rule in fragments whose values are
+  comptime-known is a compile error (a tuple field with a comptime-known value is a
+  `comptime` field, so `resolve` counts those rules from the spec's type); a fifth that only
+  the fold sees is a safety panic, and release builds keep the first four.
+- **Evaluation.** After the fold, the rules apply in order: each rule whose condition holds
+  writes its set inks over the result (a role wins over a concrete color in that slot), so a
+  later active rule wins. Then roles resolve to colors through the theme.
+- **Disabled owner.** While the owner's `disabled` bit is set, the pointer and focus
+  conditions (`hot`, `hover_focus`, `hovering`, `focused`, `focus_visible`, `held`) are false;
+  only `disabled`, `selected` and `checked` are evaluated. So a site whose ternary also gated
+  on the same `enabled` collapses into a rule.
+- **Owner.** The owner is the styled node itself or its nearest ancestor that `control` ran
+  on: `control` sets `render_data.control`, and `resolve` walks `node.parent` to the first
+  marked node and reads that node's interaction this frame. Templates call `control()` on a
+  row before they build its children, which is what makes the owner's state available when a
+  child is styled. With no marked node, the owner is the node's own interaction slot, but
+  only when the node already owns one this frame (the engine's non-acquiring
+  `peekInteraction`); with neither, a spec with rules panics in safe builds.
+
+A site whose choice mixes in other facts (a disabled control that still lifts, a lit color
+shared with a `Color` parameter) keeps the explicit form, `.ink = if (q.hot()) .acc else .dim`.
 
 ## Color: roles here, values in the game (`theme.zig`)
 

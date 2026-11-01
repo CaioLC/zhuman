@@ -600,7 +600,7 @@ pub const Interaction = packed struct {
 
     /// The **hot** predicate: the control is engaged by the pointer (hovered, or held by a
     /// press that began on it, even if the pointer has since dragged off) or by the keyboard
-    /// (focus-visible). The one lift condition `style.btn_*`, the `Style.hot` lift and the
+    /// (focus-visible). The one lift condition the `.hot` state rule (`style.When.hot`) and the
     /// templates share, matching the prototype's `:hover, :focus-visible` rules plus the press
     /// latch. Reads `focus_visible`, the CSS state the lift mirrors; `control` publishes it
     /// equal to `focused`, so on a control the two are interchangeable.
@@ -730,7 +730,7 @@ pub const RenderData = struct {
 
     /// Set by `control` on the node it runs the lifecycle for: "this node owns an
     /// interaction". Not a paint aspect — `style.resolve` walks up from a styled node to the
-    /// nearest marked ancestor (or the node itself) to resolve a `Style.hot` lift against
+    /// nearest marked ancestor (or the node itself) to evaluate `Style.on` state rules against
     /// that control's interaction. Rebuilt with the tree every frame.
     control: bool = false,
 };

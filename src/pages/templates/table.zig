@@ -54,7 +54,7 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
         .ascending => std.mem.print(&buf, "{s} \u{2191}", .{label}) catch label,
         .descending => std.mem.print(&buf, "{s} \u{2193}", .{label}) catch label,
     };
-    try box.label("t", text, .{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .hot = .{ .ink = .acc } }});
+    try box.label("t", text, .{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .on = &.{.{ .when = .hot, .ink = .acc }} }});
     return .{ .el = box, .key = box.get().key, .clicked = q.clicked };
 }
 
