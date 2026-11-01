@@ -1,7 +1,8 @@
 //! This game's world, the engine's `World` over `components.zig` and `tags.zig`, and the
 //! engine's system params bound to it and to `sim.Resources`, so a system
 //! spells `Query(.{ comp.Vigor, With(tag.Player) })` and `run(world, &res.game, metabolize)`. The
-//! engine itself is the package `ecs` (`src/ecs/README.md`).
+//! engine itself is the package `ecs` (`src/ecs/README.md`). `Events` is the engine's event store
+//! over `events.zig`, and `EventWriter(T)` / `EventReader(T, id)` are its system params.
 //!
 //! `Query`, `Single` and `MaybeSingle` are over `*World` and yield `*T`; the `Const` forms are
 //! over `*const World` and yield `*const T`. A system names a group of `sim.Resources` (`*Sim`,
@@ -11,6 +12,7 @@
 
 const engine = @import("ecs");
 const Resources = @import("./res.zig").Resources;
+const events = @import("./events.zig");
 
 pub const Entity = engine.Entity;
 pub const MAX_ENTITIES = engine.MAX_ENTITIES;
@@ -44,6 +46,19 @@ pub fn ConstSingle(comptime params: anytype) type {
 
 pub fn ConstMaybeSingle(comptime params: anytype) type {
     return engine.MaybeSingle(*const World, params);
+}
+
+/// The event store over `events.zig`, one stored cursor per `ReaderId`.
+pub const Events = engine.Events(events, events.ReaderId);
+
+/// A system param appending `T`.
+pub fn EventWriter(comptime T: type) type {
+    return Events.Writer(T);
+}
+
+/// A system param reading `T` with the cursor the store keeps for reader `id`.
+pub fn EventReader(comptime T: type, comptime id: events.ReaderId) type {
+    return Events.Reader(T, id);
 }
 
 pub fn run(world: *World, res: *Resources, comptime sys: anytype) void {

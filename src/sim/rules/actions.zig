@@ -119,7 +119,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
     {
         var buf: [64]u8 = undefined;
-        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb, migration.actOf(w, e)));
+        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb.requires.energy, ledger.receiptOf(cat, q.verb.input.slice(), 1), migration.actOf(w, e)));
     }
 
     const total = res_mod.hours_to_secs(q.verb.requires.hours, res.config.secs_per_day);
@@ -159,7 +159,7 @@ pub fn is_build(d: comp.Busy.Doing) bool {
 
 // --- the receipt and the payment line -------------------------------------------------
 
-const nothing_text = "You gathered nothing.";
+pub const nothing_text = "You gathered nothing.";
 
 /// The display word for an item in a sentence: a resource's tag name, a good's name.
 pub fn itemWord(cat: *const Catalog, id: []const u8, act: u8) []const u8 {
@@ -168,11 +168,19 @@ pub fn itemWord(cat: *const Catalog, id: []const u8, act: u8) []const u8 {
     return id;
 }
 
+/// `itemWord` for an item already resolved against the catalog.
+pub fn itemWordOf(cat: *const Catalog, it: ledger.Item, act: u8) []const u8 {
+    return switch (it) {
+        .resource => |r| r.wordIn(act),
+        .good => |gi| cat.goods[gi].name,
+    };
+}
+
 /// "You gathered 3 food and 2 materials." Amounts are rounded the way the HUD displays
 /// them; a rounded-to-zero draw reads as the miss it felt like.
-fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) []const u8 {
+pub fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) []const u8 {
     var n: usize = 0;
-    for (r.slice()) |d| if (@round(d.amount) > 0) {
+    for (r.slice()) |d| if (@round(d.qty) > 0) {
         n += 1;
     };
     if (n == 0) return nothing_text;
@@ -180,27 +188,24 @@ fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) []con
     wr.writeAll("You gathered ") catch {};
     var i: usize = 0;
     for (r.slice()) |d| {
-        const amt = @round(d.amount);
+        const amt = @round(d.qty);
         if (amt <= 0) continue;
         if (i > 0) wr.writeAll(if (i + 1 == n) " and " else ", ") catch {};
-        wr.print("{d:.0} {s}", .{ amt, itemWord(cat, d.item, act) }) catch {};
+        wr.print("{d:.0} {s}", .{ amt, itemWordOf(cat, d.item, act) }) catch {};
         i += 1;
     }
     wr.writeAll(".") catch {};
     return wr.buffered();
 }
 
-/// "You spend 1.7e 1m to begin." — the energy, then every input line.
-fn paymentText(buf: []u8, cat: *const Catalog, v: effects.Verb, act: u8) []const u8 {
+/// "You spend 1.7e 1m to begin." — the energy, then every input line paid.
+pub fn paymentText(buf: []u8, cat: *const Catalog, energy: f32, paid: ledger.Receipt, act: u8) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
-    wr.print("You spend {d:.1}e", .{v.requires.energy}) catch {};
-    for (v.input.slice()) |l| {
-        if (Catalog.resource(l.item)) |r| {
-            wr.print(" {d:.0}{s}", .{ l.n, r.letterIn(act) }) catch {};
-        } else {
-            wr.print(" {d:.0} {s}", .{ l.n, itemWord(cat, l.item, act) }) catch {};
-        }
-    }
+    wr.print("You spend {d:.1}e", .{energy}) catch {};
+    for (paid.slice()) |l| switch (l.item) {
+        .resource => |r| wr.print(" {d:.0}{s}", .{ l.qty, r.letterIn(act) }) catch {},
+        .good => wr.print(" {d:.0} {s}", .{ l.qty, itemWordOf(cat, l.item, act) }) catch {},
+    };
     wr.writeAll(" to begin.") catch {};
     return wr.buffered();
 }
@@ -349,11 +354,10 @@ test "the receipt names what landed, in line order" {
     defer cat.deinit();
     var buf: [96]u8 = undefined;
     var r = ledger.Receipt{};
-    r.items[0] = .{ .item = "food", .amount = 2.6 };
-    r.items[1] = .{ .item = "biomass", .amount = 0.2 }; // rounds to nothing
-    r.len = 2;
+    r.add(.{ .resource = .food }, 2.6);
+    r.add(.{ .resource = .biomass }, 0.2); // rounds to nothing
     try testing.expectEqualStrings("You gathered 3 food.", receiptText(&buf, &cat, r, 1));
-    r.items[1].amount = 1.5;
+    r.lines[1].qty = 1.5;
     try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r, 1));
     try testing.expectEqualStrings("You gathered 3 food and 2 biomass.", receiptText(&buf, &cat, r, 2));
     r.len = 0;

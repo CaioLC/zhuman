@@ -1,5 +1,6 @@
 //! `sim.Resources`: the resources a system may reach, and nothing else. The run (`Sim`), the
-//! tuning (`Config`), this frame's timesteps (`Time`) and the authored roster (`catalog`). The
+//! tuning (`Config`), this frame's timesteps (`Time`), the authored roster (`catalog`) and the
+//! event store (`events`). The
 //! host's `Resources` embeds it as the field `game`; a system, a rule and a sim test take
 //! `*sim.Resources`, and every field has a default, so `sim.Resources{}` is a complete value.
 
@@ -8,6 +9,7 @@ const comp = @import("./components.zig");
 const logmod = @import("./log.zig");
 const marketmod = @import("./rules/market.zig");
 const rostermod = @import("./data/roster.zig");
+const Events = @import("./ecs.zig").Events;
 
 /// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
 /// Action durations are authored in hours (`Requires.hours`) — human-readable on the
@@ -152,7 +154,7 @@ pub const Sim = struct {
 };
 
 /// What a system may reach. `run` binds a system's group params (`*Sim`, `*const Config`,
-/// `*const Time`, `*const roster.Catalog`) from these fields. One writer each: `time` by the host
+/// `*const Time`, `*const roster.Catalog`) and its event params from these fields. One writer each: `time` by the host
 /// loop, `sim` by systems, `config` by nobody, `catalog` by `reload.swap`, between frames.
 pub const Resources = struct {
     sim: Sim = .{},
@@ -163,6 +165,10 @@ pub const Resources = struct {
     /// system reads it as `*const roster.Catalog`. Defaults to no records, so a rig that never
     /// reads the roster needs nothing.
     catalog: rostermod.Catalog = rostermod.Catalog.empty,
+    /// The intents and facts (`events.zig`). Written through `events.writer(T)` or an
+    /// `EventWriter(T)` param, read by the handler and log systems with their stored cursors;
+    /// `update()` opens each frame.
+    events: Events = .{},
 
     /// A `std.Random` over `sim.prng` — call `.float(f32)`, `.boolean()`, etc. on it.
     pub fn random(self: *Resources) std.Random {

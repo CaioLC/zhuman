@@ -109,30 +109,55 @@ pub fn give(w: *World, e: Entity, cat: *const Catalog, id: []const u8, amount: f
     }
 }
 
-/// One deposited amount, for a receipt line.
-pub const Deposit = struct {
-    item: []const u8,
-    amount: f32,
-};
-
+/// What a payment, a draw or a refund moved: one line per item, in line order, at most a
+/// record's `roster.max_lines`. Plain fixed-size data naming items by `Item`, so a fact event
+/// can carry it (`sim/events.zig`).
 pub const Receipt = struct {
-    items: [roster.max_lines]Deposit = undefined,
+    lines: [roster.max_lines]Deposit = undefined,
     len: u8 = 0,
 
+    /// One moved amount of one item.
+    pub const Deposit = struct {
+        item: Item,
+        qty: f32,
+    };
+
+    /// Append a line; a line past `max_lines` is dropped (no record has one).
+    pub fn add(self: *Receipt, it: Item, qty: f32) void {
+        if (self.len == self.lines.len) return;
+        self.lines[self.len] = .{ .item = it, .qty = qty };
+        self.len += 1;
+    }
+
     pub fn slice(self: *const Receipt) []const Deposit {
-        return self.items[0..self.len];
+        return self.lines[0..self.len];
+    }
+
+    /// The sum of every line's quantity.
+    pub fn total(self: *const Receipt) f32 {
+        var t: f32 = 0;
+        for (self.slice()) |d| t += d.qty;
+        return t;
     }
 };
 
+/// The lines as a receipt at `scale`, resolved against the catalog; a line naming an item the
+/// catalog does not know is left out, as `give` would move nothing for it.
+pub fn receiptOf(cat: *const Catalog, lines: []const Line, scale: f32) Receipt {
+    var r = Receipt{};
+    for (lines) |l| if (item(cat, l.item)) |it| r.add(it, l.n * scale);
+    return r;
+}
+
 /// Draw every line at `quality` and `scale` and deposit what comes up. Returns what landed,
-/// in line order, so the caller can write the receipt.
+/// in line order, so the caller can write the receipt; an item the catalog does not know is
+/// left out.
 pub fn draw(w: *World, e: Entity, cat: *const Catalog, lines: []const Line, rng: std.Random, quality: f32, scale: f32) Receipt {
     var r = Receipt{};
     for (lines) |l| {
         const amount = quality * dist.sample(l.asDist(), rng) * scale;
         _ = give(w, e, cat, l.item, amount);
-        r.items[r.len] = .{ .item = l.item, .amount = amount };
-        r.len += 1;
+        if (item(cat, l.item)) |it| r.add(it, amount);
     }
     return r;
 }
@@ -204,8 +229,8 @@ test "draw samples each line at quality and scale and reports what landed" {
     };
     const r = draw(&w, e, &cat, &lines, prng.random(), 0.5, 1);
     try testing.expectEqual(@as(usize, 2), r.slice().len);
-    try testing.expectEqual(@as(f32, 2), r.slice()[0].amount); // 4 × 0.5 quality
+    try testing.expectEqual(@as(f32, 2), r.slice()[0].qty); // 4 × 0.5 quality
     try testing.expectEqual(@as(f32, 2), balance(&w, e, .food));
     try testing.expect(balance(&w, e, .biomass) > 0);
-    try testing.expectEqualStrings("biomass", r.slice()[1].item);
+    try testing.expectEqual(Item{ .resource = .biomass }, r.slice()[1].item);
 }

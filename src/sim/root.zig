@@ -21,6 +21,7 @@ pub const Time = res.Time;
 pub const Condition = res.Condition;
 pub const hours_to_secs = res.hours_to_secs;
 pub const ecs = @import("./ecs.zig");
+pub const events = @import("./events.zig");
 pub const log = @import("./log.zig");
 pub const baselines = @import("./baselines.zig");
 
@@ -55,6 +56,7 @@ test {
     _ = tag;
     _ = res;
     _ = ecs;
+    _ = events;
     _ = log;
     _ = baselines;
     std.testing.refAllDecls(systems);

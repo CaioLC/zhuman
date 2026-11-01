@@ -380,7 +380,10 @@ pub fn main(process: std.process.Init) !void {
         // the Act I curtain, since UI transitions are independent of the sim clock.
         app.resources.tween.setPolicy(app.resources.motion);
         app.resources.tween.advance(real_dt);
-        // 2. update game systems — but only while the run is still being played. A housed
+        // 2. open the frame's events: what was written before the previous frame began expires,
+        // and the intents the UI wrote during the last build stay readable through this frame.
+        app.resources.game.events.update();
+        // 3. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.

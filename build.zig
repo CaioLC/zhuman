@@ -123,8 +123,9 @@ pub fn build(b: *std.Build) void {
     });
     ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
     ui_test_mod.addImport("ui", ui_mod);
-    // `res.zig` embeds `sim/res.zig`, which carries the authored roster, and the UI tests
-    // compile `res.zig`, so the data files resolve here too.
+    // `res.zig` embeds `sim/res.zig`, which carries the authored roster and the event store, and
+    // the UI tests compile `res.zig`, so the data files and the `ecs` package resolve here too.
+    ui_test_mod.addImport("ecs", ecs_mod);
     ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
     ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
     ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });

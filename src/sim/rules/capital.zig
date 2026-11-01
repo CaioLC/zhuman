@@ -406,7 +406,7 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
         var wrote = false;
         for (receipt.slice()) |d| {
             if (wrote) wr.writeAll(", ") catch {};
-            wr.print("{d:.1} {s}", .{ d.amount, actions.itemWord(cat, d.item, migration.actOf(w, e)) }) catch {};
+            wr.print("{d:.1} {s}", .{ d.qty, actions.itemWordOf(cat, d.item, migration.actOf(w, e)) }) catch {};
             wrote = true;
         }
         if (restored > 0) {
