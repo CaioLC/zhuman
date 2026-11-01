@@ -47,6 +47,10 @@ pub fn build(b: *std.Build) void {
     // relative import into `src/ui/` would put an engine file in two modules, which Zig refuses.
     const ui_dep = b.dependency("ui", .{ .target = target, .optimize = optimize });
     const ui_mod = ui_dep.module("ui");
+    // The ECS engine is a package the same way (`src/ecs/build.zig.zon`), imported as `ecs`;
+    // `src/world.zig` and `src/ecs.zig` instantiate it over this game's types.
+    const ecs_dep = b.dependency("ecs", .{ .target = target, .optimize = optimize });
+    const ecs_mod = ecs_dep.module("ecs");
 
     // My lib
     const ha_mod = b.addModule("human_action", .{
@@ -56,6 +60,7 @@ pub fn build(b: *std.Build) void {
     });
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
     ha_mod.addImport("ui", ui_mod);
+    ha_mod.addImport("ecs", ecs_mod);
     // Library-internal files (components/actions/capital) reach the library's own public
     // surface via `@import("ha")` (e.g. `ha.dist`), so the module must import itself under
     // that name. Without it the self-import resolves only when `ha_mod` happens to be the
@@ -77,6 +82,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe_mod.addImport("ha", ha_mod);
+    exe_mod.addImport("ecs", ecs_mod);
 
     // Build for desktop.
     const exe = b.addExecutable(.{
@@ -134,9 +140,14 @@ pub fn build(b: *std.Build) void {
     const test_ui_step = b.step("test-ui", "Run UI-layer unit tests (engine + host binding, minus game content)");
     test_ui_step.dependOn(&run_ui_tests.step);
 
-    // The engine's own tests, from its package's module, in both test steps.
+    // The engines' own tests, from their packages' modules, in both test steps.
     const engine_tests = b.addTest(.{ .root_module = ui_mod, .use_llvm = true });
     const run_engine_tests = b.addRunArtifact(engine_tests);
     test_step.dependOn(&run_engine_tests.step);
     test_ui_step.dependOn(&run_engine_tests.step);
+
+    const ecs_tests = b.addTest(.{ .root_module = ecs_mod, .use_llvm = true });
+    const run_ecs_tests = b.addRunArtifact(ecs_tests);
+    test_step.dependOn(&run_ecs_tests.step);
+    test_ui_step.dependOn(&run_ecs_tests.step);
 }

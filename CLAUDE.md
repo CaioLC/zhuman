@@ -9,12 +9,14 @@ zig build run     # build and run
 zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build         # build only
-sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, and the engine imports nothing outside src/ui
-(cd src/ui && zig build test)   # the engine package on its own
+sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, and neither engine (src/ui, src/ecs) imports anything outside its own package
+(cd src/ui && zig build test)    # the UI engine package on its own
+(cd src/ecs && zig build test)   # the ECS engine package on its own
 ```
 
 `test-ui` compiles `src/ui/` + `src/ui_client/` in isolation — a faster loop that skips
-`main.zig`, `systems.zig` and `src/pages/`. All three targets are expected green; if one is
+`main.zig`, `systems.zig` and `src/pages/`. Both test steps also run each engine package's own
+tests. All three targets are expected green; if one is
 not, say so rather than working around it.
 
 Requires Zig 0.17.0+. SDL3 and SDL3_TTF are fetched via `build.zig.zon`.
@@ -42,6 +44,7 @@ got there — git holds the history.
 |---|---|
 | What is the sim? ECS, components, systems, actions, capital, the frame loop | [`src/README.md`](src/README.md) |
 | How does the UI engine work? nodes, the key-cache, interaction, layout | [`src/ui/README.md`](src/ui/README.md) |
+| How does the ECS engine work? the world, queries, the const rule, `run` | [`src/ecs/README.md`](src/ecs/README.md) |
 | How do I build a screen? elements, `El`, the style fold, paint features, the theme | [`src/ui_client/README.md`](src/ui_client/README.md) |
 | What is the game *for*? the vision, the acts, the locked decisions | [`docs/design.md`](docs/design.md) |
 | How should a screen be shaped? the surfaces, the grammar, the constraints | [`docs/ui_design.md`](docs/ui_design.md) |
@@ -62,6 +65,16 @@ path dependency and the code imports it as `@import("ui")`, so moving it to its 
 is swapping that path for a url. Nothing in it may name the game,
 the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this program;
 `src/pages/` is the only tier that knows what a vigor bar is.
+
+```
+src/world.zig, src/ecs.zig   the ECS instantiated over this game's components, tags, Resources
+src/ecs/                     the ECS engine — imports nothing from the game
+```
+
+`src/ecs/` is a package the same way (`src/ecs/build.zig.zon`, `@import("ecs")`): generic over
+the component and tag namespaces and the resources type, it names no component, resource or
+game type. `tools/boundary_check.sh` (tier 3) holds both engines to importing only `std`,
+`builtin` and their own files.
 
 The sim (`world.zig`, `ecs.zig`, `systems.zig`, `actions.zig`, `capital.zig`) sits beside all
 of this and knows nothing about the UI.

@@ -106,15 +106,25 @@ Each frame:
 There is no retained tree between frames. The interaction slot pool is what bridges the
 boundary.
 
-## ECS (`ecs.zig`, `world.zig`)
+## ECS (`ecs/`, `world.zig`, `ecs.zig`)
 
-A [Bevy](https://bevyengine.org)-inspired ECS over a sparse-set `World` — the ergonomics are
-modelled on Bevy, the storage is comptime Zig rather than archetypes.
+A [Bevy](https://bevyengine.org)-inspired ECS over a sparse-set `World`: the ergonomics are
+modelled on Bevy, the storage is comptime Zig rather than archetypes. The engine is the package
+`src/ecs/` (module `ecs`), generic over the component and tag namespaces and the resources
+type, and knows nothing of this game; its API, the queries and the binding rules of `run` are
+in [`ecs/README.md`](ecs/README.md). This game instantiates it in two files:
 
-**World.** One `SparseSet` per component or tag type, generated at comptime from the public
-decls of `components.zig` and `tags.zig`. `spawn(bundle)` takes a tuple of component
-*instances* and bare *tag types*; then `add`, `remove`, `get`, `has`, `despawn`. Ids are never
-recycled — `next_id` only climbs, so `MAX_ENTITIES` is a lifetime-spawn cap, not a live one.
+- `world.zig`: `World = ecs.World(components.zig, tags.zig)`, plus `Entity`, `MAX_ENTITIES`
+  and `SparseSet`.
+- `ecs.zig`: the system params over that `World` and `Resources`. `Query(.{…})`, `Single`
+  and `MaybeSingle` are over `*World` and yield `*T`; `ConstQuery`, `ConstSingle` and
+  `ConstMaybeSingle` are over `*const World` and yield `*const T`. `With`, `Without`, `Maybe`
+  and `getMany` are the engine's; `run(world, res, system)` takes `*World` and `*Resources`.
+
+**World.** One `SparseSet` per public decl of `components.zig` and `tags.zig`.
+`spawn(bundle)` takes a tuple of component *instances* and bare *tag types*; then `add`,
+`remove`, `get`, `has`, `despawn`. `get` through a `*const World` yields `?*const T`. Ids are
+never recycled, so `MAX_ENTITIES` is a lifetime-spawn cap, not a live one.
 
 **System params** are declared as a system function's parameter types and built by `ecs.run`
 through comptime introspection:
@@ -123,22 +133,20 @@ through comptime introspection:
 |---|---|
 | `Query(.{…})` | iterate every matching entity |
 | `Single` / `MaybeSingle` | expect exactly one / at most one |
-| bare component type | a *fetch* — drives iteration, yields `*T` |
+| bare component type | a *fetch*: drives iteration, yields `*T` |
 | `With(T)` / `Without(T)` | filter without fetching |
 | `Maybe(T)` | yields `?*T` |
 | `Entity` | yields the id; does not drive iteration |
 | `*Resources` / `*World` | taken directly |
-| `*Sim`, `*const Config`, `*const Time`, … | one **resource group** — any struct-typed field of `Resources` |
+| `*Sim`, `*const Config`, `*const Time`, … | one **resource group**: any struct-typed field of `Resources` |
 
 Prefer naming groups over taking `*Resources`: the signature then states what the system
-reaches, and the compiler holds it to that — `metabolize` has no `*Platform` param, so it
+reaches, and the compiler holds it to that; `metabolize` has no `*Platform` param, so it
 cannot touch the renderer. `*const` vs `*` says whether it reads or writes, which is why
-`*const Config` (tuning) and `*Sim` (the run) read differently at a glance. The set is
-derived from `Resources`' fields, so a new group needs no change in `ecs.zig`; two guards
-keep the type-directed binding honest — only struct-typed fields inject (a bare `f32` on
-`Resources` would make `*f32` bind to it), and two fields sharing a type is a build error
-rather than a silent bind to the first. `resolve_busy` still takes `*Resources`, because it
-delegates to `finish_labor`/`finish_build`, which do too.
+`*const Config` (tuning) and `*Sim` (the run) read differently at a glance. The groups are
+derived from `Resources`' fields, so a new group needs no change in `ecs.zig`, and the
+engine's two guards apply (struct-typed fields only, distinct types). `resolve_busy` still
+takes `*Resources`, because it delegates to `finish_labor`/`finish_build`, which do too.
 
 `ecs.getMany(world, entity, params)` is `Query`'s non-iterating sibling, for pulling several
 components off an entity you already have. It panics on a missing required component rather
@@ -398,8 +406,9 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `main.zig` | `App`, the event loop, the sim tick, `spawn_agent`/`spawn_player` |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `world.zig` | the sparse-set `World` |
-| `ecs.zig` | `ecs.run` + the system-param machinery, including `getMany` |
+| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `run` (see `ecs/README.md`) |
+| `world.zig` | this game's `World`: the engine's over `components.zig` and `tags.zig` |
+| `ecs.zig` | the system params and `run` over this game's `World` and `Resources`, with the `Const` forms |
 | `systems.zig` | the sim systems, in tick order |
 | `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
 | `capital.zig` | the build path, ownership and settling, the generator system |

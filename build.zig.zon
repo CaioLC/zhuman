@@ -38,6 +38,8 @@
         },
         // The UI engine: a package of its own inside this tree.
         .ui = .{ .path = "src/ui" },
+        // The ECS engine: a package of its own inside this tree.
+        .ecs = .{ .path = "src/ecs" },
     },
     .paths = .{
         "build.zig",

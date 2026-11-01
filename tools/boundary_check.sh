@@ -20,8 +20,9 @@
 #      approved list below. Both tiers match spellings, not types: a new way to read
 #      geometry is added to the pattern here, or it goes uncounted.
 #
-#   3. The engine's imports. `src/ui/` is a package of its own (`src/ui/build.zig.zon`); an
-#      import there of anything but `std`, `builtin` or its own files fails.
+#   3. The engines' imports. `src/ui/` and `src/ecs/` are packages of their own (each with its
+#      `build.zig.zon`); an import in either of anything but `std`, `builtin` or that package's
+#      own files fails.
 #
 #   4. Pages lay out; only templates paint. A page (a file under `src/pages/` outside
 #      `templates/`) places nodes — `div`, `spacer`, `with_size`/`with_flow`/`with_gap`/
@@ -75,26 +76,28 @@ if [ -n "$strays" ]; then
 fi
 
 root=$(pwd -P)
-engine=$(grep -rnE '@import\("[^"]+"\)' src/ui --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//' |
-    while IFS=: read -r file line text; do
-        printf '%s\n' "$text" | grep -oE '@import\("[^"]+"\)' | while read -r match; do
-            target=${match#@import(\"}
-            target=${target%\")}
-            case "$target" in
-                std | builtin) continue ;;
-                *.zig | *.zon)
-                    case "$(realpath -m "$(dirname "$file")/$target")" in
-                        "$root"/src/ui/*) continue ;;
-                    esac
-                    ;;
-            esac
-            echo "$file:$line: $match"
-        done
-    done)
-if [ -n "$engine" ]; then
-    echo "boundary: the engine imports something outside src/ui:"
-    echo "$engine"
-    status=1
-fi
+for pkg in src/ui src/ecs; do
+    engine=$(grep -rnE '@import\("[^"]+"\)' "$pkg" --include='*.zig' | grep -vE '^[^:]+:[0-9]+:\s*//' |
+        while IFS=: read -r file line text; do
+            printf '%s\n' "$text" | grep -oE '@import\("[^"]+"\)' | while read -r match; do
+                target=${match#@import(\"}
+                target=${target%\")}
+                case "$target" in
+                    std | builtin) continue ;;
+                    *.zig | *.zon)
+                        case "$(realpath -m "$(dirname "$file")/$target")" in
+                            "$root"/"$pkg"/*) continue ;;
+                        esac
+                        ;;
+                esac
+                echo "$file:$line: $match"
+            done
+        done)
+    if [ -n "$engine" ]; then
+        echo "boundary: the engine imports something outside $pkg:"
+        echo "$engine"
+        status=1
+    fi
+done
 
 exit $status
