@@ -55,10 +55,14 @@ fn settingRow(parent: El, id: []const u8, label: []const u8, width: f32) !El {
     return field;
 }
 
+/// A `.choices` button's chrome: a line edge and dim label at rest, line2/fg on hover or
+/// visible focus, and accent edge and label while it is the selected choice.
+pub const choice_outline = Style{ .outline_ink = .line, .on = &.{ .{ .when = .hover_focus, .outline_ink = .line2 }, .{ .when = .selected, .outline_ink = .acc } } };
+pub const choice_label = Style{ .ink = .dim, .on = &.{ .{ .when = .hover_focus, .ink = .fg }, .{ .when = .selected, .ink = .acc } } };
+
 /// A `.choices` group: one button per label, the `selected` one pressed. Returns the button
 /// clicked this frame.
 pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected: ?usize) !?usize {
-    const th = parent.ctx.res.view.theme;
     const group = try parent.box(id, .{
         .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 5,
     }, .{});
@@ -68,11 +72,8 @@ pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected:
         const on = selected == i;
         const q = b.control(.{ .name = label, .role = .radio, .checked = on, .selected = on, .ring = false });
         if (q.clicked) clicked = i;
-        const hot = q.hover_focus();
-        const line = if (on) th.acc else if (hot) th.line2 else th.line;
-        const text = if (on) th.acc else if (hot) th.fg else th.dim;
-        try b.label("lbl", label, .{ Style{ .font = 11, .text = text }, style.pad_sym(9, 3) });
-        b.set(.{}, .{Style{ .outline_color = line }});
+        try b.label("lbl", label, .{ Style{ .font = 11 }, choice_label, style.pad_sym(9, 3) });
+        b.set(.{}, .{choice_outline});
     }
     return clicked;
 }

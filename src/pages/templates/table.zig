@@ -28,9 +28,10 @@ pub fn header_cell(parent: El, id: []const u8, label: []const u8) !El {
 pub const SortShown = enum { none, ascending, descending };
 
 /// A **sortable** column label: the same tracked label as `header_cell`, but a control. The
-/// active sort column reads in `fg` with its arrow (`COST ↑` ascending, `COST ↓` descending);
-/// others stay `line2` and lift to accent on hover/focus. Members register under `group` (the
-/// header row's key), so the whole header is one Tab stop and the arrows rove across it.
+/// active sort column reads in `fg` with its arrow (`COST ↑` ascending, `COST ↓` descending)
+/// and is published as `selected`; others stay `line2`. Every column lifts to accent on
+/// hover/focus. Members register under `group` (the header row's key), so the whole header is
+/// one Tab stop and the arrows rove across it.
 /// Returns the cell, its stable key (for the group's member list) and whether it was clicked
 /// (pointer or Enter/Space) this frame; the caller owns what a click does to the sort.
 pub const SortCell = struct { el: El, key: u64, clicked: bool };
@@ -45,6 +46,8 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
             .ascending => "sorted ascending",
             .descending => "sorted descending",
         },
+        // The active sort column is the header's one selected member.
+        .selected = shown != .none,
         .roving_group = group,
         .ring = false, // the label lifts to accent
     });
@@ -54,9 +57,13 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
         .ascending => std.mem.print(&buf, "{s} \u{2191}", .{label}) catch label,
         .descending => std.mem.print(&buf, "{s} \u{2193}", .{label}) catch label,
     };
-    try box.label("t", text, .{Style{ .font = 9, .tracking = 0.07, .ink = if (shown != .none) .fg else .line2, .on = &.{.{ .when = .hot, .ink = .acc }} }});
+    try box.label("t", text, .{ Style{ .font = 9, .tracking = 0.07 }, sort_label });
     return .{ .el = box, .key = box.get().key, .clicked = q.clicked };
 }
+
+/// A sortable column's label: line2, fg while it is the active sort (published as
+/// `selected`), accent while hot on every column, the active one included.
+pub const sort_label = Style{ .ink = .line2, .on = &.{ .{ .when = .selected, .ink = .fg }, .{ .when = .hot, .ink = .acc } } };
 
 /// A body cell: `text` in `color`, elided at its track's width so a long value never knocks
 /// the downstream lanes out of line. `right` anchors the readout to the lane's right edge.

@@ -144,8 +144,11 @@ fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density
         .anchor = .bottom_right, .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row },
     }, .{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
     const is_on = toggleAndCollect(tile.el, toggle, world, e, gi);
-    try toggle.label("label", if (is_on) "● ON" else "○ OFF", .{ style.small, Style{ .ink = if (is_on) .good else .dim, .on = &.{.{ .when = .hot, .ink = .acc }} } });
+    try toggle.label("label", if (is_on) "● ON" else "○ OFF", .{ style.small, toggle_label });
 }
+
+/// The ON/OFF label: good while the toggle is checked (on), dim off, accent while hot either way.
+pub const toggle_label = Style{ .ink = .dim, .on = &.{ .{ .when = .checked, .ink = .good }, .{ .when = .hot, .ink = .acc } } };
 
 /// Resolve one generator tile's activations once the tile (`action_tile.tile`, built and
 /// lifecycle-run before this child existed) and its ON/OFF `toggle` stand. A click on the

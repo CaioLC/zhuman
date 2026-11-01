@@ -16,18 +16,19 @@ const count_w: f32 = 3 * 7.2;
 
 pub const Names = struct { less: []const u8, more: []const u8 };
 
+/// A step button's chrome: a line2 edge and fg glyph, accent while hot, `line`/`line2` at its
+/// end of the range.
+pub const step_outline = Style{ .outline_ink = .line2, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line } } };
+pub const step_glyph = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
+
 fn stepButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, enabled: bool) !bool {
-    const th = parent.ctx.res.view.theme;
     const b = try parent.box(id, .{
         .w = .{ .fixed = button_w }, .h = .{ .fixed = button_h },
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .ring = false });
-    const lit = enabled and (q.hot());
-    const line = if (!enabled) th.line else if (lit) th.acc else th.line2;
-    const text = if (!enabled) th.line2 else if (lit) th.acc else th.fg;
-    b.set(.{}, .{Style{ .outline_color = line }});
-    try b.label("g", glyph, .{Style{ .font = 12, .text = text }});
+    b.set(.{}, .{step_outline});
+    try b.label("g", glyph, .{ Style{ .font = 12 }, step_glyph });
     return q.clicked;
 }
 

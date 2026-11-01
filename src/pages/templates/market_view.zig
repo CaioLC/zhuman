@@ -119,13 +119,17 @@ fn run(parent: El, id: []const u8, font: f32, pieces: []const struct { []const u
     return runFit(parent, id, font, true, pieces);
 }
 
+/// A `.seg` button's chrome: a line2 edge and fg label while pressed (published as
+/// `selected`), the fg label alone on hover or visible focus, else a ground edge and dim label.
+pub const seg_outline = Style{ .outline_ink = .bg, .on = &.{.{ .when = .selected, .outline_ink = .line2 }} };
+pub const seg_label = Style{ .ink = .dim, .on = &.{ .{ .when = .selected, .ink = .fg }, .{ .when = .hover_focus, .ink = .fg } } };
+
 /// A `.seg` button. Returns its click.
 fn segButton(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
     const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed, .ring = false });
-    const hot = q.hover_focus();
-    b.set(.{}, .{Style{ .outline_ink = if (pressed) .line2 else .bg }});
-    try b.label("t", label, .{ Style{ .font = 11, .ink = if (pressed or hot) .fg else .dim }, style.pad_sym(7, 3) });
+    b.set(.{}, .{seg_outline});
+    try b.label("t", label, .{ Style{ .font = 11 }, seg_label, style.pad_sym(7, 3) });
     return q.clicked;
 }
 
@@ -260,6 +264,25 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     return q.clicked;
 }
 
+/// A person or good row's chrome: the panel fill on hover or visible focus with a panel edge,
+/// and while chosen (published as `selected`) the panel fill with a line2 edge.
+pub const row_look = Style{ .fill_ink = .bg, .outline_ink = .bg, .on = &.{
+    .{ .when = .hover_focus, .fill_ink = .panel, .outline_ink = .panel },
+    .{ .when = .selected, .fill_ink = .panel, .outline_ink = .line2 },
+} };
+/// A good row's name: accent while chosen, else fg.
+pub const good_name = Style{ .ink = .fg, .on = &.{.{ .when = .selected, .ink = .acc }} };
+/// PROPOSE: fg at rest, accent while hot, `line`/`line2` while the offer cannot be proposed.
+pub const propose_outline = Style{ .outline_ink = .fg, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line } } };
+pub const propose_label = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
+/// YOUR STALL: accent edge and label on hover or visible focus and while the stall is open
+/// (published as `selected`), which also fills it with the panel; else a line2 edge, dim label.
+pub const stall_outline = Style{ .outline_ink = .line2, .fill_ink = .bg, .on = &.{
+    .{ .when = .hover_focus, .outline_ink = .acc },
+    .{ .when = .selected, .outline_ink = .acc, .fill_ink = .panel },
+} };
+pub const stall_label = Style{ .ink = .dim, .on = &.{ .{ .when = .hover_focus, .ink = .acc }, .{ .when = .selected, .ink = .acc } } };
+
 fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_count]f32, words: []const []const u8) !bool {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
@@ -268,8 +291,7 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
     const row = lr.inner;
     const name = try ctx.arena.print("{s} {s}", .{ a.firstName(), a.lastName() });
     const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen, .ring = false });
-    const hot = q.hover_focus();
-    lr.outer.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
+    lr.outer.set(.{}, .{row_look});
     const top = try row.box("top", .{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .gap = 8,
@@ -302,9 +324,8 @@ fn goodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, i: usize, cho
     const row = lr.inner;
     row.set(.{ .flow = .{ .dir = .row, .cross = .start }, .in_tracks = tracks }, .{});
     const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen, .ring = false });
-    const hot = q.hover_focus();
-    lr.outer.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
-    try row.label_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell_fill = .clip }, .{Style{ .font = 13, .tracking = 0.04, .ink = if (chosen) .acc else .fg }});
+    lr.outer.set(.{}, .{row_look});
+    try row.label_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell_fill = .clip }, .{ Style{ .font = 13, .tracking = 0.04 }, good_name });
     const col = try row.box("col", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
     const off = m.offered(i);
     const want = m.wanted(i);
@@ -577,9 +598,8 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
         .w = .{ .fixed = slip_inner }, .h = .fit_children, .flow = .{ .dir = .row, .main = .center },
     }, .{});
     const q = b.control(.{ .enabled = accept, .name = "Propose", .role = .button, .ring = false });
-    const lit = accept and (q.hot());
-    b.set(.{}, .{Style{ .outline_ink = if (!accept) .line else if (lit) .acc else .fg }});
-    try b.label("t", "PROPOSE \u{2192}", .{ style.body, Style{ .ink = if (!accept) .line2 else if (lit) .acc else .fg }, style.pad_sym(8, 7) });
+    b.set(.{}, .{propose_outline});
+    try b.label("t", "PROPOSE \u{2192}", .{ style.body, propose_label, style.pad_sym(8, 7) });
     if (accept and q.clicked) {
         const deal = Settled{ .give = st.give, .take = st.take };
         m.settle(k, st.give, st.take);
@@ -701,9 +721,8 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     }
     const stall_button = try controls.box("stall", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
     const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall, .ring = false });
-    const lit = st.stall or sq.hover_focus();
-    stall_button.set(.{}, .{Style{ .outline_ink = if (lit) .acc else .line2, .fill_ink = if (st.stall) .panel else .bg }});
-    try stall_button.label("t", "YOUR STALL", .{ Style{ .font = 10, .tracking = 0.07, .ink = if (lit) .acc else .dim }, style.pad_sym(8, 3) });
+    stall_button.set(.{}, .{stall_outline});
+    try stall_button.label("t", "YOUR STALL", .{ Style{ .font = 10, .tracking = 0.07 }, stall_label, style.pad_sym(8, 3) });
     var toggle_stall = sq.clicked;
     try hrule(view, "controls_rule");
 

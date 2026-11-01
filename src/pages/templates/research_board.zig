@@ -318,25 +318,37 @@ fn centred(parent: El, id: []const u8, i: usize, str: []const u8, x: f32, y: f32
     try (try centreIn(box)).label("t", str, .{Style{ .font = font, .text = ink, .tracking = tracking }});
 }
 
+/// A `.board-view-button`'s edge: the ground at rest, line2 on hover or visible focus (a
+/// disabled button never lifts). Its label lifts with it from the caller's `rest` colour.
+pub const view_button_outline = Style{ .outline_ink = .bg, .on = &.{.{ .when = .hover_focus, .outline_ink = .line2 }} };
+
 /// A `.board-view-button`. Returns its click.
 fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, enabled: bool, min_w: f32, rest: Color, value: ?[]const u8) !bool {
     const th = parent.ctx.res.view.theme;
     const b = try parent.box(id, .{ .w = .{ .fixed = min_w }, .h = .{ .fixed = 22 } }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value, .ring = false });
     const hot = enabled and (q.hover_focus());
-    b.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .bg }});
+    b.set(.{}, .{view_button_outline});
     try (try centreIn(b)).label("t", label, .{Style{ .font = 10, .text = if (hot) th.fg else rest }});
     if (!enabled) _ = b.with_opacity(0.32);
     return q.clicked and enabled;
 }
 
+/// A `.chip`'s label: dim, accent while pressed (published as `selected`) and on hover or
+/// visible focus.
+pub const chip_label = Style{ .ink = .dim, .on = &.{ .{ .when = .selected, .ink = .acc }, .{ .when = .hover_focus, .ink = .acc } } };
+
 /// A `.chip`. Returns its click.
 fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
     const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
     const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed, .ring = false });
-    try b.label("t", label, .{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .on = &.{.{ .when = .hover_focus, .ink = .acc }} }});
+    try b.label("t", label, .{ Style{ .font = 11 }, chip_label });
     return q.clicked;
 }
+
+/// RESEARCH →: fg at rest, accent while hot; a line2 edge and dim label while it cannot run.
+pub const research_outline = Style{ .outline_ink = .fg, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line2 } } };
+pub const research_label = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .dim } } };
 
 fn detailRow(parent: El, i: usize, name: []const u8, value: []const u8) !void {
     const row = try parent.boxi("row", i, .{
@@ -829,9 +841,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             .w = .{ .fixed = inner }, .h = .{ .fixed = 34 }, .margin = .{ .before = 8, .after = 6 },
         }, .{});
         const bq = btn.control(.{ .enabled = can, .name = label, .role = .button, .ring = false });
-        const lit = can and (bq.hot());
-        btn.set(.{}, .{Style{ .outline_ink = if (!can) .line2 else if (lit) .acc else .fg }});
-        try (try centreIn(btn)).label("t", label, .{ style.body, Style{ .ink = if (!can) .dim else if (lit) .acc else .fg } });
+        btn.set(.{}, .{research_outline});
+        try (try centreIn(btn)).label("t", label, .{ style.body, research_label });
         if (can and bq.clicked) result.research = si;
         (try detail.text("cost", try costText(a, t))).set(.{ .margin = .{ .after = 9 } }, .{style.fine_print});
         try hrule(detail, "c_rule", .{ .fixed = inner });

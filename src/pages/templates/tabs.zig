@@ -36,6 +36,10 @@ const TabsState = uic.UiState.TabsState;
 
 pub const Tabs = struct { el: El, active: usize };
 
+/// A tab's label: dim, fg while it is the active tab (published as `selected`), and accent
+/// while hot on every tab, the active one included.
+pub const tab_label = Style{ .ink = .dim, .on = &.{ .{ .when = .selected, .ink = .fg }, .{ .when = .hot, .ink = .acc } } };
+
 /// Build the strip. When the caller passes `active`, that is the selection (read on entry,
 /// written on exit) and the strip's own slot is only a mirror; null means the strip owns it.
 pub fn tabs(parent: El, id: []const u8, labels: []const []const u8, active: ?*usize) !Tabs {
@@ -79,7 +83,7 @@ pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const 
         // dim. Only the active tab is outlined, always in fg (`.tab[aria-selected] { border:
         // fg }`), so the lift reads the same on every tab and no tab gains an outline on hover.
         const lbl = (try chip.text("l", label))
-            .with_style(.{ style.body, Style{ .ink = if (is_active) .fg else .dim, .on = &.{.{ .when = .hot, .ink = .acc }} }, style.pad_sym(6, 2) });
+            .with_style(.{ style.body, tab_label, style.pad_sym(6, 2) });
         if (is_active) _ = chip.with_style(.{Style{ .outline_ink = .fg }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the
         // strip baseline-aligns wherever it sits (the chip baseline-adopt pattern).

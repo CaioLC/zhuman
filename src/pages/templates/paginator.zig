@@ -11,15 +11,19 @@ const El = uic.elements.El;
 /// `.page-now`: 6ch at 11px.
 const now_w: f32 = 6 * 6.6;
 
+/// A page button's chrome: a line2 edge and fg glyph, accent while hot, `line`/`line2` while
+/// there is no page that way.
+pub const page_outline = Style{ .outline_ink = .line2, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line } } };
+pub const page_glyph = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
+
 fn pageButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     const b = try parent.box(id, .{
         .w = .{ .fixed = 22 }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
     const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .ring = false });
-    const lit = enabled and (q.hot());
-    b.set(.{}, .{Style{ .outline_ink = if (!enabled) .line else if (lit) .acc else .line2 }});
-    try b.label("g", glyph, .{ Style{ .font = 11, .ink = if (!enabled) .line2 else if (lit) .acc else .fg }, style.pad_sym(0, 2) });
+    b.set(.{}, .{page_outline});
+    try b.label("g", glyph, .{ Style{ .font = 11 }, page_glyph, style.pad_sym(0, 2) });
     return q.clicked;
 }
 

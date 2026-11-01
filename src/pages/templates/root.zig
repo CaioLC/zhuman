@@ -204,6 +204,7 @@ pub const figure = figure_mod.figure;
 // module does. One line per shelf module keeps every template's tests in `zig build test`.
 test {
     _ = @import("./pointer_conflicts_test.zig");
+    _ = @import("./state_rules_test.zig");
     _ = button_mod;
     _ = panel_mod;
     _ = scroll_view_mod;

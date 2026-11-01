@@ -51,19 +51,19 @@ fn hrule(parent: El, id: []const u8) !void {
     try parent.leaf(id, .{ .w = .{ .fixed = inner }, .h = .{ .fixed = 1 } }, .{style.rule_fill});
 }
 
+/// The slip's call to action: fg at rest, accent while hot, `line`/`line2` while disabled.
+pub const action_outline = Style{ .outline_ink = .fg, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line } } };
+pub const action_label = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
+
 /// The slip's full-width call to action (`.primary-action.slip-action`).
 fn action(parent: El, text: []const u8, enabled: bool) !struct { clicked: bool, key: u64 } {
-    const th = parent.ctx.res.view.theme;
     const b = try parent.box("cta", .{
         .w = .{ .fixed = inner }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
     const q = b.control(.{ .enabled = enabled, .name = text, .role = .button, .ring = false });
-    const lit = enabled and (q.hot());
-    const line = if (!enabled) th.line else if (lit) th.acc else th.fg;
-    const ink = if (!enabled) th.line2 else if (lit) th.acc else th.fg;
-    b.set(.{}, .{Style{ .outline_color = line }});
-    try b.label("lbl", text, .{ style.body, Style{ .text = ink }, style.pad_sym(8, 7) });
+    b.set(.{}, .{action_outline});
+    try b.label("lbl", text, .{ style.body, action_label, style.pad_sym(8, 7) });
     return .{ .clicked = enabled and q.clicked, .key = b.get().key };
 }
 

@@ -109,17 +109,24 @@ fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bo
     const verb = if (saving) (if (slot.filled) "OVERWRITE" else "SAVE HERE") else if (slot.filled) "LOAD" else "";
     var nbuf: [16]u8 = undefined;
     const q = row.control(.{ .enabled = enabled, .name = std.mem.print(&nbuf, "Slot {d}", .{i + 1}) catch "Slot", .role = .button, .value = what, .ring = false });
-    const hot = enabled and (q.hover_focus());
-    row.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .line, .fill_ink = if (hot) .panel else .bg }});
+    row.set(.{}, .{slot_look});
 
     try row.label_fit("id", std.mem.print(&nbuf, "SLOT {d}", .{i + 1}) catch "SLOT", .{ .cell = .{ .mode = .clip, .width = slot_id_w } }, .{style.eyebrow_dim});
     const what_box = try row.box("what_box", .{ .w = .grow, .h = .fit_children }, .{});
-    try what_box.label("what", what, .{Style{ .font = 12, .ink = if (enabled) .fg else .line2 }});
+    try what_box.label("what", what, .{ Style{ .font = 12 }, slot_what });
     if (verb.len > 0) {
-        try row.label("verb", verb, .{Style{ .font = 10, .tracking = 0.07, .ink = if (enabled) .acc else .line2 }});
+        try row.label("verb", verb, .{ Style{ .font = 10, .tracking = 0.07 }, slot_verb });
     }
     return q.clicked;
 }
+
+/// A slot row's chrome: a line edge on the ground, line2 on the panel while hovered or
+/// visibly focused (a disabled slot never lifts).
+pub const slot_look = Style{ .outline_ink = .line, .fill_ink = .bg, .on = &.{.{ .when = .hover_focus, .outline_ink = .line2, .fill_ink = .panel }} };
+/// What the slot holds, fg; line2 while the slot cannot be used.
+pub const slot_what = Style{ .ink = .fg, .on = &.{.{ .when = .disabled, .ink = .line2 }} };
+/// The slot's verb, accent; line2 while the slot cannot be used.
+pub const slot_verb = Style{ .ink = .acc, .on = &.{.{ .when = .disabled, .ink = .line2 }} };
 
 fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, session: Session, saving: bool) !void {
     if (try backHead(parent)) {

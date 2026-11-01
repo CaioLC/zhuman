@@ -183,6 +183,13 @@ fn headRow(parent: El, heads: Heads, set: *uic.TrackSet) !void {
     try corner.label("t", heads.corner, .{s});
 }
 
+/// A ledger row's chrome. Selected (the chosen lot): a line2 rule round the row on the panel
+/// fill; hover or visible focus: the panel fill with a panel edge; else the ground.
+pub const row_look = Style{ .fill_ink = .bg, .outline_ink = .bg, .on = &.{
+    .{ .when = .hover_focus, .fill_ink = .panel, .outline_ink = .panel },
+    .{ .when = .selected, .fill_ink = .panel, .outline_ink = .line2 },
+} };
+
 /// One ledger row (`.ledger-row`). Returns its click and key.
 fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, set: *uic.TrackSet) !struct { clicked: bool, key: u64 } {
     const ctx = parent.ctx;
@@ -194,9 +201,7 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
         .in_tracks = set,
     }, .{style.pad_each(6, pad_x, 6, pad_x)});
     const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null, .ring = false });
-    const hot = q.hover_focus();
-    // Selected: a line2 rule round the row on the panel fill; hover: the fill alone.
-    row.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (chosen or hot) .panel else .bg }});
+    row.set(.{}, .{row_look});
 
     const item = try row.box("item", .{
         .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 1,

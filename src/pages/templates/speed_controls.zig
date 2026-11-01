@@ -71,11 +71,15 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
     return box;
 }
 
+/// A chevron's glyph: dim, accent while hot (the pointer over or holding it; it takes no
+/// focus), line2 at its end of the range.
+pub const chevron_glyph = Style{ .ink = .dim, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
+
 /// One `<<`/`>>` pointer target. Returns whether it was clicked this frame. Kept out of Tab
 /// order: the stepper itself is the keyboard owner.
 fn chevron(box: El, glyph: []const u8, name: []const u8, enabled: bool) !bool {
     const q = box.control(.{ .name = name, .role = .button, .enabled = enabled, .focusable = false });
     box.set(.{ .w = .fit_children, .h = .fit_children }, .{});
-    try box.label("glyph", glyph, .{ Style{ .font = 10, .ink = if (enabled) .dim else .line2, .on = &.{.{ .when = .hot, .ink = .acc }} }, style.pad_sym(3, 2) });
+    try box.label("glyph", glyph, .{ Style{ .font = 10 }, chevron_glyph, style.pad_sym(3, 2) });
     return q.clicked;
 }

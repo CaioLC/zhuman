@@ -61,11 +61,18 @@ const restore_content_height: f32 = restore_outer_height - restore_pad_top - res
 const collapse_width: f32 = 24;
 const collapse_height: f32 = 26;
 
+/// The toggle's box: the ground fill and an fg edge, matching the active tab's resting edge,
+/// that lifts to accent while the pointer engages it or keyboard focus shows. A click keeps
+/// focus across collapse/expand, but focus-visible is off after a click, so the rail does not
+/// latch in its hover colour.
+pub const toggle_chrome = Style{ .fill_ink = .bg, .outline_ink = .fg, .outline_width = 1, .on = &.{.{ .when = .hot, .outline_ink = .acc }} };
+/// The toggle's chevron and restore label, lifting with its edge.
+pub const toggle_ink = Style{ .ink = .fg, .on = &.{.{ .when = .hot, .ink = .acc }} };
+
 /// Build the collapsible rail into `parent` (the shell's `regions.rail`). Manages its own
 /// collapse memory, toggle, and width tween; returns the fill target when expanded.
 pub fn rail(parent: El, opts: RailOptions) !Rail {
     const ctx = parent.ctx;
-    const th = ctx.res.view.theme;
 
     // The rail is the width-bearing container, not the bordered button. In the prototype the
     // expanded rail itself is 252px wide and visually transparent; only its 24x26 collapse
@@ -84,16 +91,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (toggle.query().clicked) st.collapsed = !st.collapsed;
     if (opts.collapsed) |c| c.* = st.collapsed;
-    const q = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed, .ring = false });
-    // Match the active-tab resting edge directly: foreground at rest, accent while the pointer
-    // engages it or keyboard focus shows. A click keeps focus across collapse/expand, but
-    // focus-visible is off after a click, so the rail does not latch in its hover colour.
-    const toggle_color = if (q.hot()) th.acc else th.fg;
-    const toggle_chrome = Style{
-        .fill_ink = .bg,
-        .outline_color = toggle_color,
-        .outline_width = 1,
-    };
+    _ = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed, .ring = false });
 
     // Width animates between the shared rail tokens. Clipping belongs to this width-bearing
     // container, so expanded content cannot leak across the shrinking rail during the tween.
@@ -121,13 +119,13 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
             .w = .{ .fixed = restore_width }, .h = .fit_children,
             .flow = .{ .dir = .row, .main = .center, .cross = .center },
         }, .{});
-        try chevron_lane.label("chevron", "\u{203A}", .{Style{ .text = toggle_color, .font = 16 }});
+        try chevron_lane.label("chevron", "\u{203A}", .{ toggle_ink, Style{ .font = 16 } });
 
         const label_lane = try toggle.box("label_lane", .{
             .w = .{ .fixed = restore_width }, .h = .fit_children,
             .flow = .{ .dir = .row, .main = .center, .cross = .center },
         }, .{});
-        try label_lane.label_fit("label", opts.label, .vertical, .{Style{ .text = toggle_color, .font = 9, .tracking = 0.09 }});
+        try label_lane.label_fit("label", opts.label, .vertical, .{ toggle_ink, Style{ .font = 9, .tracking = 0.09 } });
         return .{ .collapsed = true, .body = null };
     }
 
@@ -145,7 +143,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
         .offset = .{ .x = if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2 },
         .w = .{ .fixed = collapse_width }, .h = .{ .fixed = collapse_height },
     }, .{toggle_chrome});
-    (try toggle.text("chevron", "\u{2039}")).set(.{ .anchor = .center }, .{Style{ .text = toggle_color, .font = 16 }});
+    (try toggle.text("chevron", "\u{2039}")).set(.{ .anchor = .center }, .{ toggle_ink, Style{ .font = 16 } });
 
     return .{ .collapsed = false, .body = body };
 }

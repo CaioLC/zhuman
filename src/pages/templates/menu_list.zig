@@ -33,8 +33,13 @@ pub const Result = struct {
     first_key: ?u64,
 };
 
+/// A row's `›` mark: the ground colour at rest (invisible, holding its lane), accent on hover
+/// or visible focus. A disabled row never lifts.
+pub const mark_look = Style{ .ink = .bg, .on = &.{.{ .when = .hover_focus, .ink = .acc }} };
+/// A row's label: dim at rest, fg on hover or visible focus, line2 while disabled.
+pub const label_look = Style{ .ink = .dim, .on = &.{ .{ .when = .hover_focus, .ink = .fg }, .{ .when = .disabled, .ink = .line2 } } };
+
 pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options) !Result {
-    const th = parent.ctx.res.view.theme;
     const list = try parent.box(id, .{
         .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 1,
     }, .{style.pad_each(opts.top, 0, 0, 0)});
@@ -48,13 +53,10 @@ pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options)
         const q = row.control(.{ .enabled = item.enabled, .name = item.label, .role = .button, .ring = false });
         if (first_key == null) first_key = row.get().key;
         if (q.clicked) clicked = i;
-        const lit = item.enabled and (q.hover_focus());
-        const mark_color = if (lit) th.acc else th.bg;
-        const label_color = if (!item.enabled) th.line2 else if (lit) th.fg else th.dim;
 
         // The mark keeps its 2ch lane at rest, drawn in the ground colour, so labels align.
-        try row.label_fit("mark", "\u{203a}", .{ .cell = .{ .mode = .clip, .width = 2 * 0.6 * opts.font } }, .{Style{ .font = opts.font, .text = mark_color }});
-        try row.label("label", item.label, .{Style{ .font = opts.font, .tracking = -0.02, .text = label_color }});
+        try row.label_fit("mark", "\u{203a}", .{ .cell = .{ .mode = .clip, .width = 2 * 0.6 * opts.font } }, .{ Style{ .font = opts.font }, mark_look });
+        try row.label("label", item.label, .{ Style{ .font = opts.font, .tracking = -0.02 }, label_look });
         if (!item.enabled and item.why.len > 0) {
             try row.label("why", item.why, .{Style{ .font = 10, .tracking = 0.06, .ink = .line2 }});
         }
