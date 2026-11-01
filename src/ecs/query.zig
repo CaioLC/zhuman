@@ -7,8 +7,10 @@ const world_mod = @import("./world.zig");
 const Entity = world_mod.Entity;
 const Ref = world_mod.Ref;
 
-/// The shapes `run` builds from the world alone; a type carrying `_system_param_kind` is one.
-pub const ParamKind = enum { query, single, maybe_single };
+/// The system params `run` builds beyond the world and the resource groups; a type carrying
+/// `_system_param_kind` is one. The queries are built from the world, the event params
+/// (`events.zig`) from the resource group that is their store.
+pub const ParamKind = enum { query, single, maybe_single, event_writer, event_reader };
 const FilterKind = enum { with, without, maybe };
 
 /// Must have `T`; fetches nothing.

@@ -9,7 +9,9 @@
 //!  - the world pointer `run` was given (or its `*const` form), for structural changes;
 //!  - the whole resources pointer, `*R` or `*const R`;
 //!  - one **resource group**: any struct-typed field of `R`, as `*T` or `*const T`;
-//!  - a `Query`, `Single` or `MaybeSingle`, built over the world.
+//!  - a `Query`, `Single` or `MaybeSingle`, built over the world;
+//!  - an event `Writer(T)` or `Reader(T, id)` (`events.zig`), built over the one group of `R`
+//!    whose type is that param's event store.
 //!
 //! Naming groups is preferred to taking the whole resources struct: the signature then states
 //! the system's reach and the compiler holds it to that, and `*const` against `*` says whether
@@ -92,10 +94,26 @@ fn extract(comptime PT: type, world: anytype, res: anytype) PT {
     };
     if (!is_container or !@hasDecl(PT, "_system_param_kind")) {
         @compileError("system param must be " ++ @typeName(@TypeOf(world)) ++ ", *" ++ @typeName(R) ++
-            ", a Query/Single/MaybeSingle, or a resource group (" ++ groupList(R) ++
-            ", each also valid as *const); got " ++ @typeName(PT));
+            ", a Query/Single/MaybeSingle, an event Writer/Reader over a store in " ++ @typeName(R) ++
+            ", or a resource group (" ++ groupList(R) ++ ", each also valid as *const); got " ++ @typeName(PT));
     }
-    return .{ .world = world };
+    switch (PT._system_param_kind) {
+        .query, .single, .maybe_single => return .{ .world = world },
+        .event_writer, .event_reader => {
+            const name = comptime storeField(R, PT.Store) orelse @compileError(@typeName(PT) ++
+                " needs the event store " ++ @typeName(PT.Store) ++ ", and " ++ @typeName(R) ++
+                " has no field of that type");
+            return PT.init(&@field(res, name));
+        },
+    }
+}
+
+/// The field of `R` holding the event store `Store`, or null when `R` has none. Event params
+/// bind through this; a resources struct without the store cannot run a system that reads or
+/// writes events.
+fn storeField(comptime R: type, comptime Store: type) ?[:0]const u8 {
+    for (groupsOf(R)) |f| if (f.type == Store) return f.name;
+    return null;
 }
 
 const test_comps = struct {
@@ -141,4 +159,40 @@ test "run binds the world, the resources, groups and queries from an arbitrary r
     try std.testing.expectEqual(@as(u32, 1), res.tally.steps);
     run(&w, &res, peek);
     try std.testing.expectEqual(@as(u32, 3), res.tally.steps);
+}
+
+const test_events = struct {
+    pub const Rang = struct { n: u32 };
+};
+const TestEvents = @import("./events.zig").Events(test_events, enum { tally });
+const EventRes = struct {
+    tally: Tally = .{},
+    events: TestEvents = .{},
+};
+
+fn ring(w: TestEvents.Writer(test_events.Rang)) void {
+    _ = w.push(.{ .n = 3 });
+}
+
+fn hear(tally: *Tally, r: TestEvents.Reader(test_events.Rang, .tally)) void {
+    while (r.next()) |ev| tally.steps += ev.n;
+}
+
+test "run binds an event writer and reader from the store in the resources struct" {
+    var w = TestWorld.init();
+    var res: EventRes = .{};
+    res.events.update();
+    run(&w, &res, ring);
+    run(&w, &res, ring);
+    run(&w, &res, hear);
+    try std.testing.expectEqual(@as(u32, 6), res.tally.steps);
+    run(&w, &res, hear); // the scheduled cursor saw both already
+    try std.testing.expectEqual(@as(u32, 6), res.tally.steps);
+}
+
+test "a resources struct with no event store binds no event param" {
+    // `run` turns a null here into a compile error naming the missing store; a negative compile
+    // test is not possible, so the decision is tested where it is made.
+    try std.testing.expect(comptime storeField(TestRes, TestEvents) == null);
+    try std.testing.expectEqualStrings("events", comptime storeField(EventRes, TestEvents).?);
 }

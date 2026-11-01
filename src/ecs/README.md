@@ -73,6 +73,37 @@ signature that takes `*const World` is the proof.
 language server evaluates, so `const a, const b = entry;` leaves an editor with nothing to
 offer. Writing the types (`const a: *A, const b: *B = entry;`) restores it.
 
+## Events
+
+```zig
+Events(comptime ns: type, comptime ReaderId: type) type   // .capacity == 64
+  .update()                                               // once, at the top of each tick
+  .writer(T) Writer(T)            Writer(T).push(ev) bool
+  .reader(T, id) Reader(T, id)    Reader(T, id).next() ?T
+  .readerAt(T, *u64) ExternalReader(T)    .next() ?T
+  .len(T) usize   .dropped(T) u32
+```
+
+`Events(ns, ReaderId)` generates one bounded ring per public struct of `ns`, the way
+`World` generates its storages. Every public struct there is an event and must be plain
+fixed-size data: a slice or a pointer anywhere inside an event type is a compile error naming it,
+so an event owns everything it says. A public type that is not a struct, such as an enum the
+events share, is not an event. `ReaderId` is an enum naming every scheduled reader.
+
+**Nothing is silently lost.** Each push takes the store's next monotonic id. A ring holds
+`capacity` events; a push into a full ring is refused, returns false and counts in `dropped(T)`.
+
+**The lifetime rule: two ticks.** `update()` expires every event written before the previous
+tick began. An event written during tick N, or between N and N+1 where a UI writes, is readable
+through tick N+1 and gone at the top of N+2, wherever its writer and its reader sit in the tick.
+
+**The cursor rule.** A reader yields the live events past its cursor in id order and advances
+the cursor past each one it yields, so a reader that stops early resumes where it stopped and a
+reader that runs every tick sees each event exactly once. `Reader(T, id)` keeps its cursor in
+the store, one per event type per `ReaderId`, so one id may read several types. A reader outside
+the schedule keeps its own `u64` and reads through `readerAt(T, &cursor)`; a cursor older than
+everything live starts at the oldest live event.
+
 ## Systems and `run`
 
 ```zig
@@ -88,12 +119,14 @@ pointer to a `World`, `res` a pointer to any struct of resources. A parameter ma
 | `*R` / `*const R` | the whole resources struct `R` |
 | `*T` / `*const T`, `T` a struct-typed field of `R` | that field: a **resource group** |
 | `Query`, `Single`, `MaybeSingle` | built over the world |
+| `Events(…).Writer(T)`, `Events(…).Reader(T, id)` | the one group of `R` whose type is that `Events` store |
 
 The groups are derived from `R`'s fields, so a new one is injectable with no edit to the
 engine. Two guards keep the type-directed binding honest: only struct-typed fields inject (a
 bare `f32` on `R` would make `*f32` bind to it), and two fields sharing a type is a build
-error rather than a silent bind to the first. Any other parameter is a compile error that
-lists what is valid.
+error rather than a silent bind to the first. An event param whose store is not a field of `R`
+is a compile error naming the store. Any other parameter is a compile error that lists what is
+valid.
 
 Naming a group instead of taking the whole `*R` puts a system's reach in its signature, and
 `*const` against `*` says whether it reads or writes. Structural changes (`spawn`, `add`,
