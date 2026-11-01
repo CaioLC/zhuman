@@ -8,11 +8,11 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const capital = ha.capital;
-const roster = ha.roster;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const comp = ha.sim.comp;
+const capital = ha.sim.rules.capital;
+const roster = ha.sim.data.roster;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const uic = ha.ui_client;
 const style = uic.style;
@@ -64,7 +64,7 @@ fn cycleCost(act: u8, buf: []u8, q: capital.GeneratorQuote) []const u8 {
 }
 
 const Yield = struct {
-    kind: ha.dist.Kind = .fixed,
+    kind: ha.sim.kernel.dist.Kind = .fixed,
     text: []const u8,
 };
 
@@ -73,14 +73,14 @@ fn cycleYield(act: u8, buf: []u8, q: capital.GeneratorQuote) Yield {
     var best_mean: f32 = -1;
     for (q.rec.output) |line| {
         if (line.per != .day) continue;
-        const mean = ha.dist.stats(line.asDist()).mean * q.cycle_days;
+        const mean = ha.sim.kernel.dist.stats(line.asDist()).mean * q.cycle_days;
         if (mean > best_mean) {
             best = line;
             best_mean = mean;
         }
     }
     if (best) |line| {
-        const stats = ha.dist.stats(line.asDist());
+        const stats = ha.sim.kernel.dist.stats(line.asDist());
         const lo = @round(stats.p10 * q.cycle_days);
         const hi = @round(stats.p90 * q.cycle_days);
         const text = if (lo == hi)
@@ -196,7 +196,7 @@ pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, s
     const cat = &ctx.res.game.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     const count = ownedCount(world, e, cat, shelf);
-    const act = ha.migration.actOf(world, e);
+    const act = ha.sim.data.migration.actOf(world, e);
     const gap = if (shelf.density == .compact) compact_grid_gap else grid_gap;
 
     const section = try parent.box(id, .{

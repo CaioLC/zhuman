@@ -15,17 +15,17 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const tag = ha.tag;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const El = el.El;
-const ecs = ha.ecs;
-const actions = ha.actions;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const ecs = ha.sim.ecs;
+const actions = ha.sim.rules.actions;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const Node = uic.Node;
 const UiCtx = uic.UiCtx;
 
@@ -174,12 +174,12 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "figure")) {
         try t.figure(stage, "dead", t.fig_dead, th.danger);
     } else if (eq(name, "stock_token")) {
-        try t.stock_token(stage, "tok", .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .warn });
+        try t.stock_token(stage, "tok", .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .warn });
     } else if (eq(name, "stockline")) {
         const stocks = [_]t.Stock{
             .{ .abbrev = "VI", .full = "Vigor", .value = 10, .max = 10 },
-            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
-            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 24 },
+            .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
+            .{ .abbrev = ha.sim.data.roster.Resource.biomass.abbrevIn(act), .full = ha.sim.data.roster.Resource.biomass.labelIn(act), .value = 24 },
         };
         _ = try t.stockline(stage, "sl", &stocks, false);
     } else if (eq(name, "runline")) {
@@ -191,8 +191,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         const demo = try stage.box("header_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
         const stocks = [_]t.Stock{
             .{ .abbrev = "VI", .full = "Vigor", .value = 10, .max = 10 },
-            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
-            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 24 },
+            .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = 3.6, .tone = .danger },
+            .{ .abbrev = ha.sim.data.roster.Resource.biomass.abbrevIn(act), .full = ha.sim.data.roster.Resource.biomass.labelIn(act), .value = 24 },
         };
         _ = try t.header(demo, "hud", .{
             .stocks = &stocks,
@@ -226,7 +226,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             if (world.get(a[0], comp.InventoryFood)) |food| {
                 food.v = 7.8;
                 food.quality = 1;
-                food.spoils = ha.baselines.food_spoils;
+                food.spoils = ha.sim.baselines.food_spoils;
             }
             if (world.get(a[0], comp.Vigor)) |vigor| {
                 vigor.max = 15;
@@ -349,8 +349,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             });
             const stocks = [_]t.Stock{
                 .{ .abbrev = "VI", .full = "Vigor", .value = 14, .max = 15 },
-                .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = 11.6 },
-                .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = 31 },
+                .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = 11.6 },
+                .{ .abbrev = ha.sim.data.roster.Resource.biomass.abbrevIn(act), .full = ha.sim.data.roster.Resource.biomass.labelIn(act), .value = 31 },
             };
             _ = try t.header(regions.header, "hud", .{
                 .stocks = &stocks,
@@ -367,8 +367,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             });
             if (workspace.surface.market_action.consume(.clicked)) audit_trade.open = true;
 
-            var feed: ha.log.Log = .{};
-            feed.push(.normal, try ctx.arena.print("You return with 4 {s}.", .{ha.roster.Resource.biomass.wordIn(act)}));
+            var feed: ha.sim.log.Log = .{};
+            feed.push(.normal, try ctx.arena.print("You return with 4 {s}.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}));
             feed.push(.good, "The Root cellar slows what the larder loses.");
             feed.push(.normal, "You finish a second Hatchet. One is effect; one is stock.");
             feed.push(.normal, "Someone is walking the shoreline. Their pack carries made goods.");
@@ -388,7 +388,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
             const gi = ctx.res.game.catalog.goodIndex("sandals").?;
-            if (ha.capital.quote(world, a[0], &ctx.res.game.catalog, gi)) |q| {
+            if (ha.sim.rules.capital.quote(world, a[0], &ctx.res.game.catalog, gi)) |q| {
                 // Act I's lanes; the demo owns the row's tracks, as the BUILD list does, and is
                 // the framed table's width (the lane less the scroll gutter), which the row spans.
                 const set = try t.build_table_tracks(ctx, .{});
@@ -408,7 +408,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "milestone_goal")) {
         const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         var resource_label_buf: [16]u8 = undefined;
-        const resource_label = std.ascii.upperString(&resource_label_buf, ha.roster.Resource.biomass.labelIn(act));
+        const resource_label = std.ascii.upperString(&resource_label_buf, ha.sim.data.roster.Resource.biomass.labelIn(act));
         const requirements = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "14/15" },
             .{ .label = "FOOD", .value = "11.6/12" },
@@ -418,13 +418,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
             .title = "Shelter",
-            .summary = try ctx.arena.print("{s} 31/60", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .summary = try ctx.arena.print("{s} 31/60", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .readiness = "locked \u{00B7} 1 condition",
             .kicker = "A PLACE FOR OTHERS",
             .cost = "60m 6e \u{00B7} 6.0d",
             .copy = "a roof with room for four. you're not alone anymore.",
             .requirements = &requirements,
-            .explanation = try ctx.arena.print("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.roster.Resource.biomass.wordIn(act)}),
+            .explanation = try ctx.arena.print("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .action = "LOCKED",
         });
     } else if (eq(name, "market_strip")) {
@@ -598,7 +598,7 @@ fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { 
     for (counts) |c| {
         if (cat.goodIndex(c[0])) |gi| goods.count[gi] = c[1];
     }
-    ha.capital.settle(world, e, cat);
+    ha.sim.rules.capital.settle(world, e, cat);
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

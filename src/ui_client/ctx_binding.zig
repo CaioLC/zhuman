@@ -394,8 +394,8 @@ pub const UiState = struct {
         /// focus request for the board on its next build.
         pin_tip: ?u16 = null,
         want_focus: bool = false,
-        fill_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
-        fade_prev: [@import("../roster.zig").max_techs]f32 = @splat(-1),
+        fill_prev: [@import("../sim/data/roster.zig").max_techs]f32 = @splat(-1),
+        fade_prev: [@import("../sim/data/roster.zig").max_techs]f32 = @splat(-1),
     };
     /// The **range slider value math** — pure, stateless, no UI. The slider control
     /// owns *no domain math* ("no eating math"): it only produces a value in `[min, max]`

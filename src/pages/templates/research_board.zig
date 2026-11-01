@@ -11,7 +11,7 @@
 //! width at any zoom (`vector-effect: non-scaling-stroke`). A tile's hit box is its hexagon.
 //!
 //! The states come from the agent's `comp.Research`, the costs and copy from the catalog;
-//! the view never recomputes adjacency (`grid/board`). It reports a RESEARCH → press, and the
+//! the view never recomputes adjacency (`sim.rules.research`). It reports a RESEARCH → press, and the
 //! page pays and establishes the tile.
 
 const std = @import("std");
@@ -21,8 +21,8 @@ const style = uic.style;
 const Style = style.Style;
 const El = uic.elements.El;
 const Color = uic.Color;
-const roster = ha.roster;
-const hex = ha.grid.hex;
+const roster = ha.sim.data.roster;
+const hex = ha.sim.kernel.hex;
 const ResearchState = uic.UiState.ResearchState;
 
 // ---- the board's geometry, in board units (the prototype's 620×620 viewBox) ----------------
@@ -67,7 +67,7 @@ const pane_low = uic.rgb(0x15, 0x18, 0x1d);
 /// What the board reads: the catalog, the agent's board and its research balances.
 pub const Board = struct {
     cat: *const roster.Catalog,
-    research: *const ha.comp.Research,
+    research: *const ha.sim.comp.Research,
     /// Held amounts by wedge (`wedge_res` order).
     held: [6]f32,
 };
@@ -741,9 +741,9 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             }
 
             // The material dots, and the research marker on an established tile.
-            // The board's own rule (`grid/board.materialMarkers`), as wedge indices.
+            // The board's own rule (`sim.rules.research.materialMarkers`), as wedge indices.
             var wbuf: [3]hex.Wedge = undefined;
-            const wm = ha.grid.board.materialMarkers(t, &wbuf);
+            const wm = ha.sim.rules.research.materialMarkers(t, &wbuf);
             var mat_buf: [3]u3 = undefined;
             for (wm, 0..) |w, j| mat_buf[j] = @intFromEnum(w);
             const mats = mat_buf[0..wm.len];

@@ -18,8 +18,8 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const Log = ha.log.Log;
-const Tone = ha.log.Tone;
+const Log = ha.sim.log.Log;
+const Tone = ha.sim.log.Tone;
 
 const sv = @import("./scroll_view.zig");
 

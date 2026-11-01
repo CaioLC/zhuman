@@ -20,7 +20,7 @@
 //! `capital.zig` owns tool supersession.
 
 const std = @import("std");
-const logmod = @import("./log.zig");
+const logmod = @import("../log.zig");
 
 /// Where the passerby is in a visit. `absent` — no one here (the long gap between visits);
 /// `approaching` — seen coming, not yet dealable (the strip can foreshadow); `present` — here

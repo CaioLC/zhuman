@@ -16,7 +16,7 @@ sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geom
 ```
 
 `test-ui` compiles `src/ui/` + `src/ui_client/` in isolation — a faster loop that skips
-`main.zig`, `systems.zig` and `src/pages/`. Both test steps also run each engine package's own
+`main.zig`, `src/sim/` and `src/pages/`. Both test steps also run each engine package's own
 tests. `test-sim` compiles the sim files and `src/ecs/` with no `sdl3`, `ui` or host import, and
 runs the ECS package's tests too. All four targets are expected green; if one is
 not, say so rather than working around it.
@@ -69,7 +69,8 @@ the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this 
 `src/pages/` is the only tier that knows what a vigor bar is.
 
 ```
-src/world.zig, src/ecs.zig   the ECS instantiated over this game's components, tags, sim.Resources
+src/sim/                     the simulation: systems/ (the tick), rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)
+src/sim/ecs.zig              the ECS instantiated over this game's components, tags, sim.Resources
 src/sim/res.zig              sim.Resources: what a system may reach, embedded in the host Resources as `game`
 src/ecs/                     the ECS engine — imports nothing from the game
 ```
@@ -79,8 +80,8 @@ the component and tag namespaces and the resources type, it names no component, 
 game type. `tools/boundary_check.sh` (tier 3) holds both engines to importing only `std`,
 `builtin` and their own files.
 
-The sim (`world.zig`, `ecs.zig`, `systems.zig`, `actions.zig`, `capital.zig`) sits beside all
-of this and knows nothing about the UI.
+The sim (`src/sim/`, reached as `ha.sim`) sits beside all of this and knows nothing about the
+UI.
 
 ## Conventions
 

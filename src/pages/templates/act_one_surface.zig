@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const ha = @import("ha");
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const uic = ha.ui_client;
 const el = uic.elements;
@@ -38,7 +38,7 @@ pub const build_shelf = build_section_mod.Shelf{
         .which = .act_one,
         .kicker = "A PLACE FOR OTHERS",
         .copy = "a roof with room for four. you're not alone anymore.",
-        .explanation = std.fmt.comptimePrint("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.roster.Resource.biomass.wordIn(1)}),
+        .explanation = std.fmt.comptimePrint("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(1)}),
         .action = "RAISE SHELTER \u{2192}",
     },
 };
@@ -100,7 +100,7 @@ pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opt
 }
 
 test "Act I's BUILD widths fill the lane and hold every Act I build order unelided" {
-    var cat = try ha.roster.load(std.testing.allocator, ha.roster.shipped, null);
+    var cat = try ha.sim.data.roster.load(std.testing.allocator, ha.sim.data.roster.shipped, null);
     defer cat.deinit();
     try std.testing.expectEqual(@import("./capital_row.zig").lane_width, build_shelf.widths.laneTotal());
     try std.testing.expect(@import("./build_list.zig").costOverflow(&cat, build_shelf) == null);

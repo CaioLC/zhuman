@@ -1,4 +1,4 @@
-//! `grid/board` — the progression logic for the Act II STRUCTURE board: the adjacency rule
+//! `rules/research` — the progression logic for the Act II STRUCTURE board: the adjacency rule
 //! (§7) and atomic research resolution, operating over the **authored roster** (`roster.zig`)
 //! and an agent's live `comp.Research` state array. The canonical entry state is seeded by
 //! `comp.Research.entry(cat)` at the curtain (`migration.zig`); this module promotes and
@@ -18,8 +18,8 @@
 //! outward neighbors; nothing unrelated opens.
 
 const std = @import("std");
-const hex = @import("./hex.zig");
-const roster = @import("../roster.zig");
+const hex = @import("../kernel/hex.zig");
+const roster = @import("../data/roster.zig");
 const comp = @import("../components.zig");
 
 const Axial = hex.Axial;

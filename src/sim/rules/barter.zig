@@ -15,12 +15,12 @@
 //! tool's effect lands/leaves through the same path a built/broken one does.
 
 const std = @import("std");
-const comp = @import("./components.zig");
-const migration = @import("./migration.zig");
+const comp = @import("../components.zig");
+const migration = @import("../data/migration.zig");
 const market = @import("./market.zig");
 const capital = @import("./capital.zig");
-const res_mod = @import("./sim/res.zig");
-const world = @import("./world.zig");
+const res_mod = @import("../res.zig");
+const world = @import("../ecs.zig");
 
 const World = world.World;
 const Entity = world.Entity;
@@ -142,7 +142,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
 // ============================ Tests =====================================================
 
 const testing = std.testing;
-const roster = @import("./roster.zig");
+const roster = @import("../data/roster.zig");
 const effects = @import("./effects.zig");
 
 fn test_res() !Resources {

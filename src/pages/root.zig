@@ -5,13 +5,13 @@ const std = @import("std");
 const ha = @import("ha");
 const app = @import("../main.zig");
 
-const comp = ha.comp;
-const tag = ha.tag;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
 const uic = ha.ui_client;
-const ecs = ha.ecs;
-const actions = ha.actions;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const ecs = ha.sim.ecs;
+const actions = ha.sim.rules.actions;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 // Pages
 const p_act_one = @import("./play_game.zig").ui_playgame;
@@ -64,14 +64,14 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // since owning the good that ends the act is the win condition; otherwise the live page.
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const a = player.get() orelse return try withMenu(ui_ctx, world, try p_gameover(ui_ctx, world));
-    if (ha.capital.ownsMilestone(world, a[0], &ui_ctx.res.game.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
+    if (ha.sim.rules.capital.ownsMilestone(world, a[0], &ui_ctx.res.game.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
     return try withMenu(ui_ctx, world, try p_act_one(ui_ctx, world, .{}));
 }
 
 /// What the session menu says about the run behind it: the act, the day, and how many people.
 fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const act_now: u8 = if (player.get()) |a| ha.migration.actOf(world, a[0]) else 1;
+    const act_now: u8 = if (player.get()) |a| ha.sim.data.migration.actOf(world, a[0]) else 1;
     // A standing Exchange carries the settlement into Act III (a stub until Act III exists).
     const act: u8 = if (act_now == 2 and ctx.res.game.sim.exchange.standing) 3 else act_now;
     return .{

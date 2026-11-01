@@ -106,21 +106,19 @@ Each frame:
 There is no retained tree between frames. The interaction slot pool is what bridges the
 boundary.
 
-## ECS (`ecs/`, `world.zig`, `ecs.zig`)
+## ECS (`ecs/`, `sim/ecs.zig`)
 
 A [Bevy](https://bevyengine.org)-inspired ECS over a sparse-set `World`: the ergonomics are
 modelled on Bevy, the storage is comptime Zig rather than archetypes. The engine is the package
 `src/ecs/` (module `ecs`), generic over the component and tag namespaces and the resources
 type, and knows nothing of this game; its API, the queries and the binding rules of `run` are
-in [`ecs/README.md`](ecs/README.md). This game instantiates it in two files:
-
-- `world.zig`: `World = ecs.World(components.zig, tags.zig)`, plus `Entity`, `MAX_ENTITIES`
-  and `SparseSet`.
-- `ecs.zig`: the system params over that `World` and `sim.Resources`. `Query(.{…})`, `Single`
-  and `MaybeSingle` are over `*World` and yield `*T`; `ConstQuery`, `ConstSingle` and
-  `ConstMaybeSingle` are over `*const World` and yield `*const T`. `With`, `Without`, `Maybe`
-  and `getMany` are the engine's; `run(world, res, system)` takes `*World` and
-  `*sim.Resources`, so the host calls `ecs.run(&world, &res.game, system)`.
+in [`ecs/README.md`](ecs/README.md). This game instantiates it in one file, `sim/ecs.zig`:
+`World = ecs.World(components.zig, tags.zig)`, plus `Entity`, `MAX_ENTITIES` and `SparseSet`,
+and the system params over that `World` and `sim.Resources`. `Query(.{…})`, `Single` and
+`MaybeSingle` are over `*World` and yield `*T`; `ConstQuery`, `ConstSingle` and
+`ConstMaybeSingle` are over `*const World` and yield `*const T`. `With`, `Without`, `Maybe` and
+`getMany` are the engine's; `run(world, res, system)` takes `*World` and `*sim.Resources`, so
+the host calls `ecs.run(&world, &res.game, system)`.
 
 **Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog }`: exactly what
 a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
@@ -131,10 +129,11 @@ a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) em
 field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
 title, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
 `ctx.res.game.config`, `ctx.res.game.catalog` directly, and hands `&ctx.res.game` to a rule
-(`actions.begin`, `capital.begin`, `barter.resolve`). `sim/root.zig` is the `sim` hub,
-re-exported by the library as `ha.sim`. `zig build test-sim` compiles the sim files and the
-`ecs` package with no `sdl3`, `ui` or host import (root: `test_sim.zig`), so a sim file that
-reaches the host fails it.
+(`actions.begin`, `capital.begin`, `barter.resolve`). `sim/root.zig` is the `sim` namespace,
+re-exported by the library as `ha.sim`; a caller spells the folder (`ha.sim.rules.actions`,
+`ha.sim.data.roster`). `zig build test-sim` compiles the sim files and the `ecs` package with
+no `sdl3`, `ui` or host import (root: `sim/root.zig`), so a sim file that reaches the host fails
+it.
 
 **World.** One `SparseSet` per public decl of `components.zig` and `tags.zig`.
 `spawn(bundle)` takes a tuple of component *instances* and bare *tag types*; then `add`,
@@ -187,7 +186,7 @@ every system: mutating the storage you are iterating is unsafe, so collect ids f
 after (`despawn_dead` is the pattern); and an entity that can be despawned must be read with
 `MaybeSingle`, or the UI build panics the frame it dies.
 
-## The tick, in order (`systems.zig`)
+## The tick, in order (`sim/systems/tick.zig`)
 
 | System | Does |
 |---|---|
@@ -207,7 +206,7 @@ Band crossings — "You feel weak with hunger.", "You are starving." — come fr
 `Config.condition(frac)`, the single definition of the ALIVE/WEARY/SPENT thresholds that the
 status word, the vigor chip and `actions.yield_factor` all share.
 
-## Actions and capital (`actions.zig`, `capital.zig`)
+## Actions and capital (`sim/rules/actions.zig`, `sim/rules/capital.zig`)
 
 **An agent owns goods as counts, and everything it can do follows from them.** `comp.Goods`
 is one count per record of the authored roster (below); zero is not owned. A verb is never
@@ -283,7 +282,7 @@ authored **per in-game day** and scaled by the frame's dt, so a flow reads as a 
 `goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
 `ownsMilestone` is what the curtain routes on; `capacity` sums the housing of what is owned.
 
-## Passerby and barter (`market.zig`, `barter.zig`)
+## Passerby and barter (`sim/rules/market.zig`, `sim/rules/barter.zig`)
 
 **The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
 machine `absent → approaching → present → departed → absent`, ticked by `market.tick` off the
@@ -313,7 +312,7 @@ bought good through `capital.acquire` (its effect lands once; a repeat is stock)
 satchel decremented, one log line pushed. A failed check mutates nothing and returns the
 reason. `market` stays world-free; `barter` is the only place a `Quote` meets an entity.
 
-## The authored roster (`roster.zig`, `data/`)
+## The authored roster (`sim/data/roster.zig`, `data/`)
 
 The labor verbs, the capital goods and the technologies are data: `data/actions.zon`,
 `data/goods.zon` and `data/technologies.zon`, parsed at load by `std.zon.parse` into one

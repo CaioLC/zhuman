@@ -6,13 +6,13 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const effects = ha.effects;
-const roster = ha.roster;
+const comp = ha.sim.comp;
+const effects = ha.sim.rules.effects;
+const roster = ha.sim.data.roster;
 const uic = ha.ui_client;
 const vd = uic.style.verdict;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const t = @import("../templates/root.zig");
 const Line = t.HoldingsLine;
@@ -63,14 +63,14 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         }
     }
     if (world.get(e, comp.InventoryFood)) |food| {
-        const q0 = ha.baselines.food_quality;
+        const q0 = ha.sim.baselines.food_quality;
         if (food.quality != q0) try margins.append(a, .{
             .key = "quality",
             .label = "Food quality",
             .value = try a.print("{d} \u{2192} {d}", .{ q0, food.quality }),
             .verdict = vd.margin(@floatFromInt(food.quality), @floatFromInt(q0), .higher),
         });
-        const s0 = ha.baselines.food_spoils;
+        const s0 = ha.sim.baselines.food_spoils;
         try margins.append(a, .{
             .key = "spoilage",
             .label = "Food spoilage",
@@ -109,7 +109,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     // The eating policy reads its own word under BODY, so the body names only what it moves.
     const rate = ctx.res.game.config.clampMetabolism(met.rate);
 
-    const net = ha.systems.net_food_drawdown(met.base_rate, rate, 0);
+    const net = ha.sim.systems.tick.net_food_drawdown(met.base_rate, rate, 0);
     if (net <= vd.delta_eps) {
         try body.append(a, .{ .key = "coverage", .prefix = "Larder ", .value = "holds", .suffix = ".", .tone = .good });
     } else {

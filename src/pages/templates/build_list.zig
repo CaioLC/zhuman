@@ -25,18 +25,18 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const capital = ha.capital;
-const roster = ha.roster;
-const ledger = ha.ledger;
+const comp = ha.sim.comp;
+const capital = ha.sim.rules.capital;
+const roster = ha.sim.data.roster;
+const ledger = ha.sim.rules.ledger;
 const query = ha.query;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const row_mod = @import("./capital_row.zig");
 const capital_row = row_mod.capital_row;
@@ -391,7 +391,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     const rows = sv.content;
 
     if (entries.len == 0) {
-        const msg = if (blank) try ctx.arena.print("Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.migration.actOf(world, e))}) else "No recipe matches your search.";
+        const msg = if (blank) try ctx.arena.print("Nothing is within reach yet. Gather {s}.", .{roster.Resource.biomass.wordIn(ha.sim.data.migration.actOf(world, e))}) else "No recipe matches your search.";
         try rows.label("empty", msg, .{ style.body, style.faint });
     }
 
@@ -449,7 +449,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     const cost_txt = blk: {
         var cw = std.Io.Writer.fixed(&cbuf);
         for (rec.input) |l| if (l.per == .once) {
-            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(ha.migration.actOf(world, e), l.item) }) catch {};
+            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(ha.sim.data.migration.actOf(world, e), l.item) }) catch {};
         };
         cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 }) catch {};
         break :blk cw.buffered();
@@ -479,7 +479,7 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
     for (rec.input) |l| {
         if (l.per != .once) continue;
         const have = ledger.held(world, e, cat, l);
-        const word = ha.actions.itemWord(cat, l.item, ha.migration.actOf(world, e));
+        const word = ha.sim.rules.actions.itemWord(cat, l.item, ha.sim.data.migration.actOf(world, e));
         const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
         requirements[nreq] = .{ .label = label, .value = std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
         nreq += 1;
@@ -557,8 +557,8 @@ fn settler(w: *World, cat: *const roster.Catalog, biomass: f32, minerals: f32) E
         comp.Goods{},
         comp.Granted{},
     });
-    _ = ha.migration.migrate_to_act_two(w, e, cat);
-    _ = ha.ledger.move(w, e, .minerals, minerals);
+    _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
+    _ = ha.sim.rules.ledger.move(w, e, .minerals, minerals);
     return e;
 }
 

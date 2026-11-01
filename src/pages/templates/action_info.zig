@@ -4,11 +4,11 @@
 //! the pick.
 
 const ha = @import("ha");
-const roster = ha.roster;
+const roster = ha.sim.data.roster;
 
 pub const Dominant = struct {
-    band: ha.dist.Stats,
-    kind: ha.dist.Kind,
+    band: ha.sim.kernel.dist.Stats,
+    kind: ha.sim.kernel.dist.Kind,
     /// The resource's letter — the header resource bar's one-letter vocabulary — or, for a
     /// good, its id.
     letter: []const u8,
@@ -22,9 +22,9 @@ pub fn dominant(act: u8, cat: *const roster.Catalog, output: []const roster.Line
     var best: ?Dominant = null;
     for (output) |l| {
         if (l.per != .once) continue;
-        const band = ha.dist.stats(l.asDist());
+        const band = ha.sim.kernel.dist.stats(l.asDist());
         if (best == null or band.mean > best.?.band.mean) {
-            best = .{ .band = band, .kind = l.kind, .letter = letterOf(act, l.item), .word = ha.actions.itemWord(cat, l.item, act) };
+            best = .{ .band = band, .kind = l.kind, .letter = letterOf(act, l.item), .word = ha.sim.rules.actions.itemWord(cat, l.item, act) };
         }
     }
     return best;
@@ -37,7 +37,7 @@ pub fn letterOf(act: u8, item: []const u8) []const u8 {
 }
 
 /// The tiny curve icon for a distribution shape — a tile's one-glance risk profile.
-pub fn kind_icon(kind: ha.dist.Kind) [:0]const u8 {
+pub fn kind_icon(kind: ha.sim.kernel.dist.Kind) [:0]const u8 {
     return switch (kind) {
         .normal => "assets/svg/dist_normal.svg",
         .poisson => "assets/svg/dist_poisson.svg",

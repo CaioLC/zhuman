@@ -5,8 +5,8 @@
 
 const std = @import("std");
 const ha = @import("ha");
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;

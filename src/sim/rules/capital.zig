@@ -19,15 +19,15 @@
 //! from absent and leaves with the last unit; losing a spare keeps it.
 
 const std = @import("std");
-const comp = @import("./components.zig");
-const roster = @import("./roster.zig");
+const comp = @import("../components.zig");
+const roster = @import("../data/roster.zig");
 const effects = @import("./effects.zig");
 const ledger = @import("./ledger.zig");
 const actions = @import("./actions.zig");
-const migration = @import("./migration.zig");
-const ecs = @import("./ecs.zig");
-const res_mod = @import("./sim/res.zig");
-const world = @import("./world.zig");
+const migration = @import("../data/migration.zig");
+const ecs = @import("../ecs.zig");
+const res_mod = @import("../res.zig");
+const world = @import("../ecs.zig");
 
 const World = world.World;
 const Entity = world.Entity;

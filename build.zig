@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
     const ui_dep = b.dependency("ui", .{ .target = target, .optimize = optimize });
     const ui_mod = ui_dep.module("ui");
     // The ECS engine is a package the same way (`src/ecs/build.zig.zon`), imported as `ecs`;
-    // `src/world.zig` and `src/ecs.zig` instantiate it over this game's types.
+    // `src/sim/ecs.zig` instantiates it over this game's types.
     const ecs_dep = b.dependency("ecs", .{ .target = target, .optimize = optimize });
     const ecs_mod = ecs_dep.module("ecs");
 
@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
     ha_mod.addImport("ui", ui_mod);
     ha_mod.addImport("ecs", ecs_mod);
-    // The authored roster (`src/roster.zig`) compiles the shipped data files in by name
+    // The authored roster (`src/sim/data/roster.zig`) compiles the shipped data files in by name
     // (`@embedFile("actions.zon")`), so a release build carries its content and the parser
     // runs over the same bytes a dev build reads from `data/`.
     ha_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
@@ -145,11 +145,11 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_ecs_tests.step);
     test_ui_step.dependOn(&run_ecs_tests.step);
 
-    // The simulation alone (`src/test_sim.zig`): the sim files and the `ecs` package, with no
+    // The simulation alone (`src/sim/root.zig`): the sim files and the `ecs` package, with no
     // `sdl3`, no `ui` and no `ha`, so a sim file that reaches the host stops compiling here.
     // `test` does not depend on it: the same tests already run under `ha_mod`.
     const sim_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/test_sim.zig"),
+        .root_source_file = b.path("src/sim/root.zig"),
         .target = target,
         .optimize = optimize,
     });

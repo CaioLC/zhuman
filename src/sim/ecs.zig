@@ -1,4 +1,5 @@
-//! The engine's system params bound to this game's `World` and `sim.Resources`, so a system
+//! This game's world, the engine's `World` over `components.zig` and `tags.zig`, and the
+//! engine's system params bound to it and to `sim.Resources`, so a system
 //! spells `Query(.{ comp.Vigor, With(tag.Player) })` and `run(world, &res.game, metabolize)`. The
 //! engine itself is the package `ecs` (`src/ecs/README.md`).
 //!
@@ -9,8 +10,12 @@
 //! reach the renderer, the input or the view.
 
 const engine = @import("ecs");
-const World = @import("./world.zig").World;
-const Resources = @import("./sim/res.zig").Resources;
+const Resources = @import("./res.zig").Resources;
+
+pub const Entity = engine.Entity;
+pub const MAX_ENTITIES = engine.MAX_ENTITIES;
+pub const SparseSet = engine.SparseSet;
+pub const World = engine.World(@import("./components.zig"), @import("./tags.zig"));
 
 pub const With = engine.With;
 pub const Without = engine.Without;

@@ -12,7 +12,7 @@ const ha = @import("ha");
 const app = @import("../main.zig");
 
 const uic = ha.ui_client;
-const World = ha.world.World;
+const World = ha.sim.ecs.World;
 const StepState = uic.UiState.StepState;
 
 const t = @import("./templates/root.zig");

@@ -3,12 +3,12 @@
 const std = @import("std");
 // general lib ECS
 const ha = @import("ha");
-const ecs = ha.ecs;
-const comp = ha.comp;
-const tag = ha.tag;
-const actions = ha.actions;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const ecs = ha.sim.ecs;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
+const actions = ha.sim.rules.actions;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 // Ui Interface
 const uic = ha.ui_client;
 const Node = uic.Node;
@@ -50,15 +50,15 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
     }){ .world = world };
     if (q.get()) |a| {
         const e, const vigor, const food, const biomass = a;
-        const act = ha.migration.actOf(world, e);
+        const act = ha.sim.data.migration.actOf(world, e);
         // The stockline is a row of StockTokens whose order/membership is this act's
         // descriptor. Act I lists Vigor/Food/Materials; each token shows a two-letter abbrev
         // (full label on hover/focus), tints danger on a low/zero value, and owns compact versus
         // detailed number formatting.
         header_stocks = .{
             t.vigorStock(ctx, "VI", vigor),
-            .{ .abbrev = ha.roster.Resource.food.abbrevIn(act), .full = ha.roster.Resource.food.labelIn(act), .value = food.v, .verdict = uic.style.verdict.when(food.v <= 0, .low) },
-            .{ .abbrev = ha.roster.Resource.biomass.abbrevIn(act), .full = ha.roster.Resource.biomass.labelIn(act), .value = biomass.v },
+            .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = food.v, .verdict = uic.style.verdict.when(food.v <= 0, .low) },
+            .{ .abbrev = ha.sim.data.roster.Resource.biomass.abbrevIn(act), .full = ha.sim.data.roster.Resource.biomass.labelIn(act), .value = biomass.v },
         };
         header_stock_count = header_stocks.len;
 
@@ -87,7 +87,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // open. Offers are built from live `market.Quote`s — buys from the passerby's satchel
         // wares, sells from the diminishing schedule for the player's surplus/goods — so BUY/SELL
         // tabs, stock, preview, and both `YOU GIVE` directions are authoritative, and a confirmed
-        // offer routes straight to `ha.barter.resolve`. Header/Holdings/log refresh the same frame
+        // offer routes straight to `ha.sim.rules.barter.resolve`. Header/Holdings/log refresh the same frame
         // because they read live world state after the resolve.
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
@@ -99,8 +99,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         .overlay = overlay,
     });
 }
-const market = ha.market;
-const barter = ha.barter;
+const market = ha.sim.rules.market;
+const barter = ha.sim.rules.barter;
 const Ware = market.Ware;
 
 /// The passerby's wares in the order the dialog lists their balances (the AFTER rows, the
@@ -110,8 +110,8 @@ const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone };
 /// The player's word for a ware (`food`, `materials`, `fishing rod`, `hatchet`).
 fn wareKey(act: u8, w: Ware) []const u8 {
     return switch (w) {
-        .food => ha.roster.Resource.food.wordIn(act),
-        .biomass => ha.roster.Resource.biomass.wordIn(act),
+        .food => ha.sim.data.roster.Resource.food.wordIn(act),
+        .biomass => ha.sim.data.roster.Resource.biomass.wordIn(act),
         .fish_hook => "fishing rod",
         .whetstone => "hatchet",
     };
@@ -199,7 +199,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
     const ts = ts_opt orelse return null;
     if (!ts.open) return null;
     const a = ctx.arena;
-    const act = ha.migration.actOf(world, e);
+    const act = ha.sim.data.migration.actOf(world, e);
     const enc = &ctx.res.game.sim.encounter;
     const cat = &ctx.res.game.catalog;
 
@@ -253,8 +253,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiStat
         .lots = lots,
         .balances = &balances,
         .notation = .{ .abbrev = &.{
-            .{ .key = ha.roster.Resource.food.wordIn(act), .letter = ha.roster.Resource.food.letterIn(act) },
-            .{ .key = ha.roster.Resource.biomass.wordIn(act), .letter = ha.roster.Resource.biomass.letterIn(act) },
+            .{ .key = ha.sim.data.roster.Resource.food.wordIn(act), .letter = ha.sim.data.roster.Resource.food.letterIn(act) },
+            .{ .key = ha.sim.data.roster.Resource.biomass.wordIn(act), .letter = ha.sim.data.roster.Resource.biomass.letterIn(act) },
         } },
     };
 

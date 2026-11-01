@@ -13,10 +13,10 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
+const comp = ha.sim.comp;
 const uic = ha.ui_client;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
@@ -109,7 +109,7 @@ pub fn tile(
     state: []const u8,
     cost_txt: []const u8,
     duration_txt: []const u8,
-    kind: ha.dist.Kind,
+    kind: ha.sim.kernel.dist.Kind,
     yield_txt: []const u8,
     can: bool,
     progress: ?f32,
@@ -133,7 +133,7 @@ pub fn tile(
     const value: []const u8 = if (progress) |p|
         std.mem.print(&pbuf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "?"
     else
-        ha.dist.kindLabel(kind);
+        ha.sim.kernel.dist.kindLabel(kind);
     const q = box.control(.{
         .enabled = enabled,
         .name = name,
@@ -204,8 +204,8 @@ pub fn action_tile(
 ) !?Tile {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
-    const act = ha.migration.actOf(world, e);
-    const q = ha.actions.quote(world, e, cat, ctx.res.game.config, ai) orelse return null;
+    const act = ha.sim.data.migration.actOf(world, e);
+    const q = ha.sim.rules.actions.quote(world, e, cat, ctx.res.game.config, ai) orelse return null;
     const rec = cat.actions[ai];
     // One body, one act: any work in progress disables every tile; the one being
     // performed shows the underbar instead of dimming.
@@ -243,7 +243,7 @@ pub fn action_tile(
     // Band scaled by the same two-level factor `begin` locks in (weak = ×0.7 below the
     // WEARY threshold) — the promise is exactly what a click right now would pay.
     var ybuf: [16]u8 = undefined;
-    var kind: ha.dist.Kind = .fixed;
+    var kind: ha.sim.kernel.dist.Kind = .fixed;
     var yield_txt: []const u8 = "+0";
     if (info.dominant(act, cat, q.verb.output.slice())) |dom| {
         kind = dom.kind;

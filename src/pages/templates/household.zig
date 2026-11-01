@@ -5,9 +5,9 @@
 
 const ha = @import("ha");
 
-const comp = ha.comp;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const comp = ha.sim.comp;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const El = ha.ui_client.elements.El;
 
 const holdings_mod = @import("./holdings.zig");

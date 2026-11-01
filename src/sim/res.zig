@@ -4,10 +4,10 @@
 //! `*sim.Resources`, and every field has a default, so `sim.Resources{}` is a complete value.
 
 const std = @import("std");
-const comp = @import("../components.zig");
-const logmod = @import("../log.zig");
-const marketmod = @import("../market.zig");
-const rostermod = @import("../roster.zig");
+const comp = @import("./components.zig");
+const logmod = @import("./log.zig");
+const marketmod = @import("./rules/market.zig");
+const rostermod = @import("./data/roster.zig");
 
 /// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
 /// Action durations are authored in hours (`Requires.hours`) — human-readable on the
@@ -33,7 +33,7 @@ pub const Condition = enum { alive, weary, spent };
 /// Tuning knobs. Never written at runtime, and deliberately **not** part of `Sim`, so
 /// starting a fresh run doesn't discard a setting the player chose. Every value here is
 /// a first guess awaiting playtesting — which is why they're runtime fields rather than
-/// consts scattered across `actions.zig`, `systems.zig` and the templates.
+/// consts scattered across `actions.zig`, `systems/tick.zig` and the templates.
 pub const Config = struct {
     /// Game-seconds per in-game day — the tempo every per-day rate (metabolism,
     /// starvation, spoilage-as-displayed) is expressed against, and the day counter's
@@ -129,7 +129,7 @@ pub const Sim = struct {
     /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this
     /// deterministic stand-in until the population and market model exist (ACT2-01..09).
     /// Seeded on first use; cleared by `reset` for a fresh run.
-    neighbours: @import("../neighbours.zig").Market = .{},
+    neighbours: @import("./rules/neighbours.zig").Market = .{},
 
     /// **The Exchange, stubbed** — Act II's milestone. `standing` once it is raised (the
     /// settlement then reads as Act III); `population` overrides the page's stand-in

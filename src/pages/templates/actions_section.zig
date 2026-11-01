@@ -10,12 +10,12 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const actions = ha.actions;
-const roster = ha.roster;
+const comp = ha.sim.comp;
+const actions = ha.sim.rules.actions;
+const roster = ha.sim.data.roster;
 const query = ha.query;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const uic = ha.ui_client;
 const el = uic.elements;
@@ -211,7 +211,7 @@ fn settler(w: *World, cat: *const roster.Catalog) Entity {
         comp.Goods{},
         comp.Granted{},
     });
-    _ = ha.migration.migrate_to_act_two(w, e, cat);
+    _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
     return e;
 }
 

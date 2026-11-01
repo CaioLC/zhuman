@@ -6,7 +6,7 @@
 //! decl (functions, consts, imports of types you don't want registered)
 //! will fail compilation.
 // Relative, like every sim file's imports: `test-ui` and `test-sim` compile this file without `ha`.
-const roster = @import("./roster.zig");
+const roster = @import("./data/roster.zig");
 
 // NOTE: These are components
 pub const Label = struct { v: []const u8 };

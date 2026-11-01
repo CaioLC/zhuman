@@ -23,14 +23,14 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const tag = ha.tag;
-const ecs = ha.ecs;
-const actions = ha.actions;
-const capital = ha.capital;
-const ledger = ha.ledger;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
+const ecs = ha.sim.ecs;
+const actions = ha.sim.rules.actions;
+const capital = ha.sim.rules.capital;
+const ledger = ha.sim.rules.ledger;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const uic = ha.ui_client;
 const el = uic.elements;
@@ -77,7 +77,7 @@ const focus_views = [_]usize{ @intFromEnum(View.research), @intFromEnum(View.mar
 const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_generators", "a2_rail_research", "a2_rail_market" };
 
 /// The stocks the stockline reads from the ledger, in its order after Vigor.
-const ledger_stocks = [_]ha.roster.Resource{
+const ledger_stocks = [_]ha.sim.data.roster.Resource{
     .food,
     .water,
     .fuel,
@@ -142,8 +142,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         }
     }
     stocks[n] = .{
-        .abbrev = ha.roster.Resource.coin.abbrevIn(2),
-        .full = ha.roster.Resource.coin.labelIn(2),
+        .abbrev = ha.sim.data.roster.Resource.coin.abbrevIn(2),
+        .full = ha.sim.data.roster.Resource.coin.labelIn(2),
         .value = if (agent) |e| ledger.balance(world, e, .coin) else 0,
         .tone = .accent,
     };
@@ -252,7 +252,7 @@ test {
     _ = @import("./holdings.zig");
 }
 
-const nb = ha.neighbours;
+const nb = ha.sim.rules.neighbours;
 
 /// What the settlement keeps back from trade (the reserve HOLDINGS will own): a larder floor, a
 /// little water, and some biomass to build with. A stub until the reserve exists.
@@ -264,7 +264,7 @@ const reserve = blk: {
     break :blk r;
 };
 
-fn heldItem(world: *World, e: Entity, cat: *const ha.roster.Catalog, i: usize) f32 {
+fn heldItem(world: *World, e: Entity, cat: *const ha.sim.data.roster.Catalog, i: usize) f32 {
     const item = ledger.item(cat, nb.items[i]) orelse return 0;
     return switch (item) {
         .resource => |r| ledger.balance(world, e, r),
@@ -285,7 +285,7 @@ fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) 
 }
 
 /// The Exchange's price and the population it waits on (`act-ii.html`).
-const exchange_cost = [_]struct { ha.roster.Resource, f32 }{ .{ .biomass, 80 }, .{ .minerals, 40 }, .{ .metal, 24 } };
+const exchange_cost = [_]struct { ha.sim.data.roster.Resource, f32 }{ .{ .biomass, 80 }, .{ .minerals, 40 }, .{ .metal, 24 } };
 
 /// The settlement's population: the fixture's stand-in, or the stub override a fixture sets.
 fn population(ctx: *UiCtx) f32 {
@@ -402,15 +402,15 @@ fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
 }
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost
-/// from the ledger and establishes it through `grid/board`, which opens its outward neighbours.
+/// from the ledger and establishes it through `sim.rules.research`, which opens its outward neighbours.
 fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
-    const board = ha.grid.board;
+    const board = ha.sim.rules.research;
     const cat = &ctx.res.game.catalog;
     const research = world.get(e, comp.Research) orelse {
         _ = try t.empty_state(s.view, "a2_research", "No research board", "The settlement has not crossed the curtain.");
         return;
     };
-    const wedges = [6]ha.roster.Resource{ .food, .water, .fuel, .metal, .minerals, .biomass };
+    const wedges = [6]ha.sim.data.roster.Resource{ .food, .water, .fuel, .metal, .minerals, .biomass };
     var held: [6]f32 = undefined;
     for (wedges, 0..) |r, i| held[i] = ledger.balance(world, e, r);
     const st = s.owner.state(uic.UiState.ResearchState);
@@ -428,7 +428,7 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t
     if (board.research(cat, research, idx, &bal) != .researched) return;
     const tech = &cat.technologies[idx];
     for (tech.cost) |line| {
-        const r = ha.roster.Catalog.resource(line.item) orelse continue;
+        const r = ha.sim.data.roster.Catalog.resource(line.item) orelse continue;
         _ = ledger.move(world, e, r, -@round(line.n));
     }
     var newly: u64 = 0;
@@ -486,7 +486,7 @@ fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.
 }
 
 test "Act II's BUILD widths fill the lane and hold every Act II build order unelided" {
-    const roster = ha.roster;
+    const roster = ha.sim.data.roster;
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     try std.testing.expectEqual(t.build_lane_width, build_shelf.widths.laneTotal());

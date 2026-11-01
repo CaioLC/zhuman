@@ -13,12 +13,12 @@ const std = @import("std");
 const ha = @import("ha");
 const fx = @import("./fixtures.zig");
 
-const comp = ha.comp;
-const ledger = ha.ledger;
+const comp = ha.sim.comp;
+const ledger = ha.sim.rules.ledger;
 const uic = ha.ui_client;
 const vd = uic.style.verdict;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 
 const t = @import("../templates/root.zig");
 const Line = t.HoldingsLine;

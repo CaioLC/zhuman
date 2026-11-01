@@ -1,6 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl3");
-const rostermod = @import("./roster.zig");
+const rostermod = @import("./sim/data/roster.zig");
 const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
 

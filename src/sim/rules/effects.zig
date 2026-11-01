@@ -16,12 +16,12 @@
 //! fills what it adds, lowering it only clamps.
 
 const std = @import("std");
-const comp = @import("./components.zig");
-const roster = @import("./roster.zig");
-const dist = @import("./dist.zig");
+const comp = @import("../components.zig");
+const roster = @import("../data/roster.zig");
+const dist = @import("../kernel/dist.zig");
 
-const World = @import("./world.zig").World;
-const Entity = @import("./world.zig").Entity;
+const World = @import("../ecs.zig").World;
+const Entity = @import("../ecs.zig").Entity;
 const Catalog = roster.Catalog;
 const Line = roster.Line;
 const Lines = roster.Lines;

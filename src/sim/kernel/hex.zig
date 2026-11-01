@@ -1,4 +1,4 @@
-//! `grid/hex` — the **pure** pointy-top axial hex math for the Act II STRUCTURE board.
+//! `kernel/hex` — the **pure** pointy-top axial hex math for the Act II STRUCTURE board.
 //!
 //! This module is deliberately free of UI, render, ECS, and SDL imports. It uses `std` plus the
 //! roster's `Resource` naming cover so board wedge codes cannot drift from the rest of Act II.
@@ -19,7 +19,7 @@
 //!       `y = cy + 1.5 * s * r`
 
 const std = @import("std");
-const roster = @import("../roster.zig");
+const roster = @import("../data/roster.zig");
 
 // ============================ Coordinate types =============================
 

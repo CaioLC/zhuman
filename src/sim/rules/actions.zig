@@ -12,13 +12,13 @@
 //! reach zero, so labor alone cannot kill), an item may be spent to exactly zero.
 
 const std = @import("std");
-const comp = @import("./components.zig");
-const roster = @import("./roster.zig");
+const comp = @import("../components.zig");
+const roster = @import("../data/roster.zig");
 const effects = @import("./effects.zig");
 const ledger = @import("./ledger.zig");
-const migration = @import("./migration.zig");
-const res_mod = @import("./sim/res.zig");
-const world = @import("./world.zig");
+const migration = @import("../data/migration.zig");
+const res_mod = @import("../res.zig");
+const world = @import("../ecs.zig");
 
 const Resources = res_mod.Resources;
 const World = world.World;

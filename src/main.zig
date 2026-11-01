@@ -2,13 +2,13 @@ const std = @import("std");
 
 const ha = @import("ha");
 
-const comp = ha.comp;
-const tag = ha.tag;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
 const ui_client = ha.ui_client;
 const sdl = ha.sdl;
-const sys = ha.systems;
-const ecs = ha.ecs;
-const actions = ha.actions;
+const sys = ha.sim.systems.tick;
+const ecs = ha.sim.ecs;
+const actions = ha.sim.rules.actions;
 const pages = @import("./pages/root.zig");
 const Resources = ha.res.Resources;
 
@@ -142,7 +142,7 @@ const App = struct {
     frame_capper: sdl.extras.FramerateCapper(f32),
     font: ha.font.Fonts,
     resources: Resources,
-    world: ha.world.World,
+    world: ha.sim.ecs.World,
     frame_arena: std.heap.ArenaAllocator,
     ui: ui_client.UiCtx,
     /// The host frame driver — owns the one routing policy (`route.Router`) and runs the
@@ -157,7 +157,7 @@ const App = struct {
     /// The once-only trigger for the development layout dump (`HA_LAYOUT_DUMP`).
     layout_dump: ui_client.layout_dump.Trigger = .{},
     /// The `data/` files' modification times; a change reloads the roster between frames.
-    data_watch: ha.reload.Watch = .{},
+    data_watch: ha.sim.data.reload.Watch = .{},
 
     fn init(process: std.process.Init) !App {
         try sdl.init(.{ .video = true, .events = true });
@@ -207,7 +207,7 @@ const App = struct {
         // fallback. No per-frame OS call — `build_ui` only projects this onto
         // `view.reduced_motion` each frame.
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
-        self.world = ha.world.World.init();
+        self.world = ha.sim.ecs.World.init();
         _ = spawn_player(&self.world);
         self.resources.game.sim.log.push(.dim, opening_line);
 
@@ -373,7 +373,7 @@ pub fn main(process: std.process.Init) !void {
         app.resources.game.time.dt = app.resources.playback.simulationDelta(real_dt);
         // A changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
-        if (app.data_watch.poll(app.io, real_dt)) ha.reload.reload(app.io, &app.resources.game, &app.world);
+        if (app.data_watch.poll(app.io, real_dt)) ha.sim.data.reload.reload(app.io, &app.resources.game, &app.world);
         // Advance host-layer UI transitions by the frame delta and keep the
         // reduced-motion policy projected onto the registry (so a transition started this
         // frame snaps when reduced motion is on). Presentation only — always runs, even at
@@ -384,8 +384,8 @@ pub fn main(process: std.process.Init) !void {
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
         // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
-        const player = ecs.MaybeSingle(.{ ha.world.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
-        const housed = if (player.get()) |p| ha.capital.ownsMilestone(&app.world, p[0], &app.resources.game.catalog, .act_one) else false;
+        const player = ecs.MaybeSingle(.{ ha.sim.ecs.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
+        const housed = if (player.get()) |p| ha.sim.rules.capital.ownsMilestone(&app.world, p[0], &app.resources.game.catalog, .act_one) else false;
         // Skip the simulation stage entirely while paused or before a run (the title screen):
         // passing zero through systems is not sufficient because boundary-state systems (an
         // encounter at remaining=0, completed work, death/reach edge detectors) may still mutate
@@ -399,8 +399,8 @@ pub fn main(process: std.process.Init) !void {
             // Advance the Passerby encounter on the sim clock (arrival/departure logs,
             // finite satchel). Not an ECS system — the encounter is run state on `Sim`, one per
             // run, so it ticks directly rather than over a per-entity query.
-            _ = ha.market.tick(&app.resources.game.sim.encounter, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
-            ha.capital.run_generators(&app.world, &app.resources.game); // collectable capital accumulates
+            _ = ha.sim.rules.market.tick(&app.resources.game.sim.encounter, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
+            ha.sim.rules.capital.run_generators(&app.world, &app.resources.game); // collectable capital accumulates
             ecs.run(&app.world, &app.resources.game, sys.mark_dead); // vigor at 0 → tag Dead
             ecs.run(&app.world, &app.resources.game, sys.despawn_dead); // reap Dead entities
         }
@@ -408,8 +408,8 @@ pub fn main(process: std.process.Init) !void {
         // household clock above stops at the curtain; the Coin Merchant's visits run on game
         // time here, and a standing Exchange replaces the cart.
         if (housed and app.resources.route == .game and app.resources.game.time.dt > 0 and !app.resources.game.sim.exchange.standing) {
-            if (player.get()) |p| if (ha.migration.actOf(&app.world, p[0]) == 2) {
-                _ = ha.market.tickMerchant(&app.resources.game.sim.merchant, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
+            if (player.get()) |p| if (ha.sim.data.migration.actOf(&app.world, p[0]) == 2) {
+                _ = ha.sim.rules.market.tickMerchant(&app.resources.game.sim.merchant, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
             };
         }
 
@@ -483,7 +483,7 @@ const FrameHost = struct {
     }
 };
 
-fn spawn_agent(world: *ha.world.World) ha.world.Entity {
+fn spawn_agent(world: *ha.sim.ecs.World) ha.sim.ecs.Entity {
     // Spawn from the components' authoritative default baselines (see `baselines.zig`)
     // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
     // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
@@ -499,7 +499,7 @@ fn spawn_agent(world: *ha.world.World) ha.world.Entity {
     });
 }
 
-pub fn spawn_player(world: *ha.world.World) ha.world.Entity {
+pub fn spawn_player(world: *ha.sim.ecs.World) ha.sim.ecs.Entity {
     const e = spawn_agent(world);
     world.add(e, tag.Player{});
     return e;
@@ -511,8 +511,8 @@ pub const opening_line = "You wake alone. Cold. Hungry.";
 /// Begin a fresh run: retire any living player (a settled actor is still alive at the Act I
 /// curtain, so spawning over them would leave two), spawn a new one, clear the run state
 /// (clock, log, teaching flag), unpause, and log the opening line. Speed survives a new run.
-pub fn start_over(world: *ha.world.World, res: *ha.res.Resources) void {
-    const living = ecs.MaybeSingle(.{ ha.world.Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+pub fn start_over(world: *ha.sim.ecs.World, res: *ha.res.Resources) void {
+    const living = ecs.MaybeSingle(.{ ha.sim.ecs.Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     if (living.get()) |entry| world.despawn(entry[0]);
     res.playback.paused = false;
     _ = spawn_player(world);

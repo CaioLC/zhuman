@@ -12,7 +12,7 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
+const comp = ha.sim.comp;
 const uic = ha.ui_client;
 const Node = uic.Node;
 const UiCtx = uic.UiCtx;

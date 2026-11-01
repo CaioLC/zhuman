@@ -5,7 +5,7 @@
 //! counterparty's own valuation. YOUR STALL posts sells and buys at the player's own prices,
 //! and each post says how many would take it.
 //!
-//! The neighbours are `ha.neighbours` (a stub until the population and market model exist);
+//! The neighbours are `ha.sim.rules.neighbours` (a stub until the population and market model exist);
 //! the player's holdings arrive as numbers. The view edits the neighbour book (posts, a
 //! settled deal) and reports a settled deal so the page moves the player's real stocks.
 
@@ -16,7 +16,7 @@ const style = uic.style;
 const vd = style.verdict;
 const Style = style.Style;
 const El = uic.elements.El;
-const nb = ha.neighbours;
+const nb = ha.sim.rules.neighbours;
 const MarketState = uic.UiState.MarketState;
 
 const stepper_mod = @import("./quantity_stepper.zig");
@@ -74,7 +74,7 @@ fn activeGroup(st: *const MarketState, n: usize) Group {
 /// The player's word for item `i` (`food`, `cut stone`).
 fn word(ctx: *uic.UiCtx, i: usize) ![]const u8 {
     const cat = &ctx.res.game.catalog;
-    if (ha.roster.Catalog.resource(nb.items[i])) |r| return r.wordIn(2);
+    if (ha.sim.data.roster.Catalog.resource(nb.items[i])) |r| return r.wordIn(2);
     if (cat.good(nb.items[i])) |g| return std.ascii.allocLowerString(ctx.arena, g.name);
     return nb.items[i];
 }

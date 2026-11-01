@@ -14,18 +14,18 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const capital = ha.capital;
-const ledger = ha.ledger;
-const roster = ha.roster;
+const comp = ha.sim.comp;
+const capital = ha.sim.rules.capital;
+const ledger = ha.sim.rules.ledger;
+const roster = ha.sim.data.roster;
 const uic = ha.ui_client;
 const el = uic.elements;
 const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const Color = uic.Color;
 
 const info = @import("./action_info.zig");
@@ -392,7 +392,7 @@ pub fn capital_row(
     const th = ctx.res.view.theme;
     const cat = &ctx.res.game.catalog;
     const rec = q.rec;
-    const act = ha.migration.actOf(world, e);
+    const act = ha.sim.data.migration.actOf(world, e);
 
     // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded
     // roster that moves it to another index.

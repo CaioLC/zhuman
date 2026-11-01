@@ -5,7 +5,7 @@
 //! (`docs/roadmap.md`: ACT2-01 population, ACT2-08 the merchant, ACT2-09 coin).
 const std = @import("std");
 const ha = @import("ha");
-const Resource = ha.roster.Resource;
+const Resource = ha.sim.data.roster.Resource;
 
 // —— Header readouts with no model behind them ——————————————————————————————————————————
 
@@ -61,7 +61,7 @@ pub const merchant_lots = [_]MerchantLot{
 /// tick. The dialog's kicker reads `MERCHANT · MARKET OPEN 2.4 DAYS`.
 pub fn merchantDaysLeft(res: *const ha.res.Resources) f32 {
     const v = res.game.sim.merchant;
-    const left = if (v.remaining < 0) (ha.market.MerchantSchedule{}).stay_days * res.game.config.secs_per_day else v.remaining;
+    const left = if (v.remaining < 0) (ha.sim.rules.market.MerchantSchedule{}).stay_days * res.game.config.secs_per_day else v.remaining;
     return left / res.game.config.secs_per_day;
 }
 /// The kicker's tail once the Exchange stands: the floor no longer leaves.

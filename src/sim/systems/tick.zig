@@ -1,12 +1,12 @@
 const std = @import("std");
-const comp = @import("./components.zig");
-const tag = @import("./tags.zig");
-const ecs = @import("./ecs.zig");
-const res_mod = @import("./sim/res.zig");
-const world = @import("./world.zig");
-const actions = @import("./actions.zig");
-const capital = @import("./capital.zig");
-const roster = @import("./roster.zig");
+const comp = @import("../components.zig");
+const tag = @import("../tags.zig");
+const ecs = @import("../ecs.zig");
+const res_mod = @import("../res.zig");
+const world = @import("../ecs.zig");
+const actions = @import("../rules/actions.zig");
+const capital = @import("../rules/capital.zig");
+const roster = @import("../data/roster.zig");
 const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
@@ -316,7 +316,7 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
-    try std.testing.expectEqual(@import("./log.zig").Tone.good, res.sim.log.get(0).tone);
+    try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
     // The message names the good and uses the exact copy.
     try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
 

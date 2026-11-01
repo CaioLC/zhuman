@@ -12,8 +12,8 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const actions = ha.actions;
+const comp = ha.sim.comp;
+const actions = ha.sim.rules.actions;
 const uic = ha.ui_client;
 const el = uic.elements;
 const UiCtx = uic.UiCtx;

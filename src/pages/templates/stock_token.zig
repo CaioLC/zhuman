@@ -235,6 +235,6 @@ test "stock readout appends max when set" {
     const vigor = Stock{ .abbrev = "VI", .full = "Vigor", .value = 14.25, .max = 15 };
     try x("14/15", formatStock(&buf, vigor, false));
     try x("14.2/15", formatStock(&buf, vigor, true));
-    const food = Stock{ .abbrev = ha.roster.Resource.food.abbrevIn(1), .full = ha.roster.Resource.food.labelIn(1), .value = 4 };
+    const food = Stock{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(1), .full = ha.sim.data.roster.Resource.food.labelIn(1), .value = 4 };
     try x("4", formatStock(&buf, food, false));
 }

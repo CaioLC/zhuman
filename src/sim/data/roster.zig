@@ -16,7 +16,7 @@
 const std = @import("std");
 // A relative import, not `ha`: `sim/res.zig` carries the catalog, and `test-ui` and `test-sim`
 // compile it without the `ha` module.
-const dist = @import("./dist.zig");
+const dist = @import("../kernel/dist.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -307,7 +307,7 @@ pub const Good = struct {
 };
 
 /// An axial position on the research board. The ring and the pure/hybrid wedge derive from
-/// it (`grid/hex.zig`); ring 0 is the foundation and is never a record.
+/// it (`kernel/hex.zig`); ring 0 is the foundation and is never a record.
 pub const Coord = struct {
     q: i32,
     r: i32,

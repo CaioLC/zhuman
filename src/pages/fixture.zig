@@ -20,13 +20,13 @@
 const std = @import("std");
 const ha = @import("ha");
 
-const comp = ha.comp;
-const tag = ha.tag;
+const comp = ha.sim.comp;
+const tag = ha.sim.tag;
 const uic = ha.ui_client;
-const ecs = ha.ecs;
-const market = ha.market;
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const ecs = ha.sim.ecs;
+const market = ha.sim.rules.market;
+const World = ha.sim.ecs.World;
+const Entity = ha.sim.ecs.Entity;
 const Resources = ha.res.Resources;
 
 const p_playgame = @import("./play_game.zig").ui_playgame;
@@ -151,10 +151,10 @@ pub const Spec = struct {
 };
 
 /// One seeded event-log line, stamped at in-game `day` (from 1) and `hour` of that day.
-pub const LogLine = struct { day: u32 = 1, hour: f32 = 0, tone: ha.log.Tone = .normal, text: []const u8 };
+pub const LogLine = struct { day: u32 = 1, hour: f32 = 0, tone: ha.sim.log.Tone = .normal, text: []const u8 };
 
 /// One resource amount for a fixture's stocks.
-pub const Amount = struct { item: ha.roster.Resource, n: f32 };
+pub const Amount = struct { item: ha.sim.data.roster.Resource, n: f32 };
 
 /// An Act II settlement: the actor carried across the curtain (`migration.migrate_to_act_two`),
 /// the technologies researched beyond the curtain's two, the exact stocks it holds, and the
@@ -1037,7 +1037,7 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
             }
 
             // Apply effects and shadow typed components
-            ha.capital.settle(world, player, &res.game.catalog);
+            ha.sim.rules.capital.settle(world, player, &res.game.catalog);
         }
     }
     if (spec.settlement) |st| seedSettlement(res, world, player, st);
@@ -1072,15 +1072,15 @@ fn seedBuild(res: *Resources, world: *World, player: Entity, id: []const u8) voi
 fn seedSettlement(res: *Resources, world: *World, player: Entity, st: Settlement) void {
     const cat = &res.game.catalog;
     if (cat.technologies.len == 0) return;
-    _ = ha.migration.migrate_to_act_two(world, player, cat);
+    _ = ha.sim.data.migration.migrate_to_act_two(world, player, cat);
     const research = world.get(player, comp.Research) orelse return;
     research.* = comp.Research.entry(cat);
     for (st.researched) |id| {
         if (cat.techIndex(id)) |ti| research.state[ti] = .researched;
     }
-    _ = ha.grid.board.recomputeLocked(cat, research);
+    _ = ha.sim.rules.research.recomputeLocked(cat, research);
     for (st.stocks) |a| {
-        _ = ha.ledger.move(world, player, a.item, a.n - ha.ledger.balance(world, player, a.item));
+        _ = ha.sim.rules.ledger.move(world, player, a.item, a.n - ha.sim.rules.ledger.balance(world, player, a.item));
     }
     if (st.building) |id| seedBuild(res, world, player, id);
 }
@@ -1168,8 +1168,8 @@ const spawn_player = @import("../main.zig").spawn_player;
 fn seedRig(spec: Spec) !struct { res: Resources, world: World, player: Entity } {
     var res: Resources = .{ .platform = undefined };
     // Load catalog for tests
-    var diag: ha.roster.Diagnostics = .{};
-    res.game.catalog = try ha.roster.load(testing.allocator, ha.roster.shipped, &diag);
+    var diag: ha.sim.data.roster.Diagnostics = .{};
+    res.game.catalog = try ha.sim.data.roster.load(testing.allocator, ha.sim.data.roster.shipped, &diag);
     errdefer res.game.catalog.deinit();
 
     var world = World.init();
@@ -1248,7 +1248,7 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     // The owned tools grant the three verbs beyond the innate two.
     const cat = &rig.res.game.catalog;
     for ([_][]const u8{ "chop_wood", "fish", "hunt" }) |verb| {
-        try testing.expect(ha.effects.held(cat, goods, cat.actionIndex(verb).?));
+        try testing.expect(ha.sim.rules.effects.held(cat, goods, cat.actionIndex(verb).?));
     }
 }
 
@@ -1260,13 +1260,13 @@ test "an Act II fixture seeds a settlement holding every verb of the act" {
     }
     const e = rig.player;
     const cat = &rig.res.game.catalog;
-    try testing.expect(ha.migration.is_migrated(&rig.world, e));
-    try testing.expectEqual(@as(f32, 31), ha.ledger.balance(&rig.world, e, .biomass));
-    try testing.expectEqual(@as(f32, 9), ha.ledger.balance(&rig.world, e, .water));
+    try testing.expect(ha.sim.data.migration.is_migrated(&rig.world, e));
+    try testing.expectEqual(@as(f32, 31), ha.sim.rules.ledger.balance(&rig.world, e, .biomass));
+    try testing.expectEqual(@as(f32, 9), ha.sim.rules.ledger.balance(&rig.world, e, .water));
     try testing.expect(rig.world.get(e, comp.Busy).?.isBuild(cat.goodIndex("granary").?));
     for (cat.actions, 0..) |a, ai| {
         if (a.act != 2 or !a.on_surface) continue;
-        try testing.expect(ha.actions.holds(&rig.world, e, cat, @intCast(ai)));
+        try testing.expect(ha.sim.rules.actions.holds(&rig.world, e, cat, @intCast(ai)));
     }
 }
 
@@ -1283,8 +1283,8 @@ test "the default fixture leaves the spawn baseline untouched" {
     }
     const e = rig.player;
     // No balances named → rested spawn vigor (10/10), the thin larder, empty stockpile.
-    try testing.expectEqual(ha.baselines.vigor_ceiling, rig.world.get(e, comp.Vigor).?.v);
-    try testing.expectEqual(ha.baselines.food_units, rig.world.get(e, comp.InventoryFood).?.v);
+    try testing.expectEqual(ha.sim.baselines.vigor_ceiling, rig.world.get(e, comp.Vigor).?.v);
+    try testing.expectEqual(ha.sim.baselines.food_units, rig.world.get(e, comp.InventoryFood).?.v);
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
     // No goods specified → should have empty goods component
     const goods = rig.world.get(e, comp.Goods).?;

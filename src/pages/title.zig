@@ -10,7 +10,7 @@ const ha = @import("ha");
 const app = @import("../main.zig");
 
 const uic = ha.ui_client;
-const World = ha.world.World;
+const World = ha.sim.ecs.World;
 const t = @import("./templates/root.zig");
 
 const tick_s: f32 = 0.16;

@@ -25,13 +25,13 @@
 //! "exactly once" guarantee is already expressed and tested at the version boundary.
 
 const std = @import("std");
-const comp = @import("./components.zig");
-const capital = @import("./capital.zig");
+const comp = @import("../components.zig");
+const capital = @import("../rules/capital.zig");
 const roster = @import("./roster.zig");
-const ledger = @import("./ledger.zig");
-const effects = @import("./effects.zig");
-const res_mod = @import("./sim/res.zig");
-const world = @import("./world.zig");
+const ledger = @import("../rules/ledger.zig");
+const effects = @import("../rules/effects.zig");
+const res_mod = @import("../res.zig");
+const world = @import("../ecs.zig");
 
 const World = world.World;
 const Entity = world.Entity;
