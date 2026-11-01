@@ -19,11 +19,12 @@
 //! from absent and leaves with the last unit; losing a spare keeps it.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const roster = ha.roster;
-const effects = ha.effects;
-const ledger = ha.ledger;
+const comp = @import("./components.zig");
+const roster = @import("./roster.zig");
+const effects = @import("./effects.zig");
+const ledger = @import("./ledger.zig");
+const actions = @import("./actions.zig");
+const migration = @import("./migration.zig");
 const ecs = @import("./ecs.zig");
 const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
@@ -106,7 +107,7 @@ pub fn needsMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
     const goods = w.get(e, comp.Goods) orelse return false;
     for (cat.goods[gi].needs) |n| {
         if (cat.actionIndex(n)) |ai| {
-            if (!ha.actions.holds(w, e, cat, ai)) return false;
+            if (!actions.holds(w, e, cat, ai)) return false;
         } else if (cat.goodIndex(n)) |ng| {
             if (goods.count[ng] == 0) return false;
         } else return false;
@@ -262,7 +263,7 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) bool {
     const msg = std.mem.print(&buf, "You gave up on the {s}. Salvaged {d:.0} {s}.", .{
         lowerName(rec.name, &nbuf),
         salvaged,
-        if (first) |item| ha.actions.itemWord(cat, item, ha.migration.actOf(w, e)) else "units",
+        if (first) |item| actions.itemWord(cat, item, migration.actOf(w, e)) else "units",
     }) catch "You gave up on the build.";
     res.sim.log.push(.warn, msg);
     return true;
@@ -405,7 +406,7 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) bool {
         var wrote = false;
         for (receipt.slice()) |d| {
             if (wrote) wr.writeAll(", ") catch {};
-            wr.print("{d:.1} {s}", .{ d.amount, ha.actions.itemWord(cat, d.item, ha.migration.actOf(w, e)) }) catch {};
+            wr.print("{d:.1} {s}", .{ d.amount, actions.itemWord(cat, d.item, migration.actOf(w, e)) }) catch {};
             wrote = true;
         }
         if (restored > 0) {

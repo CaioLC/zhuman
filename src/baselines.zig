@@ -8,8 +8,7 @@
 //! defaults (`(comp.Vigor{}).max`), never a second copy, so a default edit moves both the spawn
 //! and the baseline together and they can never drift.
 
-const ha = @import("ha");
-const comp = ha.comp;
+const comp = @import("./components.zig");
 
 /// The vigor ceiling a fresh agent spawns at (its `Vigor.max` default).
 pub const vigor_ceiling: f32 = (comp.Vigor{}).max;

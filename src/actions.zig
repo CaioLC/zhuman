@@ -12,11 +12,11 @@
 //! reach zero, so labor alone cannot kill), an item may be spent to exactly zero.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const roster = ha.roster;
-const effects = ha.effects;
-const ledger = ha.ledger;
+const comp = @import("./components.zig");
+const roster = @import("./roster.zig");
+const effects = @import("./effects.zig");
+const ledger = @import("./ledger.zig");
+const migration = @import("./migration.zig");
 const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
 
@@ -119,7 +119,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) void {
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
     {
         var buf: [64]u8 = undefined;
-        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb, ha.migration.actOf(w, e)));
+        res.sim.log.push(.dim, paymentText(&buf, cat, q.verb, migration.actOf(w, e)));
     }
 
     const total = res_mod.hours_to_secs(q.verb.requires.hours, res.config.secs_per_day);
@@ -139,7 +139,7 @@ pub fn finish(w: *World, e: Entity, res: *Resources, ai: u16, quality: f32) void
     };
     const receipt = ledger.draw(w, e, cat, v.output.slice(), res.random(), quality, 1);
     var buf: [96]u8 = undefined;
-    const msg = receiptText(&buf, cat, receipt, ha.migration.actOf(w, e));
+    const msg = receiptText(&buf, cat, receipt, migration.actOf(w, e));
     res.sim.log.push(if (std.mem.eql(u8, msg, nothing_text)) .dim else .normal, msg);
 }
 

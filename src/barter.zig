@@ -15,8 +15,8 @@
 //! tool's effect lands/leaves through the same path a built/broken one does.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
+const comp = @import("./components.zig");
+const migration = @import("./migration.zig");
 const market = @import("./market.zig");
 const capital = @import("./capital.zig");
 const res_mod = @import("./res.zig");
@@ -132,7 +132,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
     var buf: [96]u8 = undefined;
     const msg = switch (q.direction) {
         .buy => std.mem.print(&buf, "You trade with the passerby.", .{}) catch "You trade.",
-        .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ biomass_moved, ha.roster.Resource.biomass.wordIn(ha.migration.actOf(w, e)) }) catch "You sell.",
+        .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ biomass_moved, roster.Resource.biomass.wordIn(migration.actOf(w, e)) }) catch "You sell.",
     };
     res.sim.log.push(.good, msg);
 
@@ -142,8 +142,8 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
 // ============================ Tests =====================================================
 
 const testing = std.testing;
-const roster = ha.roster;
-const effects = ha.effects;
+const roster = @import("./roster.zig");
+const effects = @import("./effects.zig");
 
 fn test_res() !Resources {
     var res: Resources = undefined;

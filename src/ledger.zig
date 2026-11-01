@@ -7,13 +7,12 @@
 //! the strict gate is energy's, and energy is a price, not a line.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const dist = ha.dist;
-const roster = ha.roster;
+const comp = @import("./components.zig");
+const dist = @import("./dist.zig");
+const roster = @import("./roster.zig");
 
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = @import("./world.zig").World;
+const Entity = @import("./world.zig").Entity;
 const Catalog = roster.Catalog;
 const Line = roster.Line;
 const Resource = roster.Resource;

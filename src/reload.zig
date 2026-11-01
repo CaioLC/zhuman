@@ -18,10 +18,9 @@
 //! copy their strings, and a node tree lives one frame.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const roster = ha.roster;
-const capital = ha.capital;
+const comp = @import("./components.zig");
+const roster = @import("./roster.zig");
+const capital = @import("./capital.zig");
 const ecs = @import("./ecs.zig");
 const world = @import("./world.zig");
 const res_mod = @import("./res.zig");

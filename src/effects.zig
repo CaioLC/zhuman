@@ -16,12 +16,12 @@
 //! fills what it adds, lowering it only clamps.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const roster = ha.roster;
+const comp = @import("./components.zig");
+const roster = @import("./roster.zig");
+const dist = @import("./dist.zig");
 
-const World = ha.world.World;
-const Entity = ha.world.Entity;
+const World = @import("./world.zig").World;
+const Entity = @import("./world.zig").Entity;
 const Catalog = roster.Catalog;
 const Line = roster.Line;
 const Lines = roster.Lines;
@@ -409,5 +409,5 @@ test "a scale on an absent line is nothing to scale; an add inserts the line" {
     tweak(&v, .{ .target = "x", .stat = .{ .input = "biomass" }, .by = 1 }, .add);
     try testing.expectEqual(@as(u8, 1), v.input.len);
     try testing.expectEqual(@as(f32, 1), v.input.items[0].n);
-    try testing.expectEqual(ha.dist.Kind.fixed, v.input.items[0].kind);
+    try testing.expectEqual(dist.Kind.fixed, v.input.items[0].kind);
 }

@@ -25,9 +25,12 @@
 //! "exactly once" guarantee is already expressed and tested at the version boundary.
 
 const std = @import("std");
-const ha = @import("ha");
-const comp = ha.comp;
-const capital = ha.capital;
+const comp = @import("./components.zig");
+const capital = @import("./capital.zig");
+const roster = @import("./roster.zig");
+const ledger = @import("./ledger.zig");
+const effects = @import("./effects.zig");
+const res_mod = @import("./res.zig");
 const world = @import("./world.zig");
 
 const World = world.World;
@@ -69,7 +72,7 @@ pub fn actOf(w: *World, e: Entity) u8 {
 ///  - stamps `Migrated{ .version = current_version }`.
 ///
 /// Returns whether it performed the migration (`true` on the first call, `false` when it no-ops).
-pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const ha.roster.Catalog) bool {
+pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const roster.Catalog) bool {
     // Idempotence gate: already carried to the current version ⇒ nothing owed.
     if (w.get(e, comp.Migrated)) |stamp| {
         if (stamp.version >= current_version) return false;
@@ -145,8 +148,8 @@ test "migration carries biomass unchanged across the curtain" {
     try std.testing.expectEqual(@as(u8, 2), actOf(&w, e));
     // The other Act II stocks are open and empty, so the ledger can pay into them.
     inline for (act_two_stocks) |Stock| try std.testing.expectEqual(@as(f32, 0), w.get(e, Stock).?.v);
-    try std.testing.expect(ha.ledger.move(&w, e, .water, 4));
-    try std.testing.expectEqual(@as(f32, 4), ha.ledger.balance(&w, e, .water));
+    try std.testing.expect(ledger.move(&w, e, .water, 4));
+    try std.testing.expectEqual(@as(f32, 4), ledger.balance(&w, e, .water));
     try std.testing.expectEqual(current_version, w.get(e, comp.Migrated).?.version);
 }
 
@@ -181,13 +184,13 @@ test "migration preserves built goods, their counts, and their granted effects" 
     // Check counts in Goods component and effects.held
     const goods = w.get(e, comp.Goods).?;
     try std.testing.expectEqual(@as(u32, 2), goods.count[fish_rod_gi]);
-    try std.testing.expect(ha.effects.held(&res.catalog, goods, fish_ai)); // the granted effect
+    try std.testing.expect(effects.held(&res.catalog, goods, fish_ai)); // the granted effect
 
     _ = migrate_to_act_two(&w, e, &res.catalog);
 
     // The good count and granted effect cross the curtain untouched.
     try std.testing.expectEqual(@as(u32, 2), w.get(e, comp.Goods).?.count[fish_rod_gi]);
-    try std.testing.expect(ha.effects.held(&res.catalog, w.get(e, comp.Goods).?, fish_ai));
+    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Goods).?, fish_ai));
 }
 
 test "migration seeds the research board from the authored initial states" {
@@ -203,7 +206,7 @@ test "migration seeds the research board from the authored initial states" {
     // One `comp.Research` now carries every tile's state by catalog index, seeded from each
     // tile's authored `initial` (`data/technologies.zon`).
     const research = w.get(e, comp.Research).?;
-    const S = ha.roster.TechState;
+    const S = roster.TechState;
     // Foraging and Woodcutting carried over from Act I as Researched.
     try std.testing.expectEqual(S.researched, research.state[cat.techIndex("foraging").?]);
     try std.testing.expectEqual(S.researched, research.state[cat.techIndex("woodcutting").?]);
@@ -280,7 +283,7 @@ test "population/market init seam is accounted exactly once, at the version boun
 }
 
 /// The quantity of `item` a list of lines names at cadence `per`.
-fn qty(lines: []const ha.roster.Line, item: []const u8, per: ha.roster.Cadence) f32 {
+fn qty(lines: []const roster.Line, item: []const u8, per: roster.Cadence) f32 {
     var n: f32 = 0;
     for (lines) |l| {
         if (l.per == per and std.mem.eql(u8, l.item, item)) n += l.n;
@@ -291,14 +294,14 @@ fn qty(lines: []const ha.roster.Line, item: []const u8, per: ha.roster.Cadence) 
 test "cross-act cost parity: same-named recipes have equal biomass costs" {
     // Biomass is the authored item in both acts, so a recipe shared by name must price each
     // cadence identically on either side of the curtain.
-    var cat = try ha.roster.load(std.testing.allocator, ha.roster.shipped, null);
+    var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var pairs: usize = 0;
     for (cat.goods) |one| {
         if (one.act != 1) continue;
         for (cat.goods) |two| {
             if (two.act != 2 or !std.mem.eql(u8, one.name, two.name)) continue;
-            for ([_]ha.roster.Cadence{ .once, .day }) |per| {
+            for ([_]roster.Cadence{ .once, .day }) |per| {
                 const biomass = qty(one.input, "biomass", per);
                 if (biomass == 0) continue;
                 try std.testing.expectEqual(biomass, qty(two.input, "biomass", per));
@@ -311,18 +314,18 @@ test "cross-act cost parity: same-named recipes have equal biomass costs" {
 
 /// A Resources with only the groups the build path touches initialized — the same minimal
 /// fixture `capital.zig`'s tests use. Loads the shipped catalog; caller must deinit.
-fn test_res() !ha.res.Resources {
+fn test_res() !res_mod.Resources {
     const testing = std.testing;
-    var res: ha.res.Resources = undefined;
+    var res: res_mod.Resources = undefined;
     res.sim = .{ .prng = std.Random.DefaultPrng.init(7) };
     res.time = .{ .dt = 0 };
     res.config = .{};
-    res.catalog = try ha.roster.load(testing.allocator, ha.roster.shipped, null);
+    res.catalog = try roster.load(testing.allocator, roster.shipped, null);
     return res;
 }
 
 /// The shipped roster — the technologies the curtain seeds `comp.Research` from. Loaded on its
 /// own (no `Resources`) for the migration tests that only need the board; caller must deinit.
-fn test_catalog() !ha.roster.Catalog {
-    return ha.roster.load(std.testing.allocator, ha.roster.shipped, null);
+fn test_catalog() !roster.Catalog {
+    return roster.load(std.testing.allocator, roster.shipped, null);
 }
