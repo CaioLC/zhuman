@@ -7,11 +7,13 @@ const world = @import("../ecs.zig");
 const actions = @import("../rules/actions.zig");
 const capital = @import("../rules/capital.zig");
 const roster = @import("../data/roster.zig");
+const events = @import("../events.zig");
 const Resources = res_mod.Resources;
 const World = world.World;
 const Entity = world.Entity;
 const Query = ecs.Query;
 const With = ecs.With;
+const EventWriter = ecs.EventWriter;
 
 /// Advance the run clock while the actor lives. Driven by the player's presence — with no
 /// player (dead) the clock freezes, so the game-over screen shows the day you died. One
@@ -67,19 +69,20 @@ test "net_food_drawdown: consumption minus inflow; days = food/net when positive
 /// larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
 /// this is the drain that finally makes `mark_dead` fire, and the clock pressure that
 /// makes every action intentional: ration and stay weak, feast and burn the stock.
-/// Edge-crossings feed the log once, on the frame they happen. Runs after `update_food`
-/// (spoilage claims its share first) and before `mark_dead` (starving to 0 dies the same
-/// frame).
+/// Edge-crossings are facts once, on the frame they happen: `FoodRanOut` when the larder
+/// empties, `BandCrossed` when the condition band changes. Runs after `update_food` (spoilage
+/// claims its share first) and before `mark_dead` (starving to 0 dies the same frame).
 pub fn metabolize(
     time: *const res_mod.Time,
     cfg: *const res_mod.Config,
-    sim: *res_mod.Sim,
-    q: Query(.{ comp.Vigor, comp.InventoryFood, comp.Metabolism }),
+    ran_out: EventWriter(events.FoodRanOut),
+    crossed: EventWriter(events.BandCrossed),
+    q: Query(.{ Entity, comp.Vigor, comp.InventoryFood, comp.Metabolism }),
 ) void {
     const dt_days = time.dt / cfg.secs_per_day;
     var it = q.iter();
     while (it.next()) |entry| {
-        const vigor: *comp.Vigor, const food: *comp.InventoryFood, const met: *comp.Metabolism = entry;
+        const e: Entity, const vigor: *comp.Vigor, const food: *comp.InventoryFood, const met: *comp.Metabolism = entry;
         const food_before = food.v;
         const frac_before = vigor.v / vigor.max;
 
@@ -92,15 +95,12 @@ pub fn metabolize(
             vigor.v = @max(0, vigor.v - cfg.starve_per_day * dt_days);
         }
 
-        // Edge-triggered log lines — once, on the crossing frame. The vigor thresholds
-        // only ever cross *downward* here while starving (eating raises), so these read
-        // as hunger, not labor fatigue.
-        if (food_before > 0 and food.v <= 0) sim.log.push(.warn, "Your food has run out.");
-        const frac = vigor.v / vigor.max;
+        // Edge-triggered — once, on the crossing frame. A downward band crossing here is
+        // hunger, not labor fatigue: labor's own toll is `WorkBegun.weary`.
+        if (food_before > 0 and food.v <= 0) _ = ran_out.push(.{ .agent = e });
         const was = cfg.condition(frac_before);
-        const now = cfg.condition(frac);
-        if (was == .alive and now != .alive) sim.log.push(.warn, "You feel weak with hunger.");
-        if (was != .spent and now == .spent) sim.log.push(.danger, "You are starving.");
+        const now = cfg.condition(vigor.v / vigor.max);
+        if (was != now) _ = crossed.push(.{ .agent = e, .from = was, .to = now });
     }
 }
 
@@ -138,12 +138,12 @@ pub fn resolve_busy(
     }
 }
 
-/// Tag any actor whose `Vigor` has drained to zero as `Dead` — vigor `0` is death. Guards
-/// on `has` so it tags once. Starvation (`metabolize` on an empty larder) is what drains
-/// vigor to zero in practice; labor can't (its energy gate is strict).
+/// Tag any actor whose `Vigor` has drained to zero as `Dead` — vigor `0` is death — and emit
+/// `Died`. Guards on `has` so it tags once. Starvation (`metabolize` on an empty larder) is what
+/// drains vigor to zero in practice; labor can't (its energy gate is strict).
 pub fn mark_dead(
-    sim: *res_mod.Sim,
     w: *World,
+    died: EventWriter(events.Died),
     q: Query(.{ Entity, comp.Vigor }),
 ) void {
     var it = q.iter();
@@ -151,7 +151,7 @@ pub fn mark_dead(
         const e: Entity, const vigor: *comp.Vigor = entry;
         if (vigor.v <= 0 and !w.has(e, tag.Dead)) {
             w.add(e, tag.Dead{});
-            sim.log.push(.danger, "You perished, cold and starved.");
+            _ = died.push(.{ .agent = e });
         }
     }
 }
@@ -175,12 +175,12 @@ pub fn despawn_dead(
 }
 
 /// **Eligibility transition tracking.** For each prerequisite-gated good of this act, when
-/// its prerequisite becomes satisfied for the first time this run, log one "A new recipe is
-/// within reach: {name}." Only goods with `needs` participate — a good with no prerequisite
+/// its prerequisite becomes satisfied for the first time this run, emit one `RecipeInReach`
+/// (the log's "A new recipe is within reach: {name}."). Only goods with `needs` participate — a good with no prerequisite
 /// is reachable from the first breath, so it is not a *transition* and never logs. The seen-set
 /// is sim state (`Sim.reach_seen`, by catalog index), so it survives
 /// frames untouched by the UI — tab switches, filter/sort changes, and rebuilds cannot re-emit
-/// the line; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a
+/// the fact; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a
 /// fresh run re-announces. Runs once per frame over the player.
 pub fn track_reach(
     res: *Resources,
@@ -199,10 +199,7 @@ pub fn track_reach(
             const met = capital.needsMet(w, e, cat, @intCast(gi));
             if (met and !res.sim.reach_seen[gi]) {
                 res.sim.reach_seen[gi] = true;
-                var nbuf: [48]u8 = undefined;
-                var buf: [96]u8 = undefined;
-                const msg = std.mem.print(&buf, "A new recipe is within reach: {s}.", .{capital.lowerName(rec.name, &nbuf)}) catch "A new recipe is within reach.";
-                res.sim.log.push(.good, msg);
+                _ = res.events.writer(events.RecipeInReach).push(.{ .agent = e, .gi = @intCast(gi) });
             } else if (!met) {
                 // The prerequisite went away (tool broke) — allow a fresh announcement if it
                 // returns, so the transition tracking is symmetric.
@@ -217,6 +214,11 @@ pub fn track_reach(
 /// The simulation's resources with `time.dt` set; every other field is its default.
 fn test_res(dt: f32) Resources {
     return .{ .time = .{ .dt = dt } };
+}
+
+/// Word the facts the systems emitted, as the frame's log system does.
+fn logged(w: *World, res: *Resources) void {
+    ecs.run(w, res, @import("./log.zig").log);
 }
 
 test "resolve_busy ticks the work and resolves it exactly once, at completion" {
@@ -236,15 +238,18 @@ test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     });
 
     ecs.run(&w, &res, resolve_busy); // 2h in — still working
+    logged(&w, &res);
     try std.testing.expect(w.has(e, comp.Busy));
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
     ecs.run(&w, &res, resolve_busy); // 4h — done: deposit + receipt, Busy gone
+    logged(&w, &res);
     try std.testing.expect(!w.has(e, comp.Busy));
     try std.testing.expect(w.get(e, comp.InventoryFood).?.v >= 0);
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 
     ecs.run(&w, &res, resolve_busy); // idle tick — nothing to resolve
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
 }
 
@@ -259,6 +264,7 @@ test "metabolize eats continuously, converting food to vigor (clamped at max)" {
     });
 
     ecs.run(&w, &res, metabolize);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 0.5), w.get(e, comp.InventoryFood).?.v); // 2 − 1.5
     try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // 5 + 1.5·2·q1
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing crossed
@@ -275,6 +281,7 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
     });
 
     ecs.run(&w, &res, metabolize);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v);
     try std.testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // clamped at max
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // "Your food has run out."
@@ -291,10 +298,12 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
     });
 
     ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day): crosses weak (3.5) and starving (1.2)
+    logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 1), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 
     ecs.run(&w, &res, metabolize); // 1 → 0 (clamped), no re-logging — mark_dead's turn
+    logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 }
@@ -309,12 +318,14 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     // yet, and goods that need nothing never announce.
     const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing became reachable
 
     // Own the hatchet (as finishing its build would): both goods that need Split wood
     // transition false→true this tick — two announcements, once each.
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
     try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
     // The message names the good and uses the exact copy.
@@ -322,14 +333,17 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
 
     // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // no repeat
 
     // The prerequisite going away (tool broke) re-arms the announcement; regaining it logs again.
     w.get(e, comp.Goods).?.count[hatchet] = 0;
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // losing it does not log
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 4), res.sim.log.count); // re-armed: two more
 }
 
@@ -355,6 +369,7 @@ test "track_reach announces this act's recipes only" {
     const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
     w.get(e, comp.Goods).?.count[res.catalog.goodIndex("rod").?] = 1;
     ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
     // The hook (this act) is announced; the weir (the next act) is not.
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "hook") != null);

@@ -28,6 +28,7 @@ const migration = @import("../data/migration.zig");
 const ecs = @import("../ecs.zig");
 const res_mod = @import("../res.zig");
 const world = @import("../ecs.zig");
+const events = @import("../events.zig");
 
 const World = world.World;
 const Entity = world.Entity;
@@ -176,39 +177,43 @@ pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) void {
     w.add(e, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total, .quality = 1 });
 }
 
-/// Completion of a build: own the lot, settle its effect if this is the first unit, log the
-/// receipt. Called by `systems.resolve_busy`.
+/// Completion of a build: own the lot, settle its effect if this is the first unit (a repeat
+/// build is stock, not a second effect), and emit `WorkDone` with the lot as its receipt and
+/// the count now owned, then `GoodsChanged`. Called by `systems.resolve_busy`.
 pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
     const cat = &res.catalog;
     const goods = w.get(e, comp.Goods) orelse return;
     const rec = &cat.goods[gi];
     if (rec.generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
-    goods.count[gi] += lot(rec);
-    if (was > 0) {
-        // A repeat build is stock, not a second effect: count it and say so.
-        var nbuf: [48]u8 = undefined;
-        var buf: [80]u8 = undefined;
-        const msg = std.mem.print(&buf, "Another {s}. You have {d}.", .{ lowerName(rec.name, &nbuf), goods.count[gi] }) catch "You made another.";
-        res.sim.log.push(.good, msg);
-        return;
-    }
-    settle(w, e, cat);
-    res.sim.log.push(.good, if (rec.copy.built.len > 0) rec.copy.built else "You built it.");
+    const units = lot(rec);
+    goods.count[gi] += units;
+    if (was == 0) settle(w, e, cat);
+    var receipt = ledger.Receipt{};
+    receipt.add(.{ .good = gi }, @floatFromInt(units));
+    _ = res.events.writer(events.WorkDone).push(.{
+        .agent = e,
+        .doing = .{ .build = gi },
+        .receipt = receipt,
+        .owned = goods.count[gi],
+        .act = migration.actOf(w, e),
+    });
+    _ = res.events.writer(events.GoodsChanged).push(.{ .agent = e });
 }
 
 /// Own `units` more of a good that arrived without a build (a trade). The effect lands once,
-/// on the way in from absent. Silent: the trade writes its own line.
+/// on the way in from absent. Emits `GoodsChanged`; the trade states its own outcome.
 pub fn acquire(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) void {
     const goods = w.get(e, comp.Goods) orelse return;
     if (units > 0 and res.catalog.goods[gi].generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
     goods.count[gi] += units;
     if (was == 0 and units > 0) settle(w, e, &res.catalog);
+    if (units > 0) _ = res.events.writer(events.GoodsChanged).push(.{ .agent = e });
 }
 
 /// Lose up to `units` of a good, spares first; the effect leaves with the last unit.
-/// Silent. Returns how many actually left.
+/// Emits `GoodsChanged` when any left. Returns how many actually left.
 pub fn release(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) u32 {
     const goods = w.get(e, comp.Goods) orelse return 0;
     const had = goods.count[gi];
@@ -221,17 +226,15 @@ pub fn release(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) u32 {
         }
         settle(w, e, &res.catalog);
     }
+    if (taken > 0) _ = res.events.writer(events.GoodsChanged).push(.{ .agent = e });
     return taken;
 }
 
-/// Break one unit: `release` plus the receipt line. Nothing calls this yet (no durability);
-/// it exists so losing a good has one path.
+/// Break one unit: `release` plus `GoodBroke`. Nothing calls this yet (no durability); it
+/// exists so losing a good has one path.
 pub fn break_one(w: *World, e: Entity, res: *Resources, gi: u16) void {
     if (release(w, e, res, gi, 1) == 0) return;
-    var nbuf: [48]u8 = undefined;
-    var buf: [64]u8 = undefined;
-    const msg = std.mem.print(&buf, "Your {s} broke.", .{lowerName(res.catalog.goods[gi].name, &nbuf)}) catch "Something of yours broke.";
-    res.sim.log.push(.warn, msg);
+    _ = res.events.writer(events.GoodBroke).push(.{ .agent = e, .gi = gi });
 }
 
 /// Abandon a build in progress: salvage `config.cancel_refund` of the build order and free
@@ -435,6 +438,11 @@ fn test_res_over(src: roster.Sources) !Resources {
     };
 }
 
+/// Word the facts the rules emitted, as the frame's log system does.
+fn logged(w: *World, res: *Resources) void {
+    world.run(w, res, @import("../systems/log.zig").log);
+}
+
 fn spawn_test_agent(w: *World, materials: f32) Entity {
     return w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
@@ -476,6 +484,7 @@ test "build pays upfront and starts the work; finish owns the spear and grants t
     try testing.expectEqual(res_mod.hours_to_secs(price.hours, res.config.secs_per_day), b.total);
 
     finish(&w, e, &res, rod);
+    logged(&w, &res);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "spear"));
     try testing.expect(heldVerb(&w, e, cat, "hunt")); // the unlock
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
@@ -533,6 +542,7 @@ test "a repeat build is stock: the count rises, the effect does not" {
     w.remove(e, comp.Busy);
     try testing.expectEqual(@as(u32, 2), count(&w, e, cat, "sandals"));
     try testing.expectEqual(once, effects.verb(cat, goods, forage).?.requires.energy); // no second discount
+    logged(&w, &res);
     try testing.expectEqualStrings("Another sandals. You have 2.", res.sim.log.get(0).text());
     try testing.expectEqual(@as(u32, 1), goodsOwned(&w, e, cat)); // kinds, not units
 
@@ -543,6 +553,7 @@ test "a repeat build is stock: the count rises, the effect does not" {
     break_one(&w, e, &res, sandals);
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "sandals"));
     try testing.expectEqual(base, effects.verb(cat, goods, forage).?.requires.energy);
+    logged(&w, &res);
     try testing.expectEqualStrings("Your sandals broke.", res.sim.log.get(0).text());
 }
 

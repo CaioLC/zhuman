@@ -142,18 +142,22 @@ fn refusal(s: Standing) Reason {
 }
 
 /// The **finish** half: draw each output line at the quality locked at begin (the spread
-/// *is* the risk — no separate success roll), deposit, and log the receipt. A verb lost
-/// mid-task (the tool was sold while fishing) finishes as nothing rather than a crash.
+/// *is* the risk — no separate success roll), deposit, and emit `WorkDone` with the receipt.
+/// A verb lost mid-task (the tool was sold while fishing) finishes as nothing, `WorkLost`,
+/// rather than a crash.
 pub fn finish(w: *World, e: Entity, res: *Resources, ai: u16, quality: f32) void {
     const cat = &res.catalog;
     const v = verbOf(w, e, cat, ai) orelse {
-        res.sim.log.push(.dim, "The work came to nothing.");
+        _ = res.events.writer(events.WorkLost).push(.{ .agent = e, .doing = .{ .labor = ai } });
         return;
     };
     const receipt = ledger.draw(w, e, cat, v.output.slice(), res.random(), quality, 1);
-    var buf: [96]u8 = undefined;
-    const msg = receiptText(&buf, cat, receipt, migration.actOf(w, e));
-    res.sim.log.push(if (std.mem.eql(u8, msg, nothing_text)) .dim else .normal, msg);
+    _ = res.events.writer(events.WorkDone).push(.{
+        .agent = e,
+        .doing = .{ .labor = ai },
+        .receipt = receipt,
+        .act = migration.actOf(w, e),
+    });
 }
 
 /// What the activity strip says the body is doing: the verb's or the recipe's name.
@@ -278,6 +282,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     try testing.expectApproxEqAbs(@as(f32, 8.3), w.get(e, comp.Vigor).?.v, 1e-5); // unpaid
 
     finish(&w, e, &res, forage, b.quality);
+    logged(&w, &res);
     try testing.expect(w.get(e, comp.InventoryFood).?.v >= 0); // yield deposited (≥ 0 draw)
     try testing.expectEqual(@as(usize, 2), res.sim.log.count); // payment + the receipt line
 }
@@ -367,6 +372,7 @@ test "a verb lost mid-task finishes as nothing" {
     const fish = res.catalog.actionIndex("fish").?;
     // Never held the rod: the busy marker is stale, and finishing it must not crash.
     finish(&w, e, &res, fish, 1);
+    logged(&w, &res);
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try testing.expectEqualStrings("The work came to nothing.", res.sim.log.get(0).text());
 }
