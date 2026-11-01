@@ -94,6 +94,12 @@ pub const Registry = struct {
     building_search: ?u64 = null,
     current_escape: ?u64 = null,
     building_escape: ?u64 = null,
+    current_page_escape: ?u64 = null,
+    building_page_escape: ?u64 = null,
+    /// Escape reached the page owner this frame. A flag of its own rather than `.dismissed`
+    /// on the page's root, because an overlay owner inside the page (the research board's
+    /// pane) bubbles its `.dismissed` up to that root. Cleared at `endBuild`.
+    page_escaped: bool = false,
     current_grid: ?u64 = null,
     building_grid: ?u64 = null,
     current_scroll: [max_scroll_owners]u64 = undefined,
@@ -111,6 +117,7 @@ pub const Registry = struct {
         self.building_range_len = 0;
         self.building_search = null;
         self.building_escape = null;
+        self.building_page_escape = null;
         self.building_grid = null;
         self.building_scroll_len = 0;
         self.building_wheel_len = 0;
@@ -150,6 +157,15 @@ pub const Registry = struct {
     /// Later overlays/views win, matching independent-root paint order.
     pub fn registerEscape(self: *Registry, key: u64) void {
         self.building_escape = key;
+    }
+
+    /// The page's own Escape owner, beneath every overlay (the game page, which opens its
+    /// session menu). It receives Escape only when no overlay owns it and no visible focus
+    /// takes it first, and it does not count as an overlay: `/` still reaches the search.
+    /// Returns whether Escape reached `key` this frame (registered by the previous build).
+    pub fn registerPageEscape(self: *Registry, key: u64) bool {
+        self.building_page_escape = key;
+        return self.page_escaped and self.current_page_escape == key;
     }
 
     /// A two-dimensional navigation owner (the research board): while it holds focus, the
@@ -202,6 +218,8 @@ pub const Registry = struct {
         self.current_range_len = self.building_range_len;
         self.current_search = self.building_search;
         self.current_escape = self.building_escape;
+        self.current_page_escape = self.building_page_escape;
+        self.page_escaped = false; // read by this build, or by none
         self.current_grid = self.building_grid;
         const old_scroll = self.current_scroll;
         self.current_scroll = self.building_scroll;
@@ -242,6 +260,10 @@ pub const Registry = struct {
 
     pub fn escapeTarget(self: *const Registry) ?u64 {
         return self.current_escape;
+    }
+
+    pub fn pageEscapeTarget(self: *const Registry) ?u64 {
+        return self.current_page_escape;
     }
 
     pub fn isGridOwner(self: *const Registry, key: u64) bool {

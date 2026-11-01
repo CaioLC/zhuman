@@ -58,7 +58,7 @@ fn action(parent: El, text: []const u8, enabled: bool) !struct { clicked: bool, 
         .w = .{ .fixed = inner }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
-    const q = b.control(.{ .enabled = enabled, .name = text, .role = .button });
+    const q = b.control(.{ .enabled = enabled, .name = text, .role = .button, .ring = false });
     const lit = enabled and (q.hot());
     const line = if (!enabled) th.line else if (lit) th.acc else th.fg;
     const ink = if (!enabled) th.line2 else if (lit) th.acc else th.fg;

@@ -67,7 +67,7 @@ pub fn dialog_frame(ctx: *UiCtx, opts: Options) !Frame {
         .w = .{ .fixed = close_size }, .h = .{ .fixed = close_size },
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
-    _ = close.control(.{ .name = opts.close_name, .role = .icon_button });
+    _ = close.control(.{ .name = opts.close_name, .role = .icon_button, .ring = false });
     try close.label("glyph", "\u{00d7}", .{Style{ .font = 18, .ink = .dim, .hot = .{ .ink = .acc } }});
     const close_clicked = close.consume(.clicked);
     try modal_mod.rule(m.box, "header_rule", opts.width);

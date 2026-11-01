@@ -323,8 +323,11 @@ Real limits, discovered by hitting them. Their *fixes* are in
 - **The search shortcut ignores the focus trap.** With a dialog open, `/` still reaches the
   catalog's search field behind it.
 - **Keyboard operation exists; screen-reader export does not.** Every control is reachable
-  by Tab or a roving group, shows a visible focus ring, and states its condition by copy and
-  shape as well as hue; the semantic tree is built but no platform exposes it.
+  by Tab or a roving group, shows keyboard focus (a large element by lifting its label to
+  accent, a small control by its outline), and states its condition by copy and shape as well
+  as hue; the semantic tree is built but no platform exposes it. Focus shows only after
+  keyboard input, as `:focus-visible` does; a click on clear space or Escape drops it, and
+  Escape with nothing to dismiss opens the session menu.
 - **Verification is by eye.** No synthetic input reaches the platform, so a screen is
   confirmed with a screenshot and, for a state that is hard to reach, a temporarily seeded
   world — never by a test that clicks.

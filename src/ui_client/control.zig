@@ -49,6 +49,11 @@ pub const Options = struct {
     cursor: cursor.Kind = .pointer,
     /// Live-region policy of the published node (a refused edit announces assertively).
     live: semantics.LiveRegion = .off,
+    /// Draw the focus ring while focus is visible. The ring is the fallback focus mark for a
+    /// control whose own chrome does not show focus. A control whose label or outline already
+    /// lifts on `hot()`/`hover_focus()` (a tile, a row, a tab, a text button, a boxed button)
+    /// passes false, so focus shows as that one lift rather than a second outline.
+    ring: bool = true,
 };
 
 /// Run the lifecycle on `node` and return its published interaction.
@@ -67,23 +72,25 @@ pub fn control(ctx: *UiCtx, node: *Node, opts: Options) UiCtx.Interaction {
     if (q.clicked and !opts.enabled) _ = ctx.consumeFlag(key, .clicked);
     if (q.clicked and opts.enabled) _ = ctx.requestFocus(key);
     const focused = ctx.isFocused(key);
+    // Focus shows only under keyboard modality (`UiCtx.focusVisible`, the CSS `:focus-visible`
+    // heuristic): a control focused by a click keeps focus but not its lift or ring.
+    const focus_visible = focused and ctx.focusVisible();
 
     // Publish every semantic bit from its owner each build, including false, so a key can
-    // never retain stale state across a change of facts. Desktop policy keeps every focused
-    // control visibly outlined, so `focus_visible` follows `focused`.
+    // never retain stale state across a change of facts.
     cb.publishControlState(ctx, key, .{
         .disabled = !opts.enabled,
         .focused = focused,
-        .focus_visible = focused,
+        .focus_visible = focus_visible,
         .selected = opts.selected,
         .checked = opts.checked,
     });
 
     // Mirror the same facts into the semantic snapshot, in paint order.
-    // The warn focus ring marks a focused control. A group (a scroll viewport, the research
-    // board's pane) is a container focus stop that draws its own edge instead, as the
-    // prototype's focusable regions set `outline: none`.
-    node.render_data.focus_ring = focused and opts.role != .group;
+    // The focus ring marks a visibly focused control that opted into it. A group (a scroll
+    // viewport, the research board's pane) is a container focus stop that draws its own edge
+    // instead, as the prototype's focusable regions set `outline: none`.
+    node.render_data.focus_ring = focus_visible and opts.ring and opts.role != .group;
     // Mark the interaction owner, so a descendant's `Style.hot` lift resolves against it.
     node.render_data.control = true;
 
@@ -166,7 +173,9 @@ test "an enabled click focuses the control and publishes its state and semantics
     ctx.setFlag(btn.key, .hovering, true);
 
     const q = control(ctx, btn, .{ .name = "Build", .role = .button, .selected = true, .value = "ready" });
-    try testing.expect(q.clicked and q.focused and q.focus_visible and q.selected and !q.disabled);
+    // A click focuses without showing it: focus-visible follows keyboard modality only.
+    try testing.expect(q.clicked and q.focused and !q.focus_visible and q.selected and !q.disabled);
+    try testing.expect(!btn.render_data.focus_ring);
     try testing.expect(ctx.isFocused(btn.key));
     try testing.expectEqual(cursor.Kind.pointer, rig.res.cursor.requested);
 

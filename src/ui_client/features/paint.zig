@@ -50,14 +50,20 @@ pub fn frect(r: ui.Rect) sdl.rect.FRect {
     return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
 }
 
-/// `?ui.Rect` (f32) → `?IRect` (i32), the shape `setClipRect` takes (`null` disables).
+/// `?ui.Rect` (f32) → `?IRect` (i32), the shape `setClipRect` takes (`null` disables). Each
+/// edge is snapped as `snap` places a hairline, so a border drawn flush to a clip's edge at a
+/// fractional scale lands inside the clip rather than one pixel past a truncated edge.
 pub fn irect(r: ?ui.Rect) ?sdl.rect.IRect {
     const v = r orelse return null;
+    const x0 = snap(v.x);
+    const y0 = snap(v.y);
+    const x1 = snap(v.x + v.w);
+    const y1 = snap(v.y + v.h);
     return .{
-        .x = @intFromFloat(v.x),
-        .y = @intFromFloat(v.y),
-        .w = @intFromFloat(v.w),
-        .h = @intFromFloat(v.h),
+        .x = @intFromFloat(x0),
+        .y = @intFromFloat(y0),
+        .w = @intFromFloat(@max(0, x1 - x0)),
+        .h = @intFromFloat(@max(0, y1 - y0)),
     };
 }
 

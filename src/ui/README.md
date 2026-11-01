@@ -329,6 +329,13 @@ focus trap at the current build position: the targets registered after it are th
 `focusFirstInScope` focuses the first enabled target inside the trap — a dialog's initial
 focus when its caller names no primary control.
 
+`Focus.visible` is the CSS `:focus-visible` bit: whether the focused target should show its
+focus. Keyboard traversal (`moveFocus`, the roving moves) sets it; the host clears it when a
+pointer press starts and sets it for the other keys it routes (`setFocusVisible`), and reads it
+as `focusVisible()`, which is false whenever nothing is focused. `inFocusStop(key)` says whether
+a key or one of its stamped ancestors is an enabled focus stop, so the host can tell a press on
+a control from a press on clear space.
+
 The registry is double-buffered to match the frame pipeline. The event stage traverses
 the last completed frame, `beginFrame` clears the build buffer, and `endFrame` repairs
 focus against the newly registered targets before publishing their order. An enabled

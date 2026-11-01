@@ -84,11 +84,11 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (toggle.query().clicked) st.collapsed = !st.collapsed;
     if (opts.collapsed) |c| c.* = st.collapsed;
-    const q = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed });
-    // Match the active-tab resting edge directly: foreground at rest, accent only during the
-    // pointer interaction. A click retains keyboard focus across collapse/expand, but that
-    // persistent focus must not latch the rail in its hover color after the pointer leaves.
-    const toggle_color = if (q.held or q.hovering) th.acc else th.fg;
+    const q = toggle.control(.{ .name = opts.label, .role = .button, .expanded = !st.collapsed, .ring = false });
+    // Match the active-tab resting edge directly: foreground at rest, accent while the pointer
+    // engages it or keyboard focus shows. A click keeps focus across collapse/expand, but
+    // focus-visible is off after a click, so the rail does not latch in its hover colour.
+    const toggle_color = if (q.hot()) th.acc else th.fg;
     const toggle_chrome = Style{
         .fill_ink = .bg,
         .outline_color = toggle_color,

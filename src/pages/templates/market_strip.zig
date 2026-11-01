@@ -114,7 +114,7 @@ pub fn market_strip(parent: El, id: []const u8, kind: MarketKind, available: boo
         .w = if (show_action) .fit_children else .{ .fixed = 0 }, .h = .fit_children,
         .flow = .{ .dir = .row }, .margin = .{ .before = if (show_action) market_gap else 0 },
     }, .{});
-    const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button });
+    const aq = act.control(.{ .enabled = available and show_action, .name = idn.action, .role = .button, .ring = false });
     if (show_action) {
         try act.label("label", idn.action, .{Style{ .font = market_font, .ink = if (aq.hot()) .acc else .dim }}); // lifts even while disabled, so not a `.hot` lift
     }

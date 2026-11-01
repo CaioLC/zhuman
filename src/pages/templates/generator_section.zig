@@ -173,6 +173,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
         .name = if (is_on) "Turn generator off" else "Turn generator on",
         .role = .checkbox,
         .checked = is_on,
+        .ring = false, // the ON/OFF label lifts to accent
     });
     // The flip read exactly the activation the lifecycle reports.
     std.debug.assert(q.clicked == flip);

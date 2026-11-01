@@ -122,7 +122,7 @@ fn stock_token_in(box: El, s: Stock, compact: bool) !void {
     const detail = formatStock(&detail_buf, s, true);
     // A focusable readout, not a control: the full label is its accessible name and the
     // detailed value its spoken value; hovering it is not an affordance, so no pointer cursor.
-    const q = box.control(.{ .name = s.full, .role = .text, .value = detail, .cursor = .default });
+    const q = box.control(.{ .name = s.full, .role = .text, .value = detail, .cursor = .default, .ring = false });
     const reveal = q.hover_focus();
     var compact_buf: [64]u8 = undefined;
     const value = if (reveal) detail else formatStock(&compact_buf, s, false);

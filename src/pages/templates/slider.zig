@@ -113,8 +113,9 @@ pub fn slider(parent: El, opts: Options) !Slider {
         .role = .slider,
         .value = value_text,
         .cursor = .horizontal_resize,
+        .ring = false, // the thumb's edge lifts to accent
     });
-    const focused = published.focused;
+    const focused = published.focus_visible;
     // A captured drag keeps the resize cursor even once the pointer leaves the lane.
     if (state.dragging and !q.hovering) {
         ctx.res.cursor.request(if (opts.enabled) .horizontal_resize else .not_allowed);

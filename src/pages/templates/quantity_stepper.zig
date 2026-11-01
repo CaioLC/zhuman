@@ -22,7 +22,7 @@ fn stepButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, e
         .w = .{ .fixed = button_w }, .h = .{ .fixed = button_h },
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
-    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
+    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .ring = false });
     const lit = enabled and (q.hot());
     const line = if (!enabled) th.line else if (lit) th.acc else th.line2;
     const text = if (!enabled) th.line2 else if (lit) th.acc else th.fg;

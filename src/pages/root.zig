@@ -83,9 +83,10 @@ fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
 }
 
 /// Append the session menu as the final/topmost root over whichever production or development
-/// page was built. A header click can open it in this same frame; its modal shell owns focus,
-/// Escape, and opener restoration.
+/// page was built. A header click or Escape on the page (no dialog open, no visible focus) opens
+/// it in this same frame; its modal shell owns focus, Escape, and opener restoration.
 fn withMenu(ctx: *uic.UiCtx, world: *World, roots: uic.Trees) !uic.Trees {
+    if (!ctx.res.menu.open and roots.len > 0 and t.pageEscape(ctx, roots[0])) ctx.res.menu.show(&ctx.res.playback);
     if (!ctx.res.menu.open) return roots;
 
     const menu = try t.menu_dialog(ctx, "session_menu", session(ctx, world));

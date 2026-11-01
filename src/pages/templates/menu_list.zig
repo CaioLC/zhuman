@@ -45,7 +45,7 @@ pub fn menu_list(parent: El, id: []const u8, items: []const Item, opts: Options)
         const row = try list.box(item.id, .{
             .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 14,
         }, .{style.pad_sym(0, 5)});
-        const q = row.control(.{ .enabled = item.enabled, .name = item.label, .role = .button });
+        const q = row.control(.{ .enabled = item.enabled, .name = item.label, .role = .button, .ring = false });
         if (first_key == null) first_key = row.get().key;
         if (q.clicked) clicked = i;
         const lit = item.enabled and (q.hover_focus());

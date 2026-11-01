@@ -36,6 +36,13 @@ pub fn rule(parent: El, id: []const u8, width: f32) !void {
     try parent.leaf(id, .{ .w = .{ .fixed = width }, .h = .{ .fixed = 1 } }, .{style.rule_fill});
 }
 
+/// The page's own Escape owner, beneath every dialog: `root` (the page's first root) takes the
+/// Escape no dialog, text field or visible focus took first (`Registry.registerPageEscape`).
+/// True on the frame Escape reached it, so the caller can open the dialog it stands for.
+pub fn pageEscape(ctx: *UiCtx, root: *uic.Node) bool {
+    return ctx.res.commands.registerPageEscape(root.key);
+}
+
 /// What the caller tells the close step.
 pub const Close = struct {
     /// An explicit close the dialog's own controls asked for this frame (×, LEAVE, RESUME).

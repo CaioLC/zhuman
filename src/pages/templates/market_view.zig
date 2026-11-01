@@ -122,7 +122,7 @@ fn run(parent: El, id: []const u8, font: f32, pieces: []const struct { []const u
 /// A `.seg` button. Returns its click.
 fn segButton(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
     const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
-    const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
+    const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed, .ring = false });
     const hot = q.hover_focus();
     b.set(.{}, .{Style{ .outline_ink = if (pressed) .line2 else .bg }});
     try b.label("t", label, .{ Style{ .font = 11, .ink = if (pressed or hot) .fg else .dim }, style.pad_sym(7, 3) });
@@ -221,7 +221,7 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     const lr = try listRow(parent, "you", null, 8);
     const row = lr.inner;
     lr.outer.set(.{}, .{Style{ .fill_ink = .panel, .outline_ink = .line2 }});
-    const q = lr.outer.control(.{ .name = "Your stall", .role = .button });
+    const q = lr.outer.control(.{ .name = "Your stall", .role = .button, .ring = false });
     var live: u32 = 0;
     var sells: std.ArrayList(u8) = .empty;
     var buys: std.ArrayList(u8) = .empty;
@@ -267,7 +267,7 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
     const lr = try listRow(parent, "person", i, 8);
     const row = lr.inner;
     const name = try ctx.arena.print("{s} {s}", .{ a.firstName(), a.lastName() });
-    const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen });
+    const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen, .ring = false });
     const hot = q.hover_focus();
     lr.outer.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
     const top = try row.box("top", .{
@@ -301,7 +301,7 @@ fn goodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, i: usize, cho
     const lr = try listRow(parent, "good", i, 7);
     const row = lr.inner;
     row.set(.{ .flow = .{ .dir = .row, .cross = .start }, .in_tracks = tracks }, .{});
-    const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen });
+    const q = lr.outer.control(.{ .name = words[i], .role = .button, .selected = chosen, .ring = false });
     const hot = q.hover_focus();
     lr.outer.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (hot) .panel else .bg }});
     try row.label_fit("name", try std.ascii.allocUpperString(a, words[i]), .{ .cell_fill = .clip }, .{Style{ .font = 13, .tracking = 0.04, .ink = if (chosen) .acc else .fg }});
@@ -416,7 +416,7 @@ fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bo
     var clicked = false;
     const n = try row.div("name");
     if (clickable) {
-        const q = n.control(.{ .name = name, .role = .button });
+        const q = n.control(.{ .name = name, .role = .button, .ring = false });
         clicked = q.clicked;
         try n.label("t", name, .{Style{ .font = 12, .ink = .fg, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     } else {
@@ -576,7 +576,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     const b = try slip.box("propose", .{
         .w = .{ .fixed = slip_inner }, .h = .fit_children, .flow = .{ .dir = .row, .main = .center },
     }, .{});
-    const q = b.control(.{ .enabled = accept, .name = "Propose", .role = .button });
+    const q = b.control(.{ .enabled = accept, .name = "Propose", .role = .button, .ring = false });
     const lit = accept and (q.hot());
     b.set(.{}, .{Style{ .outline_ink = if (!accept) .line else if (lit) .acc else .fg }});
     try b.label("t", "PROPOSE \u{2192}", .{ style.body, Style{ .ink = if (!accept) .line2 else if (lit) .acc else .fg }, style.pad_sym(8, 7) });
@@ -700,7 +700,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
         }
     }
     const stall_button = try controls.box("stall", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
-    const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall });
+    const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall, .ring = false });
     const lit = st.stall or sq.hover_focus();
     stall_button.set(.{}, .{Style{ .outline_ink = if (lit) .acc else .line2, .fill_ink = if (st.stall) .panel else .bg }});
     try stall_button.label("t", "YOUR STALL", .{ Style{ .font = 10, .tracking = 0.07, .ink = if (lit) .acc else .dim }, style.pad_sym(8, 3) });

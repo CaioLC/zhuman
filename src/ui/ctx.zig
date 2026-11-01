@@ -165,6 +165,35 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             self.focus.clear();
         }
 
+        /// Whether the focused control should show its focus (`Focus.visible`, the CSS
+        /// `:focus-visible` heuristic). False whenever nothing is focused.
+        pub fn focusVisible(self: *const Self) bool {
+            return self.focus.focused != null and self.focus.visible;
+        }
+
+        /// The host's input-modality edge: false when a pointer press starts, true for a key it
+        /// routes. Keyboard traversal sets it on its own.
+        pub fn setFocusVisible(self: *Self, visible: bool) void {
+            self.focus.visible = visible;
+        }
+
+        /// Whether `key` or one of its stamped ancestors is an enabled focus stop: a press that
+        /// lands on it will focus a control. A press that lands on no focus stop is a press on
+        /// clear space.
+        pub fn inFocusStop(self: *Self, key: u64) bool {
+            var k: ?u64 = key;
+            var guard: u32 = 0;
+            while (k) |cur| : (guard += 1) {
+                if (guard > 256) break; // a cycle can only come from a corrupt stamp
+                if (self.focus.accepts(cur)) return true;
+                const idx = self.interactions.index.get(cur) orelse break;
+                const slot = &self.interactions.slots.items[idx];
+                if (!slot.live) break;
+                k = slot.value.parent_key;
+            }
+            return false;
+        }
+
         /// Focus the first enabled target registered inside this frame's focus trap — a dialog's
         /// initial focus when its caller names no primary control. False with no trap or no target.
         pub fn focusFirstInScope(self: *Self) bool {

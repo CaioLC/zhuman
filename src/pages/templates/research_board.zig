@@ -322,7 +322,7 @@ fn centred(parent: El, id: []const u8, i: usize, str: []const u8, x: f32, y: f32
 fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, enabled: bool, min_w: f32, rest: Color, value: ?[]const u8) !bool {
     const th = parent.ctx.res.view.theme;
     const b = try parent.box(id, .{ .w = .{ .fixed = min_w }, .h = .{ .fixed = 22 } }, .{});
-    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value });
+    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .value = value, .ring = false });
     const hot = enabled and (q.hover_focus());
     b.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .bg }});
     try (try centreIn(b)).label("t", label, .{Style{ .font = 10, .text = if (hot) th.fg else rest }});
@@ -333,7 +333,7 @@ fn viewButton(parent: El, id: []const u8, label: []const u8, name: []const u8, e
 /// A `.chip`. Returns its click.
 fn chip(parent: El, id: []const u8, label: []const u8, pressed: bool) !bool {
     const b = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
-    const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed });
+    const q = b.control(.{ .name = label, .role = .radio, .checked = pressed, .selected = pressed, .ring = false });
     try b.label("t", label, .{Style{ .font = 11, .ink = if (pressed) .acc else .dim, .hot = .{ .ink = .acc, .when = .hover_focus } }});
     return q.clicked;
 }
@@ -828,7 +828,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         const btn = try detail.box("research", .{
             .w = .{ .fixed = inner }, .h = .{ .fixed = 34 }, .margin = .{ .before = 8, .after = 6 },
         }, .{});
-        const bq = btn.control(.{ .enabled = can, .name = label, .role = .button });
+        const bq = btn.control(.{ .enabled = can, .name = label, .role = .button, .ring = false });
         const lit = can and (bq.hot());
         btn.set(.{}, .{Style{ .outline_ink = if (!can) .line2 else if (lit) .acc else .fg }});
         try (try centreIn(btn)).label("t", label, .{ style.body, Style{ .ink = if (!can) .dim else if (lit) .acc else .fg } });

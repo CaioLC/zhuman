@@ -11,6 +11,11 @@ pub const Focus = struct {
     building: std.ArrayList(Target) = .empty,
     groups: std.ArrayList(Group) = .empty,
     focused: ?u64 = null,
+    /// **Focus-visible.** Whether the focused target should show it: the CSS `:focus-visible`
+    /// heuristic. Keyboard traversal (`move`, `moveInGroup`) turns it on; the host turns it off
+    /// when a pointer press starts and back on for any other key it routes, so a control focused
+    /// by a click does not keep its focus lift once the pointer leaves.
+    visible: bool = false,
     /// **Focus trap.** While a modal is open it calls `openScope()` just before it
     /// builds its own focusable content; that records the index in `building` from which the
     /// trapped targets begin (the modal is always built last, so everything from here on is
@@ -78,6 +83,11 @@ pub const Focus = struct {
         self.focused = null;
     }
 
+    /// Whether `key` is an enabled focus stop in the frame being built or the last completed one.
+    pub fn accepts(self: *Focus, key: u64) bool {
+        return self.findEnabled(key) != null;
+    }
+
     /// Focus the first enabled target registered after this frame's `openScope` — a dialog's
     /// initial focus. False when no trap is open this frame or nothing enabled is in it.
     pub fn firstInScope(self: *Focus) bool {
@@ -105,6 +115,7 @@ pub const Focus = struct {
             .previous => count - 1,
         };
         self.focused = self.globalAt(&self.current, dest, true).?.key;
+        self.visible = true;
         return true;
     }
 
@@ -129,6 +140,7 @@ pub const Focus = struct {
             if (seen == dest) {
                 g.active = target.key;
                 self.focused = target.key;
+                self.visible = true;
                 return true;
             }
             seen += 1;

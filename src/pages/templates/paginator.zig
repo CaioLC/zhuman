@@ -16,7 +16,7 @@ fn pageButton(parent: El, id: []const u8, glyph: []const u8, name: []const u8, e
         .w = .{ .fixed = 22 }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .center, .cross = .center },
     }, .{});
-    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button });
+    const q = b.control(.{ .enabled = enabled, .name = name, .role = .button, .ring = false });
     const lit = enabled and (q.hot());
     b.set(.{}, .{Style{ .outline_ink = if (!enabled) .line else if (lit) .acc else .line2 }});
     try b.label("g", glyph, .{ Style{ .font = 11, .ink = if (!enabled) .line2 else if (lit) .acc else .fg }, style.pad_sym(0, 2) });

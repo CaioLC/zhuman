@@ -74,6 +74,7 @@ pub fn text_input_look(parent: El, id: []const u8, placeholder: []const u8, widt
         .value = state.text(),
         .cursor = .text,
         .live = if (state.refused) .assertive else .off,
+        .ring = false, // a focused field's own outline turns accent
     });
     const focused = q.focused;
     if (focused and !sdl.keyboard.textInputActive(ctx.res.platform.window)) {

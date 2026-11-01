@@ -66,7 +66,7 @@ pub fn choices(parent: El, id: []const u8, labels: []const []const u8, selected:
     for (labels, 0..) |label, i| {
         const b = try group.boxi("c", i, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
         const on = selected == i;
-        const q = b.control(.{ .name = label, .role = .radio, .checked = on, .selected = on });
+        const q = b.control(.{ .name = label, .role = .radio, .checked = on, .selected = on, .ring = false });
         if (q.clicked) clicked = i;
         const hot = q.hover_focus();
         const line = if (on) th.acc else if (hot) th.line2 else th.line;

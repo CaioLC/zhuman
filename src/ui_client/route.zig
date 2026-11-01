@@ -108,7 +108,12 @@ pub const Router = struct {
     /// frame would target the previous size's rects.
     pub fn pointerPress(self: *Router, kind: PointerKind, id: ?u64, position: Point) void {
         if (self.geometry_stale) return;
+        // A pointer gesture hides the focus lift until a key is routed again, and a press on
+        // clear space (no focus stop under it) drops focus altogether.
+        self.ui.setFocusVisible(false);
         const target = self.ui.markTarget(.pressed, position.x, position.y);
+        const on_stop = if (target) |key| self.ui.inFocusStop(key) else false;
+        if (!on_stop) self.ui.clearFocus();
         self.activation.pressScaled(target, kind, id, position, self.scale);
     }
 
@@ -215,6 +220,9 @@ pub const Router = struct {
         var suppress_text = false;
         for (input.keyEvents()) |event| {
             const cmd = command.fromKeyEvent(event) orelse continue;
+            // A routed key is keyboard modality: focus shows again (`:focus-visible`). Escape
+            // is the exception, since it is what hides a visible focus.
+            if (cmd != .dismiss) self.ui.setFocusVisible(true);
             const routed = self.routeCommand(cmd);
             suppress_text = suppress_text or routed.suppress_text;
         }
@@ -335,9 +343,10 @@ pub const Router = struct {
                 return .{ .handled = ui.markKey(key, .clicked) };
             },
             .dismiss => {
-                // A focused text owner consumes Escape first; otherwise the topmost
-                // registered overlay/view receives transient `.dismissed`. Unhandled
-                // Escape never quits.
+                // A focused text owner consumes Escape first; then the topmost registered
+                // overlay/view receives transient `.dismissed`; then a visible focus is
+                // cleared; last, the page's own owner receives it (the game opens its menu).
+                // Unhandled Escape never quits.
                 if (ui.focusedKey()) |key| {
                     if (ui.res.commands.isTextOwner(key)) {
                         ui.clearFocus();
@@ -345,8 +354,14 @@ pub const Router = struct {
                         return .{ .handled = true };
                     }
                 }
-                const target = ui.res.commands.escapeTarget() orelse return .{};
-                return .{ .handled = ui.markKey(target, .dismissed) };
+                if (ui.res.commands.escapeTarget()) |target| return .{ .handled = ui.markKey(target, .dismissed) };
+                if (ui.focusVisible()) {
+                    ui.clearFocus();
+                    return .{ .handled = true };
+                }
+                if (ui.res.commands.pageEscapeTarget() == null) return .{};
+                ui.res.commands.page_escaped = true;
+                return .{ .handled = true };
             },
             .focus_search => {
                 // An open modal owns focus. Do not let `/` move focus to a catalog field

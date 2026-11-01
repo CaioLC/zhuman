@@ -382,7 +382,7 @@ pub fn capital_row(
     const row_key = row.get().key;
     // The row is a composite tile: the good's name is its accessible name and `hot` is the
     // same enabled fact the build click gates on.
-    const ctl = row.control(.{ .enabled = hot, .name = rec.name, .role = .tile });
+    const ctl = row.control(.{ .enabled = hot, .name = rec.name, .role = .tile, .ring = false });
     const lit: Color = switch (kind) {
         .ready => if (ctl.hot()) th.acc else th.fg,
         .building => th.fg,
@@ -480,14 +480,14 @@ pub fn capital_row(
                 // Another unit is stock; offered whenever the quote would accept it.
                 if (q.ready()) {
                     const more = try action_in.div("more");
-                    _ = more.control(.{ .name = "Build +1", .role = .button });
+                    _ = more.control(.{ .name = "Build +1", .role = .button, .ring = false });
                     try more.label("t", "Build +1", .{ Style{ .font = row_font, .ink = .dim, .hot = .{ .ink = .acc } } });
                     build_more = more.consume(.clicked);
                 }
             },
             .building => {
                 const x = try action_in.div("cancel");
-                _ = x.control(.{ .name = "Cancel build", .role = .icon_button });
+                _ = x.control(.{ .name = "Cancel build", .role = .icon_button, .ring = false });
                 try x.label("t", "\u{00d7}", .{ style.h3, Style{ .ink = .line2, .hot = .{ .ink = .danger } } });
                 cancelled = x.consume(.clicked);
                 cancel_key = x.get().key;

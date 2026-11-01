@@ -61,16 +61,17 @@ fn draw_node(u: *UiCtx, node: *Node, clip: ?ui.Rect, opacity: f32) void {
     if (node.render_data.focus_ring) drawFocusRing(u, node, clip, eff);
 }
 
-/// The keyboard focus ring: a `warn` hairline 3px clear of the box (`paint.focusRing`), over
+/// The keyboard focus ring: an `acc` hairline 3px clear of the box (`paint.focusRing`), over
 /// the subtree, under the ancestors' clip and not the node's own, so a clipping control (a
-/// tile, a field) still shows its ring.
+/// tile, a field) still shows its ring. The prototype's ring is `warn`; the port draws it in
+/// the quieter accent, and only on a control whose own chrome does not show focus.
 fn drawFocusRing(u: *UiCtx, node: *Node, clip: ?ui.Rect, opacity: f32) void {
     const box = paint.full(node) orelse return;
     const scale = u.res.view.scale;
     const r = paint.focusRing(box, clip, scale) orelse return;
     const rnd = u.res.platform.renderer;
     rnd.setClipRect(paint.irect(clip)) catch {};
-    const col = paint.applyOpacity(u.res.view.theme.warn, opacity);
+    const col = paint.applyOpacity(u.res.view.theme.acc, opacity);
     rnd.setDrawColor(.{ .r = col.r, .g = col.g, .b = col.b, .a = col.a }) catch return;
     const w = paint.hairline(1, scale);
     const x0 = paint.snap(r.x);

@@ -128,7 +128,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     if (goal.expand) |x| disclosure_state.expanded = x;
     // Flip on the click before the lifecycle publishes `expanded`, so it is current this frame.
     if (disclosure.query().clicked) disclosure_state.expanded = !disclosure_state.expanded;
-    _ = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded });
+    _ = disclosure.control(.{ .name = goal.title, .role = .button, .expanded = disclosure_state.expanded, .ring = false });
 
     // Center the complete disclosure composition against the definite 28px control box. If the
     // text leaves sit directly in the fixed-height parent, this engine centers them only within
@@ -163,7 +163,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .w = .{ .fixed = action_w }, .h = .{ .fixed = action_h },
             .offset = .{ .y = bar_control_offset_y },
         }, .{});
-        const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button });
+        const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button, .ring = false });
         // Disabled (`!ready`) never lifts, so the dim rest holds under the pointer.
         const action_ink: style.ThemeRole = if (ready) .fg else .dim;
         action.set(.{}, .{Style{ .outline_ink = action_ink, .hot = .{ .outline_ink = .acc, .when = .hover_focus } }});

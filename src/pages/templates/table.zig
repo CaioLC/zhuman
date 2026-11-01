@@ -46,6 +46,7 @@ pub fn sort_header_cell(parent: El, id: []const u8, label: []const u8, shown: So
             .descending => "sorted descending",
         },
         .roving_group = group,
+        .ring = false, // the label lifts to accent
     });
     var buf: [48]u8 = undefined;
     const text = switch (shown) {

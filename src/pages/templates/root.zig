@@ -124,6 +124,7 @@ pub const MilestoneRequirement = milestone_goal_mod.Requirement;
 pub const MilestoneLifecycle = milestone_goal_mod.Lifecycle;
 pub const modal = modal_mod.modal;
 pub const Modal = modal_mod.Modal;
+pub const pageEscape = modal_mod.pageEscape;
 pub const dialog_frame = dialog_frame_mod.dialog_frame;
 pub const DialogFrame = dialog_frame_mod.Frame;
 pub const DialogFrameOptions = dialog_frame_mod.Options;

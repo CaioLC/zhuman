@@ -18,7 +18,7 @@ pub fn menu_control(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
     const menu = try parent.div(id);
     if (menu.query().clicked) ctx.res.menu.show(&ctx.res.playback);
-    _ = menu.control(.{ .name = "Open menu", .role = .button });
+    _ = menu.control(.{ .name = "Open menu", .role = .button, .ring = false });
     menu.set(.{ .w = .fit_children, .h = .fit_children }, .{});
     try menu.label("label", "MENU", .{ Style{ .font = 9, .tracking = 0.04, .ink = .dim, .hot = .{ .ink = .acc } }, style.pad_sym(4, 2) });
     return menu;

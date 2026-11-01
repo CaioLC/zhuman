@@ -193,7 +193,7 @@ fn ledgerRow(parent: El, book: Book, lot: *const Lot, chosen: bool, ln: Lanes, s
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .in_tracks = set,
     }, .{style.pad_each(6, pad_x, 6, pad_x)});
-    const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null });
+    const q = row.control(.{ .name = lot.lot, .role = .button, .selected = chosen, .value = if (refused) |r| r.short else null, .ring = false });
     const hot = q.hover_focus();
     // Selected: a line2 rule round the row on the panel fill; hover: the fill alone.
     row.set(.{}, .{Style{ .fill_ink = if (chosen or hot) .panel else .bg, .outline_ink = if (chosen) .line2 else if (chosen or hot) .panel else .bg }});

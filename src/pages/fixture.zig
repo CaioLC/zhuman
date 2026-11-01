@@ -92,6 +92,9 @@ pub const Spec = struct {
     window_h: f32 = uic.view.ref_h,
     /// The pixel density (DPI) the fixture renders at — `1`, `1.5`, `2`. Fixes `view.scale`.
     pixel_density: f32 = 1,
+    /// The settings' UI scale the fixture renders at. The logical space shrinks by its factor,
+    /// as `view.computeZoomed` does for the live setting.
+    ui_scale: ha.res.Settings.UiScale = .p100,
     /// The game clock, in whole in-game days. Fixes the header's day counter deterministically
     /// (the production page derives the day from `sim.elapsed`).
     day: u32 = 1,
@@ -372,6 +375,31 @@ pub const catalog = [_]Spec{
         .pixel_density = 2,
         .day = 19,
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_scale110",
+        .about = "Act I at the reference window, UI scale 110%: framed, a narrower content lane.",
+        .ui_scale = .p110,
+        .day = 19,
+        .encounter = .present,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_one_scale125",
+        .about = "Act I at the reference window, UI scale 125%: the 760 class, stacked.",
+        .ui_scale = .p125,
+        .day = 19,
+        .encounter = .present,
+        .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
+    },
+    .{
+        .name = "act_two_scale125",
+        .about = "Act II ACTIONS at the reference window, UI scale 125%.",
+        .screen = .act_two,
+        .ui_scale = .p125,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
     },
     .{
         .name = "act_two_actions",
@@ -927,7 +955,7 @@ pub fn find(name: []const u8) ?Spec {
 /// prologue does — from the fixture's logical window size and pixel density against the
 /// `900x820` reference. Pure, so the responsive class a fixture targets is unit-testable.
 pub fn metricsOf(spec: Spec) uic.view.ViewMetrics {
-    return uic.view.compute(spec.window_w, spec.window_h, spec.pixel_density);
+    return uic.view.computeZoomed(spec.window_w, spec.window_h, spec.pixel_density, spec.ui_scale.factor());
 }
 
 /// Apply a spec's deterministic state to a freshly spawned world and its resources, with NO
@@ -945,6 +973,7 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     const m = metricsOf(spec);
     res.view.metrics = m;
     res.view.scale = m.dpi_scale;
+    res.settings.ui_scale = spec.ui_scale;
 
     // Clock: pin the elapsed game time to the start of the requested day, so the header's day
     // counter is deterministic. The production page derives `day = 1 + elapsed/secs_per_day`.

@@ -36,7 +36,7 @@ pub fn button_variant(parent: El, id: []const u8, label: []const u8, enabled: bo
 
     // The whole box is the control; its authority remains the caller's `enabled`. The lifecycle
     // (focus, activation, disabled consumption, state and semantics, cursor) is one call.
-    const q = outer.control(.{ .enabled = enabled, .name = label, .role = .button });
+    const q = outer.control(.{ .enabled = enabled, .name = label, .role = .button, .ring = false });
     const lit = q.hot();
 
     // Chrome from the published state: dim disabled, accent on held/hover/focus, else the

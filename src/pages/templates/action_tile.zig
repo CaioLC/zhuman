@@ -96,8 +96,11 @@ pub fn tile(
         .role = .tile,
         .focusable = focusRegistrationEnabled(enabled, running, was_focused),
         .value = value,
+        .ring = false, // a large tile shows hover and focus on its name, not a second outline
     });
-    const chrome = if (running) th.fg else if (!enabled) th.dim else if (q.hot()) th.acc else th.fg;
+    const chrome = if (running) th.fg else if (!enabled) th.dim else th.fg;
+    // Hover/focus lifts the name to accent; the outline keeps its resting colour.
+    const name_ink = if (enabled and q.hot()) th.acc else chrome;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
@@ -109,7 +112,7 @@ pub fn tile(
 
     const lit = can or running; // dimmed tiles flatten everything onto the chrome
 
-    try inner.label("name", name, .{ name_role, Style{ .text = chrome } });
+    try inner.label("name", name, .{ name_role, Style{ .text = name_ink } });
 
     // An optional state line, rendered **only when nonempty** (e.g. "short",
     // "working"). Dim, small — it qualifies the tile without competing with the name.

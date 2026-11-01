@@ -224,8 +224,9 @@ disabled; the focus registry decides text-input focus; `TabsState` and `CatalogS
 decide tab/filter state; simulation `Metabolism.rate` decides the eating-policy slider's
 position.
 The interaction slot is their cross-widget visual/semantic projection, never an
-independent toggle. Current desktop policy visibly outlines every focused control, so
-`focused` and `focus_visible` are both true.
+independent toggle. `focus_visible` is `focused` under keyboard modality only
+(`UiCtx.focusVisible`, the browser's `:focus-visible` heuristic): a control a click focused
+keeps focus, but neither its lift nor its ring, until a key is routed.
 
 ## Focus binding
 
@@ -235,11 +236,16 @@ Enter/Space, Escape, slash, Backspace/Delete, and Home/End. Main traverses globa
 moves and activates roving choices, and emits `.clicked` for keyboard activation so call
 sites share pointer guards. Buttons, actions, rows, nested cancel, goals, tabs, ration, and
 build choices register enabled stable keys and publish visible focus; disabled targets are
-skipped. Pointer completion requests the same focus identity.
+skipped. Pointer completion requests the same focus identity. A pointer press hides visible
+focus, and a press that lands on no focus stop (clear space) clears focus; every routed key
+other than Escape shows it again.
 
 The fixed `CommandRegistry` publishes each build's text/search and latest Escape owner for
-the next event stage. A focused text owner consumes Escape first; otherwise the topmost
-registered overlay/view receives transient `.dismissed`. Unhandled Escape does not quit;
+the next event stage. Escape goes, in order, to a focused text owner (focus clears); the
+topmost registered overlay/view (transient `.dismissed`); a visible focus (focus clears); and
+last the page's own owner (`registerPageEscape`, which returns true on the frame Escape
+reached it; the game page opens its session menu). The page owner is not an overlay, so `/`
+still reaches the search while it is registered. Unhandled Escape does not quit;
 only SDL quit/terminating does. Slash focuses the registered search field without inserting
 its shortcut byte. Editing commands and SDL text bytes are gated to registered text owners.
 
@@ -788,8 +794,11 @@ hover color reads `node.query(ctx)` on the node it was just handed).
 semantic state text (`state_good`/`state_warn`/`state_danger`/`state_muted`, the roles
 including `good`), interaction chrome (`row_hover`, `disabled_chrome`, `selected_chrome`, `provisional` the
 dim-dashed placeholder box; the keyboard focus ring is not a fragment: `control` sets
-`render_data.focus_ring` on the focused control and `draw.zig` strokes a `warn` hairline 3px
-outside its box, inset where the ancestors' clip would cut it), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
+`render_data.focus_ring` on a visibly focused control unless it passes `.ring = false`, and
+`draw.zig` strokes an `acc` hairline 3px outside its box, inset where the ancestors' clip would
+cut it. The ring is the fallback for a control whose chrome does not show focus: a tile, a row,
+a tab, a text button or a boxed button lifts its own label or outline on `hot()` and opts out,
+so a large element shows focus as a text highlight and only small boxed controls outline), and small chrome (`meter_track`/`meter_fill`, `progress_fill`,
 `legend_dot(.food)` keyed to the six `view.resources` hues). The **stateful** ones are the
 `fn(*UiCtx, *Node) Style` form — they read the node's published `Interaction` bits
 (`publishControlState` sets `disabled`/`focus_visible`/`selected`/…) and return the chrome for
@@ -867,8 +876,9 @@ color and `style.tone(t)` its ink fragment.
 **The hot predicate.** `Interaction.hot()` is `held or hovering or focus_visible`: the
 prototype's `:hover, :focus-visible` lift plus the native press latch (a press that began on
 the control stays lit while dragged off it). `Interaction.hover_focus()` drops the latch, for
-the controls that never lit during that gesture. `control` publishes `focus_visible` equal to
-`focused`, so on a control's result the two focus bits are interchangeable. The predicates read
+the controls that never lit during that gesture. `control` publishes `focus_visible` as
+`focused` under keyboard modality, so a click's focus does not hold the lift once the pointer
+leaves. The predicates read
 `focus_visible` because that is the CSS state they mirror. The `btn_*` fragments use `hot`;
 `tab`, `chip` and `row_hover` use `hover_focus`.
 

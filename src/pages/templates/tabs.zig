@@ -69,17 +69,18 @@ pub fn tabs_named(parent: El, id: []const u8, name: []const u8, labels: []const 
         // A tab is a single-selection member registered under the strip's roving group: its
         // label is the authoritative chip text, `selected` mirrors the active index, and the
         // group key links it back to the strip.
-        _ = chip.control(.{ .name = label, .role = .radio, .selected = is_active, .roving_group = bar_key });
+        _ = chip.control(.{ .name = label, .role = .radio, .selected = is_active, .roving_group = bar_key, .ring = false });
         if (member_len < member_keys.len) {
             member_keys[member_len] = chip_key;
             member_len += 1;
         }
-        // Interaction wins over the resting state (as `button` does): hover/held/focus lifts to
-        // accent even for the **active** tab, so hovering the active tab changes its color too;
-        // a resting active tab is fg, a resting inactive tab is dim.
+        // Hover/held/focus lifts the label to accent on every tab, the active one included
+        // (`.tab:hover { color: acc }`); a resting active tab is fg, a resting inactive tab is
+        // dim. Only the active tab is outlined, always in fg (`.tab[aria-selected] { border:
+        // fg }`), so the lift reads the same on every tab and no tab gains an outline on hover.
         const lbl = (try chip.text("l", label))
             .with_style(.{ style.body, Style{ .ink = if (is_active) .fg else .dim, .hot = .{ .ink = .acc } }, style.pad_sym(6, 2) });
-        if (is_active) _ = chip.with_style(.{Style{ .outline_ink = .fg, .hot = .{ .outline_ink = .acc } }});
+        if (is_active) _ = chip.with_style(.{Style{ .outline_ink = .fg }});
         // Padded text in a wrapper box: adopt the label's box-relative baseline so the
         // strip baseline-aligns wherever it sits (the chip baseline-adopt pattern).
         chip.get().size.baseline = lbl.get().size.baseline_off();

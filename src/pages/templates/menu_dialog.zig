@@ -108,7 +108,7 @@ fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bo
     const what = if (slot.filled) describe(&dbuf, slot.act, slot.day, slot.people) else "empty";
     const verb = if (saving) (if (slot.filled) "OVERWRITE" else "SAVE HERE") else if (slot.filled) "LOAD" else "";
     var nbuf: [16]u8 = undefined;
-    const q = row.control(.{ .enabled = enabled, .name = std.mem.print(&nbuf, "Slot {d}", .{i + 1}) catch "Slot", .role = .button, .value = what });
+    const q = row.control(.{ .enabled = enabled, .name = std.mem.print(&nbuf, "Slot {d}", .{i + 1}) catch "Slot", .role = .button, .value = what, .ring = false });
     const hot = enabled and (q.hover_focus());
     row.set(.{}, .{Style{ .outline_ink = if (hot) .line2 else .line, .fill_ink = if (hot) .panel else .bg }});
 
