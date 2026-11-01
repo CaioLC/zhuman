@@ -13,7 +13,7 @@ const ha = @import("ha");
 const comp = ha.sim.comp;
 const actions = ha.sim.rules.actions;
 const roster = ha.sim.data.roster;
-const query = ha.query;
+const query = @import("../query.zig");
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 

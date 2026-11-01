@@ -14,6 +14,7 @@ const vd = uic.style.verdict;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
+const body_mod = @import("../body.zig");
 const t = @import("../templates/root.zig");
 const Line = t.HoldingsLine;
 const Sentence = t.HoldingsSentence;
@@ -123,7 +124,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         });
     }
 
-    const projection = ha.body.project(.{
+    const projection = body_mod.project(.{
         .food = food.v,
         .quality = food.quality,
         .vigor = vigor.v,

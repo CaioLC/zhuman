@@ -30,7 +30,8 @@
 #      shelf; a styled, text or `label` node belongs to a template
 #      (`src/pages/templates/copy.zig` holds the prose leaves), because a style chosen in a
 #      page is art direction that drifts. The debug page is exempt:
-#      the audit harness paints by design. Any hit fails the check.
+#      the audit harness paints by design, and so are the helpers beside the pages, which build
+#      no nodes. Any hit fails the check.
 #
 # Run from anywhere: `sh tools/boundary_check.sh`. Exit 0 when clean, 1 on a failure.
 
@@ -48,7 +49,10 @@ if [ -n "$hits" ]; then
 fi
 
 paint='\.with_style\(|\.text(_fit)?\(|\.label(_fit)?\('
-pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig)
+# The helpers beside the pages (`body`, `eating`, `query`, `hex_pixel`) build no nodes: they are
+# math a page or template reads, and `query`'s `row.text(...)` is a field read, not a text leaf.
+pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig \
+    -not -name body.zig -not -name eating.zig -not -name query.zig -not -name hex_pixel.zig)
 hits=$(grep -nE "$paint" $pages | grep -vE '^[^:]+:[0-9]+:\s*//')
 # A `Props` constructor or `set` paints when its style spec (the last argument) is not `.{}`.
 # A call wrapped over lines is flagged at its first line, so keep a page's calls on one.

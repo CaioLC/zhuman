@@ -417,47 +417,77 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 ## Module map
 
+`src/` is the host: the program, its resources, the library root and the test roots, with the game's palette and design tokens. `palette.zig` and `tokens.zig` stay here rather than in `pages/` because they import `ui_client/` by relative path and the host `res.zig` carries the palette's resource hues: a file under `pages/` belongs to the executable module, and one file cannot sit in two modules.
+
 | File | Holds |
 |---|---|
 | `main.zig` | `App`, the event loop, the sim tick, `spawn_agent`/`spawn_player` |
-| `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `run` (see `ecs/README.md`) |
-| `world.zig` | this game's `World`: the engine's over `components.zig` and `tags.zig` |
-| `ecs.zig` | the system params and `run` over this game's `World` and `sim.Resources`, with the `Const` forms |
-| `systems.zig` | the sim systems, in tick order |
-| `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
-| `capital.zig` | the build path, ownership and settling, the generator system |
-| `baselines.zig` | the fresh-agent baseline, read from the component defaults |
-| `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
-| `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
-| `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
-| `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
-| `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
-| `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
-| `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
-| `grid/` | the research board: pointy-top hex geometry (`hex`) and progression over the catalog and `comp.Research` (`board`) |
-| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
-| `barter.zig` | atomic resolution of a quote against the world |
-| `query.zig` | the catalog query parser |
-| `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band, and `kindLabel` for the glyphs' spoken names |
-| `res.zig` | the host's `Resources`, grouped by who writes it: `platform`, `input`, `playback`, `menu`, `route`, `title`, `settings`, `saves`, `view`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game`, the embedded `sim.Resources` |
-| `sim/res.zig` | `sim.Resources { sim, config, time, catalog }`, what a system may reach, with `Sim`, `Config`, `Time`, `Condition` and `hours_to_secs`. `Sim` carries the clock, the log, the prng, the reach seen-set, the passerby and the merchant |
-| `sim/root.zig` | the `sim` hub, re-exported as `ha.sim`: `sim.Resources` and the types its fields hold |
-| `test_sim.zig` | the `test-sim` root: the sim files and `ecs` alone, with no UI host and no SDL |
+| `root.zig` | the `ha` library root: re-exports `sdl`, `ui`, `ui_client`, `UiCtx`, `font`, `palette`, `tokens`, `res` (the host resources) and `sim` (the simulation root) |
+| `test_ui.zig` | the test root of the UI layer alone (engine + host binding, no game content) |
+| `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
+| `res.zig` | the host `Resources`: `platform`, `input`, `view`, `playback`, `menu`, `route`, `title`, `settings`, `saves`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game: sim.Resources`, the simulation's resources embedded whole |
 | `palette.zig` | the game's palette — the ten `Theme` roles, the terminal ground, and the six resource hues |
 | `tokens.zig` | the non-color design tokens, in logical px |
+| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `run` (see `ecs/README.md`) |
+
+`sim/` is the simulation: its root, the schema, the resources a system may reach, and the ECS bound to them.
+
+| File | Holds |
+|---|---|
+| `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.log`, `sim.baselines`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
+| `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
+| `res.zig` | `sim.Resources { sim, config, time, catalog }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours and the Exchange; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
-| `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
-| `pages/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`, the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
-| `root.zig` | the `ha` library root and its re-exports |
+| `baselines.zig` | the fresh-agent baseline, read from the component defaults |
 
-Library files import their siblings by relative path; only `main.zig` and `pages/` import the
-library as `ha`, from the executable module. The UI engine is a package of
-its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to
-`ha` and to the UI tests as the module `ui`, and runs its tests in both test steps.
+`sim/systems/` holds the systems the tick runs.
 
-`dist`'s `.fixed` kind is exempt from the `scaleOf` 0.2 floor — every action leaves one yield
-slot at a fixed zero, and without the exemption each draw silently deposited +0.2.
+| File | Holds |
+|---|---|
+| `tick.zig` | the tick systems, in tick order |
+
+`sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule takes `*World` from its caller, a system or the UI's handler for a press.
+
+| File | Holds |
+|---|---|
+| `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
+| `capital.zig` | the build path, ownership and settling, the generator system |
+| `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
+| `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
+| `barter.zig` | atomic resolution of a quote against the world |
+| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
+| `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view trades with |
+| `research.zig` | the research board's progression: the adjacency rule and atomic research resolution over the catalog and `comp.Research` |
+
+`sim/kernel/` holds pure math over values; a kernel imports only `std`.
+
+| File | Holds |
+|---|---|
+| `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band, and `kindLabel` for the glyphs' spoken names |
+| `hex.zig` | pointy-top axial hex topology: coordinates, rings, neighbours, wedges and classification. Pure; imports only `std` |
+
+`sim/data/` holds the authored roster and its lifecycle: the loader, the live reload, the cross-act migration.
+
+| File | Holds |
+|---|---|
+| `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
+| `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
+| `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
+
+`pages/` is game content: the screens, the template shelf, and the helpers only a page or a template reads.
+
+| File | Holds |
+|---|---|
+| `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`, the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
+| `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
+| `query.zig` | the catalog query parser |
+| `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
+| `hex_pixel.zig` | the hex pixel transform the research board paints with: axial → pixel, the six vertex offsets, pixel → hex, and the point-in-hex test |
+
+Every file under `sim/` imports its siblings by relative path, and nothing in `sim/` imports the host (`res.zig`), `ui_client/` or SDL; the `test-sim` build step, rooted at `sim/root.zig`, is what holds that true. The UI engine is a package of its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to `ha` and to the UI tests as the module `ui`, and runs its tests in both test steps. The ECS engine `src/ecs/` is a package the same way, imported as `ecs`, with its tests run in every test step.
+
+`dist`'s `.fixed` kind is exempt from the `scaleOf` 0.2 floor — every action leaves one yield slot at a fixed zero, and without the exemption each draw silently deposited +0.2.
 
 ## Assets
 

@@ -1,5 +1,5 @@
 //! `eating_policy` — the prototype's complete policy tile: heading/readout, range input, and
-//! endpoint scale. Domain math remains in `ha.eating`; the nested `slider` owns only range
+//! endpoint scale. Domain math remains in `pages/eating.zig`; the nested `slider` owns only range
 //! interaction/chrome. The caller supplies and receives the `0..100` policy value.
 
 const std = @import("std");
@@ -11,7 +11,7 @@ const style = uic.style;
 const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
-const eating = ha.eating;
+const eating = @import("../eating.zig");
 
 const slider_mod = @import("./slider.zig");
 
