@@ -377,6 +377,9 @@ pub fn main(process: std.process.Init) !void {
         // while simulation time passes, so the intents the last build wrote are in the world
         // this frame's build reads.
         ha.sim.schedule.tick(&app.world, &app.resources.game);
+        // The fixture harness seeds the world here, after the tick and before the build, so a
+        // tick cannot move the seeded numbers before they render (`pages.prepare`).
+        pages.prepare(&app.ui, &app.world);
 
         // UI + Render Stage: the canonical per-frame UI lifecycle, run by the frame driver.
         // The host callbacks wrap page build, the cursor apply, the clear/present around the

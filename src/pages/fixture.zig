@@ -1103,20 +1103,17 @@ fn seedSettlement(res: *Resources, world: *World, player: Entity, st: Settlement
     if (st.building) |id| seedBuild(res, world, player, id);
 }
 
-/// Build the fixture page: resolve the requested spec, seed the world/resources deterministically,
-/// resize the real window to the spec's logical size so the live prologue's metrics agree with the
-/// seed, then render the production page. The seeded world is the live world `build_ui` holds, and
-/// `player` is its player entity. Touches the platform (window resize), so it is not unit-tested;
-/// the determinism is covered by `seed`/`metricsOf` tests.
-pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Trees {
+/// The fixture's world work, done before the build with the mutable world the host holds
+/// (`pages.prepare`, between the schedule's tick and the frame driver's step), so the seed is
+/// exactly what the build renders. On the first build the fixture begins a run by hand, the way
+/// `begin_run` does, and puts the run in the state its screen shows, so the schedule ticks what
+/// that state runs; the curtain opens (and pauses) as `ActEnded` would open it. Every frame it
+/// then seeds the player, which `derive`s the derived components.
+pub fn prepare(ctx: *uic.UiCtx, world: *World, name: []const u8) void {
     const spec = find(name) orelse catalog[0];
-    // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
-    // there, and the controls own them after, so the seeded screen stays navigable.
-    const first = ctx.frame == 1;
-
-    // The world is empty until a run begins. On its first frame the fixture begins one by hand,
-    // the way `begin_run` does, and puts the run in the state its screen shows, so the schedule
-    // ticks what that state runs; the curtain opens (and pauses) as `ActEnded` would open it.
+    // The driver counts the frame in `beginFrame`, after this: the build about to run is
+    // `frame + 1`, and a launch's first build is frame 1.
+    const first = ctx.frame + 1 == 1;
     if (first) {
         const living = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
         if (living.get() == null) {
@@ -1129,6 +1126,21 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
 
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     if (player.get()) |a| seed(ctx.res, world, a[0], spec);
+}
+
+/// Build the fixture page over the world `prepare` seeded: resize the real window to the spec's
+/// logical size so the live prologue's metrics agree with the seed, put the spec's view metrics
+/// back over the prologue's (the window's pixel density is not the spec's), set the first
+/// frame's resource state, then render the production page. Touches the platform (window
+/// resize), so it is not unit-tested; the determinism is covered by `seed`/`metricsOf` tests.
+pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Trees {
+    const spec = find(name) orelse catalog[0];
+    // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
+    // there, and the controls own them after, so the seeded screen stays navigable.
+    const first = ctx.frame == 1;
+    const m = metricsOf(spec);
+    ctx.res.view.metrics = m;
+    ctx.res.view.scale = m.dpi_scale;
 
     // Match the live window to the spec so the prologue's metrics equal the seed's. A resize
     // failure is non-fatal — the seed already set `view.metrics`, and the prologue degrades to

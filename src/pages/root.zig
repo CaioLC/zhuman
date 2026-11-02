@@ -23,6 +23,16 @@ const p_title = title_page.ui_title;
 const fixture = @import("./fixture.zig");
 const t = @import("./templates/root.zig");
 
+/// The world work a developer harness does before the build. The host calls it once per frame
+/// between `sim.schedule.tick` and the frame driver's step, so what it sets is exactly what the
+/// build renders. With `HA_FIXTURE` naming a spec (and the debug page not requested, which takes
+/// the route first) it is `fixture.prepare`: the first frame's spawn and state, then the seed.
+/// Otherwise it does nothing.
+pub fn prepare(ui_ctx: *uic.UiCtx, world: *World) void {
+    if (debugRequested(ui_ctx.res)) return;
+    if (fixtureRequested(ui_ctx.res)) |name| fixture.prepare(ui_ctx, world, name);
+}
+
 /// Returns a flattened list of *Nodes for the render stage
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     ui_ctx.res.view.theme = ha.palette.theme;
