@@ -25,8 +25,8 @@ const Entity = ecs.Entity;
 const Receipt = ledger.Receipt;
 
 /// Every scheduled reader, one stored cursor each per event type. A handler reads its intent
-/// family under its own id; `run` reads `NewRun`; `log` reads every fact.
-pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, exchange, neighbours, run, log };
+/// family under its own id; `run` reads `NewRun`; `debug` reads `DebugPoke`; `log` reads every fact.
+pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, exchange, neighbours, run, debug, log };
 
 /// Who comes and goes on the sim clock.
 pub const Who = enum { passerby, merchant };
@@ -62,6 +62,12 @@ pub const NeighbourDeal = struct {
 };
 /// Begin a fresh run: the current one, if any, is retired. Never refused.
 pub const NewRun = struct {};
+/// The template audit harness's door: a debug-only poke of one component, applied by `systems/debug.zig`.
+pub const DebugPoke = struct {
+    pub const What = union(enum) { food: f32, vigor: struct { v: f32, max: f32 }, rate: f32, biomass: f32, good: struct { gi: u16, count: u32 }, settle };
+    agent: Entity,
+    what: What,
+};
 
 // —— facts ————————————————————————————————————————————————————————————————————————
 

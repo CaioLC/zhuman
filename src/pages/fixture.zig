@@ -1055,8 +1055,8 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     derive(res, world);
 }
 
-/// Bring every derived component up to date with a world a fixture or the debug page set by
-/// hand, so the frame renders current data. A seeded state is set, not reached: the band is
+/// Bring every derived component up to date with a world a fixture set by hand, so the frame
+/// renders current data: `seed` runs after the schedule's writers (`pages.prepare`). A seeded state is set, not reached: the band is
 /// written through the condition rule without the `BandCrossed` its writer would emit, so the
 /// log does not word a fixture's vigor as hunger.
 pub fn derive(res: *Resources, world: *World) void {

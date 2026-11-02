@@ -12,6 +12,9 @@
 //! `detect_exchange` late in the acts' `update` sets. Act III runs Act II's sets without the
 //! merchant's clock and the Exchange detector.
 //!
+//! `debug.poke`, the template audit harness's door, runs in every act's `handle` set after the
+//! handlers and `new_run` and before the derived writers, so they see a poke in the same tick.
+//!
 //! The derived components' writers close both of an act's sets just before `log`: `condition`,
 //! then `outlook` and `quotes`, so an intent a handler applies while the run is paused, or a build
 //! that finished this tick, shows in the band, the BODY lines and the tiles the next frame reads,
@@ -41,15 +44,16 @@ const log = @import("./systems/log.zig");
 const condition = @import("./systems/condition.zig");
 const outlook = @import("./systems/outlook.zig");
 const quotes = @import("./systems/quotes.zig");
+const debug = @import("./systems/debug.zig");
 
-const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, condition.condition, outlook.outlook, quotes.quotes, log.log };
+const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, debug.poke, condition.condition, outlook.outlook, quotes.quotes, log.log };
 
 /// The systems per state, in the order they run.
 pub const schedule = engine.Schedule(GameState, .{
     .title = .{ .handle = .{run.new_run} },
     .act_one = .{
         .on_enter = .{run.begin_run},
-        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, condition.condition, outlook.outlook, quotes.quotes, log.log },
+        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, debug.poke, condition.condition, outlook.outlook, quotes.quotes, log.log },
         .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, outlook.outlook, quotes.quotes, log.log },
     },
     .act_two = .{
@@ -104,6 +108,14 @@ test "log is last in every act's handle set" {
     inline for ([_]GameState{ .act_one, .act_two, .act_three }) |s| {
         const handle = comptime schedule.setOf(s, .handle);
         try testing.expectEqual(@as(?usize, handle.len - 1), comptime schedule.indexOf(s, .handle, log.log));
+    }
+}
+
+test "debug.poke precedes condition in every act's handle set" {
+    inline for ([_]GameState{ .act_one, .act_two, .act_three }) |s| {
+        const at = comptime schedule.indexOf(s, .handle, debug.poke).?;
+        try testing.expect(at < comptime schedule.indexOf(s, .handle, condition.condition).?);
+        try testing.expect(at > comptime schedule.indexOf(s, .handle, run.new_run).?);
     }
 }
 

@@ -47,6 +47,7 @@ pub const systems = struct {
     pub const neighbours = @import("./systems/neighbours.zig");
     pub const run = @import("./systems/run.zig");
     pub const curtain = @import("./systems/curtain.zig");
+    pub const debug = @import("./systems/debug.zig");
     pub const log = @import("./systems/log.zig");
 };
 

@@ -30,8 +30,6 @@ const UiCtx = uic.UiCtx;
 
 const t = @import("./templates/root.zig");
 const act_one_holdings = @import("./act_one/holdings.zig");
-/// The derived components brought up to date after a poke (`fixture.derive`).
-const derive = @import("./fixture.zig").derive;
 const act_two_holdings = @import("./act_two/holdings.zig");
 const coin_merchant = @import("./act_two/coin_merchant.zig").coin_merchant;
 
@@ -223,18 +221,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // A coherent debug-only four-kind/six-unit fixture matching the reference anatomy.
             // Values remain ordinary live ECS data; the component performs all projections.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 } });
-            if (world.get(a[0], comp.InventoryFood)) |food| {
-                food.v = 7.8;
-                food.quality = 1;
-                food.spoils = ha.sim.baselines.food_spoils;
-            }
-            if (world.get(a[0], comp.Vigor)) |vigor| {
-                vigor.max = 15;
-                vigor.v = 14.4;
-            }
-            if (world.get(a[0], comp.Metabolism)) |met| met.rate = 0.5;
-            derive(ctx.res, world);
+            fixtureGoods(ctx, a[0], &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 } });
+            poke(ctx, a[0], .{ .food = 7.8 });
+            poke(ctx, a[0], .{ .vigor = .{ .v = 14.4, .max = 15 } });
+            poke(ctx, a[0], .{ .rate = 0.5 });
 
             const demo = try stage.box("holdings_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
             const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOUSEHOLD" });
@@ -267,7 +257,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // The live debug player starts with only the two innate verbs. Own the three tools
             // that grant the rest, so the assembly audit shows the complete five-verb reference.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
+            fixtureGoods(ctx, a[0], &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             const demo = try stage.box("actions_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
             _ = try t.actions_section(demo, world, a[0], "actions", @import("./templates/act_one_surface.zig").actions_shelf, null, null, null);
         } else {
@@ -277,8 +267,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
-            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
-            derive(ctx.res, world);
+            poke(ctx, a[0], .{ .biomass = 31 });
             // The pane fills a definite height and scrolls only its table, and spans a
             // definite width: the framed content lane.
             const demo = try stage.box("build_demo", .{ .w = .{ .fixed = t.build_lane_width }, .h = .{ .fixed = 560 } }, .{});
@@ -290,9 +279,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
         if (player.get()) |a| {
             // One interactive composition only: both authored sections switch beneath the same
             // nav and context strips. Debug owns the three unlocking tools and stocks materials.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
-            derive(ctx.res, world);
+            fixtureGoods(ctx, a[0], &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
+            poke(ctx, a[0], .{ .biomass = 31 });
             // The surface fills its parent's height (its views scroll inside), so the demo
             // gives it a definite one, as the workspace's content lane does in production.
             const demo = try stage.box("surface_demo", .{ .w = .{ .fixed = 652 }, .h = .{ .fixed = 560 } }, .{});
@@ -312,9 +300,8 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // Populate the debug-only actor with the reference's representative holdings and
             // unlocked verbs; production remains entirely progression-driven.
             // The verbs come with their tools: the hatchet, a rod and snares unlock three more.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
-            derive(ctx.res, world);
+            fixtureGoods(ctx, a[0], &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
+            poke(ctx, a[0], .{ .biomass = 31 });
 
             const demo = try stage.box("workspace_demo", .{ .w = .{ .fixed = 926 }, .h = .{ .fixed = 700 } }, .{});
             _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
@@ -334,15 +321,10 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // One large reference composition: shared shell rows around one live workspace.
             // Debug-only grants make the authored five-verb/holdings state visible; production
             // continues to derive every stock, unlock, activity, and log line from live state.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
-            if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
-            derive(ctx.res, world);
-            if (world.get(a[0], comp.InventoryFood)) |food| food.v = 11.6;
-            if (world.get(a[0], comp.Vigor)) |vigor| {
-                vigor.max = 15;
-                vigor.v = 14;
-            }
-            derive(ctx.res, world);
+            fixtureGoods(ctx, a[0], &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
+            poke(ctx, a[0], .{ .biomass = 31 });
+            poke(ctx, a[0], .{ .food = 11.6 });
+            poke(ctx, a[0], .{ .vigor = .{ .v = 14, .max = 15 } });
 
             const demo = try stage.box("act_one_page_demo", .{
                 .w = .{ .fixed = 900 }, .h = .{ .fixed = 820 }, .overflow = .clip,
@@ -482,7 +464,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "generator_section")) {
         if (player.get()) |a| {
             // Own the two generator goods so both rows show.
-            fixtureGoods(world, a[0], ctx, &.{ .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
+            fixtureGoods(ctx, a[0], &.{ .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
             const demo = try stage.box("gen_demo", .{ .w = .{ .fixed = 594 }, .h = .fit_children }, .{});
             _ = try t.generator_section(demo, world, a[0], "gens", .{ .through_act = 1 });
         } else {
@@ -597,16 +579,21 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     }
     return result.root;
 }
-/// Debug-only holdings: set the counts of the named goods and settle, so the verbs they
+/// Debug-only sample state: one `DebugPoke`, which `systems/debug.zig` applies in the next tick
+/// before the derived writers run. An entry pushes its pokes every frame it renders (each is
+/// idempotent), so its first frame renders unpoked and every frame after renders the sample.
+fn poke(ctx: *UiCtx, e: Entity, what: ha.sim.events.DebugPoke.What) void {
+    _ = ctx.res.game.events.writer(ha.sim.events.DebugPoke).push(.{ .agent = e, .what = what });
+}
+
+/// Debug-only holdings: poke the counts of the named goods, then settle, so the verbs they
 /// grant and the margins they move are derived exactly as in production.
-fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { []const u8, u32 }) void {
+fn fixtureGoods(ctx: *UiCtx, e: Entity, counts: []const struct { []const u8, u32 }) void {
     const cat = &ctx.res.game.catalog;
-    const goods = world.get(e, comp.Goods) orelse return;
     for (counts) |c| {
-        if (cat.goodIndex(c[0])) |gi| goods.count[gi] = c[1];
+        if (cat.goodIndex(c[0])) |gi| poke(ctx, e, .{ .good = .{ .gi = @intCast(gi), .count = c[1] } });
     }
-    ha.sim.rules.capital.settle(world, e, cat);
-    derive(ctx.res, world);
+    poke(ctx, e, .settle);
 }
 
 fn eq(a: []const u8, b: []const u8) bool {
