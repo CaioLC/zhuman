@@ -146,20 +146,24 @@ pub fn Events(comptime ns: type, comptime ReaderId: type) type {
             }
         }
 
-        fn RingOf(comptime T: type) type {
+        /// The position of `T`'s ring among the store's fields: one linear walk per type, so
+        /// a store of many event types stays inside the default comptime branch quota.
+        fn ringIndex(comptime T: type) usize {
             const RT = Ring(T, readers);
-            for (@typeInfo(Rings).@"struct".field_types) |FT| {
-                if (FT == RT) return RT;
+            for (@typeInfo(Rings).@"struct".field_types, 0..) |FT, i| {
+                if (FT == RT) return i;
             }
             @compileError("no event " ++ @typeName(T) ++ " in " ++ @typeName(ns));
         }
 
+        fn RingOf(comptime T: type) type {
+            _ = ringIndex(T);
+            return Ring(T, readers);
+        }
+
         fn ring(self: anytype, comptime T: type) if (@typeInfo(@TypeOf(self)).pointer.attrs.@"const") *const RingOf(T) else *RingOf(T) {
-            const info = @typeInfo(Rings).@"struct";
-            inline for (info.field_names, info.field_types) |name, FT| {
-                if (FT == RingOf(T)) return &@field(self.rings, name);
-            }
-            unreachable;
+            const name = comptime @typeInfo(Rings).@"struct".field_names[ringIndex(T)];
+            return &@field(self.rings, name);
         }
 
         fn slot(comptime id: ReaderId) usize {
