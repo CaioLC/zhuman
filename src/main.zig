@@ -444,6 +444,11 @@ fn applySaveRequest(res: *Resources, world: *ha.sim.ecs.World, io: std.Io, gpa: 
             };
             defer loaded.deinit();
             const report = save.apply(&res.game, world, &loaded.save);
+            // Nothing written before the load is readable after it: an intent from the frame
+            // before would name an entity of the run that is gone. Opening the store twice
+            // expires every event; a reader's cursor stays valid by the store's own rule.
+            res.game.events.update();
+            res.game.events.update();
             res.route = .game;
             res.title = .{};
             res.menu.open = false;
@@ -566,8 +571,10 @@ test "a save request writes the slot's file, and a load request restores it and 
     res.menu.open = false;
     res.playback.paused = false;
     res.log_heard = 7;
+    _ = res.game.events.writer(ha.sim.events.BeginLabor).push(.{ .agent = e, .ai = 0 }); // from the run that is gone
     res.saves.request = .{ .load = 0 };
     applySaveRequest(&res, &world, testing.io, testing.allocator);
+    try testing.expectEqual(@as(usize, 0), res.game.events.len(ha.sim.events.BeginLabor));
     try testing.expectEqual(ha.sim.GameState.act_one, res.game.states.current);
     try testing.expectEqual(@as(f32, 6.5), world.get(0, ha.sim.comp.Vigor).?.v);
     try testing.expectEqual(ha.res.Route.game, res.route);
