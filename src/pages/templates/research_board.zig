@@ -901,8 +901,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     // `.act-two #view-research .structure-footer { min-height: 44px }` is a border box (the
     // prototype is `box-sizing: border-box`) over its 1px top border and 6px top pad, which sit
     // outside the foot here as `foot_rule` and the foot's 6px top margin. The foot is
-    // unpadded, so its floor is a content-box one: 44 - 6 = 38, as the board has always
-    // reserved (strictly 37 once the border is also taken out).
+    // unpadded, so its floor is a content-box one: 44 - 6 = 38, which the board
+    // reserves (strictly 37 once the border is also taken out).
     foot.set(.{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .min = .{ .h = 38 },
         .flow = .{ .dir = .row, .main = .start, .cross = .start }, .gap = 10, .margin = .{ .before = 6 },

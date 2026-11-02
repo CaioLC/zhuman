@@ -1,7 +1,6 @@
-//! `board_primitives` — small, **generic** building blocks for board-like surfaces. Today that
-//! is `empty_state`, used by the Act II surface (STRUCTURE until the research board is drawn,
-//! and a settlement with no one in it). Domain-free: every string is the caller's. The
-//! STRUCTURE board's own vocabulary (tags, legend, zoom) is built with the board (BOARD-11).
+//! `board_primitives` — small, **generic** building blocks for board-like surfaces: today
+//! `empty_state`, used by the Act II surface (STRUCTURE before the research board is drawn,
+//! and a settlement with no one in it). Domain-free: every string is the caller's.
 
 const ha = @import("ha");
 

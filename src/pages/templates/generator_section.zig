@@ -197,10 +197,10 @@ fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u1
     return is_on;
 }
 
-/// Build the act's generator shelf in authored good order.
 /// A regular generator tile's outer height (border included), logical px.
 const generator_regular_h: f32 = 87;
 
+/// Build the act's generator shelf in authored good order.
 pub fn generator_section(parent: El, world: *const World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;

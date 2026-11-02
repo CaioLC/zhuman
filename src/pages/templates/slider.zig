@@ -1,9 +1,9 @@
-//! `slider` — the prototype-faithful horizontal range control.
+//! `slider` — the horizontal range control.
 //!
 //! The template owns only range-control behavior and chrome: an 18px interaction lane, a 3px
 //! split rail, and a true 12px outlined diamond thumb. Labels, policy wording, and endpoint
-//! captions belong to the caller's composition (`eating_policy`), matching the HTML anatomy.
-//! The caller remains the value source of truth; pooled state stores pointer capture only.
+//! captions belong to the caller's composition (`eating_policy`). The caller is the value
+//! source of truth; pooled state stores pointer capture only.
 //!
 //! Pointer interaction clicks/jumps anywhere in the lane, captures through drag, and releases
 //! on button-up/cancellation. Keyboard interaction is routed to a registered range owner:
@@ -20,7 +20,7 @@ const UiCtx = uic.UiCtx;
 const SliderModel = uic.UiState.SliderModel;
 const SliderState = uic.UiState.SliderState;
 
-/// Prototype dimensions in logical px (`.eating-slider` and its pseudo-elements).
+/// Dimensions in logical px.
 const control_h: f32 = 18;
 const track_h: f32 = 3;
 const thumb_d: f32 = 12;
@@ -77,8 +77,8 @@ pub fn slider(parent: El, opts: Options) !Slider {
         if (q.maximum) value = model.nudge(value, .end);
     }
 
-    // The entire 18px lane is the hit target, as the native prototype input is; the rail is
-    // intentionally only 3px. Press requests focus, jumps immediately, and owns capture.
+    // The entire 18px lane is the hit target, as a native range input's is; the rail is
+    // only 3px. Press requests focus, jumps immediately, and owns capture.
     if (control.get().rect(ctx)) |r| {
         const pointer = &ctx.res.input.pointer;
         if (opts.enabled and q.pressed) {

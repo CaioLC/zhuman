@@ -1,8 +1,7 @@
-//! `dialog_frame` — the one dialog shell every game dialog shares (the prototype's
-//! `.terminal-dialog` / `.dialog-shell`): a header with the warn kicker, the title and the ×
-//! control, a hairline, the body, a hairline, and the footer band. The trade dialog and the
-//! session menu fill the body and the footer; the frame owns only the chrome, so neither
-//! hand-rolls a header, a close control, rules or padding.
+//! `dialog_frame` — the one dialog shell every game dialog shares: a header with the warn
+//! kicker, the title and the × control, a hairline, the body, a hairline, and the footer
+//! band. The trade dialog and the session menu fill the body and the footer; the frame owns
+//! only the chrome, so neither hand-rolls a header, a close control, rules or padding.
 //!
 //! Build order is the visual order, so the body and the footer are created before the caller
 //! fills them. Close with `modal.settle` after filling both.

@@ -76,7 +76,7 @@ const wide_tracks = [_]uic.Track{
 };
 /// Narrow (`@media (max-width: 760px)`): the lot and the price on line 1, the corner spanning
 /// both on line 2. The prototype's price track is `auto` and its row gap 2px; the dialog keeps
-/// its fixed 92px price and the 9px line gap it has always drawn.
+/// its fixed 92px price and a 9px line gap.
 const narrow_tracks = [_]uic.Track{
     .{ .basis = .{ .fr = 1 } },
     .{ .basis = .{ .px = price_w } },

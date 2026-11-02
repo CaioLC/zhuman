@@ -1,6 +1,6 @@
 //! `milestone_goal` — the shared collapsible end-of-act card used by Shelter and Exchange.
 //!
-//! The prototype has two distinct rows, not a generic panel with a sentence and a button:
+//! Two distinct rows, not a generic panel with a sentence and a button:
 //! a 38px bar (`title · readiness · compact summary · details/close` + fixed 132×28 CTA),
 //! with a 7px top and 3px bottom control inset,
 //! followed by an optional full-width details region. A 2px lifecycle rail and a subtle

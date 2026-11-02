@@ -1,4 +1,4 @@
-//! Pointer conflict tests (QA-16), headless through the replay rig over the real templates:
+//! Pointer conflict tests, headless through the replay rig over the real templates:
 //! a nested control's activation does not reach its parent, the modal scrim blocks the
 //! screen behind it, the tooltip takes no hit, the wheel goes to the innermost scroll view
 //! under the pointer, and a row scrolled out of its viewport cannot activate.

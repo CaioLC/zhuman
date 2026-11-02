@@ -34,8 +34,8 @@ pub const Options = struct {
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
 /// while the dialog is open, so the dialog covers the screen by construction.
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Trees {
-    // The reviewed Act-I composition is the normal live page from the first frame. `shell`
-    // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
+    // `shell` supplies the same responsive terminal geometry used by the debug fixture's
+    // `shell_content`;
     // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD/GENERATORS surface.
     const page = try t.act_page(ctx, .{ .id = "play", .act = .act_one });
     const body = page.regions.body;

@@ -3,13 +3,14 @@
 //!
 //! A **StockToken** shows a two-letter **abbreviation** with its truncated value (`FO: 3`,
 //! `VI: 14/15`) and swaps to the **full label** plus one truncated decimal, shown only when
-//! fractional, while hovered or focused (`FOOD: 3.6`, `COIN: 126`). Each token sizes to its own content, so the stockline stays **compact**
-//! by default — every token is only as wide as its `abbrev + value`. On hover/focus the label
-//! expands to the full form, so **only the hovered token grows**; its neighbors stay tight
-//! (Act I's direct abbrev/full swap; Act II's compact token expansion rides the same fit). The
-//! label is **dim** and the value is the brighter `fg`, with `warn` and `danger` tones available
-//! for condition/scarcity states, so the number reads louder than its label and severity reads
-//! in the color.
+//! fractional, while hovered or focused (`FOOD: 3.6`, `COIN: 126`). Each token sizes to its own
+//! content, so the stockline stays **compact** by default — every token is only as wide as its
+//! `abbrev + value`. On hover/focus the label expands to the full form, so
+//! **only the hovered token grows**; its neighbors stay tight (Act I's direct abbrev/full swap;
+//! Act II's compact token expansion rides the same fit). The label is **dim**
+//! and the value is the brighter `fg`, with `warn` and `danger` tones available for
+//! condition/scarcity states, so the number reads louder than its label and severity reads in
+//! the color.
 //!
 //! A **compact** stockline — Act II's nine stocks — sets every token at 10px with 4px gaps, and
 //! the hovered or focused token returns to the full heading size, so the long line fits beside

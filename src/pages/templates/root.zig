@@ -1,9 +1,8 @@
 //! The game's **template shelf** — heavy, pre-styled compositions built on the `ui_client`
 //! foundation (elements + style) and themed from `res.view.theme` (the palette `ha.palette`
-//! installs). Mirrors
-//! `ui_client/features/`: this barrel re-exports one module per template. Game content
-//! (it reads `res.view.theme` art direction), so it lives under `pages/`, not on the `ha`
-//! library surface. Screen builders import it as `@import("./templates/root.zig")`.
+//! installs). Like `ui_client/features/`, this barrel re-exports one module per template. It
+//! is game content (it reads `res.view.theme` art direction), so it lives under `pages/`, not
+//! on the `ha` library surface. Screen builders import it as `@import("./templates/root.zig")`.
 
 const button_mod = @import("./button.zig");
 const panel_mod = @import("./panel.zig");

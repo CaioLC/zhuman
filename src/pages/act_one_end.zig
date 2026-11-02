@@ -1,11 +1,11 @@
 //! The Act I curtain (`src/pages/` game content): the UI's response to `ActEnded`. By the time
-//! it shows, the world has already crossed into Act II (`cross_curtain`); `build_ui` opens
+//! it shows, the world has crossed into Act II (`cross_curtain`); `build_ui` opens
 //! `CurtainState` on the fact, which pauses playback, so the world holds still while the player
-//! reads. While it is open `build_ui` routes here instead of to the play screen, which is also
-//! what makes the dialog's own button the only thing on the window a click can reach.
+//! reads. While it is open `build_ui` routes here instead of to the play screen, which also
+//! makes the dialog's own button the only thing on the window a click can reach.
 //!
-//! Two beats with a Continue between them: the roof first, then who it brought. The pause is
-//! the point — the arrival reads as news rather than as more reward text. The beat is
+//! Two beats with a Continue between them: the roof first, then who it brought. The pause
+//! makes the arrival read as news rather than as more reward text. The beat is
 //! `CurtainState.step`. The last beat's Continue dismisses the curtain, restoring the prior
 //! pause state, and the next frame routes to the Act II page over the live, migrated world.
 

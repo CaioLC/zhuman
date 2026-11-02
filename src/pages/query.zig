@@ -131,7 +131,7 @@ pub fn parse(text: []const u8) Query {
     return q;
 }
 
-/// The value alias fold applied at match time (currently just `built → owned`), so a query
+/// The value alias fold applied at match time (`built → owned`), so a query
 /// value is compared in canonical form. Kept here (not in the parser) because it is a *match*
 /// rule, not a tokenization rule.
 fn canonicalValue(v: []const u8) []const u8 {

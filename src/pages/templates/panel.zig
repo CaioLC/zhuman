@@ -19,7 +19,7 @@ pub fn panel(parent: El, id: []const u8, title: []const u8) !El {
     }, .{ Style{ .outline_ink = .line }, style.pad(12), style.gap(8) });
 
     const ttl = try outer.text("title", title);
-    // A panel title is the prototype's **eyebrow / section-heading** — 11px,
+    // A panel title is an **eyebrow / section heading** — 11px,
     // UPPERCASE, positive (loosened) tracking — not a body heading. The `eyebrow` role
     // carries the size + uppercase transform + in-band tracking; the theme `dim` color is
     // the panel's chrome. The caller passes a normal-case title (e.g. "Actions"); the role's

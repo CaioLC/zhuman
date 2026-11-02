@@ -1,9 +1,9 @@
 //! `fixture` — a **development-only deterministic fixture harness**. Where `debug_page` audits
 //! one *template* at a time against the prototype, this seeds one *named screen state* — a
 //! deterministic window size, game clock, catalogs, balances, and a seeded domain snapshot — and
-//! then renders it through the **production page** (`ui_playgame`). It is the entry point QA-07
-//! asks for: a reproducible way to reach "ACTIONS with a build running at the 760 width class" or
-//! "the trade dialog open against a present passerby" without playing the game to that state.
+//! then renders it through the **production page** (`ui_playgame`). It is a reproducible way to
+//! reach "ACTIONS with a build running at the 760 width class" or "the trade dialog open
+//! against a present passerby" without playing the game to that state.
 //!
 //! Reached by setting `HA_FIXTURE=<name>` before launch (`build_ui` routes here when it is set
 //! and non-empty); an unknown name lists the catalog and falls back to the first fixture. It is a
@@ -14,8 +14,8 @@
 //! `view.compute`, the game clock in days, the seed instructions), and `seed` applies it to a
 //! `World` + `Resources` with no window, so the catalog's determinism is unit-tested without a
 //! font. Only `build_fixture` touches the platform, by handing the seeded world to the real page
-//! builder — exactly as `main` does. Pixel rendering therefore stays out of the tested surface,
-//! matching QA-08's input/layout-vs-pixels split.
+//! builder — exactly as `main` does. Pixel rendering therefore stays out of the tested surface:
+//! the tests assert input and layout, not pixels.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -38,8 +38,7 @@ const run_sys = ha.sim.systems.run;
 const spawn_player = run_sys.spawn_player;
 
 /// The screen a fixture seeds the shell onto. Act I is the live survival page; `act_two` renders
-/// the Act II shared-shell catalogs (fixture-driven until the Act II simulation model is wired);
-/// `title` is the title screen with its attract loop pinned.
+/// the Act II shared-shell catalogs; `title` is the title screen with its attract loop pinned.
 pub const Screen = enum { act_one, act_two, gameover, act_one_end, title };
 
 /// The passerby's visit state a fixture wants reachable. `absent` leaves the market strip
@@ -113,9 +112,9 @@ pub const Spec = struct {
     /// Open on the first frame with the Household rail expanded, even on a focus view.
     holdings_open: bool = false,
     /// Press Tab this many times once the first frame has published the focus order, so the
-    /// capture shows a focus-visible control (QA-13).
+    /// capture shows a focus-visible control.
     tab_presses: u8 = 0,
-    /// Render under the reduced-motion policy, as `HA_REDUCED_MOTION=1` would (QA-13).
+    /// Render under the reduced-motion policy, as `HA_REDUCED_MOTION=1` would.
     reduced_motion: bool = false,
     /// Open on the first frame with the trade dialog showing (Act I needs `encounter = .present`).
     trade_open: bool = false,
@@ -270,8 +269,8 @@ const settlement_generator_balances = Balances{
 
 /// The fixture catalog, in a stable order. The first entry is the fallback for an unknown
 /// `HA_FIXTURE` value. Every value is deterministic, so each name reproduces the same screen
-/// state on every launch — the regression surface for the screenshot matrix (QA-10..13) and the
-/// seed state the keyboard journeys (QA-14/15) drive from.
+/// state on every launch — the regression surface for the screenshot matrix and the seed state
+/// the keyboard journeys drive from.
 pub const catalog = [_]Spec{
     .{
         .name = "act_one_default",
@@ -783,7 +782,7 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
         .market = .{ .group = 2, .pick_kind = 2, .pick = 0 },
     },
-    // --- QA-10: the Act I states the matrix was missing ---------------------------------
+    // --- Act I: query, building, Shelter, trade and working states ----------------------
     .{
         .name = "act_one_build_query",
         .about = "Act I BUILD searched for tools and sorted by time, quickest first.",
@@ -850,7 +849,7 @@ pub const catalog = [_]Spec{
         .working = "forage",
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
-    // --- QA-11: the Act II states the matrix was missing --------------------------------
+    // --- Act II: filtered, empty, trade, Exchange, stall and collapsed states -----------
     .{
         .name = "act_two_actions_filtered",
         .about = "Act II ACTIONS filtered to the verbs that yield food.",
@@ -1056,9 +1055,9 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
 }
 
 /// Bring every derived component up to date with a world a fixture set by hand, so the frame
-/// renders current data: `seed` runs after the schedule's writers (`pages.prepare`). A seeded state is set, not reached: the band is
-/// written through the condition rule without the `BandCrossed` its writer would emit, so the
-/// log does not word a fixture's vigor as hunger.
+/// renders current data: `seed` runs after the schedule's writers (`pages.prepare`). A seeded
+/// state is set, not reached: the band is written through the condition rule without the
+/// `BandCrossed` its writer would emit, so the log does not word a fixture's vigor as hunger.
 pub fn derive(res: *Resources, world: *World) void {
     var it = (ecs.Query(.{ comp.Vigor, comp.Condition }){ .world = world }).iter();
     while (it.next()) |entry| _ = ha.sim.rules.condition.refresh(&res.game.config, entry[0], entry[1]);

@@ -1,6 +1,6 @@
-//! `act_two/coin_merchant` — the Act II **Coin Merchant** (ACT2-14) on the shared trade dialog.
+//! `act_two/coin_merchant` — the Act II **Coin Merchant** on the shared trade dialog.
 //!
-//! The lots are the merchant's records (`sim.systems.merchant.lots`) priced in the stub Coin,
+//! The lots are the merchant's records (`sim.systems.merchant.lots`) priced in the stand-in Coin,
 //! with the stock left this visit from `Sim.merchant`; the balances are the settlement's live
 //! ledger and goods. A settlement is a `MerchantDeal` intent: the handler revalidates it and
 //! moves both sides, and the dialog reads the `Traded` fact back to flash the slip and keep the
@@ -129,7 +129,7 @@ pub fn coin_merchant(ctx: *UiCtx, world: *const World, e: Entity, id: []const u8
     const visit = try a.alloc(t.TradeDelta, @min(balances.len, ts.visit.len));
     for (visit, 0..) |*d, i| d.* = .{ .key = balances[i].key, .n = ts.visit[i] };
 
-    // A standing Exchange speaks through the same dialog under its own identity (ACT2-19); the
+    // A standing Exchange speaks through the same dialog under its own identity; the
     // merchant's kicker counts down its stay.
     const meta = if (standing) fx.exchange_meta else try a.print("MARKET OPEN {d:.1} DAYS", .{fx.merchantDaysLeft(ctx.res)});
     const res = try t.trade_dialog(ctx, id, if (standing) .exchange else .merchant, meta, book, visit, ts);

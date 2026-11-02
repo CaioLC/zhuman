@@ -136,8 +136,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     body.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = ha.tokens.gap.stack }, .{});
 
     // CSS counterpart: `.holdings-toggle` — a 24x26 box at the expanded panel's upper-right.
-    // Its chevron is independently centered in both axes; the old right-anchored bare text
-    // had neither the correct box nor a definite height against which to center.
+    // Its chevron is independently centered in both axes against the box's definite height.
     toggle.set(.{
         .anchor = .top_right,
         .offset = .{ .x = if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2 },

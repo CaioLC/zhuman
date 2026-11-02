@@ -1,5 +1,5 @@
 //! `trade_book` — the trade dialog's lots and the player's balances as numbers, and every state
-//! the dialog shows derived from them (`trade.html`'s derivation block): how many lots the
+//! the dialog shows derived from them: how many lots the
 //! player could take, what they are short, which of the three refusals applies, the short and
 //! long bundle notation, and the search. Pure: no nodes, no world. The page builds a `Book`
 //! from its venue (the passerby's quotes, the merchant's lots) and settles through its own

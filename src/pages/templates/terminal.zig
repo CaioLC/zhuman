@@ -7,7 +7,7 @@
 //!     a hairline border, its own `bg` fill, and **clipped** internals. The screen fills the
 //!     returned inner box, so nothing spills past the terminal edge.
 //!   - **Full-window** (≤760): the terminal *is* the window — no ground, no shadow, no border,
-//!     no cap — exactly the prototype's full-width mode. The returned box is the whole window.
+//!     no cap. The returned box is the whole window.
 //!
 //! The shell returns the **inner content box** (an `El`) for the screen to lay out into, plus
 //! the terminal rect it occupies, so a screen positions against the terminal, not the window.
@@ -18,7 +18,7 @@
 //! a screen passes a `ShellOptions` descriptor (act identity, responsive padding, and which
 //! optional regions it wants) and gets a `Regions` struct of `El` handles — always `header`
 //! and `body`, plus optional `rail`/`market`/`activity`/`footer` — laid out in the
-//! prototype's arrangement, so no screen hand-builds that graph. Overlay roots stay the
+//! one arrangement, so no screen hand-builds that graph. Overlay roots stay the
 //! screen's own top-layer roots, outside the clipped terminal box.
 
 const std = @import("std");
@@ -39,8 +39,7 @@ pub const Shell = struct {
 };
 
 /// Whether the page stacks (the full-window width classes, ≤760): the rail sits above the
-/// surface, every region takes its natural height, and the whole page scrolls as one, as the
-/// prototype's `@media (max-width: 760px)` lays it out.
+/// surface, every region takes its natural height, and the whole page scrolls as one.
 pub fn stacked(ctx: *UiCtx) bool {
     return !ctx.res.view.metrics.framed();
 }
@@ -98,7 +97,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
         root.set(.{ .anchor = .top_left, .overflow = .clip }, .{Style{ .fill = if (capped) ground else th.bg }});
         if (capped) {
             // A capped screen (the title's `min(700px, 100vh)`) sits at the top of the window
-            // on the ground, as the prototype's unframed `.title-screen` does.
+            // on the ground.
             const box = try root.div("terminal_box");
             _ = box.with_layout(.top_left)
                 .with_size_px(.{ .fixed = uic.view.dp(m.terminal.w, scale) }, .{ .fixed = uic.view.dp(opts.max_h, scale) })
@@ -122,7 +121,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
     const twh = uic.view.dp(capped_h, scale);
 
     // A soft drop shadow behind the terminal, placed before the box so it paints
-    // under it. Understated: the prototype's `0 16px 80px #000a`, in device px.
+    // under it. Understated (16px offset, soft blur), in device px.
     try uic.shadow.drop(root, id, tx, ty, tw, twh, .{
         .offset_y = uic.view.dp(16, scale),
         .blur = uic.view.dp(60, scale),
@@ -149,7 +148,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
 // responsive padding — instead of hand-building the header/page-grid/rail/main/footer graph.
 // One shell serves Act I and Act II: the always-present regions (`header`, `body`) plus the
 // optional ones (`rail`, `market`, `activity`, `footer`) are created only when the
-// descriptor asks, laid out in the prototype's arrangement:
+// descriptor asks, laid out in this arrangement:
 //
 //     ┌ content box (page padding, column, section gap) ──────────────┐
 //     │ header            (thin top strip: stocks · run context)      │
@@ -176,8 +175,7 @@ pub fn terminal_with(ctx: *UiCtx, id: []const u8, opts: TerminalOptions) !Shell 
 /// so the shell does not re-derive the width class.
 pub const ShellOptions = struct {
     id: []const u8,
-    /// The act this shell is for — future region descriptors branch on it; today it only
-    /// documents intent and is available to region content.
+    /// The act this shell is for; it documents intent and is available to region content.
     act: Act = .act_one,
     page_pad: f32,
     section_gap: f32,
@@ -236,7 +234,7 @@ fn footerBandHeight(page_pad: f32) f32 {
     return footer_height + page_pad;
 }
 
-/// Compose the prototype's interior rows into an existing definite-size box. Production
+/// Compose the interior rows into an existing definite-size box. Production
 /// `shell` uses the terminal content box; the debug shelf uses this seam to audit one complete
 /// 900×820 page without creating a second root or duplicating the region geometry.
 pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
@@ -297,10 +295,10 @@ pub fn shell_content(root: El, content: El, opts: ShellOptions) !Regions {
         .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
     }, .{});
 
-    // Footer: reserve its complete 86px frame plus bottom page margin in normal flow. The
-    // previous absolute child did not subtract itself from the growing grid, allowing workspace
-    // content to run underneath the log. The returned handle is the frame's 80px content lane;
-    // callers continue to render the authoritative live Log through `log_view`.
+    // Footer: its complete 86px frame plus bottom page margin is reserved in normal flow, so
+    // the growing grid subtracts it and workspace content cannot run underneath the log (an
+    // absolute child would not subtract itself). The returned handle is the frame's 80px
+    // content lane; callers render the live Log through `log_view`.
     const footer = if (opts.footer) try footer_band(content, opts.page_pad) else null;
 
     return .{

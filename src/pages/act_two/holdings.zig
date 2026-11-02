@@ -1,14 +1,13 @@
-//! `act_two/holdings` — Act II's content for the shared `holdings` rail template (ACT2-15):
-//! every good the settlement owns (Act I's carried across the curtain beside Act II's) with its
-//! short copy, the per-day FLOWS (an inflow reads `better`, a deficit `worse`, no flow `flat`), and the
-//! **population-relevant** BODY projections: how many live under one roof, how long the larder
-//! feeds them at the eating policy's rate, when water runs short at its flow, and the hall's
-//! vigor. No decorative durability/maintenance meters: those systems do not exist.
+//! `act_two/holdings` — Act II's content for the shared `holdings` rail template: every good
+//! the settlement owns (Act I's carried across the curtain beside Act II's) with its short
+//! copy, the per-day FLOWS (an inflow reads `better`, a deficit `worse`, no flow `flat`), and
+//! the **population-relevant** BODY projections: how many live under one roof, how long the
+//! larder feeds them at the eating policy's rate, when water runs short at its flow, and the
+//! hall's vigor.
 //!
 //! The roster, the stocks, the vigor and the eating rate are live; the population is
-//! `Sim.population`'s stand-in, and the flows and the per-person ration come from
-//! `fixtures.zig`, until a population and production model compute them. Pure projection into
-//! the frame arena; no nodes.
+//! `Sim.population`'s stand-in, and the flows and the per-person ration are stand-ins from
+//! `fixtures.zig`. Pure projection into the frame arena; no nodes.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -90,7 +89,7 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
     } else {
         try body.append(a, .{ .key = "water", .prefix = "Water ", .value = "holds", .suffix = ".", .tone = .good });
     }
-    // The hall's vigor reads the household's condition until each person carries their own.
+    // The hall's vigor reads the household's condition (a stand-in for per-person vigor).
     if (world.get(e, comp.Condition)) |c| {
         const cond = c.band;
         try body.append(a, .{ .key = "vigor", .prefix = "Vigor across the hall: ", .value = switch (cond) {
@@ -115,7 +114,7 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
 }
 
 test "the larder runway follows the people and the eating rate" {
-    // The prototype's numbers: 23 food feeds 7 people 10.3 days at the normal ration.
+    // 23 food feeds 7 people 10.3 days at the normal ration.
     try std.testing.expectApproxEqAbs(@as(f32, 10.27), larderDays(23, 7, 1).?, 0.01);
     // A lavish ration (2x) halves it; a meager one (0.5x) doubles it.
     try std.testing.expectApproxEqAbs(larderDays(23, 7, 1).? / 2, larderDays(23, 7, 2).?, 0.001);

@@ -4,7 +4,7 @@
 //! (`el.text`) plus style/placement composed via the fluent `El` handle. It owns none of
 //! that machinery; it just arranges it and picks the colors from `res.view.theme` + interaction.
 //!
-//! The caller's `enabled` value remains authoritative and is published as `.disabled`;
+//! The caller's `enabled` value is authoritative and is published as `.disabled`;
 //! chrome is dim when disabled, accent on hover/held, otherwise fg. Returns the outer
 //! `El`; callers still enforce their domain gate when acting on `.query().clicked`.
 
@@ -22,9 +22,9 @@ pub fn button(parent: El, id: []const u8, label: []const u8, enabled: bool) !El 
     return button_variant(parent, id, label, enabled, .primary);
 }
 
-/// The prototype's three action buttons: `.primary-action` (fg outline), `.secondary-action`
-/// (line2 outline, dim label) and `.danger-action` (danger outline and label); `.back` is
-/// `.panel-back`, a small tracked label on a line2 outline. All turn accent on hover/focus.
+/// The button variants: `primary` (fg outline), `secondary` (line2 outline, dim label),
+/// `danger` (danger outline and label) and `back` (a small tracked label on a line2 outline).
+/// All turn accent on hover/focus.
 pub const Variant = enum { primary, secondary, danger, back };
 
 /// A variant's chrome: the box outline and the label ink, each the variant's rest role with
@@ -52,7 +52,7 @@ pub fn button_variant(parent: El, id: []const u8, label: []const u8, enabled: bo
     // No content of its own — just the outline chrome.
     const outer = try parent.box(id, .{ .flow = .{ .dir = .row }, .w = .fit_children, .h = .fit_children }, .{});
 
-    // The whole box is the control; its authority remains the caller's `enabled`. The lifecycle
+    // The whole box is the control; its authority is the caller's `enabled`. The lifecycle
     // (focus, activation, disabled consumption, state and semantics, cursor) is one call.
     _ = outer.control(.{ .enabled = enabled, .name = label, .role = .button, .ring = false });
 

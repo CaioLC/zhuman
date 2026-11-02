@@ -5,7 +5,7 @@
 //! counterparty's own valuation. YOUR STALL posts sells and buys at the player's own prices,
 //! and each post says how many would take it.
 //!
-//! The neighbours are `ha.sim.rules.neighbours` (a stub until the population and market model exist);
+//! The neighbours are `ha.sim.rules.neighbours` (a stand-in, `docs/roadmap.md`);
 //! the player's holdings arrive as numbers. The view edits the player's posts on the neighbour
 //! book and reports a proposed deal the neighbour accepts, which the page writes as a
 //! `NeighbourDeal` intent; the handler settles both sides.
@@ -825,7 +825,7 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
         }
     }
 
-    // The head's count line, now the rows are known.
+    // The head's count line, set once the rows are known.
     const sub = if (st.stall)
         try a.print("{d} item{s} \u{00b7} {s}", .{ total, if (total == 1) "" else "s", if (st.side == 0) "your inventory" else "offered by neighbours" })
     else

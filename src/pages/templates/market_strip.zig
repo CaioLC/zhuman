@@ -40,7 +40,7 @@ pub const MarketIdentity = struct {
     tone: Tone,
 };
 
-/// Prototype border-box geometry: 12px copy in a 32px dashed strip, with 7px vertical and
+/// Border-box geometry: 12px copy in a 32px dashed strip, with 7px vertical and
 /// 9px horizontal insets and 10px between the three columns.
 const market_h: f32 = 32;
 const market_pad_x: f32 = 9;
@@ -131,7 +131,7 @@ pub const ActivityIdentity = struct {
     tone: Tone,
 };
 
-/// The **identity map** (pure, tested): exact prototype signal and semantic tone per state.
+/// The **identity map** (pure, tested): signal and semantic tone per state.
 pub fn activityIdentity(state: ActivityState) ActivityIdentity {
     return switch (state) {
         .idle => .{ .signal = "\u{25CB} IDLING", .tone = .dim },
@@ -152,8 +152,8 @@ pub fn activity_strip(parent: El, id: []const u8, state: ActivityState, subject:
         .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = market_h }, .overflow = .clip,
     }, .{Style{ .outline_ink = .line2, .outline_width = 1, .outline_style = .dashed }});
 
-    // Every visible field is 12px. Center their boxes rather than mixing direct-text and
-    // wrapper baselines, the same correction used by market_strip.
+    // Every visible field is 12px. Their boxes are centered rather than mixing direct-text and
+    // wrapper baselines, as in market_strip.
     const content = try strip.box("content", .{
         .anchor = .center, .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
         .flow = .{ .dir = .row, .cross = .center },
@@ -227,7 +227,7 @@ test "activity identity map mirrors prototype signal and tone" {
     try std.testing.expectEqualStrings("\u{25A0} BUILDING", building.signal);
     try std.testing.expectEqual(Tone.warn, building.tone);
 
-    // Activity and market are the same shared prototype strip box.
+    // Activity and market share one strip box.
     try std.testing.expectEqual(@as(f32, 32), market_h);
     try std.testing.expectEqual(@as(f32, 9), market_pad_x);
     try std.testing.expectEqual(@as(f32, 10), market_gap);

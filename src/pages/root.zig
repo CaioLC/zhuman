@@ -54,8 +54,8 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
         ui_ctx.res.view.scale = m.dpi_scale;
     }
     // Every page returns its roots in draw order (a dialog's root after the shell it covers).
-    // The game is the normal route. The template audit harness remains available as an explicit
-    // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
+    // The game is the normal route. The template audit harness is an explicit developer
+    // opt-in via a truthy `HA_DEBUG_PAGE` value.
     if (debugRequested(ui_ctx.res)) {
         ui_ctx.res.route = .game;
         // The harness samples the live player, so it begins a run if none has begun.
@@ -70,7 +70,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, try fixture.build_fixture(ui_ctx, world, name));
 
     // The curtain is the UI's response to `ActEnded`, heard with its own cursor. The world has
-    // already crossed into the next act; the curtain holds it still while the player reads.
+    // crossed into the next act; the curtain holds it still while the player reads.
     var ended = ui_ctx.res.game.events.readerAt(ha.sim.events.ActEnded, &ui_ctx.res.curtain.heard);
     while (ended.next()) |fact| if (fact.act == .act_one) ui_ctx.res.curtain.show(&ui_ctx.res.playback);
 
@@ -105,7 +105,7 @@ fn session(ctx: *uic.UiCtx) t.MenuSession {
     return .{
         .act = act,
         .day = 1 + @as(u64, @intFromFloat(ctx.res.game.sim.elapsed / ctx.res.game.config.secs_per_day)),
-        // Population has no model yet (ACT2-01): Act II reads the stand-in.
+        // Population is a stand-in: Act II reads `Sim.population`.
         .people = if (act >= 2) @intFromFloat(ctx.res.game.sim.population) else 1,
     };
 }

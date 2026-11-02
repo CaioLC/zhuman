@@ -10,7 +10,7 @@ const Style = style.Style;
 const UiCtx = uic.UiCtx;
 const El = el.El;
 
-/// The trade dialog width — the prototype's `.terminal-dialog` (760px).
+/// The trade dialog's width (760px).
 pub const default_width: f32 = 760;
 
 pub const Modal = struct {
@@ -63,8 +63,8 @@ pub const Outcome = struct {
 };
 
 /// The dialog's end-of-build step. Consumes all activation inside the dialog, then folds the
-/// caller's explicit close with Escape into one outcome. A click on the backdrop does nothing,
-/// as with the prototypes' `<dialog>`: the scrim only blocks what it covers. Focus policy
+/// caller's explicit close with Escape into one outcome. A click on the backdrop does nothing:
+/// the scrim only blocks what it covers. Focus policy
 /// lives here too: on the frame the dialog opens, focus goes to `initial_focus`, and on the
 /// frame it closes, back to the opener. The closing frame also forgets the shell's open edge,
 /// so a dialog that reopens next frame is a fresh open (initial focus, a new opener), not a

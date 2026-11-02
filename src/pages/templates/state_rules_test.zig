@@ -1,14 +1,14 @@
-//! Control-state looks pinned against the ternaries they replaced. A screenshot shows only the
+//! Control-state looks pinned against reference ternaries. A screenshot shows only the
 //! resting state, so each template's named look (`Style` with `on` rules) is resolved here
 //! against a control owner whose published bits run through every combination the template can
 //! publish: held, hovering, focus (none, a click's focus, visible focus), and the site's
-//! `disabled`/`selected`/`checked` facts. Each `old*` function is the `if` chain the template
-//! used before its look was a rule, so a resolved colour that differs from it is a pixel that
-//! moved. The look tables keyed by a game state (the action tile's, the BUILD row's, the
-//! milestone's) are pinned the same way, each state against its old chain, with the control
-//! disabled where the state is not actionable.
+//! `disabled`/`selected`/`checked` facts. Each `old*` function is the reference `if` chain for
+//! a template's look, so a resolved colour that differs from it is a pixel that moved. The
+//! look tables keyed by a game state (the action tile's, the BUILD row's, the milestone's) are
+//! pinned the same way, each state against its reference chain, with the control disabled
+//! where the state is not actionable.
 //!
-//! The scroll thumb's fill stays a ternary on `ScrollState.dragging`; the replay tests at the end
+//! The scroll thumb's fill is a ternary on `ScrollState.dragging`; the replay tests at the end
 //! record why. The thumb sits beside its viewport, not inside it, so on its own a rule on it has
 //! no control to read, and nested in an overflowing scroll view the nearest control is the
 //! enclosing viewport, held by any press inside it.
@@ -166,10 +166,10 @@ const Rig = struct {
     }
 };
 
-// ---- the old ternaries, as the templates wrote them -----------------------------------------
-// `hot`/`hover_focus` are the predicates the old code called on the interaction `control()`
-// returned. Sites whose old look was already a rule (`.on = hot → acc` beside a ternary rest)
-// read it as the rules did: a disabled owner is never hot.
+// ---- the reference ternaries, per template ---------------------------------------------------
+// `hot`/`hover_focus` are the predicates the chains call on the interaction `control()`
+// returned. Sites whose look is a rule (`.on = hot → acc` beside a ternary rest) read it as
+// the rules do: a disabled owner is never hot.
 
 fn OldButton(comptime variant: button.Variant) type {
     return struct {
@@ -338,8 +338,8 @@ fn oldSortLabel(f: Facts, q: Interaction) Want {
     return .{ .text = if (!q.disabled and q.hot()) .acc else if (f.on) .fg else .line2 };
 }
 
-// ---- the old game-state chains -----------------------------------------------------------------
-// These looks are keyed by a game state (a look table); the chains below picked the same colours
+// ---- the reference game-state chains -----------------------------------------------------------
+// These looks are keyed by a game state (a look table); the chains below pick the same colours
 // from the template's facts and the interaction `control()` returned.
 
 fn OldTile(comptime can: bool, comptime running: bool) type {

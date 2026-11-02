@@ -405,8 +405,8 @@ pub fn build_list(parent: El, world: *const World, e: Entity, id: []const u8, sh
         // Keyed by the recipe's id, not its sorted position, so a row's focus and state follow
         // the recipe through a re-sort or a filter change.
         const r = try capital_row(rows, world, e, set, ent.rec, ent.q, ent.kind);
-        // The lifecycle is the simulation's. A ready/owned click writes `BeginBuild`; the
-        // cancel corner writes `CancelBuild`, the refund path. No UI timers.
+        // A ready/owned click writes `BeginBuild`; the cancel corner writes `CancelBuild`, the
+        // refund path. The lifecycle is the simulation's.
         if (r.clicked_build) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = ent.gi });
         if (r.clicked_cancel) _ = ctx.res.game.events.writer(ha.sim.events.CancelBuild).push(.{ .agent = e });
     }
@@ -463,7 +463,7 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     };
 
     // The compact bar and expanded requirement row read the same authoritative checks. Values
-    // are separate strings so the shared card can color each met/unmet output like the HTML.
+    // are separate strings so the shared card can color each met/unmet output.
     const vigor_met = vigor.v >= u.vigor_abs;
     const food_met = food >= u.food;
     const recipes_met = kinds >= u.goods;
@@ -646,7 +646,7 @@ test "sortEntries: STATE groups by state (ready, reach, owned, blocked, locked) 
     defer cat.deinit();
     const e = settler(&w, &cat, 14, 0);
     // Own a firepit and a spring well, so the shelf carries owned rows beside ready, in-reach
-    // and research-gated ones — the mix a reach-only sort used to interleave.
+    // and research-gated ones: the STATE sort must group them, not interleave by reach.
     w.get(e, comp.Goods).?.count[cat.goodIndex("firepit").?] = 1;
     w.get(e, comp.Goods).?.count[cat.goodIndex("spring_well").?] = 1;
     requote(&w, e, &cat);

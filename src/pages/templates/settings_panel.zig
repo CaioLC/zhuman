@@ -4,8 +4,8 @@
 //! percentage), and an optional note under it (`.setting-note`).
 //!
 //! The panel edits `Settings` in place and reports what changed; the caller applies a change
-//! the host owns (the window). Difficulty, the volumes and contrast are held only (roadmap
-//! PORT-03): the panel shows them exactly as the prototype does.
+//! the host owns (the window). Difficulty, the volumes and contrast are held only
+//! (`docs/roadmap.md`): the panel shows them exactly as the prototype does.
 
 const std = @import("std");
 const ha = @import("ha");

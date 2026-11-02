@@ -4,8 +4,8 @@
 const std = @import("std");
 
 /// A small resource amount for a price/cost segment (energy/materials): one decimal only when
-/// fractional, so `1.7` renders `1.7` but `2.0` renders `2` and `2.5` renders `2.5` — the
-/// the ACTIONS metric style. Rounds to a tenth to avoid float noise.
+/// fractional, so `1.7` renders `1.7` but `2.0` renders `2` and `2.5` renders `2.5`: the
+/// ACTIONS metric style. Rounds to a tenth to avoid float noise.
 pub fn fmt_amount(buf: []u8, n: f32) []const u8 {
     const tenths = @round(n * 10);
     if (@mod(tenths, 10) == 0) return std.mem.print(buf, "{d:.0}", .{tenths / 10}) catch "?";

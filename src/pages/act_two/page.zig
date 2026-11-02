@@ -1,4 +1,4 @@
-//! `act_two/page` — the Act II **shared-shell instantiation** (ACT2-10) and the composition
+//! `act_two/page` — the Act II **shared-shell instantiation** and the composition
 //! root for the Act II catalogs.
 //!
 //! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, WA, FU,
@@ -11,9 +11,8 @@
 //!
 //! The page reads the player. Its stocks fill the stockline, its goods the holdings, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
-//! catalog, and write the labor and build intents as Act I does. What no
-//! system models yet — population, coin, the energy rate, flows and body projections — comes
-//! from `fixtures.zig`.
+//! catalog, and write the labor and build intents as Act I does. What no system models
+//! (population, coin, the energy rate, flows and body projections) comes from `fixtures.zig`.
 //!
 //! Each catalog view owns a persistent `CatalogState`, search editor and scroll offset on an
 //! always-built owner node, so switching views keeps each view's query, sort and position where
@@ -119,7 +118,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     const page = try t.act_page(ctx, .{ .id = "act2", .act = .act_two, .rail = true });
     const regions = page.regions;
     // --- header: PO..CO, then the runline (energy rate, Act II, day) -------------------------
-    // Vigor and the six stocks are the player's; population and coin have no model yet.
+    // Vigor and the six stocks are the player's; population and coin are stand-ins.
     var stocks: [2 + 1 + ledger_stocks.len]t.Stock = undefined;
     var n: usize = 0;
     stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx), .max = fx.capacityOf(population(ctx)) };
@@ -208,7 +207,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
             var shelf = build_shelf;
             var raised = false;
             shelf.goal = try exchangeGoal(ctx, world, e);
-            // The card opens its details once, the frame the raise is read back (ACT2-18).
+            // The card opens its details once, the frame the raise is read back.
             var stood = false;
             const heard = ctx.res.game.events.readerAt(ha.sim.events.ExchangeRaised, &trade_owner.state(uic.UiState.ViewMemory).heard);
             while (heard.next()) |f| stood = stood or f.agent == e;
@@ -252,7 +251,7 @@ const neighbours = ha.sim.systems.neighbours;
 
 const exchange = ha.sim.systems.exchange;
 
-/// The settlement's population: the stand-in until the population model exists (ACT2-01).
+/// The settlement's population: a stand-in (`docs/roadmap.md`).
 fn population(ctx: *UiCtx) f32 {
     return ctx.res.game.sim.population;
 }
@@ -353,7 +352,7 @@ fn researchView(ctx: *UiCtx, world: *const World, e: Entity, s: t.ActSurface, se
     _ = ctx.res.game.events.writer(ha.sim.events.Research).push(.{ .agent = e, .ti = @intCast(idx) });
 }
 
-/// MARKET: the neighbours view over the stub neighbour book; a deal the neighbour accepts is a
+/// MARKET: the neighbours view over the stand-in neighbour book; a deal the neighbour accepts is a
 /// `NeighbourDeal` intent, which the handler settles on both sides.
 fn market(ctx: *UiCtx, world: *const World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
     const m = &ctx.res.game.sim.neighbours;

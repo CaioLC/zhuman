@@ -1,9 +1,5 @@
-//! `capital_row` — one buildable good as a **row**, replacing the tile.
-//!
-//! A tile held two short strings, which is why its consequence column decayed into
-//! notation. A row holds a sentence, a reach meter, a verb and a corner — and it is the
-//! shape that lets a build in progress keep its place in the list instead of becoming a
-//! 3px underbar on a dim box.
+//! `capital_row` — one buildable good as a **row**: a sentence, a reach meter, a verb and a
+//! corner, which lets a build in progress keep its place in the list.
 //!
 //! Six columns, shared by the header and every row as one set of grid tracks
 //! (`tableTracks`), so every row's fields line up down the list. The last two carry the
@@ -256,7 +252,7 @@ pub fn capital_header(parent: El, id: []const u8, set: *uic.TrackSet, sort: ?Hea
     return .{ .el = header, .clicked = clicked };
 }
 
-/// What a row is showing, which is the one thing the flat grey never said. `busy` is a recipe
+/// What a row is showing. `busy` is a recipe
 /// whose order is on hand but whose builder's hands are taken by other work.
 pub const Kind = enum { ready, busy, reach, building, blocked, locked, owned };
 
@@ -640,8 +636,8 @@ fn clampedTable(spec: []const uic.Track, surface_w: f32) f32 {
     return std.math.clamp(surface_w - scroll_gutter, ext.min, ext.max);
 }
 
-/// The lane widths and table width the BUILD table had before it laid out by tracks
-/// (`capital_row.fitted` and `tableWidth`, restated as the oracle): framed the act's widths;
+/// The oracle for the BUILD table's lane widths and table width, independent of the tracks:
+/// framed the act's widths;
 /// stacked, the excess over the surface out of WHAT CHANGES (if shown), then the recipe name,
 /// then the order, each to its floor. Hidden lanes are 0, as their tracks are.
 fn oldFitted(lw: Widths, shown: [columns.len]bool, stacked: bool, surface_w: f32) struct { lanes: [columns.len]f32, table: f32 } {
