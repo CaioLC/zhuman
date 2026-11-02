@@ -71,7 +71,7 @@ the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this 
 `res.game.events` rather than calling a rule that writes, and read the outcome in the world next frame. The UI build holds `*const World`: a page or template reads components and writes intents, and only the fixture harness, before the build, holds a mutable world (`pages.prepare`).
 
 ```
-src/sim/                     the simulation: state.zig and schedule.zig (the run's states and the systems each runs, in order), systems/, rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)
+src/sim/                     the simulation: state.zig and schedule.zig (the run's states and the systems each runs, in order), systems/, rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration, save)
 src/sim/ecs.zig              the ECS instantiated over this game's components, tags, sim.Resources
 src/sim/res.zig              sim.Resources: what a system may reach, embedded in the host Resources as `game`
 src/ecs/                     the ECS engine — imports nothing from the game

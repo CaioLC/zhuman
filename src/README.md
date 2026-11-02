@@ -93,7 +93,8 @@ deciders are meant to feed the same options.
 
 `App` owns all state. `App.init` does SDL and window setup only; `App.setup` runs once after
 `App` is stable on the stack — font, `Resources`, the ECS `World` (its storages allocated from
-the app's allocator, empty until a `NewRun` begins a run), the per-frame arena, and the `UiCtx` (safe here because internal pointers are
+the app's allocator, empty until a `NewRun` or a load begins a run), the saves folder (see
+*Saves*), the per-frame arena, and the `UiCtx` (safe here because internal pointers are
 taken after the struct's address is fixed). `main.zig` owns `App`, the event loop and the one
 call to the schedule; the screens live in `pages/`.
 
@@ -116,8 +117,9 @@ Each frame:
    only SDL quit/terminating exits the process.
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
-3. **Update** — host `real_dt` advances roster watching and the tween registry. `Playback`
-   derives simulation `time.dt` at pause/1×/2×/3×. Then one call,
+3. **Update** — host `real_dt` advances roster watching and the tween registry, and a save or
+   load the last build asked for is applied (see *Saves*). `Playback` derives simulation
+   `time.dt` at pause/1×/2×/3×. Then one call,
    `sim.schedule.tick(&world, &res.game)`, runs the simulation (see *The states and the
    schedule*). Then `pages.prepare(&ui, &world)`: with `HA_FIXTURE` set, the fixture harness
    seeds the world here, after the tick and before the build, so the seed is what renders;
@@ -574,6 +576,43 @@ longer hold takes its count and any work on it with it, and every agent resettle
 larder. Rows that repeat are keyed by the record's id, so focus survives a reload that reorders
 a file.
 
+## Saves (`sim/data/save.zig`)
+
+A run is the world, `Sim` and the state, and a save holds those three as one ZON file, written
+by `std.zon.stringify` and read by `std.zon.parse`. Each live entity is one record, in entity
+order; entity ids are not saved, and a load spawns fresh ones into a cleared world
+(`World.clear`). Plain components are saved as they are. The components kept by catalog index
+(`Goods`, `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's ids, so a
+save survives a roster edit: a load resolves each id against the roster it finds, drops and
+counts a record whose id is gone (a `Busy` on one is dropped whole), opens a technology new to
+the roster at its authored initial, and resettles each agent's body and larder through
+`effects.apply`, which changes nothing on an unchanged roster. `Quotes` is derived, so a save
+says only that an agent carries it; the `quotes` writer refills it on the load frame's tick,
+before the build. `Label` is not saved. A component the module does not name, a tag that carries
+data, or a field of `Sim` it does not name is a compile error. `Sim` is saved field by field: the
+prng's state is kept, so the run's luck carries over as it does across `Sim.reset`; the reach
+seen-set as good ids; the log as its lines, oldest first, pushed back in order with each line's
+own time, and its count of lines ever pushed.
+
+`version` guards the shape: `read` parses the version alone first and refuses any other
+(`error.UnknownVersion`). The encounter and the merchant's visit are saved as they are, and
+their arrays index tables in code rather than the roster, so a change to those tables is a
+change of version. A write goes to a temporary file renamed over the slot
+(`std.Io.Dir.createFileAtomic`), so a failed write leaves the slot as it was.
+
+The host's side is `Resources.saves` (`res.zig`): the saves folder, SDL's per-user preference
+path for the game (`%APPDATA%\human_action\` on Windows) opened in `App.setup`; three slot
+files, `slot1.zon` to `slot3.zon`, read into the slot list by `refresh` (a missing file is an
+empty slot, an unreadable one or one of another version an empty slot and a warning); and
+`request`, a save or a load that a slot click in the session menu or the title's Continue (the
+filled slot with the latest day) sets. The host applies it between frames, after the roster
+watch and before the tick. A save needs `save.canSave` (the run is in an act with no transition
+pending) and the curtain closed, and leaves its outcome as the menu's flash. A load writes the
+state directly, never through `States.set`, whose transition into Act I would begin a new run;
+then the host routes to the game with the menu and the curtain closed and the simulation paused,
+forgets the log lines already announced (`log_heard`), and logs the load and any records it
+dropped. With no saves folder every slot is disabled and the game runs without saving.
+
 ## Shared text and search
 
 `query.zig` is the one catalog query parser. It tokenizes a search string once into a bounded
@@ -599,7 +638,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 | File | Holds |
 |---|---|
-| `main.zig` | `App`, the event loop, and the frame's one `sim.schedule.tick` |
+| `main.zig` | `App`, the event loop, the saves folder and the save or load a request asks for, and the frame's one `sim.schedule.tick` |
 | `root.zig` | the `ha` library root: re-exports `sdl`, `ui`, `ui_client`, `UiCtx`, `font`, `palette`, `tokens`, `res` (the host resources) and `sim` (the simulation root) |
 | `test_ui.zig` | the test root of the UI layer alone (engine + host binding, no game content) |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
@@ -666,13 +705,14 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `dist.zig` | the distribution engine (normal / poisson / uniform / exponential / fixed) + `stats` for the p10–p90 band, and `kindLabel` for the glyphs' spoken names |
 | `hex.zig` | pointy-top axial hex topology: coordinates, rings, neighbours, wedges and classification. Pure; imports only `std` |
 
-`sim/data/` holds the authored roster and its lifecycle: the loader, the live reload, the cross-act migration.
+`sim/data/` holds the authored roster and its lifecycle: the loader, the live reload, the cross-act migration, and the save.
 
 | File | Holds |
 |---|---|
 | `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
 | `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
 | `migration.zig` | the Act I → II curtain, run by `cross_curtain`: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
+| `save.zig` | a run as a ZON file: `capture`/`apply` between the world, `Sim`, the state and the `Save` shape, `write`/`read` through a caller's directory, `summary`/`peek` for a slot, `canSave` |
 
 `pages/` is game content: the screens, the template shelf, and the helpers only a page or a template reads.
 
