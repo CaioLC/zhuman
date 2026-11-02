@@ -172,7 +172,8 @@ fn held(w: *World, e: Entity, res: *Resources, verb: []const u8) bool {
 }
 
 test "a buy moves both bundles atomically and decrements the satchel" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
@@ -205,7 +206,8 @@ test "a buy moves both bundles atomically and decrements the satchel" {
 }
 
 test "a sell releases the good, credits materials, and passes it to the passerby" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
@@ -237,7 +239,8 @@ test "a sell releases the good, credits materials, and passes it to the passerby
 }
 
 test "every refusal path rolls back — nothing moves" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
@@ -276,7 +279,8 @@ test "every refusal path rolls back — nothing moves" {
 }
 
 test "selling a good you do not own is refused, not a panic" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w); // owns no hand axe
@@ -293,7 +297,8 @@ test "selling a good you do not own is refused, not a panic" {
 }
 
 test "several lots scale both bundles linearly, decrement stock by lots, and tally the visit" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);

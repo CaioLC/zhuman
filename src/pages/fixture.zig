@@ -1224,29 +1224,25 @@ pub fn stateOf(spec: Spec) ha.sim.GameState {
 
 const testing = std.testing;
 
-/// A seeded fixture for the tests, on the heap: the `World` is megabytes of sparse sets, and
-/// copies of it on the test thread's stack overflow it. The caller frees it with `freeRig`.
+/// A seeded fixture for the tests. The caller frees it with `freeRig`.
 const Rig = struct { res: Resources, world: World, player: Entity };
 
-fn seedRig(spec: Spec) !*Rig {
-    const rig = try testing.allocator.create(Rig);
-    errdefer testing.allocator.destroy(rig);
-    rig.res = .{ .platform = undefined };
+fn seedRig(spec: Spec) !Rig {
+    var res: Resources = .{ .platform = undefined };
     // Load catalog for tests
     var diag: ha.sim.data.roster.Diagnostics = .{};
-    rig.res.game.catalog = try ha.sim.data.roster.load(testing.allocator, ha.sim.data.roster.shipped, &diag);
-    errdefer rig.res.game.catalog.deinit();
+    res.game.catalog = try ha.sim.data.roster.load(testing.allocator, ha.sim.data.roster.shipped, &diag);
+    errdefer res.game.catalog.deinit();
 
-    rig.world = World.init();
-    rig.player = spawn_player(&rig.world);
-    seed(&rig.res, &rig.world, rig.player, spec);
-    return rig;
+    var world = try World.init(testing.allocator);
+    const player = spawn_player(&world);
+    seed(&res, &world, player, spec);
+    return .{ .res = res, .world = world, .player = player };
 }
 
 fn freeRig(rig: *Rig) void {
     rig.world.deinit();
     rig.res.game.catalog.deinit();
-    testing.allocator.destroy(rig);
 }
 
 test "catalog names are unique and findable; an unknown name is null" {
@@ -1281,15 +1277,15 @@ test "the high-DPI fixture fixes the scale to 2 without changing the logical cla
 }
 
 test "seed pins the game clock to the start of the requested day" {
-    const rig = try seedRig(find("act_one_working").?); // day 19
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_one_working").?); // day 19
+    defer freeRig(&rig);
     const day = 1 + @as(u64, @intFromFloat(rig.res.game.sim.elapsed / rig.res.game.config.secs_per_day));
     try testing.expectEqual(@as(u64, 19), day);
 }
 
 test "seed writes the exact balances a fixture names and leaves others at baseline" {
-    const rig = try seedRig(find("act_one_working").?);
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_one_working").?);
+    defer freeRig(&rig);
     const e = rig.player;
 
     // Check that balances are set (exact values depend on catalog health bonuses)
@@ -1318,8 +1314,8 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
 }
 
 test "an Act II fixture seeds a settlement holding every verb of the act" {
-    const rig = try seedRig(find("act_two_actions").?);
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_two_actions").?);
+    defer freeRig(&rig);
     const e = rig.player;
     const cat = &rig.res.game.catalog;
     try testing.expect(ha.sim.data.migration.is_migrated(&rig.world, e));
@@ -1338,8 +1334,8 @@ test "the Act II build fixture opens on BUILD" {
 }
 
 test "the default fixture leaves the spawn baseline untouched" {
-    const rig = try seedRig(find("act_one_default").?);
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_one_default").?);
+    defer freeRig(&rig);
     const e = rig.player;
     // No balances named → rested spawn vigor (10/10), the thin larder, empty stockpile.
     try testing.expectEqual(ha.sim.baselines.vigor_ceiling, rig.world.get(e, comp.Vigor).?.v);
@@ -1354,8 +1350,8 @@ test "the default fixture leaves the spawn baseline untouched" {
 }
 
 test "the passerby fixture seeds a dealable encounter with a full satchel" {
-    const rig = try seedRig(find("act_one_passerby").?);
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_one_passerby").?);
+    defer freeRig(&rig);
     try testing.expect(rig.res.game.sim.encounter.dealable());
     const sched = market.Schedule{};
     try testing.expectEqual(sched.satchel[@backingInt(market.Ware.food)], rig.res.game.sim.encounter.stockOf(.food));
@@ -1363,8 +1359,8 @@ test "the passerby fixture seeds a dealable encounter with a full satchel" {
 }
 
 test "the low-stock fixture reaches a danger-toned scarcity state" {
-    const rig = try seedRig(find("act_one_low_stock").?);
-    defer freeRig(rig);
+    var rig = try seedRig(find("act_one_low_stock").?);
+    defer freeRig(&rig);
     const e = rig.player;
     const vigor = rig.world.get(e, comp.Vigor).?;
     // Weary/spent band and an empty larder — the danger tones the screenshot matrix wants.
@@ -1374,13 +1370,12 @@ test "the low-stock fixture reaches a danger-toned scarcity state" {
 }
 
 test "seeding is deterministic: the same spec yields identical state twice" {
-    // One rig at a time: a rig is megabytes (the `World`'s sparse sets).
     const Observed = struct { elapsed: f32, vigor: f32, biomass: f32 };
     const spec = find("act_one_working").?;
     var seen: [2]Observed = undefined;
     for (&seen) |*o| {
-        const rig = try seedRig(spec);
-        defer freeRig(rig);
+        var rig = try seedRig(spec);
+        defer freeRig(&rig);
         o.* = .{
             .elapsed = rig.res.game.sim.elapsed,
             .vigor = rig.world.get(rig.player, comp.Vigor).?.v,

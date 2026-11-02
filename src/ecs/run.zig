@@ -151,7 +151,8 @@ fn peek(w: *const TestWorld, q: query.Query(*const TestWorld, .{test_comps.Pos})
 }
 
 test "run binds the world, the resources, groups and queries from an arbitrary resources struct" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: TestRes = .{ .clock = .{ .dt = 0.5 } };
     run(&w, &res, spawnOne);
     run(&w, &res, move);
@@ -179,7 +180,8 @@ fn hear(tally: *Tally, r: TestEvents.Reader(test_events.Rang, .tally)) void {
 }
 
 test "run binds an event writer and reader from the store in the resources struct" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: EventRes = .{};
     res.events.update();
     run(&w, &res, ring);

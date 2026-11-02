@@ -467,7 +467,8 @@ fn heldVerb(w: *World, e: Entity, cat: *const Catalog, id: []const u8) bool {
 }
 
 test "build pays upfront and starts the work; finish owns the spear and grants the verb" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -497,7 +498,8 @@ test "build pays upfront and starts the work; finish owns the spear and grants t
 }
 
 test "begin refuses when unaffordable or busy; the quote says why" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -525,7 +527,8 @@ test "begin refuses when unaffordable or busy; the quote says why" {
 }
 
 test "a repeat build is stock: the count rises, the effect does not" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -563,7 +566,8 @@ test "a repeat build is stock: the count rises, the effect does not" {
 }
 
 test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -590,7 +594,8 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
 }
 
 test "a generator accumulates without moving resources and settles only when collected" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     res.time = .{ .dt = res.config.secs_per_day }; // one full day per tick
@@ -637,7 +642,8 @@ fn spawn_settler(w: *World, cat: *const Catalog) Entity {
 }
 
 test "the shelter is offered only once its standing conditions are met" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -666,7 +672,8 @@ test "each standing condition refuses the shelter on its own" {
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const shelter = cat.goodIndex("shelter").?;
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     // Too tired: below the absolute 15 current vigor refuses, regardless of the ceiling.
     {
         const e = spawn_settler(&w, cat);
@@ -703,7 +710,8 @@ test "each standing condition refuses the shelter on its own" {
 }
 
 test "a recipe that names a technology waits on the board" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res_over(.{
         .actions =
         \\.{ .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
@@ -737,7 +745,8 @@ test "a recipe that names a technology waits on the board" {
 }
 
 test "a good with no unlock has no standing conditions, and a traded good has no quote" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -748,7 +757,8 @@ test "a good with no unlock has no standing conditions, and a traded good has no
 }
 
 test "cancel salvages half the build order, frees the body, and grants nothing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -772,7 +782,8 @@ test "cancel salvages half the build order, frees the body, and grants nothing" 
 }
 
 test "cancel refuses on labor, and on an idle body" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_test_agent(&w, 5);
@@ -786,7 +797,8 @@ test "cancel refuses on labor, and on an idle body" {
 }
 
 test "a bought tool supersedes the built one; selling it restores the next-best rank" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;

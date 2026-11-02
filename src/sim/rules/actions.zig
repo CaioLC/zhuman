@@ -270,7 +270,8 @@ fn settle_condition(w: *World, e: Entity) void {
 }
 
 test "begin pays upfront and starts the work; finish deposits and logs the receipt" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     // 0 materials on purpose: a zero-input action must act at stock 0.
@@ -302,7 +303,8 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
 }
 
 test "quote: not held, then short, ready, energy, weary quality, busy" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -342,7 +344,8 @@ test "yield_factor: two stable levels split at the WEARY threshold" {
 }
 
 test "begin warns once when its own toll crosses into weakness, and locks pre-pay quality" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_agent(&w, 4, 0); // 40% — paying 1.7 lands at 23%, across the WEARY line
@@ -357,7 +360,8 @@ test "begin warns once when its own toll crosses into weakness, and locks pre-pa
 }
 
 test "begin refuses when energy would hit zero, leaving no trace" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_agent(&w, 1.7, 0); // exactly the price — strict gate must refuse
@@ -373,7 +377,8 @@ test "begin refuses when energy would hit zero, leaving no trace" {
 }
 
 test "an input is paid at begin and named in the payment line" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_agent(&w, 10, 3);
@@ -386,7 +391,8 @@ test "an input is paid at begin and named in the payment line" {
 }
 
 test "a verb lost mid-task finishes as nothing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_agent(&w, 10, 0);
@@ -414,7 +420,8 @@ test "the receipt names what landed, in line order" {
 }
 
 test "a verb that names a technology is held once that technology is researched" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, .{
         .actions =
         \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }

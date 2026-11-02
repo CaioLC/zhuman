@@ -197,7 +197,8 @@ fn logged(w: *World, res: *Resources) void {
 }
 
 test "resolve_busy ticks the work and resolves it exactly once, at completion" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
@@ -229,7 +230,8 @@ test "resolve_busy ticks the work and resolves it exactly once, at completion" {
 }
 
 test "metabolize eats continuously, converting food to vigor (clamped at max)" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.time.dt = res.config.secs_per_day; // one full day per tick
     const e = w.spawn(.{
@@ -246,7 +248,8 @@ test "metabolize eats continuously, converting food to vigor (clamped at max)" {
 }
 
 test "metabolize at feast burns the larder dry and logs the crossing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.time.dt = res.config.secs_per_day;
     const e = w.spawn(.{
@@ -263,7 +266,8 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
 }
 
 test "metabolize starves vigor down on an empty larder; the condition writer logs the thresholds" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.time.dt = res.config.secs_per_day;
     const e = w.spawn(.{
@@ -287,7 +291,8 @@ test "metabolize starves vigor down on an empty larder; the condition writer log
 }
 
 test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms if the prereq goes away" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
@@ -326,7 +331,8 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
 }
 
 test "track_reach announces this act's recipes only" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = test_res(0);
     res.catalog = try roster.load(std.testing.allocator, .{
         .actions =

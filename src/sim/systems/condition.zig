@@ -32,7 +32,8 @@ pub fn condition(
 const testing = std.testing;
 
 test "condition writes the band and reports the crossing once; a second run changes nothing" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     const e = w.spawn(.{ comp.Vigor{ .v = 3, .max = 10 }, comp.Condition{} });

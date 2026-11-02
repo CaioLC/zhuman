@@ -17,6 +17,7 @@ them. `tools/boundary_check.sh` (tier 3) holds it to that. A host adds the modul
 
 ```zig
 World(comptime comps: type, comptime tags: type) type
+  .init(allocator: std.mem.Allocator) error{OutOfMemory}!World    .deinit()
 Entity = u32
 MAX_ENTITIES: u32 = 1024
 SparseSet(comptime T: type) type
@@ -26,9 +27,18 @@ SparseSet(comptime T: type) type
 Every public declaration there must be a type; anything else is a compile error naming it. The
 two namespaces differ only in intent: a tag is a zero-sized marker.
 
+The storages live on the heap: `init` allocates the two structs that hold them, one for the
+components and one for the tags, and `deinit` frees both. A `SparseSet` holds its arrays inline
+for `MAX_ENTITIES`, so a world's footprint is fixed at `init` and `spawn` and `add` cannot fail.
+A `World` value is a handle onto its storages, so a copy of it shares them: a world is
+initialized once, passed by pointer, and `deinit`ed once. Because the world reaches its
+storages through a pointer, a `*const World` does not make them const by itself: every accessor
+that takes the world as `anytype` names its return type through `Ref`, and that is what yields
+`*const` through `*const World`.
+
 | Method | Does |
 |---|---|
-| `init() World` / `deinit(*World)` | an empty world; nothing to free |
+| `init(allocator) !World` / `deinit(*World)` | an empty world, its storages allocated / freed |
 | `spawn(*World, bundle) Entity` | a tuple of component *instances* and bare *tag types* |
 | `add(*World, e, value)` | the value's storage |
 | `get(self: anytype, e, T)` | `?*T` through `*World`, `?*const T` through `*const World` |

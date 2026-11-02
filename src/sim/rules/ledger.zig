@@ -171,7 +171,8 @@ fn fixture() !Catalog {
 }
 
 test "a resource line reads and moves the inventory component; a missing stock holds nothing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = w.spawn(.{ comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 2 } });
     try testing.expectEqual(@as(f32, 3), balance(&w, e, .food));
     try testing.expectEqual(@as(f32, 2), balance(&w, e, .biomass));
@@ -187,7 +188,8 @@ test "a resource line reads and moves the inventory component; a missing stock h
 test "short names the first unpayable line; an item may be spent to exactly zero" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 5 } });
     const lines = [_]Line{
         .{ .item = "biomass", .n = 5 },
@@ -206,7 +208,8 @@ test "short names the first unpayable line; an item may be spent to exactly zero
 test "a good line counts units on Goods, rounded and never negative" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = w.spawn(.{comp.Goods{}});
     const gi = cat.goodIndex("sandals").?;
     try testing.expect(give(&w, e, &cat, "sandals", 2.4));
@@ -220,7 +223,8 @@ test "a good line counts units on Goods, rounded and never negative" {
 test "draw samples each line at quality and scale and reports what landed" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var prng = std.Random.DefaultPrng.init(5);
     const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 0 } });
     const lines = [_]Line{

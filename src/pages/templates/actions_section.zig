@@ -237,7 +237,8 @@ fn establishAll(w: *World, e: Entity, cat: *const roster.Catalog) void {
 }
 
 test "the curtain opens only the verbs its researched tiles establish" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat);
@@ -251,7 +252,8 @@ test "the curtain opens only the verbs its researched tiles establish" {
 }
 
 test "an established settlement lists every verb of the act in authored order" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat);
@@ -263,7 +265,8 @@ test "an established settlement lists every verb of the act in authored order" {
 }
 
 test "in: and out: match the verb's lines; state: its standing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat);

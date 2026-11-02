@@ -266,7 +266,8 @@ fn expectSnapshot(a: Snapshot, b: Snapshot) !void {
 test "with nothing owned, the innate verbs are the base records and nothing else is held" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = spawnAgent(&w);
     const goods = w.get(e, comp.Goods).?;
     const forage = cat.action("forage").?;
@@ -281,17 +282,15 @@ test "with nothing owned, the innate verbs are the base records and nothing else
 test "owning a good and losing it again leaves every verb, the ceiling and the larder as they were" {
     var cat = try fixture();
     defer cat.deinit();
-    // One world, re-initialized per good inside a call of its own: a world-sized temporary
-    // per iteration would overflow the test's stack.
-    var w = World.init();
     for (cat.goods) |g| {
         if (g.act != 1) continue;
+        var w = try World.init(std.testing.allocator);
+        defer w.deinit();
         try checkReversible(&w, &cat, g.id);
     }
 }
 
 fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
-    w.* = World.init();
     const e = spawnAgent(w);
     w.get(e, comp.Vigor).?.v = 7; // under the ceiling, so a fill on the way in shows
     // A modifier on Split wood works only once the hatchet is owned.
@@ -305,7 +304,8 @@ fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
 test "goods on one verb stack; a spare carries no second effect" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = spawnAgent(&w);
     own(&w, e, &cat, "sandals");
     own(&w, e, &cat, "bicycle");
@@ -323,7 +323,8 @@ test "goods on one verb stack; a spare carries no second effect" {
 test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersedes the hatchet" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = spawnAgent(&w);
     own(&w, e, &cat, "hatchet");
     own(&w, e, &cat, "work_gloves");
@@ -344,7 +345,8 @@ test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersede
 test "fifty rod → net → sell → sell cycles leave the fishing terms bit-exact" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = spawnAgent(&w);
     own(&w, e, &cat, "fish_rod");
     const rod = verbOf(&w, e, &cat, "fish").?;
@@ -369,7 +371,8 @@ test "fifty rod → net → sell → sell cycles leave the fishing terms bit-exa
 test "the body and larder: ceilings fill on the way up and clamp on the way down" {
     var cat = try fixture();
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = spawnAgent(&w);
     w.get(e, comp.Vigor).?.v = 8;
     own(&w, e, &cat, "leaf_bed"); // max 11, v 9

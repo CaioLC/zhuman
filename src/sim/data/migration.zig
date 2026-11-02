@@ -135,7 +135,8 @@ fn spawn_act_one_agent(w: *World, materials: f32) Entity {
 }
 
 test "migration carries biomass unchanged across the curtain" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 42);
@@ -154,7 +155,8 @@ test "migration carries biomass unchanged across the curtain" {
 }
 
 test "migration carries Food unchanged (never read or written)" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 10);
@@ -169,7 +171,8 @@ test "migration carries Food unchanged (never read or written)" {
 }
 
 test "migration preserves built goods, their counts, and their granted effects" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_act_one_agent(&w, 0);
@@ -194,7 +197,8 @@ test "migration preserves built goods, their counts, and their granted effects" 
 }
 
 test "migration seeds the research board from the authored initial states" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 5);
@@ -218,7 +222,8 @@ test "migration seeds the research board from the authored initial states" {
 }
 
 test "migration is idempotent: a second call changes nothing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 30);
@@ -238,7 +243,8 @@ test "migration is idempotent: a second call changes nothing" {
 }
 
 test "an older save-version stamp is brought forward without re-converting a balance" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = w.spawn(.{
@@ -257,7 +263,8 @@ test "an older save-version stamp is brought forward without re-converting a bal
 }
 
 test "an agent lacking the Act I materials balance still migrates, carrying 0 biomass" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = w.spawn(.{
@@ -271,7 +278,8 @@ test "an agent lacking the Act I materials balance still migrates, carrying 0 bi
 }
 
 test "population/market init seam is accounted exactly once, at the version boundary" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try test_catalog();
     defer cat.deinit();
     const e = spawn_act_one_agent(&w, 1);

@@ -124,7 +124,8 @@ fn refusal(res: *Resources) ?events.Refused {
 }
 
 test "neighbour_deal seeds the book, and refuses an unwanted or unpaid deal without settling" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = settler(&w, 0);
@@ -151,7 +152,8 @@ test "neighbour_deal seeds the book, and refuses an unwanted or unpaid deal with
 }
 
 test "neighbour_deal settles both sides and emits NeighbourSettled" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = settler(&w, 50);

@@ -203,7 +203,7 @@ const App = struct {
         // `view.reduced_motion` each frame.
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
         // The world is empty until a `NewRun` (the title's New game) begins a run.
-        self.world = ha.sim.ecs.World.init();
+        self.world = try ha.sim.ecs.World.init(allocator);
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());

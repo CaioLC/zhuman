@@ -280,8 +280,9 @@ const test_tags = struct {
 };
 const TestWorld = world_mod.World(test_comps, test_tags);
 
-fn sampleWorld() TestWorld {
-    var w = TestWorld.init();
+fn sampleWorld() !TestWorld {
+    var w = try TestWorld.init(std.testing.allocator);
+    errdefer w.deinit();
     _ = w.spawn(.{ test_comps.Pos{ .x = 1 }, test_comps.Hp{ .v = 5 }, test_tags.Hero });
     _ = w.spawn(.{ test_comps.Pos{ .x = 2 }, test_comps.Name{ .s = "b" } });
     _ = w.spawn(.{ test_comps.Pos{ .x = 3 }, test_comps.Hp{ .v = 7 }, test_tags.Dead });
@@ -289,7 +290,8 @@ fn sampleWorld() TestWorld {
 }
 
 test "Query: fetches, With, Without, Maybe and Entity in declaration order" {
-    var w = sampleWorld();
+    var w = try sampleWorld();
+    defer w.deinit();
     var sum: f32 = 0;
     var q: Query(*TestWorld, .{ test_comps.Pos, test_comps.Hp }) = .{ .world = &w };
     var it = q.iter();
@@ -319,7 +321,8 @@ test "Query: fetches, With, Without, Maybe and Entity in declaration order" {
 }
 
 test "a *const World query yields *const T" {
-    var w = sampleWorld();
+    var w = try sampleWorld();
+    defer w.deinit();
     const cw: *const TestWorld = &w;
     var q: Query(*const TestWorld, .{ test_comps.Pos, Maybe(test_comps.Name) }) = .{ .world = cw };
     var it = q.iter();
@@ -336,7 +339,8 @@ test "a *const World query yields *const T" {
 }
 
 test "getMany fetches off a known entity; const through *const World" {
-    var w = sampleWorld();
+    var w = try sampleWorld();
+    defer w.deinit();
     const pos, const name = getMany(&w, 1, .{ test_comps.Pos, Maybe(test_comps.Hp) });
     try std.testing.expectEqual(@as(f32, 2), pos.x);
     try std.testing.expect(name == null);

@@ -224,8 +224,9 @@ const Rig = struct {
         _ = self.res.events.writer(@TypeOf(fact)).push(fact);
     }
 
-    fn run(self: *Rig) void {
-        var w = ecs.World.init();
+    fn run(self: *Rig) !void {
+        var w = try ecs.World.init(std.testing.allocator);
+        defer w.deinit();
         ecs.run(&w, &self.res, log);
     }
 
@@ -242,13 +243,13 @@ test "WorkBegun: the payment line, the weariness warning before it, nothing for 
     paid.add(.{ .resource = .biomass }, 1);
     rig.emit(events.WorkBegun{ .agent = 0, .doing = .{ .labor = forage }, .weary = true, .energy = 4, .paid = paid, .act = 1 });
     rig.emit(events.WorkBegun{ .agent = 0, .doing = .{ .build = 0 }, .weary = true, .energy = 2 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try testing.expectEqualStrings("You feel weak. Work will yield less.", rig.line(1));
     try testing.expectEqual(@import("../log.zig").Tone.warn, rig.res.sim.log.get(1).tone);
     try testing.expectEqualStrings("You spend 4.0e 1m to begin.", rig.line(0));
     try testing.expectEqual(@import("../log.zig").Tone.dim, rig.res.sim.log.get(0).tone);
-    rig.run(); // each fact is worded once
+    try rig.run(); // each fact is worded once
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
 }
 
@@ -265,7 +266,7 @@ test "the body's facts: food ran out, a fall in band, death; a climb is silent" 
     rig.emit(events.BandCrossed{ .agent = 0, .from = .spent, .to = .alive });
     rig.emit(events.BandCrossed{ .agent = 0, .from = .weary, .to = .spent });
     rig.emit(events.Died{ .agent = 0 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 5), rig.res.sim.log.count);
     try expectLine(&rig, 4, .warn, "Your food has run out.");
     try expectLine(&rig, 3, .warn, "You feel weak with hunger.");
@@ -293,7 +294,7 @@ test "WorkDone: the labor receipt, a miss, a first build, a repeat build; WorkLo
     rig.emit(events.WorkDone{ .agent = 0, .doing = .{ .build = spear }, .receipt = one, .owned = 1 });
     rig.emit(events.WorkDone{ .agent = 0, .doing = .{ .build = sandals }, .receipt = pair, .owned = 2 });
     rig.emit(events.WorkLost{ .agent = 0, .doing = .{ .labor = forage } });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 5), rig.res.sim.log.count);
     try expectLine(&rig, 4, .normal, "You gathered 3 food and 2 materials.");
     try expectLine(&rig, 3, .dim, "You gathered nothing.");
@@ -315,7 +316,7 @@ test "a cancelled build names its salvage; a collected cycle lists its yield and
     rig.emit(events.BuildCancelled{ .agent = 0, .gi = cat.goodIndex("spear").? });
     rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").?, .receipt = crop, .vigor = 0.5 });
     rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").? });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
     try expectLine(&rig, 3, .warn, "You gave up on the spear. Salvaged 5 materials.");
     try expectLine(&rig, 2, .warn, "You gave up on the spear. Salvaged 0 units.");
@@ -331,7 +332,7 @@ test "arrivals and departures of the passerby and the merchant; Refused says not
     rig.emit(events.Departed{ .who = .passerby });
     rig.emit(events.Departed{ .who = .merchant });
     rig.emit(events.Refused{ .agent = 0, .intent = .begin_build, .reason = .busy });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
     try expectLine(&rig, 3, .good, "A passerby stops, and opens a satchel of odds and ends.");
     try expectLine(&rig, 2, .good, "The merchant's cart is back, restocked from downriver.");
@@ -344,7 +345,7 @@ test "Traded with the passerby: a buy, and a sell naming the materials paid in t
     defer rig.deinit();
     rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .buy, .biomass_moved = 4 });
     rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .sell, .biomass_moved = 5, .act = 1 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .good, "You trade with the passerby.");
     try expectLine(&rig, 0, .good, "You sell to the passerby for 5 materials.");
@@ -355,7 +356,7 @@ test "Traded with the merchant names the lots and the lot's record" {
     defer rig.deinit();
     rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 0, .lots = 1 });
     rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 4, .lots = 3 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .good, "You trade 1 lot of Water \u{00d7}6 with the merchant.");
     try expectLine(&rig, 0, .good, "You trade 3 lots of Food \u{00d7}10 with the merchant.");
@@ -373,7 +374,7 @@ test "Researched: the establishment with its cost and what it opened, then each 
     } else unreachable;
     const tech = cat.technologies[ti];
     rig.emit(events.Researched{ .agent = 0, .ti = ti, .newly = 0b11 });
-    rig.run();
+    try rig.run();
 
     var cost: [256]u8 = undefined;
     var cw = std.Io.Writer.fixed(&cost);
@@ -413,7 +414,7 @@ test "ExchangeRaised: the Exchange stands" {
     var rig = try Rig.init();
     defer rig.deinit();
     rig.emit(events.ExchangeRaised{ .agent = 0 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
     try expectLine(&rig, 0, .good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
@@ -422,7 +423,7 @@ test "NeighbourSettled: both sides settle" {
     var rig = try Rig.init();
     defer rig.deinit();
     rig.emit(events.NeighbourSettled{ .agent = 0, .neighbour = 3 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
     try expectLine(&rig, 0, .good, "A neighbour takes your deal. Both sides settle.");
 }
@@ -434,7 +435,7 @@ test "a broken good, a recipe in reach; GoodsChanged says nothing" {
     rig.emit(events.GoodBroke{ .agent = 0, .gi = cat.goodIndex("sandals").? });
     rig.emit(events.RecipeInReach{ .agent = 0, .gi = cat.goodIndex("work_gloves").? });
     rig.emit(events.GoodsChanged{ .agent = 0 });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .warn, "Your sandals broke.");
     try expectLine(&rig, 0, .good, "A new recipe is within reach: work gloves.");
@@ -445,7 +446,7 @@ test "RunBegun: the opening line, dim; ActEnded says nothing" {
     defer rig.deinit();
     rig.emit(events.RunBegun{});
     rig.emit(events.ActEnded{ .act = .act_one });
-    rig.run();
+    try rig.run();
     try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
     try expectLine(&rig, 0, .dim, "You wake alone. Cold. Hungry.");
 }

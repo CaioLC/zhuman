@@ -78,7 +78,8 @@ const Rig = struct {
 
     /// A settlement at the curtain's board, holding `n` of every research resource.
     fn init(self: *Rig, n: f32) !void {
-        self.w = World.init();
+        self.w = try World.init(testing.allocator);
+        errdefer self.w.deinit();
         self.res = .{ .catalog = try roster.load(testing.allocator, roster.shipped, null) };
         self.res.events.update();
         self.e = self.w.spawn(.{
@@ -90,6 +91,11 @@ const Rig = struct {
             comp.InventoryBiomass{ .v = n },
             comp.Research.entry(&self.res.catalog),
         });
+    }
+
+    fn deinit(self: *Rig) void {
+        self.w.deinit();
+        self.res.catalog.deinit();
     }
 
     fn refusal(self: *Rig) ?events.Refused {
@@ -110,7 +116,7 @@ const Rig = struct {
 test "research refuses without a board, a locked tile, or a short ledger, and changes nothing" {
     var rig: Rig = undefined;
     try rig.init(0);
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     const ti = rig.openTile();
     const board_before = rig.w.get(rig.e, comp.Research).?.*;
 
@@ -141,7 +147,7 @@ test "research refuses without a board, a locked tile, or a short ledger, and ch
 test "research establishes the tile, pays its cost from the ledger and names what it opened" {
     var rig: Rig = undefined;
     try rig.init(500);
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     const ti = rig.openTile();
     const tech = rig.res.catalog.technologies[ti];
     _ = rig.res.events.writer(events.Research).push(.{ .agent = rig.e, .ti = ti });

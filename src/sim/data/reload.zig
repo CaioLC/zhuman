@@ -251,7 +251,8 @@ fn agent(w: *World) Entity {
 }
 
 test "a swap carries goods, research, work and the reach seen-set to the new indices by id" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
     defer res.catalog.deinit();
     const e = agent(&w);
@@ -283,7 +284,8 @@ test "a swap carries goods, research, work and the reach seen-set to the new ind
 }
 
 test "a record the new files drop takes its count and its work with it" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
     defer res.catalog.deinit();
     const e = agent(&w);
@@ -302,7 +304,8 @@ test "a record the new files drop takes its count and its work with it" {
 }
 
 test "a bad file keeps the catalog and logs why" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
     defer res.catalog.deinit();
     var tmp = testing.tmpDir(.{});
@@ -316,7 +319,8 @@ test "a bad file keeps the catalog and logs why" {
 }
 
 test "a directory overrides the files it holds and falls back for the rest" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
     defer res.catalog.deinit();
     var tmp = testing.tmpDir(.{});

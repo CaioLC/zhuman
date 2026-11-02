@@ -49,7 +49,7 @@ pub fn poke(
 const testing = std.testing;
 
 test "a poke sets the named component, the rate clamped into the band" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
@@ -73,7 +73,7 @@ test "a poke sets the named component, the rate clamped into the band" {
 }
 
 test "a poke at a missing agent or a missing component changes nothing" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();

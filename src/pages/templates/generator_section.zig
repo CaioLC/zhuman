@@ -269,10 +269,11 @@ const GenRig = struct {
         self.arena = std.heap.ArenaAllocator.init(testing.allocator);
         self.ui = UiCtx.init(&self.res, testing.allocator, self.arena.allocator());
         self.driver = uic.FrameDriver.init(&self.ui, &self.arena, testing.io, .none);
-        self.world = World.init();
+        self.world = try World.init(testing.allocator);
     }
 
     fn tearDown(self: *GenRig) void {
+        self.world.deinit();
         self.ui.deinit();
         self.arena.deinit();
         self.res.game.catalog.deinit();

@@ -79,7 +79,8 @@ fn house(w: *World, e: Entity, cat: *const roster.Catalog) void {
 }
 
 test "detect_shelter waits for the milestone, then requests Act II and emits ActEnded once" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     res.events.update();
@@ -98,7 +99,8 @@ test "detect_shelter waits for the milestone, then requests Act II and emits Act
 }
 
 test "cross_curtain migrates the player once" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = spawn_player(&w);
@@ -110,7 +112,8 @@ test "cross_curtain migrates the player once" {
 }
 
 test "detect_exchange requests Act III from Act II once the Exchange stands" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{ .states = .{ .current = .act_two } };
     ecs.run(&w, &res, detect_exchange);
     try testing.expect(res.states.next == null);

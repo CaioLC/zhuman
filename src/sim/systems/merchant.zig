@@ -185,7 +185,8 @@ test "every merchant lot names items the catalog knows" {
 }
 
 test "merchant_deal refuses without mutating: short of coin, sold out, the cart away" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = settler(&w, 4); // water costs 5 coin a lot
@@ -214,7 +215,8 @@ test "merchant_deal refuses without mutating: short of coin, sold out, the cart 
 }
 
 test "merchant_deal moves both sides, takes the stock and emits Traded; a new visit restocks" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = settler(&w, 20);
@@ -248,7 +250,8 @@ test "merchant_deal moves both sides, takes the stock and emits Traded; a new vi
 }
 
 test "a SELL lot of a good the agent does not own is refused" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = settler(&w, 0);

@@ -578,7 +578,8 @@ fn requote(w: *World, e: Entity, cat: *const roster.Catalog) void {
 }
 
 test "Act II: the blank shelf is every authored recipe, research-gated rows included" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat, 0, 0);
@@ -589,7 +590,8 @@ test "Act II: the blank shelf is every authored recipe, research-gated rows incl
 }
 
 test "Act II carries owned Act I goods onto its shelf, unless it authors a recipe of that name" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat, 0, 0);
@@ -612,7 +614,8 @@ test "Act II carries owned Act I goods onto its shelf, unless it authors a recip
 }
 
 test "Act II: tech: finds recipes by technology; a build in progress pins first under every sort" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat, 40, 40);
@@ -637,7 +640,8 @@ test "Act II: tech: finds recipes by technology; a build in progress pins first 
 }
 
 test "sortEntries: STATE groups by state (ready, reach, owned, blocked, locked) in either direction" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat, 14, 0);
@@ -668,7 +672,8 @@ test "sortEntries: STATE groups by state (ready, reach, owned, blocked, locked) 
 }
 
 test "sortEntries: name ascending is A–Z" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
     defer cat.deinit();
     const e = settler(&w, &cat, 10, 0);

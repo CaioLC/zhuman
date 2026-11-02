@@ -56,7 +56,8 @@ const Rig = struct {
 
     /// An agent owning one garden bed whose cycle is complete.
     fn init(self: *Rig) !void {
-        self.w = World.init();
+        self.w = try World.init(testing.allocator);
+        errdefer self.w.deinit();
         self.res = .{ .catalog = try roster.load(testing.allocator, roster.shipped, null) };
         self.res.events.update();
         self.gi = self.res.catalog.goodIndex("garden_bed").?;
@@ -72,6 +73,11 @@ const Rig = struct {
         self.w.get(self.e, comp.Generators).?.progress[self.gi] = 1e9;
     }
 
+    fn deinit(self: *Rig) void {
+        self.w.deinit();
+        self.res.catalog.deinit();
+    }
+
     fn refusal(self: *Rig) ?events.Refused {
         var cursor: u64 = 0;
         return self.res.events.readerAt(events.Refused, &cursor).next();
@@ -81,7 +87,7 @@ const Rig = struct {
 test "toggle refuses a good that is not an owned generator, without mutating" {
     var rig: Rig = undefined;
     try rig.init();
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     const spear = rig.res.catalog.goodIndex("spear").?;
     _ = rig.res.events.writer(events.ToggleGenerator).push(.{ .agent = rig.e, .gi = spear });
     ecs.run(&rig.w, &rig.res, generators_toggle);
@@ -92,7 +98,7 @@ test "toggle refuses a good that is not an owned generator, without mutating" {
 test "toggle switches an owned generator off once per intent" {
     var rig: Rig = undefined;
     try rig.init();
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     _ = rig.res.events.writer(events.ToggleGenerator).push(.{ .agent = rig.e, .gi = rig.gi });
     ecs.run(&rig.w, &rig.res, generators_toggle);
     ecs.run(&rig.w, &rig.res, generators_toggle);
@@ -103,7 +109,7 @@ test "toggle switches an owned generator off once per intent" {
 test "collect refuses a switched-off generator without mutating and emits Refused" {
     var rig: Rig = undefined;
     try rig.init();
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     rig.w.get(rig.e, comp.Generators).?.off[rig.gi] = true;
     _ = rig.res.events.writer(events.CollectGenerator).push(.{ .agent = rig.e, .gi = rig.gi });
     ecs.run(&rig.w, &rig.res, generators_collect);
@@ -116,7 +122,7 @@ test "collect refuses a switched-off generator without mutating and emits Refuse
 test "collect settles a ready cycle and emits Collected; the update system matures it again" {
     var rig: Rig = undefined;
     try rig.init();
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     _ = rig.res.events.writer(events.CollectGenerator).push(.{ .agent = rig.e, .gi = rig.gi });
     ecs.run(&rig.w, &rig.res, generators_collect);
     try testing.expectEqual(@as(f32, 0), rig.w.get(rig.e, comp.Generators).?.progress[rig.gi]);

@@ -253,7 +253,8 @@ test "States begins on the first tag with nothing pending; set requests, in read
 }
 
 test "a transition is applied at the top of the next tick, running on_exit then on_enter once" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: TestRes = .{};
     res.go.to = .play;
     try testing.expectEqualStrings("i", tickOnce(&w, &res, true)); // requested, not applied
@@ -266,7 +267,8 @@ test "a transition is applied at the top of the next tick, running on_exit then 
 }
 
 test "a request for the current state is a restart: on_exit then on_enter" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: TestRes = .{ .states = .{ .current = .play } };
     res.go.to = .play;
     try testing.expectEqualStrings("huv", tickOnce(&w, &res, true));
@@ -275,14 +277,16 @@ test "a request for the current state is a restart: on_exit then on_enter" {
 }
 
 test "handle runs while time is still and update does not" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: TestRes = .{ .states = .{ .current = .play } };
     try testing.expectEqualStrings("h", tickOnce(&w, &res, false));
     try testing.expectEqualStrings("huv", tickOnce(&w, &res, true));
 }
 
 test "a state the table does not name has empty sets and ticks to nothing" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     var res: TestRes = .{ .states = .{ .current = .play } };
     res.go.to = .over;
     try testing.expectEqualStrings("huv", tickOnce(&w, &res, true));

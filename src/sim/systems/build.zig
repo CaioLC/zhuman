@@ -62,7 +62,8 @@ fn only(res: *Resources, comptime T: type) ?T {
 }
 
 test "build refuses without mutating and emits Refused" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const spear = res.catalog.goodIndex("spear").?;
@@ -77,7 +78,8 @@ test "build refuses without mutating and emits Refused" {
 }
 
 test "build begins the work and emits WorkBegun; cancel salvages and emits BuildCancelled" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const spear = res.catalog.goodIndex("spear").?;
@@ -100,7 +102,8 @@ test "build begins the work and emits WorkBegun; cancel salvages and emits Build
 }
 
 test "cancel refuses on an idle body without mutating and emits Refused" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = agent(&w, 5);

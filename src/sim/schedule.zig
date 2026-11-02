@@ -211,7 +211,8 @@ fn newRun(w: *ecs.World, res: *Resources) void {
 }
 
 test "a run begins, crosses the Act I curtain once, and restarts whole" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     try testing.expect(res.states.in(.title));
@@ -251,7 +252,8 @@ test "a run begins, crosses the Act I curtain once, and restarts whole" {
 }
 
 test "a player at vigor 0 ends the run in game over, where the clock stands still" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     newRun(&w, &res);
@@ -268,7 +270,8 @@ test "a player at vigor 0 ends the run in game over, where the clock stands stil
 }
 
 test "paused, the intents apply and nothing spends time" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     newRun(&w, &res);
@@ -282,7 +285,8 @@ test "paused, the intents apply and nothing spends time" {
 }
 
 test "paused, a handler's fact still becomes its log line before it expires" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     newRun(&w, &res);

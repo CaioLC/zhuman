@@ -48,7 +48,8 @@ fn foodQuote(rev: u32) market.Quote {
 }
 
 test "barter refuses a stale quote without mutating and emits Refused" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = trader(&w);
@@ -62,7 +63,8 @@ test "barter refuses a stale quote without mutating and emits Refused" {
 }
 
 test "barter settles once and emits Traded with the passerby" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = trader(&w);

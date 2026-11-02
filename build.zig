@@ -78,19 +78,12 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("ha", ha_mod);
     exe_mod.addImport("ecs", ecs_mod);
 
-    // The game's world (`src/sim/ecs.zig`) holds every component's storage inline for its full
-    // entity capacity, about 7 MB, and the game and the tests hold one on the stack, where a debug
-    // build keeps a copy in each frame that passes it by value. Every binary that holds a world
-    // reserves this much stack, because the 16 MB default does not fit two copies.
-    const world_stack: u64 = 64 * 1024 * 1024;
-
     // Build for desktop.
     const exe = b.addExecutable(.{
         .name = "human_action",
         .root_module = exe_mod,
         .use_llvm = true,
     });
-    exe.stack_size = world_stack;
     b.installArtifact(exe);
 
     // Package the UI typeface and its license next to the binary. SDL_ttf opens
@@ -109,7 +102,6 @@ pub fn build(b: *std.Build) void {
 
     // Unit tests
     const unit_tests = b.addTest(.{ .root_module = ha_mod, .use_llvm = true });
-    unit_tests.stack_size = world_stack;
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
@@ -119,7 +111,6 @@ pub fn build(b: *std.Build) void {
     // `main.zig`), so its test blocks need a root of their own: the executable module. The
     // one `test` step runs both binaries.
     const page_tests = b.addTest(.{ .root_module = exe_mod, .use_llvm = true });
-    page_tests.stack_size = world_stack;
     const run_page_tests = b.addRunArtifact(page_tests);
     test_step.dependOn(&run_page_tests.step);
 
@@ -139,7 +130,6 @@ pub fn build(b: *std.Build) void {
     ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
     ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
     const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
-    ui_tests.stack_size = world_stack;
     const run_ui_tests = b.addRunArtifact(ui_tests);
 
     const test_ui_step = b.step("test-ui", "Run UI-layer unit tests (engine + host binding, minus game content)");
@@ -169,7 +159,6 @@ pub fn build(b: *std.Build) void {
     sim_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
     sim_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
     const sim_tests = b.addTest(.{ .root_module = sim_test_mod, .use_llvm = true });
-    sim_tests.stack_size = world_stack;
     const run_sim_tests = b.addRunArtifact(sim_tests);
 
     const test_sim_step = b.step("test-sim", "Run the simulation's unit tests alone (src/ecs + the sim files, no UI host, no SDL)");

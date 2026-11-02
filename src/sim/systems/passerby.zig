@@ -26,7 +26,8 @@ pub fn passerby(
 const testing = std.testing;
 
 test "passerby emits Arrived when the encounter opens and Departed when it ends" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     const sched = market.Schedule{};

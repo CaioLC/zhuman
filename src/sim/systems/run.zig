@@ -74,7 +74,8 @@ pub fn detect_death(states: *States, living: LivingPlayer) void {
 const testing = std.testing;
 
 test "new_run requests Act I once for several intents, and nothing without one" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     ecs.run(&w, &res, new_run);
@@ -87,7 +88,8 @@ test "new_run requests Act I once for several intents, and nothing without one" 
 }
 
 test "begin_run retires the living player, spawns one, resets Sim and emits RunBegun" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     const old = spawn_player(&w);
@@ -104,7 +106,8 @@ test "begin_run retires the living player, spawns one, resets Sim and emits RunB
 }
 
 test "detect_death requests game over only when no player remains" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{ .states = .{ .current = .act_one } };
     const e = spawn_player(&w);
     ecs.run(&w, &res, detect_death);

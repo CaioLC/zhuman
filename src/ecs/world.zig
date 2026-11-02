@@ -92,22 +92,32 @@ pub fn World(comptime comps: type, comptime tags: type) type {
         const Self = @This();
 
         next_id: Entity,
-        components: Storages(comps),
-        tags: Storages(tags),
+        components: *Storages(comps),
+        tags: *Storages(tags),
+        allocator: std.mem.Allocator,
 
-        pub fn init() Self {
-            var w: Self = undefined;
-            w.next_id = 0;
-            inline for (@typeInfo(@TypeOf(w.components)).@"struct".field_names) |name| {
-                @field(w.components, name) = .{};
+        /// An empty world: allocates the two storage structs and empties every set. A world
+        /// holds pointers to them, so a copy of the value shares them: initialize it once, pass
+        /// it by pointer, and `deinit` it once.
+        pub fn init(allocator: std.mem.Allocator) error{OutOfMemory}!Self {
+            const components = try allocator.create(Storages(comps));
+            errdefer allocator.destroy(components);
+            const tag_sets = try allocator.create(Storages(tags));
+            inline for (@typeInfo(Storages(comps)).@"struct".field_names) |name| {
+                @field(components, name) = .{};
             }
-            inline for (@typeInfo(@TypeOf(w.tags)).@"struct".field_names) |name| {
-                @field(w.tags, name) = .{};
+            inline for (@typeInfo(Storages(tags)).@"struct".field_names) |name| {
+                @field(tag_sets, name) = .{};
             }
-            return w;
+            return .{ .next_id = 0, .components = components, .tags = tag_sets, .allocator = allocator };
         }
 
-        pub fn deinit(_: *Self) void {}
+        /// Frees the storages. Every pointer a storage handed out dangles after.
+        pub fn deinit(self: *Self) void {
+            self.allocator.destroy(self.components);
+            self.allocator.destroy(self.tags);
+            self.* = undefined;
+        }
 
         /// Spawn an entity carrying a `bundle` of components/tags, returning its id.
         /// Each tuple element is either a **component instance** (added as-is) or a bare
@@ -131,11 +141,11 @@ pub fn World(comptime comps: type, comptime tags: type) type {
         /// `*const Self`. A type in neither namespace is a compile error.
         pub fn storageOf(self: anytype, comptime T: type) Ref(@TypeOf(self), SparseSet(T)) {
             comptime checkSelf(Self, @TypeOf(self));
-            const cs = @typeInfo(@TypeOf(self.components)).@"struct";
+            const cs = @typeInfo(Storages(comps)).@"struct";
             inline for (cs.field_names, cs.field_types) |name, FT| {
                 if (FT == SparseSet(T)) return &@field(self.components, name);
             }
-            const ts = @typeInfo(@TypeOf(self.tags)).@"struct";
+            const ts = @typeInfo(Storages(tags)).@"struct";
             inline for (ts.field_names, ts.field_types) |name, FT| {
                 if (FT == SparseSet(T)) return &@field(self.tags, name);
             }
@@ -162,10 +172,10 @@ pub fn World(comptime comps: type, comptime tags: type) type {
         /// Remove `e` from every component and tag storage (each `remove` no-ops if `e`
         /// is not in that storage). The entity id is not recycled: `next_id` only climbs.
         pub fn despawn(self: *Self, e: Entity) void {
-            inline for (@typeInfo(@TypeOf(self.components)).@"struct".field_names) |name| {
+            inline for (@typeInfo(Storages(comps)).@"struct".field_names) |name| {
                 @field(self.components, name).remove(e);
             }
-            inline for (@typeInfo(@TypeOf(self.tags)).@"struct".field_names) |name| {
+            inline for (@typeInfo(Storages(tags)).@"struct".field_names) |name| {
                 @field(self.tags, name).remove(e);
             }
         }
@@ -183,7 +193,7 @@ const test_tags = struct {
 const TestWorld = World(test_comps, test_tags);
 
 test "spawn takes component instances and bare tag types" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
     defer w.deinit();
     const a = w.spawn(.{ test_comps.Pos{ .x = 2 }, test_tags.Marked });
     const b = w.spawn(.{});
@@ -196,7 +206,8 @@ test "spawn takes component instances and bare tag types" {
 }
 
 test "remove and despawn; ids are not recycled" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     const a = w.spawn(.{ test_comps.Pos{}, test_comps.Hp{} });
     const b = w.spawn(.{test_comps.Pos{ .x = 7 }});
     w.remove(a, test_comps.Hp);
@@ -209,12 +220,14 @@ test "remove and despawn; ids are not recycled" {
 }
 
 test "get through *const World yields ?*const T, through *World ?*T" {
-    var w = TestWorld.init();
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
     const e = w.spawn(.{test_comps.Hp{ .v = 3 }});
     const cw: *const TestWorld = &w;
     try std.testing.expect(@TypeOf(cw.get(e, test_comps.Hp)) == ?*const test_comps.Hp);
     try std.testing.expect(@TypeOf(w.get(e, test_comps.Hp)) == ?*test_comps.Hp);
     try std.testing.expect(@TypeOf(cw.storageOf(test_comps.Hp)) == *const SparseSet(test_comps.Hp));
+    try std.testing.expect(@TypeOf(cw.storageOf(test_tags.Marked)) == *const SparseSet(test_tags.Marked));
     try std.testing.expectEqual(@as(u32, 3), cw.get(e, test_comps.Hp).?.v);
     try std.testing.expect(cw.has(e, test_comps.Hp));
     w.get(e, test_comps.Hp).?.v = 4;

@@ -99,7 +99,8 @@ const Rig = struct {
 
     /// A settlement of 520 holding `n` of each input, with a ring-4 tile established when `four`.
     fn init(self: *Rig, n: f32, four: bool) !void {
-        self.w = World.init();
+        self.w = try World.init(testing.allocator);
+        errdefer self.w.deinit();
         self.res = .{ .catalog = try roster.load(testing.allocator, roster.shipped, null) };
         self.res.events.update();
         self.res.sim.population = 520;
@@ -111,6 +112,11 @@ const Rig = struct {
             }
         };
         self.e = self.w.spawn(.{ comp.InventoryBiomass{ .v = n }, comp.InventoryMinerals{ .v = n }, comp.InventoryMetal{ .v = n }, board });
+    }
+
+    fn deinit(self: *Rig) void {
+        self.w.deinit();
+        self.res.catalog.deinit();
     }
 
     fn raise(self: *Rig) void {
@@ -131,28 +137,28 @@ const Rig = struct {
 test "raise_exchange refuses locked, short and standing without paying" {
     var locked: Rig = undefined;
     try locked.init(100, false); // no ring-4 tile
-    defer locked.res.catalog.deinit();
+    defer locked.deinit();
     locked.raise();
     try testing.expectEqual(@as(?Reason, .locked), locked.refusal());
     try testing.expectEqual(@as(f32, 100), ledger.balance(&locked.w, locked.e, .biomass));
     // With the tile but the stand-in population, still locked.
     var small: Rig = undefined;
     try small.init(100, true);
-    defer small.res.catalog.deinit();
+    defer small.deinit();
     small.res.sim.population = 48;
     small.raise();
     try testing.expectEqual(@as(?Reason, .locked), small.refusal());
 
     var short: Rig = undefined;
     try short.init(30, true);
-    defer short.res.catalog.deinit();
+    defer short.deinit();
     short.raise();
     try testing.expectEqual(@as(?Reason, .short), short.refusal());
     try testing.expectEqual(@as(f32, 30), ledger.balance(&short.w, short.e, .biomass));
 
     var standing: Rig = undefined;
     try standing.init(100, true);
-    defer standing.res.catalog.deinit();
+    defer standing.deinit();
     standing.res.sim.exchange.standing = true;
     standing.raise();
     try testing.expectEqual(@as(?Reason, .already_standing), standing.refusal());
@@ -163,7 +169,7 @@ test "raise_exchange refuses locked, short and standing without paying" {
 test "raise_exchange pays the price, stands the Exchange and emits ExchangeRaised" {
     var rig: Rig = undefined;
     try rig.init(100, true);
-    defer rig.res.catalog.deinit();
+    defer rig.deinit();
     rig.raise();
     try testing.expect(rig.res.sim.exchange.standing);
     try testing.expectEqual(@as(f32, 20), ledger.balance(&rig.w, rig.e, .biomass));

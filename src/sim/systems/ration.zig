@@ -30,7 +30,8 @@ pub fn ration(
 const testing = std.testing;
 
 test "ration refuses an agent with no metabolism without mutating and emits Refused" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     const e = w.spawn(.{comp.Vigor{}});
@@ -42,7 +43,8 @@ test "ration refuses an agent with no metabolism without mutating and emits Refu
 }
 
 test "ration sets the rate, clamped into the band, once per intent" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
     const e = w.spawn(.{comp.Metabolism{}});

@@ -80,7 +80,8 @@ fn rig() !res_mod.Resources {
 }
 
 test "quotes answers what the rules answer, slot by slot" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -134,7 +135,8 @@ test "quotes answers what the rules answer, slot by slot" {
 }
 
 test "quotes is idempotent: a second run on an unchanged world writes the same answers" {
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
     const e = w.spawn(.{

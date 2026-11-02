@@ -154,7 +154,8 @@ test "rate min/max shift food_days and recovery time monotonically" {
 }
 
 test "outlook writes the projection at the clamped rate; a second run changes nothing" {
-    var w = ecs.World.init();
+    var w = try ecs.World.init(std.testing.allocator);
+    defer w.deinit();
     var res = res_mod.Resources{};
     const e = w.spawn(.{
         comp.Vigor{ .v = 5, .max = 10 },

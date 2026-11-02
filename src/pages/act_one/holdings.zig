@@ -137,7 +137,8 @@ test "every buildable good carries the rail's compact copy" {
 test "spare goods feed the trade-stock margin" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
-    var w = World.init();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
     const e = w.spawn(.{comp.Goods{}});
     const goods = w.get(e, comp.Goods).?;
     goods.count[cat.goodIndex("sandals").?] = 3;
