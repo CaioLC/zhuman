@@ -126,9 +126,11 @@ pub const Spec = struct {
     attract_s: f32 = 6,
     /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 4`).
     market: ?uic.UiState.MarketState = null,
-    /// The Exchange stub on the first frame (standing, a population override), and whether
-    /// its card opens with the details showing (`screen = .act_two`, `view = 1`).
+    /// The Exchange on the first frame (standing or not), the settlement's population
+    /// (`Sim.population`; null keeps the stand-in), and whether the Exchange card opens with
+    /// the details showing (`screen = .act_two`, `view = 1`).
     exchange: ha.sim.Sim.Exchange = .{},
+    population: ?f32 = null,
     exchange_open: bool = false,
     /// The RESEARCH board's opening (`screen = .act_two`, `view = 3`).
     research: ?@import("./act_two/page.zig").ResearchSeed = null,
@@ -717,7 +719,7 @@ pub const catalog = [_]Spec{
         .day = 140,
         .balances = settlement_balances,
         .settlement = exchange_settlement,
-        .exchange = .{ .population = 520 },
+        .population = 520,
         .exchange_open = true,
     },
     .{
@@ -728,7 +730,8 @@ pub const catalog = [_]Spec{
         .day = 160,
         .balances = settlement_balances,
         .settlement = exchange_settlement,
-        .exchange = .{ .population = 520, .standing = true },
+        .exchange = .{ .standing = true },
+        .population = 520,
         .exchange_open = true,
     },
     .{
@@ -911,7 +914,7 @@ pub const catalog = [_]Spec{
         .day = 140,
         .balances = settlement_balances,
         .settlement = .{ .researched = exchange_settlement.researched, .stocks = settlement.stocks },
-        .exchange = .{ .population = 520 },
+        .population = 520,
         .exchange_open = true,
     },
     .{
@@ -1110,6 +1113,9 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.game.sim.exchange = spec.exchange;
+    if (first) if (spec.population) |people| {
+        ctx.res.game.sim.population = people;
+    };
     if (first and spec.merchant_away) ctx.res.game.sim.merchant = .{ .present = false, .remaining = ctx.res.game.config.secs_per_day };
     if (first) if (spec.trade_taken) |taken| for (taken, 0..) |sold, i| {
         if (i < ctx.res.game.sim.merchant.taken.len) ctx.res.game.sim.merchant.taken[i] = sold;

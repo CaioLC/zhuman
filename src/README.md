@@ -125,7 +125,8 @@ the host calls `ecs.run(&world, &res.game, system)`.
 
 **Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog, events }`:
 exactly what a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
-reach seen-set, the passerby, the merchant, the stub neighbours and Exchange; `reset` starts a
+reach seen-set, the passerby, the merchant, the stub neighbours, the Exchange and the
+population stand-in; `reset` starts a
 fresh one), `config: Config` the tuning, `time: Time` this frame's real and simulation deltas,
 `catalog` the authored roster, `events` the intents and facts (*Events*, below); `hours_to_secs`
 lives beside them. Every field has a default, so
@@ -200,8 +201,8 @@ over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixe
 names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
-`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`, and,
-declared for the Act II handlers, `RaiseExchange`, `NeighbourDeal`. The UI writes them through
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`,
+`RaiseExchange`, and, declared for the Act II handler, `NeighbourDeal`. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -209,7 +210,7 @@ the handler answers with `Refused{agent, intent, reason}`.
 
 **Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
 `GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
-`RecipeInReach`, `Traded`, `Researched`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
+`RecipeInReach`, `Traded`, `Researched`, `ExchangeRaised`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
 A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
 `{ item: ledger.Item, qty }`.
 
@@ -219,7 +220,7 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `barter`, `merchant`, `research`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `merchant`, `research`, `exchange`, `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
 itself, through `events.readerAt(T, &cursor)`.
 
@@ -246,6 +247,7 @@ paused or not and housed or not:
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
 | `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings, moves both sides, takes the stock, `Traded` |
 | `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
+| `exchange.raise_exchange` | `RaiseExchange` | refuses while standing, locked (`exchange.lifecycle`: a ring-4 technology and more than 500 of `Sim.population`) or short; else pays `exchange.cost` from the ledger and stands it, `ExchangeRaised` |
 
 The tick systems run only while the run is played and `dt > 0`, in this order:
 
@@ -509,7 +511,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `res.zig` | `sim.Resources { sim, config, time, catalog, events }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours and the Exchange; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `res.zig` | `sim.Resources { sim, config, time, catalog, events }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
 | `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
 | `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
@@ -527,6 +529,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `barter.zig` | the `Barter` handler |
 | `merchant.zig` | the Coin Merchant's lots (a stand-in, ACT2-14), its visit system and the `MerchantDeal` handler |
 | `research.zig` | the `Research` handler: the board and the ledger's one writer for a research |
+| `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
 | `passerby.zig` | the passerby's update system |
 | `log.zig` | the log system: every fact into its `Log` line |
 

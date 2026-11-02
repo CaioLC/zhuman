@@ -209,11 +209,14 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
             var shelf = build_shelf;
             var raised = false;
             shelf.goal = try exchangeGoal(ctx, world, e);
-            if (opts.exchange_open or ctx.res.game.sim.exchange.reveal) shelf.goal.?.expand = true;
-            ctx.res.game.sim.exchange.reveal = false;
+            // The card opens its details once, the frame the raise is read back (ACT2-18).
+            var stood = false;
+            const heard = ctx.res.game.events.readerAt(ha.sim.events.ExchangeRaised, &trade_owner.state(uic.UiState.ViewMemory).heard);
+            while (heard.next()) |f| stood = stood or f.agent == e;
+            if (opts.exchange_open or stood) shelf.goal.?.expand = true;
             shelf.raised = &raised;
             _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
-            if (raised) raiseExchange(ctx, world, e);
+            if (raised) _ = ctx.res.game.events.writer(ha.sim.events.RaiseExchange).push(.{ .agent = e });
         },
         .generators => {
             const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Owned generators" }, s.scroll);
@@ -277,42 +280,11 @@ fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) 
     }
 }
 
-/// The Exchange's price and the population it waits on (`act-ii.html`).
-const exchange_cost = [_]struct { ha.sim.data.roster.Resource, f32 }{ .{ .biomass, 80 }, .{ .minerals, 40 }, .{ .metal, 24 } };
+const exchange = ha.sim.systems.exchange;
 
-/// The settlement's population: the fixture's stand-in, or the stub override a fixture sets.
+/// The settlement's population: the stand-in until the population model exists (ACT2-01).
 fn population(ctx: *UiCtx) f32 {
-    return fx.populationOf(&ctx.res.game.sim);
-}
-
-/// The first ring-4 technology established, alphabetically (the prototype names one).
-fn ringFour(ctx: *UiCtx, world: *World, e: Entity) ?[]const u8 {
-    const research = world.get(e, comp.Research) orelse return null;
-    var best: ?[]const u8 = null;
-    for (ctx.res.game.catalog.technologies, 0..) |tech, i| {
-        if (tech.coord.ring() != 4 or research.state[i] != .researched) continue;
-        if (best == null or std.mem.order(u8, tech.name, best.?) == .lt) best = tech.name;
-    }
-    return best;
-}
-
-/// The Exchange's lifecycle: standing once raised; locked until a ring-4 technology stands and
-/// the settlement is strictly more than 500 people; then unfunded while any input is short.
-fn exchangeLifecycle(standing: bool, people: f32, ring_four: bool, short_kinds: u32) t.MilestoneLifecycle {
-    if (standing) return .done;
-    if (!(ring_four and people > 500)) return .locked;
-    return if (short_kinds > 0) .unfunded else .ready;
-}
-
-test "the Exchange unlocks past 500 people with a ring-4 technology, and funds separately" {
-    const x = std.testing.expectEqual;
-    try x(t.MilestoneLifecycle.locked, exchangeLifecycle(false, 500, true, 0));
-    try x(t.MilestoneLifecycle.ready, exchangeLifecycle(false, 501, true, 0));
-    try x(t.MilestoneLifecycle.locked, exchangeLifecycle(false, 501, false, 0));
-    // Each short input keeps it unfunded on its own.
-    try x(t.MilestoneLifecycle.unfunded, exchangeLifecycle(false, 501, true, 1));
-    try x(t.MilestoneLifecycle.unfunded, exchangeLifecycle(false, 501, true, 3));
-    try x(t.MilestoneLifecycle.done, exchangeLifecycle(true, 0, false, 3));
+    return ctx.res.game.sim.population;
 }
 
 /// The Exchange card: locked until a ring-4 technology stands and the settlement passes 500
@@ -321,15 +293,15 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
     const a = ctx.arena;
     const standing = ctx.res.game.sim.exchange.standing;
     const people = population(ctx);
-    const four = ringFour(ctx, world, e);
+    const four = if (world.get(e, comp.Research)) |board| exchange.ringFour(&ctx.res.game.catalog, board) else null;
     const research_met = four != null;
-    const people_met = people > 500;
+    const people_met = people > exchange.people_needed;
     var short_kinds: u32 = 0;
     var short: std.ArrayList(u8) = .empty;
     var reqs: std.ArrayList(t.MilestoneRequirement) = .empty;
     try reqs.append(a, .{ .label = "RING 4", .value = if (research_met or standing) "1/1" else "0/1", .met = research_met or standing });
     try reqs.append(a, .{ .label = "PEOPLE", .value = try a.print("{}/501", .{@as(u32, @intFromFloat(people))}), .met = people_met or standing });
-    for (exchange_cost) |c| {
+    for (exchange.cost) |c| {
         const have = ledger.balance(world, e, c[0]);
         const word = c[0].wordIn(2);
         if (have < c[1]) {
@@ -343,7 +315,9 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
             .met = standing or have >= c[1],
         });
     }
-    const state = exchangeLifecycle(standing, people, research_met, short_kinds);
+    const state: t.MilestoneLifecycle = switch (exchange.lifecycle(standing, people, research_met, short_kinds)) {
+        inline else => |l| @field(t.MilestoneLifecycle, @tagName(l)),
+    };
     const people_n: u32 = @intFromFloat(people);
     const unmet: u32 = @as(u32, @intFromBool(!research_met)) + @intFromBool(!people_met);
     return .{
@@ -381,17 +355,6 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
             .done => "ACT III OPEN",
         },
     };
-}
-
-/// Raise the Exchange: pay its price from the ledger and stand it; the settlement reads as
-/// Act III from the next frame.
-fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
-    if (ctx.res.game.sim.exchange.standing) return;
-    for (exchange_cost) |c| if (ledger.balance(world, e, c[0]) < c[1]) return;
-    for (exchange_cost) |c| _ = ledger.move(world, e, c[0], -c[1]);
-    ctx.res.game.sim.exchange.standing = true;
-    ctx.res.game.sim.exchange.reveal = true;
-    ctx.res.game.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → a `Research` intent;

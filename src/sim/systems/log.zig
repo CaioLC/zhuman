@@ -104,6 +104,9 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
         };
     }
 
+    var exchange = ev.reader(events.ExchangeRaised, .log);
+    while (exchange.next()) |_| sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
+
     var ran_out = ev.reader(events.FoodRanOut, .log);
     while (ran_out.next()) |_| sim.log.push(.warn, "Your food has run out.");
 
@@ -394,6 +397,15 @@ test "a research cost reads in whole units and capitals, or as carried across th
     const carried = roster.Technology{ .id = "c", .name = "C", .short = "C", .coord = .{ .q = 1, .r = 0 } };
     costText(&cw, &carried);
     try testing.expectEqualStrings("CARRIED FROM ACT I", cw.buffered());
+}
+
+test "ExchangeRaised: the Exchange stands" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.ExchangeRaised{ .agent = 0 });
+    rig.run();
+    try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
+    try expectLine(&rig, 0, .good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {

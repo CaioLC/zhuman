@@ -5,9 +5,10 @@
 //! feeds them at the eating policy's rate, when water runs short at its flow, and the hall's
 //! vigor. No decorative durability/maintenance meters: those systems do not exist.
 //!
-//! The roster, the stocks, the vigor and the eating rate are live; the flows, the population
-//! and the per-person ration come from `fixtures.zig` until a population and production model
-//! compute them. Pure projection into the frame arena; no nodes.
+//! The roster, the stocks, the vigor and the eating rate are live; the population is
+//! `Sim.population`'s stand-in, and the flows and the per-person ration come from
+//! `fixtures.zig`, until a population and production model compute them. Pure projection into
+//! the frame arena; no nodes.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -76,7 +77,7 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     };
 
     var body: std.ArrayList(Sentence) = .empty;
-    const people = fx.populationOf(&ctx.res.game.sim);
+    const people = ctx.res.game.sim.population;
     try body.append(a, .{ .key = "population", .prefix = "Population ", .value = try a.print("{d:.0}", .{people}), .suffix = " under one roof.", .tone = .good });
 
     // The larder at the eating policy's rate: the rail's slider moves this line.

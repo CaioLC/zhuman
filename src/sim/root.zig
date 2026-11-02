@@ -35,6 +35,7 @@ pub const systems = struct {
     pub const barter = @import("./systems/barter.zig");
     pub const merchant = @import("./systems/merchant.zig");
     pub const research = @import("./systems/research.zig");
+    pub const exchange = @import("./systems/exchange.zig");
     pub const log = @import("./systems/log.zig");
 };
 

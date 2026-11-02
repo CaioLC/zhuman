@@ -21,7 +21,7 @@ const Receipt = ledger.Receipt;
 
 /// Every scheduled reader, one stored cursor each per event type. A handler reads its intent
 /// family under its own id; `log` reads every fact.
-pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, log };
+pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, exchange, log };
 
 /// Who comes and goes on the sim clock.
 pub const Who = enum { passerby, merchant };
@@ -114,6 +114,10 @@ pub const Refused = struct {
         not_owned,
         /// The agent has no research board.
         no_board,
+        /// The milestone's conditions are not met.
+        locked,
+        /// The milestone already stands.
+        already_standing,
     };
 };
 
@@ -182,6 +186,9 @@ pub const Traded = struct {
 /// `agent` established technology `ti`; `newly` has a bit set, by catalog index, for each
 /// tile that became available with it.
 pub const Researched = struct { agent: Entity, ti: u16, newly: u64 = 0 };
+
+/// `agent` raised the Exchange.
+pub const ExchangeRaised = struct { agent: Entity };
 
 /// A visitor arrived.
 pub const Arrived = struct { who: Who };

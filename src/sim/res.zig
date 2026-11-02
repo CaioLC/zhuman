@@ -134,17 +134,17 @@ pub const Sim = struct {
     /// Seeded on first use; cleared by `reset` for a fresh run.
     neighbours: @import("./rules/neighbours.zig").Market = .{},
 
-    /// **The Exchange, stubbed** — Act II's milestone. `standing` once it is raised (the
-    /// settlement then reads as Act III); `population` overrides the page's stand-in
-    /// population until the population model exists (ACT2-01), so a fixture can reach every
-    /// state of the card. Cleared by `reset`.
+    /// **The Exchange** — Act II's milestone, `standing` once it is raised (the settlement then
+    /// reads as Act III). Raised by `systems/exchange.zig`. Cleared by `reset`.
     exchange: Exchange = .{},
+
+    /// **The settlement's population** — a stand-in number until the population model exists
+    /// (`docs/roadmap.md`, ACT2-01). The Exchange's unlock and the Act II header read it; a
+    /// fixture sets it to reach every state of the Exchange card.
+    population: f32 = 48,
 
     pub const Exchange = struct {
         standing: bool = false,
-        population: ?f32 = null,
-        /// Raised this frame: the card opens its details on the next build (ACT2-18).
-        reveal: bool = false,
     };
 
     /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would

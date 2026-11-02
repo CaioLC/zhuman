@@ -21,7 +21,6 @@ const p_debug = @import("./debug_page.zig").debug_page;
 const title_page = @import("./title.zig");
 const p_title = title_page.ui_title;
 const fixture = @import("./fixture.zig");
-const act_two_fixtures = @import("./act_two/fixtures.zig");
 const t = @import("./templates/root.zig");
 
 /// Returns a flattened list of *Nodes for the render stage
@@ -77,8 +76,8 @@ fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
     return .{
         .act = act,
         .day = 1 + @as(u64, @intFromFloat(ctx.res.game.sim.elapsed / ctx.res.game.config.secs_per_day)),
-        // Population has no model yet (ACT2-01): Act II reads its fixture.
-        .people = if (act >= 2) @intFromFloat(act_two_fixtures.populationOf(&ctx.res.game.sim)) else 1,
+        // Population has no model yet (ACT2-01): Act II reads the stand-in.
+        .people = if (act >= 2) @intFromFloat(ctx.res.game.sim.population) else 1,
     };
 }
 

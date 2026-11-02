@@ -1,22 +1,11 @@
 //! `act_two/fixtures` — the authored stand-ins for what the Act II simulation does not model:
-//! the population and coin readouts, the energy rate, the merchant's days left, the
-//! settlement's per-day flows and its body projections. Everything the catalog and the world can say — the
+//! the coin readout, the energy rate, the merchant's days left, the settlement's per-day flows
+//! and its body projections; the population stand-in is `Sim.population`. Everything the catalog and the world can say — the
 //! verbs, the recipes, the stocks, the goods owned — comes from them instead
 //! (`docs/roadmap.md`: ACT2-01 population, ACT2-08 the merchant, ACT2-09 coin).
 const std = @import("std");
 const ha = @import("ha");
 const Resource = ha.sim.data.roster.Resource;
-
-// —— Header readouts with no model behind them ——————————————————————————————————————————
-
-/// The settlement's population.
-pub const population: f32 = 48;
-
-/// The population the pages show: the stand-in, or the Exchange stub's override (a fixture
-/// reaching the Exchange's 500-people condition).
-pub fn populationOf(sim: *const @import("ha").sim.Sim) f32 {
-    return sim.exchange.population orelse population;
-}
 
 // —— Coin Merchant (ACT2-14) ————————————————————————————————————————————————————————————
 // The merchant's lots and its visits are the simulation's (`sim.systems.merchant`); what the
