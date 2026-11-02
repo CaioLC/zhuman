@@ -9,7 +9,7 @@
 //! run from its package (`build.zig`), in this step and in `test`. Referencing
 //! `features/root.zig` runs the `comptime` conformance check over the feature `list`;
 //! `refAllDecls` then forces the concrete composition/feature/draw bodies to compile
-//! (`svg.attach` is referenced explicitly since no composition calls it yet).
+//! (`svg.attach` is referenced explicitly because no composition calls it).
 
 const std = @import("std");
 
@@ -52,7 +52,7 @@ test {
     _ = frame_mod; // the host frame driver — the per-frame phase sequence `Driver.step`
     _ = profile; // host-side frame capture: state stats + timings over one shared window
     _ = replay; // full-frame headless input replay through frame.Driver + route.Router
-    _ = journey; // keyboard-only Act I/II interaction journeys over the shared route policy (QA-14/15)
+    _ = journey; // keyboard-only Act I/II interaction journeys over the shared route policy
     _ = frame_lifecycle; // the frame lifecycle locked as an SDL-free integration test (positive + misordered)
     _ = cursor; // cursor request lifecycle and SDL system-shape mappings
     _ = drag; // strict threshold and capture-backed scrollbar drag tests
@@ -75,5 +75,5 @@ test {
     std.testing.refAllDecls(control); // the one control lifecycle
     std.testing.refAllDecls(style); // style/placement fold + its unit tests
     std.testing.refAllDecls(elements); // content leaves + `el` — force the bodies to compile
-    _ = &features.data_svg; // svg.attach — compile it even though no widget calls it yet
+    _ = &features.data_svg; // svg.attach — compiled although no widget calls it
 }

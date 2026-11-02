@@ -157,9 +157,9 @@ const App = struct {
     fn init(process: std.process.Init) !App {
         try sdl.init(.{ .video = true, .events = true });
         try sdl.ttf.init();
-        // Sized to the BUILD panel, which is the tallest screen: five shelves of tiles whose
-        // width grew with the manufactured tier's three-digit prices, so they wrap two to a
-        // row. Resizable, and the columns do not yet reflow (docs/roadmap.md, Act I).
+        // Sized to the BUILD panel, the tallest screen: five shelves of tiles, wide enough
+        // from the manufactured tier's three-digit prices that they wrap two to a row.
+        // Resizable; the columns do not reflow (docs/roadmap.md, Act I).
         const window, const renderer = try sdl.render.Renderer.initWithWindow(
             "Human Action",
             900,
@@ -510,8 +510,8 @@ const FrameHost = struct {
         const self: *FrameHost = @ptrCast(@alignCast(user));
         // Development capture: the five-pass timings paired with per-pool / interaction /
         // node state counts over one shared window. A no-op unless `HA_UI_PROFILE` is set and
-        // info logging is compiled in. The timing lines are preserved verbatim through the
-        // capture's `Report.log` (it emits the same five-pass avg/max lines plus state lines).
+        // info logging is compiled in. `Report.log` emits the five-pass avg/max lines plus
+        // the state lines.
         self.app.ui_capture.record(sample, ui_ctx, trees);
         if (self.app.ui_capture.takeIfReady(600)) |report| report.log();
         // Development node/layout dump (`HA_LAYOUT_DUMP=<path>`): once, on the configured frame.

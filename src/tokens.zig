@@ -1,13 +1,12 @@
-//! `tokens` — the game's **design tokens, encoded once**. One authoritative place
-//! for the finalized non-color layout scalars: page padding, the common gap ladder, the
-//! hairline width, the control-height ladder, and a re-export of the already-centralized
-//! typography sizes (`ui_client.type`) and functional-transition durations
-//! (`ui_client.tween`). Colors are the other half of the token set and live where a color
-//! *role* belongs: the foundation roles in `ui_client/theme.zig` (`Theme`, incl. the
-//! `good` role) and the game's values + resource/sector hues + terminal ground in
-//! `palette.zig`. So a call site cites `tokens.pad_page` / `tokens.gap.row` /
-//! `tokens.control.h_std` / `type.heading` / `tween.holdings_s` instead of a bare literal,
-//! and every finalized number has exactly one definition.
+//! `tokens` — the game's **design tokens, encoded once**. The one place for the non-color
+//! layout scalars: page padding, the common gap ladder, the hairline width, the
+//! control-height ladder, and a re-export of the typography sizes (`ui_client.type`) and
+//! functional-transition durations (`ui_client.tween`). Colors live where a color *role*
+//! belongs: the foundation roles in `ui_client/theme.zig` (`Theme`, incl. the `good` role)
+//! and the game's values + resource/sector hues + terminal ground in `palette.zig`. So a
+//! call site cites `tokens.pad_page` / `tokens.gap.group` / `tokens.control.h_std` /
+//! `type.heading` / `tween.holdings_s` instead of a bare literal, and every number has
+//! exactly one definition.
 //!
 //! **All scalars here are *logical* px / seconds** — the pre-scale authoring units. The one
 //! logical→device multiply is `ui_client.type.toDevice` (fonts) / `view.dp` (geometry) /
@@ -21,16 +20,15 @@ const typ = @import("./ui_client/type.zig");
 const tween = @import("./ui_client/tween.zig");
 
 // —— Typography sizes (re-exported; authored in `ui_client/type.zig`) ————————————————————
-// The typography contract (size + tracking + case, coupled) already lives in one module
-// (`type.zig`). Re-exported here as bare logical-px sizes so the sizes have a single citation
-// point next to the other layout tokens, without duplicating the numbers — these *are* the
-// `type` roles' sizes.
+// The typography contract (size + tracking + case, coupled) lives in `type.zig`. The sizes
+// are re-exported here as bare logical px, one citation point next to the other layout
+// tokens; these *are* the `type` roles' sizes.
 
 /// Body copy — the base of the ladder and the unstyled default (14 logical px).
 pub const size_body: f32 = typ.body.size_logical_px;
 /// Small/secondary copy — captions, dense readouts (11 logical px).
 pub const size_small: f32 = typ.small.size_logical_px;
-/// Heading — the prototype `--h3` (21 logical px).
+/// Heading (21 logical px).
 pub const size_heading: f32 = typ.heading.size_logical_px;
 
 // —— Page padding —————————————————————————————————————————————————————————————————————
@@ -67,8 +65,8 @@ pub const hairline: f32 = 1;
 
 // —— Control heights ——————————————————————————————————————————————————————————————————
 /// The control-height ladder — the fixed heights interactive controls stand at, in logical
-/// px. `compact` is the prototype's `30px` popup/select height (the `select` control's height); `std` is
-/// the ordinary button/field height; `tall` is a primary/CTA row.
+/// px. `compact` is the popup/select height (the `select` control's); `std` is the ordinary
+/// button/field height; `tall` is a primary/CTA row.
 pub const control = struct {
     pub const h_compact: f32 = 30;
     pub const h_std: f32 = 34;
@@ -84,9 +82,8 @@ pub const rail = struct {
 };
 
 // —— Transition durations (re-exported; authored in `ui_client/tween.zig`) ————————————————
-// The functional-transition durations live in one module (`tween.zig`), in seconds.
-// Re-exported so they have one citation point beside
-// the layout tokens without duplicating the values.
+// The functional-transition durations live in `tween.zig`, in seconds; they are re-exported
+// here beside the layout tokens.
 
 /// Holdings/BODY rail collapse transition (`120ms`).
 pub const dur_rail_s: f32 = tween.holdings_s;

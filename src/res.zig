@@ -41,7 +41,7 @@ pub const Platform = struct {
 };
 
 /// Persistent host playback controls. They are not run state, so starting a fresh game keeps
-/// the player's selected speed. Only the reviewed 1×/2×/3× values are accepted.
+/// the player's selected speed. Only the 1×/2×/3× values are accepted.
 pub const Playback = struct {
     speed: u8 = 1,
     paused: bool = false,
@@ -181,7 +181,7 @@ pub const TitleState = struct {
 
 /// The player's settings, shared by the title screen and the session menu. Held for the
 /// session. Window size, fullscreen and UI scale act on the host; difficulty, the two volumes
-/// and contrast are held but have no effect until their systems exist (roadmap PORT-03).
+/// and contrast are held but have no effect (stand-ins; `docs/roadmap.md`).
 pub const Settings = struct {
     pub const Difficulty = enum {
         abundant,
@@ -189,7 +189,7 @@ pub const Settings = struct {
         harsh,
         barren,
 
-        /// Input cost and yield multipliers the difficulty names (not yet applied).
+        /// Input cost and yield multipliers the difficulty names (a stand-in: no system reads them).
         pub fn cost(self: Difficulty) f32 {
             return switch (self) {
                 .abundant => 0.8,
@@ -312,8 +312,7 @@ pub const Input = @import("./ui_client/input.zig").Input;
 /// This frame's resolved presentation values. Everything here is recomputed in
 /// `build_ui`'s prologue from sim state and the window; nothing persists across frames,
 /// and nothing outside the UI reads it. State that must survive a frame belongs in a
-/// `Ctx` pool; state the sim writes belongs in `Sim`. The responsive-scale factor is the
-/// next resident (docs/roadmap.md, "Act I").
+/// `Ctx` pool; state the sim writes belongs in `Sim`.
 pub const View = struct {
     /// This frame's palette — `build_ui` installs one over the foundation's neutral
     /// defaults.
@@ -371,9 +370,9 @@ pub const Resources = struct {
     log_heard: ?u64 = null,
     /// Host-side accessibility bridge: consumes the published `semantics` snapshot
     /// and drains `announcements` to the active platform provider each frame. Default provider
-    /// is the inert `NoopProvider` — this build ships no Windows UIA screen-reader tree
-    /// (`zig-sdl3` 0.2.3 exposes no `WM_GETOBJECT` hook), and the bridge's capability report
-    /// says so honestly. All platform policy stays host-side; no simulation system touches it.
+    /// is the inert `NoopProvider`: there is no Windows UIA screen-reader tree (`zig-sdl3`
+    /// 0.2.3 exposes no `WM_GETOBJECT` hook), and the bridge's capability report says so.
+    /// All platform policy stays host-side; no simulation system touches it.
     a11y: @import("./ui_client/a11y.zig").Bridge =
         @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
     /// Host-side reduced-motion policy: a one-bit preference resolved **once** at
@@ -384,8 +383,8 @@ pub const Resources = struct {
     /// motion-allowed until `init` resolves the real preference.
     motion: @import("./ui_client/motion.zig").Policy = .{},
     /// Host-side transition/tween registry: scalar transitions keyed by stable
-    /// node/domain id for the prototype's functional animations (Holdings collapse, stock-token
-    /// font swap, board state changes). `main` advances it by the frame `dt` and projects the
+    /// node/domain id for the functional animations (Holdings collapse, stock-token font
+    /// swap, board state changes). `main` advances it by the frame `dt` and projects the
     /// reduced-motion policy onto it each frame; a consumer reads `value(id, fallback)` to
     /// drive a size/gap/opacity. Presentation only; no simulation system reads it. Bounded and
     /// non-allocating (POD), so it lives inline on `Resources`.

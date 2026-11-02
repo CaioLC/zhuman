@@ -36,9 +36,8 @@ pub const ground = rgb(9, 8, 6);
 
 /// The six resource/sector colors — Food, Water, Fuel, Metal, Minerals, Biomass. These are
 /// **game content**, not foundation `Theme` roles: the engine has no notion of a "resource",
-/// and Act II adds sectors keyed by these hues, so they are authored here as a fixed record
-/// and carried on `View` for the HUD/legend to sample. Kept off `Theme` on purpose: resource/sector
-/// colors are game `View`/palette data, not generic `Theme` roles.
+/// so they are a fixed record authored here and carried on `View` for the HUD/legend to
+/// sample.
 pub const ResourceColors = struct {
     food: uitheme.Color = rgb(217, 121, 102), // #d97966
     water: uitheme.Color = rgb(91, 159, 196), // #5b9fc4
