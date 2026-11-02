@@ -1,11 +1,12 @@
-//! Library root for the ECS engine (`src/ecs/`). Re-exports the world, the queries, the events
-//! and `run` under one namespace, so a host imports `ecs` and reaches everything. See
-//! `README.md`.
+//! Library root for the ECS engine (`src/ecs/`). Re-exports the world, the queries, the events,
+//! `run`, and the states and schedule under one namespace, so a host imports `ecs` and reaches
+//! everything. See `README.md`.
 
 const world = @import("./world.zig");
 const query = @import("./query.zig");
 const run_mod = @import("./run.zig");
 const events = @import("./events.zig");
+const schedule = @import("./schedule.zig");
 
 pub const Entity = world.Entity;
 pub const MAX_ENTITIES = world.MAX_ENTITIES;
@@ -26,9 +27,15 @@ pub const Events = events.Events;
 
 pub const run = run_mod.run;
 
+pub const States = schedule.States;
+pub const Schedule = schedule.Schedule;
+pub const SetKind = schedule.SetKind;
+pub const sameSystem = schedule.sameSystem;
+
 test {
     _ = world;
     _ = query;
     _ = run_mod;
     _ = events;
+    _ = schedule;
 }

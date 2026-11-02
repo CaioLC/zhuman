@@ -132,3 +132,51 @@ Naming a group instead of taking the whole `*R` puts a system's reach in its sig
 `*const` against `*` says whether it reads or writes. Structural changes (`spawn`, `add`,
 `remove`, `despawn`) go through the world pointer; mutating a storage while iterating it is
 unsafe, so a system collects ids first and applies after.
+
+## States and the schedule
+
+```zig
+States(comptime S: type) type          // { current: S = <S's first tag>, next: ?S = null }
+  .in(s) bool    .set(s)
+Schedule(comptime S: type, comptime sets: anytype) type
+  .tick(world, res, states: *States(S), run_update: bool)
+  .setOf(comptime s, comptime kind) tuple    .indexOf(comptime s, comptime kind, comptime sys) ?usize
+  .sets                                      // the table as declared
+SetKind = enum { on_enter, handle, update, on_exit }
+sameSystem(comptime a, comptime b) bool
+```
+
+`States(S)` is plain data, so it sits as a field of the resources struct and a system takes it
+as a resource group: `*const States(S)` to read with `in`, `*States(S)` to request a transition
+with `set`. A request waits in `next`; a later request in the same tick replaces it.
+
+`Schedule(S, sets)` is the systems, declared once, per state. `sets` is a struct literal with one
+field per state that runs anything, each a struct literal of sets, each a tuple of system
+functions (they differ in signature, so not a slice):
+
+```zig
+const schedule = Schedule(Phase, .{
+    .idle = .{ .handle = .{ start } },
+    .play = .{ .on_enter = .{ setup }, .handle = .{ input }, .update = .{ move, collide }, .on_exit = .{ teardown } },
+});
+```
+
+| Set | Runs |
+|---|---|
+| `on_exit` | once, when a transition leaves the state |
+| `on_enter` | once, when a transition enters it |
+| `handle` | every tick the state is current |
+| `update` | every tick the state is current and `run_update` is true |
+
+`tick` does, in order: apply the pending transition, if any (clear `next`, run the current
+state's `on_exit`, make `next` current, run its `on_enter`); run the current state's `handle`
+set; if `run_update`, run its `update` set. Each set runs in declared order through `run`, so a
+system there binds its params as anywhere else. A request for the state already current is a
+restart and runs both sets the same way. A transition requested during a tick is applied at the
+top of the next, so every system of one tick sees one state, and one requested from an
+`on_enter` set waits a tick like any other.
+
+A state the table does not name has empty sets. A table field that is not a tag of `S`, a set
+named anything but the four, or a set that is not a tuple of functions is a compile error naming
+it. `setOf` and `indexOf` read the table at comptime, so a test can assert the order a set
+declares; `sameSystem` compares two system functions.
