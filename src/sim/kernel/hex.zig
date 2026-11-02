@@ -8,7 +8,7 @@
 //! compares integer coordinates instead. Screen placement is the research board's
 //! (`pages/hex_pixel.zig`), a one-way transform out of these coordinates.
 //!
-//! Conventions (from `docs/hex_tech_board_spec.md` §1–§3):
+//! Conventions (`src/README.md`, "The research board"):
 //!   - Orientation: pointy-top (a vertex points up).
 //!   - Coordinates: axial `(q, r)`, hub at `(0, 0)`.
 //!   - Ring of a hex: `max(|q|, |r|, |q + r|)`.
@@ -68,7 +68,7 @@ pub const Cube = struct {
 /// The six resource families, in the fixed clockwise screen order starting at 3 o'clock:
 /// Food, Water, Fuel, Metal, Minerals, Biomass. This ordinal order is load-bearing — every
 /// adjacent pair forms a hybrid domain, so it must not be reordered. The enum is a pure
-/// identity (an index into §2's table); the UI maps it to a palette hue, not this module.
+/// identity (an index into the wedge table); the UI maps it to a palette hue, not this module.
 pub const Wedge = enum(u3) {
     food = 0,
     water = 1,
@@ -89,7 +89,7 @@ pub const Wedge = enum(u3) {
 };
 
 /// The six wedge direction vectors in order, indexed by `@backingInt(Wedge)`. A pure corner
-/// hex at ring `n` for wedge `w` is `dir[w] * n`. These are the §2 direction vectors.
+/// hex at ring `n` for wedge `w` is `dir[w] * n`. These are the wedge direction vectors.
 pub const directions = [6]Axial{
     .{ .q = 1, .r = 0 }, // 0 Food     — 0°   (right)
     .{ .q = 0, .r = 1 }, // 1 Water    — 60°  (lower right)
@@ -183,7 +183,7 @@ pub fn disk(gpa: std.mem.Allocator, max_ring: u32, list: *std.ArrayList(Axial)) 
 
 // ============================ Classification =============================
 
-/// Pure/hybrid classification of a ring hex (§3). Ring 0 is `.foundation`. A ring-`n ≥ 1`
+/// Pure/hybrid classification of a ring hex. Ring 0 is `.foundation`. A ring-`n ≥ 1`
 /// hex is either a `.pure` corner owned by one wedge, or a `.hybrid` edge between two adjacent
 /// wedges with a position index `k` (`1..n-1`). `k` small leans toward `wedge`; `k` large
 /// leans toward `wedge.next()`.
@@ -199,7 +199,7 @@ pub const Kind = union(enum) {
 /// Classify a hex from its exact axial coordinates. Compares against the six corner equations
 /// first; otherwise solves the unique `(w, k)` edge equation. Never rounds a screen angle.
 ///
-/// Edge equation (§3): `pos = n * dir[w] + k * (dir[w+1] - dir[w])`, for `k = 1..n-1`.
+/// Edge equation: `pos = n * dir[w] + k * (dir[w+1] - dir[w])`, for `k = 1..n-1`.
 pub fn classify(a: Axial) Kind {
     const n = ring(a);
     if (n == 0) return .foundation;
@@ -356,7 +356,7 @@ test "classify: ring-2 hybrids sit between adjacent wedges at k=1" {
 }
 
 test "classify: ring-3 Food–Water edge distinguishes k=1 and k=2 by lean" {
-    // Per spec §10 ring 3: (2,1) is Food–Water k=1, (1,2) is Food–Water k=2.
+    // Ring 3: (2,1) is Food–Water k=1, (1,2) is Food–Water k=2.
     const a = classify(.{ .q = 2, .r = 1 });
     try testing.expect(a == .hybrid);
     try testing.expectEqual(Wedge.food, a.hybrid.wedge);

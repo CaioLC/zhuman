@@ -13,8 +13,8 @@ Mechanism lives elsewhere and is not repeated here — how a node is built and l
 
 **A surface answers one question.** When a screen answers several, it answers all of them
 badly: the shape that serves one question is rarely the shape that serves another, so a
-surface with three jobs ends up with the furniture of none of them. The BUILD pane was
-sixteen identical tiles because it was simultaneously a shop, a catalog and an inventory.
+surface with three jobs ends up with the furniture of none of them. A BUILD pane of identical
+tiles would be a shop, a catalog and an inventory at once.
 
 Everything below follows from splitting questions apart and giving each its own shape.
 
@@ -57,8 +57,8 @@ its children are content — so a row is hovered as a row even while the pointer
 
 ## ACTIONS — the verb browser
 
-Twenty unlocked verbs no longer fit as large cards. ACTIONS therefore uses one search-first browser
-with compact two-column rows. Each row remains one full button and carries name, readiness, energy,
+Twenty unlocked verbs do not fit as large cards, so ACTIONS is one search-first browser
+with compact two-column rows. Each row is one full button and carries name, readiness, energy,
 time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
 `*` use the same grammar as BUILD. ACTIONS does not sort: verbs read in authored order. Every act
@@ -73,7 +73,7 @@ appetite and `50` is normal, and the slider's word (`meager`, `lean`, `modest`, 
 `{word} · {rate}×` and projects coverage (how long the larder lasts) and recovery (days to
 full vigor) from the same arithmetic the metabolism loop runs; the simulation stores only
 the resulting bounded multiplier. A count-only summary reports `<visible> of 20 actions
-shown`; query and sort state use `actionq`, `actionsort`, `actiondir` and `actionsortopen=1`.
+shown`.
 
 ## BUILD — the shop
 
@@ -86,8 +86,8 @@ Garden bed      12m 4e   0.7d   grows food on its own      ▓▓▁  0.3d left 
 Work gloves     24m 1e   2.1d   splitting wood costs less  needs Split wood
 ```
 
-*name · cost · time · what it changes · state · corner.* The last two carry everything the
-grey used to hide: `Build →`, a reach meter against the limiting stock, time remaining, or
+*name · cost · time · what it changes · state · corner.* The last two carry everything a
+plain grey row would hide: `Build →`, a reach meter against the limiting stock, time remaining, or
 the verb a blocked good is waiting on.
 
 **A build in progress keeps its row.** It does not become a bar on a dim box — it stays in
@@ -104,8 +104,8 @@ state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` ex
 A blank query shows the act's complete shelf — owned, distant, prerequisite-short and
 research-gated recipes included, disabled rather than hidden — and typing only narrows it. Every
 act uses the same BUILD pane (`build_section`); only its content differs: which records are the
-act's recipes, the subtitle, and the milestone card. That removes the need for visible FILTER,
-SHOW, built, preset, or syntax-help rows while keeping every recipe reachable.
+act's recipes, the subtitle, and the milestone card. So no FILTER, SHOW, built, preset or
+syntax-help rows are needed, and every recipe stays reachable.
 
 **Sort from the column headers.** RECIPE (name), COST (order size), TIME and STATE (reach) are
 sortable: clicking one sorts on it in its natural direction — STATE nearest first, the others
@@ -113,16 +113,15 @@ cheapest, quickest, A–Z — and clicking it again flips the direction. Only th
 wears an arrow (`↑`/`↓`) and reads in `fg`. The header row is one Tab stop; arrows rove across its
 columns and Enter/Space sorts. The default is STATE ↓.
 
-The summary is count-only (`{shown} of {total} recipes shown`); balances already live in the header. A build
-in progress remains visible regardless of query and linked research updates recipe state without
-rebuilding the list. The removed explanatory footnote is not replaced: the browser and goal card
-must explain themselves.
+The summary is count-only (`{shown} of {total} recipes shown`); balances already live in the
+header. A build in progress remains visible regardless of query and linked research updates
+recipe state without rebuilding the list. There is no explanatory footnote: the browser and
+goal card must explain themselves.
 
-Defaults are the whole design: most players never touch the controls, so the default view keeps
-every currently eligible recipe reachable without typing. ACTIONS and BUILD use one shared catalog
-scroll element and the same global scrollbar treatment; the current nine-recipe BUILD default
-naturally overflows it. The six-column heading remains sticky, while even broad 50-row queries leave
-search, Exchange and the event log fixed.
+Defaults are the whole design: most players never touch the controls, so the blank view keeps
+every recipe reachable without typing. ACTIONS and BUILD use one shared catalog scroll element
+and the same global scrollbar treatment. The six-column heading is sticky, and a long list
+leaves search, Exchange and the event log fixed.
 
 **The log is part of ACTIONS, BUILD, and GENERATORS.** One four-line live event log occupies the terminal footer
 on both panes and keeps its place while their result collections scroll. Lines read newest
@@ -151,8 +150,7 @@ made, and the materials for the largest build in the act; raising it pays throug
 build path as any recipe, and the curtain falls only when the build completes. In Act II it is
 the **Exchange**, a standing trading floor. Its recipe is unlocked
 only when population is strictly greater than 500 and at least one ring-4 technology is
-Researched. The prototype recipe costs 80 Biomass, 40 Minerals and 24 Metal and takes 18
-days. Raising it pays those inputs, replaces the temporary passerby-descended merchant row
+Researched. The recipe costs 80 Biomass, 40 Minerals and 24 Metal and takes 18 days. Raising it pays those inputs, replaces the temporary passerby-descended merchant row
 with a permanent Exchange, and opens Act III. A compact Exchange bar remains fixed below the
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
@@ -270,45 +268,59 @@ against what is held, what it does, and what it opens outward; `RESEARCH →` pa
 once and establishes it, or names what is short. The camera zooms on the wheel about the
 pointer and pans on a drag; the arrows walk the lit tiles and Escape clears the selection.
 Filters (researched, available, all) and a search dim what they leave out rather than
-removing it, so the map keeps its shape.
+removing it, so the map keeps its shape. The filters are cumulative from narrow to broad:
+`all` keeps the anonymous locked silhouettes, and a search never reveals a locked tile's label.
 
-What follows is the board's intent beyond that first pass.
+**Tile states.** A locked tile is the resource colour at about 24% opacity with no label, and
+is neither selectable, clickable nor a focus target. An available tile is at about 66%, labelled
+and interactive. A researched tile is at full opacity with a marker, and stays selectable to
+inspect. Affordability is not a state: an available tile the settlement cannot pay for stays
+available, and its action reads the deficit as a fact, `NEEDS 2 BIOMASS · 1 FOOD`, never a
+route to cover it. A researched tile has no repeat action. Locked labels are hidden so that
+progression and the silhouette of the board stay legible, not because the society lacks the
+knowledge.
 
-A production structure rather than a tech tree, which changes its
-topology: videogame trees fan **out**, one item unlocking three, but capital goods are
-complementary — a recipe converges on its output, so the graph fans **in**.
+**Resource identity.** A pure tile's body is its resource colour toned toward neutral and a
+hybrid's is the toned midpoint of its two. A pure tile has one inset closed rail in its
+colour on all six edges; a hybrid has two, each resource owning the three contiguous edges
+nearest its direction, so the pair partitions the six without overlap: 24 closed rails and 36
+hybrids of two make 96 rail paths. Small material dots near a tile's lower edge show its
+composition (the rule is in [`../src/README.md`](../src/README.md), *The research board*); they
+do not replace the full cost in the detail pane. `HYBRID` in the detail and the tooltip is the
+textual cue for the same fact. The six resource colours are equal in lightness, so bodies,
+rails and dots stay distinct without harsh seams (`src/palette.zig`).
 
-**Materials and capital only.** Consumption is deliberately off the board, named once at
-the rim. That single decision is what lets the radius mean one thing: **centre is the body
-and the gifts of nature, rim is where goods meet the mouth**, raw to finished. The radius
-is then the *length of production* — how many stages stand between raw stone and dinner —
-and growth radiates outward.
+**The board's surface.** The foundation is one undivided neutral hex with no label, no rail
+and no interaction: its accessible name is *Ring 0 foundation*, it is never a focus target,
+hover target or action, and a camera drag may start from it. The board has no circular or
+wedge backdrop, no stage-circle guides, no ring labels and no summary beneath it; the only
+text outside the tiles is the six resource labels on the perimeter, on a neutral-cool charcoal
+surface.
 
-Hex geometry supplies both axes for nothing: a ring at distance *n* holds exactly *6n*
-tiles, so **ring is the stage** and **sextant is the specialization**. A tile on a seam
-between two wedges belongs to both trades, which falls out of the grid rather than being
-authored.
+**Reading a tile.** Hovering a lit tile shows a tooltip with its name, ring, domain and state.
+The detail pane shows the name, ring and era, pure or hybrid domain, state, effect, authored
+cost against what is held, the deficit, and what it enables. It never offers BUILD: research
+can open a recipe, and BUILD stays the construction surface. The camera has zoom-out, zoom-in,
+percentage and reset controls; the scale is 100% by default and clamped to 75%–250%. A drag
+pans once it passes a small movement threshold and suppresses the click that ends it, while a
+press that did not move selects. Expanding or collapsing HOLDINGS never rebuilds or resets the
+board.
 
-**The chords are the economics.** An edge running radially is deepening your own trade; an
-edge running as a chord across the board is needing what somebody else makes. The density
-of chords is the degree of division of labour, drawn. Selecting a good lights everything
-upstream of it, and the reach of what lights up is what you cannot do alone.
+A tile's ring is its stage and its sextant its specialization: a ring at distance *n* holds
+exactly *6n* tiles, so the radius is the length of production, centre the gifts of nature and
+the outer rings later stages. A tile on a seam between two wedges belongs to both trades,
+which falls out of the grid rather than being authored.
 
 **Say stages, not orders.** Menger numbers inward from consumption — first-order is the
 loaf — so on a board with nature at the centre, "higher order outward" inverts him.
 Böhm-Bawerk's stages run raw to finished, which is the direction drawn.
 
-**Structure is displayed and costed, never enforced.** A prerequisite is a hard refusal, and
-an impossible good has no price to compare against — the merchant would become a key rather
-than a counterparty. Building across specializations stays possible at a penalty, because
-the lesson is comparative advantage: trade must pay even when you could make it yourself.
-
 The board is the map and the place research is paid for; BUILD is the shop.
 
 ## Constraints that shape the work
 
-Real limits, discovered by hitting them. Their *fixes* are in
-[`roadmap.md`](roadmap.md); what they mean for a screen is here.
+Real limits. Their *fixes* are in [`roadmap.md`](roadmap.md); what they mean for a screen is
+here.
 
 - **A text leaf has exactly one fit** — free, wrapped to a width, a clipped or ellipsized
   cell of a fixed width, or vertical — chosen where it is created. A string past the text

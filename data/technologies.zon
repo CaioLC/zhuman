@@ -6,8 +6,7 @@
 // as researched, the four other ring-1 tiles and the five ring-2 openers available, the
 // rest locked. `short` is the hex's board label. `effect` and `enables` are the player's
 // words. Rings 1–4; ring 0 is the
-// foundation and is not a record. The layout and the names follow
-// `docs/hex_tech_board_spec.md`.
+// foundation and is not a record. The board's rules are `src/README.md`, "The research board".
 .{
     // ----- Ring 1 — Crude production (all pure) -----
     .{

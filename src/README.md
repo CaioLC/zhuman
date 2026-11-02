@@ -532,6 +532,59 @@ a name. Per agent the board is `comp.Research`, one `TechState` per catalog inde
 curtain by `Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
 `researched`, and a verb that names one is held from then on, as a grant would hold it.
 
+**The research board.** The sixty records in `data/technologies.zon` are the tiles; the rules
+they obey are here. The board is an adoption board: research establishes already-known
+technology at the settlement's scale and is priced in resources, so there is no knowledge
+currency and nothing to discover.
+
+*Geometry (`kernel/hex.zig`).* The grid is pointy-top, in axial `(q, r)`. A hex's ring is
+`max(|q|, |r|, |q + r|)` and ring `n` holds `6n` hexes, so rings 0–4 are 61 logical hexes: the
+foundation at `(0, 0)` and the sixty tiles of rings 1–4. Six wedges, one per resource, run
+clockwise on screen from 3 o'clock in the order Food `(1, 0)`, Water `(0, 1)`, Fuel `(-1, 1)`,
+Metal `(-1, 0)`, Minerals `(0, -1)`, Biomass `(1, -1)` (`hex.Wedge`). The order is fixed, because
+every adjacent pair is a hybrid domain: Food–Water (fishing, irrigation), Water–Fuel (steam,
+hydro), Fuel–Metal (smelting, rail), Metal–Minerals (concrete, glass), Minerals–Biomass (kilns,
+paper), Biomass–Food (farming, storage). Non-adjacent pairs, Food–Metal for one, have no hybrid
+tiles. `pages/hex_pixel.zig` is the one-way transform from these integers to screen floats.
+
+*Classification (`hex.classify`).* At ring `n ≥ 1` a hex is a pure corner when it is
+`n * dir[w]` for exactly one wedge `w`: six per ring, owned by that resource. Every other hex is
+a hybrid on the edge between wedges `w` and `w + 1`, at `n * dir[w] + k * (dir[w+1] - dir[w])`
+for `k = 1 .. n-1`: `6(n - 1)` per ring, leaning toward `w` for a small `k` and toward `w + 1`
+for a large one. It is solved from exact coordinates and never from a rounded screen angle,
+because float angle thresholds are ambiguous on a boundary.
+
+*The foundation.* Ring 0 has no record, is not a resource, a tile or an action, and is never
+counted among the sixty states. It is the logical Researched neighbor of the six ring-1 tiles,
+for adjacency only.
+
+*Unlocking (`rules/research.zig`).* A Locked tile becomes Available when at least one of its six
+neighbors on a strictly lower ring is Researched, so every ring-1 tile is at least Available,
+a pure corner chains outward along its wedge, and a hybrid is reachable from either adjacent
+wedge without the neighboring corner. Promotion is one-way. Entering the board from the
+curtain's `initial` states gives 2 Researched, 9 Available and 49 Locked, which is exactly what
+the rule computes from the two Researched tiles carried over from Act I.
+
+*Researching.* `research.research` takes a tile that is Available and whose whole cost is held,
+deducts the complete bundle (never part of it), marks the tile Researched and promotes only its
+outward neighbors; on any failure nothing changes. A cost is a list of once-lines in the six
+research resources: never Coin, vigor, population, finished goods or Materials. A tile's wedge or
+hybrid pair names its domain, not its recipe, so a cost may name resources outside it. Every
+resource a cost names has an authored source (an action or a good that outputs it), checked by
+test. Affordability is not a state: a tile that cannot be paid stays Available and `deficits`
+reports the shortfall per resource, with no advice on how to cover it. Research builds no
+good: it unlocks actions, transformations and BUILD recipes, and the goods are made in BUILD.
+
+*Material dots (`materialMarkers`).* A tile carries one to three dots naming its composition:
+its own wedge or wedges first, then the first distinct resources its cost names. The count is 1
+for a pure tile of rings 1–2 and 2 for rings 3–4, and 2 for a hybrid of rings 2–3 and 3 on
+ring 4, totalling 6, 18, 36 and 66 dots over rings 1 to 4.
+
+*Invariants the tests hold.* Sixty tiles on rings 1–4, no two on one coordinate, none on the
+foundation or beyond ring 4; six pure and `6(n - 1)` hybrid tiles per ring; the dot totals
+above; 96 rail paths (see [`../docs/ui_design.md`](../docs/ui_design.md), *RESEARCH*); and every
+tile's cost in the six resources only.
+
 **Acts.** Every record carries the first `act` it exists in (a resource knows its own in
 code), and a reference may never reach forward. The Act I surfaces — the ACTIONS grid, the
 BUILD list and its total, the reach announcements — read records of act 1 only, so later

@@ -1,19 +1,19 @@
 //! `rules/research` — the progression logic for the Act II STRUCTURE board: the adjacency rule
-//! (§7) and atomic research resolution, operating over the **authored roster** (`roster.zig`)
+//! and atomic research resolution, operating over the **authored roster** (`roster.zig`)
 //! and an agent's live `comp.Research` state array. The canonical entry state is seeded by
 //! `comp.Research.entry(cat)` at the curtain (`migration.zig`); this module promotes and
 //! establishes tiles from there.
 //!
 //! The board is the catalog's technology table (rings 1..4) keyed by catalog index — the same
 //! stable key `comp.Research.state` is indexed by. Ring 0 is a logical Researched neighbor for
-//! ring-1 adjacency only — it has no record and is never counted among the tiles (§5).
+//! ring-1 adjacency only — it has no record and is never counted among the tiles.
 //!
 //! Unlike `hex`, it reads the authored data (`roster.Catalog`) and the agent's state
 //! (`comp.Research`). It owns no rendering, palette, or SDL — the rendering layer reads a
 //! `comp.Research`'s per-tile state and the catalog's records and draws the bodies itself; it
 //! never recomputes adjacency.
 //!
-//! Adjacency rule (§7): a Locked tile becomes Available when at least one of its six neighbors
+//! Adjacency rule: a Locked tile becomes Available when at least one of its six neighbors
 //! with a **strictly lower ring number** is Researched. Researching a tile recomputes only its
 //! outward neighbors; nothing unrelated opens.
 
@@ -39,7 +39,7 @@ fn axial(c: roster.Coord) Axial {
 /// A held balance of the research resources, indexed by `@backingInt(Resource)`. Used to test
 /// affordability and to apply an atomic research deduction. The six research currencies (Food,
 /// Water, Fuel, Metal, Minerals, Biomass) are the only ones a cost ever names; Coin and generic
-/// Materials have slots here but are never a research price (§7).
+/// Materials have slots here but are never a research price.
 pub const Balances = struct {
     amounts: [res_count]u32 = @splat(0),
 
@@ -58,7 +58,7 @@ pub const Balances = struct {
     }
 };
 
-/// One unmet resource requirement, for a factual deficit readout (§7: show the factual deficit
+/// One unmet resource requirement, for a factual deficit readout (show the factual deficit
 /// only, no acquisition-route advice).
 pub const Deficit = struct {
     resource: Resource,
@@ -98,7 +98,7 @@ pub fn stateOf(cat: *const Catalog, board: *const Research, id: []const u8) ?Sta
 }
 
 /// Whether a coordinate counts as a Researched neighbor for adjacency. Ring 0 (the foundation)
-/// is always a logical Researched neighbor (§5); any authored tile counts only if its current
+/// is always a logical Researched neighbor; any authored tile counts only if its current
 /// state is `researched`.
 fn researchedAt(cat: *const Catalog, board: *const Research, coord: Axial) bool {
     if (hex.ring(coord) == 0) return true; // the foundation is a logical Researched neighbor
@@ -135,7 +135,7 @@ pub fn recomputeLocked(cat: *const Catalog, board: *Research) u32 {
     return promoted;
 }
 
-/// Recompute only the **outward neighbors** of the tile at `index` (§7: researching a tile
+/// Recompute only the **outward neighbors** of the tile at `index` (researching a tile
 /// changes only its immediate outward neighbors from Locked to Available; nothing unrelated
 /// opens). An outward neighbor is one on a strictly higher ring.
 fn promoteOutwardNeighbors(cat: *const Catalog, board: *Research, index: usize) void {
@@ -181,14 +181,14 @@ pub fn deficits(tech: *const Technology, bal: Balances, out: []Deficit) []Defici
 pub const ResearchResult = enum {
     /// Not Available (Locked, or already Researched) — nothing changed.
     not_available,
-    /// Available but the balance cannot pay the full bundle — nothing changed (§7: never a
+    /// Available but the balance cannot pay the full bundle — nothing changed (never a
     /// partial payment).
     unaffordable,
     /// Paid atomically; the tile is now Researched and its outward neighbors recomputed.
     researched,
 };
 
-/// Attempt to research the tile at catalog `index`, paying from `bal` (§7 research resolution):
+/// Attempt to research the tile at catalog `index`, paying from `bal` (research resolution):
 /// verify it is Available and fully affordable; deduct the complete bundle atomically; mark it
 /// Researched on `research`; recompute only its outward neighbors. On any failure nothing
 /// changes and `bal` is untouched.
@@ -206,7 +206,7 @@ pub fn research(cat: *const Catalog, board: *Research, index: usize, bal: *Balan
     return .researched;
 }
 
-/// How many material-reference dots a tile carries (spec §: ring 1 = 6, ring 2 = 18, ring 3 =
+/// How many material-reference dots a tile carries (ring 1 = 6, ring 2 = 18, ring 3 =
 /// 36, ring 4 = 66 in all): its own wedges up to ring 2, two from ring 3, three on a ring-4
 /// hybrid.
 pub fn markerCount(coord: roster.Coord) usize {
@@ -293,7 +293,7 @@ fn indexOf(cat: *const Catalog, id: []const u8) usize {
 }
 
 /// The canonical opening balances at the curtain: Food and Biomass carry opening values;
-/// Water/Fuel/Metal/Minerals begin at zero (§8). Generous enough that the openers are
+/// Water/Fuel/Metal/Minerals begin at zero. Generous enough that the openers are
 /// affordable, for the research-flow tests.
 fn openingBalances() Balances {
     var b = Balances{};
@@ -316,7 +316,7 @@ test "entry board matches the canonical curtain: 2 Researched, 9 Available, 49 L
 test "entry states equal what the adjacency rule computes from the two migrated tiles" {
     // Start from only the two migrated Researched tiles Locked-elsewhere, then let the
     // adjacency rule run. It must reproduce the authored 9 Available openers exactly — proving
-    // the authored `initial` fields are consistent with §7, not hand-waved.
+    // the authored `initial` fields are consistent with the adjacency rule, not hand-waved.
     var cat = try testCatalog();
     defer cat.deinit();
     var r = Research{};
