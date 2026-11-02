@@ -210,6 +210,7 @@ fn settler(w: *World, cat: *const roster.Catalog) Entity {
         comp.InventoryBiomass{ .v = 30 },
         comp.Goods{},
         comp.Granted{},
+        comp.Condition{},
     });
     _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
     return e;

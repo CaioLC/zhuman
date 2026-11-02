@@ -27,11 +27,11 @@ pub const Time = struct {
     dt: f32 = 0,
 };
 
-/// How tired an agent is, in bands. One vocabulary for the condition word, the vigor
-/// chip's color, the "you feel weak" log lines and labor's yield penalty — they all key
-/// off the same two thresholds, so they read them through `Config.condition` rather than
-/// each carrying its own copy of the numbers.
-pub const Condition = enum { alive, weary, spent };
+/// How tired an agent is, in bands: the `comp.Condition` component's enum. One vocabulary for
+/// the condition word, the vigor chip's color, the "you feel weak" log lines and labor's yield
+/// penalty; the band is applied from the two thresholds in one place (`rules/condition.zig`),
+/// and every reader reads the component.
+pub const Band = comp.Condition.Band;
 
 /// Tuning knobs. Never written at runtime, and deliberately **not** part of `Sim`, so
 /// starting a fresh run doesn't discard a setting the player chose. Every value here is
@@ -76,15 +76,16 @@ pub const Config = struct {
     cancel_refund: f32 = 0.5,
 
     /// Which band a vigor fraction falls in. The single definition of the two
-    /// thresholds; edge-crossing is a change in this value.
-    pub fn condition(self: Config, frac: f32) Condition {
+    /// thresholds; `rules/condition.refresh` is its one caller, and a crossing is a change in
+    /// the `comp.Condition` it writes.
+    pub fn condition(self: Config, frac: f32) Band {
         if (frac <= self.spent_frac) return .spent;
         if (frac < self.weary_frac) return .weary;
         return .alive;
     }
 
     /// Labor's yield multiplier for an agent in this condition.
-    pub fn yield_of(self: Config, c: Condition) f32 {
+    pub fn yield_of(self: Config, c: Band) f32 {
         return if (c == .alive) 1.0 else self.weary_yield;
     }
 

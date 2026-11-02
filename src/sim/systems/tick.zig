@@ -14,6 +14,7 @@ const Entity = world.Entity;
 const Query = ecs.Query;
 const With = ecs.With;
 const EventWriter = ecs.EventWriter;
+const condition = @import("./condition.zig").condition;
 
 /// Advance the run clock while the actor lives. Driven by the player's presence — with no
 /// player (dead) the clock freezes, so the game-over screen shows the day you died. One
@@ -69,14 +70,14 @@ test "net_food_drawdown: consumption minus inflow; days = food/net when positive
 /// larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
 /// this is the drain that finally makes `mark_dead` fire, and the clock pressure that
 /// makes every action intentional: ration and stay weak, feast and burn the stock.
-/// Edge-crossings are facts once, on the frame they happen: `FoodRanOut` when the larder
-/// empties, `BandCrossed` when the condition band changes. Runs after `update_food` (spoilage
-/// claims its share first) and before `mark_dead` (starving to 0 dies the same frame).
+/// The larder emptying is a fact once, on the frame it happens: `FoodRanOut`. The band the
+/// vigor now falls in is the `condition` system's, which runs right after this one and reports
+/// the crossing. Runs after `update_food` (spoilage claims its share first) and before
+/// `mark_dead` (starving to 0 dies the same frame).
 pub fn metabolize(
     time: *const res_mod.Time,
     cfg: *const res_mod.Config,
     ran_out: EventWriter(events.FoodRanOut),
-    crossed: EventWriter(events.BandCrossed),
     q: Query(.{ Entity, comp.Vigor, comp.InventoryFood, comp.Metabolism }),
 ) void {
     const dt_days = time.dt / cfg.secs_per_day;
@@ -84,7 +85,6 @@ pub fn metabolize(
     while (it.next()) |entry| {
         const e: Entity, const vigor: *comp.Vigor, const food: *comp.InventoryFood, const met: *comp.Metabolism = entry;
         const food_before = food.v;
-        const frac_before = vigor.v / vigor.max;
 
         if (food.v > 0) {
             const want = met.base_rate * cfg.clampMetabolism(met.rate) * dt_days;
@@ -95,12 +95,8 @@ pub fn metabolize(
             vigor.v = @max(0, vigor.v - cfg.starve_per_day * dt_days);
         }
 
-        // Edge-triggered — once, on the crossing frame. A downward band crossing here is
-        // hunger, not labor fatigue: labor's own toll is `WorkBegun.weary`.
+        // Edge-triggered — once, on the frame the larder empties.
         if (food_before > 0 and food.v <= 0) _ = ran_out.push(.{ .agent = e });
-        const was = cfg.condition(frac_before);
-        const now = cfg.condition(vigor.v / vigor.max);
-        if (was != now) _ = crossed.push(.{ .agent = e, .from = was, .to = now });
     }
 }
 
@@ -287,7 +283,7 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // "Your food has run out."
 }
 
-test "metabolize starves vigor down on an empty larder, logging the thresholds" {
+test "metabolize starves vigor down on an empty larder; the condition writer logs the thresholds" {
     var w = World.init();
     var res = test_res(0);
     res.time.dt = res.config.secs_per_day;
@@ -295,14 +291,17 @@ test "metabolize starves vigor down on an empty larder, logging the thresholds" 
         comp.Vigor{ .v = 5, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.Metabolism{ .rate = 0.5 }, // rate is irrelevant when starving
+        comp.Condition{},
     });
 
     ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day): crosses weak (3.5) and starving (1.2)
+    ecs.run(&w, &res, condition);
     logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 1), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 
     ecs.run(&w, &res, metabolize); // 1 → 0 (clamped), no re-logging — mark_dead's turn
+    ecs.run(&w, &res, condition);
     logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);

@@ -126,7 +126,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     n += 1;
     if (agent) |e| {
         const vigor = world.get(e, comp.Vigor).?;
-        stocks[n] = t.vigorStock(ctx, "VI", vigor);
+        stocks[n] = t.vigorStock("VI", vigor, world.get(e, comp.Condition));
         n += 1;
         for (ledger_stocks) |resource| {
             const amount = ledger.balance(world, e, resource);

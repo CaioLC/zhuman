@@ -155,3 +155,13 @@ pub const Metabolism = struct {
     rate: f32 = 1.0,
     base_rate: f32 = 1.5,
 };
+
+/// The agent's condition band, derived from the vigor fraction by the `condition` system
+/// (`systems/condition.zig`) through `rules/condition.refresh`, which holds the two thresholds
+/// (`Config.condition`). The condition word, the vigor chip's tone and labor's yield step read
+/// this value; none of them recomputes it.
+pub const Condition = struct {
+    /// How tired an agent is: rested, weary (labor yields `Config.weary_yield`), spent.
+    pub const Band = enum { alive, weary, spent };
+    band: Band = .alive,
+};

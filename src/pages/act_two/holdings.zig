@@ -91,8 +91,8 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
         try body.append(a, .{ .key = "water", .prefix = "Water ", .value = "holds", .suffix = ".", .tone = .good });
     }
     // The hall's vigor reads the household's condition until each person carries their own.
-    if (world.get(e, comp.Vigor)) |v| {
-        const cond = ctx.res.game.config.condition(v.v / v.max);
+    if (world.get(e, comp.Condition)) |c| {
+        const cond = c.band;
         try body.append(a, .{ .key = "vigor", .prefix = "Vigor across the hall: ", .value = switch (cond) {
             .alive => "rested",
             .weary => "weary",

@@ -118,14 +118,15 @@ pub fn day(ctx: *UiCtx) u64 {
     return 1 + @as(u64, @intFromFloat(ctx.res.game.sim.elapsed / ctx.res.game.config.secs_per_day));
 }
 
-/// The Vigor stock token, toned by the body's condition — the same reading every act shows.
-pub fn vigorStock(ctx: *UiCtx, abbrev: []const u8, vigor: *const comp.Vigor) stock_mod.Stock {
+/// The Vigor stock token, toned by the body's condition band (`comp.Condition`) — the same
+/// reading every act shows. An agent without the component reads as rested.
+pub fn vigorStock(abbrev: []const u8, vigor: *const comp.Vigor, cond: ?*const comp.Condition) stock_mod.Stock {
     return .{
         .abbrev = abbrev,
         .full = "Vigor",
         .value = vigor.v,
         .max = vigor.max,
-        .tone = switch (ctx.res.game.config.condition(vigor.v / vigor.max)) {
+        .tone = switch (if (cond) |c| c.band else .alive) {
             .alive => .normal,
             .weary => .warn,
             .spent => .danger,

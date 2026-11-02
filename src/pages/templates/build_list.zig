@@ -557,6 +557,7 @@ fn settler(w: *World, cat: *const roster.Catalog, biomass: f32, minerals: f32) E
         comp.InventoryBiomass{ .v = biomass },
         comp.Goods{},
         comp.Granted{},
+        comp.Condition{},
     });
     _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
     _ = ha.sim.rules.ledger.move(w, e, .minerals, minerals);

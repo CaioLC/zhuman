@@ -278,6 +278,7 @@ const GenRig = struct {
             comp.Goods{},
             comp.Generators{},
             comp.Granted{},
+            comp.Condition{},
         });
         const gi: u16 = @intCast(self.res.game.catalog.goodIndex("garden_bed").?);
         self.world.get(e, comp.Goods).?.count[gi] = 1;

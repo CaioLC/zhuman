@@ -19,7 +19,7 @@ pub const Resources = res.Resources;
 pub const Sim = res.Sim;
 pub const Config = res.Config;
 pub const Time = res.Time;
-pub const Condition = res.Condition;
+pub const Band = res.Band;
 pub const hours_to_secs = res.hours_to_secs;
 pub const ecs = @import("./ecs.zig");
 pub const events = @import("./events.zig");
@@ -32,6 +32,7 @@ pub const schedule = @import("./schedule.zig");
 
 pub const systems = struct {
     pub const tick = @import("./systems/tick.zig");
+    pub const condition = @import("./systems/condition.zig");
     pub const labor = @import("./systems/labor.zig");
     pub const build = @import("./systems/build.zig");
     pub const generators = @import("./systems/generators.zig");
@@ -49,6 +50,7 @@ pub const systems = struct {
 
 pub const rules = struct {
     pub const actions = @import("./rules/actions.zig");
+    pub const condition = @import("./rules/condition.zig");
     pub const capital = @import("./rules/capital.zig");
     pub const effects = @import("./rules/effects.zig");
     pub const ledger = @import("./rules/ledger.zig");

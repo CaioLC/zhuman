@@ -29,6 +29,7 @@ const ecs = @import("../ecs.zig");
 const res_mod = @import("../res.zig");
 const world = @import("../ecs.zig");
 const events = @import("../events.zig");
+const condition = @import("./condition.zig");
 
 const World = world.World;
 const Entity = world.Entity;
@@ -178,13 +179,14 @@ pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
     const price = q.rec.requires.?;
     const order = roster.Lines.only(q.rec.input, .once);
     const vigor = w.get(e, comp.Vigor).?;
-    const frac_before = vigor.v / vigor.max;
     vigor.v -= price.energy;
+    // The band the toll moves is the build's, not the metabolism's (`rules/condition`).
+    const crossing = if (w.get(e, comp.Condition)) |c| condition.refresh(&res.config, vigor, c) else null;
     ledger.pay(w, e, cat, order.slice(), 1);
     _ = res.events.writer(events.WorkBegun).push(.{
         .agent = e,
         .doing = .{ .build = gi },
-        .weary = res.config.condition(frac_before) == .alive and res.config.condition(vigor.v / vigor.max) != .alive,
+        .weary = condition.wearied(crossing),
         .energy = price.energy,
         .paid = ledger.receiptOf(cat, order.slice(), 1),
         .act = migration.actOf(w, e),
@@ -415,6 +417,9 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason
     const receipt = ledger.draw(w, e, cat, roster.Lines.only(q.rec.output, .day).slice(), res.random(), 1, q.cycle_days);
     const restored = @min(q.spec.vigor, vigor.max - vigor.v);
     vigor.v += restored;
+    // A collection's net toll is the collection's, not hunger: the band takes it silently
+    // (`rules/condition`).
+    if (w.get(e, comp.Condition)) |c| _ = condition.refresh(&res.config, vigor, c);
     ensureGenerators(w, e).progress[gi] = 0;
     _ = res.events.writer(events.Collected).push(.{ .agent = e, .gi = gi, .receipt = receipt, .vigor = restored, .act = migration.actOf(w, e) });
     return null;

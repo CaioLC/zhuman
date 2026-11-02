@@ -18,7 +18,7 @@ const comp = @import("./components.zig");
 const ledger = @import("./rules/ledger.zig");
 const market = @import("./rules/market.zig");
 const neighbours = @import("./rules/neighbours.zig");
-const Condition = @import("./res.zig").Condition;
+const Band = comp.Condition.Band;
 const GameState = @import("./state.zig").GameState;
 
 const Entity = ecs.Entity;
@@ -164,7 +164,7 @@ pub const GoodBroke = struct { agent: Entity, gi: u16 };
 pub const Collected = struct { agent: Entity, gi: u16, receipt: Receipt = .{}, vigor: f32 = 0, act: u8 = 1 };
 
 /// `agent`'s condition band changed.
-pub const BandCrossed = struct { agent: Entity, from: Condition, to: Condition };
+pub const BandCrossed = struct { agent: Entity, from: Band, to: Band };
 
 /// `agent`'s larder emptied.
 pub const FoodRanOut = struct { agent: Entity };

@@ -32,25 +32,26 @@ const neighbours = @import("./systems/neighbours.zig");
 const run = @import("./systems/run.zig");
 const curtain = @import("./systems/curtain.zig");
 const log = @import("./systems/log.zig");
+const condition = @import("./systems/condition.zig");
 
-const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, log.log };
+const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, condition.condition, log.log };
 
 /// The systems per state, in the order they run.
 pub const schedule = engine.Schedule(GameState, .{
     .title = .{ .handle = .{run.new_run} },
     .act_one = .{
         .on_enter = .{run.begin_run},
-        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, log.log },
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, log.log },
+        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, condition.condition, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, log.log },
     },
     .act_two = .{
         .on_enter = .{curtain.cross_curtain},
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, condition.condition, log.log },
     },
     .act_three = .{
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, condition.condition, log.log },
     },
     .game_over = .{ .handle = .{run.new_run} },
 });
@@ -110,6 +111,15 @@ test "no handler is in an update set" {
         inline for (update) |sys| try testing.expect(comptime !readsEvents(sys));
     }
     try testing.expect(comptime readsEvents(labor.labor)); // the test can tell a handler
+}
+
+test "condition follows metabolize in every update set that runs it" {
+    inline for (states_list) |name| {
+        const s = @field(GameState, name);
+        if (comptime schedule.indexOf(s, .update, tick_sys.metabolize)) |m| {
+            try testing.expect(comptime engine.sameSystem(schedule.setOf(s, .update)[m + 1], condition.condition));
+        }
+    }
 }
 
 test "the merchant's clock and the Exchange detector run in Act II only" {

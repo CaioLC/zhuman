@@ -30,6 +30,8 @@ const UiCtx = uic.UiCtx;
 
 const t = @import("./templates/root.zig");
 const act_one_holdings = @import("./act_one/holdings.zig");
+/// The derived components brought up to date after a poke (`fixture.derive`).
+const derive = @import("./fixture.zig").derive;
 const act_two_holdings = @import("./act_two/holdings.zig");
 const coin_merchant = @import("./act_two/coin_merchant.zig").coin_merchant;
 
@@ -232,6 +234,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                 vigor.v = 14.4;
             }
             if (world.get(a[0], comp.Metabolism)) |met| met.rate = 0.5;
+            derive(ctx.res, world);
 
             const demo = try stage.box("holdings_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
             const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOUSEHOLD" });
@@ -275,6 +278,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // Give the debug-only catalog a representative stock level so ready and reach rows
             // appear together, matching the reference anatomy without changing production.
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
+            derive(ctx.res, world);
             // The pane fills a definite height and scrolls only its table, and spans a
             // definite width: the framed content lane.
             const demo = try stage.box("build_demo", .{ .w = .{ .fixed = t.build_lane_width }, .h = .{ .fixed = 560 } }, .{});
@@ -288,6 +292,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // nav and context strips. Debug owns the three unlocking tools and stocks materials.
             fixtureGoods(world, a[0], ctx, &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
+            derive(ctx.res, world);
             // The surface fills its parent's height (its views scroll inside), so the demo
             // gives it a definite one, as the workspace's content lane does in production.
             const demo = try stage.box("surface_demo", .{ .w = .{ .fixed = 652 }, .h = .{ .fixed = 560 } }, .{});
@@ -309,6 +314,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // The verbs come with their tools: the hatchet, a rod and snares unlock three more.
             fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
+            derive(ctx.res, world);
 
             const demo = try stage.box("workspace_demo", .{ .w = .{ .fixed = 926 }, .h = .{ .fixed = 700 } }, .{});
             _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
@@ -330,11 +336,13 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
             // continues to derive every stock, unlock, activity, and log line from live state.
             fixtureGoods(world, a[0], ctx, &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
             if (world.get(a[0], comp.InventoryBiomass)) |stock| stock.v = 31;
+            derive(ctx.res, world);
             if (world.get(a[0], comp.InventoryFood)) |food| food.v = 11.6;
             if (world.get(a[0], comp.Vigor)) |vigor| {
                 vigor.max = 15;
                 vigor.v = 14;
             }
+            derive(ctx.res, world);
 
             const demo = try stage.box("act_one_page_demo", .{
                 .w = .{ .fixed = 900 }, .h = .{ .fixed = 820 }, .overflow = .clip,
@@ -598,6 +606,7 @@ fn fixtureGoods(world: *World, e: Entity, ctx: *UiCtx, counts: []const struct { 
         if (cat.goodIndex(c[0])) |gi| goods.count[gi] = c[1];
     }
     ha.sim.rules.capital.settle(world, e, cat);
+    derive(ctx.res, world);
 }
 
 fn eq(a: []const u8, b: []const u8) bool {

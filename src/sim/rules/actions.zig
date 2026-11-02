@@ -20,6 +20,7 @@ const migration = @import("../data/migration.zig");
 const res_mod = @import("../res.zig");
 const world = @import("../ecs.zig");
 const events = @import("../events.zig");
+const condition = @import("./condition.zig");
 
 const Resources = res_mod.Resources;
 const World = world.World;
@@ -34,11 +35,11 @@ const Reason = events.Refused.Reason;
 // word to WEARY and tints the V chip warn, so the state is announced before the band changes.
 // (The linear slide was built once and reverted: constant band churn, and it felt bad.)
 
-/// The current yield multiplier for an agent's vigor — 1.0 while `.alive`, else
-/// `Config.weary_yield`. The thresholds live on `Config` (`sim/res.zig`) so the sim, the
-/// condition word and the vigor chip can't drift apart.
-pub fn yield_factor(vigor: *const comp.Vigor, cfg: res_mod.Config) f32 {
-    return cfg.yield_of(cfg.condition(vigor.v / vigor.max));
+/// The current yield multiplier for an agent's condition — 1.0 while `.alive`, else
+/// `Config.weary_yield`. It reads the derived `comp.Condition`, the same band the condition
+/// word and the vigor chip read, so the three cannot drift apart.
+pub fn yield_factor(cond: *const comp.Condition, cfg: res_mod.Config) f32 {
+    return cfg.yield_of(cond.band);
 }
 
 /// Why a verb cannot begin right now, or `ready`.
@@ -83,11 +84,13 @@ pub fn holds(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
     return verbOf(w, e, cat, ai) != null;
 }
 
-/// The quote for verb `ai`, or null when the agent does not hold it.
+/// The quote for verb `ai`, or null when the agent does not hold it or has no body (no
+/// `Vigor` or no `Condition`).
 pub fn quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?Quote {
     const v = verbOf(w, e, cat, ai) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
-    var q = Quote{ .verb = v, .standing = .ready, .quality = yield_factor(vigor, cfg) };
+    const cond = w.get(e, comp.Condition) orelse return null;
+    var q = Quote{ .verb = v, .standing = .ready, .quality = yield_factor(cond, cfg) };
     if (w.has(e, comp.Busy)) {
         q.standing = .busy; // one body, one act
     } else if (v.requires.energy >= vigor.v) {
@@ -109,18 +112,19 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason {
     const q = quote(w, e, cat, res.config, ai) orelse return .unavailable;
     if (!q.ready()) return refusal(q.standing);
     const vigor = w.get(e, comp.Vigor).?;
-    const frac_before = vigor.v / vigor.max;
 
     // Pay the price upfront. The strict energy gate keeps vigor > 0, so labor alone can't
-    // kill — running the body to death takes starving it of the refill.
+    // kill — running the body to death takes starving it of the refill. The band the toll
+    // moves is labor's, carried on `WorkBegun.weary`, not the metabolism's (`rules/condition`).
     vigor.v -= q.verb.requires.energy;
+    const crossing = condition.refresh(&res.config, vigor, w.get(e, comp.Condition).?);
     ledger.pay(w, e, cat, q.verb.input.slice(), 1);
 
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
     _ = res.events.writer(events.WorkBegun).push(.{
         .agent = e,
         .doing = .{ .labor = ai },
-        .weary = res.config.condition(frac_before) == .alive and res.config.condition(vigor.v / vigor.max) != .alive,
+        .weary = condition.wearied(crossing),
         .energy = q.verb.requires.energy,
         .paid = ledger.receiptOf(cat, q.verb.input.slice(), 1),
         .act = migration.actOf(w, e),
@@ -246,13 +250,22 @@ fn logged(w: *World, res: *Resources) void {
 }
 
 fn spawn_agent(w: *World, vigor: f32, materials: f32) Entity {
-    return w.spawn(.{
+    const e = w.spawn(.{
         comp.Vigor{ .v = vigor, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryBiomass{ .v = materials },
         comp.Goods{},
         comp.Granted{},
+        comp.Condition{},
     });
+    settle_condition(w, e);
+    return e;
+}
+
+/// Bring the agent's band up to date with a vigor a test set by hand, as the `condition`
+/// system does each frame.
+fn settle_condition(w: *World, e: Entity) void {
+    _ = condition.refresh(&res_mod.Config{}, w.get(e, comp.Vigor).?, w.get(e, comp.Condition).?);
 }
 
 test "begin pays upfront and starts the work; finish deposits and logs the receipt" {
@@ -305,6 +318,7 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
     w.get(e, comp.Vigor).?.v = 1.0; // exactly the price — strict gate refuses
     try testing.expectEqual(Standing.energy, quote(&w, e, cat, res.config, traps).?.standing);
     w.get(e, comp.Vigor).?.v = 3.0; // 30%: weary, so the quality drops a step
+    settle_condition(&w, e);
     try testing.expectEqual(res.config.weary_yield, quote(&w, e, cat, res.config, traps).?.quality);
     w.add(e, comp.Busy{ .doing = .{ .labor = traps }, .total = 1, .remaining = 1, .quality = 1 });
     try testing.expectEqual(Standing.busy, quote(&w, e, cat, res.config, traps).?.standing);
@@ -313,11 +327,17 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
 test "yield_factor: two stable levels split at the WEARY threshold" {
     const cfg = res_mod.Config{};
     var v = comp.Vigor{ .v = 10, .max = 10 };
-    try testing.expectEqual(@as(f32, 1.0), yield_factor(&v, cfg));
+    var c = comp.Condition{};
+    _ = condition.refresh(&cfg, &v, &c);
+    try testing.expectEqual(@as(f32, 1.0), yield_factor(&c, cfg));
     v.v = 3.5; // exactly the threshold — not yet weak (strictly below crosses)
-    try testing.expectEqual(@as(f32, 1.0), yield_factor(&v, cfg));
+    _ = condition.refresh(&cfg, &v, &c);
+    try testing.expectEqual(@as(f32, 1.0), yield_factor(&c, cfg));
     v.v = 3.4;
-    try testing.expectEqual(cfg.weary_yield, yield_factor(&v, cfg));
+    _ = condition.refresh(&cfg, &v, &c);
+    try testing.expectEqual(cfg.weary_yield, yield_factor(&c, cfg));
+    c.band = .spent;
+    try testing.expectEqual(cfg.weary_yield, yield_factor(&c, cfg));
 }
 
 test "begin warns once when its own toll crosses into weakness, and locks pre-pay quality" {
@@ -404,7 +424,7 @@ test "a verb that names a technology is held once that technology is researched"
         ,
     }, null);
     defer cat.deinit();
-    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.Goods{}, comp.Granted{} });
+    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.Goods{}, comp.Granted{}, comp.Condition{} });
 
     try testing.expect(!holds(&w, e, &cat, 0)); // no board at all
     w.add(e, comp.Research.entry(&cat));

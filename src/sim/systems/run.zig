@@ -33,6 +33,7 @@ fn spawn_agent(world: *World) Entity {
         comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
         comp.Generators{}, // collectable capital accumulates independently of the body's work
         comp.Granted{}, // and the goods contribute nothing to the body or larder yet
+        comp.Condition{}, // rested; the `condition` system keeps the band
     });
 }
 

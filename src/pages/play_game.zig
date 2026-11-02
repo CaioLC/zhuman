@@ -56,7 +56,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
         // (full label on hover/focus), tints danger on a low/zero value, and owns compact versus
         // detailed number formatting.
         header_stocks = .{
-            t.vigorStock(ctx, "VI", vigor),
+            t.vigorStock("VI", vigor, world.get(e, comp.Condition)),
             .{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(act), .full = ha.sim.data.roster.Resource.food.labelIn(act), .value = food.v, .verdict = uic.style.verdict.when(food.v <= 0, .low) },
             .{ .abbrev = ha.sim.data.roster.Resource.biomass.abbrevIn(act), .full = ha.sim.data.roster.Resource.biomass.labelIn(act), .value = biomass.v },
         };
