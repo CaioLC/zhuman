@@ -70,8 +70,8 @@ values and emits nothing new, and a test says so.
   capacity and a copy of the terms per verb would add tens of megabytes to it.
 
 The writers close each act's `handle` and `update` sets, just before `log`, so a paused intent
-or a build finished this tick shows the next frame; `condition` also runs right after
-`metabolize` (the schedule, below). The fixture seed and the debug page bring all three current
+or a build finished this tick shows the next frame (the schedule, below). The fixture seed and
+the debug page bring all three current
 after they set a world by hand (`fixture.derive`); a seeded band is set, not reached, so it is
 written without a `BandCrossed`.
 
@@ -296,7 +296,7 @@ tick instead of expiring unread; its cursor makes the second run of a tick read 
 The derived components' writers (`condition`, `outlook`, `quotes`) run just before `log` in
 both of an act's sets, for the same reason. Each set runs in the order it declares, and
 `schedule.zig`'s tests hold the rules: `log` last in every `update` set and in every act's
-`handle` set, `outlook` and `quotes` the two before it, `condition` right after `metabolize`,
+`handle` set, `outlook` and `quotes` the two before it, `condition` the one before them (after `metabolize`),
 `new_run` in every `handle` set, no handler in an `update` set.
 
 The `handle` sets:
@@ -329,7 +329,6 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `tick.advance_clock` | ✓ | ✓ | ✓ | bumps `sim.elapsed`, only while a player exists |
 | `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
 | `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
-| `condition.condition` | ✓ | ✓ | ✓ | writes each agent's `Condition` band; `BandCrossed` once, on the crossing |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
@@ -340,7 +339,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `run.detect_death` | ✓ | ✓ | ✓ | no player left: requests `game_over` |
 | `curtain.detect_shelter` | ✓ | | | requests `act_two`, `ActEnded` |
 | `curtain.detect_exchange` | | ✓ | | requests `act_three` |
-| `condition.condition` | ✓ | ✓ | ✓ | again, so a band a finished build moved is current for the readers below |
+| `condition.condition` | ✓ | ✓ | ✓ | writes each agent's `Condition` band after everything that moved vigor; `BandCrossed` once, on the crossing |
 | `outlook.outlook` | ✓ | ✓ | ✓ | writes each agent's `Outlook` |
 | `quotes.quotes` | ✓ | ✓ | ✓ | writes each agent's `Quotes` |
 | `log.log` | ✓ | ✓ | ✓ | turns the facts written since its last run into `Log` lines |

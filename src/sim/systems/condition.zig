@@ -1,10 +1,10 @@
 //! The `condition` system: the one writer of `comp.Condition`. It brings every agent's band up
 //! to date with its vigor (`rules/condition.refresh`) and emits `BandCrossed` for each band that
-//! moved. It runs right after `metabolize` in each act's `update` set, so the metabolism's
-//! crossing is a fact the same tick, and again before the frame's last readers (`outlook`,
-//! `quotes`, `log`) in each act's `handle` and `update` sets, so a band moved by a handler or by
-//! a finished build is current when the page reads it. Running it again on an unchanged world
-//! changes nothing and emits nothing.
+//! moved. It runs before the frame's last readers (`outlook`, `quotes`, `log`) in each act's
+//! `handle` and `update` sets, after `metabolize` and after every rule that moves vigor, so the
+//! metabolism's crossing is a fact the same tick and a band moved by a handler or by a finished
+//! build is current when the page reads it. Running it again on an unchanged world changes
+//! nothing and emits nothing.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");

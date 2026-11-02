@@ -14,9 +14,9 @@
 //!
 //! The derived components' writers close both of an act's sets just before `log`: `condition`,
 //! then `outlook` and `quotes`, so an intent a handler applies while the run is paused, or a build
-//! that finished this tick, shows in the band, the BODY lines and the tiles the next frame reads.
-//! `condition` also runs right after `metabolize`, so the metabolism's crossing is a fact in the
-//! tick it happens.
+//! that finished this tick, shows in the band, the BODY lines and the tiles the next frame reads,
+//! and the metabolism's crossing is a fact in the tick it happens. Nothing between `metabolize`
+//! and the writers reads the band, so one run per set is enough.
 
 const std = @import("std");
 const engine = @import("ecs");
@@ -50,16 +50,16 @@ pub const schedule = engine.Schedule(GameState, .{
     .act_one = .{
         .on_enter = .{run.begin_run},
         .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, condition.condition, outlook.outlook, quotes.quotes, log.log },
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, outlook.outlook, quotes.quotes, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, outlook.outlook, quotes.quotes, log.log },
     },
     .act_two = .{
         .on_enter = .{curtain.cross_curtain},
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, condition.condition, outlook.outlook, quotes.quotes, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, condition.condition, outlook.outlook, quotes.quotes, log.log },
     },
     .act_three = .{
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, condition.condition, outlook.outlook, quotes.quotes, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, condition.condition, outlook.outlook, quotes.quotes, log.log },
     },
     .game_over = .{ .handle = .{run.new_run} },
 });
@@ -121,11 +121,19 @@ test "no handler is in an update set" {
     try testing.expect(comptime readsEvents(labor.labor)); // the test can tell a handler
 }
 
-test "condition follows metabolize in every update set that runs it" {
+test "condition runs once per set, after metabolize in every update set that runs it" {
     inline for (states_list) |name| {
         const s = @field(GameState, name);
+        inline for (.{ .update, .handle }) |kind| {
+            const set = comptime schedule.setOf(s, kind);
+            comptime var runs: usize = 0;
+            inline for (set) |sys| {
+                if (comptime engine.sameSystem(sys, condition.condition)) runs += 1;
+            }
+            try testing.expect(comptime runs <= 1);
+        }
         if (comptime schedule.indexOf(s, .update, tick_sys.metabolize)) |m| {
-            try testing.expect(comptime engine.sameSystem(schedule.setOf(s, .update)[m + 1], condition.condition));
+            try testing.expect(comptime schedule.indexOf(s, .update, condition.condition).? > m);
         }
     }
 }
