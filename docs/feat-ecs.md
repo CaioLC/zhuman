@@ -7,12 +7,14 @@ system derives for everyone else to read. It describes the intended shape the wa
 [`feat-script-lang.md`](feat-script-lang.md) does; the order it is built in is at the end, and
 [`roadmap.md`](roadmap.md) tracks it.
 
-Today the tick systems are systems, but the rules they share are invoked from the paint tier: a
-template holding `*World` calls `actions.begin` the frame it sees a click, the Act II page pays
-the Exchange and the research board itself, and a trade settles its two halves in two tiers. The
-engine, `ecs.zig` and `world.zig`, is bound to this game's `Resources`, which drags the UI host
-and SDL into every sim test. Nothing models the run's states, so the curtain, the title and the
-game-over screen are five unrelated facts the main loop and the pages each re-derive.
+Before this work the tick systems were systems, but the rules they shared were invoked from the
+paint tier: a template holding `*World` called `actions.begin` the frame it saw a click, the Act
+II page paid the Exchange and the research board itself, and a trade settled its two halves in
+two tiers. The engine was bound to this game's `Resources`, which dragged the UI host and SDL into
+every sim test. Steps 1 to 4 below have landed: the engine is a package, the simulation has its
+own resources and folders, and every rule runs from a handler or tick system through events.
+What nothing yet models is the run's states, so the curtain, the title and the game-over screen
+are facts the main loop and the pages each re-derive, and the UI build still holds `*World`.
 
 ## The model
 
@@ -52,95 +54,138 @@ same rule. The simulation instantiates them once in `sim/ecs.zig`, so a system s
 `Query(.{ comp.Vigor, With(tag.Player) })`, and the UI gets the const forms under a `Const`
 prefix.
 
-**`Events(comptime ns: type)`.** One bounded ring per `pub const` struct in `ns`, enumerated the
-way `World` enumerates components. Every event is plain data, fixed-size, with no slice into an
-arena. The store is written through `writer(T)` and read through a cursor:
+**`Events(comptime ns: type, comptime ReaderId: type)`.** One bounded ring per `pub const`
+struct in `ns`, enumerated the way `World` enumerates components; a `pub` enum in `ns` is shared
+vocabulary, not an event. Every event is plain data, fixed-size, with no slice or pointer
+anywhere inside it, and a type that breaks this is a compile error naming it. The store is written
+through `writer(T)` and read through a cursor:
 
-- `push` appends with a monotonic id. A full ring refuses the push and counts it in `dropped`;
-  nothing is silently lost and a test can assert the count.
-- `update()` runs once at the top of each tick and expires every event older than the previous
-  tick, so an event lives two ticks: the one it was written in and the next. The UI writes
-  between ticks and its events are read by the handlers of the following tick. A system writes
-  during a tick and a reader later in the same tick, or anywhere in the next, sees it.
+- `push` appends with a store-wide monotonic id and returns whether it landed. A full ring
+  refuses the push and counts it in `dropped(T)`; nothing is silently lost and a test can assert
+  the count.
+- `update()` runs once at the top of each tick and expires every event written before the
+  previous tick began, so an event lives two ticks: the one it was written in and the next. The
+  UI writes between ticks and its events are read by the handlers of the following tick. A system
+  writes during a tick and a reader later in the same tick, or anywhere in the next, sees it.
 - A reader yields the events after its own cursor and not yet expired. A system's cursor lives in
-  the store, keyed by the system's position in the schedule, so a reader that runs every tick sees
-  each event exactly once. The UI reads with a cursor it keeps in its own state.
+  the store, keyed by a `ReaderId` the simulation declares, one enum tag per scheduled reader, so
+  a reader that runs every tick sees each event exactly once, two readers of one type stay
+  independent by name, and a handler test needs no schedule. The UI reads with a `u64` cursor it
+  keeps in its own state, through `readerAt(T, &cursor)`.
 
-The system params are `EventWriter(T)` and `EventReader(T)`. A handler's signature states what it
-consumes.
+The system params are `EventWriter(T)` and `EventReader(T, id)`; a handler spells
+`EventReader(BeginLabor, .labor)`, and its signature states what it consumes.
 
 **`States(comptime S: type)`.** A resource holding `current` and `next: ?S`. A system requests a
-transition by setting `next`; the schedule applies it at the top of the following tick, running
-the leaving state's `on_exit` set, then the entering state's `on_enter` set. `in(s)` is the read.
+transition with `set(s)`; the schedule applies it at the top of the following tick, running the
+leaving state's `on_exit` set, then the entering state's `on_enter` set, once each. A request
+for the state already current is a restart and runs both sets the same way. `in(s)` is the read.
+`current` defaults to the enum's first tag, so a `sim.Resources{}` begins on the title.
 
-**`Schedule(comptime S: type)`.** The ordered systems, declared once, per state:
+**`Schedule(comptime S: type, comptime sets: anytype)`.** The ordered systems, declared once,
+per state. Systems differ in signature, so a set is a tuple of functions, not a slice:
 
 ```zig
-pub const schedule = Schedule(GameState){
-    .title     = .{ .handle = &.{ new_run } },
-    .act_one   = .{ .handle = &.{ labor, build, cancel, generators_toggle, generators_collect, ration, barter, new_run },
-                    .update = &.{ clock, larder, metabolize, work, reach, passerby, generators, condition, outlook, quotes, death, log },
-                    .on_exit = &.{ act_ended } },
-    .act_two   = .{ .on_enter = &.{ cross_curtain },
-                    .handle = &.{ labor, build, cancel, generators_toggle, generators_collect, ration, research, exchange, merchant_deal, neighbour_deal, new_run },
-                    .update = &.{ clock, larder, metabolize, work, generators, merchant, condition, outlook, quotes, death, log } },
-    .act_three = .{ /* act_two's sets without the merchant's clock */ },
-    .game_over = .{ .handle = &.{ new_run } },
-};
+pub const schedule = Schedule(GameState, .{
+    .title     = .{ .handle = .{ new_run } },
+    .act_one   = .{ .on_enter = .{ begin_run },
+                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, barter, new_run },
+                    .update = .{ advance_clock, update_food, metabolize, resolve_busy, track_reach, passerby, generators, mark_dead, despawn_dead, detect_death, detect_shelter, log } },
+    .act_two   = .{ .on_enter = .{ cross_curtain },
+                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, merchant_deal, research, raise_exchange, neighbour_deal, new_run },
+                    .update = .{ advance_clock, update_food, metabolize, resolve_busy, generators, merchant, mark_dead, despawn_dead, detect_death, detect_exchange, log } },
+    .act_three = .{ /* act_two's sets without the merchant's clock and detect_exchange */ },
+    .game_over = .{ .handle = .{ new_run } },
+});
 ```
+
+Step 6 adds the derived writers `condition`, `outlook` and `quotes` to each `update` set just
+before `log`. A state the table does not name has empty sets; a field that is not a state, or a
+set with another name, is a compile error.
 
 `tick(world, res)` does, in order: `events.update()`; apply a pending transition; run the current
 state's `handle` set; if `time.dt > 0`, run its `update` set. The split is what pausing means:
 intents apply while the menu is open, so a slider does not snap back, while nothing that spends
 or detects time runs. The host loop calls `tick` once per frame and nothing else. The order a
-set declares is the order it runs, and a test asserts the orders this document names.
+set declares is the order it runs, and a test asserts the orders this document names: `log` is
+last in every `update` set, `new_run` is in every `handle` set, and no handler is in an `update`
+set.
 
 ## The simulation: `src/sim/`
 
 ```
 src/
-  main.zig  root.zig  test_ui.zig  font.zig  res.zig    the host
+  main.zig  root.zig  test_ui.zig  font.zig  res.zig  palette.zig  tokens.zig    the host
   ecs/                                                  the engine package
   sim/
-    root.zig            the `sim` re-exports and test root
+    root.zig            the `sim` namespace: systems, rules, kernel, data as nested structs; the test-sim root
     components.zig  tags.zig  events.zig  state.zig
     res.zig             sim.Resources { sim, config, time, catalog, events, states }
-    ecs.zig             World, Query, Single, MaybeSingle, getMany, run over this game's types
-    schedule.zig        the schedule above
+    ecs.zig             World, Query, Single, MaybeSingle, getMany, Events, run over this game's types
+    schedule.zig        the schedule above, and `tick`
     systems/            what the schedule calls, one file per concern
     rules/              actions, capital, effects, ledger, barter, market, research, neighbours
     kernel/             dist, hex topology
     data/               roster, reload, migration
     log.zig
-  pages/                + eating, query, palette, tokens; the research board owns hex pixel math
+  pages/                + eating, query, hex_pixel (the research board's pixel math)
   ui_client/  ui/       unchanged
 ```
 
+`palette.zig` and `tokens.zig` stay in the host rather than moving to `pages/`: a Zig file
+belongs to one module, the library's `res.zig` reads the palette, and `src/pages/` is in the
+executable module. Sim files import each other by relative path and never the library.
+
 **`sim.Resources`** holds exactly what a system may reach: `sim: Sim`, `config: Config`,
-`time: Time`, `catalog: Catalog`, `events: Events(events_ns)`, `states: States(GameState)`.
+`time: Time`, `catalog: Catalog`, `events: Events(events_ns, ReaderId)`, `states: States(GameState)`.
 `hours_to_secs` and `random()` move with it. The host's `Resources` embeds it as `game` and keeps
 `Platform`, `Input`, the registries, `playback`, `menu`, `route`, `title`, `settings`, `saves` and
 `view`. A sim test builds `sim.Resources{}` whole; nothing in it is `undefined`.
 
-**`GameState`** is `enum { title, act_one, act_two, act_three, game_over }`. The curtain is not a
-state: Act I ends when the shelter stands, `detect_shelter` sets `next = .act_two`, `act_ended`
-emits `ActEnded{ .act_one }` on exit, and `cross_curtain` runs the migration on entry. The curtain
-dialog is the UI's response to that event, and it pauses playback the way the menu does, so the
-world holds still while the player reads. `game_over` is a state because it is terminal: no
-agents, nothing to tick, one way out. `title` is a state because the run has not begun.
+**`GameState`** is `enum { title, act_one, act_two, act_three, game_over }`, in `sim/state.zig`.
+The transitions, each a system:
+
+- `new_run`, a handler in every state's `handle` set, reads `NewRun` and requests `act_one`.
+  `begin_run`, `act_one`'s `on_enter`, retires any living player, spawns the new one, resets
+  `Sim` and emits `RunBegun`, which the log words as the opening line. The spawn moves from
+  `main.zig` into the simulation with it.
+- `detect_shelter`, in `act_one`'s `update` set, requests `act_two` the tick the player owns the
+  Act I milestone and emits `ActEnded{ .act_one }` in the same breath. The fact belongs to the
+  detector, not to an `on_exit` set: a restart also leaves Act I, and the act did not end.
+  `cross_curtain`, `act_two`'s `on_enter`, runs `migration.migrate_to_act_two` on the player.
+- `detect_death`, after `despawn_dead` in each act's `update` set, requests `game_over` when no
+  player remains.
+- `detect_exchange`, in `act_two`'s `update` set, requests `act_three` once `Sim.exchange`
+  stands. Act III's sets are Act II's without the merchant's clock, which is today's gate on
+  that system written as a state.
+
+The curtain is not a state. It is the UI's response to `ActEnded`: the host's `Resources` keeps
+a `CurtainState` beside `MenuState`, the page build hears the fact with the curtain's own cursor
+and opens it, and it pauses playback the way the menu does, so the world holds still while the
+player reads. Its last beat's button is Continue, which closes the curtain and resumes; the next
+frame's route is the Act II page over the live, migrated world. Nothing starts over there.
+`game_over` is a state because it is terminal: no agents, nothing to tick, one way out. `title`
+is a state because the run has not begun; it is distinct from the host's `Route`, which says
+whether the title screen is showing, since Quit to menu leaves a live run paused behind it.
 `Playback.paused` stays a zero delta on the host, not a state.
 
 **Events** (`sim/events.zig`). Intents, written by the UI or a decider: `BeginLabor{agent, ai}`,
 `BeginBuild{agent, gi}`, `CancelBuild{agent}`, `ToggleGenerator{agent, gi}`,
 `CollectGenerator{agent, gi}`, `SetRation{agent, rate}`, `Barter{agent, quote, lots}`,
 `Research{agent, ti}`, `RaiseExchange{agent}`, `MerchantDeal{agent, lot, lots}`,
-`NeighbourDeal{agent, neighbour, give, take}`, `NewRun{}`. Facts, written by systems:
-`Refused{intent, reason}`, `WorkBegun`, `WorkDone{agent, doing, receipt}`, `BandCrossed{agent,
-from, to}`, `FoodRanOut{agent}`, `Died{agent}`, `GoodsChanged{agent}`, `Researched{agent, ti}`,
-`ExchangeRaised`, `Arrived{who}`, `Departed{who}`, `ActEnded{act}`. Every log line a system
-pushes today becomes a fact event, and `systems/log.zig`, last in the `update` set, is the one
-reader that turns facts into `Log` lines. The UI's live announcer reads the same facts with its
-own cursor.
+`NeighbourDeal{agent, neighbour, give, take}`, `NewRun{}`. Facts, written by systems and the
+rules they call: `Refused{agent, intent, reason}`, `WorkBegun{agent, doing, weary, energy, paid,
+act}`, `WorkDone{agent, doing, receipt, owned, act}`, `WorkLost`, `BuildCancelled{agent, gi,
+refund, act}`, `GoodBroke`, `Collected{agent, gi, receipt, vigor, act}`, `BandCrossed{agent,
+from, to}`, `FoodRanOut{agent}`, `Died{agent}`, `GoodsChanged{agent}`, `RecipeInReach{agent,
+gi}`, `Arrived{who}`, `Departed{who}`, `Traded{agent, with, direction, biomass_moved, lot, lots,
+act}`, `Researched{agent, ti, newly}`, `ExchangeRaised{agent}`, `NeighbourSettled{agent,
+neighbour}`, `RunBegun{}`, `ActEnded{act}`. A fact is semantic and carries what its line needs:
+a bounded `Receipt` of item and quantity lines (`rules/ledger.zig`), a bitmask of the tiles a
+technology opened, the act whose words the agent speaks. So `systems/log.zig`, last in the
+`update` set, takes only `Sim`, the catalog and the store, never the world, and is the one reader
+that turns facts into `Log` lines. A rule that refuses returns the `Refused.Reason`; the handler
+emits it. The UI reads the facts it shows with its own cursors.
 
 **Handlers** are one file per intent family in `systems/`, each calling the rule it already has:
 `labor.zig` calls `actions.begin`; `build.zig` calls `capital.begin` and `cancel_build`;
@@ -176,7 +221,9 @@ book's type and valuation until ACT2-01 dissolves it into components. The kernel
 ## The host and the UI
 
 `main.zig` computes `time.dt`, polls the roster watch, and calls `sim.schedule.tick(&world,
-&res.game)` once. The housed check, the route check and the Act II gate are gone from it.
+&res.game)` once. The housed check, the route check and the Act II gate are gone from it, and
+so is the spawn at launch: the world is empty until `NewRun`. A run left behind the title by
+Quit to menu is paused, so its `update` set does not run; a gate on the route is not needed.
 
 The UI build takes `*const World`. A template that writes a component stops compiling. The
 pages read `ctx.res.game.sim`, `ctx.res.game.config`, `ctx.res.game.catalog` with direct field
@@ -193,8 +240,14 @@ becomes an event:
 | `act_two/page.zig` pays research and raises the Exchange | `Research`, `RaiseExchange` |
 | `coin_merchant.zig` moves both sides | `MerchantDeal` |
 | `market_view.zig` settles the neighbour, the page settles the player | `NeighbourDeal` |
-| `gameover.zig`, `title.zig`, `act_one_end.zig` call `app.start_over` | `NewRun` |
+| `gameover.zig`, `title.zig` call `app.start_over` | `NewRun`; the title also sets the route and unpauses, host state it owns |
+| `act_one_end.zig`'s last beat calls `app.start_over` | the curtain closes (`CurtainState`), and the state machine has already moved on |
 | `debug_page.zig` pokes components mid-build | `DebugPoke` |
+
+`build_ui` routes on the state: the title while `route` or the state says so, the curtain while
+`CurtainState` is open, the game-over screen in `game_over` or when no player remains, the Act I
+page in `act_one`, the Act II page in `act_two` and `act_three`. A page that derives the act from
+`Migrated` or `Sim.exchange` reads the state instead.
 
 Fixtures set the world up before the build with the mutable handle they already hold.
 
@@ -239,16 +292,15 @@ API shapes the later steps build on.
    one intent family at a time, labor first and the ration slider last; the facts and
    `systems/log.zig`; the merchant stock onto `Sim.merchant`.
 5. **States and the schedule.** `States`, `Schedule`, `sim/state.zig`, `sim/schedule.zig`;
-   `detect_shelter`, `act_ended`, `cross_curtain`, `new_run`; the main loop makes one call; the
-   curtain dialog pauses through playback.
+   `new_run`, `begin_run`, `detect_shelter`, `cross_curtain`, `detect_death`,
+   `detect_exchange`; `NewRun`, `RunBegun`, `ActEnded`; the main loop makes one call; the
+   curtain pauses through playback and Continue leads into Act II live.
 6. **Derived components.** `Condition`, then `Outlook` retiring `body.zig`, then `Quotes`
    retiring the per-tile quote calls.
 7. **`*const World`** into the build, `DebugPoke`, the boundary rule written down.
 
 ## Open
 
-- After the curtain, does Continue lead into Act II live, or does the last beat start over as
-  today while Act II stays fixture-only? The state machine supports both; the product decides.
 - `rules/market.zig` and `rules/neighbours.zig` are both markets. A rename waits for ACT2-01,
   when the neighbours stop being a stub.
 - Change detection on components (Bevy's `Changed<T>`) is not built. Derived writers recompute
