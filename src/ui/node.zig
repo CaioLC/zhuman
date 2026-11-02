@@ -1,7 +1,7 @@
 //! `Node` — the engine's tree atom, generic over the host's `RenderData`, plus the
 //! `stamp_rects` post-layout walk that captures each queried node's rect into its
-//! interaction slot. Split out of `root.zig`, which re-exports both (`ui.Node`,
-//! `ui.stamp_rects`). Imports only leaf engine modules — no host binding.
+//! interaction slot. `root.zig` re-exports both (`ui.Node`, `ui.stamp_rects`). Imports
+//! only leaf engine modules — no host binding.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -278,7 +278,7 @@ pub fn Node(comptime RenderData: type) type {
             return u.priorGeometryOf(self.key);
         }
 
-        /// Compatibility rect projection; use `priorGeometry` for conversions/clips.
+        /// The `rect` of `priorGeometry`; conversions and clips use `priorGeometry`.
         pub fn rect(self: *Self, u: anytype) ?Rect {
             return (self.priorGeometry(u) orelse return null).rect;
         }
@@ -1331,7 +1331,7 @@ test "width before height: a column-wrap's x pass still packs against bottom-up 
     defer arena.deinit();
     const a = arena.allocator();
 
-    // Pins the one y-to-x coupling left. A 200×100 wrapping `.stretch` column: k0 is 0.5 of
+    // Pins the one y-to-x coupling. A 200×100 wrapping `.stretch` column: k0 is 0.5 of
     // the height (50 final, 0 bottom-up), k1 a 10-wide content box 30 tall, k2 80 wide and
     // 30 tall. Widths are solved first, so the stretch packs the bottom-up heights 0+30+30
     // into one line, whose widest member is k2: k1 stretches to 80. (Against the final
@@ -2314,7 +2314,7 @@ test "a duplicate sibling key is detected and the structural path names it" {
     try std.testing.expectEqualStrings("root", row.pathInto(&tiny));
 }
 
-// ---- ENGINE-05: height measured at the resolved width -----------------------------------
+// ---- height measured at the resolved width -----------------------------------
 
 /// A fake wrapped-text measurer: the text is `data_width` px long on one line, so at width
 /// `w` it breaks into `ceil(data_width / w)` lines of 10 px, with a baseline of 3. Records
@@ -2471,7 +2471,7 @@ test "measure_h: under a fit_children parent the width falls back to the seed, t
     try std.testing.expectEqual(@as(f32, 10), mid.size.height);
 }
 
-// ---- ENGINE-06a: a zero-seed measure_h cell takes what layout gives it -------------------
+// ---- a zero-seed measure_h cell takes what layout gives it -------------------
 
 test "measure_h: a zero-width seed under a fit_children parent contributes no width" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2579,7 +2579,7 @@ test "measure_h: the profiled measured solve reports the measure walk" {
     try std.testing.expectEqual(@as(u64, 50), p.total());
 }
 
-// ---- ENGINE-06b: shared grid tracks ------------------------------------------------------
+// ---- shared grid tracks ------------------------------------------------------
 
 const Track = features.Track;
 const TrackSet = features.TrackSet;
@@ -2771,9 +2771,9 @@ test "tracks: shrink_order gives way by order, each to its floor, and the residu
     try std.testing.expectEqualSlices(f32, &.{ 80, 40 }, s2.widths);
 }
 
-/// The BUILD table's former hand-written `fitted` arithmetic, restated for the golden test: the excess over the
-/// surface comes out of WHAT CHANGES (if shown), then the recipe, then the cost, each to its
-/// floor. Lanes in BUILD column order: recipe, cost, time, effect, state, corner.
+/// The BUILD table's `fitted` arithmetic written out by hand for the golden test: the excess
+/// over the surface comes out of WHAT CHANGES (if shown), then the recipe, then the cost, each
+/// to its floor. Lanes in BUILD column order: recipe, cost, time, effect, state, corner.
 fn fitted_ref(lanes: [6]f32, shown: [6]bool, surface: f32) [6]f32 {
     const row_gap: f32 = 8;
     const row_pad_x: f32 = 6;
@@ -3012,7 +3012,7 @@ test "tracks: a re-solve resets the set, so it repeats exactly and follows chang
     try std.testing.expectEqual(@as(f32, 82), r2.size.width); // 30 + 0 + 40 + 2 × 6
 }
 
-// ---- ENGINE-06c: multi-line participants (CSS implicit grid rows) ------------------------
+// ---- multi-line participants (CSS implicit grid rows) ------------------------
 
 const all_tracks: u16 = std.math.maxInt(u16);
 

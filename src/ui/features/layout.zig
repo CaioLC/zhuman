@@ -34,12 +34,11 @@ pub const Flow = struct {
     /// one. Everything below is expressed in main/cross terms and mapped to x/y by `dir`.
     dir: Direction = .row,
     /// Lay the children out in reverse order along the main axis. Composes with any `main`
-    /// alignment (it just reverses the sequence before packing). Replaces the old
-    /// `*_reverse` enum variants.
+    /// alignment (it just reverses the sequence before packing).
     reverse: bool = false,
     /// Wrap onto a new line when the running main-axis extent would exceed the box, instead
     /// of overflowing in one line. Lines stack along the cross axis (flush from the start;
-    /// `align-content` — distributing the lines — is not modeled yet). Replaces `*_wrapped`.
+    /// `align-content`, which distributes the lines, is not modeled).
     wrap: bool = false,
     /// **Main-axis distribution**: where the *whole run* of children sits within the box's
     /// main extent, and how leftover main-axis space is shared. This is about the group
@@ -116,8 +115,7 @@ pub const Overflow = enum {
     /// every ordinary node.
     visible,
     /// Crop this node's subtree to its own box. Read by the host render walk (SDL
-    /// clip rect) and, in time, by hit-testing. Future crop variants: `scroll` (folds
-    /// the `scroll_y` offset in), `ellipsis`.
+    /// clip rect) and by hit-testing.
     clip,
 };
 
@@ -551,7 +549,7 @@ pub const Layout = struct {
 ///                              participant's cells at their tracks' x, `track_place`).
 /// The sizing passes are pure (no host callback — `content` sizes read the host's
 /// pre-measured `data_width`/`data_height`, set on the node at build). `place` takes a
-/// scratch `Allocator` only to materialize each node's in-flow child list; it still never
+/// scratch `Allocator` only to materialize each node's in-flow child list; it never
 /// consults the host. Call at the root.
 ///
 /// This entrypoint never re-measures: a `Size.measure_h` node keeps its build-time
@@ -595,7 +593,7 @@ const Axis = enum { x, y };
 /// Diagnostic variant of `set_global_pos`: identical solve, with nanosecond durations read
 /// from the host's `clock`. Both bottom-up passes (1, 3) count as `intrinsic`, both
 /// top-down passes (2, 4) as `relative`, and `place` as `placement`. The normal entrypoint
-/// remains clock-free and callback-free. Like `set_global_pos`, it never re-measures, so
+/// is clock-free and callback-free. Like `set_global_pos`, it never re-measures, so
 /// `Sample.measure` stays 0.
 pub fn set_global_pos_profiled(node: anytype, alloc: Allocator, clock: Clock) anyerror!Sample {
     return solve(node, alloc, clock, NoMeasure{});
@@ -748,7 +746,7 @@ fn pack_step(c: anytype, main: Axis, first: bool, gap: f32) f32 {
 /// fit-height is set by its two anchored groups). Reads children's already-resolved
 /// bottom-up sizes.
 ///
-/// A `wrap`ping run is measured across **all** its lines (`wrap_cross`, added 2026-08-24)
+/// A `wrap`ping run is measured across **all** its lines (`wrap_cross`)
 /// whenever the main extent is knowable — otherwise a shelf that wraps to two rows would
 /// report one row of height and whatever follows it would draw on top. `resolved_main` is
 /// the node's final inner main extent when the caller has one (step 3, for a row).
@@ -806,7 +804,7 @@ fn nth_flow_child(node: anytype, k: usize) @TypeOf(node) {
 ///
 /// A column-wrap (main = y) is measured in pass 1 only: its `fit_children` width is needed
 /// by the x pass, before any height is final, so it packs against a `fixed` height and the
-/// children's pass-1 heights. That is the one coupling still running from y back to x.
+/// children's pass-1 heights. That is the one coupling running from y back to x.
 ///
 /// `reverse` is mirrored, since reversing changes which children share a line and
 /// therefore how deep each line is.
@@ -900,8 +898,9 @@ fn recalculate_size(node: anytype) void {
     if (node.layout.track_row) |set| collect_auto(node, set);
     if (node.layout.track_owner) |set| {
         // A `fit_children` participant (or anything fitting around one) read `auto_max` while
-        // later participants had yet to report. Now the max covers every participant, so
-        // redo the subtree's x extents; the max is idempotent, so the redo measures the same.
+        // later participants had yet to report. The max now covers every participant, so
+        // the subtree's x extents are redone; the max is idempotent, so the redo measures
+        // the same.
         if (set.has_auto()) {
             for (node.children.items) |c| recalculate_axis(c, .x);
         }
@@ -1000,7 +999,7 @@ fn resolve_children(node: anytype, comptime axis: Axis, def: bool) void {
     const p_inner = inner_extent(node, axis);
     // An out-of-flow child never feeds its parent's fit on the main axis, and on the cross
     // axis only through its bottom-up (content) extent, so a `fit_children` parent's size is
-    // final by now: a percentage on an anchored child resolves against it (UIE-10). In-flow
+    // final by now: a percentage on an anchored child resolves against it. In-flow
     // children keep the indefinite fallback, since their size is what the fit summed.
     for (node.children.items) |c| {
         const oof = c.layout.anchor != .relative;
@@ -1190,7 +1189,7 @@ fn distribute_grow(node: anytype, main: Axis) void {
             const w = grow_weight(c);
             if (w <= 0) continue;
             // `remaining × w` first: with w = 1 that is exact, so all-1 weights reproduce
-            // the old `remaining / active` share bit for bit.
+            // the equal `remaining / active` share bit for bit.
             const share = remaining * w / active_weight;
             const current = inner_extent(c, main);
             const capacity = if (max_extent(&c.size, main)) |maximum| @max(0, maximum - current) else share;
@@ -1263,7 +1262,7 @@ fn shrink_tally(node: anytype, main: Axis, ratio: f32) ShrinkTally {
 /// end, so every round reads the untouched bases.
 ///
 /// Skipped for a wrapping run, which breaks lines instead (CSS shrinks each line on its
-/// own; we don't need that yet). Descendants resolve against the shrunk size, since the
+/// own; the engine does not). Descendants resolve against the shrunk size, since the
 /// recursion runs afterwards. A shrunk `fit_children` child keeps its rule, so its own
 /// in-flow children still see an indefinite parent; only its box got smaller.
 fn distribute_shrink(node: anytype, main: Axis) void {

@@ -258,11 +258,10 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             @field(self.interactions.get(idx).flags, @tagName(flag)) = val;
         }
 
-        /// This key's interaction state. Zeroed (all flags off) the first frame a
-        /// widget appears. `Slot` has no semantic nonzero defaults, so it uses the
-        /// pool's zeroable fallback. This is the
-        /// read-through query: calling it allocates-or-keeps the slot (a node has
-        /// no interaction state until something marks or reads it — lazy slots).
+        /// This key's interaction state, all flags off the first frame a widget appears.
+        /// `Slot` has no nonzero defaults, so it uses the pool's zeroable fallback. This is
+        /// the read-through query: calling it allocates-or-keeps the slot (a node has no
+        /// interaction state until something marks or reads it).
         pub fn interactionOf(self: *Self, k: u64) IntFlags {
             const idx = self.interactions.acquire(self.gpa, k, self.frame) catch @panic("ui interaction OOM");
             return self.interactions.get(idx).flags;
@@ -279,8 +278,8 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
             return .{ .rect = rect, .clip = slot.value.clip };
         }
 
-        /// Compatibility projection of `priorGeometryOf`; prefer the explicit accessor
-        /// when doing coordinate conversion or effective-clip calculations.
+        /// The `rect` of `priorGeometryOf`. Coordinate conversion and effective-clip
+        /// calculations use `priorGeometryOf`.
         pub fn rectOf(self: *Self, k: u64) ?Rect {
             return (self.priorGeometryOf(k) orelse return null).rect;
         }
@@ -412,7 +411,7 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
         }
 
         /// Capture-aware event-stage routing that also reports the stable key which
-        /// received the flag. The ordinary `mark` wrapper remains source-compatible.
+        /// received the flag. `mark` is the same routing without the key.
         pub fn markTarget(self: *Self, comptime flag: FlagEnum, x: f32, y: f32) ?u64 {
             if (self.pointer_capture) |key| {
                 if (self.markKey(key, flag)) return key;
@@ -479,11 +478,10 @@ pub fn Ctx(comptime StateNs: type, comptime IntFlags: type, comptime Res: type) 
 }
 
 // ============================ Tests ==========================================
-// The event stage had no coverage at all before these: `test-ui` would go green
-// through a total inversion of hit-test semantics, and there is no synthetic-input
-// path into the platform, so a screenshot cannot show which of two overlapping nodes
-// took a click. `mark` is pure over the slot pool — `res` and `arena` are untouched by
-// every method here — so it tests directly with no window and no allocator ceremony.
+// These cover the event stage: there is no synthetic-input path into the platform, so a
+// screenshot cannot show which of two overlapping nodes took a click. `mark` is pure over
+// the slot pool (`res` and `arena` are untouched by every method here), so it tests
+// directly with no window and no allocator ceremony.
 
 const TestFlags = packed struct {
     hovering: bool = false,
