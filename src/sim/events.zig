@@ -8,6 +8,10 @@
 //! turns them into `Log` lines, and the UI reads them with its own cursor.
 //!
 //! A refused intent changes nothing and is answered by `Refused`, naming the intent and the gate.
+//!
+//! The run's lifecycle is events too: `NewRun` asks for a fresh run, `RunBegun` says one began,
+//! and `ActEnded` says the player's act ended and the next is requested (`systems/run.zig`,
+//! `systems/curtain.zig`).
 
 const ecs = @import("ecs");
 const comp = @import("./components.zig");
@@ -15,13 +19,14 @@ const ledger = @import("./rules/ledger.zig");
 const market = @import("./rules/market.zig");
 const neighbours = @import("./rules/neighbours.zig");
 const Condition = @import("./res.zig").Condition;
+const GameState = @import("./state.zig").GameState;
 
 const Entity = ecs.Entity;
 const Receipt = ledger.Receipt;
 
 /// Every scheduled reader, one stored cursor each per event type. A handler reads its intent
-/// family under its own id; `log` reads every fact.
-pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, exchange, neighbours, log };
+/// family under its own id; `run` reads `NewRun`; `log` reads every fact.
+pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, research, exchange, neighbours, run, log };
 
 /// Who comes and goes on the sim clock.
 pub const Who = enum { passerby, merchant };
@@ -55,6 +60,8 @@ pub const NeighbourDeal = struct {
     give: [neighbours.bundle_len]u16,
     take: [neighbours.bundle_len]u16,
 };
+/// Begin a fresh run: the current one, if any, is retired. Never refused.
+pub const NewRun = struct {};
 
 // —— facts ————————————————————————————————————————————————————————————————————————
 
@@ -194,6 +201,12 @@ pub const ExchangeRaised = struct { agent: Entity };
 
 /// `agent` settled a deal with stub neighbour `neighbour`; both sides moved.
 pub const NeighbourSettled = struct { agent: Entity, neighbour: u8 };
+
+/// A run began: a fresh player and a reset `Sim`.
+pub const RunBegun = struct {};
+
+/// The player's act `act` ended and the next act is requested.
+pub const ActEnded = struct { act: GameState };
 
 /// A visitor arrived.
 pub const Arrived = struct { who: Who };

@@ -1,8 +1,8 @@
 //! `sim.Resources`: the resources a system may reach, and nothing else. The run (`Sim`), the
-//! tuning (`Config`), this frame's timesteps (`Time`), the authored roster (`catalog`) and the
-//! event store (`events`). The
-//! host's `Resources` embeds it as the field `game`; a system, a rule and a sim test take
-//! `*sim.Resources`, and every field has a default, so `sim.Resources{}` is a complete value.
+//! tuning (`Config`), this frame's timesteps (`Time`), the authored roster (`catalog`), the
+//! event store (`events`) and the run's state (`states`). The host's `Resources` embeds it as
+//! the field `game`; a system, a rule and a sim test take `*sim.Resources`, and every field has
+//! a default, so `sim.Resources{}` is a complete value, on the title with an empty world.
 
 const std = @import("std");
 const comp = @import("./components.zig");
@@ -10,6 +10,7 @@ const logmod = @import("./log.zig");
 const marketmod = @import("./rules/market.zig");
 const rostermod = @import("./data/roster.zig");
 const Events = @import("./ecs.zig").Events;
+const States = @import("./state.zig").States;
 
 /// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
 /// Action durations are authored in hours (`Requires.hours`) — human-readable on the
@@ -155,8 +156,9 @@ pub const Sim = struct {
 };
 
 /// What a system may reach. `run` binds a system's group params (`*Sim`, `*const Config`,
-/// `*const Time`, `*const roster.Catalog`) and its event params from these fields. One writer each: `time` by the host
-/// loop, `sim` by systems, `config` by nobody, `catalog` by `reload.swap`, between frames.
+/// `*const Time`, `*const roster.Catalog`, `*States`) and its event params from these fields.
+/// One writer each: `time` by the host loop, `sim` by systems, `config` by nobody, `catalog` by
+/// `reload.swap`, between frames, `states` by the transition systems and the schedule.
 pub const Resources = struct {
     sim: Sim = .{},
     config: Config = .{},
@@ -170,6 +172,9 @@ pub const Resources = struct {
     /// `EventWriter(T)` param, read by the handler and log systems with their stored cursors;
     /// `update()` opens each frame.
     events: Events = .{},
+    /// The run's state (`state.zig`): requested by the transition systems through `set`,
+    /// applied by `schedule.tick`, read by the UI. Begins on the title.
+    states: States = .{},
 
     /// A `std.Random` over `sim.prng` — call `.float(f32)`, `.boolean()`, etc. on it.
     pub fn random(self: *Resources) std.Random {

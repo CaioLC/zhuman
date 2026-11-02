@@ -1,7 +1,8 @@
 //! The `sim` namespace: the simulation, re-exported by the library as `ha.sim`. A caller spells
 //! the folder (`sim.rules.actions.begin`, `sim.kernel.hex`, `sim.data.roster`), so the call says
-//! what it reaches. The folders are namespaces declared here as nested structs: `systems` (what
-//! runs each tick), `rules` (the operations the systems and the UI call), `kernel` (pure math
+//! what it reaches. `state` holds the run's states and `schedule` the systems each runs, in
+//! order, with `tick`. The folders are namespaces declared here as nested structs: `systems` (what
+//! the schedule runs), `rules` (the operations the systems and the UI call), `kernel` (pure math
 //! over `std`) and `data` (the authored roster, its reload and the act migration).
 //!
 //! It is also the root of `test-sim`, which compiles the simulation with no UI host and no SDL.
@@ -24,6 +25,10 @@ pub const ecs = @import("./ecs.zig");
 pub const events = @import("./events.zig");
 pub const log = @import("./log.zig");
 pub const baselines = @import("./baselines.zig");
+pub const state = @import("./state.zig");
+pub const GameState = state.GameState;
+pub const States = state.States;
+pub const schedule = @import("./schedule.zig");
 
 pub const systems = struct {
     pub const tick = @import("./systems/tick.zig");
@@ -37,6 +42,8 @@ pub const systems = struct {
     pub const research = @import("./systems/research.zig");
     pub const exchange = @import("./systems/exchange.zig");
     pub const neighbours = @import("./systems/neighbours.zig");
+    pub const run = @import("./systems/run.zig");
+    pub const curtain = @import("./systems/curtain.zig");
     pub const log = @import("./systems/log.zig");
 };
 
@@ -70,6 +77,8 @@ test {
     _ = events;
     _ = log;
     _ = baselines;
+    _ = state;
+    _ = schedule;
     std.testing.refAllDecls(systems);
     std.testing.refAllDecls(rules);
     std.testing.refAllDecls(kernel);

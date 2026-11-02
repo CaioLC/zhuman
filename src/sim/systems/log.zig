@@ -1,8 +1,9 @@
 //! The log system: the one reader that turns facts into `Log` lines. It reads every fact with
 //! the `.log` cursor and words each with the rules' text helpers and the catalog. It reads the
-//! fact types in the order the frame writes them (the handlers' facts, then the tick's in tick
-//! order), so one agent's lines land in the order they happened. A fact no line describes
-//! (`GoodsChanged`, an upward `BandCrossed`, a build beginning) is read and passed over.
+//! fact types in the order the frame writes them (a transition's facts, then the handlers', then
+//! the tick's in tick order), so one agent's lines land in the order they happened. A fact no
+//! line describes (`GoodsChanged`, an upward `BandCrossed`, a build beginning, `ActEnded`, whose
+//! curtain is the UI's) is read and passed over.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
@@ -12,9 +13,13 @@ const capital = @import("../rules/capital.zig");
 const res_mod = @import("../res.zig");
 const roster = @import("../data/roster.zig");
 const merchant = @import("./merchant.zig");
+const run_sys = @import("./run.zig");
 
 /// Run last in the frame, after every writer of a fact.
 pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void {
+    var run_begun = ev.reader(events.RunBegun, .log);
+    while (run_begun.next()) |_| sim.log.push(.dim, run_sys.opening_line);
+
     var begun = ev.reader(events.WorkBegun, .log);
     while (begun.next()) |f| switch (f.doing) {
         // The feed shows labor's debit the moment the work begins; a build begins silently.
@@ -176,6 +181,8 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
     // Read and passed over: no line describes them.
     var changed = ev.reader(events.GoodsChanged, .log);
     while (changed.next()) |_| {}
+    var ended = ev.reader(events.ActEnded, .log);
+    while (ended.next()) |_| {}
     var refused = ev.reader(events.Refused, .log);
     while (refused.next()) |_| {}
 }
@@ -431,4 +438,14 @@ test "a broken good, a recipe in reach; GoodsChanged says nothing" {
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .warn, "Your sandals broke.");
     try expectLine(&rig, 0, .good, "A new recipe is within reach: work gloves.");
+}
+
+test "RunBegun: the opening line, dim; ActEnded says nothing" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.RunBegun{});
+    rig.emit(events.ActEnded{ .act = .act_one });
+    rig.run();
+    try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
+    try expectLine(&rig, 0, .dim, "You wake alone. Cold. Hungry.");
 }
