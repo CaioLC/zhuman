@@ -10,21 +10,21 @@ The UI engine is [`ui/README.md`](ui/README.md) and its host binding is
 
 ## The model
 
-The first slice is **one actor under scarcity** — Robinson Crusoe economics, plus a passing
+Act I is **one actor under scarcity** — Robinson Crusoe economics, plus a passing
 merchant for the first barter; no money. There is deliberately **no world and no space**:
 everything the player sees and does is UI.
 
 The resource model separates survival from accounting:
 
 - **Energy** is the *unit of work* — the **price** of an action, never a stock you hold. It is
-  paid from a source. Today that source is the body; later it is harnessed external energy.
+  paid from a source, and that source is the body.
 - **Vigor** (`comp.Vigor { v, max }`) is that source, and **`vigor == 0` is death**. The
   fraction `v/max` also scales an action's output quality, so a tired actor produces less.
 - **Food** (`comp.InventoryFood { v, quality, spoils }`) is a perishable larder — produced by
   labor, consumed continuously by the metabolism, and always spoiling.
 - **Biomass** (`comp.InventoryBiomass { v }`) is the fungible durable stockpile in every act:
   Act I UI and log prose cover its official name as **Materials**, while Act II shows Biomass.
-  The curtain carries the same balance unchanged; typed resources join it rather than replacing it.
+  The curtain carries the same balance unchanged.
 
 **Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
 every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
@@ -77,8 +77,7 @@ which runs after the tick, brings all three current after it sets a world by han
 
 `eating.zig` is the slider's side of the BODY: `rate(value) = 0.5 × 4^(value/100)` over a
 `0..100` slider, its inverse `valueFromRate`, the policy word ladder (meager … lavish), and the
-per-act coverage/recovery constants; it imports nothing and serves both the template and a
-future system.
+per-act coverage/recovery constants; it imports nothing and serves the template.
 
 That yields the two praxeological margins the game is about: *labor vs. leisure* (working
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
@@ -86,8 +85,8 @@ later* (act for food and materials now, or spend materials and hours on capital)
 
 Death is total: a new run (`begin_run`) wipes everything accumulated (`Sim.reset`).
 
-The decision is split **`decide → act`**. The player is the only decider; the roadmap's AI
-deciders are meant to feed the same options.
+The decision is split **`decide → act`**. The player is the only decider; AI deciders are
+in [`../docs/roadmap.md`](../docs/roadmap.md).
 
 ## Main loop (`main.zig`)
 
@@ -233,7 +232,7 @@ documentation of which name is which. A single-component capture (`while (it.nex
 already unambiguous from the `Query` a line above, and is left bare.
 
 **Structural changes go through a raw `*World` param.** A deferred `Commands` buffer is
-deliberately not built (see the `project_commands_deferred` memory). Two consequences bind
+rejected (see the `project_commands_deferred` memory). Two consequences bind
 every system: mutating the storage you are iterating is unsafe, so collect ids first and apply
 after (`despawn_dead` is the pattern); and an entity that can be despawned must be read with
 `MaybeSingle`, or the UI build panics the frame it dies.
@@ -247,8 +246,8 @@ names agents, records and items by index and amounts by number, never by text.
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
 `ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`,
 `RaiseExchange`, `NeighbourDeal`, and `NewRun`, which asks for a fresh run. The UI writes them through
-`ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
-decider will write the same events. A **handler** system reads one intent family and calls the
+`ctx.res.game.events.writer(T).push(…)` and mutates nothing; any decider writes the same
+events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
 the handler answers with `Refused{agent, intent, reason}`.
 
@@ -393,7 +392,7 @@ Innate verbs are the records flagged `innate`; every other verb exists while an 
 (`actions.verbOf`). `actions.quote` is the one gate calculation: the verb's effective terms, the
 quality a begin would lock (`yield_factor` over the agent's `Condition` band), and a `Standing`
 of `ready`, `busy`, `energy` or `short` with the first unpayable line. It fills the verb slots
-of `comp.Quotes`, which the tile and a future decider read, and `begin` asks it again at apply
+of `comp.Quotes`, which the tile reads, and `begin` asks it again at apply
 time. An agent without a `Vigor` or a `Condition` has no quote.
 
 **Labor resolves in two halves,** because actions take time:
@@ -549,8 +548,8 @@ body and larder are the one exception to derive-never-store, because their compo
 other writers: `effects.apply` computes the contribution, diffs it against `comp.Granted`,
 and applies the delta — a raised ceiling fills what it adds, a lowered one only clamps.
 `ledger.zig` is where a line meets holdings: the one switch over `Resource` to the inventory
-components — the Act II ones opened at the curtain, none for coin until the simulation
-recognizes a medium of exchange — plus `comp.Goods` counts for a good item, with
+components — the Act II ones opened at the curtain, none for coin, since the simulation
+recognizes no medium of exchange (a stand-in; see [`../docs/roadmap.md`](../docs/roadmap.md)) — plus `comp.Goods` counts for a good item, with
 `short`/`pay`/`draw` over a list
 of lines. Per agent that leaves `Goods` (a count per catalog index) and `Granted`; the
 catalog itself sits on `sim.Resources` as `catalog`, so a system declares `*const roster.Catalog`.
@@ -634,7 +633,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 ## Module map
 
-`src/` is the host: the program, its resources, the library root and the test roots, with the game's palette and design tokens. `palette.zig` and `tokens.zig` stay here rather than in `pages/` because they import `ui_client/` by relative path and the host `res.zig` carries the palette's resource hues: a file under `pages/` belongs to the executable module, and one file cannot sit in two modules.
+`src/` is the host: the program, its resources, the library root and the test roots, with the game's palette and design tokens. `palette.zig` and `tokens.zig` live here rather than in `pages/` because they import `ui_client/` by relative path and the host `res.zig` carries the palette's resource hues: a file under `pages/` belongs to the executable module, and one file cannot sit in two modules.
 
 | File | Holds |
 |---|---|
@@ -653,7 +652,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, `sim.state` (with `GameState` and `States`), `sim.schedule`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Band` (the `comp.Condition` enum) and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, a stand-in (see `../docs/roadmap.md`); `Config`, `Time`, `Band` (the `comp.Condition` enum) and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
 | `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
 | `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event, `DebugPoke` (the template audit harness's poke of one component) among them |
 | `state.zig` | `GameState` and `States`, the engine's state resource over it |
@@ -674,7 +673,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `generators.zig` | the `ToggleGenerator` and `CollectGenerator` handlers, and the `generators` update system |
 | `ration.zig` | the `SetRation` handler |
 | `barter.zig` | the `Barter` handler |
-| `merchant.zig` | the Coin Merchant's lots (a stand-in, ACT2-14), its visit system and the `MerchantDeal` handler |
+| `merchant.zig` | the Coin Merchant's lots (a stand-in; see `../docs/roadmap.md`), its visit system and the `MerchantDeal` handler |
 | `research.zig` | the `Research` handler: the board and the ledger's one writer for a research |
 | `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
 | `neighbours.zig` | the reserve table (a stand-in), `heldItem`, and the `NeighbourDeal` handler that settles both sides of a deal |
@@ -725,7 +724,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 Every file under `sim/` imports its siblings by relative path, and nothing in `sim/` imports the host (`res.zig`), `ui_client/` or SDL; the `test-sim` build step, rooted at `sim/root.zig`, is what holds that true. The UI engine is a package of its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to `ha` and to the UI tests as the module `ui`, and runs its tests in both test steps. The ECS engine `src/ecs/` is a package the same way, imported as `ecs`, with its tests run in every test step.
 
-`dist`'s `.fixed` kind is exempt from the `scaleOf` 0.2 floor — every action leaves one yield slot at a fixed zero, and without the exemption each draw silently deposited +0.2.
+`dist`'s `.fixed` kind is exempt from the `scaleOf` 0.2 floor — every action leaves one yield slot at a fixed zero, and without the exemption each draw would silently deposit +0.2.
 
 ## Assets
 
@@ -733,5 +732,5 @@ Every file under `sim/` imports its siblings by relative path, and nothing in `s
   compiled in by `build.zig`, and read from `data/` at startup and whenever a file changes.
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
-  `ui_client.icon_sprite`. Currently unused.
+  `ui_client.icon_sprite`. Unused.
 - `assets/hello.png` — test image.

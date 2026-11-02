@@ -54,7 +54,7 @@ Node(comptime RenderData: type)                                           // the
 Colors are host-side too: the engine has no `Color` type. A payload on `RenderData` is
 whatever the host puts there (here, SDL's `pixels.Color`), carried opaquely.
 
-The host supplies, *one layer up* (today `src/ui_client/` + `src/res.zig`): the
+The host supplies, *one layer up* (`src/ui_client/` + `src/res.zig`): the
 concrete bindings `pub const UiCtx = ui.Ctx(UiState, Interaction, Resources)` and
 `pub const Node = ui.Node(RenderData)` (`ctx_binding.zig`), the `Interaction` type, the
 paint-feature registry + `attach` mixins (`features/`), the content elements and style
@@ -209,7 +209,7 @@ queryable — there's no separate opt-in. A node *participates* in hit-testing o
 `query`s it (that's what keeps its interaction slot alive). **The flag vocabulary is
 host-defined**, exactly like `RenderData`: the host passes its `Interaction` struct
 as the `IntFlags` parameter, and the engine stores it opaquely — it owns neither the
-field names nor what they mean. Today's host (`ui_client/ctx_binding.zig`):
+field names nor what they mean. The host's (`ui_client/ctx_binding.zig`):
 
 ```zig
 pub const Interaction = packed struct {
@@ -261,7 +261,7 @@ geometry — so **hit-testing iterates the live slots, never the node tree**:
   a release geometrically, and route a completed activation without teaching core what
   a click means. Three things fall out of stopping at the first hit:
   - **Occlusion is a mechanism.** A node genuinely blocks what is drawn beneath it, so
-    an overlay no longer has to trust that whatever it covers is harmless to double-fire.
+    an overlay need not trust that whatever it covers is harmless to double-fire.
     Independent roots are stamped in the same order they draw; querying a modal scrim or
     opaque popup therefore puts it after—and above—the covered screen for hover, press,
     release, wheel, and activation alike. A deliberately non-blocking overlay must opt
@@ -360,8 +360,7 @@ gets no slot, geometry, or hit-test — cost ≈ (queried nodes), not node count
 `priorGeometryOf` (via `node.priorGeometry`) reads the full global rect and inherited
 global clip stamped by a prior frame, without creating a slot; missing and unstamped slots
 return null. The explicit name matters because current-frame coordinates do not exist until
-layout after build. Legacy `rectOf` / `node.rect` remain projections for dimension-only
-callers.
+layout after build. `rectOf` / `node.rect` are projections for dimension-only callers.
 
 `Geometry` translates points and rects between global and node-local **pixel** coordinates
 with no scaling, and reports the node's effective clip both globally and locally (its full
@@ -391,8 +390,8 @@ Two orthogonal axes, both Unity-inspired:
   `wrap`, `reverse`, `main` (main-axis distribution — `start`/`center`/`end`/`space_between`
   /`space_around`/`space_evenly`), and `cross` (per-child cross-axis alignment — `start`/
   `center`/`end`/`baseline`/`stretch`). One `place` algorithm reads all five, so every combination
-  composes; the old flat `ChildrenAlign` enum enumerated a fixed subset of that product by
-  hand (and grew a second, overlapping cross-align mechanism as features were bolted on).
+  composes; a flat alignment enum is rejected because it enumerates only a fixed subset of
+  that product and invites a second, overlapping cross-align mechanism.
   `stretch` (CSS `align-items: stretch`) is the one cross mode that *sizes*: in the sizing
   pass, in-flow children with an auto cross rule (`fit_children`/`content`) grow to their
   line's cross extent (the parent's content box, or each wrapped line's max), so equal-height
@@ -430,7 +429,7 @@ Two orthogonal axes, both Unity-inspired:
   being a separate tree it stays out of the main tree's flow/sizing. To anchor an overlay
   to an existing node, read **`node.priorGeometry(ctx)`** (the geometry `stamp_rects`
   recorded last frame), then use its rect/conversion/effective-clip helpers to derive the
-  origin. `node.rect(ctx)` remains a compatibility projection for width/height-only reads.
+  origin. `node.rect(ctx)` is a projection for width/height-only reads.
 - **`offset_x`/`offset_y`** — a displacement in px applied *after* the anchor (or the
   parent's flow) has resolved, so it moves a placement instead of replacing one. This is
   the only way to put a node at a coordinate you computed yourself: nine anchor presets
@@ -456,9 +455,8 @@ Two orthogonal axes, both Unity-inspired:
   **masks** the result — a scroll viewport is the composition `.clip` + a `scroll_y`
   offset. It lives in core `Layout` (not a host render aspect) because it feeds *two*
   engine consumers — the render walk's clip stack and hit-testing (`stamp_rects` folds
-  the same inherited clip onto each slot, so a clipped-away node is not clickable). The host still owns the actual clip *call*
-  (`setClipRect`), the same way it owns painting. Future crop variants: `scroll` (folds
-  the offset in), `ellipsis`.
+  the same inherited clip onto each slot, so a clipped-away node is not clickable). The host owns the actual clip *call*
+  (`setClipRect`), the same way it owns painting.
 
 ### Sizing
 
@@ -537,7 +535,7 @@ breaks into). Five passes, plus one optional measure step between 2 and 3:
    participant's cells go to their tracks' x instead (`track_place`), aligned across the
    row by the same `cross` code.
 
-One coupling still runs from heights back to widths: a column-wrap (`dir = .column`,
+One coupling runs from heights back to widths: a column-wrap (`dir = .column`,
 `wrap`) needs heights to count its columns, but its width is solved first, so its
 `fit_children` width and its `stretch` lines use the bottom-up (pass 1) heights. No
 template wraps a column.
@@ -642,7 +640,7 @@ so it takes line 2 at full width under the lot and the price.
 
 `FrameProfiler` measures the five passes relevant to UI traversal cost: intrinsic sizing,
 relative/percentage/grow resolution, placement, stamping, and drawing. The normal
-`set_global_pos` remains clock-free and callback-free; its explicit diagnostic sibling
+`set_global_pos` is clock-free and callback-free; its explicit diagnostic sibling
 `set_global_pos_profiled` times the same solve and returns a `Sample`: both bottom-up
 passes count as intrinsic sizing, both top-down passes as relative resolution.
 It reads time from a `profile.Clock` (`ui.FrameClock`) the host passes in, a monotonic
@@ -651,12 +649,11 @@ The host owns stamping/drawing clocks, combines every root into one frame sample
 records it. Reports contain per-pass averages and maxima plus stamping's share of the
 measured total; totals use saturating arithmetic and each report window resets cleanly.
 
-The desktop host emits a report every 600 frames. These rolling observations are useful
-for development, but are not a substitute for QA-17's controlled worst cases (20 actions,
-50 recipes, dialog, and the full zoomed board on the reference machine). The current
-policy is deliberately evidence-gated: retain the simple O(all) stamp walk and its required
-paint-order production unless representative reports identify stamping as material. Do
-not infer a rewrite from node count alone.
+The desktop host emits a report every 600 frames. These rolling observations are a
+development aid, not controlled worst-case measurements (see
+[`../../docs/roadmap.md`](../../docs/roadmap.md)). The policy is evidence-gated: the simple
+O(all) stamp walk and its required paint-order production stay unless representative reports
+identify stamping as material. Do not infer a rewrite from node count alone.
 
 ## Writing a widget
 
@@ -709,7 +706,7 @@ to give it new interactive behaviour.
 **Rendering is entirely host-side.** The engine has no draw feature — it stores
 the tree + `render_data` and exposes `root.iterate()` (a zero-alloc pre-order cursor).
 The host loop *is the renderer*; it lives at the call site (`ui_client/draw.zig`), not
-behind an engine wrapper, and picks whatever backend it likes (SDL, GPU, CPU). Today's
+behind an engine wrapper, and picks whatever backend it likes (SDL, GPU, CPU). The
 host organizes it as a **feature registry** (`ui_client/features/`): an ordered list of
 paint features (text/fill/outline/img/svg), each a module owning its `RenderData` field,
 its optional pooled `State`, its `attach` mixin, and its `draw`. The walk is a recursive
@@ -743,13 +740,12 @@ measures; the *generic* engine code never does.
 
 - **Reject flags; use feature fields.** `Node` carries typed optional payload fields
   rather than bare bits, so an aspect arrives with the data it needs to paint. Widget
-  *classes* (`UIWidgets`/`Button`/`DataType`) were dissolved into plain functions.
+  *classes* (`UIWidgets`/`Button`/`DataType`) are rejected: widgets are plain functions.
 - **Persistence = pools + handles**, keyed by rolling hash. No generation
   counters; never compact.
 - **Build is a world-mutating step at one fixed schedule slot.** Immediate mode
-  reads input inline, so the old `OnClick` + `dispatch_click` indirection is gone.
-  No command queue by default (it would reintroduce what immediate mode removes);
-  add one per-action only if validation/replay/networking ever needs it.
+  reads input inline, so there is no `OnClick` + `dispatch_click` indirection.
+  There is no command queue (it would reintroduce what immediate mode removes).
 - **Input lives in the host's `Resources`**, not in `Ui` — one source of truth
   shared by the UI and any ECS systems.
 - **Anchors + Layout Groups for macro composition; autolayout for interiors** is
@@ -762,4 +758,4 @@ engine-invoked `*anyopaque` callbacks — and imports nothing outside this folde
 `src/ui/` into its own repo is packaging work; `src/ui_client/` is the template for how a host
 binds it (see [`../ui_client/README.md`](../ui_client/README.md)).
 
-What the engine does *not* do yet is [`../../docs/roadmap.md`](../../docs/roadmap.md).
+What the engine does *not* do is in [`../../docs/roadmap.md`](../../docs/roadmap.md).

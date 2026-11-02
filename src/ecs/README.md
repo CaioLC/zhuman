@@ -133,8 +133,8 @@ pointer to a `World`, `res` a pointer to any struct of resources. A parameter ma
 | `Query`, `Single`, `MaybeSingle` | built over the world |
 | `Events(…).Writer(T)`, `Events(…).Reader(T, id)` | the one group of `R` whose type is that `Events` store |
 
-The groups are derived from `R`'s fields, so a new one is injectable with no edit to the
-engine. Two guards keep the type-directed binding honest: only struct-typed fields inject (a
+The groups are derived from `R`'s fields, so a field added to `R` is injectable with no edit
+to the engine. Two guards keep the type-directed binding honest: only struct-typed fields inject (a
 bare `f32` on `R` would make `*f32` bind to it), and two fields sharing a type is a build
 error rather than a silent bind to the first. An event param whose store is not a field of `R`
 is a compile error naming the store. Any other parameter is a compile error that lists what is
