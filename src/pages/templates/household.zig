@@ -18,7 +18,7 @@ const eating_mod = @import("../eating.zig");
 /// write `SetRation`, which the ration handler applies before the next build. Only a change is
 /// written, so a still slider writes nothing. An agent with no metabolism shows the policy
 /// disabled at normal.
-pub fn household(parent: El, world: *World, e: Entity, id: []const u8, content: holdings_mod.Content) !El {
+pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, content: holdings_mod.Content) !El {
     const ctx = parent.ctx;
     const column = try holdings_mod.holdings(parent, id, content);
     if (world.get(e, comp.Metabolism)) |met| {

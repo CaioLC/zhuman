@@ -106,7 +106,7 @@ fn authorsName(cat: *const roster.Catalog, shelf: Shelf, name: []const u8) bool 
 
 /// Whether good `gi` is on agent `e`'s shelf: one of the act's recipes, or — with
 /// `carry_owned` — a buildable earlier-act good the agent owns that the act does not shadow.
-pub fn onShelf(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, gi: usize) bool {
+pub fn onShelf(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, gi: usize) bool {
     const rec = &cat.goods[gi];
     if (shelf.holds(rec)) return true;
     if (!shelf.carry_owned or !rec.buildable or rec.milestone != null or rec.act >= shelf.act) return false;
@@ -116,7 +116,7 @@ pub fn onShelf(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shel
 
 /// The shelf's total for agent `e`: the authored recipes plus the carried goods it owns —
 /// the heading's count and the summary's denominator.
-pub fn shelfTotal(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
+pub fn shelfTotal(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
     var n: usize = 0;
     for (cat.goods, 0..) |_, gi| n += @intFromBool(onShelf(world, e, cat, shelf, gi));
     return n;
@@ -251,7 +251,7 @@ fn kindOf(q: comp.Quotes.Build, building: bool) Kind {
 
 /// Classify the shelf for agent `e` and keep the rows `query_text` admits, into `buf`. Pure
 /// over world + catalog, so it is unit-testable. A build in progress is never filtered away.
-pub fn collect(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, query_text: []const u8, buf: []Entry) []Entry {
+pub fn collect(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, query_text: []const u8, buf: []Entry) []Entry {
     const q = query.parse(query_text);
     const blank = query_text.len == 0;
     const busy = world.get(e, comp.Busy);
@@ -335,7 +335,7 @@ pub fn sortEntries(entries: []Entry, sort: Sort, dir: Direction) void {
 /// scroll offset on the same terms. `set` is the table's tracks for `shelf.widths` at this
 /// width (`capital_row.tableTracks`). The list fills its parent's width and remaining height;
 /// the table (header and rows) spans it less the scroll gutter.
-pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, set: *uic.TrackSet, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
+pub fn build_list(parent: El, world: *const World, e: Entity, id: []const u8, shelf: Shelf, set: *uic.TrackSet, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
 
@@ -425,7 +425,7 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
 /// The act's milestone good as a `milestone_goal` — outside the recipe filtering/sorting
 /// because it is the act's ending, not an item in it. Its lifecycle and requirements
 /// recompute live from the record's `unlock`; `words` is the act's copy.
-fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: MilestoneCopy) !void {
+fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, words: MilestoneCopy) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     if (capital.ownsMilestone(world, e, cat, words.which)) return; // owning it raises the curtain — the act is over

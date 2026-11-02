@@ -41,7 +41,7 @@ fn targetGap(collapsed: bool) f32 {
 }
 
 /// Compose the left HOLDINGS rail and right tabbed content as one responsive workspace.
-pub fn act_one_workspace(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
+pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const u8, opts: Options) !Result {
     const ctx = parent.ctx;
     // Stacked (≤760) the rail sits above the content and both take their natural heights.
     const stack = @import("./terminal.zig").stacked(ctx);

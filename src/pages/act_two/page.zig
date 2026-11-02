@@ -111,8 +111,8 @@ pub const ResearchSeed = t.ResearchSeed;
 
 /// Build the Act II page. Returns its roots in draw order: the shell, then the merchant dialog's
 /// overlay root while it is open.
-pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
-    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
+    const player = ecs.ConstMaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const agent: ?Entity = if (player.get()) |a| a[0] else null;
 
     // The shared act page with a shell rail (Holdings/BODY) and the log footer.
@@ -259,7 +259,7 @@ fn population(ctx: *UiCtx) f32 {
 
 /// The Exchange card: locked until a ring-4 technology stands and the settlement passes 500
 /// people, unfunded until the biomass, minerals and metal are held, ready, then standing.
-fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
+fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
     const a = ctx.arena;
     const standing = ctx.res.game.sim.exchange.standing;
     const people = population(ctx);
@@ -330,7 +330,7 @@ fn exchangeGoal(ctx: *UiCtx, world: *World, e: Entity) !t.MilestoneGoal {
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → a `Research` intent;
 /// the handler pays the tile's cost and establishes it, and the board highlights what it opened
 /// once the `Researched` fact is read back.
-fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
+fn researchView(ctx: *UiCtx, world: *const World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
     const cat = &ctx.res.game.catalog;
     const research = world.get(e, comp.Research) orelse {
         _ = try t.empty_state(s.view, "a2_research", "No research board", "The settlement has not crossed the curtain.");
@@ -355,7 +355,7 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t
 
 /// MARKET: the neighbours view over the stub neighbour book; a deal the neighbour accepts is a
 /// `NeighbourDeal` intent, which the handler settles on both sides.
-fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
+fn market(ctx: *UiCtx, world: *const World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
     const m = &ctx.res.game.sim.neighbours;
     if (!m.seeded) m.seed(neighbours.people);
     var player = t.MarketPlayer{ .trade = "forager", .held = undefined, .reserved = undefined, .coin = ledger.balance(world, e, .coin) };

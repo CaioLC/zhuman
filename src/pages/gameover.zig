@@ -9,7 +9,7 @@ const World = ha.sim.ecs.World;
 
 const t = @import("./templates/root.zig");
 
-pub fn ui_gameover(ctx: *uic.UiCtx, world: *World) !uic.Trees {
+pub fn ui_gameover(ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     _ = world;
     // The game-over screen lives in the one terminal shell; it needs only the main body.
     const regions = try t.shell(ctx, .{

@@ -1133,7 +1133,7 @@ pub fn prepare(ctx: *uic.UiCtx, world: *World, name: []const u8) void {
 /// back over the prologue's (the window's pixel density is not the spec's), set the first
 /// frame's resource state, then render the production page. Touches the platform (window
 /// resize), so it is not unit-tested; the determinism is covered by `seed`/`metricsOf` tests.
-pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Trees {
+pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !uic.Trees {
     const spec = find(name) orelse catalog[0];
     // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
     // there, and the controls own them after, so the seeded screen stays navigable.

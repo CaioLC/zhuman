@@ -19,7 +19,7 @@ const Line = t.HoldingsLine;
 const Sentence = t.HoldingsSentence;
 
 /// Units beyond the first of every owned good — what a trader could take.
-fn spareUnits(world: *World, e: Entity, cat: *const roster.Catalog) u32 {
+fn spareUnits(world: *const World, e: Entity, cat: *const roster.Catalog) u32 {
     const goods = world.get(e, comp.Goods) orelse return 0;
     var spares: u32 = 0;
     for (cat.goods, 0..) |_, gi| spares += goods.count[gi] -| 1;
@@ -27,7 +27,7 @@ fn spareUnits(world: *World, e: Entity, cat: *const roster.Catalog) u32 {
 }
 
 /// Project agent `e` into the rail's content for this frame.
-pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
+pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsContent {
     const a = ctx.arena;
     const cat = &ctx.res.game.catalog;
 

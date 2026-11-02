@@ -33,7 +33,7 @@ pub const Options = struct {
 
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
 /// while the dialog is open, so the dialog covers the screen by construction.
-pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
+pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Trees {
     // The reviewed Act-I composition is the normal live page from the first frame. `shell`
     // supplies the same responsive terminal geometry used by the debug fixture's `shell_content`;
     // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD/GENERATORS surface.
@@ -45,7 +45,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *World, opts: Options) !uic.Trees {
     var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
     var header_stocks: [3]t.Stock = undefined;
     var header_stock_count: usize = 0;
-    const q = ecs.MaybeSingle(.{
+    const q = ecs.ConstMaybeSingle(.{
         Entity, comp.Vigor, comp.InventoryFood, comp.InventoryBiomass, ecs.With(tag.Player),
     }){ .world = world };
     if (q.get()) |a| {
@@ -194,7 +194,7 @@ fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequenc
 /// player's stocks and tools as SELL lots, each backed by a live `market.Quote`; a settlement
 /// writes a `Barter` intent with its lot count. Returns the dialog's overlay root (or null
 /// when closed).
-fn trade_overlay(ctx: *uic.UiCtx, world: *World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
+fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.UiState.TradeState) !?*Node {
     const ts = ts_opt orelse return null;
     if (!ts.open) return null;
     const a = ctx.arena;

@@ -66,7 +66,7 @@ pub const Result = struct {
 
 /// Compose Act I's work surface. The returned market control is the strip's trailing action;
 /// callers own eligibility and modal lifecycle.
-pub fn act_one_surface(parent: El, world: *World, e: Entity, id: []const u8, opts: Options) !Result {
+pub fn act_one_surface(parent: El, world: *const World, e: Entity, id: []const u8, opts: Options) !Result {
     const s = try surface_mod.act_surface(parent, id, .{
         .labels = &view_labels,
         .nav_name = "Act I surfaces",

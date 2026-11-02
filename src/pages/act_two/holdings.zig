@@ -52,7 +52,7 @@ pub fn runwayTone(days: f32) Tone {
 }
 
 /// Project agent `e`'s settlement into the rail's content for this frame.
-pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
+pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsContent {
     const a = ctx.arena;
     const cat = &ctx.res.game.catalog;
 

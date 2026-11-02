@@ -42,7 +42,7 @@ pub const Shelf = struct {
     }
 };
 
-fn ownedCount(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
+fn ownedCount(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf) usize {
     const goods = world.get(e, comp.Goods) orelse return 0;
     var count: usize = 0;
     for (cat.goods, 0..) |rec, gi| {
@@ -108,7 +108,7 @@ fn stateWord(q: comp.Quotes.Generator) []const u8 {
     };
 }
 
-fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
+fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     const rec = &cat.goods[gi];
@@ -174,7 +174,7 @@ pub const toggle_label = Style{ .ink = .dim, .on = &.{ .{ .when = .checked, .ink
 ///   `capital_row` does: only a click on the tile body writes `CollectGenerator`.
 ///
 /// Returns whether the generator is on after this frame's activation.
-fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) bool {
+fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u16) bool {
     const ctx = toggle.ctx;
     // A generator can always be paused or resumed. The flip and the lifecycle share this gate.
     const enabled = true;
@@ -201,7 +201,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *World, e: Entity, gi: u16) boo
 /// A regular generator tile's outer height (border included), logical px.
 const generator_regular_h: f32 = 87;
 
-pub fn generator_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf) !El {
+pub fn generator_section(parent: El, world: *const World, e: Entity, id: []const u8, shelf: Shelf) !El {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);

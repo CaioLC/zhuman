@@ -3,7 +3,7 @@
 # covers the authoring tiers (`src/pages/` and the foundation compositions in `src/ui_client/`),
 # not the mechanism files beneath them.
 #
-# Three tiers. The first two split hard failures from an inventory, because an allowlist per
+# Five tiers. The first two split hard failures from an inventory, because an allowlist per
 # call would be brittle:
 #
 #   1. Hard failures. Protocol knowledge that has one home now and no legitimate use in a
@@ -32,6 +32,14 @@
 #      page is art direction that drifts. The debug page is exempt:
 #      the audit harness paints by design, and so are the helpers beside the pages, which build
 #      no nodes. Any hit fails the check.
+#
+#   5. The UI build holds `*const World`. A page or template reads components and writes intents
+#      (`ctx.res.game.events.writer(T)`); a component write is a system's. A `pub fn` under
+#      `src/pages/` whose signature (from `pub fn` to the brace that opens its body) names a
+#      mutable world, `*World` not preceded by `const `, fails, except in `fixture.zig` and the
+#      pages' `root.zig`: the fixture harness seeds the world before the build, through
+#      `pages.prepare`. A private test helper may hold a mutable world; it is not reached from a
+#      build. Any hit fails the check.
 #
 # Run from anywhere: `sh tools/boundary_check.sh`. Exit 0 when clean, 1 on a failure.
 
@@ -103,5 +111,23 @@ for pkg in src/ui src/ecs; do
         status=1
     fi
 done
+
+# The UI build holds `*const World` (tier 5).
+pages_all=$(find src/pages -name '*.zig' -not -name fixture.zig -not -path src/pages/root.zig)
+mutable=$(awk '
+    /^[[:space:]]*pub fn / { sig = 1 }
+    sig {
+        line = $0
+        sub(/\/\/.*/, "", line)
+        gsub(/const \*World/, "", line)
+        if (line ~ /\*World([^A-Za-z0-9_]|$)/) print FILENAME ":" FNR ": " $0
+        if ($0 ~ /\{[[:space:]]*(\/\/.*)?$/) sig = 0
+    }
+' $pages_all)
+if [ -n "$mutable" ]; then
+    echo "boundary: a page or template takes a mutable world (the UI build holds *const World):"
+    echo "$mutable"
+    status=1
+fi
 
 exit $status

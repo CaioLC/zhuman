@@ -382,7 +382,7 @@ pub fn recipeType(rec: *const roster.Good) []const u8 {
 /// content column) and lays out by `set`.
 pub fn capital_row(
     parent: El,
-    world: *World,
+    world: *const World,
     e: Entity,
     set: *uic.TrackSet,
     rec: *const roster.Good,

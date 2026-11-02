@@ -37,7 +37,7 @@ fn resolve(arena: std.mem.Allocator, cat: *const roster.Catalog, id: []const u8)
     };
 }
 
-fn heldOf(world: *World, e: Entity, item: ledger.Item) f32 {
+fn heldOf(world: *const World, e: Entity, item: ledger.Item) f32 {
     return switch (item) {
         .resource => |r| ledger.balance(world, e, r),
         .good => |gi| if (world.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
@@ -85,7 +85,7 @@ fn tally(arena: std.mem.Allocator, cat: *const roster.Catalog, keys: []const Res
 
 /// Build the merchant dialog when `ts.open` and settle what it asks this frame. Returns the
 /// overlay root (or null when closed).
-pub fn coin_merchant(ctx: *UiCtx, world: *World, e: Entity, id: []const u8, ts: *TradeState) !?*Node {
+pub fn coin_merchant(ctx: *UiCtx, world: *const World, e: Entity, id: []const u8, ts: *TradeState) !?*Node {
     const standing = ctx.res.game.sim.exchange.standing;
     const visit_now = &ctx.res.game.sim.merchant;
     const a = ctx.arena;

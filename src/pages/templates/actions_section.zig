@@ -114,7 +114,7 @@ const ActionRow = struct {
 
 /// Every held verb of the shelf in authored order: the verbs the agent's `comp.Quotes` answers
 /// for. Pure over world + catalog.
-pub fn held(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, buf: []Entry) []Entry {
+pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, buf: []Entry) []Entry {
     const quotes = world.get(e, comp.Quotes) orelse return buf[0..0];
     var n: usize = 0;
     for (cat.actions, 0..) |*rec, i| {
@@ -151,7 +151,7 @@ pub fn filter(list: []Entry, query_text: []const u8) []Entry {
 /// With `scroll` the pane fills its parent's height, which must be definite: the heading,
 /// search and summary stay put and only the tiles scroll (Act II's long catalog). Without it
 /// the pane is content-high and the caller scrolls it whole (Act I's short roster).
-pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
+pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
 

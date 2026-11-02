@@ -33,7 +33,7 @@ pub const Shelf = build_list_mod.Shelf;
 /// (`capital_row.Extent`) plus the scroll gutter: framed that is the 594px lane; stacked, the
 /// page's surface. Everything inside takes its width from the section, and the engine solves
 /// the tracks against the rows' own width.
-pub fn build_section(parent: El, world: *World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
+pub fn build_section(parent: El, world: *const World, e: Entity, id: []const u8, shelf: build_list_mod.Shelf, catalog: ?*uic.UiState.CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
     // The table's tracks at this width class; the list below lays out by them.
     const set = try row_mod.tableTracks(ctx, shelf.widths);

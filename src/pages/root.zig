@@ -34,7 +34,7 @@ pub fn prepare(ui_ctx: *uic.UiCtx, world: *World) void {
 }
 
 /// Returns a flattened list of *Nodes for the render stage
-pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
+pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     ui_ctx.res.view.theme = ha.palette.theme;
     ui_ctx.res.view.ground = ha.palette.ground;
     ui_ctx.res.view.resources = ha.palette.resources;
@@ -85,7 +85,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
         if (ui_ctx.res.curtain.open) ui_ctx.res.playback.paused = true;
         return trees;
     }
-    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+    const player = ecs.ConstMaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     if (states.in(.game_over) or player.get() == null) return try withMenu(ui_ctx, try p_gameover(ui_ctx, world));
     return try withMenu(ui_ctx, switch (states.current) {
         .act_one => try p_act_one(ui_ctx, world, .{}),

@@ -89,7 +89,7 @@ fn requestedEntry(res: *const ha.res.Resources) ?usize {
 
 /// Build the audit page. Returns its roots in draw order: the page, then the trade dialog's
 /// root while that entry is open.
-pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
+pub fn debug_page(ctx: *UiCtx, world: *const World) !uic.Trees {
     const th = ctx.res.view.theme;
 
     const root = try el.root(ctx, "debug");
@@ -158,11 +158,11 @@ pub fn debug_page(ctx: *UiCtx, world: *World) !uic.Trees {
 
 /// Build exactly one template into `stage` with sample data. Returns an optional overlay root
 /// (only the trade dialog uses it). Everything else returns null.
-fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
+fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *uic.UiState.TradeState) !?*Node {
     const ctx = stage.ctx;
     const th = ctx.res.view.theme;
     const act: u8 = 1;
-    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+    const player = ecs.ConstMaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
 
     if (eq(name, "button")) {
         _ = try t.button(stage, "b_on", "Enabled", true);

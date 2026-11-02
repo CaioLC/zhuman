@@ -197,7 +197,7 @@ pub fn tile(
 /// takes a domain operation as a parameter.
 pub fn action_tile(
     parent: El,
-    world: *World,
+    world: *const World,
     e: Entity,
     ai: u16,
     id: []const u8,

@@ -125,7 +125,7 @@ fn attract(arena: std.mem.Allocator, seconds: f32) !t.TitleAttract {
     };
 }
 
-pub fn ui_title(ctx: *uic.UiCtx, world: *World) !uic.Trees {
+pub fn ui_title(ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     _ = world;
     ctx.res.title.attract_s += ctx.res.game.time.real_dt;
     const r = try t.title_screen(ctx, "title", try attract(ctx.arena, ctx.res.title.attract_s));
