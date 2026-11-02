@@ -335,9 +335,9 @@ pub const UiState = struct {
     /// A trade dialog's state, kept on a **stable** node (the market strip, built every frame)
     /// so it survives the frame-arena rebuild and view switches. `mode` is the active tab (0 =
     /// buy, 1 = sell); `selected` the chosen lot's id (0 = none), `lots` the slip's count, `page`
-    /// the ledger page. `taken` and `visit` are the Act II merchant stub's own books (lots sold
-    /// by lot index, and the visit's signed movement by balance index) until ACT2-14 gives the
-    /// merchant real stock. All default to the closed, nothing-chosen state.
+    /// the ledger page. `visit` is the Act II merchant dialog's tally of the visit (the signed
+    /// movement by balance index), display state the page keeps from the trades it reads back.
+    /// All default to the closed, nothing-chosen state.
     pub const TradeState = struct {
         mode: usize = 0,
         open: bool = false,
@@ -349,10 +349,7 @@ pub const UiState = struct {
         /// The page's cursor into the trade facts: a settlement is read back from the event
         /// store, and `settled` set when it lands.
         heard: u64 = 0,
-        taken: [32]u16 = @splat(0),
         visit: [16]f32 = @splat(0),
-        /// The Act II merchant visit `taken` and `visit` belong to; a new visit clears them.
-        visit_id: u32 = 0,
     };
     /// The MARKET view's state, on the view's always-built owner so it survives a tab switch:
     /// the grouping (0 natural, 1 by person, 2 by good), the stall and its side (0 selling,

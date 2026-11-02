@@ -392,6 +392,7 @@ pub fn main(process: std.process.Init) !void {
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_collect);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.ration.ration);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.barter.barter);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.merchant.merchant_deal);
         // 4. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen
@@ -418,7 +419,7 @@ pub fn main(process: std.process.Init) !void {
         // time here, and a standing Exchange replaces the cart.
         if (housed and app.resources.route == .game and app.resources.game.time.dt > 0 and !app.resources.game.sim.exchange.standing) {
             if (player.get()) |p| if (ha.sim.data.migration.actOf(&app.world, p[0]) == 2) {
-                _ = ha.sim.rules.market.tickMerchant(&app.resources.game.sim.merchant, app.resources.game.time.dt, .{}, app.resources.game.config.secs_per_day, &app.resources.game.sim.log);
+                ecs.run(&app.world, &app.resources.game, ha.sim.systems.merchant.merchant); // the visit clock → Arrived / Departed
             };
         }
 

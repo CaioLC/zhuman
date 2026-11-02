@@ -124,8 +124,9 @@ pub const Sim = struct {
     /// day); the UI reads it. Cleared by `reset` for a fresh run.
     encounter: marketmod.Encounter = .{},
 
-    /// **The Act II Coin Merchant's visits** — present or away, a visit identity, the time left.
-    /// Ticked by `market.tickMerchant` in Act II; the merchant dialog and strip read it.
+    /// **The Act II Coin Merchant's visits** — present or away, a visit identity, the time left,
+    /// and the lots sold this visit. Ticked by the `merchant` system in Act II and dealt with by
+    /// `merchant_deal` (`systems/merchant.zig`); the merchant dialog and strip read it.
     merchant: marketmod.MerchantVisit = .{},
 
     /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this

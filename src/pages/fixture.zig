@@ -140,7 +140,8 @@ pub const Spec = struct {
     /// The trade dialog's tab, applied on frame 2: a fresh open starts on BUY, so the tab is
     /// set once the dialog has opened. 0 BUY, 1 SELL.
     trade_mode: ?usize = null,
-    /// The Act II merchant's lots already sold, by lot index (a sold-out lot is its stock).
+    /// The Act II merchant's lots already sold this visit, by lot index (a sold-out lot is its
+    /// stock), written to `Sim.merchant.taken` on the first frame.
     trade_taken: ?[]const u16 = null,
     /// A build of this recipe in progress, half done (either act).
     building: ?[]const u8 = null,
@@ -1110,6 +1111,9 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.game.sim.exchange = spec.exchange;
     if (first and spec.merchant_away) ctx.res.game.sim.merchant = .{ .present = false, .remaining = ctx.res.game.config.secs_per_day };
+    if (first) if (spec.trade_taken) |taken| for (taken, 0..) |sold, i| {
+        if (i < ctx.res.game.sim.merchant.taken.len) ctx.res.game.sim.merchant.taken[i] = sold;
+    };
     if (spec.reduced_motion) ctx.res.motion.reduced_motion = true;
     // The focus order exists once frame 1 has ended; Tab from there.
     if (ctx.frame == 2) for (0..spec.tab_presses) |_| {
@@ -1142,7 +1146,6 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
             .initial_query = if (first) spec.query else null,
             .initial_sort = if (first) spec.sort else null,
             .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
-            .trade_taken = if (first) spec.trade_taken else null,
         }),
         .gameover => try p_gameover(ctx, world),
         .act_one_end => try p_act_one_end(ctx, world),

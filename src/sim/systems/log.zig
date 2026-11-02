@@ -11,6 +11,7 @@ const actions = @import("../rules/actions.zig");
 const capital = @import("../rules/capital.zig");
 const res_mod = @import("../res.zig");
 const roster = @import("../data/roster.zig");
+const merchant = @import("./merchant.zig");
 
 /// Run last in the frame, after every writer of a fact.
 pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void {
@@ -67,7 +68,11 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
                 .buy => "You trade with the passerby.",
                 .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ f.biomass_moved, roster.Resource.biomass.wordIn(f.act) }) catch "You sell.",
             }),
-            .merchant => {},
+            .merchant => sim.log.push(.good, std.mem.print(&buf, "You trade {d} lot{s} of {s} with the merchant.", .{
+                f.lots,
+                if (f.lots == 1) "" else "s",
+                if (f.lot < merchant.lots.len) merchant.lots[f.lot].lot else "goods",
+            }) catch "You trade with the merchant."),
         }
     }
 
@@ -287,6 +292,17 @@ test "Traded with the passerby: a buy, and a sell naming the materials paid in t
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .good, "You trade with the passerby.");
     try expectLine(&rig, 0, .good, "You sell to the passerby for 5 materials.");
+}
+
+test "Traded with the merchant names the lots and the lot's record" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 0, .lots = 1 });
+    rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 4, .lots = 3 });
+    rig.run();
+    try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
+    try expectLine(&rig, 1, .good, "You trade 1 lot of Water \u{00d7}6 with the merchant.");
+    try expectLine(&rig, 0, .good, "You trade 3 lots of Food \u{00d7}10 with the merchant.");
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {

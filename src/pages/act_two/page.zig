@@ -11,9 +11,9 @@
 //!
 //! The page reads the player. Its stocks fill the stockline, its goods the holdings, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
-//! catalog, and begin work through `actions.begin` and `capital.begin` as Act I does. What no
-//! system models yet — population, coin, the energy rate, the merchant's lots, flows and body
-//! projections — comes from `fixtures.zig`, and a merchant trade is only logged.
+//! catalog, and write the labor and build intents as Act I does. What no
+//! system models yet — population, coin, the energy rate, flows and body projections — comes
+//! from `fixtures.zig`.
 //!
 //! Each catalog view owns a persistent `CatalogState`, search editor and scroll offset on an
 //! always-built owner node, so switching views keeps each view's query, sort and position where
@@ -101,12 +101,11 @@ pub const Options = struct {
     exchange_open: bool = false,
     /// Seed the RESEARCH board on this frame (a fixture's first frame).
     research: ?t.ResearchSeed = null,
-    /// Seed the active view's search and sort, and the merchant dialog's tab and its lots
-    /// already taken (a fixture's first frame).
+    /// Seed the active view's search and sort, and the merchant dialog's tab (a fixture's
+    /// first frame).
     initial_query: ?[]const u8 = null,
     initial_sort: ?uic.UiState.CatalogState = null,
     trade_mode: ?usize = null,
-    trade_taken: ?[]const u16 = null,
 };
 
 pub const ResearchSeed = t.ResearchSeed;
@@ -179,13 +178,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         if ((m.query().clicked or opts.open_trade) and (ctx.res.game.sim.exchange.standing or ctx.res.game.sim.merchant.dealable()))
             trade_owner.state(uic.UiState.TradeState).open = true;
     }
-    {
-        const ts = trade_owner.state(uic.UiState.TradeState);
-        if (opts.trade_mode) |mode| ts.mode = mode;
-        if (opts.trade_taken) |taken| for (taken, 0..) |sold, i| {
-            if (i < ts.taken.len) ts.taken[i] = sold;
-        };
-    }
+    if (opts.trade_mode) |mode| trade_owner.state(uic.UiState.TradeState).mode = mode;
 
     // --- the rail: the Household column, collapsing with it ---------------------------------
     // Each view keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse

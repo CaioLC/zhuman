@@ -200,8 +200,8 @@ over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixe
 names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
-`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, and, declared for the Act II handlers,
-`Research`, `RaiseExchange`, `MerchantDeal`, `NeighbourDeal`. The UI writes them through
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, and, declared for
+the Act II handlers, `Research`, `RaiseExchange`, `NeighbourDeal`. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -219,7 +219,7 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `barter`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `merchant`, `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
 itself, through `events.readerAt(T, &cursor)`.
 
@@ -243,6 +243,7 @@ paused or not and housed or not:
 | `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
+| `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings, moves both sides, takes the stock, `Traded` |
 
 The tick systems run only while the run is played and `dt > 0`, in this order:
 
@@ -257,6 +258,10 @@ The tick systems run only while the run is played and `dt > 0`, in this order:
 | `generators.generators` | matures every owned, enabled generator by `dt` (`capital.run_generators`) |
 | `tick.mark_dead` | tags `Dead` at `vigor ≤ 0`, `Died` |
 | `tick.despawn_dead` | reaps them; the UI then shows the start-over screen |
+
+In Act II, once the shelter stands and while the Exchange does not, `merchant.merchant` runs on
+the same `dt > 0` gate instead: the merchant's visit clock (`market.tickMerchant`), `Arrived` /
+`Departed`, and a return clears the lots taken (`Sim.merchant.taken`).
 
 Then, every frame and last, `log.log` turns the frame's facts into `Log` lines.
 
@@ -518,6 +523,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `generators.zig` | the `ToggleGenerator` and `CollectGenerator` handlers, and the `generators` update system |
 | `ration.zig` | the `SetRation` handler |
 | `barter.zig` | the `Barter` handler |
+| `merchant.zig` | the Coin Merchant's lots (a stand-in, ACT2-14), its visit system and the `MerchantDeal` handler |
 | `passerby.zig` | the passerby's update system |
 | `log.zig` | the log system: every fact into its `Log` line |
 
@@ -530,7 +536,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `barter.zig` | atomic resolution of a quote against the world |
-| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule |
+| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule; the merchant's visit clock and the lots taken in a visit |
 | `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view trades with |
 | `research.zig` | the research board's progression: the adjacency rule and atomic research resolution over the catalog and `comp.Research` |
 

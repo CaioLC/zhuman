@@ -21,7 +21,7 @@ const Receipt = ledger.Receipt;
 
 /// Every scheduled reader, one stored cursor each per event type. A handler reads its intent
 /// family under its own id; `log` reads every fact.
-pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, log };
+pub const ReaderId = enum { labor, build, generators, ration, passerby, barter, merchant, log };
 
 /// Who comes and goes on the sim clock.
 pub const Who = enum { passerby, merchant };
@@ -46,7 +46,7 @@ pub const Barter = struct { agent: Entity, quote: market.Quote, lots: u16 };
 pub const Research = struct { agent: Entity, ti: u16 };
 /// Raise the Exchange.
 pub const RaiseExchange = struct { agent: Entity };
-/// Take `lots` of the Coin Merchant's lot `lot`.
+/// Take `lots` of the Coin Merchant's lot `lot`, an index into `systems/merchant.zig`'s `lots`.
 pub const MerchantDeal = struct { agent: Entity, lot: u32, lots: u32 };
 /// Settle a deal with stub neighbour `neighbour`: what the agent gives and takes, per item.
 pub const NeighbourDeal = struct {

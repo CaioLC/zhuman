@@ -20,7 +20,6 @@
 //! `capital.zig` owns tool supersession.
 
 const std = @import("std");
-const logmod = @import("../log.zig");
 
 /// Where the passerby is in a visit. `absent` — no one here (the long gap between visits);
 /// `approaching` — seen coming, not yet dealable (the strip can foreshadow); `present` — here
@@ -317,16 +316,22 @@ pub fn sell_quote(ware: Ware, already_sold: u32, id: u32, rev: u32) Quote {
 //
 // The Coin Merchant stays a few days, packs up, and comes back after a short absence with fresh
 // stock. A smaller clock than the passerby's: two phases, a visit identity that bumps on each
-// return (so a lot sold out last visit is restocked, and a dialog opened against one visit
-// cannot settle against the next), and a log line at each edge. Ticked off the sim clock in Act
-// II only; the dialog and the strip read it.
+// return (so a lot sold out last visit is restocked), and an `Event` at each edge. Ticked off the
+// sim clock in Act II only, by the `merchant` system (`systems/merchant.zig`), which holds the
+// merchant's lots; the dialog and the strip read it.
+
+/// The merchant's lot records (`systems/merchant.zig`'s `lots`), which that file asserts.
+pub const merchant_lot_count = 19;
 
 pub const MerchantVisit = struct {
     present: bool = true,
-    /// Bumps on every return; the dialog's sold-out tally belongs to one visit.
+    /// Bumps on every return.
     id: u32 = 1,
     /// Seconds left in the current phase; negative until the first tick seeds the stay.
     remaining: f32 = -1,
+    /// Lots sold this visit, by lot index; a lot's stock left is its record's stock less this.
+    /// The `merchant` system clears it when a new visit begins.
+    taken: [merchant_lot_count]u16 = @splat(0),
 
     pub fn dealable(self: *const MerchantVisit) bool {
         return self.present;
@@ -338,21 +343,19 @@ pub const MerchantSchedule = struct {
     away_days: f32 = 1.5,
 };
 
-/// Advance the merchant by `dt` seconds, logging departure and return.
-pub fn tickMerchant(v: *MerchantVisit, dt: f32, sched: MerchantSchedule, spd: f32, log: *logmod.Log) Event {
+/// Advance the merchant by `dt` seconds; a departure and a return are its `Event`s.
+pub fn tickMerchant(v: *MerchantVisit, dt: f32, sched: MerchantSchedule, spd: f32) Event {
     if (v.remaining < 0) v.remaining = sched.stay_days * spd;
     v.remaining -= dt;
     if (v.remaining > 0) return .none;
     if (v.present) {
         v.present = false;
         v.remaining = sched.away_days * spd;
-        log.push(.dim, "The merchant packs the cart and takes the river road.");
         return .departed;
     }
     v.present = true;
     v.id += 1;
     v.remaining = sched.stay_days * spd;
-    log.push(.good, "The merchant's cart is back, restocked from downriver.");
     return .arrived;
 }
 
@@ -511,19 +514,17 @@ test "sell_quote exposes the next unit's diminished value before confirmation" {
 }
 
 test "the merchant stays, leaves, and returns as a new visit" {
-    var log = logmod.Log{};
     var v = MerchantVisit{};
     const sched = MerchantSchedule{};
-    try testing.expectEqual(Event.none, tickMerchant(&v, 1, sched, secs_per_day, &log));
+    try testing.expectEqual(Event.none, tickMerchant(&v, 1, sched, secs_per_day));
     try testing.expect(v.dealable());
     try testing.expectApproxEqAbs(sched.stay_days * secs_per_day - 1, v.remaining, 1e-3);
 
-    try testing.expectEqual(Event.departed, tickMerchant(&v, sched.stay_days * secs_per_day, sched, secs_per_day, &log));
+    try testing.expectEqual(Event.departed, tickMerchant(&v, sched.stay_days * secs_per_day, sched, secs_per_day));
     try testing.expect(!v.dealable());
     try testing.expectEqual(@as(u32, 1), v.id);
 
-    try testing.expectEqual(Event.arrived, tickMerchant(&v, sched.away_days * secs_per_day, sched, secs_per_day, &log));
+    try testing.expectEqual(Event.arrived, tickMerchant(&v, sched.away_days * secs_per_day, sched, secs_per_day));
     try testing.expect(v.dealable());
-    try testing.expectEqual(@as(u32, 2), v.id); // a fresh visit: last visit's sales no longer count
-    try testing.expectEqual(@as(usize, 2), log.count);
+    try testing.expectEqual(@as(u32, 2), v.id); // a fresh visit
 }
