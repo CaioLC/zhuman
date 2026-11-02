@@ -152,7 +152,6 @@ pub const paginator = @import("./paginator.zig").paginator;
 pub const market_view = @import("./market_view.zig").market_view;
 pub const research_board = @import("./research_board.zig").research_board;
 pub const ResearchBoard = @import("./research_board.zig").Board;
-pub const researchCostLine = @import("./research_board.zig").costLine;
 pub const ResearchSeed = @import("./research_board.zig").Seed;
 pub const researchApplySeed = @import("./research_board.zig").applySeed;
 pub const MarketPlayer = @import("./market_view.zig").Player;

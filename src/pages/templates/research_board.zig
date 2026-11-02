@@ -278,11 +278,6 @@ fn costText(a: std.mem.Allocator, t: *const roster.Technology) ![]const u8 {
     return out.items;
 }
 
-/// The cost of tile `t` as the log line names it (`8 FOOD · 6 BIOMASS`).
-pub fn costLine(a: std.mem.Allocator, t: *const roster.Technology) ![]const u8 {
-    return costText(a, t);
-}
-
 fn deficitText(a: std.mem.Allocator, b: Board, t: *const roster.Technology) !?[]const u8 {
     var out: std.ArrayList(u8) = .empty;
     for (t.cost) |line| {

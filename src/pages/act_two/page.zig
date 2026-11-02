@@ -394,10 +394,10 @@ fn raiseExchange(ctx: *UiCtx, world: *World, e: Entity) void {
     ctx.res.game.sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 }
 
-/// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → pays the tile's cost
-/// from the ledger and establishes it through `sim.rules.research`, which opens its outward neighbours.
+/// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → a `Research` intent;
+/// the handler pays the tile's cost and establishes it, and the board highlights what it opened
+/// once the `Researched` fact is read back.
 fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t.ResearchSeed) !void {
-    const board = ha.sim.rules.research;
     const cat = &ctx.res.game.catalog;
     const research = world.get(e, comp.Research) orelse {
         _ = try t.empty_state(s.view, "a2_research", "No research board", "The settlement has not crossed the curtain.");
@@ -407,46 +407,17 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t
     var held: [6]f32 = undefined;
     for (wedges, 0..) |r, i| held[i] = ledger.balance(world, e, r);
     const st = s.owner.state(uic.UiState.ResearchState);
+    const heard = ctx.res.game.events.readerAt(ha.sim.events.Researched, &st.heard);
+    while (heard.next()) |f| {
+        if (f.agent != e) continue;
+        st.last = f.ti;
+        st.newly = f.newly;
+    }
     const query_owner = try s.owner.div("research_query");
     if (seed) |sd| t.researchApplySeed(cat, st, query_owner, sd);
     const out = try t.research_board(s.view, "a2_research", .{ .cat = cat, .research = research, .held = held }, st, query_owner);
     const idx = out.research orelse return;
-
-    var bal = board.Balances{};
-    for (wedges, 0..) |r, i| bal.set(r, @intFromFloat(@max(0, @floor(held[i]))));
-    var before: u64 = 0;
-    for (0..cat.technologies.len) |i| if (research.state[i] == .available) {
-        before |= @as(u64, 1) << @intCast(i);
-    };
-    if (board.research(cat, research, idx, &bal) != .researched) return;
-    const tech = &cat.technologies[idx];
-    for (tech.cost) |line| {
-        const r = ha.sim.data.roster.Catalog.resource(line.item) orelse continue;
-        _ = ledger.move(world, e, r, -@round(line.n));
-    }
-    var newly: u64 = 0;
-    var suffix: std.ArrayList(u8) = .empty;
-    for (0..cat.technologies.len) |i| {
-        const bit = @as(u64, 1) << @intCast(i);
-        if (research.state[i] == .available and before & bit == 0) {
-            newly |= bit;
-            try suffix.appendSlice(ctx.arena, if (suffix.items.len == 0) " " else ", ");
-            try suffix.appendSlice(ctx.arena, cat.technologies[i].name);
-        }
-    }
-    if (suffix.items.len > 0) try suffix.appendSlice(ctx.arena, " now available.");
-    st.last = idx;
-    st.newly = newly;
-    const cost = try t.researchCostLine(ctx.arena, tech);
-    ctx.res.game.sim.log.push(.good, try ctx.arena.print("{s} is established. {s} paid.{s}", .{ tech.name, cost, suffix.items }));
-    // What it opens in BUILD and ACTIONS takes effect this frame (`capital.techMet`,
-    // `actions.verbOf` read the board); say so once, now, since a tile is researched once.
-    for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
-        ctx.res.game.sim.log.push(.normal, try ctx.arena.print("{s} can now be built.", .{g.name}));
-    };
-    for (cat.actions) |act| if (act.tech) |at| if (std.mem.eql(u8, at, tech.id)) {
-        ctx.res.game.sim.log.push(.normal, try ctx.arena.print("{s} is now open.", .{act.name}));
-    };
+    _ = ctx.res.game.events.writer(ha.sim.events.Research).push(.{ .agent = e, .ti = @intCast(idx) });
 }
 
 /// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the

@@ -388,6 +388,8 @@ pub const UiState = struct {
         /// the status line until the selection moves.
         last: ?u16 = null,
         newly: u64 = 0,
+        /// The page's cursor into the research facts `last` and `newly` are read from.
+        heard: u64 = 0,
         /// Each tile's last target fill opacity and filter opacity (negative: never drawn),
         /// so a change starts a `board_s` transition from where the tile stood.
         /// A fixture's pinned tooltip (a catalog index) until the pointer hovers a tile, and a

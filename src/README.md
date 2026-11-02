@@ -200,8 +200,8 @@ over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixe
 names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
-`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, and, declared for
-the Act II handlers, `Research`, `RaiseExchange`, `NeighbourDeal`. The UI writes them through
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`, and,
+declared for the Act II handlers, `RaiseExchange`, `NeighbourDeal`. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -209,7 +209,7 @@ the handler answers with `Refused{agent, intent, reason}`.
 
 **Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
 `GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
-`RecipeInReach`, `Traded`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
+`RecipeInReach`, `Traded`, `Researched`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
 A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
 `{ item: ledger.Item, qty }`.
 
@@ -219,14 +219,15 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `barter`, `merchant`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `merchant`, `research`, `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
 itself, through `events.readerAt(T, &cursor)`.
 
 **The log.** `systems/log.zig` is the one reader that writes `Log`. It reads every fact with
 the `.log` cursor, in the order the frame writes the types, and words each with the rules' text
 helpers (`actions.paymentText`, `actions.receiptText`, `actions.itemWordOf`,
-`capital.lowerName`) and the catalog (the roster's authored `copy.built`). A fact no line
+`capital.lowerName`) and the catalog (the roster's authored `copy.built`, a technology's cost,
+the merchant's lot records). A fact no line
 describes, such as `GoodsChanged` or an upward `BandCrossed`, is passed over.
 
 ## The frame's systems, in order (`sim/systems/`)
@@ -244,6 +245,7 @@ paused or not and housed or not:
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
 | `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings, moves both sides, takes the stock, `Traded` |
+| `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
 
 The tick systems run only while the run is played and `dt > 0`, in this order:
 
@@ -524,6 +526,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `ration.zig` | the `SetRation` handler |
 | `barter.zig` | the `Barter` handler |
 | `merchant.zig` | the Coin Merchant's lots (a stand-in, ACT2-14), its visit system and the `MerchantDeal` handler |
+| `research.zig` | the `Research` handler: the board and the ledger's one writer for a research |
 | `passerby.zig` | the passerby's update system |
 | `log.zig` | the log system: every fact into its `Log` line |
 

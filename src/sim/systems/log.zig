@@ -76,6 +76,34 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
         }
     }
 
+    var researched = ev.reader(events.Researched, .log);
+    while (researched.next()) |f| {
+        const tech = &cat.technologies[f.ti];
+        var buf: [512]u8 = undefined;
+        var wr = std.Io.Writer.fixed(&buf);
+        wr.print("{s} is established. ", .{tech.name}) catch {};
+        costText(&wr, tech);
+        wr.writeAll(" paid.") catch {};
+        var opened = false;
+        for (cat.technologies, 0..) |t, i| {
+            if (i >= @bitSizeOf(@TypeOf(f.newly)) or f.newly & (@as(u64, 1) << @intCast(i)) == 0) continue;
+            wr.print("{s}{s}", .{ if (opened) ", " else " ", t.name }) catch {};
+            opened = true;
+        }
+        if (opened) wr.writeAll(" now available.") catch {};
+        sim.log.push(.good, wr.buffered());
+        // What it opens in BUILD and ACTIONS takes effect now (`capital.techMet` and
+        // `actions.verbOf` read the board); a tile is researched once, so this is said once.
+        for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
+            var gbuf: [128]u8 = undefined;
+            sim.log.push(.normal, std.mem.print(&gbuf, "{s} can now be built.", .{g.name}) catch "A new recipe can now be built.");
+        };
+        for (cat.actions) |act| if (act.tech) |at| if (std.mem.eql(u8, at, tech.id)) {
+            var abuf: [128]u8 = undefined;
+            sim.log.push(.normal, std.mem.print(&abuf, "{s} is now open.", .{act.name}) catch "A new verb is now open.");
+        };
+    }
+
     var ran_out = ev.reader(events.FoodRanOut, .log);
     while (ran_out.next()) |_| sim.log.push(.warn, "Your food has run out.");
 
@@ -144,6 +172,21 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
     while (changed.next()) |_| {}
     var refused = ev.reader(events.Refused, .log);
     while (refused.next()) |_| {}
+}
+
+/// A research cost as the log names it (`8 FOOD · 6 BIOMASS`), or that the tile was carried
+/// across the curtain.
+fn costText(wr: *std.Io.Writer, tech: *const roster.Technology) void {
+    if (tech.cost.len == 0) {
+        wr.writeAll("CARRIED FROM ACT I") catch {};
+        return;
+    }
+    for (tech.cost, 0..) |line, i| {
+        if (i > 0) wr.writeAll(" \u{00b7} ") catch {};
+        const r = roster.Catalog.resource(line.item) orelse continue;
+        wr.print("{} ", .{@as(u32, @intFromFloat(@round(line.n)))}) catch {};
+        for (r.labelIn(2)) |c| wr.writeByte(std.ascii.toUpper(c)) catch {};
+    }
 }
 
 // ============================ Tests ==========================================
@@ -303,6 +346,54 @@ test "Traded with the merchant names the lots and the lot's record" {
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .good, "You trade 1 lot of Water \u{00d7}6 with the merchant.");
     try expectLine(&rig, 0, .good, "You trade 3 lots of Food \u{00d7}10 with the merchant.");
+}
+
+test "Researched: the establishment with its cost and what it opened, then each recipe and verb it enables" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    const cat = &rig.res.catalog;
+    // A tile that some recipe or verb names, and two tiles it opened.
+    const ti: u16 = blk: for (cat.technologies, 0..) |t, i| {
+        if (t.cost.len == 0) continue;
+        for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, t.id)) break :blk @intCast(i);
+        for (cat.actions) |a| if (a.tech) |at| if (std.mem.eql(u8, at, t.id)) break :blk @intCast(i);
+    } else unreachable;
+    const tech = cat.technologies[ti];
+    rig.emit(events.Researched{ .agent = 0, .ti = ti, .newly = 0b11 });
+    rig.run();
+
+    var cost: [256]u8 = undefined;
+    var cw = std.Io.Writer.fixed(&cost);
+    costText(&cw, &tech);
+    var want: [512]u8 = undefined;
+    const first = try std.fmt.bufPrint(&want, "{s} is established. {s} paid. {s}, {s} now available.", .{ tech.name, cw.buffered(), cat.technologies[0].name, cat.technologies[1].name });
+    var enabled: usize = 0;
+    for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
+        enabled += 1;
+    };
+    for (cat.actions) |a| if (a.tech) |at| if (std.mem.eql(u8, at, tech.id)) {
+        enabled += 1;
+    };
+    try testing.expect(enabled > 0);
+    try testing.expectEqual(1 + enabled, rig.res.sim.log.count);
+    try expectLine(&rig, enabled, .good, first);
+    try testing.expect(std.mem.indexOf(u8, first, " \u{00b7} ") != null or tech.cost.len == 1);
+    const last = rig.line(0);
+    try testing.expect(std.mem.endsWith(u8, last, " can now be built.") or std.mem.endsWith(u8, last, " is now open."));
+    try testing.expectEqual(Tone.normal, rig.res.sim.log.get(0).tone);
+}
+
+test "a research cost reads in whole units and capitals, or as carried across the curtain" {
+    var buf: [128]u8 = undefined;
+    var wr = std.Io.Writer.fixed(&buf);
+    const two = roster.Technology{ .id = "t", .name = "T", .short = "T", .coord = .{ .q = 1, .r = 0 }, .cost = &.{ .{ .item = "food", .n = 8 }, .{ .item = "biomass", .n = 5.6 } } };
+    costText(&wr, &two);
+    try testing.expectEqualStrings("8 FOOD \u{00b7} 6 BIOMASS", wr.buffered());
+    var cbuf: [32]u8 = undefined;
+    var cw = std.Io.Writer.fixed(&cbuf);
+    const carried = roster.Technology{ .id = "c", .name = "C", .short = "C", .coord = .{ .q = 1, .r = 0 } };
+    costText(&cw, &carried);
+    try testing.expectEqualStrings("CARRIED FROM ACT I", cw.buffered());
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {
