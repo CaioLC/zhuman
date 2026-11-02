@@ -11,9 +11,9 @@
 //! This is the mechanism/policy seam drawn *through* a feature: `State` is engine
 //! caching (declared in `ctx_binding.UiState`, stored/keyed/evicted by `src/ui/cache.zig`);
 //! `Payload`/`attach`/`draw` are host policy (they touch the font, the renderer, the
-//! backend). Adding a feature — `svg` was the proof — is one module here + one `list`
-//! entry + one matching `RenderData` field; the draw walk and pools follow. `RenderData`
-//! stays hand-written, but `assertFeature` fails the build if it drifts from the list.
+//! backend). Adding a feature is one module here + one `list` entry + one matching
+//! `RenderData` field; the draw walk and pools follow. `RenderData` is hand-written, and
+//! `assertFeature` fails the build if it drifts from the list.
 //!
 //! Overflow/clip is deliberately **not** a feature — it's `Layout.overflow` (geometry the
 //! render walk *and* hit-testing read), not a paint aspect. See `src/ui/features/layout.zig`.
@@ -55,8 +55,8 @@ comptime {
 }
 
 // --- Ergonomic attach wrappers -------------------------------------------------
-// The old `data_*` mixin names, now thin aliases onto the owning feature's `attach`.
-// Keeps widget/call-site churn to zero while the definitions live with their feature.
+// The `data_*` mixin names: thin aliases onto the owning feature's `attach`, so call sites
+// name the mixin while the definition lives with its feature.
 
 pub const data_text = text.attach;
 pub const data_img = image.attach_texture;

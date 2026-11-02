@@ -1,12 +1,13 @@
-//! `geometry_tess` — the **pure, SDL-free tessellation** behind the `geometry` feature. It turns high-level shapes (a convex polygon, a thick polyline) into an
-//! indexed triangle mesh: a flat vertex list plus `u16` indices, three per triangle. It
+//! `geometry_tess` — the **pure, SDL-free tessellation** behind the `geometry` feature. It
+//! turns high-level shapes (a convex polygon, a thick polyline) into an indexed triangle
+//! mesh: a flat vertex list plus `u16` indices, three per triangle. It
 //! touches no SDL, no allocator, and no I/O — the caller hands it fixed-capacity slices and
 //! it reports overflow rather than allocating — so the geometry math (fan triangulation,
 //! miter joins, caps) is unit-tested deterministically without a graphics context, the same
 //! discipline `wrap.zig` uses for line breaking.
 //!
 //! **Coordinates are the caller's.** The routines are unit-agnostic: `features/geometry.zig`
-//! feeds them **node-local unit-square** points (0..1 on each axis, like `line.zig`) so a
+//! feeds them **node-local unit-square** points (0..1 on each axis) so a
 //! shape survives resize/zoom, and maps the emitted vertices to device px at draw. Tests
 //! feed whatever coordinates make the assertion clearest. Color is a plain rgba byte quad
 //! here (the feature converts to SDL's float `FColor` at draw), keeping this module free of
@@ -24,7 +25,7 @@ pub const V2 = struct { x: f32, y: f32 };
 
 /// An rgba color as bytes (0..255) — the host `Color`'s shape without importing SDL. The
 /// feature converts this to SDL's float `FColor` at draw; per-vertex color is what lets one
-/// mesh carry a gradient (the gradient seam) or a multi-hue rail.
+/// mesh carry a gradient or a multi-hue rail.
 pub const Rgba = struct { r: u8, g: u8, b: u8, a: u8 };
 
 /// One mesh vertex: a position plus its own color. `renderGeometry` interpolates the colors
@@ -95,7 +96,7 @@ pub fn fillConvex(mesh: *Mesh, points: []const V2, color: Rgba) void {
 
 /// Fan-triangulate a convex polygon with **per-vertex** colors (`colors[i]` for `points[i]`),
 /// so `renderGeometry` interpolates them across the fill — a flat tint when all equal, a
-/// gradient/mixed fill when not (the gradient seam). `colors` must be at least `points.len`
+/// gradient/mixed fill when not. `colors` must be at least `points.len`
 /// long; when `null`, `flat` is used for every vertex. Fewer than 3 points is a no-op.
 pub fn fillConvexMulti(mesh: *Mesh, points: []const V2, flat: Rgba, colors: ?[]const Rgba) void {
     if (points.len < 3) return;
@@ -118,9 +119,9 @@ pub fn fillConvexMulti(mesh: *Mesh, points: []const V2, flat: Rgba, colors: ?[]c
     }
 }
 
-/// The axis a linear gradient runs along. Only the two axis-aligned directions
-/// the prototype uses — a full CSS gradient angle grammar is out of scope. `horizontal` runs
-/// along +x (left→right), `vertical` along +y (top→bottom), both in the unit square.
+/// The axis a linear gradient runs along: only the two axis-aligned directions, no angles.
+/// `horizontal` runs along +x (left→right), `vertical` along +y (top→bottom), both in the
+/// unit square.
 pub const Dir = enum { horizontal, vertical };
 
 /// One explicit gradient color stop: a position along the axis (`pos` in 0..1) and the color
@@ -136,8 +137,7 @@ pub const Stop = struct { pos: f32, color: Rgba };
 /// interpolates them across the span — a smooth ramp for distinct positions, a **hard split**
 /// for a duplicated position, and a **wash** when a stop's color is transparent. The cross
 /// axis spans the full 0..1 (a horizontal gradient's color is constant down each column, a
-/// vertical gradient's across each row), matching the prototype's `90deg`/vertical washes and
-/// the split track. Fewer than 2 stops is a no-op; positions are used as given (the caller
+/// vertical gradient's across each row). Fewer than 2 stops is a no-op; positions are used as given (the caller
 /// authors them explicitly). Overflow is reported through the mesh.
 pub fn fillGradient(mesh: *Mesh, dir: Dir, stops: []const Stop) void {
     if (stops.len < 2) return;

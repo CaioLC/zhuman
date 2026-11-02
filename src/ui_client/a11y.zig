@@ -8,8 +8,8 @@
 //! semantic fact. It runs host-side only — `src/ui/` stays generic and accessibility-
 //! unaware, and no simulation system reads or writes it. Its job is to (a) report, honestly,
 //! which accessibility guarantees this desktop build actually ships, and (b) hold a narrow,
-//! testable insertion seam (`Provider`) where a real Windows UIA provider can later slot in
-//! without touching the engine or the semantics source.
+//! testable insertion seam (`Provider`) where a Windows UIA provider slots in without
+//! touching the engine or the semantics source.
 //!
 //! ### The screen-reader limitation (recorded, not worked around)
 //!
@@ -31,7 +31,7 @@
 //!   * Non-color state cues — outline/shape state projections, never color alone.
 //!   * Live-announcement plumbing — `AnnouncementChannel`; this bridge is the reader that
 //!     drains it through a generation cursor and forwards each new message to the active
-//!     `Provider` sink (a no-op/logging default now; a UIA notification later).
+//!     `Provider` sink (a no-op by default).
 //!
 //! ## Lifecycle
 //!
@@ -52,18 +52,17 @@
 const std = @import("std");
 const semantics = @import("semantics.zig");
 
-/// Whether the bridge is currently running. A future real provider might add a
-/// `.degraded` variant (e.g. UIA present but a raise failed); today it is binary.
+/// Whether the bridge is currently running.
 pub const Status = enum {
-    /// Not yet initialized, or torn down. `poll` is a no-op guarded against this.
+    /// Uninitialized, or torn down. `poll` is a no-op guarded against this.
     inactive,
     /// Initialized with a provider; `poll` forwards snapshots and announcements.
     active,
 };
 
 /// Honest report of which accessibility guarantees this build ships. These are facts about
-/// the shipped desktop app, not aspirations: the four booleans that are `true` are exercised
-/// today; `screen_reader_export` is `false` because no `WM_GETOBJECT`-answering UIA provider
+/// the shipped desktop app, not aspirations: the four booleans that are `true` are exercised;
+/// `screen_reader_export` is `false` because no `WM_GETOBJECT`-answering UIA provider
 /// exists (see the module doc). A test asserts this shape so the honesty cannot silently rot
 /// into a fake claim.
 pub const Capabilities = struct {
@@ -80,7 +79,7 @@ pub const Capabilities = struct {
     screen_reader_export: bool = false,
 };
 
-/// The narrow future-provider seam. A real Windows UIA provider implements these against a
+/// The narrow provider seam. A real Windows UIA provider implements these against a
 /// `WM_GETOBJECT`-answering `IRawElementProviderFragmentRoot`; the default `NoopProvider`
 /// implements them as inert sinks so the bridge is fully exercised without any platform
 /// dependency. The bridge only ever calls through this vtable, so a provider slots in
@@ -128,10 +127,10 @@ pub const Provider = struct {
 
 /// The default, always-safe provider: every operation is inert. `elementFromKey` reports
 /// "not present" (there is no platform element), `mapRole` returns `0` (UIA
-/// `UIA_CustomControlTypeId` stand-in), and the raise/getRoot sinks do nothing. This is the
-/// production default until a real UIA provider exists; it lets the whole bridge run and be
-/// tested with no platform surface. A stateless singleton — `instance()` yields a `Provider`
-/// bound to a shared zero-size context.
+/// `UIA_CustomControlTypeId` stand-in), and the raise/getRoot sinks do nothing. It is the
+/// production default, a stand-in for a UIA provider (`docs/roadmap.md`); it lets the whole
+/// bridge run and be tested with no platform surface. A stateless singleton: `instance()`
+/// yields a `Provider` bound to a shared zero-size context.
 pub const NoopProvider = struct {
     var shared: NoopProvider = .{};
 
@@ -246,7 +245,7 @@ pub const Bridge = struct {
         return self.last_spoken.slice();
     }
 
-    /// Resolve a stable `node.key` through the active provider (a future UIA element lookup).
+    /// Resolve a stable `node.key` through the active provider (a UIA element lookup).
     /// Returns false when inactive or when the provider has no such element — which is always
     /// true for `NoopProvider`, honestly reporting "no platform element exists".
     pub fn elementFromKey(self: *const Bridge, key: u64) bool {
@@ -335,8 +334,8 @@ test "capabilities are honest: keyboard/focus/non-color/live yes, screen-reader 
     try testing.expect(caps.visible_focus);
     try testing.expect(caps.non_color_state);
     try testing.expect(caps.live_region_plumbing);
-    // The honest limitation: no UIA screen-reader tree on this build. This assertion is the
-    // guard against a future fake claim — flipping it true without a real provider fails here.
+    // The honest limitation: no UIA screen-reader tree on this build. This assertion guards
+    // against a fake claim: flipping it true without a real provider fails here.
     try testing.expect(!caps.screen_reader_export);
 
     // A default bridge carries the same honest report.

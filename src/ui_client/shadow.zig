@@ -2,9 +2,9 @@
 //! the prototype's soft drop shadows (`box-shadow: 0 16px 80px #000a`, dialog `0 18px 80px
 //! #000d`, popup `0 4px 14px #0008`) are approximated by a small **bounded stack of
 //! translucent black rectangles** — each a little larger and more offset than the last, with
-//! low alpha, so they build up a soft penumbra under a box without a real gaussian. This is
-//! the "bounded layers" the roadmap calls for, deliberately **understated**: flat black
-//! translucency, no rounded corners, no gloss, no glow.
+//! low alpha, so they build up a soft penumbra under a box without a real gaussian. The
+//! look is deliberately **understated**: flat black translucency, no rounded corners, no
+//! gloss, no glow.
 //!
 //! Two pieces:
 //!   - `layers(Spec)` — the **pure**, SDL-free layer math (offsets, spreads, alphas). It is

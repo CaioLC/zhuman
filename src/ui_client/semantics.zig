@@ -29,8 +29,8 @@
 //! into `SemanticNode`s for the current stock/game controls (button, icon button, action
 //! tile, build row, cancel/goal, tabs, ration choices, the build sort/show/tier radio-like
 //! groups and the built checkbox, text input, progress bar, and the modal/dialog shell).
-//! No production board/search/modal *consumer* exists at this roadmap stage, so these
-//! describe the real controls that do exist and do not invent game content.
+//! No production board/search/modal consumer exists, so these describe the real controls
+//! that do exist and do not invent game content.
 
 const std = @import("std");
 
@@ -67,8 +67,8 @@ pub const LiveRegion = enum { off, polite, assertive };
 /// The semantic interaction state carried per node. These MUST match what the control
 /// publishes to the interaction pool through `publishControlState` — this struct is a
 /// projection for the bridge, not an independent latch. `expanded` has no interaction-pool
-/// equivalent yet (no production disclosure/expander control exists), so it defaults false
-/// and is set only by a helper whose control genuinely owns an expanded/collapsed fact.
+/// equivalent (no disclosure/expander control exists), so it defaults false and is set only
+/// by a helper whose control genuinely owns an expanded/collapsed fact.
 pub const SemanticState = struct {
     disabled: bool = false,
     focused: bool = false,

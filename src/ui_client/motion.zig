@@ -2,31 +2,31 @@
 //! *optional* UI transitions animate or **snap** to their end state, while functional
 //! progress, state changes, pointer/focus feedback, and the simulation always remain visible.
 //!
-//! ## What this is, and what it is honestly *not*
+//! ## What this is, and what it is not
 //!
 //! This is a one-bit presentation policy (`reduced_motion`), resolved **once at host init**
 //! and then projected onto `View.reduced_motion` each build/frame. It is host-side only:
 //! `src/ui/` stays generic and motion-unaware, and no simulation system reads or writes it.
 //! It deliberately does **not** touch determinate progress indicators (the action-tile
-//! underbar, the eating-policy slider position), the day/clock readouts, or any state/focus cue — those
-//! are *functional* and remain visible regardless of the policy. It only gates genuinely
-//! *decorative* time-varying visuals (none ships today), and
-//! provides the `snap` gate the tween registry routes every optional transition through.
+//! underbar, the eating-policy slider position), the day/clock readouts, or any state/focus
+//! cue: those are *functional* and remain visible regardless of the policy. It only gates
+//! *decorative* time-varying visuals (none ships), and provides the `snap` gate the tween
+//! registry routes every optional transition through.
 //!
-//! ## The platform preference (and its honest limitation)
+//! ## The platform preference and its limitation
 //!
 //! On Windows the OS-level reduced-motion flag is the "client area animation" system
 //! parameter, read with `SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, …)` — the flag
 //! behind Settings → Accessibility → Visual effects → Animation effects. Its BOOL is
 //! *enable-animations*, so `reduced_motion = !client_area_animation_enabled`. This is the
 //! documented, live-state query (unlike the registry `MinAnimate` value, which does not
-//! reflect temporary changes), and it links against `user32` — already linked by the
-//! vendored SDL C build — with no `build.zig` change and no per-frame OS call.
+//! reflect temporary changes), and it links against `user32`, which the vendored SDL C build
+//! already links, with no per-frame OS call.
 //!
 //! SDL exposes no cross-platform reduced-motion abstraction (`zig-sdl3` 0.2.3 has only mouse
 //! hints and a light/dark theme query), so there is nothing portable to build on. On every
-//! non-Windows target the platform probe returns a deterministic `false` (motion allowed) —
-//! recorded honestly rather than pretending a preference was read.
+//! non-Windows target the platform probe returns a deterministic `false` (motion allowed),
+//! not a preference that was read.
 //!
 //! ## Resolution & precedence (non-panicking)
 //!
@@ -64,8 +64,8 @@ pub const Policy = struct {
 
     /// A convenience gate for a scalar animation *phase* in `[0,1]` (e.g. the heartbeat's
     /// sine phase): when reduced motion is on, collapse to a caller-chosen constant `frozen`
-    /// so the visual holds still; otherwise pass the live `phase` through. Kept general for
-    /// any phase-driven decorative visual.
+    /// so the visual holds still; otherwise pass the live `phase` through. General for any
+    /// phase-driven decorative visual.
     pub fn phase(self: Policy, live: f32, frozen: f32) f32 {
         return if (self.reduced_motion) frozen else live;
     }
@@ -173,8 +173,8 @@ pub fn nullProbe() Probe {
 /// user wants client-area animations. `FALSE` ⇒ animations off ⇒ reduced motion on.
 const SPI_GETCLIENTAREAANIMATION: u32 = 0x1042;
 
-// Declared only on Windows; links against `user32`, already linked by the vendored SDL C
-// build (kernel32/user32/gdi32/winmm/imm32), so no `build.zig` change is needed.
+// Declared only on Windows; links against `user32`, which the vendored SDL C build already
+// links (kernel32/user32/gdi32/winmm/imm32).
 const win32 = if (builtin.target.os.tag == .windows) struct {
     // BOOL SystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni);
     extern "user32" fn SystemParametersInfoW(

@@ -1,9 +1,8 @@
-//! `control` — the one host-side control lifecycle. Every ordinary control used to repeat
-//! the same ritual by hand: register focus, query, consume a disabled click, request focus on
-//! click, read focus, publish `ControlState`, request the cursor, publish semantics. This is
-//! that ritual once, for the node it is handed (`El.control`). The caller keeps only what is
-//! genuinely its own: the enabled gate, the accessible name and role, and the chrome it
-//! paints from the result.
+//! `control` — the one host-side control lifecycle: register focus, query, consume a disabled
+//! click, request focus on click, read focus, publish `ControlState`, request the cursor,
+//! publish semantics, for the node it is handed (`El.control`). The caller keeps only what is
+//! its own: the enabled gate, the accessible name and role, and the chrome it paints from the
+//! result.
 //!
 //! The result is the node's interaction read **after** publication, so `focused`,
 //! `focus_visible`, `disabled`, `selected` and `checked` are the published bits — the same

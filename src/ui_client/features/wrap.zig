@@ -17,8 +17,8 @@
 //! **Why host-driven breaks instead of SDL's own wrapper:** `TTF_GetStringSizeWrapped` /
 //! `renderTextSolidWrapped` exist, but SDL owns the break points, does not guarantee its
 //! measured line count equals what a separate render produces byte-for-byte, and its
-//! over-long-word handling is not the deterministic UTF-8-safe hard-break this slice
-//! requires. Driving the breaks here — greedy word wrap with a `measureString`-backed
+//! over-long-word handling is not the deterministic UTF-8-safe hard-break needed here.
+//! Driving the breaks here — greedy word wrap with a `measureString`-backed
 //! hard-break fallback — is what lets "renders exactly the measured lines" be a guarantee
 //! rather than a hope.
 //!
@@ -69,9 +69,8 @@ pub const Line = struct { start: usize, len: usize };
 ///     prefix, and continue with the remainder as the next word.
 ///
 /// `emit` returns `bool`: `false` stops the walk early (a caller with a fixed line budget,
-/// e.g. a POD span table, can cap lines without this routine knowing the cap). Returns the
-/// total number of lines that *would* be produced if never stopped is **not** tracked here;
-/// callers that need the count accumulate it in `emit`.
+/// e.g. a POD span table, can cap lines without this routine knowing the cap). The routine
+/// does not count lines; a caller that needs the count accumulates it in `emit`.
 pub fn wrapLines(
     text: []const u8,
     max_w: f32,
@@ -84,7 +83,7 @@ pub fn wrapLines(
     if (text.len == 0) return;
 
     // Fast path: no width constraint. One line per newline-delimited segment; the common
-    // no-newline case is a single line, exactly today's single-line behavior.
+    // no-newline case is a single line.
     if (max_w <= 0) {
         var seg_start: usize = 0;
         var i: usize = 0;

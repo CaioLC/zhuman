@@ -1027,7 +1027,7 @@ test "text feature: horizontal blit snaps only its fractional device-pixel origi
     );
 }
 
-// --- `.fill` measure (ENGINE-05), SDL-free -------------------------------------------------
+// --- `.fill` measure, SDL-free -------------------------------------------------
 //
 // `heightForWidth` needs a live font only for the wrap itself; quantization, the fit write and
 // the memo live in `fillMeasure`, driven here by a 1px-per-byte fake through the same
@@ -1109,7 +1109,7 @@ test "text feature: .fill measure declines other fits, empty text and sub-pixel 
     try std.testing.expect(fillMeasure(&st, 20, fonts) == null);
     try std.testing.expectEqual(@as(usize, 0), calls);
 }
-// --- `.cell_fill` (ENGINE-06a), SDL-free ---------------------------------------------------
+// --- `.cell_fill`, SDL-free ---------------------------------------------------
 
 test "text feature: .cell_fill records the floored solved width and keeps the single-line height" {
     var calls: usize = 0;

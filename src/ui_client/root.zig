@@ -49,7 +49,7 @@ pub const style = @import("./style.zig");
 pub const typography = @import("./type.zig");
 /// The content layer — pure content leaves (`text`/`image`/`svg`) + the `el` sugar.
 pub const elements = @import("./elements.zig");
-/// The color vocabulary — `Color`, the blend math, and `Theme`'s nine roles with plain
+/// The color vocabulary — `Color`, the blend math, and `Theme`'s ten roles with plain
 /// neutral defaults. A game installs its own values (`ha.palette`) onto `res.view.theme`;
 /// this layer only ever names the roles.
 pub const theme = @import("./theme.zig");
@@ -99,7 +99,7 @@ pub const TextMeasurer = measure.TextMeasurer;
 pub const profile = @import("./profile.zig");
 pub const FrameCapture = profile.FrameCapture;
 
-// Development node/layout dump (`HA_LAYOUT_DUMP=<path>`, QA-09): one frame's trees with keys,
+// Development node/layout dump (`HA_LAYOUT_DUMP=<path>`): one frame's trees with keys,
 // boxes, clips, features, focus and semantics, through the same `sample` hook.
 pub const layout_dump = @import("./layout_dump.zig");
 
@@ -113,7 +113,7 @@ pub const Replay = replay.Replay;
 pub const ReplayEvent = replay.Event;
 pub const MemoryPlatform = replay.MemoryPlatform;
 
-// Keyboard-only interaction journeys (QA-14/15): multi-frame keyboard scripts over a
+// Keyboard-only interaction journeys: multi-frame keyboard scripts over a
 // representative stamped control set, driven through the shared `route.Router` policy,
 // asserting focus traversal, activation, roving movement, and dismissal reach every control
 // without a pointer. See `journey.zig`.
@@ -171,7 +171,7 @@ pub const ControlState = ctx_binding.ControlState;
 pub const publishControlState = ctx_binding.publishControlState;
 pub const Node = ctx_binding.Node;
 pub const Color = ctx_binding.Color; // the host color type (SDL's), carried on RenderData
-pub const Theme = theme.Theme; // the nine paint roles (neutral defaults; a game overrides)
+pub const Theme = theme.Theme; // the ten paint roles (neutral defaults; a game overrides)
 pub const mix = theme.mix; // per-channel color blend
 pub const rgb = theme.rgb; // opaque RGB shorthand
 pub const UiState = ctx_binding.UiState;
@@ -201,7 +201,7 @@ pub const Trees = tree.Trees; // the return-type wrapper (host)
 pub const collect = Node.collect; // the flatten mechanism (engine)
 pub const oneRoot = tree.oneRoot; // a single-root page as `Trees`
 
-// features (attach mixins — the old `data_*` names)
+// features (attach mixins, the `data_*` names)
 pub const data_text = features.data_text;
 pub const data_img = features.data_img;
 pub const data_sprite = features.data_sprite;

@@ -73,15 +73,15 @@ pub const UiState = struct {
         fit: Fit = .free,
         /// **Device-px letter-spacing** added between glyph clusters when rendering and
         /// measuring this text. `0` (the default) is the **untracked fast path**:
-        /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, exactly
-        /// as before, so untracked text (and dense rows) pay nothing. A non-zero value (set by
+        /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, so
+        /// untracked text (and dense rows) pay nothing. A non-zero value (set by
         /// `style.apply` from a role's `tracking_em` resolved through the frame `scale` at
         /// `st.px`, via `type.deviceTracking`) makes both `remeasure` and `draw` run the *same*
         /// per-cluster advance routine — the measured width and the drawn glyph positions add
         /// the identical integer `dx` between the identical clusters, so box and render agree
         /// exactly for single-line, wrapped, clip, and ellipsis paths. Already an **integer**
         /// device px (rounded at resolve time) so it stays crisp. POD like `fit` in *shape*,
-        /// but the state as a whole is **no longer POD**
+        /// but the state as a whole is **not POD**
         /// (see `tex`/`cache_key` below): it owns a GPU texture and declares `deinit`.
         /// This is the render-affecting attribute the texture cache keys on.
         tracking: f32 = 0,
@@ -551,7 +551,7 @@ pub const Vert = struct { p: Point, color: Color };
 pub const Point = struct { x: f32, y: f32 };
 
 /// The `geometry` feature's payload: the per-mesh draw parameters that are *not*
-/// the variable-length vertices (those live in `GeometryState`). Today that is a single
+/// the variable-length vertices (those live in `GeometryState`). It is a single
 /// `opacity` multiplier applied to every vertex's
 /// alpha at draw — a cheap mesh-wide fade that is the natural hook for per-node dimming
 /// without recomputing each vertex color. Present ⟹ draw the node's pooled mesh.
@@ -615,7 +615,7 @@ pub const Interaction = packed struct {
     /// `hot` without the press latch: hovered or focus-visible only, the literal prototype
     /// `:hover, :focus-visible` lift. It differs from `hot` exactly while a press that began
     /// on the control is dragged off it (`held` without `hovering`) on an unfocused control;
-    /// the sites that never lit for that gesture keep this form so their pixels do not change.
+    /// sites that do not light for that gesture use this form.
     pub fn hover_focus(self: @This()) bool {
         return self.hovering or self.focus_visible;
     }
@@ -680,7 +680,7 @@ pub const Sprite = struct {
 /// *inward*, so it never grows the node's box); `style` picks solid / dashed / dotted. The
 /// whole feature payload, so a caller can vary thickness and pattern per node — see
 /// `features/outline.zig` for how each `style` rasterizes. Defaults (`width = 1`, `.solid`)
-/// reproduce the old 1px box border.
+/// give a 1px solid border.
 pub const LineStyle = enum { solid, dashed, dotted };
 pub const Outline = struct {
     color: Color,
@@ -708,7 +708,7 @@ pub fn icon_sprite(res: *Resources, col: f32, row: f32) Sprite {
 /// z-order is the feature `list`'s order, not this struct's. Add a feature: add its
 /// module to `features/`, list it, and add the matching field here — no engine change.
 ///
-/// Overflow/clip is **not** here — it moved to `Layout.overflow` (it's geometry read by
+/// Overflow/clip is **not** here: it is `Layout.overflow` (it's geometry read by
 /// the render walk *and* hit-testing, not a paint aspect). See `src/ui/features/layout.zig`.
 pub const RenderData = struct {
     text: ?Color = null, // cached glyphs (in node.state(TextState)), blit in this color
@@ -726,7 +726,7 @@ pub const RenderData = struct {
     /// reads it, so opacity never changes clickability — state logic decides that separately.
     opacity: f32 = 1,
 
-    /// The keyboard focus ring (`outline: 1px solid var(--warn); outline-offset: 3px`). Not a
+    /// The keyboard focus ring (the prototype's `outline-offset: 3px` ring). Not a
     /// paint feature: `control` sets it on the focused control and the render walk strokes it
     /// after the node's subtree, outside the box, under the ancestors' clip (inset when that
     /// clip would cut it).
@@ -976,7 +976,7 @@ test "TextState pool: values survive pool growth (handle, not pointer)" {
 test "TextState pool: deinit under a failing allocator does not leak (POD state)" {
     // TextState owns no heap (fixed inline buffer), so a mid-growth allocation failure
     // must leave the pool safely deinitializable with the testing allocator asserting no
-    // leak. This guards the POD ownership claim behind the Option A design.
+    // leak. This guards the POD ownership claim.
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 8 });
     const alloc = failing.allocator();
     var p: Pool(TextStateT) = .{};

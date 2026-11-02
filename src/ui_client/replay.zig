@@ -562,8 +562,8 @@ test "replay: Escape reaches the topmost registered target as .dismissed" {
 }
 
 /// A 100×100 scroll view holding ten 30px rows (336px of content with the 4px gaps).
-/// Rebuilt from the current `El`/node APIs plus the host scroll primitives (`ScrollState`,
-/// the wheel policy, and `drag.updateScrollThumb`) rather than a packaged widget: a viewport
+/// Built from `El`/node APIs plus the host scroll primitives (`ScrollState`, the wheel
+/// policy, and `drag.updateScrollThumb`) rather than a packaged widget: a viewport
 /// clips a `fit_children` content column, the wheel over the viewport advances the clamped
 /// offset at 24 px/tick, and the offset folds into `content.layout.scroll_y`.
 const ScrollFixture = struct {

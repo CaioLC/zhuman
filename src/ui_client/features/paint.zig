@@ -158,7 +158,7 @@ test "snap: rounds a device coordinate to a whole pixel boundary" {
 }
 
 test "hairline: a 1px logical line is >=1 crisp device px at any scale" {
-    // At scale 1 (today) it is identity: 1 logical px → 1 device px.
+    // At scale 1 it is identity: 1 logical px → 1 device px.
     try std.testing.expectEqual(@as(f32, 1), hairline(1, 1));
     // A fractional DPI scale rounds to a whole device px (no 1.5px smear), never below 1.
     try std.testing.expectEqual(@as(f32, 2), hairline(1, 1.5)); // 1.5 → 2

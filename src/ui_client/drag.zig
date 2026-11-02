@@ -107,8 +107,8 @@ pub fn updateScrollThumb(
     }
 }
 
-/// End a scroll drag when overflow disappears before the thumb can rebuild. Generic
-/// prune repair is still the final safety net, but normal widget teardown releases now.
+/// End a scroll drag when overflow disappears before the thumb can rebuild. Generic prune
+/// repair is the safety net; normal widget teardown releases the capture.
 pub fn cancelScrollThumb(ctx: *cb.UiCtx, state: *cb.UiState.ScrollState) void {
     if (state.drag_owner_key) |key| _ = ctx.releasePointerCapture(key);
     state.clearDrag();

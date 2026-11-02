@@ -14,7 +14,7 @@
 //! `leaf`/`label`/`label_fit` build a node you never touch again and return nothing, so no
 //! `_ =` is needed. `set(props, spec)` is the same application onto a handle that already
 //! exists (a template's return, a row styled after its `control`). The chainable `with_*`
-//! setters stay: `Props` applies through them, and a chain still suits a value used inline.
+//! setters are what `Props` applies through, and a chain suits a value used inline.
 //!
 //! Content leaves default their anchor to **`.relative`** (they are always children — roots
 //! come from `el.root`, which stays `.top_left`), so flowed layout is the zero-config case.
@@ -720,14 +720,12 @@ pub fn tracks_gaps(ctx: *UiCtx, spec: []const ui.Track, col_gap: f32, row_gap: f
 pub fn root(ctx: *UiCtx, id: []const u8) !El {
     const node = try Node.create(ctx.arena, id);
     // A root must place *itself*: `Node.init` defaults `.relative`, which errors the
-    // placement pass on a parentless node (`NoInfoForChildren`) — the gameover screen
-    // crashed the first time death ever fired, because unlike the play screen it never
-    // overrode the anchor. Set here so the doc's promise ("stays non-relative") is true.
+    // placement pass on a parentless node (`NoInfoForChildren`).
     node.layout.anchor = .top_left;
     // The layout is solved in **device pixels** (the space the renderer draws and
     // that text boxes already live in via `type.toDevice`), so the root is the drawable pixel
     // size (`metrics.px_w/px_h` = logical × DPI). At DPI 1 this equals the window coordinate
-    // size (today's behavior); at high-DPI it fills the whole drawable crisply.
+    // size; at high-DPI it fills the whole drawable crisply.
     const m = ctx.res.view.metrics;
     node.size = ui.features.Size.initFixed(m.px_w, m.px_h);
     return .{ .ctx = ctx, .node = node };

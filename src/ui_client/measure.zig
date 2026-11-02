@@ -1,7 +1,7 @@
 //! The host's layout measurer: the struct `Driver.step` hands to the engine's
 //! `set_global_pos_measured_profiled`. The engine calls `height_for_width` once per solve for
 //! each `Size.measure_h` node, after every width is final and before any height is computed
-//! (see `ui/features/layout.zig`). Today only text measures: a `.fill` leaf wraps at its
+//! (see `ui/features/layout.zig`). Only text measures: a `.fill` leaf wraps at its
 //! solved width (`text.heightForWidth`), and a `.cell_fill` leaf records its solved width
 //! (and returns null). Anything else returns null and keeps its build-time `data_height`.
 

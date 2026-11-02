@@ -1,5 +1,5 @@
-//! `svg` feature — the proof that the interface holds for a *resource-owning,
-//! invalidating* state, the shape `text` and `img` never exercised.
+//! `svg` feature: the feature with a *resource-owning, invalidating* state, the shape `text`
+//! and `img` do not have.
 //!
 //! An SVG is expensive to rasterize, so — unlike `text` (re-rasterized every frame) —
 //! its `State` (`SvgState`) **caches** the produced texture, and `attach` re-rasterizes

@@ -1,4 +1,4 @@
-//! `Props` constructors (`El.box`/`boxi`/`leaf`/`set`) against the setter chains they replace:
+//! `Props` constructors (`El.box`/`boxi`/`leaf`/`set`) against the equivalent setter chains:
 //! the same node fields at scales 1 and 2. SDL-free; text leaves need the platform font, so
 //! `label`/`label_fit` are covered by the live pages (the layout audit and the screenshots).
 

@@ -1,21 +1,21 @@
 //! `text_input` — the single-line search/text field, an `El` composition over the
 //! authoritative host editor model (`UiState.TextInputState` = `editor.LineEditor`, pooled by
-//! the field's node key or by an owner the caller names). The field registers its stable key in global traversal order and as
-//! the `/` search target, requests singular engine focus when clicked, and clears focus on a
-//! primary press that lands outside it. SDL delivers text and key events as raw events, so
-//! `main.zig` routes them into this same model — text through `insert`, caret/selection/
-//! clipboard/delete through the editor's methods — against whichever key `ctx.focusedKey()`
-//! returns.
+//! the field's node key or by an owner the caller names). The field registers its stable key
+//! in global traversal order and as the `/` search target, requests singular engine focus
+//! when clicked, and clears focus on a primary press that lands outside it. SDL delivers
+//! text and key events as raw events, so `main.zig` routes them into this same model: text
+//! through `insert`, caret/selection/clipboard/delete through the editor's methods, against
+//! whichever key `ctx.focusedKey()` returns.
 //!
 //! Rendering reads the model: `placeholder` (dim) when empty and unfocused; while focused the
 //! caret as a bar, or the selection wrapped in guillemets; plain text otherwise. The primitive
 //! text feature paints one run and cannot place a sub-glyph caret or a colored selection band,
-//! so the caret is a visible marker at its codepoint position and a selection is bracketed —
-//! an honest reflection of the model without pretending to glyph hit-testing. Focus draws
-//! accent chrome, and a refused edit (overflow / invalid / multi-line) draws a `danger` outline
-//! until the next accepted edit. A trailing "✕" clears the field on click (the pointer half of
-//! the clear action; keyboard clear is Ctrl+A then Backspace, same model). The field starts SDL
-//! text input when it takes focus and stops it when nothing is focused.
+//! so the caret is a visible marker at its codepoint position and a selection is bracketed,
+//! with no glyph hit-testing. Focus draws accent chrome, and a refused edit (overflow /
+//! invalid / multi-line) draws a `danger` outline until the next accepted edit. A trailing
+//! "✕" clears the field on click (the pointer half of the clear action; keyboard clear is
+//! Ctrl+A then Backspace, same model). The field starts SDL text input when it takes focus
+//! and stops it when nothing is focused.
 
 const std = @import("std");
 const sdl = @import("sdl3");

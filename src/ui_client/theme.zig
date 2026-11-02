@@ -22,7 +22,7 @@ const sdl3 = @import("sdl3");
 /// call into SDL destructures a colour into an anonymous literal anyway, so nothing here
 /// leans on the type's identity. What it buys is that `src/pages/` — templates and
 /// screens — can name a colour without importing `sdl3`. No file under `pages/` imports
-/// the graphics backend today; this is part of why.
+/// the graphics backend; this is part of why.
 pub const Color = sdl3.pixels.Color;
 
 /// Opaque RGB shorthand (alpha = 255). SDL's `Color` has no field defaults (it is a

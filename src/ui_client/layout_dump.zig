@@ -1,4 +1,4 @@
-//! `layout_dump` — a text dump of one laid-out frame (QA-09): every node of every root in paint
+//! `layout_dump` — a text dump of one laid-out frame: every node of every root in paint
 //! order, indented by depth, with its stable key, its box and inherited clip in logical px, its
 //! render features, its interaction and focus state, and the semantic node published for it.
 //! It is the tool for diagnosing an overlap or a clipping fault without a screenshot, and for

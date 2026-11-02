@@ -1,4 +1,4 @@
-//! `journey` — **keyboard-only interaction journeys** (QA-14/15) driven through the shared
+//! `journey` — **keyboard-only interaction journeys** driven through the shared
 //! host routing policy (`route.Router`). A journey is a multi-frame script of keyboard
 //! commands against a representative stamped control set, asserting that focus traversal,
 //! activation, roving movement, and dismissal reach every control and return focus correctly
@@ -136,7 +136,7 @@ pub const Scene = struct {
     }
 };
 
-// =============================== QA-14 / QA-15 journeys ===================================
+// =============================== Keyboard-only journeys ===================================
 // SDL-free: a `Resources` with an undefined platform, real pools/focus/semantics, controls
 // stamped and registered by hand, keyboard scripted, focus/activation/dismissal read back.
 

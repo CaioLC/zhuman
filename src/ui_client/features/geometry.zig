@@ -1,22 +1,20 @@
-//! `geometry` feature — untextured colored triangles and honest thick polylines, backed by
-//! SDL's `renderGeometry`. It is the second *variable-length* feature after
-//! `line`: a mesh has a variable vertex/index count, so the coordinates live in a pooled
-//! `GeometryState` (declared in `ctx_binding.UiState`, like every feature state) and the
-//! `RenderData` payload carries only the per-mesh draw parameters (an opacity multiplier).
+//! `geometry` feature — untextured colored triangles and thick polylines, backed by SDL's
+//! `renderGeometry`. A *variable-length* feature: a mesh has a variable vertex/index count,
+//! so the coordinates live in a pooled `GeometryState` (declared in `ctx_binding.UiState`,
+//! like every feature state) and the `RenderData` payload carries only the per-mesh draw
+//! parameters (an opacity multiplier).
 //!
 //! The mesh is built by the **pure, SDL-free** `geometry_tess.zig` (a convex-polygon fan, a
 //! thick polyline with miter joins and butt/square caps) into node-local **unit-square**
 //! coordinates — (0,0) is the node's top-left, (1,1) its bottom-right — so a shape survives
-//! resize and zoom without recomputing, exactly like `line.zig`. `attach` runs the
-//! tessellator once at build; `draw` maps the stored unit vertices to device px through the
+//! resize and zoom without recomputing. `attach` runs the tessellator once at build; `draw` maps the stored unit vertices to device px through the
 //! node's laid-out box, converts each per-vertex `Color` (u8) to SDL's float `FColor` with
 //! the mesh opacity folded into alpha, and submits one `renderGeometry` call. The render
 //! walk's `.blend` baseline makes vertex alpha composite; the walk's clip stack
 //! crops the triangles like any other paint.
 //!
 //! This is the primitive shared by hex bodies/rails/markers, distribution curves, slider
-//! diamonds, and diagonal indicators. `line.zig`'s first-segment-normal approximation has no
-//! callers left; deleting it is roadmap CLEAN-07.
+//! diamonds, and diagonal indicators.
 
 const std = @import("std");
 const sdl = @import("sdl3");
@@ -44,9 +42,9 @@ pub const Dir = tess.Dir;
 pub const GradientStop = struct { pos: f32, color: cb.Color };
 
 /// Give `node` a **convex-polygon fill** through `points` (node-local unit-square coords),
-/// flat `color`. Fan-triangulated by the pure tessellator into the pooled mesh. Like
-/// `line`, this does not size the node — points are relative, so the caller gives the node a
-/// box and the fill stretches to it. `opacity` fades the whole mesh (default opaque).
+/// flat `color`. Fan-triangulated by the pure tessellator into the pooled mesh. This does
+/// not size the node — points are relative, so the caller gives the node a box and the fill
+/// stretches to it. `opacity` fades the whole mesh (default opaque).
 pub fn attach_polygon(ctx: *UiCtx, node: *Node, points: []const cb.Point, color: cb.Color, opacity: f32) void {
     const st = node.state(ctx, State);
     var vbuf: [State.vcap]tess.Vertex = undefined;

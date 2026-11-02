@@ -1,4 +1,4 @@
-//! DPI tests at scales 1, 1.5 and 2 (QA-21), SDL-free through the replay rig.
+//! DPI tests at scales 1, 1.5 and 2, SDL-free through the replay rig.
 //!
 //! Every authored dimension is logical px scaled once through `view.dp` at the `El` and style
 //! seams, the layout is solved and hit-tested in device px, and a pointer reaches that space
@@ -51,7 +51,8 @@ const Rig = struct {
 };
 
 /// The scene, in logical px:
-///   panel   at (20,10), a 200x100 content box inside padding 12 across and 8 down, a row with a 6px gap
+///   panel   at (20,10), a 200x100 content box inside padding 12 across and 8 down, a row
+///           with a 6px gap
 ///     a     40x30, the first in the row
 ///     b     40x30, after a and the gap
 ///   window  at (300,10), 60x40, clipping

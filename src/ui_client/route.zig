@@ -15,7 +15,7 @@
 //! session — are reached through `Platform`, an injectable vtable; `Platform.none` is the
 //! inert default a headless test uses.
 //!
-//! The field→editor seam and the modal search guard follow current host policy: the
+//! The field→editor seam and the modal search guard follow the host policy: the
 //! focused editor is resolved through the command registry's `editorKeyOf` indirection (a
 //! field may delegate its model to an always-built owner key), and the slash search
 //! shortcut is suppressed while an Escape owner (an open modal) traps focus, so `/` can

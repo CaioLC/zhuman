@@ -44,7 +44,7 @@ pub const Style = struct {
     /// composes as "inherit". Only the uppercase eyebrow role sets `.upper`.
     transform: ?typ.Transform = null,
     /// **Texture-content ink**: the tint a *non-text* content aspect paints with.
-    /// Today that is `svg` (an icon raster is rasterized white and tinted at blit, the
+    /// That is `svg` (an icon raster is rasterized white and tinted at blit, the
     /// `svg.draw`/`text` composite model), so a set `tint` recolors `render_data.svg`. It is a
     /// separate field from `text` on purpose — `text` is *glyph* ink and `tint` is *texture*
     /// ink, so a tuple can carry both without either shadowing the other, and each folds
@@ -68,7 +68,7 @@ pub const Style = struct {
     // `Color`; `resolve` reads the live `ctx.res.view.theme` for it. A slot and its twin fold
     // as one: whichever a later fragment sets wins, and a fragment that sets both resolves to
     // the role. So `Style{ .text = th.dim }` and `Style{ .ink = .dim }` paint the same
-    // pixels, and a call site migrates by dropping its `th`.
+    // pixels.
 
     /// Glyph ink by role — the twin of `text`.
     ink: ?ThemeRole = null,
@@ -131,9 +131,8 @@ const ink_slots = [_]struct { []const u8, []const u8, ?[]const u8 }{
 pub const verdict = @import("./verdict.zig");
 pub const Verdict = verdict.Verdict;
 
-// A bright-red debug outline around any node. `Color` is SDL's `SDL_Color` — u8 fields on
-// a 0–255 scale, so the outline must be `a = 255` (opaque) and `r = 255` (full red); the
-// earlier `a = 0.0, r = 1.0` read as 0–1 floats and coerced to a=0 (transparent), r=1 (~black).
+// A bright-red debug outline around any node. `Color` is SDL's `SDL_Color`: u8 fields on
+// a 0–255 scale, so the outline is `a = 255` (opaque) and `r = 255` (full red).
 pub const debug: Style = .{ .outline_color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } };
 
 // Every scalar below is authored at one reference resolution; the responsive scale factor
@@ -156,16 +155,14 @@ fn role(r: typ.Role) Style {
 
 pub const body: Style = role(typ.body);
 pub const small: Style = role(typ.small);
-/// The prototype heading (`--h3`, 21 logical px, -0.04em). `h3` is retained as an alias so
-/// existing call sites keep compiling; new sites should prefer `heading`.
+/// The prototype heading (`--h3`, 21 logical px, -0.04em). `h3` is an alias of `heading`.
 pub const heading: Style = role(typ.heading);
 pub const h3: Style = heading;
 /// Uppercase eyebrow / section label — 11px, UPPERCASE, +0.07em tracking.
 pub const eyebrow: Style = role(typ.eyebrow);
 
-// Legacy above-contract display sizes used by the Act curtain / capital
-// header. They are **not** part of the prototype body/small/heading contract; they inherit
-// the global tracking unless a fragment overrides it. Kept so those sites keep compiling.
+// Display sizes above the prototype body/small/heading contract, used by the Act curtain and
+// capital header. They inherit the global tracking unless a fragment overrides it.
 pub const h2: Style = .{ .font = 28, .tracking = typ.body.tracking_em };
 pub const h1: Style = .{ .font = 36, .tracking = typ.body.tracking_em };
 
@@ -197,9 +194,8 @@ pub const dashed: Style = .{ .outline_style = .dashed };
 pub const dotted: Style = .{ .outline_style = .dotted };
 
 // --- Ink and named role fragments -----------------------------------------------
-// Theme-relative looks named by what they mean, for the literals templates repeated. Each
-// sets exactly the fields the literal it replaces set (no tracking or transform is added),
-// so swapping one in never moves a pixel.
+// Theme-relative looks named by what they mean. Each sets only its own fields (no tracking
+// or transform is added).
 
 /// Glyph ink by role, as a fragment: `style.ink(.fg)`.
 pub fn ink(r: ThemeRole) Style {
@@ -615,7 +611,7 @@ test "style: role fragments carry the prototype contract (size + tracking + tran
     const sh = resolve(undefined, undefined, heading);
     try std.testing.expectEqual(@as(?f32, 21), sh.font); // the prototype --h3
     try std.testing.expectEqual(@as(?f32, -0.04), sh.tracking);
-    // `h3` is a retained alias for `heading`.
+    // `h3` is an alias for `heading`.
     const s3 = resolve(undefined, undefined, h3);
     try std.testing.expectEqual(sh.font, s3.font);
     try std.testing.expectEqual(sh.tracking, s3.tracking);

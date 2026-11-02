@@ -1,13 +1,10 @@
 //! `text_cache` — the **pure, SDL-free seam** for rendered-text texture caching.
 //!
-//! The per-frame text hot path (`features/text.zig`) used to rasterize *and* upload *and*
-//! free a GPU texture for **every visible string every frame** — an unchanged label paid a
-//! full `renderTextSolid → createTextureFromSurface → renderTexture → deinit` round trip
-//! 60×/second, and every catalog-filter keystroke re-rasterized the whole visible result
-//! set. The cache holds **one composite white texture per `TextState`** — for **every**
-//! variant (single-line, tracked, wrapped, clip, ellipsis, and the tracked combinations) —
-//! in the node's pooled `State` (mirroring the `svg` feature) and re-rasterizes **only**
-//! when a render-affecting input changes. No variant re-rasterizes on a cache hit.
+//! The cache holds **one composite white texture per `TextState`** — for **every** variant
+//! (single-line, tracked, wrapped, clip, ellipsis, and the tracked combinations) — in the
+//! node's pooled `State` (as the `svg` feature does) and re-rasterizes **only** when a
+//! render-affecting input changes. No variant re-rasterizes on a cache hit, so an unchanged
+//! label costs a blit, not a rasterize + upload + free per frame.
 //!
 //! This module owns the parts that need **no SDL**: the cache **key** (every input that
 //! affects pixels), the **decision** (hit / miss-and-reupload / abandon-after-reset), and
@@ -20,13 +17,13 @@
 //!
 //! **Color strategy (tint-on-blit):** color is deliberately **not** a key dimension. The
 //! glyphs are rasterized **white** and tinted at blit time via SDL `setColorMod`/
-//! `setAlphaMod` — exactly the `svg.draw` model — so a hover/focus recolor reuses the same
-//! cached texture and never churns the cache. This is the "color strategy" the cache keys on:
-//! the strategy is fixed (tint-on-blit), so the RGBA never enters the key.
+//! `setAlphaMod` — the `svg.draw` model — so a hover/focus recolor reuses the same cached
+//! texture and never churns the cache. The strategy is fixed, so the RGBA never enters
+//! the key.
 //!
-//! **The generic/host boundary is preserved:** this is `ui_client` host policy. The generic
-//! engine (`src/ui`) stays typography/texture-unaware; the `Pool` eviction hook (`cache.zig`)
-//! already frees a resource-owning state via its `deinit`, unchanged.
+//! **The generic/host boundary:** this is `ui_client` host policy. The generic engine
+//! (`src/ui`) is typography/texture-unaware; the `Pool` eviction hook (`cache.zig`) frees a
+//! resource-owning state through its `deinit`.
 
 const std = @import("std");
 
@@ -43,8 +40,8 @@ const std = @import("std");
 ///     has no key (see `keyOf` returning null) → no texture.
 ///   - `px` — device font size (`State.px`, already `logical * scale`); a **scale** change
 ///     changes `px`, so scale is captured transitively (not double-counted).
-///   - `font_id` — a font identity/weight token. One face today (a constant), but keyed now
-///     so a future multi-face/weight change invalidates correctly.
+///   - `font_id` — a font identity/weight token. One face (a constant), keyed so a face or
+///     weight change invalidates correctly.
 ///   - `tracking` — device-px letter-spacing (changes glyph advances/positions).
 ///   - `overflow` / `overflow_width` — cell discipline. `.clip` blits the whole
 ///     string (pixels depend on content only — the clip *rect* is a per-frame render-time
@@ -78,9 +75,8 @@ pub const Key = struct {
     }
 };
 
-/// The single font-identity token today: one face (JetBrainsMonoNL-Regular) at one weight.
-/// A constant so it costs nothing now, but present in the key so a future multi-face/weight
-/// build invalidates on face/weight change without a key-shape migration.
+/// The single font-identity token: one face (JetBrainsMonoNL-Regular) at one weight. It is
+/// in the key so a face or weight change invalidates without a key-shape change.
 pub const default_font_id: u32 = 0;
 
 /// The render-affecting inputs `keyOf` folds — the SDL-free projection of a `TextState`
@@ -487,7 +483,7 @@ test "text_cache: filtering a catalog frees only pruned rows, survivors keep one
 // ===================== Per-variant composite proofs (all variants cached) =============
 //
 // The cache holds EVERY accepted variant as one composite white texture: normal, tracked,
-// wrapped, clip, ellipsis, and the tracked combinations. `keyOf` already folds every
+// wrapped, clip, ellipsis, and the tracked combinations. `keyOf` folds every
 // pixel-affecting dimension, and `decide`/`FakeSlot.sync` are variant-agnostic, so these
 // prove — SDL-free — that each variant (a) rasterizes+uploads exactly once across 120
 // frames of identical inputs (the composite is generated on the miss and blitted, never
@@ -652,8 +648,8 @@ test "text_cache: composite generation is atomic — a failed generation latches
 test "text_cache: renderer reset abandons then re-rasterizes each variant's composite (never double-free)" {
     // A render-device reset invalidates every uploaded composite. A generation change
     // must ABANDON the dead handle (no destroy — the GPU object already died with the device)
-    // and re-rasterize under the new generation, on every variant. Verified here for the
-    // multi-surface variants that previously re-rasterized per frame.
+    // and re-rasterize under the new generation, on every variant, the multi-surface ones
+    // included.
     const variants = [_]*const fn (u32) Inputs{
         variant_inputs.tracked,
         variant_inputs.wrapped,
