@@ -5,8 +5,8 @@ const std = @import("std");
 
 pub const Entity = u32;
 
-/// The lifetime-spawn cap. Ids are never recycled (`next_id` only climbs), so this bounds every
-/// entity a world ever spawns, not the live count.
+/// The spawn cap. Ids are never recycled (`next_id` only climbs until `clear`), so this bounds
+/// every entity a world spawns between `init` or a `clear` and the next, not the live count.
 pub const MAX_ENTITIES: u32 = 1024;
 
 /// The pointer to `T` reached through a pointer of type `P`: `*const T` when `P` points to
@@ -45,6 +45,12 @@ pub fn SparseSet(comptime T: type) type {
             comptime checkSelf(Self, @TypeOf(self));
             const idx = self.sparse[e] orelse return null;
             return &self.dense_values[idx];
+        }
+
+        /// Empties the set; the arrays stay where they are.
+        pub fn clear(self: *Self) void {
+            self.sparse = @splat(null);
+            self.len = 0;
         }
 
         pub fn remove(self: *Self, e: Entity) void {
@@ -169,6 +175,18 @@ pub fn World(comptime comps: type, comptime tags: type) type {
             self.storageOf(T).remove(e);
         }
 
+        /// Empties every component and tag storage and resets `next_id` to 0, keeping the
+        /// allocation: the world is as `init` left it, and the next `spawn` is entity 0.
+        pub fn clear(self: *Self) void {
+            inline for (@typeInfo(Storages(comps)).@"struct".field_names) |name| {
+                @field(self.components, name).clear();
+            }
+            inline for (@typeInfo(Storages(tags)).@"struct".field_names) |name| {
+                @field(self.tags, name).clear();
+            }
+            self.next_id = 0;
+        }
+
         /// Remove `e` from every component and tag storage (each `remove` no-ops if `e`
         /// is not in that storage). The entity id is not recycled: `next_id` only climbs.
         pub fn despawn(self: *Self, e: Entity) void {
@@ -217,6 +235,23 @@ test "remove and despawn; ids are not recycled" {
     // The swap-remove moved `b` into `a`'s dense slot; its sparse index follows.
     try std.testing.expectEqual(@as(f32, 7), w.get(b, test_comps.Pos).?.x);
     try std.testing.expectEqual(@as(Entity, 2), w.spawn(.{}));
+}
+
+test "clear empties every storage and resets ids" {
+    var w = try TestWorld.init(std.testing.allocator);
+    defer w.deinit();
+    const a = w.spawn(.{ test_comps.Pos{ .x = 1 }, test_comps.Hp{}, test_tags.Marked });
+    _ = w.spawn(.{test_comps.Hp{ .v = 2 }});
+    w.clear();
+    try std.testing.expectEqual(@as(u32, 0), w.storageOf(test_comps.Pos).len);
+    try std.testing.expectEqual(@as(u32, 0), w.storageOf(test_comps.Hp).len);
+    try std.testing.expectEqual(@as(u32, 0), w.storageOf(test_tags.Marked).len);
+    try std.testing.expect(!w.has(a, test_comps.Pos));
+    try std.testing.expect(!w.has(a, test_tags.Marked));
+    const b = w.spawn(.{test_comps.Pos{ .x = 5 }});
+    try std.testing.expectEqual(@as(Entity, 0), b);
+    try std.testing.expectEqual(@as(f32, 5), w.get(b, test_comps.Pos).?.x);
+    try std.testing.expect(!w.has(b, test_comps.Hp));
 }
 
 test "get through *const World yields ?*const T, through *World ?*T" {

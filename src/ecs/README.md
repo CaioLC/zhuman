@@ -45,9 +45,11 @@ that takes the world as `anytype` names its return type through `Ref`, and that 
 | `has(self: anytype, e, T) bool` | through either pointer |
 | `storageOf(self: anytype, T)` | `*SparseSet(T)` or `*const SparseSet(T)`, by the same rule |
 | `remove(*World, e, T)` / `despawn(*World, e)` | one storage / every storage |
+| `clear(*World)` | every storage emptied and `next_id` back to 0, the allocation kept |
 
-Ids are never recycled: `next_id` only climbs, so `MAX_ENTITIES` is a lifetime-spawn cap, not
-a live one. Removal is a swap-remove, so a storage's dense order is not spawn order.
+Ids are never recycled: `next_id` only climbs until `clear`, so `MAX_ENTITIES` caps the spawns since
+the last `clear` or `init`, not the live count. Removal is a swap-remove, so a storage's dense order
+is not spawn order.
 
 ## Queries
 
