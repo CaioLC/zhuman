@@ -3,7 +3,7 @@
 //! what it reaches. `state` holds the run's states and `schedule` the systems each runs, in
 //! order, with `tick`. The folders are namespaces declared here as nested structs: `systems` (what
 //! the schedule runs), `rules` (the operations the systems and the UI call), `kernel` (pure math
-//! over `std`) and `data` (the authored roster, its reload and the act migration).
+//! over `std`) and `data` (the authored roster, its reload, the act migration and the save).
 //!
 //! It is also the root of `test-sim`, which compiles the simulation with no UI host and no SDL.
 //! That module is given only `ecs` and the three roster data files, so a sim file that imports
@@ -72,6 +72,7 @@ pub const data = struct {
     pub const roster = @import("./data/roster.zig");
     pub const reload = @import("./data/reload.zig");
     pub const migration = @import("./data/migration.zig");
+    pub const save = @import("./data/save.zig");
 };
 
 test {
