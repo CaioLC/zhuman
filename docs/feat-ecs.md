@@ -99,8 +99,9 @@ pub const schedule = Schedule(GameState, .{
 });
 ```
 
-Step 6 adds the derived writers `condition`, `outlook` and `quotes` to each `update` set just
-before `log`. A state the table does not name has empty sets; a field that is not a state, or a
+Step 6 adds the derived writers `condition`, `outlook` and `quotes` just before `log` in each
+`update` set and in each act's `handle` set, for the reason `log` closes both: an intent applied
+while the run is paused must show in the band, the BODY lines and the tiles the next frame. A state the table does not name has empty sets; a field that is not a state, or a
 set with another name, is a compile error.
 
 `tick(world, res)` does, in order: `events.update()`; apply a pending transition; run the current
@@ -204,15 +205,23 @@ replaces `Sim.exchange.population`.
 **Derived components** have one writer each, a system late in the `update` set, and no other
 source of truth:
 
-- `Condition` is the band, written beside `metabolize`; `BandCrossed` is a comparison with the
-  previous value, and `cfg.condition` is called in one place.
+- `Condition { band: Band }` is the band; `BandCrossed` is a comparison with the previous value,
+  and `cfg.condition` is called in one place, `rules/condition.refresh`. The `condition` system
+  runs it on every agent after `metabolize`; `actions.begin`, `capital.begin` and
+  `capital.collect_generator` run it on the agent they charge and carry the crossing on their own
+  fact, because the log words a fall as hunger and a writer that only compares with the previous
+  band cannot tell labor's toll from the metabolism's.
 - `Outlook{ food_days, recovery }` replaces `body.project`; `outlook.zig` is its writer.
-- `Quotes` holds a `Standing` and the effective terms per verb and per recipe, written after the
-  ledger settles; the tile, the BUILD row and a decider read the same answer, and `actions.quote`
-  and `capital.quote` become the rule that fills it.
+- `Quotes` holds the standing per verb, per recipe and per owned generator, with the first
+  unpayable line by index, the quality a begin would lock, the count owned, the reach and the
+  generator's progress, written after the ledger settles; the tile, the BUILD row and a decider
+  read the same answer, and `actions.quote`, `capital.quote` and `capital.generator_quote` are the
+  rule that fills it. It does not hold a verb's terms: the world stores every component inline for
+  `MAX_ENTITIES`, so a copy of the terms per verb would add tens of megabytes to it. The terms stay
+  the pure read `actions.verbOf` over `Goods` and `Research`.
 
 The writer of a derived component is idempotent: running it twice on an unchanged world changes
-nothing, and a test says so.
+nothing, and a test says so; another holds `Quotes` under six kilobytes.
 
 **Rules** keep their names and signatures. `rules/market.zig` holds the passerby and merchant
 state types and their pure step functions, because `Sim` holds the state and must not import a
@@ -307,3 +316,7 @@ API shapes the later steps build on.
   when the neighbours stop being a stub.
 - Change detection on components (Bevy's `Changed<T>`) is not built. Derived writers recompute
   for every agent every tick; the trigger to add it is a measurable cost, not a population size.
+- The world's storage is inline over `MAX_ENTITIES`, about 7 MB with the derived components, and
+  `build.zig` reserves a 64 MB stack for every binary that holds one. Heap-backed storage in the
+  engine would drop the reserve and let `Quotes` carry the terms; the trigger is the first
+  component that does not fit, not this one.
