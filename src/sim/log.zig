@@ -1,29 +1,29 @@
-//! Event log — the newest-first feed of what just happened (foraged, built, died).
+//! Event log: the newest-first feed of what just happened (foraged, built, died).
 //!
 //! Global (one feed for the run), held on `Resources` so it outlives the per-frame UI
 //! arena. Fixed-capacity ring buffer with inline message buffers, so pushing needs no
 //! allocator. Callers format a message into a stack buffer, then `push` copies it in.
-//! Leaf module — imports nothing.
+//! Leaf module: imports nothing.
 
-/// Tone of a log line — drives the color the host paints it in (see `log_tone_color`
-/// in `main.zig`). Kept here so both the sim (a death message) and the UI agree on it.
+/// Tone of a log line: drives the color the host paints it in (see `log_tone_color` in
+/// `main.zig`). It lives here so both the sim (a death message) and the UI agree on it.
 pub const Tone = enum { dim, normal, good, warn, danger };
 
-/// Longest message kept per entry, in bytes. Sized to hold the game's log copy in full —
-/// the longest current line ("{d} more are priced past one pair of hands." and the death
-/// lines) fits comfortably with headroom. A longer message is **refused as a whole** on
-/// `push` (see below), never a silently cut prefix, so a log line is either the complete
-/// message or an explicit "(message too long)" marker — never a severed UTF-8 codepoint.
+/// Longest message kept per entry, in bytes. Sized to hold the game's log copy in full, with
+/// headroom over the longest line ("{d} more are priced past one pair of hands." and the death
+/// lines). A longer message is refused as a whole on `push`, never a silently cut prefix, so a
+/// log line is either the complete message or the explicit `overflow_marker`, never a severed
+/// UTF-8 codepoint.
 pub const max_len = 256;
 /// How many entries the ring buffer holds before overwriting the oldest.
 pub const capacity = 64;
 
-/// The visible marker substituted for a message that exceeds `max_len`. Refusal is
-/// **non-silent**: rather than storing a cut prefix, the entry reports its refusal in the
-/// feed (and flags it), matching `semantics.OwnedText`/the editor's whole-refusal policy.
+/// The visible marker substituted for a message that exceeds `max_len`. Refusal is non-silent:
+/// rather than storing a cut prefix, the entry reports its refusal in the feed (and flags it),
+/// matching `semantics.OwnedText` and the editor's whole-refusal policy.
 pub const overflow_marker = "(log message too long)";
 
-/// One log line: an inline text buffer + its live length + tone. Fixed-size so entries
+/// One log line: an inline text buffer, its live length and its tone. Fixed-size so entries
 /// live in the ring buffer with no heap.
 pub const Entry = struct {
     buf: [max_len]u8 = undefined,
@@ -33,12 +33,12 @@ pub const Entry = struct {
     /// it into a day + time-of-day stamp; the log itself knows nothing of day length.
     at: f32 = 0,
     /// The message pushed here exceeded `max_len` and was refused whole: `buf`/`len` hold
-    /// the `overflow_marker`, not a cut prefix. Surfaced so a reader knows the feed is
-    /// lossy for this line rather than silently showing a severed message.
+    /// the `overflow_marker`, not a cut prefix. Lets a reader know the feed is lossy for this
+    /// line.
     refused: bool = false,
 
     /// The message text (the live slice of the inline buffer). For a refused entry this is
-    /// the explicit `overflow_marker`, never a truncated prefix of the original.
+    /// the `overflow_marker`, never a truncated prefix of the original.
     pub fn text(self: *const Entry) []const u8 {
         return self.buf[0..self.len];
     }
@@ -57,12 +57,12 @@ pub const Log = struct {
     /// it on the entry so call sites need not pass a time.
     now: f32 = 0,
 
-    /// Append a message with `tone`. The bytes are copied in **full** when they fit
-    /// `max_len`, so the caller's buffer can be reused immediately after. A message past
-    /// `max_len` is **refused as a whole** — the entry stores the visible `overflow_marker`
-    /// and sets `Entry.refused`, never a silently cut or mid-codepoint prefix. The refusal
-    /// is observable on the stored `Entry` (its `refused` flag and the marker text) rather
-    /// than a return value, so the existing fire-and-forget call sites are unchanged.
+    /// Append a message with `tone`. The bytes are copied in full when they fit `max_len`, so
+    /// the caller's buffer can be reused immediately after. A message past `max_len` is
+    /// refused as a whole: the entry stores the visible `overflow_marker` and sets
+    /// `Entry.refused`, never a silently cut or mid-codepoint prefix. The refusal is
+    /// observable on the stored `Entry` (its `refused` flag and the marker text), not in a
+    /// return value, so call sites are fire-and-forget.
     pub fn push(self: *Log, tone: Tone, msg: []const u8) void {
         const e = &self.entries[self.head];
         const accepted = msg.len <= max_len;
@@ -84,7 +84,7 @@ pub const Log = struct {
         return @intCast(@min(self.pushed - seen, self.count));
     }
 
-    /// Drop every entry — used on "start over" so a new run begins with a clean feed.
+    /// Drop every entry, so a new run begins with a clean feed.
     pub fn clear(self: *Log) void {
         self.head = 0;
         self.count = 0;

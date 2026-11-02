@@ -24,7 +24,7 @@ fn spawn_agent(world: *World) Entity {
     // Spawn from the components' authoritative default baselines (see `baselines.zig`)
     // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
     // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
-    // starting state has exactly one source and Holdings can derive current-vs-base against it.
+    // starting state has exactly one source.
     return world.spawn(.{
         comp.Vigor{}, // rested at the ceiling (10/10)
         comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)

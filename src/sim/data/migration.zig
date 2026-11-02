@@ -1,13 +1,13 @@
-//! `migration` — the **versioned Act I → II curtain migration** (`ACT1-18`). The one place
-//! that carries an agent across the act boundary, and the one writer of the Act II balance and
-//! research-state components. It is content, not engine: it composes existing ECS operations
+//! `migration`: the versioned Act I to II curtain migration. The one place that carries an
+//! agent across the act boundary, and the one writer of the Act II balance and research-state
+//! components. It is content, not engine: it composes existing ECS operations
 //! (`World.add`/`get`/`has`/`remove`) over the components in `components.zig`, the same way
-//! `capital.zig` composes build steps — no `src/ui/` or `src/ui_client/` architecture is touched.
+//! `capital.zig` composes build steps.
 //!
 //! The curtain rules:
 //!
-//!  1. **Food and Biomass carry unchanged.** Both balances already exist in Act I; only Biomass's
-//!     display name changes from Materials to Biomass after the stamp is applied.
+//!  1. **Food and Biomass carry unchanged.** Both balances exist in Act I; only Biomass's
+//!     display name changes from Materials to Biomass once the stamp is applied.
 //!  2. **Open the remaining Act II stocks at zero.** Water, Fuel, Metal, and Minerals are added
 //!     only when absent, so the first Act II yield has somewhere to land.
 //!  3. **Goods/counts/effects are preserved.** Migration touches none of them.
@@ -16,13 +16,11 @@
 //!  5. **Run exactly once.** A versioned `Migrated` stamp makes the operation idempotent and is
 //!     also the authority used by `actOf` for act-aware display names.
 //!
-//! Population/capacity/market initialization "exactly once" is noted as a migration
-//! responsibility by `ACT1-18`, but its home is the Act II population system
-//! (`ACT2-01`, which is told to reuse the shelter record's `capacity`) and the market `Encounter`
-//! state — neither of which has an Act II shape yet. Rather than invent a second ceiling or a
-//! second market grammar here (which the roadmap explicitly forbids), this migration owns the
-//! balance/research transition and leaves a single documented seam, `population_seeded`, so the
-//! "exactly once" guarantee is already expressed and tested at the version boundary.
+//! Population, capacity and market initialization are not done here: they belong to the Act II
+//! population system (which reuses the shelter record's `capacity`) and the market `Encounter`
+//! state, so the migration neither invents a second ceiling nor a second market grammar. It
+//! owns the balance/research transition and exposes one seam, `population_seeded`, which
+//! expresses the "exactly once" guarantee at the version boundary (`docs/roadmap.md`).
 
 const std = @import("std");
 const comp = @import("../components.zig");
@@ -36,18 +34,18 @@ const world = @import("../ecs.zig");
 const World = world.World;
 const Entity = world.Entity;
 
-/// The current migration schema version. Bumped whenever the migration gains a step, so an
-/// agent stamped at an older version can be carried forward by a future `migrate_to_act_two`
-/// without re-running the steps it already has. The first (and current) schema is `1`.
+/// The current migration schema version. It is bumped whenever the migration gains a step, so
+/// an agent stamped at an older version is carried forward by `migrate_to_act_two` without
+/// re-running the steps it already has.
 pub const current_version: u32 = 1;
 
 /// The Act II stocks besides Biomass, opened empty at the curtain.
 const act_two_stocks = .{ comp.InventoryWater, comp.InventoryFuel, comp.InventoryMetal, comp.InventoryMinerals };
 
-/// The stub Coin purse the curtain opens (`comp.InventoryCoin`).
+/// The stand-in Coin purse the curtain opens (`comp.InventoryCoin`).
 pub const curtain_coin: f32 = 20;
 
-/// Whether `e` has already crossed the curtain — the presence of the `Migrated` stamp.
+/// Whether `e` has crossed the curtain: the presence of the `Migrated` stamp.
 pub fn is_migrated(w: *const World, e: Entity) bool {
     return w.has(e, comp.Migrated);
 }
@@ -57,10 +55,9 @@ pub fn actOf(w: *const World, e: Entity) u8 {
     return if (w.has(e, comp.Migrated)) 2 else 1;
 }
 
-/// Carry `e` from Act I to Act II. Idempotent: if the agent already carries a `Migrated` stamp at
-/// `current_version`, this returns immediately having changed nothing — so calling it twice (or on
-/// an already-Act-II agent) is safe, which is the `ACT1-18` idempotence requirement. On the first
-/// call it:
+/// Carry `e` from Act I to Act II. Idempotent: if the agent carries a `Migrated` stamp at
+/// `current_version`, this returns at once having changed nothing, so calling it twice (or on
+/// an Act II agent) is safe. On the first call it:
 ///
 ///  - carries the existing `InventoryBiomass` balance unchanged (or adds it empty if missing);
 ///  - opens the other Act II stocks (water, fuel, metal, minerals) at zero;
@@ -76,45 +73,42 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const roster.Catalog) bool
     // Idempotence gate: already carried to the current version ⇒ nothing owed.
     if (w.get(e, comp.Migrated)) |stamp| {
         if (stamp.version >= current_version) return false;
-        // A future save-version step would run here (older stamp → bring forward). With only
-        // schema 1 today, reaching this branch means the stamp is from a pre-release build; bring
-        // it to current without touching the already-carried balance.
+        // An older stamp is brought forward to current without touching the carried balance;
+        // a step authored for a later schema would run here.
         stamp.version = current_version;
         return true;
     }
 
-    // Biomass is already an Act I stock. Carry its balance unchanged, adding an empty stock only
-    // for defensive compatibility with an agent that somehow lacks it.
+    // Biomass is an Act I stock. Carry its balance unchanged, adding an empty stock only for an
+    // agent that lacks it.
     if (!w.has(e, comp.InventoryBiomass)) w.add(e, comp.InventoryBiomass{});
     // The other Act II stocks open at zero, so the first yield of water or metal lands.
     inline for (act_two_stocks) |Stock| {
         if (!w.has(e, Stock)) w.add(e, Stock{});
     }
-    // The stub Coin purse opens with a little to spend (ACT2-09 decides when coin emerges).
+    // The stand-in Coin purse opens with a little to spend (`docs/roadmap.md`).
     if (!w.has(e, comp.InventoryCoin)) w.add(e, comp.InventoryCoin{ .v = curtain_coin });
 
-    // 4. Goods/counts/effects: nothing to do — the counts live on `comp.Goods` and what they
-    // grant derives from them. The test asserts the no-op explicitly.
+    // 4. Goods/counts/effects: nothing to do, because the counts live on `comp.Goods` and what
+    // they grant derives from them. The test asserts the no-op explicitly.
 
     // 5. Seed the Act II research board. One `comp.Research` carries every tile's state by
     // catalog index, seeded from each tile's authored `initial` (Foraging/Woodcutting
-    // Researched, the other four ring-1 tiles Available, the rest Locked — see
-    // `data/technologies.zon`). The `has` guard keeps a re-seed from clobbering a board a
-    // prior step already wrote.
+    // Researched, the other four ring-1 tiles Available, the rest Locked; see
+    // `data/technologies.zon`). The `has` guard keeps a re-seed from clobbering a board
+    // already written.
     if (!w.has(e, comp.Research)) w.add(e, comp.Research.entry(cat));
 
-    // 6. Stamp the version — the idempotence marker and the save-version boundary.
+    // 6. Stamp the version: the idempotence marker and the save-version boundary.
     w.add(e, comp.Migrated{ .version = current_version });
     return true;
 }
 
-/// Whether the one-time Act II population/capacity/market initialization is owed for `e`. The
-/// shelter the agent built in Act I carries the capacity (its record's `capacity`, summed by
-/// `capital.capacity` — the single ceiling `ACT2-01` is told to reuse); "seeded" here means the
-/// agent has crossed the curtain and
-/// therefore that initialization has already been accounted exactly once. Exposed as the single
-/// documented seam for the population/market init so the "exactly once" guarantee is testable at
-/// the version boundary before the Act II systems exist.
+/// Whether the one-time Act II population/capacity/market initialization has been accounted
+/// for `e`. The shelter built in Act I carries the capacity (its record's `capacity`, summed by
+/// `capital.capacity`, the single ceiling); "seeded" means the agent has crossed the curtain,
+/// so that initialization is accounted exactly once. It is the one seam for the
+/// population/market init, so the "exactly once" guarantee is testable at the version boundary.
 pub fn population_seeded(w: *const World, e: Entity) bool {
     return is_migrated(w, e);
 }
@@ -249,7 +243,7 @@ test "an older save-version stamp is brought forward without re-converting a bal
     defer cat.deinit();
     const e = w.spawn(.{
         comp.InventoryBiomass{ .v = 15 }, // already an Act II agent
-        comp.Migrated{ .version = 0 }, // but stamped at a pre-release schema
+        comp.Migrated{ .version = 0 }, // but stamped at an older schema
         comp.Goods{}, // Required for catalog
         comp.Granted{}, // Required for effects
     });

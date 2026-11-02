@@ -1,6 +1,6 @@
 //! The neighbours: the handler for `NeighbourDeal`, which settles a deal with one of Act II's
-//! stub neighbours (`rules/neighbours.zig`) on both sides in one function: the neighbour's books
-//! and the agent's ledger and goods. It seeds the stub book on first use. A refused deal changes
+//! stand-in neighbours (`rules/neighbours.zig`) on both sides in one function: the neighbour's
+//! books and the agent's ledger and goods. It seeds the book on first use. A refused deal changes
 //! nothing and is answered by `Refused`; one that settles emits `NeighbourSettled`.
 
 const std = @import("std");
@@ -17,13 +17,12 @@ const Entity = ecs.Entity;
 const Resources = res_mod.Resources;
 const Reason = events.Refused.Reason;
 
-/// The neighbours the stub book is seeded with.
+/// The neighbours the book is seeded with.
 pub const people = 24;
 
 /// What the settlement keeps back from trade, by item (`nb.items`): a larder floor, a little
-/// water, and some biomass to build with. A stand-in until HOLDINGS owns the reserve
-/// (`docs/roadmap.md`, PORT-06). What is held beyond it is spare, which is what a neighbour's
-/// verdict weighs.
+/// water, and some biomass to build with. A stand-in (`docs/roadmap.md`). What is held beyond
+/// it is spare, which is what a neighbour's verdict weighs.
 pub const reserve = blk: {
     var r: [nb.item_count]f32 = @splat(0);
     r[0] = 6;

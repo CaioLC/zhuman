@@ -11,7 +11,7 @@
 //! outside any family stack freely.
 //!
 //! The body and the larder are the exception to "derive, never store": their components have
-//! other writers (the metabolism, a future aging term), so `apply` computes what the goods
+//! other writers (the metabolism), so `apply` computes what the goods
 //! contribute, diffs it against `comp.Granted`, and applies the delta — raising the ceiling
 //! fills what it adds, lowering it only clamps.
 

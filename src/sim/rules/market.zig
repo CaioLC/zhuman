@@ -144,16 +144,14 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32) Event {
 // ============================ Typed bundles & quotes ===========================
 //
 // One **transfer representation** for everything a trade moves — Food, generic Materials, and
-// owned goods — so barter resolution has a single shape to validate and apply, and Act
-// II can extend it by adding `Item` variants (typed resources, Coin) without a new grammar.
+// owned goods — so barter resolution has a single shape to validate and apply.
 
-/// A thing a bundle can carry. Today: Food, generic Materials, and the two small tools the
-/// passerby deals in (which map to owned-good components on the player side). Act II adds its
-/// typed resources and Coin here — the `Ware` slots are the extension point, so `Item = Ware`.
+/// A thing a bundle can carry: Food, generic Materials, and the two small tools the passerby
+/// deals in (which map to owned-good components on the player side). `Item = Ware`.
 pub const Item = Ware;
 
-/// One line of a transfer: a quantity of an `Item`. `qty` is `f32` because Food is fractional and
-/// Act II resources will be too; whole-unit tools simply use integral values.
+/// One line of a transfer: a quantity of an `Item`. `qty` is `f32` because Food is fractional;
+/// whole-unit tools use integral values.
 pub const Line = struct { item: Item, qty: f32 };
 
 /// The maximum lines a bundle holds — a single Act I trade never moves more than a couple of

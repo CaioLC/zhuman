@@ -4,7 +4,7 @@
 //! on what terms, is derived from the goods it owns (`effects.verb`) and, for a verb that names
 //! a `tech`, from the agent's research (`verbOf`); nothing about a verb is stored on the agent.
 //! `quote` is the one gate calculation: the `quotes` system writes its answer onto `comp.Quotes`
-//! for the tile and a future decider, and `begin` asks it again at apply time. Labor resolves in
+//! for the tile and a decider, and `begin` asks it again at apply time. Labor resolves in
 //! two halves because it takes time:
 //! `begin` gates, pays and starts the work; `finish` draws the yield at the quality locked at
 //! begin and deposits it, dispatched by `systems.resolve_busy` when the timer runs out.
@@ -34,7 +34,7 @@ const Reason = events.Refused.Reason;
 // constant step, not a linear slide: it keeps the advertised band stable — the band only
 // moves at a threshold crossing — and the crossing is the same one that flips the condition
 // word to WEARY and tints the V chip warn, so the state is announced before the band changes.
-// (The linear slide was built once and reverted: constant band churn, and it felt bad.)
+// A linear slide was tried and rejected: constant band churn.
 
 /// The current yield multiplier for an agent's condition — 1.0 while `.alive`, else
 /// `Config.weary_yield`. It reads the derived `comp.Condition`, the same band the condition

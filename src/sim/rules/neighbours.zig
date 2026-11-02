@@ -1,7 +1,7 @@
-//! `neighbours` — a **stub** Act II neighbour economy behind the MARKET view (`market.html`),
-//! standing in for population, per-agent ledgers, valuation and trade evidence until
-//! ACT2-01..09 land. It is deterministic: `seed` builds the same neighbours every run from a
-//! fixed LCG, as the prototype does.
+//! `neighbours` — a stand-in Act II neighbour economy behind the MARKET view (`market.html`),
+//! standing in for population, per-agent ledgers, valuation and trade evidence
+//! (`docs/roadmap.md`). It is deterministic: `seed` builds the same neighbours every run from a
+//! fixed LCG.
 //!
 //! Each neighbour has a trade (what it makes, what it buys), finite stocks it sells, wants it
 //! buys, its own asking and bidding prices, and coin. The player posts sells and buys at its
@@ -232,7 +232,7 @@ pub fn valueOf(a: Agent, bundle: [bundle_len]u16) u32 {
 }
 
 pub const Verdict = union(enum) {
-    /// Nothing on one side yet.
+    /// Nothing on one side.
     idle,
     /// The neighbour buys none of what the player offers, and no coin is offered.
     refuse,

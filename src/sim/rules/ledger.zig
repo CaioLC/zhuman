@@ -17,9 +17,8 @@ const Catalog = roster.Catalog;
 const Line = roster.Line;
 const Resource = roster.Resource;
 
-/// The inventory component that holds a resource's balance, or null while the resource has
-/// no component — an agent then holds none of it. Coin's is a stub until the simulation
-/// recognizes a medium of exchange (`docs/roadmap.md`, "ACT2-09").
+/// The inventory component that holds a resource's balance, or null when the resource has
+/// no component: an agent then holds none of it. Coin's is a stand-in (`docs/roadmap.md`).
 pub fn Stock(comptime r: Resource) ?type {
     return switch (r) {
         .food => comp.InventoryFood,
@@ -176,7 +175,7 @@ test "a resource line reads and moves the inventory component; a missing stock h
     const e = w.spawn(.{ comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 2 } });
     try testing.expectEqual(@as(f32, 3), balance(&w, e, .food));
     try testing.expectEqual(@as(f32, 2), balance(&w, e, .biomass));
-    try testing.expectEqual(@as(f32, 0), balance(&w, e, .water)); // no component yet
+    try testing.expectEqual(@as(f32, 0), balance(&w, e, .water)); // no component
     try testing.expect(move(&w, e, .food, 1.5));
     try testing.expectEqual(@as(f32, 4.5), balance(&w, e, .food));
     try testing.expect(!move(&w, e, .water, 1)); // nowhere to put it

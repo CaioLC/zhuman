@@ -12,9 +12,9 @@ const rostermod = @import("./data/roster.zig");
 const Events = @import("./ecs.zig").Events;
 const States = @import("./state.zig").States;
 
-/// In-game hours → game-seconds (a day is 24h mapped onto `Config.secs_per_day`).
-/// Action durations are authored in hours (`Requires.hours`) — human-readable on the
-/// tiles — and ticked in game-seconds (`Busy.remaining`).
+/// In-game hours to game-seconds (a day is 24h mapped onto `Config.secs_per_day`). Action
+/// durations are authored in hours (`Requires.hours`), human-readable on the tiles, and ticked
+/// in game-seconds (`Busy.remaining`).
 pub fn hours_to_secs(h: f32, secs_per_day: f32) f32 {
     return h * secs_per_day / 24.0;
 }
@@ -33,15 +33,13 @@ pub const Time = struct {
 /// and every reader reads the component.
 pub const Band = comp.Condition.Band;
 
-/// Tuning knobs. Never written at runtime, and deliberately **not** part of `Sim`, so
-/// starting a fresh run doesn't discard a setting the player chose. Every value here is
-/// a first guess awaiting playtesting — which is why they're runtime fields rather than
+/// Tuning knobs. Never written at runtime, and deliberately not part of `Sim`, so starting a
+/// fresh run does not discard a setting the player chose. They are runtime fields rather than
 /// consts scattered across `actions.zig`, `systems/tick.zig` and the templates.
 pub const Config = struct {
-    /// Game-seconds per in-game day — the tempo every per-day rate (metabolism,
-    /// starvation, spoilage-as-displayed) is expressed against, and the day counter's
-    /// divisor. Lives here (not `main.zig`) so library systems can convert per-day
-    /// rates to per-`dt` amounts.
+    /// Game-seconds per in-game day: the tempo every per-day rate (metabolism, starvation,
+    /// spoilage-as-displayed) is expressed against, and the day counter's divisor. It lives
+    /// here (not `main.zig`) so library systems can convert per-day rates to per-`dt` amounts.
     secs_per_day: f32 = 20,
 
     // —— condition bands ——
@@ -49,20 +47,20 @@ pub const Config = struct {
     spent_frac: f32 = 0.12,
     /// Vigor fraction below which an agent is WEARY.
     weary_frac: f32 = 0.35,
-    /// Yield multiplier once an agent is no longer `.alive`. A constant step, not a
-    /// linear slide — the slide was built once and reverted (band churn, felt bad).
+    /// Yield multiplier once an agent is no longer `.alive`. A constant step, not a linear
+    /// slide: a slide churned the bands and felt bad.
     weary_yield: f32 = 0.7,
 
     // —— metabolism ——
-    /// Vigor drained per day once the larder is empty. ~2.5 days from a full tank to
-    /// death — the countdown that makes rationing a real decision.
+    /// Vigor drained per day once the larder is empty: about 2.5 days from a full tank to
+    /// death, the countdown that makes rationing a real decision.
     starve_per_day: f32 = 4.0,
     /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
     vigor_per_food: f32 = 2.0,
-    /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar
-    /// multiplier the player sets continuously; the *range* and *default* are config (not UI
-    /// words), and `clampMetabolism` is the one place a rate is made legal. Normal is the
-    /// default (`1.0`); ration/feast are just points inside `[min, max]`.
+    /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar multiplier
+    /// the player sets continuously; the range and default are config (not UI words), and
+    /// `clampMetabolism` is the one place a rate is made legal. Normal is the default (`1.0`);
+    /// ration and feast are points inside `[min, max]`.
     metabolism_rate_min: f32 = 0.5,
     metabolism_rate_max: f32 = 2.0,
     metabolism_rate_default: f32 = 1.0,
@@ -89,68 +87,65 @@ pub const Config = struct {
         return if (c == .alive) 1.0 else self.weary_yield;
     }
 
-    /// Clamp a metabolism rate into the authoritative `[min, max]` band — the one
-    /// place a rate is made legal, used on migration/reset and by any UI that sets the rate.
+    /// Clamp a metabolism rate into the authoritative `[min, max]` band: the one place a rate
+    /// is made legal, used on migration/reset and by any UI that sets the rate.
     pub fn clampMetabolism(self: Config, rate: f32) f32 {
         return std.math.clamp(rate, self.metabolism_rate_min, self.metabolism_rate_max);
     }
 };
 
-/// The run: everything the simulation writes that isn't a component. `reset` starts a
-/// fresh one — a new field added here is cleared by that call for free, which is the
-/// point of the grouping.
+/// The run: everything the simulation writes that isn't a component. `reset` starts a fresh
+/// one, clearing every field here, which is the point of the grouping.
 pub const Sim = struct {
-    /// Seconds of game time elapsed this run — advanced while the actor lives (see
+    /// Seconds of game time elapsed this run, advanced while the actor lives (see
     /// `advance_clock`). Drives the day counter.
     elapsed: f32 = 0,
     /// Newest-first event feed shown in the HUD log panel; one feed for the run.
     log: logmod.Log = .{},
     /// The player has successfully begun at least one action this run. Set by
-    /// `actions.begin_labor`; retained as run-progression memory even though the full Act-I
-    /// workspace is now visible from the first frame.
+    /// `actions.begin_labor`; run-progression memory.
     tutorial_done: bool = false,
-    /// The simulation's one source of chance — every uncertain outcome is rolled
-    /// against this. Held here so the player today and the AI deciders later draw
-    /// uncertainty from the same stream. Reached through `Resources.random()`.
+    /// The simulation's one source of chance: every uncertain outcome is rolled against this,
+    /// so every actor draws uncertainty from the same stream. Reached through
+    /// `Resources.random()`.
     prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0),
-    /// **Eligibility transition memory** — one bit per good, by catalog index, recording
-    /// whether the good's prerequisite has *already* been seen satisfied this run. The
-    /// `systems.track_reach` tick flips a bit false→true and logs "A new recipe is within reach"
-    /// exactly once; because it is sim state (not UI), tab switches / filter / sort / rebuilds
-    /// never touch it, so the line cannot repeat. Cleared by `reset` for a fresh run.
+    /// Eligibility transition memory: one bit per good, by catalog index, recording whether
+    /// the good's prerequisite has been seen satisfied this run. The `systems.track_reach`
+    /// tick flips a bit false to true and logs "A new recipe is within reach" exactly once;
+    /// because it is sim state (not UI), tab switches, filters, sorts and rebuilds never touch
+    /// it, so the line cannot repeat. Cleared by `reset`.
     reach_seen: [rostermod.max_goods]bool = @splat(false),
 
-    /// **The Passerby encounter** — the run's one Act I counterparty as a clock-driven
-    /// state machine (absent/approaching/present/departed, a stable visit `id`, and a finite
-    /// per-visit satchel). Ticked each frame by `market.tick` off the sim clock (never a hardcoded
-    /// day); the UI reads it. Cleared by `reset` for a fresh run.
+    /// The Passerby encounter: the run's one Act I counterparty as a clock-driven state
+    /// machine (absent/approaching/present/departed, a stable visit `id`, and a finite
+    /// per-visit satchel). Ticked each frame by `market.tick` off the sim clock (never a
+    /// hardcoded day); the UI reads it. Cleared by `reset`.
     encounter: marketmod.Encounter = .{},
 
-    /// **The Act II Coin Merchant's visits** — present or away, a visit identity, the time left,
+    /// The Act II Coin Merchant's visits: present or away, a visit identity, the time left,
     /// and the lots sold this visit. Ticked by the `merchant` system in Act II and dealt with by
     /// `merchant_deal` (`systems/merchant.zig`); the merchant dialog and strip read it.
     merchant: marketmod.MerchantVisit = .{},
 
-    /// **The neighbours, stubbed** — Act II's MARKET view reads and trades with this
-    /// deterministic stand-in until the population and market model exist (ACT2-01..09).
-    /// Seeded on first use; cleared by `reset` for a fresh run.
+    /// The neighbours, a stand-in: Act II's MARKET view reads and trades with this
+    /// deterministic stand-in for the population and market model (`docs/roadmap.md`).
+    /// Seeded on first use; cleared by `reset`.
     neighbours: @import("./rules/neighbours.zig").Market = .{},
 
-    /// **The Exchange** — Act II's milestone, `standing` once it is raised (the settlement then
+    /// The Exchange: Act II's milestone, `standing` once it is raised (the settlement then
     /// reads as Act III). Raised by `systems/exchange.zig`. Cleared by `reset`.
     exchange: Exchange = .{},
 
-    /// **The settlement's population** — a stand-in number until the population model exists
-    /// (`docs/roadmap.md`, ACT2-01). The Exchange's unlock and the Act II header read it; a
-    /// fixture sets it to reach every state of the Exchange card.
+    /// The settlement's population: a stand-in number (`docs/roadmap.md`). The Exchange's unlock
+    /// and the Act II header read it; a fixture sets it to reach every state of the Exchange card.
     population: f32 = 48,
 
     pub const Exchange = struct {
         standing: bool = false,
     };
 
-    /// Begin a fresh run. The prng is **carried over on purpose**: rewinding it would
-    /// make every run replay the first one's luck.
+    /// Begin a fresh run. The prng is carried over on purpose: rewinding it would make every
+    /// run replay the first one's luck.
     pub fn reset(self: *Sim) void {
         self.* = .{ .prng = self.prng };
     }
@@ -177,7 +172,7 @@ pub const Resources = struct {
     /// applied by `schedule.tick`, read by the UI. Begins on the title.
     states: States = .{},
 
-    /// A `std.Random` over `sim.prng` — call `.float(f32)`, `.boolean()`, etc. on it.
+    /// A `std.Random` over `sim.prng`: call `.float(f32)`, `.boolean()`, etc. on it.
     pub fn random(self: *Resources) std.Random {
         return self.sim.prng.random();
     }

@@ -8,13 +8,13 @@
 // Relative, like every sim file's imports: `test-ui` and `test-sim` compile this file without `ha`.
 const roster = @import("./data/roster.zig");
 
-// NOTE: These are components
+// Components.
 pub const Label = struct { v: []const u8 };
 
-/// Vigor: human energy source. Field defaults are the **authoritative starting baseline**
-/// A rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults
-/// (and the `baselines` module names them) rather than repeating literals, so Holdings can
-/// derive a current-vs-base margin against the same numbers.
+/// Vigor: the human energy source. The field defaults are the authoritative starting baseline:
+/// a rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults (the
+/// `baselines` module names them) rather than repeating literals, so Holdings derives a
+/// current-vs-base margin against the same numbers.
 pub const Vigor = struct {
     v: f32 = 10,
     max: f32 = 10,
@@ -31,14 +31,14 @@ pub const InventoryBiomass = struct {
 };
 
 /// The capital goods an agent owns, as a count per catalog index of the authored roster
-/// (`roster.zig`); zero is not owned. Only ownership carries an effect — a second pair of
-/// sandals is stock — so what the goods *do* is derived, never stored here (`effects.zig`).
+/// (`roster.zig`); zero is not owned. Only ownership carries an effect (a second pair of
+/// sandals is stock), so what the goods *do* is derived, never stored here (`effects.zig`).
 pub const Goods = struct {
     count: [roster.max_goods]u32 = @splat(0),
 };
 
 /// Passive progress and on/off state for owned collectable generators, keyed by catalog good
-/// index. `off` defaults false so a newly acquired generator starts accumulating immediately;
+/// index. `off` defaults false so an acquired generator starts accumulating immediately;
 /// toggling off preserves `progress` and consumes nothing.
 pub const Generators = struct {
     progress: [roster.max_goods]f32 = @splat(0),
@@ -56,7 +56,7 @@ pub const Granted = struct {
 
 /// Where each technology of the authored roster stands for this agent, by catalog index
 /// (`roster.zig`). Seeded at the curtain from every record's `initial`; the research board
-/// promotes and establishes from there, and a recipe that names a `tech` is offered only once
+/// promotes and establishes from there. A recipe that names a `tech` is offered only once
 /// it reads `researched` here (`capital.quote`).
 pub const Research = struct {
     state: [roster.max_techs]roster.TechState = @splat(.locked),
@@ -69,10 +69,10 @@ pub const Research = struct {
     }
 };
 
-// -- Additional Act II stocks: opened at the curtain, never before --------------------------
-// Biomass already exists in Act I (displayed there through the Materials cover). Migration
-// carries that balance unchanged and opens the remaining resource stocks at zero. Each is a
-// plain balance in the `InventoryBiomass` shape, reached through `ledger.Stock`.
+// -- Act II stocks: opened at the curtain, never before ------------------------------------
+// Biomass exists in Act I (displayed there through the Materials cover). Migration carries
+// that balance unchanged and opens the remaining resource stocks at zero. Each is a plain
+// balance in the `InventoryBiomass` shape, reached through `ledger.Stock`.
 
 pub const InventoryWater = struct {
     v: f32 = 0,
@@ -90,26 +90,26 @@ pub const InventoryMinerals = struct {
     v: f32 = 0,
 };
 
-/// **Coin, stubbed.** A balance like the others so the merchant and the neighbours can settle
-/// real numbers, opened at the curtain with a small purse. The simulation does not yet decide
-/// that a medium of exchange emerges (`docs/roadmap.md`, ACT2-09); this stands in until it does.
+/// Coin, a stand-in: a balance like the others so the merchant and the neighbours can settle
+/// real numbers, opened at the curtain with a small purse. The simulation does not decide that
+/// a medium of exchange emerges (`docs/roadmap.md`).
 pub const InventoryCoin = struct {
     v: f32 = 0,
 };
 
-/// **Migration version stamp** — the versioned marker the Act I → II migration writes onto an
-/// agent the one time it runs. Its presence is what makes the migration idempotent: a second
-/// call sees the stamp and returns without reopening stocks or re-seeding research. The
-/// `version` field is the save-version boundary — a migration authored for an older save shape
-/// can read it and decide whether a further step is owed. Act I agents do not carry it; owning
-/// it *is* "this agent has crossed the curtain".
+/// The migration version stamp: the marker the Act I to II migration writes onto an agent the
+/// one time it runs. Its presence makes the migration idempotent: a second call sees the stamp
+/// and returns without reopening stocks or re-seeding research. The `version` field is the
+/// save-version boundary: a migration for an older save shape reads it to decide whether a
+/// further step is owed. Act I agents do not carry it; owning it means the agent has crossed
+/// the curtain.
 pub const Migrated = struct {
-    /// The migration schema version this agent was last carried to. Bumped when the migration
-    /// gains a new step; `migration.current_version` is the authority.
+    /// The migration schema version this agent was last carried to;
+    /// `migration.current_version` is the authority.
     version: u32 = 0,
 };
 
-/// The one act in progress — an agent holds at most one (one body, one act at a time;
+/// The one act in progress: an agent holds at most one (one body, one act at a time;
 /// `actions.begin` refuses while it exists). Costs are paid at start; the yield
 /// resolves at *completion* (`systems.resolve_busy` dispatches on `doing`). `quality` is
 /// locked at the click — the band the tile advertised is the band the draw uses, even if
@@ -144,12 +144,11 @@ pub const Busy = struct {
     }
 };
 
-/// The continuous eating policy: an agent consumes its own larder every tick — eating
-/// happens regardless of action (see `systems.metabolize`); what the player controls is
-/// the *rate*. `rate` is a **bounded scalar multiplier** in `[0.5, 2.0]`, `1.0` at
-/// normal: it scales `base_rate` continuously (ration = stretch the larder and stay weak,
-/// feast = restore fast and burn the stock), replacing the old three-value ration/normal/feast
-/// enum. `base_rate` is food/day at `rate = 1.0`. The `Config` owns the range/default and the
+/// The continuous eating policy: an agent consumes its own larder every tick, regardless of
+/// action (see `systems.metabolize`); what the player controls is the rate. `rate` is a
+/// bounded scalar multiplier in `[0.5, 2.0]`, `1.0` at normal: it scales `base_rate`
+/// continuously (ration = stretch the larder and stay weak, feast = restore fast and burn the
+/// stock). `base_rate` is food/day at `rate = 1.0`. The `Config` owns the range/default and the
 /// clamp (`Config.clampMetabolism`); this stores the persisted agent-local choice.
 pub const Metabolism = struct {
     rate: f32 = 1.0,
@@ -170,14 +169,14 @@ pub const Condition = struct {
 /// (`systems/outlook.zig`) from the vigor, the larder and the metabolism: how many days the
 /// larder lasts, and whether and how fast the vigor recovers. The BODY lines read it.
 pub const Outlook = struct {
-    /// The recovery outcome — a tagged result, never a bare number, so a reader renders the
+    /// The recovery outcome: a tagged result, never a bare number, so a reader renders the
     /// right copy for each state instead of guessing from a sentinel.
     pub const Recovery = union(enum) {
-        /// Already at the vigor ceiling — nothing to recover.
+        /// Already at the vigor ceiling: nothing to recover.
         at_ceiling,
-        /// No larder — the body is starving, not recovering.
+        /// No larder: the body is starving, not recovering.
         no_food,
-        /// Food has zero quality — it fills the belly but yields no vigor, so no recovery.
+        /// Food has zero quality: it fills the belly but yields no vigor, so no recovery.
         no_quality,
         /// The larder yields some vigor but **cannot reach the ceiling**; carries the days the
         /// larder lasts and the vigor it will have restored by then (a partial recovery).

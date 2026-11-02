@@ -122,8 +122,8 @@ pub fn qualifiesAvailable(cat: *const Catalog, board: *const Research, index: us
 }
 
 /// Recompute every Locked tile's eligibility and promote those that now qualify to Available.
-/// Available/Researched tiles are left untouched (promotion is one-way here; the UX prototype
-/// never demotes). Returns the number of tiles promoted.
+/// Available/Researched tiles are left untouched (promotion is one-way: it never
+/// demotes). Returns the number of tiles promoted.
 pub fn recomputeLocked(cat: *const Catalog, board: *Research) u32 {
     var promoted: u32 = 0;
     for (0..cat.technologies.len) |i| {
@@ -451,7 +451,7 @@ test "a chain of research walks a wedge outward without opening other wedges" {
     try testing.expectEqual(State.locked, stateOf(&cat, &r, "precision_machining").?);
 }
 
-// ---- the authored board's invariants (BOARD-02, BOARD-03, QA-06) --------------------------
+// ---- the authored board's invariants ------------------------------------------------------
 
 test "the board holds sixty tiles over rings 1-4: six pure and 6(n-1) hybrids per ring" {
     var cat = try testCatalog();

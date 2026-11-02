@@ -2,8 +2,8 @@
 //! `sim.Resources.events`). Every public struct here is an event, plain fixed-size data that
 //! names agents, records and items by index and amounts by number, never by text.
 //!
-//! **Intents** say what an agent means to do. The UI writes them today, a decider will later;
-//! a handler system reads each family and calls the rule it already has. **Facts** say what
+//! **Intents** say what an agent means to do. The UI writes them; a handler system reads each
+//! family and calls the rule that carries it out. **Facts** say what
 //! happened. Systems and the rules they call write them; `systems/log.zig` is the one reader that
 //! turns them into `Log` lines, and the UI reads them with its own cursor.
 //!

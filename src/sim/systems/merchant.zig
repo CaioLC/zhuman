@@ -19,9 +19,9 @@ const Entity = ecs.Entity;
 const Resources = res_mod.Resources;
 const Reason = events.Refused.Reason;
 
-// —— The merchant's lots (a stand-in: ACT2-14) ——————————————————————————————————————————
-// The merchant's finite lots, priced in the stub Coin, authored here until the merchant has a
-// stock and a valuation of its own (`docs/roadmap.md`, ACT2-14). A term names a `Resource` or
+// —— The merchant's lots (a stand-in) ————————————————————————————————————————————————
+// The merchant's finite lots, priced in the stub Coin and authored here in place of a stock and
+// a valuation of the merchant's own (`docs/roadmap.md`). A term names a `Resource` or
 // a good by catalog id; a lot is one unit of trade, scaled linearly by the lots taken. BUY lots
 // carry the merchant's stock per visit; SELL lots are bounded by what the settlement holds.
 

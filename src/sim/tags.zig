@@ -21,5 +21,4 @@ pub const Food = struct {};
 pub const Comfort = struct {};
 pub const Tool = struct {};
 pub const WoodCutting = struct {};
-// Nothing reads these yet; the set is settled when something needs to group goods
-// (docs/roadmap.md, "Act II").
+// Nothing reads these; they are a stand-in set for grouping goods (docs/roadmap.md, "Act II").

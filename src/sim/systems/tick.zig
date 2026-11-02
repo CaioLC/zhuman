@@ -17,8 +17,8 @@ const EventWriter = ecs.EventWriter;
 const condition = @import("./condition.zig").condition;
 
 /// Advance the run clock while the actor lives. Driven by the player's presence — with no
-/// player (dead) the clock freezes, so the game-over screen shows the day you died. One
-/// player today, so this bumps `elapsed` once for the frame it finds one.
+/// player (dead) the clock freezes, so the game-over screen shows the day you died. With one
+/// player this bumps `elapsed` once for the frame it finds one.
 pub fn advance_clock(
     sim: *res_mod.Sim,
     time: *const res_mod.Time,
@@ -30,7 +30,7 @@ pub fn advance_clock(
 }
 
 /// Spoil the larder toward zero at `spoils` units/second — food rots, so a surplus can't
-/// simply be banked forever (this is what storage capital will later mitigate).
+/// simply be banked forever.
 pub fn update_food(
     time: *const res_mod.Time,
     q: Query(.{comp.InventoryFood}),
@@ -45,9 +45,9 @@ pub fn update_food(
 
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
 /// larder — no eat action, eating happens regardless; the *rate* is the agent's standing
-/// choice (`Metabolism.rate`, a bounded scalar). Food converts to vigor as it's consumed (scaled by the
-/// larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
-/// this is the drain that finally makes `mark_dead` fire, and the clock pressure that
+/// choice (`Metabolism.rate`, a bounded scalar). Food converts to vigor as it's consumed (scaled
+/// by the larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
+/// this is the drain that makes `mark_dead` fire, and the clock pressure that
 /// makes every action intentional: ration and stay weak, feast and burn the stock.
 /// The larder emptying is a fact once, on the frame it happens: `FoodRanOut`. The band the
 /// vigor now falls in is the `condition` system's, which runs right after this one and reports
@@ -151,8 +151,9 @@ pub fn despawn_dead(
 
 /// **Eligibility transition tracking.** For each prerequisite-gated good of this act, when
 /// its prerequisite becomes satisfied for the first time this run, emit one `RecipeInReach`
-/// (the log's "A new recipe is within reach: {name}."). Only goods with `needs` participate — a good with no prerequisite
-/// is reachable from the first breath, so it is not a *transition* and never logs. The seen-set
+/// (the log's "A new recipe is within reach: {name}."). Only goods with `needs` participate:
+/// a good with no prerequisite is reachable from the first breath, so it is not a *transition*
+/// and never logs. The seen-set
 /// is sim state (`Sim.reach_seen`, by catalog index), so it survives
 /// frames untouched by the UI — tab switches, filter/sort changes, and rebuilds cannot re-emit
 /// the fact; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a

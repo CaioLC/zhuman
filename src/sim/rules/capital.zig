@@ -5,7 +5,7 @@
 //! of ownership *settles* the body and larder (`effects.apply`). What a good does to a **verb**
 //! is never stored —
 //! `effects.verb` derives it. `quote` is the one gate calculation: the `quotes` system writes its
-//! answer onto `comp.Quotes` for the BUILD row and a future decider, and `begin` asks it again at
+//! answer onto `comp.Quotes` for the BUILD row and a decider, and `begin` asks it again at
 //! apply time.
 //!
 //! Two gates beside the price. `needs` — the verb or tool a modifier works on must be held
@@ -251,8 +251,8 @@ pub fn release(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) u32 {
     return taken;
 }
 
-/// Break one unit: `release` plus `GoodBroke`. Nothing calls this yet (no durability); it
-/// exists so losing a good has one path.
+/// Break one unit: `release` plus `GoodBroke`. Nothing calls it (goods have no durability); it
+/// is the one path for losing a good to breakage.
 pub fn break_one(w: *World, e: Entity, res: *Resources, gi: u16) void {
     if (release(w, e, res, gi, 1) == 0) return;
     _ = res.events.writer(events.GoodBroke).push(.{ .agent = e, .gi = gi });
@@ -629,14 +629,14 @@ test "a generator accumulates without moving resources and settles only when col
 fn spawn_settler(w: *World, cat: *const Catalog) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15, max is irrelevant
-        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the finalized 12
-        comp.InventoryBiomass{ .v = 100 }, // >= the finalized 60 price
+        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the unlock's 12
+        comp.InventoryBiomass{ .v = 100 }, // >= the 60 price
         comp.Goods{},
         comp.Granted{},
     });
     const goods = w.get(e, comp.Goods).?;
     for ([_][]const u8{ "sandals", "leaf_bed", "cookpot", "root_cellar", "wire_snares" }) |id| {
-        goods.count[cat.goodIndex(id).?] = 1; // five goods owned >= the finalized 5
+        goods.count[cat.goodIndex(id).?] = 1; // five goods owned >= the unlock's 5
     }
     return e;
 }
