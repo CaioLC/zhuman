@@ -158,7 +158,7 @@ test "quotes is idempotent: a second run on an unchanged world writes the same a
 }
 
 test "Quotes stays small" {
-    // The world holds every component's storage inline for its full entity capacity, so each
+    // The world holds every component's storage for its full `MAX_ENTITIES` capacity, so each
     // byte here is a kilobyte of world; the terms stay out of it (`actions.verbOf`).
     try testing.expect(@sizeOf(comp.Quotes) <= 6144);
 }

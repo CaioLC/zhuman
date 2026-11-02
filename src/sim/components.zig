@@ -194,8 +194,8 @@ pub const Outlook = struct {
 /// the `quotes` system (`systems/quotes.zig`) through `actions.quote`, `capital.quote` and
 /// `capital.generator_quote`, so a tile, a BUILD row and a decider read one answer. It holds the
 /// standings and the per-item numbers, not the terms: a verb's effective terms stay the pure read
-/// `actions.verbOf`, because the world holds every component's storage inline for its full
-/// entity capacity, and a copy of the terms per verb would add tens of megabytes to it. Every
+/// `actions.verbOf`, because the world holds every component's storage for its full
+/// `MAX_ENTITIES` capacity, and a copy of the terms per verb would add tens of megabytes to it. Every
 /// slot is indexed by the record's catalog index.
 pub const Quotes = struct {
     /// A `short` index that names no line: the order is payable.

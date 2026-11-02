@@ -217,8 +217,8 @@ source of truth:
   unpayable line by index, the quality a begin would lock, the count owned, the reach and the
   generator's progress, written after the ledger settles; the tile, the BUILD row and a decider
   read the same answer, and `actions.quote`, `capital.quote` and `capital.generator_quote` are the
-  rule that fills it. It does not hold a verb's terms: the world stores every component inline for
-  `MAX_ENTITIES`, so a copy of the terms per verb would add tens of megabytes to it. The terms stay
+  rule that fills it. It does not hold a verb's terms: the world stores every component for its full
+  `MAX_ENTITIES` capacity, so a copy of the terms per verb would add tens of megabytes to it. The terms stay
   the pure read `actions.verbOf` over `Goods` and `Research`.
 
 The writer of a derived component is idempotent: running it twice on an unchanged world changes
@@ -320,7 +320,3 @@ API shapes the later steps build on.
   when the neighbours stop being a stub.
 - Change detection on components (Bevy's `Changed<T>`) is not built. Derived writers recompute
   for every agent every tick; the trigger to add it is a measurable cost, not a population size.
-- The world's storage is inline over `MAX_ENTITIES`, about 7 MB with the derived components, and
-  `build.zig` reserves a 64 MB stack for every binary that holds one. Heap-backed storage in the
-  engine would drop the reserve and let `Quotes` carry the terms; the trigger is the first
-  component that does not fit, not this one.

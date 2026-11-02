@@ -66,7 +66,7 @@ values and emits nothing new, and a test says so.
   `capital.generator_quote`, so the ACTIONS tile, the BUILD row, the GENERATORS tile and a
   decider read one answer; the handlers still ask the rule at apply time, and the rule is the
   authority. It holds standings and not a verb's terms, which stay the pure read
-  `actions.verbOf`, because the world stores every component inline for its full entity
+  `actions.verbOf`, because the world stores every component for its full `MAX_ENTITIES`
   capacity and a copy of the terms per verb would add tens of megabytes to it.
 
 The writers close each act's `handle` and `update` sets, just before `log`, so a paused intent
@@ -92,8 +92,8 @@ deciders are meant to feed the same options.
 ## Main loop (`main.zig`)
 
 `App` owns all state. `App.init` does SDL and window setup only; `App.setup` runs once after
-`App` is stable on the stack — font, `Resources`, the ECS `World` (empty until a `NewRun`
-begins a run), the per-frame arena, and the `UiCtx` (safe here because internal pointers are
+`App` is stable on the stack — font, `Resources`, the ECS `World` (its storages allocated from
+the app's allocator, empty until a `NewRun` begins a run), the per-frame arena, and the `UiCtx` (safe here because internal pointers are
 taken after the struct's address is fixed). `main.zig` owns `App`, the event loop and the one
 call to the schedule; the screens live in `pages/`.
 

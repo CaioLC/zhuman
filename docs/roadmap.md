@@ -94,6 +94,7 @@ The goal: every game rule runs from the schedule and nothing outside `src/sim/` 
 - [x] **ECS-05 — States and the schedule.** `States`, `Schedule`, `sim/state.zig`, `sim/schedule.zig`; `new_run`, `begin_run`, `detect_shelter`, `cross_curtain`, `detect_death`, `detect_exchange`; the main loop makes one call; the curtain pauses through playback and Continue leads into Act II live.
 - [x] **ECS-06 — Derived components.** `Condition`, then `Outlook` retiring `body.zig`, then `Quotes` retiring the per-tile quote calls.
 - [x] **ECS-07 — `*const World` into the build.** The UI build holds only `*const World`, `DebugPoke`, the boundary rule written down.
+- [x] **ECS-08 — Heap-backed storage.** The world's storages are allocated by `World.init(allocator)` and freed by `deinit`; the 64 MB stack reserve is gone and the fixture rig is a stack value again.
 
 ## 2. Engine and host gaps — `src/ui/`, `src/ui_client/`, the shell
 
