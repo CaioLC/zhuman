@@ -3,13 +3,13 @@
 //!
 //! Generators mature on simulation time without occupying `Busy`. A ready tile collects its
 //! complete cycle immediately; the lower-right ON/OFF control pauses accumulation while preserving
-//! progress. All readiness, cost, output, and progress comes from `capital.generator_quote`.
+//! progress. Readiness and progress come from the agent's `comp.Quotes`, cost and output from
+//! the record's generator.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.sim.comp;
-const capital = ha.sim.rules.capital;
 const roster = ha.sim.data.roster;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
@@ -51,14 +51,19 @@ fn ownedCount(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf
     return count;
 }
 
-fn cycleCost(act: u8, buf: []u8, q: capital.GeneratorQuote) []const u8 {
+/// A cycle's length in days.
+fn cycleDays(spec: roster.Generator) f32 {
+    return spec.hours / 24.0;
+}
+
+fn cycleCost(act: u8, buf: []u8, rec: *const roster.Good, spec: roster.Generator) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     var ebuf: [8]u8 = undefined;
-    wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, q.spec.energy)}) catch {};
-    for (q.rec.input) |line| {
+    wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, spec.energy)}) catch {};
+    for (rec.input) |line| {
         if (line.per != .day) continue;
         var nbuf: [8]u8 = undefined;
-        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n * q.cycle_days), info.letterOf(act, line.item) }) catch {};
+        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n * cycleDays(spec)), info.letterOf(act, line.item) }) catch {};
     }
     return wr.buffered();
 }
@@ -68,12 +73,13 @@ const Yield = struct {
     text: []const u8,
 };
 
-fn cycleYield(act: u8, buf: []u8, q: capital.GeneratorQuote) Yield {
+fn cycleYield(act: u8, buf: []u8, rec: *const roster.Good, spec: roster.Generator) Yield {
+    const cycle_days = cycleDays(spec);
     var best: ?roster.Line = null;
     var best_mean: f32 = -1;
-    for (q.rec.output) |line| {
+    for (rec.output) |line| {
         if (line.per != .day) continue;
-        const mean = ha.sim.kernel.dist.stats(line.asDist()).mean * q.cycle_days;
+        const mean = ha.sim.kernel.dist.stats(line.asDist()).mean * cycle_days;
         if (mean > best_mean) {
             best = line;
             best_mean = mean;
@@ -81,18 +87,18 @@ fn cycleYield(act: u8, buf: []u8, q: capital.GeneratorQuote) Yield {
     }
     if (best) |line| {
         const stats = ha.sim.kernel.dist.stats(line.asDist());
-        const lo = @round(stats.p10 * q.cycle_days);
-        const hi = @round(stats.p90 * q.cycle_days);
+        const lo = @round(stats.p10 * cycle_days);
+        const hi = @round(stats.p90 * cycle_days);
         const text = if (lo == hi)
             std.mem.print(buf, "+{d:.0}{s}", .{ hi, info.letterOf(act, line.item) }) catch "+?"
         else
             std.mem.print(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, info.letterOf(act, line.item) }) catch "+?";
         return .{ .kind = line.kind, .text = text };
     }
-    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{q.spec.vigor}) catch "+?v" };
+    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{spec.vigor}) catch "+?v" };
 }
 
-fn stateWord(q: capital.GeneratorQuote) []const u8 {
+fn stateWord(q: comp.Quotes.Generator) []const u8 {
     return switch (q.standing) {
         .charging => "accumulating",
         .off => "off",
@@ -105,21 +111,24 @@ fn stateWord(q: capital.GeneratorQuote) []const u8 {
 fn generatorTile(parent: El, world: *World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
-    const q = capital.generator_quote(world, e, cat, ctx.res.game.config, gi) orelse return;
+    const rec = &cat.goods[gi];
+    const spec = rec.generator orelse return;
+    const quotes = world.get(e, comp.Quotes) orelse return;
+    const q = quotes.generators[gi] orelse return;
 
     var cost_buf: [40]u8 = undefined;
     var duration_buf: [12]u8 = undefined;
     var yield_buf: [20]u8 = undefined;
-    const duration = std.mem.print(&duration_buf, "{d:.0}h", .{q.spec.hours}) catch "?";
-    const yield = cycleYield(act, &yield_buf, q);
+    const duration = std.mem.print(&duration_buf, "{d:.0}h", .{spec.hours}) catch "?";
+    const yield = cycleYield(act, &yield_buf, rec, spec);
     const progress: ?f32 = if (q.standing == .charging) q.fraction() else null;
-    const display_name = if (q.spec.label.len > 0) q.spec.label else q.rec.name;
+    const display_name = if (spec.label.len > 0) spec.label else rec.name;
     const tile = try action_tile.tile(
         parent,
-        q.rec.id,
+        rec.id,
         display_name,
         stateWord(q),
-        cycleCost(act, &cost_buf, q),
+        cycleCost(act, &cost_buf, rec, spec),
         duration,
         yield.kind,
         yield.text,
@@ -279,10 +288,12 @@ const GenRig = struct {
             comp.Generators{},
             comp.Granted{},
             comp.Condition{},
+            comp.Quotes{},
         });
         const gi: u16 = @intCast(self.res.game.catalog.goodIndex("garden_bed").?);
         self.world.get(e, comp.Goods).?.count[gi] = 1;
         self.world.get(e, comp.Generators).?.progress[gi] = 1e9;
+        ha.sim.ecs.run(&self.world, &self.res.game, ha.sim.systems.quotes.quotes);
         return .{ .world = &self.world, .e = e, .gi = gi };
     }
 };
@@ -310,7 +321,7 @@ const GenFixture = struct {
     pub fn build(self: *GenFixture, ctx: *UiCtx) anyerror!uic.Trees {
         const root = try el.root(ctx, "root");
         const tile = try place(root, "tile", 0, 0, 300, 87);
-        const ready = capital.generator_quote(self.world, self.e, &ctx.res.game.catalog, ctx.res.game.config, self.gi).?.ready();
+        const ready = self.world.get(self.e, comp.Quotes).?.generators[self.gi].?.ready();
         self.tile_lifecycle_click = tile.control(.{ .enabled = ready, .name = "Garden bed", .role = .tile }).clicked;
         const toggle = try place(tile, "toggle", 240, 60, 60, 27);
         self.on = toggleAndCollect(tile, toggle, self.world, self.e, self.gi);
@@ -322,6 +333,7 @@ const GenFixture = struct {
         ctx.res.game.events.update();
         ha.sim.ecs.run(self.world, &ctx.res.game, ha.sim.systems.generators.generators_toggle);
         ha.sim.ecs.run(self.world, &ctx.res.game, ha.sim.systems.generators.generators_collect);
+        ha.sim.ecs.run(self.world, &ctx.res.game, ha.sim.systems.quotes.quotes);
         const out = try ctx.arena.alloc(*Node, 1);
         out[0] = root.get();
         return out;

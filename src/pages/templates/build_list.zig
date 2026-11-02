@@ -159,11 +159,13 @@ fn naturalDir(s: Sort) Direction {
     return if (s == .state) .descending else .ascending;
 }
 
-/// One classified recipe for this frame: its quote (which carries the catalog index and the
-/// record), its display `kind`, the inputs/hours it sorts by, and the words it answers `query`
-/// fields with. Everything is a record string or a live number — no allocation.
+/// One classified recipe for this frame: its catalog index and record, its standing from the
+/// agent's `comp.Quotes`, its display `kind`, the inputs/hours it sorts by, and the words it
+/// answers `query` fields with. Everything is a record string or a live number — no allocation.
 pub const Entry = struct {
-    q: capital.Quote,
+    gi: u16,
+    rec: *const roster.Good,
+    q: comp.Quotes.Build,
     kind: Kind,
     inputs: f32,
     hours: f32,
@@ -233,7 +235,7 @@ fn orderTotal(rec: *const roster.Good) f32 {
     return n;
 }
 
-fn kindOf(q: capital.Quote, building: bool) Kind {
+fn kindOf(q: comp.Quotes.Build, building: bool) Kind {
     if (building) return .building;
     if (q.count > 0) return .owned;
     return switch (q.standing) {
@@ -253,14 +255,17 @@ pub fn collect(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shel
     const q = query.parse(query_text);
     const blank = query_text.len == 0;
     const busy = world.get(e, comp.Busy);
+    const quotes = world.get(e, comp.Quotes) orelse return buf[0..0];
     var n: usize = 0;
     for (cat.goods, 0..) |*rec, i| {
         if (!onShelf(world, e, cat, shelf, i)) continue;
         if (n == buf.len) break;
         const gi: u16 = @intCast(i);
-        const quote = capital.quote(world, e, cat, gi) orelse continue;
+        const quote = quotes.builds[gi] orelse continue;
         const kind = kindOf(quote, busy != null and busy.?.isBuild(gi));
         var ent = Entry{
+            .gi = gi,
+            .rec = rec,
             .q = quote,
             .kind = kind,
             .inputs = orderTotal(rec),
@@ -399,10 +404,10 @@ pub fn build_list(parent: El, world: *World, e: Entity, id: []const u8, shelf: S
     for (entries) |ent| {
         // Keyed by the recipe's id, not its sorted position, so a row's focus and state follow
         // the recipe through a re-sort or a filter change.
-        const r = try capital_row(rows, world, e, set, ent.q, ent.kind);
+        const r = try capital_row(rows, world, e, set, ent.rec, ent.q, ent.kind);
         // The lifecycle is the simulation's. A ready/owned click writes `BeginBuild`; the
         // cancel corner writes `CancelBuild`, the refund path. No UI timers.
-        if (r.clicked_build) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = ent.q.gi });
+        if (r.clicked_build) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = ent.gi });
         if (r.clicked_cancel) _ = ctx.res.game.events.writer(ha.sim.events.CancelBuild).push(.{ .agent = e });
     }
 
@@ -429,8 +434,9 @@ fn milestone_goal(parent: El, world: *World, e: Entity, id: []const u8, words: M
         if (g.milestone == words.which) found = @intCast(i);
     }
     const gi = found orelse return;
-    const quote = capital.quote(world, e, cat, gi) orelse return;
-    const rec = quote.rec;
+    const quotes = world.get(e, comp.Quotes) orelse return;
+    const quote = quotes.builds[gi] orelse return;
+    const rec = &cat.goods[gi];
     const price = rec.requires.?;
     const u = rec.unlock orelse return;
     const vigor = world.get(e, comp.Vigor).?;
@@ -558,10 +564,17 @@ fn settler(w: *World, cat: *const roster.Catalog, biomass: f32, minerals: f32) E
         comp.Goods{},
         comp.Granted{},
         comp.Condition{},
+        comp.Quotes{},
     });
     _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
     _ = ha.sim.rules.ledger.move(w, e, .minerals, minerals);
+    requote(w, e, cat);
     return e;
+}
+
+/// Write the agent's quotes, as the `quotes` system does each frame.
+fn requote(w: *World, e: Entity, cat: *const roster.Catalog) void {
+    ha.sim.systems.quotes.fill(w, e, cat, .{}, w.get(e, comp.Quotes).?);
 }
 
 test "Act II: the blank shelf is every authored recipe, research-gated rows included" {
@@ -584,6 +597,7 @@ test "Act II carries owned Act I goods onto its shelf, unless it authors a recip
     const goods = w.get(e, comp.Goods).?;
     goods.count[cat.goodIndex("leaf_bed").?] = 1; // no Act II recipe of that name
     goods.count[cat.goodIndex("garden_bed").?] = 1; // shadowed by Act II's Garden bed
+    requote(&w, e, &cat);
     try testing.expect(onShelf(&w, e, &cat, carrying, cat.goodIndex("leaf_bed").?));
     try testing.expect(!onShelf(&w, e, &cat, carrying, cat.goodIndex("garden_bed").?));
     try testing.expect(!onShelf(&w, e, &cat, act_two_test, cat.goodIndex("leaf_bed").?));
@@ -605,13 +619,14 @@ test "Act II: tech: finds recipes by technology; a build in progress pins first 
     var buf: [roster.max_goods]Entry = undefined;
     const loom = collect(&w, e, &cat, act_two_test, "tech:loom", &buf);
     try testing.expect(loom.len > 0);
-    for (loom) |ent| try testing.expectEqualStrings("loom_ropewalk", ent.q.rec.tech.?);
+    for (loom) |ent| try testing.expectEqualStrings("loom_ropewalk", ent.rec.tech.?);
 
     // Establish the loom and begin the ropewalk: it is pinned above everything.
     w.get(e, comp.Research).?.state[cat.techIndex("loom_ropewalk").?] = .researched;
     const ropewalk = cat.goodIndex("ropewalk").?;
     const total = ha.sim.hours_to_secs(cat.goods[ropewalk].requires.?.hours, 20);
     w.add(e, comp.Busy{ .doing = .{ .build = ropewalk }, .total = total, .remaining = total, .quality = 1 });
+    requote(&w, e, &cat);
     for ([_]Sort{ .state, .inputs, .time, .name }) |s| {
         for ([_]Direction{ .ascending, .descending }) |d| {
             const list = collect(&w, e, &cat, act_two_test, "", &buf);
@@ -630,6 +645,7 @@ test "sortEntries: STATE groups by state (ready, reach, owned, blocked, locked) 
     // and research-gated ones — the mix a reach-only sort used to interleave.
     w.get(e, comp.Goods).?.count[cat.goodIndex("firepit").?] = 1;
     w.get(e, comp.Goods).?.count[cat.goodIndex("spring_well").?] = 1;
+    requote(&w, e, &cat);
     var buf: [roster.max_goods]Entry = undefined;
     const list = collect(&w, e, &cat, act_two_test, "", &buf);
 

@@ -131,9 +131,10 @@ pub const Line = struct {
     }
 };
 
-/// The caps the sim's bounded per-agent containers rely on (`comp.Goods`, `comp.Research`);
-/// the validator holds the files to them. `max_lines` bounds one side of a verb *after*
-/// every `add` effect on it has inserted its line.
+/// The caps the sim's bounded per-agent containers rely on (`comp.Goods`, `comp.Research`,
+/// `comp.Quotes`); the validator holds the files to them. `max_lines` bounds one side of a verb
+/// *after* every `add` effect on it has inserted its line.
+pub const max_actions = 64;
 pub const max_goods = 128;
 pub const max_lines = 4;
 pub const max_techs = 128;
@@ -513,8 +514,9 @@ pub const Rule = enum {
     bad_number,
     /// A technology sits on the foundation (ring 0) or shares a coordinate with another.
     bad_coord,
-    /// More goods than `max_goods` or technologies than `max_techs`, or more lines on one
-    /// side of a record than `max_lines` once every `add` on it has inserted its line.
+    /// More verbs than `max_actions`, goods than `max_goods` or technologies than `max_techs`,
+    /// or more lines on one side of a record than `max_lines` once every `add` on it has
+    /// inserted its line.
     too_many,
 };
 
@@ -604,6 +606,7 @@ const Validator = struct {
 
     /// The caps the sim's bounded containers rely on.
     fn checkCapacity(self: *Validator) Error!void {
+        if (self.actions.len > max_actions) return self.fail(.actions, .too_many, self.actions[max_actions].id, "actions");
         if (self.goods.len > max_goods) return self.fail(.goods, .too_many, self.goods[max_goods].id, "goods");
         if (self.technologies.len > max_techs) return self.fail(.technologies, .too_many, self.technologies[max_techs].id, "technologies");
         for (self.actions) |a| {
@@ -975,6 +978,18 @@ test "goods keep their shape" {
         \\    .{ .id = "hall", .name = "Hall", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .milestone = .act_one },
         \\}
     , .milestone_twice);
+}
+
+test "a roster over the verb cap is refused" {
+    const many = comptime blk: {
+        @setEvalBranchQuota(100_000);
+        var s: []const u8 = ".{\n    .{ .id = \"fish\", .name = \"Fish\", .requires = .{ .energy = 1.0, .hours = 1.0 } },\n";
+        for (0..max_actions) |i| {
+            s = s ++ std.fmt.comptimePrint("    .{{ .id = \"v{d}\", .name = \"V{d}\", .requires = .{{ .energy = 1.0, .hours = 1.0 }} }},\n", .{ i, i });
+        }
+        break :blk std.fmt.comptimePrint("{s}}}", .{s});
+    };
+    try expectRule(many, ok_goods, .too_many);
 }
 
 test "a lot of an intermediate is its own once-output" {

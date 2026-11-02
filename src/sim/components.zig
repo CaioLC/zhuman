@@ -189,3 +189,74 @@ pub const Outlook = struct {
     food_days: f32 = 0,
     recovery: Recovery = .no_food,
 };
+
+/// What each of the agent's verbs, recipes and generators would answer right now, written by
+/// the `quotes` system (`systems/quotes.zig`) through `actions.quote`, `capital.quote` and
+/// `capital.generator_quote`, so a tile, a BUILD row and a decider read one answer. It holds the
+/// standings and the per-item numbers, not the terms: a verb's effective terms stay the pure read
+/// `actions.verbOf`, because the world holds every component's storage inline for its full
+/// entity capacity, and a copy of the terms per verb would add tens of megabytes to it. Every
+/// slot is indexed by the record's catalog index.
+pub const Quotes = struct {
+    /// A `short` index that names no line: the order is payable.
+    pub const none: u8 = 0xff;
+    /// Why a verb cannot begin right now, or `ready` (`actions.Standing`).
+    pub const VerbStanding = enum { ready, busy, energy, short };
+    /// Why a build cannot begin right now, or `ready`, in precedence order (`capital.Standing`).
+    pub const BuildStanding = enum { ready, tech, needs, unlock, busy, energy, short };
+    /// Where an owned generator's cycle stands (`capital.GeneratorStanding`).
+    pub const GeneratorStanding = enum { charging, off, ready, energy, short };
+
+    /// `short`: index of the first unpayable line in the effective verb's `input` (`none` when payable).
+    pub const Verb = struct {
+        standing: VerbStanding,
+        short: u8 = none,
+        /// The yield multiplier a begin right now would lock.
+        quality: f32,
+
+        pub fn ready(self: Verb) bool {
+            return self.standing == .ready;
+        }
+    };
+
+    /// `short`: index of the first unpayable line in the record's `input` (`none` when payable).
+    pub const Build = struct {
+        standing: BuildStanding,
+        short: u8 = none,
+        /// Units already owned.
+        count: u32,
+        /// How close the build order is to affordable: the smallest held/needed over its
+        /// once-inputs, 1 when it has none.
+        reach: f32,
+
+        pub fn ready(self: Build) bool {
+            return self.standing == .ready;
+        }
+    };
+
+    /// `short`: index of the first unpayable line in the record's `input` (`none` when payable).
+    pub const Generator = struct {
+        standing: GeneratorStanding,
+        short: u8 = none,
+        /// Game-seconds accumulated toward the cycle, and the cycle's length.
+        progress: f32,
+        total: f32,
+
+        pub fn ready(self: Generator) bool {
+            return self.standing == .ready;
+        }
+
+        /// How far through its cycle, in [0, 1].
+        pub fn fraction(self: Generator) f32 {
+            if (self.total <= 0) return 1;
+            return @min(@max(self.progress / self.total, 0), 1);
+        }
+    };
+
+    /// By verb index; null: the agent does not hold the verb.
+    verbs: [roster.max_actions]?Verb = @splat(null),
+    /// By good index; null: not buildable, or the agent has no holdings.
+    builds: [roster.max_goods]?Build = @splat(null),
+    /// By good index; null: not an owned generator.
+    generators: [roster.max_goods]?Generator = @splat(null),
+};

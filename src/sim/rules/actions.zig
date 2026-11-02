@@ -3,8 +3,9 @@
 //! A verb is a record in `data/actions.zon` (`roster.zig`). Whether an agent holds it, and
 //! on what terms, is derived from the goods it owns (`effects.verb`) and, for a verb that names
 //! a `tech`, from the agent's research (`verbOf`); nothing about a verb is stored on the agent.
-//! `quote` is the one gate calculation — the tile, `begin`, and a future
-//! decider read the same answer — and labor resolves in two halves because it takes time:
+//! `quote` is the one gate calculation: the `quotes` system writes its answer onto `comp.Quotes`
+//! for the tile and a future decider, and `begin` asks it again at apply time. Labor resolves in
+//! two halves because it takes time:
 //! `begin` gates, pays and starts the work; `finish` draws the yield at the quality locked at
 //! begin and deposits it, dispatched by `systems.resolve_busy` when the timer runs out.
 //!
@@ -42,8 +43,8 @@ pub fn yield_factor(cond: *const comp.Condition, cfg: res_mod.Config) f32 {
     return cfg.yield_of(cond.band);
 }
 
-/// Why a verb cannot begin right now, or `ready`.
-pub const Standing = enum { ready, busy, energy, short };
+/// Why a verb cannot begin right now, or `ready`: the standing `comp.Quotes` carries per verb.
+pub const Standing = comp.Quotes.VerbStanding;
 
 /// What one click would do: the verb's effective terms for this agent, the quality it would
 /// lock, and whether it can begin now. One calculation for the tile, the gate and a decider.

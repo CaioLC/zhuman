@@ -4,8 +4,9 @@
 //! `comp.Goods`. Building, buying, selling and breaking all move that count, and every change
 //! of ownership *settles* the body and larder (`effects.apply`). What a good does to a **verb**
 //! is never stored —
-//! `effects.verb` derives it. `quote` is the one gate calculation: the BUILD row, `begin`, and
-//! a future decider read the same answer.
+//! `effects.verb` derives it. `quote` is the one gate calculation: the `quotes` system writes its
+//! answer onto `comp.Quotes` for the BUILD row and a future decider, and `begin` asks it again at
+//! apply time.
 //!
 //! Two gates beside the price. `needs` — the verb or tool a modifier works on must be held
 //! (the roster's only tech-tree edge: you need the hatchet before the tools that sharpen it).
@@ -39,10 +40,10 @@ const Reason = events.Refused.Reason;
 
 // --- the quote ---------------------------------------------------------------------------
 
-/// Why a build cannot begin right now, or `ready`. The order is the precedence: a technology
-/// not yet researched says "tech" before anything else, then a missing prerequisite "needs",
-/// standing conditions before the body.
-pub const Standing = enum { ready, tech, needs, unlock, busy, energy, short };
+/// Why a build cannot begin right now, or `ready`: the standing `comp.Quotes` carries per
+/// recipe. The order is the precedence: a technology not yet researched says "tech" before
+/// anything else, then a missing prerequisite "needs", standing conditions before the body.
+pub const Standing = comp.Quotes.BuildStanding;
 
 pub const Quote = struct {
     gi: u16,
@@ -304,7 +305,8 @@ pub fn lowerName(name: []const u8, buf: *[48]u8) []const u8 {
 
 // --- collectable generators ---------------------------------------------------------------
 
-pub const GeneratorStanding = enum { charging, off, ready, energy, short };
+/// Where an owned generator's cycle stands: the standing `comp.Quotes` carries per generator.
+pub const GeneratorStanding = comp.Quotes.GeneratorStanding;
 
 /// One owned generator's authoritative state and collection gate.
 pub const GeneratorQuote = struct {

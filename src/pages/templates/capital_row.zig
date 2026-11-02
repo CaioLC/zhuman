@@ -15,7 +15,6 @@ const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.sim.comp;
-const capital = ha.sim.rules.capital;
 const ledger = ha.sim.rules.ledger;
 const roster = ha.sim.data.roster;
 const uic = ha.ui_client;
@@ -377,21 +376,22 @@ pub fn recipeType(rec: *const roster.Good) []const u8 {
     return "good";
 }
 
-/// One row over a recipe's quote. `kind` decides the colors and what the last two columns
-/// say; the caller has already decided the row belongs on screen at all (see `build_list`).
-/// The row spans `parent` (the scroll view's content column) and lays out by `set`.
+/// One row over a recipe's record and its standing in the agent's `comp.Quotes`. `kind`
+/// decides the colors and what the last two columns say; the caller has already decided the
+/// row belongs on screen at all (see `build_list`). The row spans `parent` (the scroll view's
+/// content column) and lays out by `set`.
 pub fn capital_row(
     parent: El,
     world: *World,
     e: Entity,
     set: *uic.TrackSet,
-    q: capital.Quote,
+    rec: *const roster.Good,
+    q: comp.Quotes.Build,
     kind: Kind,
 ) !Row {
     const ctx = parent.ctx;
     const th = ctx.res.view.theme;
     const cat = &ctx.res.game.catalog;
-    const rec = q.rec;
     const act = ha.sim.data.migration.actOf(world, e);
 
     // Keyed by the recipe's id: the row's identity across re-sorts, filters and a reloaded

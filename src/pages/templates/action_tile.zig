@@ -190,7 +190,8 @@ pub fn tile(
     return .{ .el = box, .clicked = !running and can and q.clicked };
 }
 
-/// A tile for one verb of the roster: formats price/band from the agent's quote and reports
+/// A tile for one verb of the roster: formats price/band from the verb's terms
+/// (`actions.verbOf`) and its standing and quality from the agent's `comp.Quotes`, and reports
 /// the affordability-gated click. Returns the tile and its activation (null if the agent
 /// doesn't hold the verb); the caller places it and calls the simulation — a template never
 /// takes a domain operation as a parameter.
@@ -205,7 +206,9 @@ pub fn action_tile(
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     const act = ha.sim.data.migration.actOf(world, e);
-    const q = ha.sim.rules.actions.quote(world, e, cat, ctx.res.game.config, ai) orelse return null;
+    const quotes = world.get(e, comp.Quotes) orelse return null;
+    const q = quotes.verbs[ai] orelse return null;
+    const verb = ha.sim.rules.actions.verbOf(world, e, cat, ai) orelse return null;
     const rec = cat.actions[ai];
     // One body, one act: any work in progress disables every tile; the one being
     // performed shows the underbar instead of dimming.
@@ -224,15 +227,15 @@ pub fn action_tile(
     var cw = std.Io.Writer.fixed(&cbuf);
     {
         var ebuf: [8]u8 = undefined;
-        cw.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, q.verb.requires.energy)}) catch {};
+        cw.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, verb.requires.energy)}) catch {};
     }
-    for (q.verb.input.slice()) |l| {
+    for (verb.input.slice()) |l| {
         var nbuf: [8]u8 = undefined;
         cw.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, l.n), info.letterOf(act, l.item) }) catch {};
     }
     const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
-    const duration_txt = std.mem.print(&dbuf, "{d:.0}h", .{q.verb.requires.hours}) catch "?";
+    const duration_txt = std.mem.print(&dbuf, "{d:.0}h", .{verb.requires.hours}) catch "?";
 
     // The prototype action tile always keeps the same two-line anatomy: name, then metrics.
     // Running state is already communicated by the ActivityStrip and the tile's progress
@@ -245,7 +248,7 @@ pub fn action_tile(
     var ybuf: [16]u8 = undefined;
     var kind: ha.sim.kernel.dist.Kind = .fixed;
     var yield_txt: []const u8 = "+0";
-    if (info.dominant(act, cat, q.verb.output.slice())) |dom| {
+    if (info.dominant(act, cat, verb.output.slice())) |dom| {
         kind = dom.kind;
         const lo = @round(dom.band.p10 * q.quality);
         const hi = @round(dom.band.p90 * q.quality);

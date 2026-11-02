@@ -34,6 +34,7 @@ pub const systems = struct {
     pub const tick = @import("./systems/tick.zig");
     pub const condition = @import("./systems/condition.zig");
     pub const outlook = @import("./systems/outlook.zig");
+    pub const quotes = @import("./systems/quotes.zig");
     pub const labor = @import("./systems/labor.zig");
     pub const build = @import("./systems/build.zig");
     pub const generators = @import("./systems/generators.zig");

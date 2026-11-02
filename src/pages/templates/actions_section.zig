@@ -5,7 +5,8 @@
 //!
 //! **No sorting.** Verbs read in authored order. A blank query lists every held verb, the ones
 //! that cannot begin now dimmed; the shared `query` parser answers `in:`/`out:` from a verb's
-//! lines, `state:` from its standing (ready, busy, short) and free text from its name.
+//! lines, `state:` from its standing (ready, busy, short) and free text from its name. The
+//! standing is the agent's `comp.Quotes`; the lines are the verb's terms (`actions.verbOf`).
 
 const std = @import("std");
 const ha = @import("ha");
@@ -111,17 +112,20 @@ const ActionRow = struct {
     }
 };
 
-/// Every held verb of the shelf in authored order. Pure over world + catalog.
-pub fn held(world: *World, e: Entity, cat: *const roster.Catalog, cfg: ha.sim.Config, shelf: Shelf, buf: []Entry) []Entry {
+/// Every held verb of the shelf in authored order: the verbs the agent's `comp.Quotes` answers
+/// for. Pure over world + catalog.
+pub fn held(world: *World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, buf: []Entry) []Entry {
+    const quotes = world.get(e, comp.Quotes) orelse return buf[0..0];
     var n: usize = 0;
     for (cat.actions, 0..) |*rec, i| {
         if (!shelf.holds(rec)) continue;
         if (n == buf.len) break;
         const ai: u16 = @intCast(i);
-        const q = actions.quote(world, e, cat, cfg, ai) orelse continue;
+        const q = quotes.verbs[ai] orelse continue;
+        const verb = actions.verbOf(world, e, cat, ai) orelse continue;
         buf[n] = .{ .ai = ai, .rec = rec, .standing = q.standing };
-        buf[n].in_len = join(&buf[n].in_buf, q.verb.input.slice());
-        buf[n].out_len = join(&buf[n].out_buf, q.verb.output.slice());
+        buf[n].in_len = join(&buf[n].in_buf, verb.input.slice());
+        buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
         n += 1;
     }
     return buf[0..n];
@@ -159,7 +163,7 @@ pub fn actions_section(parent: El, world: *World, e: Entity, id: []const u8, she
 
     // The heading counts the verbs the actor holds — the same set the summary counts against.
     var buf: [max_verbs]Entry = undefined;
-    const all = held(world, e, cat, ctx.res.game.config, shelf, &buf);
+    const all = held(world, e, cat, shelf, &buf);
     var count_buf: [16]u8 = undefined;
     const count = std.mem.print(&count_buf, "{d} VERBS", .{all.len}) catch "VERBS";
     _ = try browser.browser_heading(section, "heading", "ACTIONS", shelf.subtitle, count);
@@ -211,9 +215,16 @@ fn settler(w: *World, cat: *const roster.Catalog) Entity {
         comp.Goods{},
         comp.Granted{},
         comp.Condition{},
+        comp.Quotes{},
     });
     _ = ha.sim.data.migration.migrate_to_act_two(w, e, cat);
+    requote(w, e, cat);
     return e;
+}
+
+/// Write the agent's quotes, as the `quotes` system does each frame.
+fn requote(w: *World, e: Entity, cat: *const roster.Catalog) void {
+    ha.sim.systems.quotes.fill(w, e, cat, .{}, w.get(e, comp.Quotes).?);
 }
 
 /// Research every technology and own the three goods that grant a verb.
@@ -222,6 +233,7 @@ fn establishAll(w: *World, e: Entity, cat: *const roster.Catalog) void {
     for (research.state[0..cat.technologies.len]) |*s| s.* = .researched;
     const goods = w.get(e, comp.Goods).?;
     for ([_][]const u8{ "firepit", "spring_well", "forge" }) |id| goods.count[cat.goodIndex(id).?] = 1;
+    requote(w, e, cat);
 }
 
 test "the curtain opens only the verbs its researched tiles establish" {
@@ -230,7 +242,7 @@ test "the curtain opens only the verbs its researched tiles establish" {
     defer cat.deinit();
     const e = settler(&w, &cat);
     var buf: [max_verbs]Entry = undefined;
-    const list = held(&w, e, &cat, .{}, act_two_test, &buf);
+    const list = held(&w, e, &cat, act_two_test, &buf);
     try testing.expect(list.len > 0 and list.len < authoredTotal(&cat, act_two_test));
     for (list) |ent| {
         const t = ent.rec.tech orelse return error.UntaggedVerb;
@@ -245,7 +257,7 @@ test "an established settlement lists every verb of the act in authored order" {
     const e = settler(&w, &cat);
     establishAll(&w, e, &cat);
     var buf: [max_verbs]Entry = undefined;
-    const list = held(&w, e, &cat, .{}, act_two_test, &buf);
+    const list = held(&w, e, &cat, act_two_test, &buf);
     try testing.expectEqual(authoredTotal(&cat, act_two_test), list.len);
     for (list[1..], 0..) |ent, i| try testing.expect(ent.ai > list[i].ai);
 }
@@ -257,7 +269,7 @@ test "in: and out: match the verb's lines; state: its standing" {
     const e = settler(&w, &cat);
     establishAll(&w, e, &cat);
     var buf: [max_verbs]Entry = undefined;
-    const n = held(&w, e, &cat, .{}, act_two_test, &buf).len;
+    const n = held(&w, e, &cat, act_two_test, &buf).len;
 
     var work: [max_verbs]Entry = undefined;
     @memcpy(work[0..n], buf[0..n]);

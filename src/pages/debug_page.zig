@@ -395,7 +395,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
     } else if (eq(name, "capital_row")) {
         if (player.get()) |a| {
             const gi = ctx.res.game.catalog.goodIndex("sandals").?;
-            if (ha.sim.rules.capital.quote(world, a[0], &ctx.res.game.catalog, gi)) |q| {
+            if (if (world.get(a[0], comp.Quotes)) |quotes| quotes.builds[gi] else null) |q| {
                 // Act I's lanes; the demo owns the row's tracks, as the BUILD list does, and is
                 // the framed table's width (the lane less the scroll gutter), which the row spans.
                 const set = try t.build_table_tracks(ctx, .{});
@@ -403,7 +403,7 @@ fn render_one(stage: El, world: *World, name: []const u8, audit_trade: *uic.UiSt
                     .w = .{ .fixed = t.build_lane_width - t.build_scroll_gutter }, .h = .fit_children,
                     .flow = .{ .dir = .column }, .tracks = set,
                 }, .{});
-                _ = try t.capital_row(demo, world, a[0], set, q, .ready);
+                _ = try t.capital_row(demo, world, a[0], set, &ctx.res.game.catalog.goods[gi], q, .ready);
             }
         } else {
             try stage.label("na", "(needs a live player)", .{});
