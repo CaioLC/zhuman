@@ -1,6 +1,6 @@
 # The simulation as an ECS
 
-**A draft specification, being built.** This is the shape the simulation takes once every game
+**The specification, as built.** This is the shape the simulation has now that every game
 rule runs from the schedule and nothing outside `src/sim/` holds a mutable world: the engine as
 a package, the events the deciders write, the states the schedule routes on, and the components a
 system derives for everyone else to read. It describes the intended shape the way
@@ -11,10 +11,10 @@ Before this work the tick systems were systems, but the rules they shared were i
 paint tier: a template holding `*World` called `actions.begin` the frame it saw a click, the Act
 II page paid the Exchange and the research board itself, and a trade settled its two halves in
 two tiers. The engine was bound to this game's `Resources`, which dragged the UI host and SDL into
-every sim test. Steps 1 to 4 below have landed: the engine is a package, the simulation has its
-own resources and folders, and every rule runs from a handler or tick system through events.
-What nothing yet models is the run's states, so the curtain, the title and the game-over screen
-are facts the main loop and the pages each re-derive, and the UI build still holds `*World`.
+every sim test. All seven steps below have landed: the engine is a package, the simulation has
+its own resources and folders, every rule runs from a handler or tick system through events, the
+run's states route the schedule and the pages, three components are derived for the UI to read,
+and the build holds `*const World`.
 
 ## The model
 
@@ -26,7 +26,8 @@ Three words, each with one meaning:
 - A **rule** is a function a system calls: a gate, a payment, a deposit, an interpretation. Rules
   take `*World` from the system that calls them and are never reached from the UI.
 - A **read** is a pure function over values, or a component a system derived. The UI reads
-  components through `*const World` and calls kernels; it does not call rules.
+  components through `*const World` and calls kernels and the read rules, the pure functions over
+  `*const World`; it calls no rule that writes.
 
 The player and an AI decider are the same thing to the simulation: a writer of intent events. The
 UI build reads the world, writes events, and mutates nothing. A rule that today returns a result
@@ -231,8 +232,9 @@ book's type and valuation until ACT2-01 dissolves it into components. The kernel
 
 ## The host and the UI
 
-`main.zig` computes `time.dt`, polls the roster watch, and calls `sim.schedule.tick(&world,
-&res.game)` once. The housed check, the route check and the Act II gate are gone from it, and
+`main.zig` computes `time.dt`, polls the roster watch, calls `sim.schedule.tick(&world,
+&res.game)` once, then `pages.prepare(&ui, &world)`, the fixture harness's world work between
+the tick and the build. The housed check, the route check and the Act II gate are gone from it, and
 so is the spawn at launch: the world is empty until `NewRun`. A run left behind the title by
 Quit to menu is paused, so its `update` set does not run; a gate on the route is not needed.
 
@@ -253,14 +255,15 @@ becomes an event:
 | `market_view.zig` settles the neighbour, the page settles the player | `NeighbourDeal` |
 | `gameover.zig`, `title.zig` call `app.start_over` | `NewRun`; the title also sets the route and unpauses, host state it owns |
 | `act_one_end.zig`'s last beat calls `app.start_over` | the curtain closes (`CurtainState`), and the state machine has already moved on |
-| `debug_page.zig` pokes components mid-build | `DebugPoke` |
+| `debug_page.zig` pokes components mid-build | `DebugPoke { agent, what }`, applied by `systems/debug.zig` in every act's `handle` set before the derived writers |
 
 `build_ui` routes on the state: the title while `route` or the state says so, the curtain while
 `CurtainState` is open, the game-over screen in `game_over` or when no player remains, the Act I
 page in `act_one`, the Act II page in `act_two` and `act_three`. A page that derives the act from
 `Migrated` or `Sim.exchange` reads the state instead.
 
-Fixtures set the world up before the build with the mutable handle they already hold.
+Fixtures set the world up before the build through `pages.prepare`, which the host calls between
+the tick and the build so the seed is exactly what renders.
 
 ## Tests
 
@@ -281,7 +284,8 @@ Fixtures set the world up before the build with the mutable handle they already 
 `src/README.md` gains the three words and the schedule, loses the "not an ECS system" footnotes
 and the module map's flat list for one grouped by folder. `src/ecs/README.md` is the engine's.
 `CLAUDE.md` adds `test-sim`, the `ecs` package to *Layers*, and the rule that the UI holds
-`*const World`. `tools/boundary_check.sh` extends tier 3 to `src/ecs/`. The
+`*const World`. `tools/boundary_check.sh` extends tier 3 to `src/ecs/` and adds tier 5: a `pub fn`
+in a page or template that takes a mutable world fails. The
 `project_commands_deferred` memory is superseded: events are the deferral, and `Commands` for
 structural changes stays deferred on the same trigger.
 
