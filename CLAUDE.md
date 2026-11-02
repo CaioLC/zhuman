@@ -10,7 +10,7 @@ zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build test-sim # the simulation alone: src/ecs + the sim files, no UI host, no SDL
 zig build         # build only
-sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, and neither engine (src/ui, src/ecs) imports anything outside its own package
+sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, no page or template taking a mutable world, and neither engine (src/ui, src/ecs) imports anything outside its own package
 (cd src/ui && zig build test)    # the UI engine package on its own
 (cd src/ecs && zig build test)   # the ECS engine package on its own
 ```
@@ -68,7 +68,7 @@ path dependency and the code imports it as `@import("ui")`, so moving it to its 
 is swapping that path for a url. Nothing in it may name the game,
 the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this program;
 `src/pages/` is the only tier that knows what a vigor bar is. The pages write intents through
-`res.game.events` rather than calling a rule, and read the outcome in the world next frame.
+`res.game.events` rather than calling a rule that writes, and read the outcome in the world next frame. The UI build holds `*const World`: a page or template reads components and writes intents, and only the fixture harness, before the build, holds a mutable world (`pages.prepare`).
 
 ```
 src/sim/                     the simulation: state.zig and schedule.zig (the run's states and the systems each runs, in order), systems/, rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)

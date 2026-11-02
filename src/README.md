@@ -70,10 +70,10 @@ values and emits nothing new, and a test says so.
   capacity and a copy of the terms per verb would add tens of megabytes to it.
 
 The writers close each act's `handle` and `update` sets, just before `log`, so a paused intent
-or a build finished this tick shows the next frame (the schedule, below). The fixture seed and
-the debug page bring all three current
-after they set a world by hand (`fixture.derive`); a seeded band is set, not reached, so it is
-written without a `BandCrossed`.
+or a build finished this tick shows the next frame (the schedule, below). The fixture seed,
+which runs after the tick, brings all three current after it sets a world by hand
+(`fixture.derive`); a seeded band is set, not reached, so it is written without a
+`BandCrossed`. The debug page's pokes are intents, applied before the writers run.
 
 `eating.zig` is the slider's side of the BODY: `rate(value) = 0.5 × 4^(value/100)` over a
 `0..100` slider, its inverse `valueFromRate`, the policy word ladder (meager … lavish), and the
@@ -119,9 +119,11 @@ Each frame:
 3. **Update** — host `real_dt` advances roster watching and the tween registry. `Playback`
    derives simulation `time.dt` at pause/1×/2×/3×. Then one call,
    `sim.schedule.tick(&world, &res.game)`, runs the simulation (see *The states and the
-   schedule*).
-4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
-   returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
+   schedule*). Then `pages.prepare(&ui, &world)`: with `HA_FIXTURE` set, the fixture harness
+   seeds the world here, after the tick and before the build, so the seed is what renders;
+   otherwise it does nothing.
+4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui(ui, &world)` builds fresh
+   trees over a `*const World` and returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
    The command registry and the host **semantic snapshot** (`res.semantics`) both
    `beginBuild` here, so interactive controls publish their prior-build command owners and
    their owned accessibility metadata (role/label/value/state/relationships/live-region) in
@@ -153,6 +155,15 @@ and the system params over that `World` and `sim.Resources`. `Query(.{…})`, `S
 `ConstMaybeSingle` are over `*const World` and yield `*const T`. `With`, `Without`, `Maybe` and
 `getMany` are the engine's; `run(world, res, system)` takes `*World` and `*sim.Resources`, so
 the host calls `ecs.run(&world, &res.game, system)`.
+
+**System, rule, read.** A **system** is a function the schedule calls with system params, and
+the only code that holds `*World`. A **rule** is a function a system calls (a gate, a payment, a
+deposit, an interpretation): it takes `*World` for a write and `*const World` for a read. A
+**read** is a pure function over values, or a component a system derived; that is what the UI
+holds. The UI build takes `*const World`, reads components through the `Const` queries and the
+read rules, and writes intents; a template that writes a component does not compile, and
+`tools/boundary_check.sh` fails a page or template whose `pub fn` takes a mutable world. The one
+exception is the fixture harness, which seeds the world before the build (`pages.prepare`).
 
 **Resources.** `sim/res.zig` holds `sim.Resources { sim, config, time, catalog, events }`:
 exactly what a system may reach. `sim: Sim` is the run (the clock, the log, the prng behind `random()`, the
@@ -294,7 +305,9 @@ slider does not snap back, while nothing that spends or detects time runs. `log`
 an act's sets, so a fact a handler writes while the run is paused becomes its line in the same
 tick instead of expiring unread; its cursor makes the second run of a tick read nothing twice.
 The derived components' writers (`condition`, `outlook`, `quotes`) run just before `log` in
-both of an act's sets, for the same reason. Each set runs in the order it declares, and
+both of an act's sets, for the same reason. `debug.poke`, the template audit harness's door,
+runs in every act's `handle` set after the handlers and `new_run` and before the writers, so a
+`DebugPoke` shows in the derived components the tick it applies. Each set runs in the order it declares, and
 `schedule.zig`'s tests hold the rules: `log` last in every `update` set and in every act's
 `handle` set, `outlook` and `quotes` the two before it, `condition` the one before them (after `metabolize`),
 `new_run` in every `handle` set, no handler in an `update` set.
@@ -603,7 +616,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
 | `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Band` (the `comp.Condition` enum) and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
 | `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
-| `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event |
+| `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event, `DebugPoke` (the template audit harness's poke of one component) among them |
 | `state.zig` | `GameState` and `States`, the engine's state resource over it |
 | `schedule.zig` | `schedule`, the systems per state in the order they run, and `tick`, the host's one call per frame |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
@@ -629,6 +642,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `passerby.zig` | the passerby's update system |
 | `run.zig` | the run's lifecycle: `spawn_player`, `new_run`, `begin_run`, `detect_death`, and the opening line |
 | `curtain.zig` | the act boundaries: `detect_shelter`, `cross_curtain`, `detect_exchange` |
+| `debug.zig` | the `DebugPoke` handler, `poke`: sets one component of an agent for the debug page; never refused, and a missing component changes nothing |
 | `log.zig` | the log system: every fact into its `Log` line |
 
 `sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule that writes takes `*World` from the system that calls it. A rule that only reads (`capital.quote`, `capital.ownsMilestone`, `actions.holds`, `ledger.balance`, `migration.actOf`, …) takes `*const World`: a pure function over the world is a read, so the UI build may call it as well, and the compiler is what tells the two apart, since `get` through a `*const World` yields `?*const T`.
@@ -664,7 +678,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 | File | Holds |
 |---|---|
-| `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`build_ui`, which routes on the state; `play_game`; `gameover`; `act_one_end`, the curtain over a world already in Act II, opened on `ActEnded`; the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
+| `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`prepare`, the fixture harness's world work between the tick and the build; `build_ui`, which routes on the state over a `*const World`; `play_game`; `gameover`; `act_one_end`, the curtain over a world already in Act II, opened on `ActEnded`; the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `query.zig` | the catalog query parser |
 | `hex_pixel.zig` | the hex pixel transform the research board paints with: axial → pixel, the six vertex offsets, pixel → hex, and the point-in-hex test |
