@@ -63,7 +63,7 @@ pub const Quote = struct {
 
 /// Whether verb `ai`'s technology is researched for this agent. A verb without one is not
 /// opened by research.
-fn researched(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
+fn researched(w: *const World, e: Entity, cat: *const Catalog, ai: u16) bool {
     const id = cat.actions[ai].tech orelse return false;
     const ti = cat.techIndex(id) orelse return false;
     const research = w.get(e, comp.Research) orelse return false;
@@ -73,7 +73,7 @@ fn researched(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
 /// Verb `ai`'s effective terms for agent `e`, or null when the agent does not hold it: innate,
 /// granted by an applying good, or opened by its researched technology. Owned goods modify it
 /// the same way in every case.
-pub fn verbOf(w: *World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb {
+pub fn verbOf(w: *const World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb {
     const goods = w.get(e, comp.Goods) orelse return null;
     if (effects.verb(cat, goods, ai)) |v| return v;
     if (!researched(w, e, cat, ai)) return null;
@@ -81,13 +81,13 @@ pub fn verbOf(w: *World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb 
 }
 
 /// Whether agent `e` holds verb `ai` (see `verbOf`).
-pub fn holds(w: *World, e: Entity, cat: *const Catalog, ai: u16) bool {
+pub fn holds(w: *const World, e: Entity, cat: *const Catalog, ai: u16) bool {
     return verbOf(w, e, cat, ai) != null;
 }
 
 /// The quote for verb `ai`, or null when the agent does not hold it or has no body (no
 /// `Vigor` or no `Condition`).
-pub fn quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?Quote {
+pub fn quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?Quote {
     const v = verbOf(w, e, cat, ai) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
     const cond = w.get(e, comp.Condition) orelse return null;

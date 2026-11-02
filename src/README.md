@@ -631,7 +631,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `curtain.zig` | the act boundaries: `detect_shelter`, `cross_curtain`, `detect_exchange` |
 | `log.zig` | the log system: every fact into its `Log` line |
 
-`sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule takes `*World` from its caller, a system or the UI's handler for a press.
+`sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule that writes takes `*World` from the system that calls it. A rule that only reads (`capital.quote`, `capital.ownsMilestone`, `actions.holds`, `ledger.balance`, `migration.actOf`, …) takes `*const World`: a pure function over the world is a read, so the UI build may call it as well, and the compiler is what tells the two apart, since `get` through a `*const World` yields `?*const T`.
 
 | File | Holds |
 |---|---|

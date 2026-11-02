@@ -44,7 +44,7 @@ pub fn ringFour(cat: *const roster.Catalog, board: *const comp.Research) ?[]cons
 }
 
 /// How many of the price's inputs the agent holds too little of.
-pub fn shortKinds(w: *World, e: ecs.Entity) u32 {
+pub fn shortKinds(w: *const World, e: ecs.Entity) u32 {
     var n: u32 = 0;
     for (cost) |c| n += @intFromBool(ledger.balance(w, e, c[0]) < c[1]);
     return n;

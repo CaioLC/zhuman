@@ -33,7 +33,7 @@ pub fn Stock(comptime r: Resource) ?type {
 }
 
 /// An agent's balance of `r`; zero when it holds no stock of it.
-pub fn balance(w: *World, e: Entity, r: Resource) f32 {
+pub fn balance(w: *const World, e: Entity, r: Resource) f32 {
     switch (r) {
         inline else => |rr| {
             if (comptime Stock(rr)) |T| {
@@ -74,7 +74,7 @@ pub fn item(cat: *const Catalog, id: []const u8) ?Item {
 }
 
 /// How much of a line's item the agent holds.
-pub fn held(w: *World, e: Entity, cat: *const Catalog, l: Line) f32 {
+pub fn held(w: *const World, e: Entity, cat: *const Catalog, l: Line) f32 {
     switch (item(cat, l.item) orelse return 0) {
         .resource => |r| return balance(w, e, r),
         .good => |gi| {
@@ -85,7 +85,7 @@ pub fn held(w: *World, e: Entity, cat: *const Catalog, l: Line) f32 {
 }
 
 /// The first line the agent cannot pay at `scale`, or null when every line is affordable.
-pub fn short(w: *World, e: Entity, cat: *const Catalog, lines: []const Line, scale: f32) ?Line {
+pub fn short(w: *const World, e: Entity, cat: *const Catalog, lines: []const Line, scale: f32) ?Line {
     for (lines) |l| if (held(w, e, cat, l) < l.n * scale) return l;
     return null;
 }

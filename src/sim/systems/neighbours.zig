@@ -33,7 +33,7 @@ pub const reserve = blk: {
 };
 
 /// How much of item `i` (`nb.items`) the agent holds.
-pub fn heldItem(w: *World, e: Entity, cat: *const @import("../data/roster.zig").Catalog, i: usize) f32 {
+pub fn heldItem(w: *const World, e: Entity, cat: *const @import("../data/roster.zig").Catalog, i: usize) f32 {
     const item = ledger.item(cat, nb.items[i]) orelse return 0;
     return switch (item) {
         .resource => |r| ledger.balance(w, e, r),

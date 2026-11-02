@@ -63,7 +63,7 @@ pub const Quote = struct {
 };
 
 /// The quote for good `gi`, or null when it is not buildable or the agent has no holdings.
-pub fn quote(w: *World, e: Entity, cat: *const Catalog, gi: u16) ?Quote {
+pub fn quote(w: *const World, e: Entity, cat: *const Catalog, gi: u16) ?Quote {
     const rec = &cat.goods[gi];
     if (!rec.buildable) return null;
     const goods = w.get(e, comp.Goods) orelse return null;
@@ -88,7 +88,7 @@ pub fn quote(w: *World, e: Entity, cat: *const Catalog, gi: u16) ?Quote {
     return q;
 }
 
-fn reachOf(w: *World, e: Entity, cat: *const Catalog, order: []const roster.Line) f32 {
+fn reachOf(w: *const World, e: Entity, cat: *const Catalog, order: []const roster.Line) f32 {
     var r: f32 = 1;
     for (order) |l| {
         if (l.n <= 0) continue;
@@ -99,7 +99,7 @@ fn reachOf(w: *World, e: Entity, cat: *const Catalog, order: []const roster.Line
 
 /// Whether the technology a recipe waits on is researched for this agent. No `tech` means
 /// yes; an agent without a board has researched nothing.
-pub fn techMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
+pub fn techMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
     const id = cat.goods[gi].tech orelse return true;
     const ti = cat.techIndex(id) orelse return false;
     const research = w.get(e, comp.Research) orelse return false;
@@ -107,7 +107,7 @@ pub fn techMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
 }
 
 /// Whether every `needs` entry is held: a verb as `actions.holds` answers it, a tool by count.
-pub fn needsMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
+pub fn needsMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
     const goods = w.get(e, comp.Goods) orelse return false;
     for (cat.goods[gi].needs) |n| {
         if (cat.actionIndex(n)) |ai| {
@@ -120,7 +120,7 @@ pub fn needsMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
 }
 
 /// Whether the builder meets the good's standing conditions. No `unlock` means none.
-pub fn unlockMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
+pub fn unlockMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
     const u = cat.goods[gi].unlock orelse return true;
     const vigor = w.get(e, comp.Vigor) orelse return false;
     if (vigor.v < u.vigor_abs) return false; // absolute current vigor, not a fraction
@@ -129,7 +129,7 @@ pub fn unlockMet(w: *World, e: Entity, cat: *const Catalog, gi: u16) bool {
 }
 
 /// How many buildable good **kinds** the agent owns — four pairs of sandals are one.
-pub fn goodsOwned(w: *World, e: Entity, cat: *const Catalog) u32 {
+pub fn goodsOwned(w: *const World, e: Entity, cat: *const Catalog) u32 {
     const goods = w.get(e, comp.Goods) orelse return 0;
     var n: u32 = 0;
     for (cat.goods, 0..) |g, gi| {
@@ -138,14 +138,14 @@ pub fn goodsOwned(w: *World, e: Entity, cat: *const Catalog) u32 {
     return n;
 }
 
-pub fn owns(w: *World, e: Entity, cat: *const Catalog, id: []const u8) bool {
+pub fn owns(w: *const World, e: Entity, cat: *const Catalog, id: []const u8) bool {
     const goods = w.get(e, comp.Goods) orelse return false;
     const gi = cat.goodIndex(id) orelse return false;
     return goods.count[gi] > 0;
 }
 
 /// Whether the agent owns the good that ends `m` — what the curtain routes on.
-pub fn ownsMilestone(w: *World, e: Entity, cat: *const Catalog, m: roster.Milestone) bool {
+pub fn ownsMilestone(w: *const World, e: Entity, cat: *const Catalog, m: roster.Milestone) bool {
     const goods = w.get(e, comp.Goods) orelse return false;
     for (cat.goods, 0..) |g, gi| {
         if (g.milestone == m and goods.count[gi] > 0) return true;
@@ -154,7 +154,7 @@ pub fn ownsMilestone(w: *World, e: Entity, cat: *const Catalog, m: roster.Milest
 }
 
 /// How many humans the agent's goods house.
-pub fn capacity(w: *World, e: Entity, cat: *const Catalog) u32 {
+pub fn capacity(w: *const World, e: Entity, cat: *const Catalog) u32 {
     const goods = w.get(e, comp.Goods) orelse return 0;
     var n: u32 = 0;
     for (cat.goods, 0..) |g, gi| {
@@ -336,7 +336,7 @@ fn ensureGenerators(w: *World, e: Entity) *comp.Generators {
 }
 
 /// Quote collection without consulting `Busy`: generators mature beside body-occupying work.
-pub fn generator_quote(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, gi: u16) ?GeneratorQuote {
+pub fn generator_quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, gi: u16) ?GeneratorQuote {
     const rec = &cat.goods[gi];
     const spec = rec.generator orelse return null;
     const goods = w.get(e, comp.Goods) orelse return null;

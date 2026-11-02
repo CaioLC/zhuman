@@ -35,7 +35,7 @@ pub fn quotes(
 
 /// Write every slot of agent `e`'s quotes: the verbs the catalog has, then its goods; every slot
 /// past the catalog's records is null.
-pub fn fill(w: *World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, out: *Quotes) void {
+pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, out: *Quotes) void {
     out.* = .{};
     for (0..cat.actions.len) |i| {
         const ai: u16 = @intCast(i);

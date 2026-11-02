@@ -48,12 +48,12 @@ const act_two_stocks = .{ comp.InventoryWater, comp.InventoryFuel, comp.Inventor
 pub const curtain_coin: f32 = 20;
 
 /// Whether `e` has already crossed the curtain — the presence of the `Migrated` stamp.
-pub fn is_migrated(w: *World, e: Entity) bool {
+pub fn is_migrated(w: *const World, e: Entity) bool {
     return w.has(e, comp.Migrated);
 }
 
 /// The act whose names should be shown for `e`: the migration stamp lifts the Biomass cover.
-pub fn actOf(w: *World, e: Entity) u8 {
+pub fn actOf(w: *const World, e: Entity) u8 {
     return if (w.has(e, comp.Migrated)) 2 else 1;
 }
 
@@ -115,7 +115,7 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const roster.Catalog) bool
 /// therefore that initialization has already been accounted exactly once. Exposed as the single
 /// documented seam for the population/market init so the "exactly once" guarantee is testable at
 /// the version boundary before the Act II systems exist.
-pub fn population_seeded(w: *World, e: Entity) bool {
+pub fn population_seeded(w: *const World, e: Entity) bool {
     return is_migrated(w, e);
 }
 
