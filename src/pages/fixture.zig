@@ -1151,6 +1151,8 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
     ) catch {};
 
     if (spec.screen != .title) ctx.res.route = .game;
+    // The slots are empty whatever the saves folder holds, so a fixture renders alike everywhere.
+    if (first) ctx.res.saves.slots = @splat(.{});
     if (first) ctx.res.game.sim.exchange = spec.exchange;
     if (first) if (spec.population) |people| {
         ctx.res.game.sim.population = people;

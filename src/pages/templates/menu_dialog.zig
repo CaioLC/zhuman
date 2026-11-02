@@ -4,8 +4,9 @@
 //! Continue, × and Escape on the menu screen resume it. Escape on a sub-screen steps back to
 //! the menu. Quit is the one destructive choice, so it is the one that confirms.
 //!
-//! Saving and loading are stubbed (roadmap PORT-03): a save records the settlement's
-//! description in a session-held slot, and a load restores nothing.
+//! A slot click asks the host for a save or a load (`SaveSlots.request`); the host applies it
+//! between frames and leaves the flash the menu screen shows. With no saves folder every slot is
+//! disabled and the footer says why.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -76,11 +77,12 @@ fn title(screen: Screen) []const u8 {
     };
 }
 
-fn footerNote(menu: *const res_mod.MenuState) []const u8 {
+fn footerNote(menu: *const res_mod.MenuState, saves: *const res_mod.SaveSlots) []const u8 {
+    const unavailable = "Saving is unavailable: the save folder could not be opened.";
     return switch (menu.screen) {
         .menu => menu.flash() orelse "Escape resumes. The simulation is frozen while this is open.",
-        .save => "Saving writes the settlement as it stands at this moment.",
-        .load => "Loading discards the settlement in progress.",
+        .save => if (saves.dir == null) unavailable else "Saving writes the settlement as it stands at this moment.",
+        .load => if (saves.dir == null) unavailable else "Loading discards the settlement in progress.",
         .settings => "Difficulty applies from the next day onward.",
         .quit => "",
     };
@@ -97,9 +99,9 @@ fn backHead(parent: El) !bool {
 }
 
 /// One `.slot` row. Returns its click.
-fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool) !bool {
+fn slotRow(parent: El, i: usize, slot: res_mod.SaveSlots.Slot, saving: bool, available: bool) !bool {
     const ctx = parent.ctx;
-    const enabled = saving or slot.filled;
+    const enabled = available and (saving or slot.filled);
     const row = try parent.boxi("slot", i, .{
         .w = .{ .fixed = dims(ctx).inner - 18 }, .h = .fit_children,
         .flow = .{ .dir = .row, .cross = .center }, .gap = 11,
@@ -128,21 +130,19 @@ pub const slot_what = Style{ .ink = .fg, .on = &.{.{ .when = .disabled, .ink = .
 /// The slot's verb, accent; line2 while the slot cannot be used.
 pub const slot_verb = Style{ .ink = .acc, .on = &.{.{ .when = .disabled, .ink = .line2 }} };
 
-fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, session: Session, saving: bool) !void {
+/// The slot list. A click asks the host for the save or the load and returns to the menu
+/// screen, where the host's flash reports the outcome.
+fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, saving: bool) !void {
     if (try backHead(parent)) {
         menu.screen = .menu;
         return;
     }
     const list = try parent.box("slots", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 5 }, .{});
     for (saves.slots, 0..) |slot, i| {
-        if (!try slotRow(list, i, slot, saving)) continue;
-        var buf: [40]u8 = undefined;
-        if (saving) {
-            saves.slots[i] = .{ .filled = true, .act = session.act, .day = @intCast(session.day), .people = session.people };
-            menu.setFlash(std.mem.print(&buf, "Saved to slot {d}.", .{i + 1}) catch "Saved.");
-        } else {
-            menu.setFlash(std.mem.print(&buf, "Loaded slot {d}.", .{i + 1}) catch "Loaded.");
-        }
+        if (!try slotRow(list, i, slot, saving, saves.dir != null)) continue;
+        const at: u8 = @intCast(i);
+        saves.request = if (saving) .{ .save = at } else .{ .load = at };
+        menu.flash_len = 0;
         menu.screen = .menu;
     }
 }
@@ -218,7 +218,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
                 }
             }
         },
-        .save, .load => try slotsScreen(screen_box, menu, &ctx.res.saves, session, shown == .save),
+        .save, .load => try slotsScreen(screen_box, menu, &ctx.res.saves, shown == .save),
         .settings => {
             if (try backHead(screen_box)) {
                 menu.screen = .menu;
@@ -234,7 +234,7 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
         },
     }
 
-    const note = footerNote(menu);
+    const note = footerNote(menu, &ctx.res.saves);
     if (note.len > 0) try frame_mod.dialog_note(frame.footer, "note", note, dims(ctx).inner);
 
     const outcome = modal_mod.settle(ctx, frame.modal, .{

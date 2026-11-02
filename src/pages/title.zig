@@ -1,5 +1,5 @@
-//! The title screen (`title.html`): the route before a run. The menu offers Continue (disabled
-//! while there is no settlement to resume), New game, Settings, Credits and Quit. Behind it the
+//! The title screen (`title.html`): the route before a run. The menu offers Continue (the latest
+//! save; disabled while there is none), New game, Settings, Credits and Quit. Behind it the
 //! attract loop shows the game receded: a ticking stockline, the merchant strip, work filling,
 //! holdings and an event log. The loop is canned (the prototype's own copy, its tick every
 //! 160ms, a log line every 3.4s) and a pure function of how long the title has been showing,
@@ -128,10 +128,15 @@ fn attract(arena: std.mem.Allocator, seconds: f32) !t.TitleAttract {
 pub fn ui_title(ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     _ = world;
     ctx.res.title.attract_s += ctx.res.game.time.real_dt;
-    const r = try t.title_screen(ctx, "title", try attract(ctx.arena, ctx.res.title.attract_s));
+    const latest = ctx.res.saves.latest();
+    const r = try t.title_screen(ctx, "title", try attract(ctx.arena, ctx.res.title.attract_s), latest != null);
     if (r.changed.window) applyWindow(ctx);
     switch (r.action) {
         .none => {},
+        // The host loads it between frames and sets the route, the menu and the pause.
+        .continue_game => if (latest) |i| {
+            ctx.res.saves.request = .{ .load = @intCast(i) };
+        },
         .new_game => {
             // The schedule begins the run from the intent; the route, the pause and the
             // curtain are the host's, reset here. The curtain keeps its cursor, so a fact

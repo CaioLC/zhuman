@@ -1,6 +1,8 @@
 const std = @import("std");
 const sdl = @import("sdl3");
 const rostermod = @import("./sim/data/roster.zig");
+const savemod = @import("./sim/data/save.zig");
+const simres = @import("./sim/res.zig");
 const thememod = @import("./ui_client/theme.zig");
 const fontmod = @import("./font.zig");
 
@@ -247,8 +249,10 @@ pub const Settings = struct {
     window: ?Window = null,
 };
 
-/// Stubbed save slots: what a save would hold, kept for the session only. Saving records the
-/// settlement's description; loading restores nothing yet (no persistence exists).
+/// The save slots: three files in the saves folder, what each holds as the slot list shows it,
+/// and the save or load the menu or the title asked for. The host opens the folder at startup
+/// (`dir`; null means saving is unavailable) and applies `request` between frames, before the
+/// tick (`main.zig`); the file format is `sim/data/save.zig`.
 pub const SaveSlots = struct {
     pub const count = 3;
     pub const Slot = struct {
@@ -257,7 +261,39 @@ pub const SaveSlots = struct {
         day: u32 = 1,
         people: u32 = 1,
     };
+    /// A save to, or a load from, a slot index.
+    pub const Request = union(enum) { save: u8, load: u8 };
+
     slots: [count]Slot = @splat(.{}),
+    /// The saves folder; null when it could not be opened.
+    dir: ?std.Io.Dir = null,
+    /// What the menu or the title asked for this frame; the host takes it.
+    request: ?Request = null,
+
+    const names = [count][]const u8{ "slot1.zon", "slot2.zon", "slot3.zon" };
+
+    /// The file of slot `i`, in `dir`.
+    pub fn fileName(i: usize) []const u8 {
+        return names[i];
+    }
+
+    /// Read what each slot's file holds. A missing file is an empty slot; one that cannot be
+    /// read, or holds another version, is an empty slot and a warning.
+    pub fn refresh(self: *SaveSlots, io: std.Io, gpa: std.mem.Allocator, cfg: *const simres.Config) void {
+        const dir = self.dir orelse return;
+        for (&self.slots, names) |*slot, name| {
+            slot.* = .{};
+            dir.access(io, name, .{}) catch |err| {
+                if (err != error.FileNotFound) std.log.warn("save {s}: {s}", .{ name, @errorName(err) });
+                continue;
+            };
+            const s = savemod.peek(io, dir, name, gpa, cfg) orelse {
+                std.log.warn("save {s} could not be read, or is of another version; the slot shows empty", .{name});
+                continue;
+            };
+            slot.* = .{ .filled = true, .act = s.act, .day = s.day, .people = s.people };
+        }
+    }
 
     /// The filled slot with the latest day, if any.
     pub fn latest(self: *const SaveSlots) ?usize {

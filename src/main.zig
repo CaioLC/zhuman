@@ -202,8 +202,9 @@ const App = struct {
         // fallback. No per-frame OS call — `build_ui` only projects this onto
         // `view.reduced_motion` each frame.
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
-        // The world is empty until a `NewRun` (the title's New game) begins a run.
+        // The world is empty until a `NewRun` (the title's New game) or a load begins a run.
         self.world = try ha.sim.ecs.World.init(allocator);
+        self.openSaves();
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -214,7 +215,24 @@ const App = struct {
         self.driver = ui_client.FrameDriver.init(&self.ui, &self.frame_arena, self.io, sdlPlatform(&self.window));
     }
 
+    /// Open the saves folder, SDL's per-user preference path for the game, and read its slots.
+    /// A failure leaves `saves.dir` null and says why; the game runs without saving.
+    fn openSaves(self: *App) void {
+        const path = sdl.filesystem.getPrefPath("", "human_action") catch |err| {
+            std.log.warn("saving is unavailable: no preference path ({s})", .{@errorName(err)});
+            return;
+        };
+        defer sdl.free(path);
+        const dir = std.Io.Dir.openDirAbsolute(self.io, path, .{}) catch |err| {
+            std.log.warn("saving is unavailable: {s} did not open ({s})", .{ path, @errorName(err) });
+            return;
+        };
+        self.resources.saves.dir = dir;
+        self.resources.saves.refresh(self.io, self.gpa, &self.resources.game.config);
+    }
+
     fn deinit(self: *App) void {
+        if (self.resources.saves.dir) |d| d.close(self.io);
         self.ui.deinit();
         self.frame_arena.deinit();
         self.world.deinit();
@@ -368,6 +386,9 @@ pub fn main(process: std.process.Init) !void {
         // 2. a changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
         if (app.data_watch.poll(app.io, real_dt)) ha.sim.data.reload.reload(app.io, &app.resources.game, &app.world);
+        // A save or a load the menu or the title asked for, here for the same reason: a load
+        // replaces the world before the tick refills its derived components and the build reads it.
+        applySaveRequest(&app.resources, &app.world, app.io, app.gpa);
         // Host-layer UI transitions advance by real time and follow the reduced-motion policy
         // (a transition started this frame snaps when reduced motion is on). Presentation only.
         app.resources.tween.setPolicy(app.resources.motion);
@@ -387,6 +408,55 @@ pub fn main(process: std.process.Init) !void {
         // stamp, draw, endFrame, registry/a11y publication — is the driver's fixed sequence.
         var host_ctx = FrameHost{ .app = &app };
         try app.driver.step(host_ctx.host());
+    }
+}
+
+// ---- Saves ------------------------------------------------------------------------------
+
+/// Apply the save or load `saves.request` holds, between frames and before the tick
+/// (`sim/data/save.zig`). A save is refused unless the run is in an act with no transition
+/// pending and the curtain is closed; it leaves its outcome as the menu's flash and rereads the
+/// slots. A load replaces the world, `Sim` and the state, routes to the game with the menu and
+/// the curtain closed and the simulation paused, forgets the log lines already announced (the
+/// log's count came back from the file), and logs that it loaded.
+fn applySaveRequest(res: *Resources, world: *ha.sim.ecs.World, io: std.Io, gpa: std.mem.Allocator) void {
+    const save = ha.sim.data.save;
+    const request = res.saves.request orelse return;
+    res.saves.request = null;
+    var buf: [64]u8 = undefined;
+    switch (request) {
+        .save => |i| {
+            const dir = res.saves.dir orelse return res.menu.setFlash("Cannot save now.");
+            if (i >= ha.res.SaveSlots.count or !save.canSave(&res.game) or res.curtain.open) return res.menu.setFlash("Cannot save now.");
+            save.write(io, dir, ha.res.SaveSlots.fileName(i), gpa, &res.game, world) catch |err| {
+                std.log.err("save to slot {d} failed: {s}", .{ i + 1, @errorName(err) });
+                return res.menu.setFlash("Could not save.");
+            };
+            res.menu.setFlash(std.mem.print(&buf, "Saved to slot {d}.", .{i + 1}) catch "Saved.");
+            res.saves.refresh(io, gpa, &res.game.config);
+        },
+        .load => |i| {
+            const dir = res.saves.dir orelse return;
+            if (i >= ha.res.SaveSlots.count) return;
+            var loaded = save.read(io, dir, ha.res.SaveSlots.fileName(i), gpa) catch |err| {
+                std.log.err("load from slot {d} failed: {s}", .{ i + 1, @errorName(err) });
+                return res.menu.setFlash(std.mem.print(&buf, "Could not load slot {d}.", .{i + 1}) catch "Could not load.");
+            };
+            defer loaded.deinit();
+            const report = save.apply(&res.game, world, &loaded.save);
+            res.route = .game;
+            res.title = .{};
+            res.menu.open = false;
+            res.menu.screen = .menu;
+            res.menu.flash_len = 0;
+            res.curtain = .{ .heard = res.curtain.heard };
+            res.playback.paused = true;
+            res.log_heard = null;
+            const log = &res.game.sim.log;
+            log.push(.normal, std.mem.print(&buf, "Loaded slot {d}.", .{i + 1}) catch "Loaded.");
+            if (report.dropped == 1) log.push(.warn, "1 record in the save is gone from the roster.");
+            if (report.dropped > 1) log.push(.warn, std.mem.print(&buf, "{d} records in the save are gone from the roster.", .{report.dropped}) catch "Records in the save are gone from the roster.");
+        },
     }
 }
 
@@ -455,4 +525,54 @@ const FrameHost = struct {
 // root, so this block is what pulls their test declarations into `zig build test`.
 test {
     _ = pages;
+}
+
+test "a save request writes the slot's file, and a load request restores it and routes to the game paused" {
+    const testing = std.testing;
+    var res = ui_client.replay.headlessResources();
+    res.game.catalog = try ha.sim.data.roster.load(testing.allocator, ha.sim.data.roster.shipped, null);
+    defer res.game.catalog.deinit();
+    var world = try ha.sim.ecs.World.init(testing.allocator);
+    defer world.deinit();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    res.saves.dir = tmp.dir;
+
+    const e = ha.sim.systems.run.spawn_player(&world);
+    world.get(e, ha.sim.comp.Vigor).?.v = 6.5;
+    res.game.states = .{ .current = .act_one };
+    res.game.sim.elapsed = 45;
+    res.menu.show(&res.playback);
+    res.saves.request = .{ .save = 0 };
+    applySaveRequest(&res, &world, testing.io, testing.allocator);
+    try testing.expectEqual(@as(?ha.res.SaveSlots.Request, null), res.saves.request);
+    try tmp.dir.access(testing.io, "slot1.zon", .{});
+    try testing.expectEqualStrings("Saved to slot 1.", res.menu.flash().?);
+    try testing.expect(res.saves.slots[0].filled);
+    try testing.expectEqual(@as(u32, 3), res.saves.slots[0].day);
+    try testing.expectEqual(@as(?usize, 0), res.saves.latest());
+
+    // A pending transition refuses the save.
+    res.game.states.set(.act_two);
+    res.saves.request = .{ .save = 1 };
+    applySaveRequest(&res, &world, testing.io, testing.allocator);
+    try testing.expectEqualStrings("Cannot save now.", res.menu.flash().?);
+    try testing.expect(!res.saves.slots[1].filled);
+
+    // The run moves on; the load puts it back, from the title.
+    world.get(e, ha.sim.comp.Vigor).?.v = 1;
+    res.game.states = .{ .current = .game_over };
+    res.route = .title;
+    res.menu.open = false;
+    res.playback.paused = false;
+    res.log_heard = 7;
+    res.saves.request = .{ .load = 0 };
+    applySaveRequest(&res, &world, testing.io, testing.allocator);
+    try testing.expectEqual(ha.sim.GameState.act_one, res.game.states.current);
+    try testing.expectEqual(@as(f32, 6.5), world.get(0, ha.sim.comp.Vigor).?.v);
+    try testing.expectEqual(ha.res.Route.game, res.route);
+    try testing.expect(res.playback.paused);
+    try testing.expect(!res.menu.open);
+    try testing.expectEqual(@as(?u64, null), res.log_heard);
+    try testing.expectEqualStrings("Loaded slot 1.", res.game.sim.log.get(0).text());
 }

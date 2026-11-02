@@ -4,8 +4,8 @@
 //! credits. Settings and credits replace the menu column; this is a screen, not a modal, so
 //! Escape on them steps back to the menu.
 //!
-//! The page supplies the attract frame (`Attract`) and acts on the result: New game, Quit, and
-//! a window setting to apply.
+//! The page supplies the attract frame (`Attract`) and whether there is a save to continue, and
+//! acts on the result: Continue, New game, Quit, and a window setting to apply.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -36,7 +36,7 @@ pub const Attract = struct {
     log: []const LogLine,
 };
 
-pub const Action = enum { none, new_game, quit };
+pub const Action = enum { none, continue_game, new_game, quit };
 
 pub const Result = struct {
     root: *uic.Node,
@@ -217,7 +217,8 @@ fn credits(parent: El) !void {
     }
 }
 
-pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
+/// `can_continue`: a save exists for Continue to load.
+pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract, can_continue: bool) !Result {
     const th = ctx.res.view.theme;
     // `.title-screen`: `min(700px, 100vh)` high on a `line` hairline, and it never scrolls.
     const sh = try terminal_mod.terminal_with(ctx, id, .{ .max_h = 700, .scroll = false, .outline = th.line });
@@ -250,13 +251,14 @@ pub fn title_screen(ctx: *uic.UiCtx, id: []const u8, a: Attract) !Result {
         .menu => {
             try body.label("wordmark", "Human Action", .{Style{ .font = 46, .tracking = -0.06, .ink = .fg }});
             const list = try menu_list_mod.menu_list(body, "menu", &.{
-                .{ .id = "continue", .label = "Continue", .enabled = false, .why = "no settlement in progress" },
+                .{ .id = "continue", .label = "Continue", .enabled = can_continue, .why = "no settlement in progress" },
                 .{ .id = "new", .label = "New game" },
                 .{ .id = "settings", .label = "Settings" },
                 .{ .id = "credits", .label = "Credits" },
                 .{ .id = "quit", .label = "Quit" },
             }, .{});
             if (list.clicked) |i| switch (i) {
+                0 => action = .continue_game,
                 1 => action = .new_game,
                 2 => screen.* = .settings,
                 3 => screen.* = .credits,
