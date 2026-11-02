@@ -52,7 +52,7 @@ That yields the two praxeological margins the game is about: *labor vs. leisure*
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
 later* (act for food and materials now, or spend materials and hours on capital).
 
-Death is total: a start-over wipes everything accumulated (`res.game.sim.reset()`).
+Death is total: a new run (`begin_run`) wipes everything accumulated (`Sim.reset`).
 
 The decision is split **`decide → act`**. The player is the only decider; the roadmap's AI
 deciders are meant to feed the same options.
@@ -60,10 +60,10 @@ deciders are meant to feed the same options.
 ## Main loop (`main.zig`)
 
 `App` owns all state. `App.init` does SDL and window setup only; `App.setup` runs once after
-`App` is stable on the stack — font, `Resources`, the ECS `World`, the player actor, the
-per-frame arena, and the `UiCtx` (safe here because internal pointers are taken after the
-struct's address is fixed). `main.zig` owns `App`, the event loop, the sim tick, and
-`spawn_agent`/`spawn_player`; the screens live in `pages/`.
+`App` is stable on the stack — font, `Resources`, the ECS `World` (empty until a `NewRun`
+begins a run), the per-frame arena, and the `UiCtx` (safe here because internal pointers are
+taken after the struct's address is fixed). `main.zig` owns `App`, the event loop and the one
+call to the schedule; the screens live in `pages/`.
 
 Each frame:
 
@@ -85,10 +85,9 @@ Each frame:
 2. **Mark** — `ui.mark(.hovering, …)` hit-tests *last* frame's stamped rects by iterating the
    interaction slot pool. No tree walk.
 3. **Update** — host `real_dt` advances roster watching and the tween registry. `Playback`
-   derives simulation `time.dt` at pause/1×/2×/3×. The simulation stage then opens the frame's
-   events (`events.update()`), runs every handler (an intent applies while paused), runs the
-   tick systems only while the run is played and `dt > 0`, and runs the log system last (see
-   *The frame's systems, in order*).
+   derives simulation `time.dt` at pause/1×/2×/3×. Then one call,
+   `sim.schedule.tick(&world, &res.game)`, runs the simulation (see *The states and the
+   schedule*).
 4. **Build UI** — `ui.beginFrame()`, arena reset, `pages.build_ui()` builds fresh trees and
    returns `Trees`, a flat list of independent roots (a screen, plus any floating overlay).
    The command registry and the host **semantic snapshot** (`res.semantics`) both
@@ -202,7 +201,7 @@ names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
 `ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`,
-`RaiseExchange`, `NeighbourDeal`. The UI writes them through
+`RaiseExchange`, `NeighbourDeal`, and `NewRun`, which asks for a fresh run. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -211,7 +210,8 @@ the handler answers with `Refused{agent, intent, reason}`.
 **Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
 `GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
 `RecipeInReach`, `Traded`, `Researched`, `ExchangeRaised`, `NeighbourSettled`, `Arrived`,
-`Departed`, `Refused`. Systems and the rules they call write them.
+`Departed`, `Refused`, and the run's own: `RunBegun` (a run began) and `ActEnded{act}` (the
+player's act ended and the next is requested). Systems and the rules they call write them.
 A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
 `{ item: ledger.Item, qty }`.
 
@@ -221,25 +221,56 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `barter`, `merchant`, `research`, `exchange`, `neighbours`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `merchant`, `research`, `exchange`, `neighbours`, `run`
+(`new_run`), `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
 itself, through `events.readerAt(T, &cursor)`: the trade dialogs read `Traded` on
 `TradeState.heard`, the research board `Researched` on `ResearchState.heard`, the Act II page
-`ExchangeRaised` on `ViewMemory.heard`.
+`ExchangeRaised` on `ViewMemory.heard`, and `build_ui` `ActEnded` on `CurtainState.heard`.
 
 **The log.** `systems/log.zig` is the one reader that writes `Log`. It reads every fact with
 the `.log` cursor, in the order the frame writes the types, and words each with the rules' text
 helpers (`actions.paymentText`, `actions.receiptText`, `actions.itemWordOf`,
 `capital.lowerName`) and the catalog (the roster's authored `copy.built`, a technology's cost,
-the merchant's lot records). A fact no line
-describes, such as `GoodsChanged` or an upward `BandCrossed`, is passed over.
+the merchant's lot records); `RunBegun` is the opening line, "You wake alone. Cold. Hungry." A
+fact no line describes, such as `GoodsChanged`, an upward `BandCrossed` or `ActEnded`, is
+passed over.
 
-## The frame's systems, in order (`sim/systems/`)
+## The states and the schedule (`sim/state.zig`, `sim/schedule.zig`)
 
-`main.zig` runs these through `ecs.run`, after `events.update()`. The handlers run every frame,
-paused or not and housed or not:
+`GameState` is `{ title, act_one, act_two, act_three, game_over }`, held as the engine's
+`States` on `sim.Resources.states` (see [`ecs/README.md`](ecs/README.md)). A fresh
+`sim.Resources{}` is on the title with an empty world. A system requests a transition with
+`states.set`; the schedule applies it at the top of the next tick, running the leaving state's
+`on_exit` set and the entering state's `on_enter` set once each (a request for the current state
+is a restart). The transitions, and who requests them:
 
-| System | Reads | Does |
+| Transition | Requested by | On entering |
+|---|---|---|
+| any → `act_one` | `run.new_run`, reading `NewRun`, in every state's `handle` set | `run.begin_run`: retires any living player, spawns one (`spawn_player`), `Sim.reset` (the prng carries over), `RunBegun` |
+| `act_one` → `act_two` | `curtain.detect_shelter`, the tick the player owns the Act I milestone (`capital.ownsMilestone`); it emits `ActEnded{ .act_one }` with the request, once | `curtain.cross_curtain`: `migration.migrate_to_act_two` on the player |
+| `act_two` → `act_three` | `curtain.detect_exchange`, once `Sim.exchange` stands | — |
+| an act → `game_over` | `run.detect_death`, after `despawn_dead`, when no player remains | — |
+
+`ActEnded` belongs to the detector rather than to an `on_exit` set, because a restart also
+leaves Act I and the act did not end.
+
+`schedule.tick(world, res)` does, in order: `events.update()`; apply the pending transition;
+run the current state's `handle` set; if `time.dt > 0`, run its `update` set. That split is
+what pausing means: an intent applies while the menu or the curtain holds the run still, so a
+slider does not snap back, while nothing that spends or detects time runs. Each set runs in the
+order it declares, and `schedule.zig`'s tests hold the rules: `log` last in every `update` set,
+`new_run` in every `handle` set, no handler in an `update` set.
+
+The `handle` sets:
+
+| State | Handlers, in order |
+|---|---|
+| `title`, `game_over` | `new_run` |
+| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run` |
+| `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run` |
+
+| Handler | Reads | Does |
 |---|---|---|
 | `labor.labor` | `BeginLabor` | `actions.begin`: pays and starts the work, `WorkBegun` |
 | `build.build` | `BeginBuild` | `capital.begin`: pays and starts the build, `WorkBegun` |
@@ -252,26 +283,38 @@ paused or not and housed or not:
 | `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
 | `exchange.raise_exchange` | `RaiseExchange` | refuses while standing, locked (`exchange.lifecycle`: a ring-4 technology and more than 500 of `Sim.population`) or short; else pays `exchange.cost` from the ledger and stands it, `ExchangeRaised` |
 | `neighbours.neighbour_deal` | `NeighbourDeal` | seeds the stub book if unseeded; refuses an unknown neighbour, a deal the neighbour's `verdict` does not accept on the agent's spare (held less `neighbours.reserve`), or one the agent cannot pay; else settles both sides (the book's `settle`, the agent's ledger, goods and coin), `NeighbourSettled` |
+| `run.new_run` | `NewRun` | requests `act_one`; several in one tick are one request |
 
-The tick systems run only while the run is played and `dt > 0`, in this order:
+The `update` sets, one column per act; the rows are in the order each set runs them:
 
-| System | Does |
-|---|---|
-| `tick.advance_clock` | bumps `sim.elapsed`, only while a player exists |
-| `tick.update_food` | spoils each larder toward zero at its own `spoils` rate |
-| `tick.metabolize` | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` and `BandCrossed` once, on the crossing |
-| `tick.resolve_busy` | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
-| `tick.track_reach` | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
-| `passerby.passerby` | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
-| `generators.generators` | matures every owned, enabled generator by `dt` (`capital.run_generators`) |
-| `tick.mark_dead` | tags `Dead` at `vigor ≤ 0`, `Died` |
-| `tick.despawn_dead` | reaps them; the UI then shows the start-over screen |
+| System | `act_one` | `act_two` | `act_three` | Does |
+|---|---|---|---|---|
+| `tick.advance_clock` | ✓ | ✓ | ✓ | bumps `sim.elapsed`, only while a player exists |
+| `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
+| `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` and `BandCrossed` once, on the crossing |
+| `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
+| `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
+| `generators.generators` | ✓ | ✓ | ✓ | matures every owned, enabled generator by `dt` (`capital.run_generators`) |
+| `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |
+| `tick.mark_dead` | ✓ | ✓ | ✓ | tags `Dead` at `vigor ≤ 0`, `Died` |
+| `tick.despawn_dead` | ✓ | ✓ | ✓ | reaps them |
+| `run.detect_death` | ✓ | ✓ | ✓ | no player left: requests `game_over` |
+| `curtain.detect_shelter` | ✓ | | | requests `act_two`, `ActEnded` |
+| `curtain.detect_exchange` | | ✓ | | requests `act_three` |
+| `log.log` | ✓ | ✓ | ✓ | turns the tick's facts into `Log` lines |
 
-In Act II, once the shelter stands and while the Exchange does not, `merchant.merchant` runs on
-the same `dt > 0` gate instead: the merchant's visit clock (`market.tickMerchant`), `Arrived` /
-`Departed`, and a return clears the lots taken (`Sim.merchant.taken`).
+`title` and `game_over` have no `update` set: before a run and after it, only `new_run` runs.
 
-Then, every frame and last, `log.log` turns the frame's facts into `Log` lines.
+**The curtain is the UI's, not a state.** The host `Resources` keeps a `CurtainState` beside
+`MenuState`. `build_ui` hears `ActEnded` on the curtain's own cursor and opens it, which pauses
+playback the way the menu does, so the world, already crossed into Act II by `cross_curtain`,
+holds still while the player reads. The last beat's Continue closes it and restores the pause
+state; the next frame routes to the Act II page over the live world. `build_ui` routes on the
+state: the title while the host's `Route` or the state says so (Quit to menu leaves a live run
+paused behind the title), the curtain while it is open, the game-over screen in `game_over` or
+when no player remains (the frame between `despawn_dead` and the transition), the Act I page in
+`act_one`, the Act II page in `act_two` and `act_three`.
 
 Naming convention: `update_<component_snake_case>` drives one component.
 
@@ -355,7 +398,7 @@ slice of the upkeep is payable, pay it and deposit the same slice of the flow. B
 authored **per in-game day** and scaled by the frame's dt, so a flow reads as a trickle.
 
 `goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
-`ownsMilestone` is what the curtain routes on; `capacity` sums the housing of what is owned.
+`ownsMilestone` is what `detect_shelter` reads; `capacity` sums the housing of what is owned.
 
 ## Passerby and barter (`sim/rules/market.zig`, `sim/rules/barter.zig`)
 
@@ -500,28 +543,30 @@ transition durations re-exported from `ui_client` so every finalized number has 
 
 | File | Holds |
 |---|---|
-| `main.zig` | `App`, the event loop, the sim tick, `spawn_agent`/`spawn_player` |
+| `main.zig` | `App`, the event loop, and the frame's one `sim.schedule.tick` |
 | `root.zig` | the `ha` library root: re-exports `sdl`, `ui`, `ui_client`, `UiCtx`, `font`, `palette`, `tokens`, `res` (the host resources) and `sim` (the simulation root) |
 | `test_ui.zig` | the test root of the UI layer alone (engine + host binding, no game content) |
 | `font.zig` | `Fonts`, a lazy size → `ttf.Font` cache. One font per point size |
-| `res.zig` | the host `Resources`: `platform`, `input`, `view`, `playback`, `menu`, `route`, `title`, `settings`, `saves`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game: sim.Resources`, the simulation's resources embedded whole |
+| `res.zig` | the host `Resources`: `platform`, `input`, `view`, `playback`, `menu`, `curtain`, `route`, `title`, `settings`, `saves`, the host registries (`cursor`, `commands`, `semantics`, `announcements`, `a11y`, `motion`, `tween`), and `game: sim.Resources`, the simulation's resources embedded whole |
 | `palette.zig` | the game's palette — the ten `Theme` roles, the terminal ground, and the six resource hues |
 | `tokens.zig` | the non-color design tokens, in logical px |
-| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `Events`, `run` (see `ecs/README.md`) |
+| `ecs/` | the ECS engine package: `World(comps, tags)`, the queries, `Events`, `run`, `States`, `Schedule` (see `ecs/README.md`) |
 
 `sim/` is the simulation: its root, the schema, the resources a system may reach, and the ECS bound to them.
 
 | File | Holds |
 |---|---|
-| `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
+| `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, `sim.state` (with `GameState` and `States`), `sim.schedule`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `res.zig` | `sim.Resources { sim, config, time, catalog, events }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
 | `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
 | `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event |
+| `state.zig` | `GameState` and `States`, the engine's state resource over it |
+| `schedule.zig` | `schedule`, the systems per state in the order they run, and `tick`, the host's one call per frame |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
 
-`sim/systems/` holds the systems the frame runs.
+`sim/systems/` holds the systems the schedule runs.
 
 | File | Holds |
 |---|---|
@@ -536,6 +581,8 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
 | `neighbours.zig` | the reserve table (a stand-in), `heldItem`, and the `NeighbourDeal` handler that settles both sides of a deal |
 | `passerby.zig` | the passerby's update system |
+| `run.zig` | the run's lifecycle: `spawn_player`, `new_run`, `begin_run`, `detect_death`, and the opening line |
+| `curtain.zig` | the act boundaries: `detect_shelter`, `cross_curtain`, `detect_exchange` |
 | `log.zig` | the log system: every fact into its `Log` line |
 
 `sim/rules/` holds the functions a system calls: a gate, a payment, a deposit, an interpretation. A rule takes `*World` from its caller, a system or the UI's handler for a press.
@@ -564,13 +611,13 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
 | `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
-| `migration.zig` | the Act I → II curtain: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
+| `migration.zig` | the Act I → II curtain, run by `cross_curtain`: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
 
 `pages/` is game content: the screens, the template shelf, and the helpers only a page or a template reads.
 
 | File | Holds |
 |---|---|
-| `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`build_ui`, `play_game`, `gameover`, `act_one_end`, the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
+| `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`build_ui`, which routes on the state; `play_game`; `gameover`; `act_one_end`, the curtain over a world already in Act II, opened on `ActEnded`; the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `query.zig` | the catalog query parser |
 | `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |

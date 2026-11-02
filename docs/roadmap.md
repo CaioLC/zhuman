@@ -91,7 +91,7 @@ The goal: every game rule runs from the schedule and nothing outside `src/sim/` 
 - [x] **ECS-02 — `sim.Resources`.** Split out of the host's and embedded as `game`; the rename at the call sites; sim tests build it whole; the `test-sim` step.
 - [x] **ECS-03 — The folders.** The moves to `src/sim/`, `hex` split into topology and pixel math, `body.zig` and `eating.zig` to where they are read; nothing else changes.
 - [x] **ECS-04 — Events.** `Events`, `EventWriter`, `EventReader` in the engine; `sim/events.zig`; handlers one intent family at a time, labor first and the ration slider last; the facts and `systems/log.zig`; the merchant stock onto `Sim.merchant`.
-- [ ] **ECS-05 — States and the schedule.** `States`, `Schedule`, `sim/state.zig`, `sim/schedule.zig`; `detect_shelter`, `act_ended`, `cross_curtain`, `new_run`; the main loop makes one call; the curtain dialog pauses through playback.
+- [x] **ECS-05 — States and the schedule.** `States`, `Schedule`, `sim/state.zig`, `sim/schedule.zig`; `detect_shelter`, `act_ended`, `cross_curtain`, `new_run`; the main loop makes one call; the curtain dialog pauses through playback.
 - [ ] **ECS-06 — Derived components.** `Condition`, then `Outlook` retiring `body.zig`, then `Quotes` retiring the per-tile quote calls.
 - [ ] **ECS-07 — `*const World` into the build.** The UI build holds only `*const World`, `DebugPoke`, the boundary rule written down.
 
@@ -107,7 +107,7 @@ The goal: every game rule runs from the schedule and nothing outside `src/sim/` 
 
 ## 3. Act I — act transition
 
-- [ ] **ACT1-18 — Implement a versioned Act I → II migration.** Carry Food unchanged; convert only unspent generic Materials to Biomass `1:1`; preserve goods/counts/effects; remove generic Materials from active Act II accounting; seed Foraging/Woodcutting researched and the remaining ring-1 states per the board spec; initialize population/capacity/market state exactly once. Unit-test idempotence and save-version boundaries. In place: `migration.migrate_to_act_two`, which converts Materials, opens the other Act II stocks empty, seeds the board with `Research.entry` and stamps `Migrated`, each rule tested. Nothing calls it at the curtain yet, and population/capacity/market initialization is the `population_seeded` seam until ACT2-01.
+- [ ] **ACT1-18 — Implement a versioned Act I → II migration.** Carry Food unchanged; convert only unspent generic Materials to Biomass `1:1`; preserve goods/counts/effects; remove generic Materials from active Act II accounting; seed Foraging/Woodcutting researched and the remaining ring-1 states per the board spec; initialize population/capacity/market state exactly once. Unit-test idempotence and save-version boundaries. In place: `migration.migrate_to_act_two`, which converts Materials, opens the other Act II stocks empty, seeds the board with `Research.entry` and stamps `Migrated`, each rule tested. `cross_curtain` runs it on the player on entering Act II, and population/capacity/market initialization is the `population_seeded` seam until ACT2-01.
 - [x] **ACT1-19 — Enforce cross-act cost parity.** A test in `migration.zig` holds every recipe the two acts share by name to the same quantity, cadence by cadence, in Act I materials and Act II biomass at the curtain rate; the garden bed is the canonical pair. A reviewed exception, when one is needed, is a list that test skips.
 
 ## 4. Act II authoritative backend and shell

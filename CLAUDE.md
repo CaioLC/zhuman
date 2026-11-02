@@ -35,7 +35,8 @@ a Bevy-style sparse-set ECS. Those two are the project — the scope rule is **U
 nothing else**.
 
 Today it plays Act I: a lone actor under scarcity, and a passing merchant for the first
-barter. No money.
+barter. No money. When the shelter stands it crosses into Act II live, where the population,
+coin, flows and energy are still stand-ins.
 
 ## Where the knowledge lives
 
@@ -70,7 +71,7 @@ the theme's values, or `Resources`' contents. `src/ui_client/` binds it to this 
 `res.game.events` rather than calling a rule, and read the outcome in the world next frame.
 
 ```
-src/sim/                     the simulation: systems/ (the tick), rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)
+src/sim/                     the simulation: state.zig and schedule.zig (the run's states and the systems each runs, in order), systems/, rules/ (the operations), kernel/ (pure math), data/ (the roster, reload, migration)
 src/sim/ecs.zig              the ECS instantiated over this game's components, tags, sim.Resources
 src/sim/res.zig              sim.Resources: what a system may reach, embedded in the host Resources as `game`
 src/ecs/                     the ECS engine — imports nothing from the game
