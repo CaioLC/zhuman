@@ -316,7 +316,4 @@ API shapes the later steps build on.
 
 ## Open
 
-- `rules/market.zig` and `rules/neighbours.zig` are both markets. A rename waits for ACT2-01,
-  when the neighbours stop being a stub.
-- Change detection on components (Bevy's `Changed<T>`) is not built. Derived writers recompute
-  for every agent every tick; the trigger to add it is a measurable cost, not a population size.
+What is not built is in [`roadmap.md`](roadmap.md): the storage policy (DEFER-05), change detection on components (DEFER-10) and one name for the markets (DEFER-11).
