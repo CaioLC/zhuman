@@ -39,14 +39,46 @@ field defaults, `spawn_agent` spawns them default-valued, and `baselines.zig` *r
 defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, so Holdings can show
 current-vs-base margins against a value that cannot drift from the spawn.
 
-**The BODY readouts are the sim's own arithmetic.** `body.project` takes larder units and
-quality, the vigor deficit and ceiling, base metabolism, the rate, and `vigor_per_food`, and
-returns food coverage in days plus a tagged `Recovery` — `at_ceiling`, `no_food`,
-`no_quality`, `partial`, or `recovering { days }` — using the same products `metabolize`
-applies, so the projection and the loop agree by construction. `eating.zig` is the slider's
-side of it: `rate(value) = 0.5 × 4^(value/100)` over a `0..100` slider, its inverse
-`valueFromRate`, the policy word ladder (meager … lavish), and the per-act coverage/recovery
-constants; it imports nothing and serves both the template and a future system.
+**Three components are derived, each by one writer system.** The UI reads them and recomputes
+none of them, and each writer is idempotent: run twice on an unchanged world it writes the same
+values and emits nothing new, and a test says so.
+
+- `comp.Condition` is the agent's band, `alive`, `weary` or `spent` (`Condition.Band`, `sim.Band`).
+  `rules/condition.refresh` is the one place the two thresholds (`Config.condition`) are
+  applied, and the `condition` system calls it on every agent and emits `BandCrossed` for each
+  band that moved. The vigor chip's tone, the hall's vigor line and labor's yield step
+  (`actions.yield_factor`) read the band. `actions.begin` and `capital.begin` also refresh the
+  agent they charge, and carry the crossing on `WorkBegun.weary`, because the log words labor's
+  toll ("You feel weak. Work will yield less.") apart from hunger ("You feel weak with
+  hunger.") and a writer that only compares with the previous band cannot tell the two causes
+  apart; `capital.collect_generator` refreshes for the same reason, since a collection's energy
+  can outweigh the vigor it restores. Every crossing the writer reports is the metabolism's.
+- `comp.Outlook` is the BODY projection: the days the larder lasts at the current rate
+  (`food_days`) and a tagged `Recovery`, `at_ceiling`, `no_food`, `no_quality`,
+  `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
+  the same products `metabolize` applies (`base_rate × rate`, `× vigor_per_food × quality`), so
+  the projection and the loop agree by construction, and both BODY lines of the Act I holdings
+  read it.
+- `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
+  standing and the quality a begin would lock, per recipe the standing, the count owned and the
+  reach, per generator the standing and its progress, and in each the first unpayable line by
+  its index. The `quotes` system fills every slot through `actions.quote`, `capital.quote` and
+  `capital.generator_quote`, so the ACTIONS tile, the BUILD row, the GENERATORS tile and a
+  decider read one answer; the handlers still ask the rule at apply time, and the rule is the
+  authority. It holds standings and not a verb's terms, which stay the pure read
+  `actions.verbOf`, because the world stores every component inline for its full entity
+  capacity and a copy of the terms per verb would add tens of megabytes to it.
+
+The writers close each act's `handle` and `update` sets, just before `log`, so a paused intent
+or a build finished this tick shows the next frame; `condition` also runs right after
+`metabolize` (the schedule, below). The fixture seed and the debug page bring all three current
+after they set a world by hand (`fixture.derive`); a seeded band is set, not reached, so it is
+written without a `BandCrossed`.
+
+`eating.zig` is the slider's side of the BODY: `rate(value) = 0.5 × 4^(value/100)` over a
+`0..100` slider, its inverse `valueFromRate`, the policy word ladder (meager … lavish), and the
+per-act coverage/recovery constants; it imports nothing and serves both the template and a
+future system.
 
 That yields the two praxeological margins the game is about: *labor vs. leisure* (working
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
@@ -261,17 +293,19 @@ what pausing means: an intent applies while the menu or the curtain holds the ru
 slider does not snap back, while nothing that spends or detects time runs. `log` closes both of
 an act's sets, so a fact a handler writes while the run is paused becomes its line in the same
 tick instead of expiring unread; its cursor makes the second run of a tick read nothing twice.
-Each set runs in the order it declares, and `schedule.zig`'s tests hold the rules: `log` last in
-every `update` set and in every act's `handle` set, `new_run` in every `handle` set, no handler
-in an `update` set.
+The derived components' writers (`condition`, `outlook`, `quotes`) run just before `log` in
+both of an act's sets, for the same reason. Each set runs in the order it declares, and
+`schedule.zig`'s tests hold the rules: `log` last in every `update` set and in every act's
+`handle` set, `outlook` and `quotes` the two before it, `condition` right after `metabolize`,
+`new_run` in every `handle` set, no handler in an `update` set.
 
 The `handle` sets:
 
 | State | Handlers, in order |
 |---|---|
 | `title`, `game_over` | `new_run` |
-| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run`, `log` |
-| `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run`, `log` |
+| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run`, `condition`, `outlook`, `quotes`, `log` |
+| `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run`, `condition`, `outlook`, `quotes`, `log` |
 
 | Handler | Reads | Does |
 |---|---|---|
@@ -294,7 +328,8 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 |---|---|---|---|---|
 | `tick.advance_clock` | ✓ | ✓ | ✓ | bumps `sim.elapsed`, only while a player exists |
 | `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
-| `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` and `BandCrossed` once, on the crossing |
+| `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
+| `condition.condition` | ✓ | ✓ | ✓ | writes each agent's `Condition` band; `BandCrossed` once, on the crossing |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
@@ -305,6 +340,9 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `run.detect_death` | ✓ | ✓ | ✓ | no player left: requests `game_over` |
 | `curtain.detect_shelter` | ✓ | | | requests `act_two`, `ActEnded` |
 | `curtain.detect_exchange` | | ✓ | | requests `act_three` |
+| `condition.condition` | ✓ | ✓ | ✓ | again, so a band a finished build moved is current for the readers below |
+| `outlook.outlook` | ✓ | ✓ | ✓ | writes each agent's `Outlook` |
+| `quotes.quotes` | ✓ | ✓ | ✓ | writes each agent's `Quotes` |
 | `log.log` | ✓ | ✓ | ✓ | turns the facts written since its last run into `Log` lines |
 
 `title` and `game_over` have no `update` set: before a run and after it, only `new_run` runs.
@@ -321,9 +359,9 @@ when no player remains (the frame between `despawn_dead` and the transition), th
 
 Naming convention: `update_<component_snake_case>` drives one component.
 
-Band crossings — "You feel weak with hunger.", "You are starving." — come from
-`Config.condition(frac)`, the single definition of the ALIVE/WEARY/SPENT thresholds that the
-status word, the vigor chip and `actions.yield_factor` all share.
+Band crossings — "You feel weak with hunger.", "You are starving." — are the `condition`
+system's `BandCrossed`, from `Config.condition(frac)`, the single definition of the
+ALIVE/WEARY/SPENT thresholds, applied in `rules/condition.refresh` alone.
 
 ## Actions and capital (`sim/rules/actions.zig`, `sim/rules/capital.zig`)
 
@@ -338,16 +376,19 @@ goods contribute to the body and larder, so those deltas stay relative.
 
 Innate verbs are the records flagged `innate`; every other verb exists while an owned good
 `grant`s it or, for a verb that names a `tech`, once that technology is researched
-(`actions.verbOf`). `actions.quote` is the one gate calculation — the tile, `begin` and a future
-decider read the same answer: the verb's effective terms, the quality a begin would lock,
-and a `Standing` of `ready`, `busy`, `energy` or `short` with the first unpayable line.
+(`actions.verbOf`). `actions.quote` is the one gate calculation: the verb's effective terms, the
+quality a begin would lock (`yield_factor` over the agent's `Condition` band), and a `Standing`
+of `ready`, `busy`, `energy` or `short` with the first unpayable line. It fills the verb slots
+of `comp.Quotes`, which the tile and a future decider read, and `begin` asks it again at apply
+time. An agent without a `Vigor` or a `Condition` has no quote.
 
 **Labor resolves in two halves,** because actions take time:
 
 - `begin` — refuse unless the quote is ready (one body, one act; energy strict; inputs
   payable), returning the `Refused.Reason`; pay the energy and the input lines upfront; lock
-  `quality` at the *advertised* pre-payment vigor; add `comp.Busy{ .doing = .{ .labor = index } }`;
-  emit `WorkBegun`.
+  `quality` at the *advertised* pre-payment band; refresh the agent's `Condition`; add
+  `comp.Busy{ .doing = .{ .labor = index } }`; emit `WorkBegun`, `weary` when the toll crossed
+  out of `alive`.
 - `finish` — draw each output line at the locked quality (**the spread is the risk**, there
   is no separate success roll), deposit through `ledger.draw`, emit `WorkDone` with the
   receipt of what landed. A verb lost mid-task — the rod sold while fishing — finishes as
@@ -366,7 +407,7 @@ verb's price or lines, a ceiling, a larder quality step, a spoilage factor. Gene
 the goods with `day` lines, intermediates the goods whose once-output is a lot of themselves;
 neither is a category in code.
 
-`capital.quote` answers for the BUILD row and the gate at once: the units owned, the `reach`
+`capital.quote` answers for the BUILD row (through `comp.Quotes`) and the gate at once: the units owned, the `reach`
 of the build order (the smallest held-over-needed across its once-inputs), and a `Standing`
 in precedence order — `tech` (the technology the recipe waits on is not researched on the
 agent's board), `needs` (the verb or tool a modifier works on is not held, so a chainsaw is
@@ -561,7 +602,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `root.zig` | the `sim` namespace: re-exports every file below as `sim.comp`, `sim.tag`, `sim.res`, `sim.ecs`, `sim.events`, `sim.log`, `sim.baselines`, `sim.state` (with `GameState` and `States`), `sim.schedule`, and declares the four folders as nested structs, `sim.systems.*`, `sim.rules.*`, `sim.kernel.*`, `sim.data.*`; also the module root of the `test-sim` build step, which compiles the simulation with no UI host and no SDL |
 | `components.zig` / `tags.zig` | component and tag types — **only** `pub const <Name> = struct {…}`, since `World` enumerates them at comptime |
-| `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Condition` and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
+| `res.zig` | `sim.Resources { sim, config, time, catalog, events, states }`: exactly what a system may reach. `Sim` carries the log, the reach seen-set, the passerby encounter, the merchant visit, the stubbed neighbours, the Exchange and `population`, the stand-in until ACT2-01; `Config`, `Time`, `Band` (the `comp.Condition` enum) and `hours_to_secs` live here; `random()` is a `std.Random` over `sim.prng` |
 | `ecs.zig` | this game's `World` (the engine's over `components.zig` and `tags.zig`), the system params and `run` over that `World` and `sim.Resources`, with the `Const` forms; `Events` (the engine's store over `events.zig`), `EventWriter(T)` and `EventReader(T, id)` |
 | `events.zig` | the intents and facts, `Refused.Intent` and `Refused.Reason`, `Who`, and `ReaderId`: every public struct is an event |
 | `state.zig` | `GameState` and `States`, the engine's state resource over it |
@@ -574,6 +615,9 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | File | Holds |
 |---|---|
 | `tick.zig` | the tick systems, in tick order |
+| `condition.zig` | the `condition` system, the one writer of `comp.Condition` |
+| `outlook.zig` | the `outlook` system, the one writer of `comp.Outlook`, and the BODY projection's pure math (`project`) |
+| `quotes.zig` | the `quotes` system, the one writer of `comp.Quotes`, and `fill`, one agent's quotes |
 | `labor.zig` | the `BeginLabor` handler |
 | `build.zig` | the `BeginBuild` and `CancelBuild` handlers |
 | `generators.zig` | the `ToggleGenerator` and `CollectGenerator` handlers, and the `generators` update system |
@@ -593,6 +637,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | File | Holds |
 |---|---|
 | `actions.zig` | per-agent labor: `quote`, `begin`/`finish`, `verbOf`, `yield_factor` |
+| `condition.zig` | `refresh`: the condition band from the vigor, the one caller of `Config.condition`, and the crossing it made |
 | `capital.zig` | the build path, ownership and settling, the generator system |
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
@@ -623,7 +668,6 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `root.zig`, `act_one/`, `act_two/`, `templates/` | the screens (`build_ui`, which routes on the state; `play_game`; `gameover`; `act_one_end`, the curtain over a world already in Act II, opened on `ActEnded`; the Act II shell in `act_two/`), the fixture harness (`fixture.zig`), and the template shelf |
 | `eating.zig` | the Eating Policy math: slider value ↔ rate, the word ladder, per-act coverage/recovery |
 | `query.zig` | the catalog query parser |
-| `body.zig` | the BODY projection: food coverage and the tagged recovery outcome |
 | `hex_pixel.zig` | the hex pixel transform the research board paints with: axial → pixel, the six vertex offsets, pixel → hex, and the point-in-hex test |
 
 Every file under `sim/` imports its siblings by relative path, and nothing in `sim/` imports the host (`res.zig`), `ui_client/` or SDL; the `test-sim` build step, rooted at `sim/root.zig`, is what holds that true. The UI engine is a package of its own, `src/ui/`, which `build.zig.zon` names as a path dependency; `build.zig` hands it to `ha` and to the UI tests as the module `ui`, and runs its tests in both test steps. The ECS engine `src/ecs/` is a package the same way, imported as `ecs`, with its tests run in every test step.
