@@ -61,8 +61,7 @@ ordinal — never a global utility function.
 
 - **Act I — Robinson Crusoe (pop 1).** Assets divide into *food* and *materials*. Crude labor
   and the few capital goods a single individual can build from scavenged scrap — rudimentary
-  sandals, a leaf bed, wire snares, a dug root cellar, a garden bed. Act I personal building is
-  limited to crude goods. A passerby brings the two manufactured unlockers—a fishing rod and a
+  sandals, a leaf bed, wire snares, a dug root cellar, a garden bed. A passerby brings the two manufactured unlockers—a fishing rod and a
   hatchet—in exchange for food and raw materials. Garden beds, wire snares, and medicinal
   herb beds accumulate independently of the body; the player collects each completed cycle for
   a small Vigor cost, and may pause an individual generator without losing progress. The HUD's
@@ -80,16 +79,3 @@ ordinal — never a global utility function.
 - **Act III+ — village → town → city.** Materials expand further and the player gains access to
   a global source of capital goods, letting the city specialize. Firms, deeper division of labor,
   the long climb to billions.
-
-## Open design questions (Act II)
-
-The first is **the project's core challenge** above — open because a demand model can't be
-designed before agents exist, not because it's minor. Record these; don't litigate them yet.
-
-- How agents form **demands** — subjective, ordinal preferences over food vs. materials; needs
-  and thresholds; and how it degrades from per-agent deciders to aggregate demand at scale.
-- How an **exchange ratio** forms — posted price, bilateral bargaining, or double auction.
-- What **specialization** is — per-agent skills, comparative advantage from differing
-  yields/vigor, or learning-by-doing.
-- **Per-agent inventories** vs. a shared stockpile (barter requires individual holdings).
-- **Autonomous decider policy** — how an AI agent ranks the catalog under scarcity.
