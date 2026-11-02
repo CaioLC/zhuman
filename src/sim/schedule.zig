@@ -33,25 +33,26 @@ const run = @import("./systems/run.zig");
 const curtain = @import("./systems/curtain.zig");
 const log = @import("./systems/log.zig");
 const condition = @import("./systems/condition.zig");
+const outlook = @import("./systems/outlook.zig");
 
-const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, condition.condition, log.log };
+const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, condition.condition, outlook.outlook, log.log };
 
 /// The systems per state, in the order they run.
 pub const schedule = engine.Schedule(GameState, .{
     .title = .{ .handle = .{run.new_run} },
     .act_one = .{
         .on_enter = .{run.begin_run},
-        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, condition.condition, log.log },
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, log.log },
+        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, condition.condition, outlook.outlook, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, outlook.outlook, log.log },
     },
     .act_two = .{
         .on_enter = .{curtain.cross_curtain},
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, condition.condition, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, merchant.merchant, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_exchange, condition.condition, outlook.outlook, log.log },
     },
     .act_three = .{
         .handle = act_two_handle,
-        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, condition.condition, log.log },
+        .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, condition.condition, tick_sys.resolve_busy, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, condition.condition, outlook.outlook, log.log },
     },
     .game_over = .{ .handle = .{run.new_run} },
 });

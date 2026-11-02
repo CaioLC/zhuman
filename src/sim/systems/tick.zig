@@ -43,27 +43,6 @@ pub fn update_food(
     }
 }
 
-/// Net daily food drawdown (Holdings/BODY projection): the metabolism's per-day
-/// consumption (`base_rate × rate` — the *same* product `metabolize` applies, with `rate` the
-/// bounded scalar) minus a per-day generator inflow. `≤0` means the larder holds.
-/// Lives here beside `metabolize` so the projection provably reads the loop's rate rather than
-/// a copied tuning constant, and so it is covered by `zig build test`.
-pub fn net_food_drawdown(base_rate: f32, rate: f32, inflow_per_day: f32) f32 {
-    return base_rate * rate - inflow_per_day;
-}
-
-test "net_food_drawdown: consumption minus inflow; days = food/net when positive" {
-    const base: f32 = 1.5;
-    // The scalar rate scales the drawdown directly: normal (1.0) is base_rate; ration (0.5)
-    // halves it; a big enough generator inflow makes it hold.
-    try std.testing.expectApproxEqAbs(@as(f32, 1.5), net_food_drawdown(base, 1.0, 0), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.75), net_food_drawdown(base, 0.5, 0), 1e-4);
-    try std.testing.expect(net_food_drawdown(base, 0.5, 1.0) <= 0);
-    // Days-of-food is food / net when net is positive.
-    const net = net_food_drawdown(base, 1.0, 0);
-    try std.testing.expectApproxEqAbs(@as(f32, 4), @as(f32, 6) / net, 1e-4); // 6 / 1.5 = 4 days
-}
-
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
 /// larder — no eat action, eating happens regardless; the *rate* is the agent's standing
 /// choice (`Metabolism.rate`, a bounded scalar). Food converts to vigor as it's consumed (scaled by the

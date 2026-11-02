@@ -1,6 +1,6 @@
 //! `act_one/holdings` — Act I's content for the shared `holdings` rail template: the owned-good
 //! roster, the MARGINS the goods have moved (verb energy, food quality and spoilage, the vigor
-//! ceiling, trade stock), and the BODY projection (larder coverage, recovery).
+//! ceiling, trade stock), and the BODY lines (food days, recovery) from the agent's `Outlook`.
 //! Pure projection over live state into the frame arena; it builds no nodes.
 
 const std = @import("std");
@@ -14,7 +14,6 @@ const vd = uic.style.verdict;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
-const body_mod = @import("../body.zig");
 const t = @import("../templates/root.zig");
 const Line = t.HoldingsLine;
 const Sentence = t.HoldingsSentence;
@@ -100,40 +99,21 @@ pub fn content(ctx: *uic.UiCtx, world: *World, e: Entity) !t.HoldingsContent {
     };
 
     // --- BODY ------------------------------------------------------------------------------
-    const met = world.get(e, comp.Metabolism) orelse {
+    // The `outlook` system's projection at the eating policy's rate; the policy reads its own
+    // word under BODY, so the body names only what it moves.
+    const outlook = world.get(e, comp.Outlook) orelse {
         c.body_note = "no body projection";
         return c;
     };
-    const food = world.get(e, comp.InventoryFood) orelse return c;
-    const vigor = world.get(e, comp.Vigor) orelse return c;
     var body: std.ArrayList(Sentence) = .empty;
-    // The eating policy reads its own word under BODY, so the body names only what it moves.
-    const rate = ctx.res.game.config.clampMetabolism(met.rate);
-
-    const net = ha.sim.systems.tick.net_food_drawdown(met.base_rate, rate, 0);
-    if (net <= vd.delta_eps) {
-        try body.append(a, .{ .key = "coverage", .prefix = "Larder ", .value = "holds", .suffix = ".", .tone = .good });
-    } else {
-        const days = food.v / net;
-        try body.append(a, .{
-            .key = "coverage",
-            .prefix = "Food lasts ",
-            .value = try a.print("{d:.1}d", .{days}),
-            .suffix = ".",
-            .verdict = vd.when(days < 2, .low),
-        });
-    }
-
-    const projection = body_mod.project(.{
-        .food = food.v,
-        .quality = food.quality,
-        .vigor = vigor.v,
-        .vigor_max = vigor.max,
-        .base_rate = met.base_rate,
-        .rate = rate,
-        .vigor_per_food = ctx.res.game.config.vigor_per_food,
+    try body.append(a, .{
+        .key = "coverage",
+        .prefix = "Food lasts ",
+        .value = try a.print("{d:.1}d", .{outlook.food_days}),
+        .suffix = ".",
+        .verdict = vd.when(outlook.food_days < 2, .low),
     });
-    try body.append(a, switch (projection.recovery) {
+    try body.append(a, switch (outlook.recovery) {
         .at_ceiling => Sentence{ .key = "recovery", .prefix = "Vigor is ", .value = "full", .suffix = ".", .tone = .good },
         .no_food => Sentence{ .key = "recovery", .prefix = "Recovery: ", .value = "starving", .suffix = ".", .tone = .danger },
         .no_quality => Sentence{ .key = "recovery", .prefix = "Recovery: ", .value = "no vigor", .suffix = ".", .tone = .danger },

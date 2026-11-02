@@ -1062,6 +1062,7 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
 pub fn derive(res: *Resources, world: *World) void {
     var it = (ecs.Query(.{ comp.Vigor, comp.Condition }){ .world = world }).iter();
     while (it.next()) |entry| _ = ha.sim.rules.condition.refresh(&res.game.config, entry[0], entry[1]);
+    ecs.run(world, &res.game, ha.sim.systems.outlook.outlook);
 }
 
 /// An action `id` in progress, two thirds done (the running tile's underbar).

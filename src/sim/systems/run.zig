@@ -34,6 +34,7 @@ fn spawn_agent(world: *World) Entity {
         comp.Generators{}, // collectable capital accumulates independently of the body's work
         comp.Granted{}, // and the goods contribute nothing to the body or larder yet
         comp.Condition{}, // rested; the `condition` system keeps the band
+        comp.Outlook{}, // the body's projection, written by the `outlook` system
     });
 }
 

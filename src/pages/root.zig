@@ -148,7 +148,6 @@ test {
     _ = @import("./templates/root.zig");
     _ = @import("./fmt.zig");
     _ = @import("./hex_pixel.zig");
-    _ = @import("./body.zig");
     _ = @import("./eating.zig");
     _ = @import("./query.zig");
     _ = @import("./play_game.zig");

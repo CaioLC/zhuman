@@ -49,10 +49,10 @@ if [ -n "$hits" ]; then
 fi
 
 paint='\.with_style\(|\.text(_fit)?\(|\.label(_fit)?\('
-# The helpers beside the pages (`body`, `eating`, `query`, `hex_pixel`) build no nodes: they are
+# The helpers beside the pages (`eating`, `query`, `hex_pixel`) build no nodes: they are
 # math a page or template reads, and `query`'s `row.text(...)` is a field read, not a text leaf.
 pages=$(find src/pages -name '*.zig' -not -path 'src/pages/templates/*' -not -name debug_page.zig \
-    -not -name body.zig -not -name eating.zig -not -name query.zig -not -name hex_pixel.zig)
+    -not -name eating.zig -not -name query.zig -not -name hex_pixel.zig)
 hits=$(grep -nE "$paint" $pages | grep -vE '^[^:]+:[0-9]+:\s*//')
 # A `Props` constructor or `set` paints when its style spec (the last argument) is not `.{}`.
 # A call wrapped over lines is flagged at its first line, so keep a page's calls on one.

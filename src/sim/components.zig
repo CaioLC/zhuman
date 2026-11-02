@@ -165,3 +165,27 @@ pub const Condition = struct {
     pub const Band = enum { alive, weary, spent };
     band: Band = .alive,
 };
+
+/// The body's outlook at the current eating rate, written by the `outlook` system
+/// (`systems/outlook.zig`) from the vigor, the larder and the metabolism: how many days the
+/// larder lasts, and whether and how fast the vigor recovers. The BODY lines read it.
+pub const Outlook = struct {
+    /// The recovery outcome — a tagged result, never a bare number, so a reader renders the
+    /// right copy for each state instead of guessing from a sentinel.
+    pub const Recovery = union(enum) {
+        /// Already at the vigor ceiling — nothing to recover.
+        at_ceiling,
+        /// No larder — the body is starving, not recovering.
+        no_food,
+        /// Food has zero quality — it fills the belly but yields no vigor, so no recovery.
+        no_quality,
+        /// The larder yields some vigor but **cannot reach the ceiling**; carries the days the
+        /// larder lasts and the vigor it will have restored by then (a partial recovery).
+        partial: struct { days: f32, restored: f32 },
+        /// Full vigor is reachable at the current rate; carries the days to reach it.
+        recovering: struct { days: f32 },
+    };
+    /// Days of food at the current rate; `0` when the larder is empty.
+    food_days: f32 = 0,
+    recovery: Recovery = .no_food,
+};
