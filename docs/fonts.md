@@ -1,10 +1,10 @@
 # Font provenance
 
-## JetBrains Mono (UI body/heading/eyebrow typeface — TEXT-04)
+## JetBrains Mono (UI body/heading/eyebrow typeface)
 
 - **File:** `assets/fonts/JetBrainsMonoNL-Regular.ttf`
 - **Family:** JetBrains Mono NL (the **"No Ligatures"** build — the `NL` suffix)
-- **Weight/style shipped:** Regular (400) only. TEXT-04's contract is regular-weight
+- **Weight/style shipped:** Regular (400) only. Text is regular-weight
   throughout (body 14 / small 11 / heading 21 logical px); no bold/italic is packaged.
 - **Upstream:** https://github.com/JetBrains/JetBrainsMono
 - **Release asset:** the `JetBrainsMono-*.zip` release ships `fonts/ttf/JetBrainsMonoNL-Regular.ttf`
@@ -21,8 +21,7 @@
 
 ## Why the "No Ligatures" (NL) build
 
-TEXT-04 requires that ligature assumptions be disabled. The NL build is a two-layer
-defense together with the render path:
+Ligatures are disabled in two layers, the NL build and the render path:
 
 1. **Asset:** the `NL` cut has no ligature glyphs/rules baked in, so the shaper cannot
    substitute an `->`/`==`/`!=` ligature even if asked.
@@ -30,7 +29,6 @@ defense together with the render path:
    (see the tracking advance routine), which never feeds multi-codepoint runs to a
    shaper, so no ligature can form regardless of the font.
 
-## Kenney fonts (unrelated, pre-existing)
+## Kenney fonts (unrelated)
 
-`assets/fonts/License.txt` covers the **Kenney** display fonts (CC0) that predate this
-work. It does **not** cover JetBrains Mono; the OFL file above is JetBrains Mono's license.
+`assets/fonts/License.txt` covers the **Kenney** display fonts (CC0). It does **not** cover JetBrains Mono; the OFL file above is JetBrains Mono's license.
