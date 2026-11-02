@@ -395,6 +395,7 @@ pub fn main(process: std.process.Init) !void {
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.merchant.merchant_deal);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.research.research);
         ecs.run(&app.world, &app.resources.game, ha.sim.systems.exchange.raise_exchange);
+        ecs.run(&app.world, &app.resources.game, ha.sim.systems.neighbours.neighbour_deal);
         // 4. update game systems — but only while the run is still being played. A housed
         // actor has ended Act I, and the curtain is a still frame: without this the world
         // would keep spoiling and starving behind the dialog, and a win left on screen

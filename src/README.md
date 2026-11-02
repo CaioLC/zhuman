@@ -134,8 +134,8 @@ a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) em
 field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
 title, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
 `ctx.res.game.config`, `ctx.res.game.catalog` directly and writes intents through
-`ctx.res.game.events.writer(T)`; the Act II trades that are not yet intents hand
-`&ctx.res.game` to their rule from the page. `sim/root.zig` is the `sim` namespace,
+`ctx.res.game.events.writer(T)`; it reads an outcome it waits on (a trade settled, a tile
+researched) as a fact, with a cursor of its own. `sim/root.zig` is the `sim` namespace,
 re-exported by the library as `ha.sim`; a caller spells the folder (`ha.sim.rules.actions`,
 `ha.sim.data.roster`). `zig build test-sim` compiles the sim files and the `ecs` package with
 no `sdl3`, `ui` or host import (root: `sim/root.zig`), so a sim file that reaches the host fails
@@ -202,7 +202,7 @@ names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
 `ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`,
-`RaiseExchange`, and, declared for the Act II handler, `NeighbourDeal`. The UI writes them through
+`RaiseExchange`, `NeighbourDeal`. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` where it used to call a rule, and mutates nothing; a
 decider will write the same events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -210,7 +210,8 @@ the handler answers with `Refused{agent, intent, reason}`.
 
 **Facts** say what happened: `WorkBegun`, `WorkDone`, `WorkLost`, `BuildCancelled`,
 `GoodBroke`, `Collected`, `BandCrossed`, `FoodRanOut`, `Died`, `GoodsChanged`,
-`RecipeInReach`, `Traded`, `Researched`, `ExchangeRaised`, `Arrived`, `Departed`, `Refused`. Systems and the rules they call write them.
+`RecipeInReach`, `Traded`, `Researched`, `ExchangeRaised`, `NeighbourSettled`, `Arrived`,
+`Departed`, `Refused`. Systems and the rules they call write them.
 A receipt in a fact is a `ledger.Receipt`: up to a record's `roster.max_lines` lines of
 `{ item: ledger.Item, qty }`.
 
@@ -220,9 +221,11 @@ handlers of frame N+1, and gone at the top of N+2; a fact a system writes is rea
 rest of its frame and the next.
 
 **Reader ids.** `ReaderId` names every scheduled reader: `labor`, `build`, `generators`,
-`ration`, `passerby`, `barter`, `merchant`, `research`, `exchange`, `log`. The store keeps one cursor per event type per id, so a handler
+`ration`, `passerby`, `barter`, `merchant`, `research`, `exchange`, `neighbours`, `log`. The store keeps one cursor per event type per id, so a handler
 reading its family sees each intent once. The UI reads facts with a `u64` cursor it keeps
-itself, through `events.readerAt(T, &cursor)`.
+itself, through `events.readerAt(T, &cursor)`: the trade dialogs read `Traded` on
+`TradeState.heard`, the research board `Researched` on `ResearchState.heard`, the Act II page
+`ExchangeRaised` on `ViewMemory.heard`.
 
 **The log.** `systems/log.zig` is the one reader that writes `Log`. It reads every fact with
 the `.log` cursor, in the order the frame writes the types, and words each with the rules' text
@@ -248,6 +251,7 @@ paused or not and housed or not:
 | `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings, moves both sides, takes the stock, `Traded` |
 | `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
 | `exchange.raise_exchange` | `RaiseExchange` | refuses while standing, locked (`exchange.lifecycle`: a ring-4 technology and more than 500 of `Sim.population`) or short; else pays `exchange.cost` from the ledger and stands it, `ExchangeRaised` |
+| `neighbours.neighbour_deal` | `NeighbourDeal` | seeds the stub book if unseeded; refuses an unknown neighbour, a deal the neighbour's `verdict` does not accept on the agent's spare (held less `neighbours.reserve`), or one the agent cannot pay; else settles both sides (the book's `settle`, the agent's ledger, goods and coin), `NeighbourSettled` |
 
 The tick systems run only while the run is played and `dt > 0`, in this order:
 
@@ -530,6 +534,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `merchant.zig` | the Coin Merchant's lots (a stand-in, ACT2-14), its visit system and the `MerchantDeal` handler |
 | `research.zig` | the `Research` handler: the board and the ledger's one writer for a research |
 | `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
+| `neighbours.zig` | the reserve table (a stand-in), `heldItem`, and the `NeighbourDeal` handler that settles both sides of a deal |
 | `passerby.zig` | the passerby's update system |
 | `log.zig` | the log system: every fact into its `Log` line |
 
@@ -543,7 +548,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule; the merchant's visit clock and the lots taken in a visit |
-| `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view trades with |
+| `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view shows and `systems/neighbours.zig` settles with |
 | `research.zig` | the research board's progression: the adjacency rule and atomic research resolution over the catalog and `comp.Research` |
 
 `sim/kernel/` holds pure math over values; a kernel imports only `std`.

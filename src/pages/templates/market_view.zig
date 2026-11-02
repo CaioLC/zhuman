@@ -6,8 +6,9 @@
 //! and each post says how many would take it.
 //!
 //! The neighbours are `ha.sim.rules.neighbours` (a stub until the population and market model exist);
-//! the player's holdings arrive as numbers. The view edits the neighbour book (posts, a
-//! settled deal) and reports a settled deal so the page moves the player's real stocks.
+//! the player's holdings arrive as numbers. The view edits the player's posts on the neighbour
+//! book and reports a proposed deal the neighbour accepts, which the page writes as a
+//! `NeighbourDeal` intent; the handler settles both sides.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -52,12 +53,13 @@ pub const Player = struct {
 };
 
 pub const Settled = struct {
+    neighbour: u8,
     give: [nb.bundle_len]u16,
     take: [nb.bundle_len]u16,
 };
 
 pub const Result = struct {
-    /// A deal the neighbour accepted this frame; the page moves the player's side.
+    /// A deal proposed this frame that the neighbour accepts; the page writes it as an intent.
     settled: ?Settled = null,
 };
 
@@ -513,7 +515,7 @@ fn pickAgent(st: *MarketState, m: *const nb.Market, k: usize, seed: ?Player) voi
     };
 }
 
-fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, words: []const []const u8) !?Settled {
+fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Player, words: []const []const u8) !?Settled {
     const ctx = slip.ctx;
     const th = ctx.res.view.theme;
     const a = ctx.arena;
@@ -603,8 +605,7 @@ fn agentSlip(slip: El, m: *nb.Market, k: usize, st: *MarketState, p: Player, wor
     b.set(.{}, .{propose_outline});
     try b.label("t", "PROPOSE \u{2192}", .{ style.body, propose_label, style.pad_sym(8, 7) });
     if (accept and q.clicked) {
-        const deal = Settled{ .give = st.give, .take = st.take };
-        m.settle(k, st.give, st.take);
+        const deal = Settled{ .neighbour = @intCast(k), .give = st.give, .take = st.take };
         st.give = @splat(0);
         st.take = @splat(0);
         return deal;

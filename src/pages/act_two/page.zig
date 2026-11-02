@@ -27,7 +27,6 @@ const comp = ha.sim.comp;
 const tag = ha.sim.tag;
 const ecs = ha.sim.ecs;
 const actions = ha.sim.rules.actions;
-const capital = ha.sim.rules.capital;
 const ledger = ha.sim.rules.ledger;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
@@ -249,36 +248,7 @@ test {
 }
 
 const nb = ha.sim.rules.neighbours;
-
-/// What the settlement keeps back from trade (the reserve HOLDINGS will own): a larder floor, a
-/// little water, and some biomass to build with. A stub until the reserve exists.
-const reserve = blk: {
-    var r: [nb.item_count]f32 = @splat(0);
-    r[0] = 6;
-    r[1] = 2;
-    r[5] = 10;
-    break :blk r;
-};
-
-fn heldItem(world: *World, e: Entity, cat: *const ha.sim.data.roster.Catalog, i: usize) f32 {
-    const item = ledger.item(cat, nb.items[i]) orelse return 0;
-    return switch (item) {
-        .resource => |r| ledger.balance(world, e, r),
-        .good => |gi| if (world.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
-    };
-}
-
-/// Move `n` of item `i` into (or, negative, out of) the agent's holdings.
-fn moveItem(world: *World, e: Entity, res: *ha.res.Resources, i: usize, n: f32) void {
-    const item = ledger.item(&res.game.catalog, nb.items[i]) orelse return;
-    switch (item) {
-        .resource => |r| _ = ledger.move(world, e, r, n),
-        .good => |gi| {
-            const units: u32 = @intFromFloat(@abs(n));
-            if (n > 0) capital.acquire(world, e, &res.game, gi, units) else _ = capital.release(world, e, &res.game, gi, units);
-        },
-    }
-}
+const neighbours = ha.sim.systems.neighbours;
 
 const exchange = ha.sim.systems.exchange;
 
@@ -383,15 +353,15 @@ fn researchView(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, seed: ?t
     _ = ctx.res.game.events.writer(ha.sim.events.Research).push(.{ .agent = e, .ti = @intCast(idx) });
 }
 
-/// MARKET: the neighbours view over the stub neighbour book; an accepted deal moves the
-/// player's real stocks and goods.
+/// MARKET: the neighbours view over the stub neighbour book; a deal the neighbour accepts is a
+/// `NeighbourDeal` intent, which the handler settles on both sides.
 fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.UiState.MarketState) !void {
     const m = &ctx.res.game.sim.neighbours;
-    if (!m.seeded) m.seed(24);
+    if (!m.seeded) m.seed(neighbours.people);
     var player = t.MarketPlayer{ .trade = "forager", .held = undefined, .reserved = undefined, .coin = ledger.balance(world, e, .coin) };
     for (0..nb.item_count) |i| {
-        player.held[i] = heldItem(world, e, &ctx.res.game.catalog, i);
-        player.reserved[i] = @min(player.held[i], reserve[i]);
+        player.held[i] = neighbours.heldItem(world, e, &ctx.res.game.catalog, i);
+        player.reserved[i] = @min(player.held[i], neighbours.reserve[i]);
     }
     const st = s.owner.state(uic.UiState.MarketState);
     if (initial) |seed| st.* = seed;
@@ -402,14 +372,7 @@ fn market(ctx: *UiCtx, world: *World, e: Entity, s: t.ActSurface, initial: ?uic.
         break :blk box;
     } else s.view;
     const r = try t.market_view(host, "a2_market", m, st, player, s.owner, stall_owner);
-    if (r.settled) |deal| {
-        for (0..nb.item_count) |i| {
-            if (deal.give[i] > 0) moveItem(world, e, ctx.res, i, -@as(f32, @floatFromInt(deal.give[i])));
-            if (deal.take[i] > 0) moveItem(world, e, ctx.res, i, @floatFromInt(deal.take[i]));
-        }
-        _ = ledger.move(world, e, .coin, @as(f32, @floatFromInt(deal.take[nb.coin])) - @as(f32, @floatFromInt(deal.give[nb.coin])));
-        ctx.res.game.sim.log.push(.good, "A neighbour takes your deal. Both sides settle.");
-    }
+    if (r.settled) |deal| _ = ctx.res.game.events.writer(ha.sim.events.NeighbourDeal).push(.{ .agent = e, .neighbour = deal.neighbour, .give = deal.give, .take = deal.take });
 }
 
 test "Act II's BUILD widths fill the lane and hold every Act II build order unelided" {

@@ -107,6 +107,9 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
     var exchange = ev.reader(events.ExchangeRaised, .log);
     while (exchange.next()) |_| sim.log.push(.good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
 
+    var neighbour = ev.reader(events.NeighbourSettled, .log);
+    while (neighbour.next()) |_| sim.log.push(.good, "A neighbour takes your deal. Both sides settle.");
+
     var ran_out = ev.reader(events.FoodRanOut, .log);
     while (ran_out.next()) |_| sim.log.push(.warn, "Your food has run out.");
 
@@ -406,6 +409,15 @@ test "ExchangeRaised: the Exchange stands" {
     rig.run();
     try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
     try expectLine(&rig, 0, .good, "The Exchange stands. Passing merchants become a permanent market; Act III opens.");
+}
+
+test "NeighbourSettled: both sides settle" {
+    var rig = try Rig.init();
+    defer rig.deinit();
+    rig.emit(events.NeighbourSettled{ .agent = 0, .neighbour = 3 });
+    rig.run();
+    try testing.expectEqual(@as(usize, 1), rig.res.sim.log.count);
+    try expectLine(&rig, 0, .good, "A neighbour takes your deal. Both sides settle.");
 }
 
 test "a broken good, a recipe in reach; GoodsChanged says nothing" {
