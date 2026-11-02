@@ -34,6 +34,8 @@ const p_act_two = @import("./act_two/page.zig").ui_act_two;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_title = @import("./title.zig").ui_title;
+const run_sys = ha.sim.systems.run;
+const spawn_player = run_sys.spawn_player;
 
 /// The screen a fixture seeds the shell onto. Act I is the live survival page; `act_two` renders
 /// the Act II shared-shell catalogs (fixture-driven until the Act II simulation model is wired);
@@ -1096,6 +1098,22 @@ fn seedSettlement(res: *Resources, world: *World, player: Entity, st: Settlement
 /// the determinism is covered by `seed`/`metricsOf` tests.
 pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Trees {
     const spec = find(name) orelse catalog[0];
+    // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
+    // there, and the controls own them after, so the seeded screen stays navigable.
+    const first = ctx.frame == 1;
+
+    // The world is empty until a run begins. On its first frame the fixture begins one by hand,
+    // the way `begin_run` does, and puts the run in the state its screen shows, so the schedule
+    // ticks what that state runs; the curtain opens (and pauses) as `ActEnded` would open it.
+    if (first) {
+        const living = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
+        if (living.get() == null) {
+            _ = spawn_player(world);
+            ctx.res.game.sim.log.push(.dim, run_sys.opening_line);
+        }
+        ctx.res.game.states = .{ .current = stateOf(spec) };
+        if (spec.screen == .act_one_end) ctx.res.curtain.show(&ctx.res.playback);
+    }
 
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     if (player.get()) |a| seed(ctx.res, world, a[0], spec);
@@ -1108,9 +1126,6 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
         @intFromFloat(spec.window_h),
     ) catch {};
 
-    // A launch's first build is UI frame 1: the fixture opens its view, rail, dialog and menu
-    // there, and the controls own them after, so the seeded screen stays navigable.
-    const first = ctx.frame == 1;
     if (spec.screen != .title) ctx.res.route = .game;
     if (first) ctx.res.game.sim.exchange = spec.exchange;
     if (first) if (spec.population) |people| {
@@ -1154,7 +1169,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
             .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
         }),
         .gameover => try p_gameover(ctx, world),
-        .act_one_end => try p_act_one_end(ctx, world),
+        .act_one_end => try p_act_one_end(ctx),
         .title => blk: {
             // The attract loop is pinned (the page adds this frame's real time after) and the
             // title screen is the spec's from the first frame.
@@ -1166,13 +1181,24 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *World, name: []const u8) !uic.Tree
     };
 }
 
+/// The state a spec's screen shows: Act II with the Exchange standing is Act III, and the
+/// curtain stands over a world already in Act II.
+pub fn stateOf(spec: Spec) ha.sim.GameState {
+    return switch (spec.screen) {
+        .act_one => .act_one,
+        .act_two => if (spec.exchange.standing) .act_three else .act_two,
+        .act_one_end => .act_two,
+        .gameover => .game_over,
+        .title => .title,
+    };
+}
+
 // =============================== Tests (pure, SDL-free) ===================================
 // The catalog and `seed` are deterministic data over a `World` + `Resources` with an undefined
 // platform — the same headless harness `control.zig`/`replay.zig` use. No window, no font: the
 // determinism contract is what is asserted, not any pixel.
 
 const testing = std.testing;
-const spawn_player = @import("../main.zig").spawn_player;
 
 fn seedRig(spec: Spec) !struct { res: Resources, world: World, player: Entity } {
     var res: Resources = .{ .platform = undefined };
@@ -1348,4 +1374,16 @@ test "seeding is deterministic: the same spec yields identical state twice" {
         };
     }
     try testing.expectEqual(seen[0], seen[1]);
+}
+
+test "each screen's fixture puts the run in the state that screen shows" {
+    try testing.expectEqual(ha.sim.GameState.act_one, stateOf(find("act_one_low_stock").?));
+    try testing.expectEqual(ha.sim.GameState.act_two, stateOf(find("act_one_end").?));
+    try testing.expectEqual(ha.sim.GameState.game_over, stateOf(find("gameover").?));
+    try testing.expectEqual(ha.sim.GameState.act_three, stateOf(find("act_two_exchange_standing").?));
+    for (catalog) |spec| switch (spec.screen) {
+        .act_two => try testing.expect(stateOf(spec) == .act_two or stateOf(spec) == .act_three),
+        .title => try testing.expectEqual(ha.sim.GameState.title, stateOf(spec)),
+        else => {},
+    };
 }

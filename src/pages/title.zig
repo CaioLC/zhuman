@@ -7,7 +7,6 @@
 
 const std = @import("std");
 const ha = @import("ha");
-const app = @import("../main.zig");
 
 const uic = ha.ui_client;
 const World = ha.sim.ecs.World;
@@ -127,15 +126,21 @@ fn attract(arena: std.mem.Allocator, seconds: f32) !t.TitleAttract {
 }
 
 pub fn ui_title(ctx: *uic.UiCtx, world: *World) !uic.Trees {
+    _ = world;
     ctx.res.title.attract_s += ctx.res.game.time.real_dt;
     const r = try t.title_screen(ctx, "title", try attract(ctx.arena, ctx.res.title.attract_s));
     if (r.changed.window) applyWindow(ctx);
     switch (r.action) {
         .none => {},
         .new_game => {
-            app.start_over(world, ctx.res);
+            // The schedule begins the run from the intent; the route, the pause and the
+            // curtain are the host's, reset here. The curtain keeps its cursor, so a fact
+            // already heard is not heard again.
+            _ = ctx.res.game.events.writer(ha.sim.events.NewRun).push(.{});
             ctx.res.route = .game;
             ctx.res.title = .{};
+            ctx.res.playback.paused = false;
+            ctx.res.curtain = .{ .heard = ctx.res.curtain.heard };
         },
         .quit => ctx.res.menu.quit_requested = true,
     }

@@ -160,9 +160,9 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
         .market_available = ctx.res.game.sim.exchange.standing or ctx.res.game.sim.merchant.dealable(),
         .activity = blk: {
             var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null);
-            // A standing Exchange is what the idle settlement reports (`setActivity('idle',
+            // In Act III the idle settlement reports its standing Exchange (`setActivity('idle',
             // 'Exchange standing', 'Act III open')`).
-            if (act.state == .idle and ctx.res.game.sim.exchange.standing) {
+            if (act.state == .idle and ctx.res.game.states.in(.act_three)) {
                 act.subject = "Exchange standing";
                 act.metadata = "Act III open";
             }
@@ -233,7 +233,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *World, opts: Options) !uic.Trees {
     return page.finish(.{
         .stocks = stocks[0..n],
         .compact_stocks = true,
-        .act_label = if (ctx.res.game.sim.exchange.standing) "Act III" else "Act II",
+        .act_label = if (ctx.res.game.states.in(.act_three)) "Act III" else "Act II",
         .gen = fx.energy_gen,
         .consumed = fx.energy_consumed,
         .log = !s.focus,

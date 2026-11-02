@@ -3,7 +3,6 @@
 
 const std = @import("std");
 const ha = @import("ha");
-const app = @import("../main.zig");
 
 const comp = ha.sim.comp;
 const tag = ha.sim.tag;
@@ -15,6 +14,7 @@ const Entity = ha.sim.ecs.Entity;
 
 // Pages
 const p_act_one = @import("./play_game.zig").ui_playgame;
+const p_act_two = @import("./act_two/page.zig").ui_act_two;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
@@ -48,31 +48,50 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *World) !uic.Trees {
     // developer opt-in via a truthy `HA_DEBUG_PAGE` value.
     if (debugRequested(ui_ctx.res)) {
         ui_ctx.res.route = .game;
-        return try withMenu(ui_ctx, world, try p_debug(ui_ctx, world));
+        // The harness samples the live player, so it begins a run if none has begun.
+        const states = &ui_ctx.res.game.states;
+        if (states.in(.title) and states.next == null) _ = ui_ctx.res.game.events.writer(ha.sim.events.NewRun).push(.{});
+        return try withMenu(ui_ctx, try p_debug(ui_ctx, world));
     }
 
     // The deterministic fixture harness: `HA_FIXTURE=<name>` seeds one named screen state and
     // renders it through the production page. A developer opt-in like the debug page; off unless
     // the variable is set and non-empty. See `fixture.zig`.
-    if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, world, try fixture.build_fixture(ui_ctx, world, name));
+    if (fixtureRequested(ui_ctx.res)) |name| return try withMenu(ui_ctx, try fixture.build_fixture(ui_ctx, world, name));
 
-    // Before a run, the title screen.
-    if (ui_ctx.res.route == .title) return try p_title(ui_ctx, world);
+    // The curtain is the UI's response to `ActEnded`, heard with its own cursor. The world has
+    // already crossed into the next act; the curtain holds it still while the player reads.
+    var ended = ui_ctx.res.game.events.readerAt(ha.sim.events.ActEnded, &ui_ctx.res.curtain.heard);
+    while (ended.next()) |fact| if (fact.act == .act_one) ui_ctx.res.curtain.show(&ui_ctx.res.playback);
 
-    // Route on the actor: despawned (vigor hit 0) → game over; housed → the Act I curtain,
-    // since owning the good that ends the act is the win condition; otherwise the live page.
+    // Route on the state: the title before a run (or when Quit to menu left one behind it),
+    // the curtain while it is open, the game-over screen once no player remains (the state
+    // follows a tick after `despawn_dead`), then the act's page.
+    const states = &ui_ctx.res.game.states;
+    if (ui_ctx.res.route == .title or states.in(.title)) return try p_title(ui_ctx, world);
+    if (ui_ctx.res.curtain.open) {
+        const trees = try withMenu(ui_ctx, try p_act_one_end(ui_ctx));
+        // Still open (Continue closes it): a Resume from the menu does not run the world behind it.
+        if (ui_ctx.res.curtain.open) ui_ctx.res.playback.paused = true;
+        return trees;
+    }
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const a = player.get() orelse return try withMenu(ui_ctx, world, try p_gameover(ui_ctx, world));
-    if (ha.sim.rules.capital.ownsMilestone(world, a[0], &ui_ctx.res.game.catalog, .act_one)) return try withMenu(ui_ctx, world, try p_act_one_end(ui_ctx, world));
-    return try withMenu(ui_ctx, world, try p_act_one(ui_ctx, world, .{}));
+    if (states.in(.game_over) or player.get() == null) return try withMenu(ui_ctx, try p_gameover(ui_ctx, world));
+    return try withMenu(ui_ctx, switch (states.current) {
+        .act_one => try p_act_one(ui_ctx, world, .{}),
+        .act_two, .act_three => try p_act_two(ui_ctx, world, .{}),
+        .title, .game_over => unreachable, // routed above
+    });
 }
 
-/// What the session menu says about the run behind it: the act, the day, and how many people.
-fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
-    const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    const act_now: u8 = if (player.get()) |a| ha.sim.data.migration.actOf(world, a[0]) else 1;
-    // A standing Exchange carries the settlement into Act III (a stub until Act III exists).
-    const act: u8 = if (act_now == 2 and ctx.res.game.sim.exchange.standing) 3 else act_now;
+/// What the session menu says about the run behind it: the act (from the state), the day, and
+/// how many people.
+fn session(ctx: *uic.UiCtx) t.MenuSession {
+    const act: u8 = switch (ctx.res.game.states.current) {
+        .act_two => 2,
+        .act_three => 3,
+        .title, .act_one, .game_over => 1,
+    };
     return .{
         .act = act,
         .day = 1 + @as(u64, @intFromFloat(ctx.res.game.sim.elapsed / ctx.res.game.config.secs_per_day)),
@@ -84,11 +103,11 @@ fn session(ctx: *uic.UiCtx, world: *World) t.MenuSession {
 /// Append the session menu as the final/topmost root over whichever production or development
 /// page was built. A header click or Escape on the page (no dialog open, no visible focus) opens
 /// it in this same frame; its modal shell owns focus, Escape, and opener restoration.
-fn withMenu(ctx: *uic.UiCtx, world: *World, roots: uic.Trees) !uic.Trees {
+fn withMenu(ctx: *uic.UiCtx, roots: uic.Trees) !uic.Trees {
     if (!ctx.res.menu.open and roots.len > 0 and t.pageEscape(ctx, roots[0])) ctx.res.menu.show(&ctx.res.playback);
     if (!ctx.res.menu.open) return roots;
 
-    const menu = try t.menu_dialog(ctx, "session_menu", session(ctx, world));
+    const menu = try t.menu_dialog(ctx, "session_menu", session(ctx));
     if (menu.changed.window) title_page.applyWindow(ctx);
     if (menu.quit) {
         // Quit to menu: the run behind it is left, and the title screen comes up next frame.

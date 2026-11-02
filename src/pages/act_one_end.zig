@@ -1,23 +1,21 @@
-//! The Act I curtain (`src/pages/` game content). Owning a `Shelter` *is* the win, so
-//! `build_ui` routes here the frame the build resolves and stops building the HUD at all.
-//! That is also what makes the dialog's own button the only thing on the window a click
-//! can reach — a real overlay would leave the play screen live underneath it.
+//! The Act I curtain (`src/pages/` game content): the UI's response to `ActEnded`. By the time
+//! it shows, the world has already crossed into Act II (`cross_curtain`); `build_ui` opens
+//! `CurtainState` on the fact, which pauses playback, so the world holds still while the player
+//! reads. While it is open `build_ui` routes here instead of to the play screen, which is also
+//! what makes the dialog's own button the only thing on the window a click can reach.
 //!
-//! Two beats with a Continue between them: the roof first, then who it brought. The
-//! pause is the point — the arrival reads as news rather than as more reward text. The
-//! beat lives in the dialog's own pooled `StepState` (the `TabsState` pattern), so it
-//! survives the frame-arena reset without touching `Resources`.
+//! Two beats with a Continue between them: the roof first, then who it brought. The pause is
+//! the point — the arrival reads as news rather than as more reward text. The beat is
+//! `CurtainState.step`. The last beat's Continue dismisses the curtain, restoring the prior
+//! pause state, and the next frame routes to the Act II page over the live, migrated world.
 
 const ha = @import("ha");
-const app = @import("../main.zig");
 
 const uic = ha.ui_client;
-const World = ha.sim.ecs.World;
-const StepState = uic.UiState.StepState;
 
 const t = @import("./templates/root.zig");
 
-/// The curtain's script. The last beat's button is the one that starts a new run.
+/// The curtain's script. The last beat's button closes the curtain.
 const Beat = struct { line: []const u8, note: []const u8, button: []const u8 };
 const beats = [_]Beat{
     .{
@@ -28,11 +26,12 @@ const beats = [_]Beat{
     .{
         .line = "Two others asked to move in.",
         .note = "You are not alone here anymore. Act I ends.",
-        .button = "Start over",
+        .button = "Continue",
     },
 };
 
-pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
+/// Build the curtain at the beat `CurtainState.step` names, and advance or dismiss on a click.
+pub fn ui_act_one_end(ctx: *uic.UiCtx) !uic.Trees {
     // The Act I curtain lives in the one terminal shell; it needs only the main body.
     const regions = try t.shell(ctx, .{
         .id = "act1",
@@ -42,10 +41,9 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         // A curtain centred in the window; it never scrolls.
         .scroll = false,
     });
-    // The beat persists on the body's own slot (the shell region is rebuilt every frame).
-    const st = regions.body.state(StepState);
-    if (st.step >= beats.len) st.step = 0; // the script shrank across frames — stay valid
-    const beat = beats[st.step];
+    const curtain = &ctx.res.curtain;
+    if (curtain.step >= beats.len) curtain.step = 0; // the script shrank — stay valid
+    const beat = beats[curtain.step];
 
     const c = try t.curtain(regions.body, "curtain", .{
         .title = "ACT I",
@@ -54,12 +52,10 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx, world: *World) !uic.Trees {
         .button = beat.button,
     });
     if (c.clicked) {
-        if (st.step + 1 < beats.len) {
-            st.step += 1;
+        if (curtain.step + 1 < beats.len) {
+            curtain.step += 1;
         } else {
-            // Nothing follows Act I yet, so the only way on is back to the start.
-            app.start_over(world, ctx.res);
-            st.step = 0;
+            curtain.dismiss(&ctx.res.playback);
         }
     }
     return try uic.oneRoot(ctx.arena, regions.root.get());

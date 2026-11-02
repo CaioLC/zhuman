@@ -131,6 +131,35 @@ pub const MenuState = struct {
     }
 };
 
+/// The Act I curtain, the UI's response to `ActEnded`. The page build hears the fact with its
+/// own cursor (`heard`) and opens it; opening pauses the simulation and remembers whether it
+/// was already paused, so the world, which has already crossed into the next act, holds still
+/// while the player reads. `step` is the beat on screen. Dismissing (the last beat's Continue)
+/// restores the prior pause state, and the next frame routes to the live act.
+pub const CurtainState = struct {
+    open: bool = false,
+    step: u8 = 0,
+    restore_paused: bool = false,
+    /// The `ActEnded` cursor: past the last fact the build heard.
+    heard: u64 = 0,
+
+    /// Open on the first beat and pause, remembering the prior pause state. Open already: no-op.
+    pub fn show(self: *CurtainState, playback: *Playback) void {
+        if (self.open) return;
+        self.restore_paused = playback.paused;
+        self.open = true;
+        self.step = 0;
+        playback.paused = true;
+    }
+
+    /// Close, rewind the beat, and restore the pause state `show` remembered.
+    pub fn dismiss(self: *CurtainState, playback: *Playback) void {
+        self.open = false;
+        self.step = 0;
+        playback.paused = self.restore_paused;
+    }
+};
+
 /// The session menu's screens (`menu.html`).
 pub const MenuScreen = enum { menu, save, load, settings, quit };
 
@@ -327,6 +356,8 @@ pub const Resources = struct {
     tween: @import("./ui_client/tween.zig").Registry = .{},
     playback: Playback = .{},
     menu: MenuState = .{},
+    /// The act curtain over the live world, opened by the page build on `ActEnded`.
+    curtain: CurtainState = .{},
     /// The top-level screen. A launch opens on the title; New game routes to the game.
     route: Route = .title,
     title: TitleState = .{},

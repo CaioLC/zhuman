@@ -2,13 +2,8 @@ const std = @import("std");
 
 const ha = @import("ha");
 
-const comp = ha.sim.comp;
-const tag = ha.sim.tag;
 const ui_client = ha.ui_client;
 const sdl = ha.sdl;
-const sys = ha.sim.systems.tick;
-const ecs = ha.sim.ecs;
-const actions = ha.sim.rules.actions;
 const pages = @import("./pages/root.zig");
 const Resources = ha.res.Resources;
 
@@ -207,9 +202,8 @@ const App = struct {
         // fallback. No per-frame OS call — `build_ui` only projects this onto
         // `view.reduced_motion` each frame.
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
+        // The world is empty until a `NewRun` (the title's New game) begins a run.
         self.world = ha.sim.ecs.World.init();
-        _ = spawn_player(&self.world);
-        self.resources.game.sim.log.push(.dim, opening_line);
 
         self.frame_arena = std.heap.ArenaAllocator.init(allocator);
         self.ui = ui_client.UiCtx.init(&self.resources, allocator, self.frame_arena.allocator());
@@ -366,68 +360,23 @@ pub fn main(process: std.process.Init) !void {
         // mutates nothing the step reads.
 
         // Update Stage
-        // 1. update game resources. Host time always advances normally; simulation time alone
-        // takes the selected playback multiplier (and later pause's zero multiplier).
+        // 1. this frame's timesteps. Host time always advances; simulation time takes the
+        // playback multiplier, zero while paused (the menu, the curtain, the stepper).
         const real_dt = app.frame_capper.delay();
         app.resources.game.time.real_dt = real_dt;
         app.resources.game.time.dt = app.resources.playback.simulationDelta(real_dt);
-        // A changed `data/` file reloads the roster here, between frames: before the systems
+        // 2. a changed `data/` file reloads the roster here, between frames: before the systems
         // read it and before the page build, so nothing holds the records being replaced.
         if (app.data_watch.poll(app.io, real_dt)) ha.sim.data.reload.reload(app.io, &app.resources.game, &app.world);
-        // Advance host-layer UI transitions by the frame delta and keep the
-        // reduced-motion policy projected onto the registry (so a transition started this
-        // frame snaps when reduced motion is on). Presentation only — always runs, even at
-        // the Act I curtain, since UI transitions are independent of the sim clock.
+        // Host-layer UI transitions advance by real time and follow the reduced-motion policy
+        // (a transition started this frame snaps when reduced motion is on). Presentation only.
         app.resources.tween.setPolicy(app.resources.motion);
         app.resources.tween.advance(real_dt);
-        // 2. open the frame's events: what was written before the previous frame began expires,
-        // and the intents the UI wrote during the last build stay readable through this frame.
-        app.resources.game.events.update();
-        // 3. the handlers: every frame, paused or not and housed or not, so an intent the UI wrote
-        // during the last build applies now and its outcome is in the world this frame's build reads.
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.labor.labor);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.build.build);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.build.cancel);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_toggle);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators_collect);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.ration.ration);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.barter.barter);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.merchant.merchant_deal);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.research.research);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.exchange.raise_exchange);
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.neighbours.neighbour_deal);
-        // 4. update game systems — but only while the run is still being played. A housed
-        // actor has ended Act I, and the curtain is a still frame: without this the world
-        // would keep spoiling and starving behind the dialog, and a win left on screen
-        // long enough would turn into a game over. `pages.build_ui` routes on the same fact.
-        const player = ecs.MaybeSingle(.{ ha.sim.ecs.Entity, comp.Goods, ecs.With(tag.Player) }){ .world = &app.world };
-        const housed = if (player.get()) |p| ha.sim.rules.capital.ownsMilestone(&app.world, p[0], &app.resources.game.catalog, .act_one) else false;
-        // Skip the simulation stage entirely while paused or before a run (the title screen):
-        // passing zero through systems is not sufficient because boundary-state systems (an
-        // encounter at remaining=0, completed work, death/reach edge detectors) may still mutate
-        // without consuming time.
-        if (!housed and app.resources.route == .game and app.resources.game.time.dt > 0) {
-            ecs.run(&app.world, &app.resources.game, sys.advance_clock); // run clock ticks while alive
-            ecs.run(&app.world, &app.resources.game, sys.update_food); // larder spoils
-            ecs.run(&app.world, &app.resources.game, sys.metabolize); // continuous eating / starvation
-            ecs.run(&app.world, &app.resources.game, sys.resolve_busy); // work in progress ticks/completes
-            ecs.run(&app.world, &app.resources.game, sys.track_reach); // newly in-reach recipes → RecipeInReach
-            ecs.run(&app.world, &app.resources.game, ha.sim.systems.passerby.passerby); // the encounter clock → Arrived / Departed
-            ecs.run(&app.world, &app.resources.game, ha.sim.systems.generators.generators); // collectable capital accumulates
-            ecs.run(&app.world, &app.resources.game, sys.mark_dead); // vigor at 0 → tag Dead
-            ecs.run(&app.world, &app.resources.game, sys.despawn_dead); // reap Dead entities
-        }
-        // Act II's systems are stubbed until its population model exists (ACT2-01), so the
-        // household clock above stops at the curtain; the Coin Merchant's visits run on game
-        // time here, and a standing Exchange replaces the cart.
-        if (housed and app.resources.route == .game and app.resources.game.time.dt > 0 and !app.resources.game.sim.exchange.standing) {
-            if (player.get()) |p| if (ha.sim.data.migration.actOf(&app.world, p[0]) == 2) {
-                ecs.run(&app.world, &app.resources.game, ha.sim.systems.merchant.merchant); // the visit clock → Arrived / Departed
-            };
-        }
-
-        // 5. the log, every frame and last: every fact written above becomes its line.
-        ecs.run(&app.world, &app.resources.game, ha.sim.systems.log.log);
+        // 3. the simulation: the schedule's one tick (`sim/schedule.zig`). It opens the frame's
+        // events, applies a pending transition, runs the state's handlers, and its update set
+        // while simulation time passes, so the intents the last build wrote are in the world
+        // this frame's build reads.
+        ha.sim.schedule.tick(&app.world, &app.resources.game);
 
         // UI + Render Stage: the canonical per-frame UI lifecycle, run by the frame driver.
         // The host callbacks wrap page build, the cursor apply, the clear/present around the
@@ -498,43 +447,6 @@ const FrameHost = struct {
         }
     }
 };
-
-fn spawn_agent(world: *ha.sim.ecs.World) ha.sim.ecs.Entity {
-    // Spawn from the components' authoritative default baselines (see `baselines.zig`)
-    // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
-    // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
-    // starting state has exactly one source and Holdings can derive current-vs-base against it.
-    return world.spawn(.{
-        comp.Vigor{}, // rested at the ceiling (10/10)
-        comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
-        comp.InventoryBiomass{ .v = 0 }, // nothing stockpiled yet
-        comp.Metabolism{}, // eats continuously from the first breath (normal rate)
-        comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
-        comp.Generators{}, // collectable capital accumulates independently of the body's work
-        comp.Granted{}, // and the goods contribute nothing to the body or larder yet
-    });
-}
-
-pub fn spawn_player(world: *ha.sim.ecs.World) ha.sim.ecs.Entity {
-    const e = spawn_agent(world);
-    world.add(e, tag.Player{});
-    return e;
-}
-
-/// The opening line every run begins with.
-pub const opening_line = "You wake alone. Cold. Hungry.";
-
-/// Begin a fresh run: retire any living player (a settled actor is still alive at the Act I
-/// curtain, so spawning over them would leave two), spawn a new one, clear the run state
-/// (clock, log, teaching flag), unpause, and log the opening line. Speed survives a new run.
-pub fn start_over(world: *ha.sim.ecs.World, res: *ha.res.Resources) void {
-    const living = ecs.MaybeSingle(.{ ha.sim.ecs.Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
-    if (living.get()) |entry| world.despawn(entry[0]);
-    res.playback.paused = false;
-    _ = spawn_player(world);
-    res.game.sim.reset();
-    res.game.sim.log.push(.dim, opening_line);
-}
 
 // The pages are game content outside the `ha` library; the executable module is their test
 // root, so this block is what pulls their test declarations into `zig build test`.
