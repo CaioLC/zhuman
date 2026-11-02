@@ -258,17 +258,20 @@ leaves Act I and the act did not end.
 `schedule.tick(world, res)` does, in order: `events.update()`; apply the pending transition;
 run the current state's `handle` set; if `time.dt > 0`, run its `update` set. That split is
 what pausing means: an intent applies while the menu or the curtain holds the run still, so a
-slider does not snap back, while nothing that spends or detects time runs. Each set runs in the
-order it declares, and `schedule.zig`'s tests hold the rules: `log` last in every `update` set,
-`new_run` in every `handle` set, no handler in an `update` set.
+slider does not snap back, while nothing that spends or detects time runs. `log` closes both of
+an act's sets, so a fact a handler writes while the run is paused becomes its line in the same
+tick instead of expiring unread; its cursor makes the second run of a tick read nothing twice.
+Each set runs in the order it declares, and `schedule.zig`'s tests hold the rules: `log` last in
+every `update` set and in every act's `handle` set, `new_run` in every `handle` set, no handler
+in an `update` set.
 
 The `handle` sets:
 
 | State | Handlers, in order |
 |---|---|
 | `title`, `game_over` | `new_run` |
-| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run` |
-| `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run` |
+| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run`, `log` |
+| `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run`, `log` |
 
 | Handler | Reads | Does |
 |---|---|---|
@@ -302,7 +305,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `run.detect_death` | ✓ | ✓ | ✓ | no player left: requests `game_over` |
 | `curtain.detect_shelter` | ✓ | | | requests `act_two`, `ActEnded` |
 | `curtain.detect_exchange` | | ✓ | | requests `act_three` |
-| `log.log` | ✓ | ✓ | ✓ | turns the tick's facts into `Log` lines |
+| `log.log` | ✓ | ✓ | ✓ | turns the facts written since its last run into `Log` lines |
 
 `title` and `game_over` have no `update` set: before a run and after it, only `new_run` runs.
 

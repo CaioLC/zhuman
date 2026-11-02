@@ -89,10 +89,10 @@ per state. Systems differ in signature, so a set is a tuple of functions, not a 
 pub const schedule = Schedule(GameState, .{
     .title     = .{ .handle = .{ new_run } },
     .act_one   = .{ .on_enter = .{ begin_run },
-                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, barter, new_run },
+                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, barter, new_run, log },
                     .update = .{ advance_clock, update_food, metabolize, resolve_busy, track_reach, passerby, generators, mark_dead, despawn_dead, detect_death, detect_shelter, log } },
     .act_two   = .{ .on_enter = .{ cross_curtain },
-                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, merchant_deal, research, raise_exchange, neighbour_deal, new_run },
+                    .handle = .{ labor, build, cancel, generators_toggle, generators_collect, ration, merchant_deal, research, raise_exchange, neighbour_deal, new_run, log },
                     .update = .{ advance_clock, update_food, metabolize, resolve_busy, generators, merchant, mark_dead, despawn_dead, detect_death, detect_exchange, log } },
     .act_three = .{ /* act_two's sets without the merchant's clock and detect_exchange */ },
     .game_over = .{ .handle = .{ new_run } },
@@ -106,10 +106,12 @@ set with another name, is a compile error.
 `tick(world, res)` does, in order: `events.update()`; apply a pending transition; run the current
 state's `handle` set; if `time.dt > 0`, run its `update` set. The split is what pausing means:
 intents apply while the menu is open, so a slider does not snap back, while nothing that spends
-or detects time runs. The host loop calls `tick` once per frame and nothing else. The order a
-set declares is the order it runs, and a test asserts the orders this document names: `log` is
-last in every `update` set, `new_run` is in every `handle` set, and no handler is in an `update`
-set.
+or detects time runs. `log` closes both of an act's sets, so a fact a handler writes while the
+run is paused becomes its line in the same tick rather than expiring unread; its cursor makes
+the second run of a tick read nothing twice. The host loop calls `tick` once per frame and
+nothing else. The order a set declares is the order it runs, and a test asserts the orders this
+document names: `log` is last in every `update` set and in every act's `handle` set, `new_run`
+is in every `handle` set, and no handler is in an `update` set.
 
 ## The simulation: `src/sim/`
 
@@ -182,9 +184,9 @@ gi}`, `Arrived{who}`, `Departed{who}`, `Traded{agent, with, direction, biomass_m
 act}`, `Researched{agent, ti, newly}`, `ExchangeRaised{agent}`, `NeighbourSettled{agent,
 neighbour}`, `RunBegun{}`, `ActEnded{act}`. A fact is semantic and carries what its line needs:
 a bounded `Receipt` of item and quantity lines (`rules/ledger.zig`), a bitmask of the tiles a
-technology opened, the act whose words the agent speaks. So `systems/log.zig`, last in the
-`update` set, takes only `Sim`, the catalog and the store, never the world, and is the one reader
-that turns facts into `Log` lines. A rule that refuses returns the `Refused.Reason`; the handler
+technology opened, the act whose words the agent speaks. So `systems/log.zig`, last in an act's
+`handle` and `update` sets, takes only `Sim`, the catalog and the store, never the world, and is
+the one reader that turns facts into `Log` lines. A rule that refuses returns the `Refused.Reason`; the handler
 emits it. The UI reads the facts it shows with its own cursors.
 
 **Handlers** are one file per intent family in `systems/`, each calling the rule it already has:

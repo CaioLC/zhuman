@@ -4,7 +4,9 @@
 //! A state's `handle` set reads the intents and runs every tick, paused or not, so an intent
 //! the UI wrote applies the next frame and a slider does not snap back while the menu is open.
 //! Its `update` set spends time and detects what time changed, and runs only while time passes
-//! (`time.dt > 0`). `log` is last in every `update` set, after every writer of a fact. The
+//! (`time.dt > 0`). `log` is last in both of an act's sets, after every writer of a fact: a fact
+//! a handler writes while the run is paused becomes its line in the same tick instead of
+//! expiring unread, and its cursor makes the second run of a tick read nothing twice. The
 //! transitions are systems too: `new_run` in every `handle` set, `begin_run` entering Act I,
 //! `cross_curtain` entering Act II, and the detectors `detect_death`, `detect_shelter` and
 //! `detect_exchange` late in the acts' `update` sets. Act III runs Act II's sets without the
@@ -31,14 +33,14 @@ const run = @import("./systems/run.zig");
 const curtain = @import("./systems/curtain.zig");
 const log = @import("./systems/log.zig");
 
-const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run };
+const act_two_handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, merchant.merchant_deal, research.research, exchange.raise_exchange, neighbours.neighbour_deal, run.new_run, log.log };
 
 /// The systems per state, in the order they run.
 pub const schedule = engine.Schedule(GameState, .{
     .title = .{ .handle = .{run.new_run} },
     .act_one = .{
         .on_enter = .{run.begin_run},
-        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run },
+        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, log.log },
         .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, log.log },
     },
     .act_two = .{
@@ -86,6 +88,13 @@ test "log is last in every update set that runs anything" {
         if (update.len > 0) {
             try testing.expectEqual(@as(?usize, update.len - 1), comptime schedule.indexOf(s, .update, log.log));
         }
+    }
+}
+
+test "log is last in every act's handle set" {
+    inline for ([_]GameState{ .act_one, .act_two, .act_three }) |s| {
+        const handle = comptime schedule.setOf(s, .handle);
+        try testing.expectEqual(@as(?usize, handle.len - 1), comptime schedule.indexOf(s, .handle, log.log));
     }
 }
 
@@ -209,4 +218,22 @@ test "paused, the intents apply and nothing spends time" {
     tick(&w, &res);
     try testing.expectApproxEqAbs(@as(f32, 1.5), w.get(e, comp.Metabolism).?.rate, 1e-6);
     try testing.expectEqual(elapsed, res.sim.elapsed);
+}
+
+test "paused, a handler's fact still becomes its log line before it expires" {
+    var w = ecs.World.init();
+    var res = try rig();
+    defer res.catalog.deinit();
+    newRun(&w, &res);
+    const e = player(&w);
+    res.time.dt = 0;
+    const lines = res.sim.log.count;
+    const forage = res.catalog.actionIndex("forage").?;
+    _ = res.events.writer(events.BeginLabor).push(.{ .agent = e, .ai = forage });
+    tick(&w, &res); // the handler begins the work and the log words WorkBegun, paused
+    try testing.expect(w.has(e, comp.Busy));
+    try testing.expectEqual(lines + 1, res.sim.log.count);
+    tick(&w, &res);
+    tick(&w, &res); // the fact has expired; nothing was read twice
+    try testing.expectEqual(lines + 1, res.sim.log.count);
 }
