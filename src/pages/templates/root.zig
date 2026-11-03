@@ -211,6 +211,7 @@ test {
     _ = log_view_mod;
     _ = action_tile_mod;
     _ = generator_section_mod;
+    _ = @import("./generator_tile.zig");
     _ = tabs_mod;
     _ = curtain_mod;
     _ = @import("./act_page.zig");
