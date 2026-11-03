@@ -1,5 +1,5 @@
 //! `actions_section` — the ACTIONS pane, the same template on every act: the heading with the
-//! act's kind counts as two toggles, one search field, a toolbar with the count-only summary
+//! act's kind counts as two toggles, one search field, a toolbar with the hidden-tile summary
 //! and the sort chips, and the held verbs then the owned generators in two growing columns (one
 //! at the compact breakpoint). A verb is an `action_tile`, a generator a `generator_tile`. Only
 //! the content differs per act (`Shelf`: which verbs and generators, the subtitle, the density);
@@ -20,6 +20,16 @@
 //! **Kind toggles.** The eyebrow `{n} VERBS · {m} GENERATORS` is two toggles: pressing one shows
 //! that kind alone, pressing it again shows every kind. The kind lives in the catalog state's
 //! `kind` (`Show`), beside the view's query.
+//!
+//! **Hidden tiles.** Every tile carries a `hide` corner at its top right; pressing it adds the
+//! entry to the view's hidden set (`CatalogState.hidden`, a verb numbered by its action index, a
+//! generator by `max_verbs` plus its good index) and it leaves the grid. A hidden generator keeps
+//! running; it is only out of sight. The summary is one toggle, `{n} hidden out of {N} →`, `N`
+//! every entry of the pane: pressed, it opens the hidden view (`show_hidden`), which lists only
+//! the hidden entries, dashed and dim with an `unhide` corner, under `← {n} hidden out of {N} ·
+//! unhide all`; pressed again, it returns. With nothing hidden it is inert and only counts, and
+//! a hidden view whose set empties falls back to the full grid; `unhide all` empties the set
+//! and returns to the full grid. The kind, the query and the sort apply in either view.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -239,6 +249,57 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
     return buf[0..n];
 }
 
+/// The hidden set's number for an entry: a verb's action index, a generator's good index past
+/// the verbs.
+pub fn slot(ent: *const Entry) usize {
+    return switch (ent.kind) {
+        .verb => ent.index,
+        .generator => max_verbs + @as(usize, ent.index),
+    };
+}
+
+comptime {
+    std.debug.assert(max_verbs >= roster.max_actions);
+    std.debug.assert(max_verbs + roster.max_goods <= CatalogState.max_hidden);
+}
+
+/// Whether the view's hidden set holds `ent`.
+pub fn isHidden(st: *const CatalogState, ent: *const Entry) bool {
+    return st.hidden.isSet(slot(ent));
+}
+
+/// How many of `list` the view hides.
+pub fn hiddenCount(list: []const Entry, st: *const CatalogState) usize {
+    var n: usize = 0;
+    for (list) |*ent| n += @intFromBool(isHidden(st, ent));
+    return n;
+}
+
+/// Hide `ent`, or unhide it when it is hidden.
+pub fn toggleHidden(st: *CatalogState, ent: *const Entry) void {
+    st.hidden.toggle(slot(ent));
+}
+
+/// Empty the hidden set and return to the full grid.
+pub fn unhideAll(st: *CatalogState) void {
+    st.hidden = .empty;
+    st.show_hidden = false;
+}
+
+/// Keep the entries of the view in force, in place and in order: the hidden ones in the hidden
+/// view, the rest otherwise. A hidden view with nothing hidden falls back to the full grid.
+pub fn inView(list: []Entry, st: *CatalogState) []Entry {
+    if (hiddenCount(list, st) == 0) st.show_hidden = false;
+    var n: usize = 0;
+    for (list) |ent| {
+        if (isHidden(st, &ent) == st.show_hidden) {
+            list[n] = ent;
+            n += 1;
+        }
+    }
+    return list[0..n];
+}
+
 /// Keep the entries of a kind `show` admits that `query_text` admits, in place and in order;
 /// returns the kept prefix.
 pub fn filter(list: []Entry, query_text: []const u8, show: Show) []Entry {
@@ -303,6 +364,39 @@ fn kindToggle(parent: El, id: []const u8, text: []const u8, name: []const u8, st
     try b.label("t", text, .{ style.eyebrow, kind_toggle_ink });
 }
 
+/// The summary's ink: dim at rest, fg while the hidden view is open, line2 while inert, accent
+/// while hot.
+pub const summary_ink = Style{ .ink = .dim, .on = &.{ .{ .when = .checked, .ink = .fg }, .{ .when = .disabled, .ink = .line2 }, .{ .when = .hot, .ink = .acc } } };
+
+/// The summary, `{n} hidden out of {N} →`, as the hidden view's toggle: a click opens or closes
+/// the view, and with nothing hidden it is disabled and only counts. The state is read after the
+/// click, so the label is current on the click frame. The two-state toggle publishes as a
+/// checkbox, as the kind toggles do.
+fn hiddenToggle(parent: El, st: *CatalogState, hidden: usize, total: usize) !void {
+    const b = try parent.box("hidden", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
+    const enabled = hidden > 0;
+    if (enabled and b.query().clicked) st.show_hidden = !st.show_hidden;
+    const open = enabled and st.show_hidden;
+    var nbuf: [40]u8 = undefined;
+    const name = std.mem.print(&nbuf, "{d} hidden out of {d}", .{ hidden, total }) catch "hidden";
+    _ = b.control(.{ .enabled = enabled, .name = name, .role = .checkbox, .checked = open, .ring = false });
+    var tbuf: [48]u8 = undefined;
+    const text = if (!enabled) name else if (open)
+        std.mem.print(&tbuf, "\u{2190} {s}", .{name}) catch name
+    else
+        std.mem.print(&tbuf, "{s} \u{2192}", .{name}) catch name;
+    try b.label("t", text, .{ style.small, summary_ink });
+}
+
+/// `unhide all`, beside the summary in the hidden view: a text button in the summary's ink.
+/// Returns its click.
+fn unhideAllButton(parent: El) !bool {
+    const b = try parent.box("unhide_all", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
+    const q = b.control(.{ .name = "Unhide all", .role = .button, .ring = false });
+    try b.label("t", "unhide all", .{ style.small, summary_ink });
+    return q.clicked;
+}
+
 /// The heading's eyebrow, `{n} VERBS · {m} GENERATORS`, into the heading's top row.
 fn kindToggles(top: El, list: []const Entry, st: *CatalogState) !void {
     var verbs: usize = 0;
@@ -343,18 +437,28 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
     try kindToggles(heading.top, all, st);
 
     const controls = try cc.catalog_controls(section, "actions_ctl", cc.actions_placeholder, st, search_owner);
-    const shown = filter(all, controls.query_text, Show.of(st.kind));
 
-    // The toolbar: the summary on the left, the sort chips on the right, on one baseline.
+    // The toolbar: the summary toggle (and `unhide all` in the hidden view) on the left, the sort
+    // chips on the right, on one baseline.
     const toolbar = try section.box("toolbar", .{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
         .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline }, .gap = 12,
     }, .{});
-    var sbuf: [40]u8 = undefined;
-    const summary = std.mem.print(&sbuf, "{d} of {d} actions shown", .{ shown.len, all.len }) catch "?";
-    _ = try copy.summary_line(toolbar, "summary", summary);
+    const hidden_n = hiddenCount(all, st);
+    if (hidden_n == 0) st.show_hidden = false;
+    // Centered across: a box reports no baseline, so a baseline row would hang the separator's
+    // descent below the two buttons and push the toolbar's line down.
+    const summary = try toolbar.box("summary", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center } }, .{});
+    try hiddenToggle(summary, st, hidden_n, all.len);
+    if (st.show_hidden) {
+        try summary.label("sep", " \u{00B7} ", .{ style.small, style.muted });
+        if (try unhideAllButton(summary)) unhideAll(st);
+    }
     const sorted = try cc.sort_chips(toolbar, "sort", "Sort actions", &sort_keys, st);
+    const total = all.len;
+    const shown = filter(inView(all, st), controls.query_text, Show.of(st.kind));
     sortEntries(shown, @enumFromInt(sorted.sort), sorted.dir);
+    const hide: action_tile_mod.Hide = if (st.show_hidden) .hidden else .shown;
 
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     // The tiles' host: the pane itself, or a scroll viewport filling the height left under
@@ -366,23 +470,30 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
     } else section;
     const grid = try browser.tile_lanes(host, "grid", compact, if (shelf.density == .compact) compact_grid_gap else grid_gap);
     if (shown.len == 0) {
-        const msg = if (all.len == 0) "No action is open yet. Build or research one." else "No action matches your search.";
+        const msg = if (total == 0)
+            "No action is open yet. Build or research one."
+        else if (st.show_hidden)
+            "No hidden action matches your search."
+        else
+            "No action matches your search.";
         _ = try copy.empty_line(grid.grid, "empty", msg);
     }
     const act = ha.sim.data.migration.actOf(world, e);
     // Keyed by the verb's or the good's id, so focus follows it through a re-sort or a query.
-    for (shown, 0..) |ent, pos| {
+    for (shown, 0..) |*ent, pos| {
         const lane = grid.lanes[pos % 2];
-        switch (ent.kind) {
-            .generator => try generator_tile.generatorTile(lane, world, e, act, ent.index, shelf.density),
-            .verb => if (try action_tile_mod.action_tile(lane, world, e, ent.index, ent.id, shelf.density)) |tl| {
+        const tile: ?action_tile_mod.Tile = switch (ent.kind) {
+            .generator => try generator_tile.generatorTile(lane, world, e, act, ent.index, shelf.density, hide),
+            .verb => if (try action_tile_mod.action_tile(lane, world, e, ent.index, ent.id, shelf.density, hide)) |tl| blk: {
                 tl.el.set(.{
                     .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_tile_mod.height(shelf.density) },
                     .flow = .{ .dir = .column, .main = .center },
                 }, .{});
                 if (tl.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginLabor).push(.{ .agent = e, .ai = ent.index });
-            },
-        }
+                break :blk tl;
+            } else null,
+        };
+        if (tile) |tl| if (tl.hide_clicked) toggleHidden(st, ent);
     }
     return section;
 }
@@ -690,4 +801,110 @@ test "the held entries carry their authored place, price and state rank" {
     sortEntries(work[0..list.len], .state, .none);
     try testing.expectEqual(@as(u8, 3), work[0].rank);
     try testing.expectEqualStrings("garden_bed_two", work[list.len - 1].id);
+}
+
+/// The view of `list` in force under `st`, filtered by `query_text` and its kind and sorted by
+/// its sort, over a copy of `list`.
+fn viewed(work: []Entry, list: []const Entry, st: *CatalogState, query_text: []const u8) []Entry {
+    @memcpy(work[0..list.len], list);
+    const shown = filter(inView(work[0..list.len], st), query_text, Show.of(st.kind));
+    sortEntries(shown, @enumFromInt(st.sort), st.dir);
+    return shown;
+}
+
+fn has(list: []const Entry, id: []const u8) bool {
+    for (list) |ent| if (std.mem.eql(u8, ent.id, id)) return true;
+    return false;
+}
+
+test "hiding moves an entry from the full grid to the hidden view; unhide all returns it" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const e = settler(&w, &cat);
+    establishAll(&w, e, &cat);
+    ownGenerators(&w, e, &cat);
+    var buf: [max_entries]Entry = undefined;
+    const list = held(&w, e, &cat, act_two_test, &buf);
+    const verbs = authoredTotal(&cat, act_two_test);
+    var work: [max_entries]Entry = undefined;
+
+    // Nothing hidden: the hidden view falls back to the full grid.
+    var st: CatalogState = .{};
+    st.show_hidden = true;
+    try testing.expectEqual(list.len, viewed(&work, list, &st, "").len);
+    try testing.expect(!st.show_hidden);
+
+    // Hide the first verb and the first generator: both leave the grid and fill the hidden view.
+    toggleHidden(&st, &list[0]);
+    toggleHidden(&st, &list[verbs]);
+    try testing.expectEqual(@as(usize, 2), hiddenCount(list, &st));
+    const full = viewed(&work, list, &st, "");
+    try testing.expectEqual(list.len - 2, full.len);
+    try testing.expect(!has(full, list[0].id) and !has(full, list[verbs].id));
+    st.show_hidden = true;
+    const hidden = viewed(&work, list, &st, "");
+    try testing.expectEqual(@as(usize, 2), hidden.len);
+    try testing.expect(has(hidden, list[0].id) and has(hidden, list[verbs].id));
+
+    // The numbering keeps a verb and a good of the same index apart.
+    try testing.expect(slot(&list[verbs]) >= max_verbs);
+
+    // Unhiding one keeps the view open on the other.
+    toggleHidden(&st, &list[0]);
+    try testing.expectEqual(@as(usize, 1), viewed(&work, list, &st, "").len);
+    try testing.expect(st.show_hidden);
+
+    // Unhide all empties the set and returns to the full grid.
+    unhideAll(&st);
+    try testing.expectEqual(@as(usize, 0), hiddenCount(list, &st));
+    try testing.expect(!st.show_hidden);
+    try testing.expectEqual(list.len, viewed(&work, list, &st, "").len);
+
+    // Bitwise zero, as a pooled slot starts, is nothing hidden and the full grid.
+    const zero = std.mem.zeroes(CatalogState);
+    try testing.expectEqual(@as(usize, 0), hiddenCount(list, &zero));
+    try testing.expect(!zero.show_hidden);
+}
+
+test "the kind, the query and the sort apply in the hidden view" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const e = settler(&w, &cat);
+    establishAll(&w, e, &cat);
+    ownGenerators(&w, e, &cat);
+    var buf: [max_entries]Entry = undefined;
+    const list = held(&w, e, &cat, act_two_test, &buf);
+    const verbs = authoredTotal(&cat, act_two_test);
+    var work: [max_entries]Entry = undefined;
+
+    // Hide two verbs and the three generators, then open the hidden view.
+    var st: CatalogState = .{};
+    for ([_]usize{ 0, 1, verbs, verbs + 1, verbs + 2 }) |i| toggleHidden(&st, &list[i]);
+    st.show_hidden = true;
+    try testing.expectEqual(@as(usize, 5), viewed(&work, list, &st, "").len);
+
+    st.kind = @intFromEnum(Show.generators);
+    try testing.expectEqual(@as(usize, 3), viewed(&work, list, &st, "").len);
+    st.kind = @intFromEnum(Show.verbs);
+    try testing.expectEqual(@as(usize, 2), viewed(&work, list, &st, "").len);
+    st.kind = @intFromEnum(Show.all);
+
+    const off = viewed(&work, list, &st, "state:off");
+    try testing.expectEqual(@as(usize, 1), off.len);
+    try testing.expectEqualStrings("garden_bed_two", off[0].id);
+
+    // `NAME` orders the hidden entries A to Z (the two garden beds share a name); `DEFAULT`
+    // descending reverses the authored order.
+    st.sort = @intFromEnum(Sort.name);
+    st.dir = .ascending;
+    const by_name = viewed(&work, list, &st, "");
+    for (by_name[1..], 0..) |ent, i| try testing.expect(!std.ascii.lessThanIgnoreCase(ent.name, by_name[i].name));
+    st.sort = @intFromEnum(Sort.default);
+    st.dir = .descending;
+    const reversed = viewed(&work, list, &st, "");
+    for (reversed[1..], 0..) |ent, i| try testing.expect(ent.order < reversed[i].order);
 }

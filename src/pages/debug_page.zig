@@ -242,7 +242,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 .gap = 10,
             }, .{});
             inline for (.{ .{ "at", t.ActionDensity.regular }, .{ "atc", t.ActionDensity.compact } }) |d| {
-                if (try t.action_tile(col, world, a[0], forage, d[0], d[1])) |tl| {
+                if (try t.action_tile(col, world, a[0], forage, d[0], d[1], .none)) |tl| {
                     tl.el.set(.{
                         .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = t.actionTileHeight(d[1]) },
                         .flow = .{ .dir = .column, .main = .center },

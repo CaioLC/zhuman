@@ -63,13 +63,20 @@ time, distribution shape and expected output. Plain text plus `in:`, `out:`, `ty
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
 `*` use the same grammar as BUILD. The grid also lists the owned generators, after the verbs, as
 the generator tile (collect on the body, the mode corner on its lower right); a generator answers
-`type:generator`, a verb `type:verb`. A toolbar under the search holds the count on the left and
-the sort chips `SORT DEFAULT · STATE · NAME · COST · TIME` on the right: a chip pressed first
-sorts in its natural direction (DEFAULT the authored order, verbs then generators; STATE ready
-first; the rest ascending), pressed again it flips, and equal keys read by name. The heading's
-eyebrow, `{n} VERBS · {m} GENERATORS`, is two kind toggles: pressing one shows that
-kind alone, pressing it again shows everything. Every act uses the same ACTIONS pane
-(`actions_section`); only its content differs (which verbs and generators, and the subtitle).
+`type:generator`, a verb `type:verb`. A toolbar under the search holds the hidden count on the
+left and the sort chips `SORT DEFAULT · STATE · NAME · COST · TIME` on the right: a chip
+pressed first sorts in its natural direction (DEFAULT the authored order, verbs then
+generators; STATE ready first; the rest ascending), pressed again it flips, and equal keys read
+by name. Every tile has a `hide` corner at its top right that takes it out of the grid; a
+hidden generator keeps running. The count is a toggle, `{n} hidden out of {N} →`, inert
+while nothing is hidden: pressed, it opens the hidden view, which lists only the hidden tiles,
+dashed and dim with an `unhide` corner, under `← {n} hidden out of {N} · unhide all`,
+and the kind, the search and the sort apply there too. `unhide all` empties the set and
+returns to the full grid, as the view does by itself when its last tile is unhidden; the set is
+per-view UI state and is not saved. The heading's eyebrow, `{n} VERBS · {m} GENERATORS`, is
+two kind toggles: pressing one shows that kind alone, pressing it again shows everything.
+Every act uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs
+and generators, and the subtitle).
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named

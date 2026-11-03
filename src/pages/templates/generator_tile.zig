@@ -7,7 +7,9 @@
 //! A click on the ready tile writes `CollectGenerator`; a click on the corner writes
 //! `ToggleGenerator` and never collects. Readiness and progress come from the agent's
 //! `comp.Quotes`, cost and output from the record's generator. At the compact density the
-//! state word rides the name row and the tile stands at verb height.
+//! state word rides the name row and the tile stands at verb height. In a catalog that hides
+//! entries the tile carries the hide corner at its top right (`action_tile.Hide`), and a
+//! hidden tile dims its mode corner with the rest.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -84,14 +86,16 @@ fn stateWord(q: comp.Quotes.Generator) []const u8 {
 }
 
 /// Build the tile for owned generator `gi` into `parent`, keyed by the good's id. `act` picks
-/// the item letters of the cost and yield.
-pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, density: action_tile.Density) !void {
+/// the item letters of the cost and yield; `hide` the hide corner and the look. Returns the tile
+/// and its hide corner's click, which neither collects nor cycles the mode; the tile collects on
+/// its own, so `clicked` is false. Null when the agent does not own a quoted generator `gi`.
+pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, density: action_tile.Density, hide: action_tile.Hide) !?action_tile.Tile {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     const rec = &cat.goods[gi];
-    const spec = rec.generator orelse return;
-    const quotes = world.get(e, comp.Quotes) orelse return;
-    const q = quotes.generators[gi] orelse return;
+    const spec = rec.generator orelse return null;
+    const quotes = world.get(e, comp.Quotes) orelse return null;
+    const q = quotes.generators[gi] orelse return null;
 
     var cost_buf: [40]u8 = undefined;
     var duration_buf: [12]u8 = undefined;
@@ -112,6 +116,7 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u1
         q.ready(),
         progress,
         density,
+        hide,
     );
     // A regular tile stands as tall as the prototype's (`min-height: 82px` plus the state
     // line: 87px outer); a compact one, its state on the name row, as tall as a compact verb.
@@ -131,7 +136,8 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u1
     }, .{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
     const mode = toggleAndCollect(tile.el, toggle, world, e, gi, display_name);
     const size: Style = if (density == .compact) .{ .font = 10 } else style.small;
-    try toggle.label("label", mode_labels.get(mode), .{ size, mode_inks.get(mode) });
+    try toggle.label("label", mode_labels.get(mode), .{ size, if (hide == .hidden) hidden_mode_ink else mode_inks.get(mode) });
+    return .{ .el = tile.el, .clicked = false, .hide_clicked = tile.hide_clicked };
 }
 
 /// The mode corner's text per mode.
@@ -147,6 +153,9 @@ pub const mode_inks = std.EnumArray(comp.Generators.Mode, Style).init(.{
     .auto = .{ .ink = .fg, .on = &.{.{ .when = .hot, .ink = .acc }} },
     .off = .{ .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} },
 });
+
+/// A hidden tile's mode corner: dim in every mode, accent while hot.
+pub const hidden_mode_ink = Style{ .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} };
 
 /// Resolve one generator tile's activations once the tile (`action_tile.tile`, built and
 /// lifecycle-run before this child existed) and its mode corner `toggle` stand. A click on the
@@ -258,6 +267,12 @@ const GenFixture = struct {
     tile_lifecycle_click: bool = false,
     /// The tile's click once the toggle resolved, the one that decides a collect.
     tile_collect_click: bool = false,
+    /// Whether the tile carries a hide corner in its top-right 60x20, built before the toggle
+    /// as `action_tile.tile` builds it.
+    with_hide: bool = false,
+    hide_key: u64 = 0,
+    /// The hide corner's click, as `action_tile.hideControl` reports it.
+    hide_click: bool = false,
 
     fn place(parent: El, id: []const u8, x: f32, y: f32, w: f32, h: f32) !El {
         return (try parent.div(id))
@@ -271,6 +286,11 @@ const GenFixture = struct {
         const tile = try place(root, "tile", 0, 0, 300, 87);
         const ready = self.world.get(self.e, comp.Quotes).?.generators[self.gi].?.ready();
         self.tile_lifecycle_click = tile.control(.{ .enabled = ready, .name = "Garden bed", .role = .tile }).clicked;
+        if (self.with_hide) {
+            const corner = try place(tile, "hide", 240, 0, 60, 20);
+            self.hide_click = action_tile.hideControl(corner, "Garden bed", .shown);
+            self.hide_key = corner.get().key;
+        }
         const toggle = try place(tile, "toggle", 240, 60, 60, 27);
         self.shown = toggleAndCollect(tile, toggle, self.world, self.e, self.gi, "Garden bed");
         self.tile_collect_click = tile.query().clicked;
@@ -341,6 +361,31 @@ test "generator: a pointer click on the tile body collects and does not toggle" 
     try testing.expect(fx.collected());
     try testing.expect(fx.mode() == .on and fx.shown == .on);
     try testing.expect(rig.world.get(fx.e, comp.InventoryFood).?.v > 0);
+}
+
+test "generator: a click on the hide corner neither collects nor toggles" {
+    var rig: GenRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var fx = rig.gardener();
+    fx.with_hide = true;
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(GenFixture, &fx));
+    try r.idle(1);
+
+    try genClick(&r, 270, 10);
+    try testing.expect(fx.hide_click);
+    // The click bubbled to the ready tile's lifecycle; the corner took it back first.
+    try testing.expect(fx.tile_lifecycle_click and !fx.tile_collect_click);
+    try testing.expect(!fx.collected());
+    try testing.expect(fx.mode() == .on and fx.shown == .on);
+    try testing.expectEqual(@as(?u64, fx.hide_key), rig.ui.focusedKey());
+    const n = rig.res.semantics.find(fx.hide_key).?;
+    try testing.expectEqual(uic.SemanticRole.button, n.role);
+    try testing.expectEqualStrings("Hide Garden bed", n.label.slice());
+
+    // The body still collects.
+    try genClick(&r, 50, 30);
+    try testing.expect(!fx.hide_click and fx.collected());
 }
 
 test "generator: Tab to the toggle and Enter toggles it and does not collect" {

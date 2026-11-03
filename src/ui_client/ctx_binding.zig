@@ -323,16 +323,23 @@ pub const UiState = struct {
     /// A catalog controls bar's persisted state: `sort` is the chosen sort-kind index,
     /// `dir` the direction (`none` disables/resets ordering), `sort_open` whether the disclosed
     /// sort row is showing, `kind` a catalog's kind filter, an index the caller interprets (0 is
-    /// every kind). It lives where the caller keeps it — on an always-built owner (BUILD's
+    /// every kind), `hidden` a catalog's hidden entries by the caller's numbering (below
+    /// `max_hidden`), and `show_hidden` whether the catalog lists its hidden entries instead of
+    /// the rest. It lives where the caller keeps it — on an always-built owner (BUILD's
     /// is on the Act I surface) or the bar's own node — and distinct ids keep ACTIONS and BUILD
     /// **independent**. The query *text* is the search field's `TextInputState`, likewise on the
-    /// owner the caller names or the field's own node.
+    /// owner the caller names or the field's own node. Bitwise zero is the semantic default:
+    /// nothing hidden, the full list.
     pub const CatalogState = struct {
         pub const Direction = enum { none, ascending, descending };
+        /// How many entries a catalog can number for `hidden`.
+        pub const max_hidden = 256;
         sort: usize = 0,
         dir: Direction = .none,
         sort_open: bool = false,
         kind: u8 = 0,
+        show_hidden: bool = false,
+        hidden: std.StaticBitSet(max_hidden) = .empty,
     };
     /// A trade dialog's state, kept on a **stable** node (the market strip, built every frame)
     /// so it survives the frame-arena rebuild and view switches. `mode` is the active tab (0 =

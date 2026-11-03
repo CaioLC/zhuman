@@ -86,7 +86,7 @@ pub fn generator_section(parent: El, world: *const World, e: Entity, id: []const
     var lane: usize = 0;
     for (cat.goods, 0..) |rec, gi| {
         if (!shelf.holds(rec) or goods.count[gi] == 0) continue;
-        try generator_tile.generatorTile(lanes[lane % 2], world, e, act, @intCast(gi), shelf.density);
+        _ = try generator_tile.generatorTile(lanes[lane % 2], world, e, act, @intCast(gi), shelf.density, .none);
         lane += 1;
     }
     return section;

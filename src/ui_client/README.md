@@ -729,7 +729,10 @@ hidden direct child's slot alive from its always-built owner, without building t
 it owns the slot on its own node; a pointer and the caller owns it — the tab strip's `active`,
 a select's `value`, a disclosure's `expanded`, the rail's `collapsed`, a scroll view's
 `ScrollState`, the catalog's `CatalogState` (its sort, direction, open sort row and `kind`, a
-kind filter whose index the caller interprets, 0 being every kind). A view that is only
+kind filter whose index the caller interprets, 0 being every kind; `hidden`, a bitset of the
+catalog's hidden entries by the caller's numbering below `max_hidden`, and `show_hidden`,
+whether it lists those entries instead of the rest; bitwise zero is nothing hidden and the
+full list). A view that is only
 sometimes built keeps its state
 on the node that is always built and passes pointers down: the Act I surface holds BUILD's
 catalog state and search editor, so hiding the tab prunes nothing. A pointer from `state(T)`

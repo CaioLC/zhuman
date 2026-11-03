@@ -8,6 +8,9 @@
 //! string-driven `tile` core draws the box; `action_tile` wraps it for the typed action
 //! components (Requires/Yields), while one-off actions that don't fit that shape
 //! (`eat_tile`) format their own strings and call `tile` directly.
+//!
+//! A tile of a catalog that hides entries carries a `hide` corner at its top right (`Hide`);
+//! hidden, it wears a dashed line2 outline and dim inks, and its corner reads `unhide`.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -30,7 +33,13 @@ const icon_px: f32 = 14;
 /// control takes.
 const compact_state_clear: f32 = 28;
 
-pub const Tile = struct { el: El, clicked: bool };
+/// The tile, the click on its body, and the click on its hide corner (never both: the corner
+/// takes its own click).
+pub const Tile = struct { el: El, clicked: bool, hide_clicked: bool = false };
+
+/// Whether a tile carries the hide corner and how it is dressed: `none` has no corner, `shown`
+/// a `hide` corner on the tile's own look, `hidden` an `unhide` corner on the hidden look.
+pub const Hide = enum { none, shown, hidden };
 
 /// The tile's type scale. `regular` is Act I's grid (h3 name, body metrics, 82px); `compact`
 /// is Act II's long catalog (body name, 10px metrics, 52px), so twenty verbs fit without
@@ -90,6 +99,24 @@ pub const tile_looks = std.EnumArray(TileState, TileLook).init(.{
     },
 });
 
+/// A hidden tile's look over its state's: a dashed line2 outline and every ink dim, the name
+/// keeping its hot rule, so the tile still reads as the control it is.
+pub fn hiddenLook(look: TileLook) TileLook {
+    return .{
+        .outline = .{ .outline_ink = .line2, .outline_style = .dashed },
+        .name = .{ .ink = .dim, .on = look.name.on },
+        .state = .{ .ink = .dim },
+        .metric = .{ .ink = .dim },
+        .icon = .{ .tint_ink = .dim },
+        .yield = .{ .ink = .dim },
+    };
+}
+
+/// The hide corner's ink: line2 on a shown tile, dim on a hidden one, accent while hot.
+pub fn hideInk(hide: Hide) Style {
+    return .{ .ink = if (hide == .hidden) .dim else .line2, .on = &.{.{ .when = .hot, .ink = .acc }} };
+}
+
 /// An enabled action is an ordinary focus target. A running tile (an inert progress readout)
 /// stays a target only while it owns focus; moving away removes it from traversal on the next
 /// frame.
@@ -105,7 +132,8 @@ fn focusRegistrationEnabled(enabled: bool, running: bool, focused: bool) bool {
 /// on a regular tile, beside the name on a compact one, so the compact height holds;
 /// `cost_txt` is the price segment (`−{energy}e {optional input costs}`) and `duration_txt`
 /// the trailing duration, joined by a middot. `kind` selects the curve glyph and its shared
-/// accessible label.
+/// accessible label. `hide` adds the hide corner and the hidden look; its click is
+/// `hide_clicked`, never the body's.
 pub fn tile(
     parent: El,
     id: []const u8,
@@ -118,6 +146,7 @@ pub fn tile(
     can: bool,
     progress: ?f32,
     density: Density,
+    hide: Hide,
 ) !Tile {
     const ctx = parent.ctx;
     const running = progress != null;
@@ -148,7 +177,8 @@ pub fn tile(
     });
     // The look is the state's (`tile_looks`); the name's hover/focus lift is its rule, and the
     // control publishes `disabled` on every other state.
-    const look = tile_looks.get(tileState(can, running));
+    const state_look = tile_looks.get(tileState(can, running));
+    const look = if (hide == .hidden) hiddenLook(state_look) else state_look;
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
@@ -196,7 +226,39 @@ pub fn tile(
         }, .{Style{ .fill_ink = .acc }});
     }
 
-    return .{ .el = box, .clicked = !running and can and q.clicked };
+    if (hide == .none) return .{ .el = box, .clicked = !running and can and q.clicked };
+    const hide_clicked = try hideCorner(box, name, hide, density);
+    // The corner's click bubbled to the tile's lifecycle, which ran first; read the tile's click
+    // again now that the corner has taken its own (a disabled tile consumed it in its lifecycle).
+    return .{ .el = box, .clicked = !running and can and box.query().clicked, .hide_clicked = hide_clicked };
+}
+
+/// The hide corner, a button anchored out of flow at the tile's top right, so it never grows
+/// the tile: `hide`, or `unhide` on a hidden tile, named `Hide <name>` / `Unhide <name>`, 10px.
+/// Its padding sets it on the prototype's corner (7px down and 10px in on a regular tile, 5px
+/// and 8px on a compact one) and widens its hit area. It consumes its click, so the tile body
+/// never acts on it; returns the click.
+fn hideCorner(box: El, name: []const u8, hide: Hide, density: Density) !bool {
+    const corner = try box.box("hide", .{
+        .anchor = .top_right, .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row },
+    }, .{if (density == .compact) style.pad_each(5, 8, 3, 6) else style.pad_each(7, 10, 3, 6)});
+    const clicked = hideControl(corner, name, hide);
+    try corner.label("t", if (hide == .hidden) "unhide" else "hide", .{ Style{ .font = 10 }, hideInk(hide) });
+    return clicked;
+}
+
+/// The hide corner's control on `corner`, a child of the tile built after the tile's lifecycle:
+/// a button named `Hide <name>` or `Unhide <name>` that consumes its click, so a tile re-queried
+/// after it sees only a click on its body. Returns the click.
+pub fn hideControl(corner: El, name: []const u8, hide: Hide) bool {
+    const ctx = corner.ctx;
+    const q = corner.control(.{
+        .name = ctx.arena.print("{s} {s}", .{ if (hide == .hidden) "Unhide" else "Hide", name }) catch name,
+        .role = .button,
+        .ring = false, // the label lifts to accent
+    });
+    _ = corner.consume(.clicked);
+    return q.clicked;
 }
 
 /// A tile for one verb of the roster: formats price/band from the verb's terms
@@ -211,6 +273,7 @@ pub fn action_tile(
     ai: u16,
     id: []const u8,
     density: Density,
+    hide: Hide,
 ) !?Tile {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
@@ -267,7 +330,7 @@ pub fn action_tile(
             std.mem.print(&ybuf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "?";
     }
 
-    return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress, density);
+    return try tile(parent, id, rec.name, state_txt, cost_txt, duration_txt, kind, yield_txt, can, progress, density, hide);
 }
 
 test "running action retains existing focus without becoming a new tab stop" {
@@ -311,5 +374,17 @@ test "tile_looks pins every state's inks" {
         inline for (.{ "outline", "state", "metric", "icon", "yield" }) |f| {
             try std.testing.expectEqual(@as(usize, 0), @field(l, f).on.len);
         }
+        // Hidden, every state wears the dashed line2 outline and dim inks; the name keeps its
+        // rules.
+        const h = hiddenLook(l);
+        try std.testing.expectEqual(R.line2, h.outline.outline_ink.?);
+        try std.testing.expectEqual(style.dashed.outline_style.?, h.outline.outline_style.?);
+        inline for (.{ "name", "state", "metric", "yield" }) |f| try std.testing.expectEqual(R.dim, @field(h, f).ink.?);
+        try std.testing.expectEqual(R.dim, h.icon.tint_ink.?);
+        try std.testing.expectEqual(rules.len, h.name.on.len);
     }
+    // The hide corner: line2 shown, dim hidden, accent while hot.
+    try std.testing.expectEqual(R.line2, hideInk(.shown).ink.?);
+    try std.testing.expectEqual(R.dim, hideInk(.hidden).ink.?);
+    try std.testing.expectEqual(R.acc, hideInk(.shown).on[0].ink.?);
 }
