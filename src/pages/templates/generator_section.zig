@@ -180,7 +180,8 @@ fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u1
     const enabled = true;
     const flip = enabled and toggle.query().clicked;
     if (flip) _ = ctx.res.game.events.writer(ha.sim.events.ToggleGenerator).push(.{ .agent = e, .gi = gi });
-    const is_on = !world.get(e, comp.Generators).?.off[gi] != flip;
+    const was = world.get(e, comp.Generators).?.mode[gi];
+    const is_on = (if (flip) was.next() else was) != .off;
     const q = toggle.control(.{
         .enabled = enabled,
         .name = if (is_on) "Turn generator off" else "Turn generator on",
@@ -340,8 +341,8 @@ const GenFixture = struct {
         return out;
     }
 
-    fn off(self: *const GenFixture) bool {
-        return self.world.get(self.e, comp.Generators).?.off[self.gi];
+    fn mode(self: *const GenFixture) comp.Generators.Mode {
+        return self.world.get(self.e, comp.Generators).?.mode[self.gi];
     }
 
     /// A collect restarts the cycle; an uncollected bed keeps its full progress.
@@ -363,19 +364,22 @@ test "generator: a pointer click on the toggle toggles once and does not collect
     try r.idle(1);
 
     try genClick(&r, 270, 73);
-    try testing.expect(fx.off() and !fx.on);
+    try testing.expect(fx.mode() == .auto and fx.on);
     // The click reached the ready tile's lifecycle by bubbling; the toggle took it back first.
     try testing.expect(fx.tile_lifecycle_click);
     try testing.expect(!fx.tile_collect_click);
     try testing.expect(!fx.collected());
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 
-    // The next click turns it back on (a full cycle is ready again) and still does not collect.
+    // The next click turns it off, the one after back on (a full cycle is ready again); none
+    // collects.
     try genClick(&r, 270, 73);
-    try testing.expect(!fx.off() and fx.on);
+    try testing.expect(fx.mode() == .off and !fx.on);
+    try genClick(&r, 270, 73);
+    try testing.expect(fx.mode() == .on and fx.on);
     try testing.expect(!fx.collected());
     try r.idle(1);
-    try testing.expect(!fx.off() and !fx.collected()); // exactly once per click
+    try testing.expect(fx.mode() == .on and !fx.collected()); // exactly once per click
 }
 
 test "generator: a pointer click on the tile body collects and does not toggle" {
@@ -389,7 +393,7 @@ test "generator: a pointer click on the tile body collects and does not toggle" 
     try genClick(&r, 50, 30);
     try testing.expect(fx.tile_collect_click);
     try testing.expect(fx.collected());
-    try testing.expect(!fx.off() and fx.on);
+    try testing.expect(fx.mode() == .on and fx.on);
     try testing.expect(rig.world.get(fx.e, comp.InventoryFood).?.v > 0);
 }
 
@@ -408,14 +412,14 @@ test "generator: Tab to the toggle and Enter toggles it and does not collect" {
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 
     try r.frame(&.{.{ .key_press = .{ .key = .return_key } }});
-    try testing.expect(fx.off() and !fx.on);
+    try testing.expect(fx.mode() == .auto and fx.on);
     try testing.expect(fx.tile_lifecycle_click and !fx.tile_collect_click);
     try testing.expect(!fx.collected());
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 
-    // Space as well: back on, still uncollected, focus kept.
+    // Space as well: off, still uncollected, focus kept.
     try r.frame(&.{.{ .key_press = .{ .key = .space } }});
-    try testing.expect(!fx.off() and fx.on and !fx.collected());
+    try testing.expect(fx.mode() == .off and !fx.on and !fx.collected());
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 }
 
@@ -432,7 +436,9 @@ test "generator: the published checked state and name match the label on the tog
         try testing.expectEqualStrings("Turn generator off", n.label.slice());
     }
 
-    try genClick(&r, 270, 73);
+    try genClick(&r, 270, 73); // on -> auto, still checked
+    try testing.expect(fx.on);
+    try genClick(&r, 270, 73); // auto -> off
     {
         // The label reads `fx.on`; the snapshot published on the same frame agrees with it.
         const n = rig.res.semantics.find(fx.toggle_key).?;

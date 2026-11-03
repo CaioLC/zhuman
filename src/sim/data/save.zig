@@ -102,8 +102,9 @@ comptime {
 }
 
 pub const GoodSave = struct { id: []const u8, count: u32 };
-/// A generator whose progress or toggle differs from the default.
-pub const GeneratorSave = struct { id: []const u8, progress: f32 = 0, off: bool = false };
+/// A generator whose progress or mode differs from the default. `off` is the older record's
+/// word for the mode: a load reads `off = true` as `mode = .off`; a capture never writes it.
+pub const GeneratorSave = struct { id: []const u8, progress: f32 = 0, mode: comp.Generators.Mode = .on, off: bool = false };
 pub const ResearchSave = struct { id: []const u8, state: roster.TechState };
 pub const BusySave = struct {
     pub const Doing = union(enum) { labor: []const u8, build: []const u8 };
@@ -222,7 +223,7 @@ fn captureAgent(arena: Allocator, cat: *const roster.Catalog, w: *const World, e
     if (w.get(e, comp.Generators)) |g| {
         var list: std.ArrayList(GeneratorSave) = .empty;
         for (cat.goods, 0..) |rec, gi| {
-            if (g.progress[gi] != 0 or g.off[gi]) try list.append(arena, .{ .id = try arena.dupe(u8, rec.id), .progress = g.progress[gi], .off = g.off[gi] });
+            if (g.progress[gi] != 0 or g.mode[gi] != .on) try list.append(arena, .{ .id = try arena.dupe(u8, rec.id), .progress = g.progress[gi], .mode = g.mode[gi] });
         }
         a.generators = list.items;
     }
@@ -380,7 +381,7 @@ fn applyAgent(w: *World, cat: *const roster.Catalog, a: *const AgentSave, report
         for (list) |r| {
             if (cat.goodIndex(r.id)) |gi| {
                 gens.progress[gi] = r.progress;
-                gens.off[gi] = r.off;
+                gens.mode[gi] = if (r.off) .off else r.mode;
             } else report.dropped += 1;
         }
         w.add(e, gens);
@@ -500,7 +501,8 @@ fn settle(res: *Resources, w: *World) Entity {
     effects.apply(w, e, cat);
     const gens = w.get(e, comp.Generators).?;
     gens.progress[cat.goodIndex("garden_bed").?] = 3.75;
-    gens.off[cat.goodIndex("sandals").?] = true;
+    gens.mode[cat.goodIndex("sandals").?] = .off;
+    gens.mode[cat.goodIndex("garden_bed").?] = .auto;
     w.add(e, comp.Busy{ .doing = .{ .build = cat.goodIndex("hatchet").? }, .total = 5, .remaining = 2.125, .quality = 0.7 });
     _ = migration.migrate_to_act_two(w, e, cat);
     const research = w.get(e, comp.Research).?;
@@ -640,6 +642,42 @@ test "a record naming an id the roster no longer has is dropped and counted" {
     try testing.expectEqual(@as(u32, 1), w.get(0, comp.Goods).?.count[res.catalog.goodIndex("sandals").?]);
     try testing.expect(!w.has(0, comp.Busy));
     try testing.expect(w.has(0, tags.Player));
+}
+
+test "a generator record round-trips its mode; an older record's off reads as the mode" {
+    var res = Resources{ .catalog = try shipped() };
+    defer res.catalog.deinit();
+    const cat = &res.catalog;
+    var w = try World.init(testing.allocator);
+    defer w.deinit();
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const src =
+        \\.{ .version = 1, .state = .act_one,
+        \\   .sim = .{ .elapsed = 0, .tutorial_done = false, .prng = .{ 1, 2, 3, 4 }, .reach_seen = .{}, .encounter = .{}, .merchant = .{}, .exchange = .{}, .population = 48, .neighbours = .{}, .log = .{} },
+        \\   .agents = .{ .{ .generators = .{
+        \\       .{ .id = "wire_snares", .off = true },
+        \\       .{ .id = "garden_bed", .progress = 2.5, .off = false },
+        \\       .{ .id = "chicken_coop", .mode = .auto },
+        \\   } } } }
+    ;
+    const old = try decode(a, try a.dupeSentinel(u8, src, 0));
+    try testing.expectEqual(@as(u32, 0), apply(&res, &w, &old).dropped);
+    const gens = w.get(0, comp.Generators).?;
+    try testing.expectEqual(comp.Generators.Mode.off, gens.mode[cat.goodIndex("wire_snares").?]);
+    try testing.expectEqual(comp.Generators.Mode.on, gens.mode[cat.goodIndex("garden_bed").?]);
+    try testing.expectEqual(@as(f32, 2.5), gens.progress[cat.goodIndex("garden_bed").?]);
+    try testing.expectEqual(comp.Generators.Mode.auto, gens.mode[cat.goodIndex("chicken_coop").?]);
+
+    // A capture writes the mode and never the older word.
+    const text = try encode(a, &(try capture(a, &res, &w)));
+    try testing.expect(std.mem.indexOf(u8, text, ".off = ") == null);
+    var w2 = try World.init(testing.allocator);
+    defer w2.deinit();
+    _ = apply(&res, &w2, &(try decode(a, try a.dupeSentinel(u8, text, 0))));
+    try testing.expectEqual(gens.mode, w2.get(0, comp.Generators).?.mode);
+    try testing.expectEqual(gens.progress, w2.get(0, comp.Generators).?.progress);
 }
 
 test "a file of another version is refused; garbage is a parse error" {

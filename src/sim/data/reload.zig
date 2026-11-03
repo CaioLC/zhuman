@@ -9,7 +9,7 @@
 //! one line; a load that succeeds says so in the event log.
 //!
 //! A load that succeeds is swapped in. Everything kept by catalog index is carried to the new
-//! indices by id: each agent's goods, generator progress/toggles and research, the work in
+//! indices by id: each agent's goods, generator progress/modes and research, the work in
 //! progress, and the reach seen-set.
 //! A record the new files no longer hold takes its count, its research state and any work on
 //! it with it. Then every agent resettles its body and larder against the new records. The
@@ -130,7 +130,7 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
             for (old.goods, 0..) |g, gi| {
                 if (cat.goodIndex(g.id)) |ni| {
                     generators.progress[ni] = was.progress[gi];
-                    generators.off[ni] = was.off[gi];
+                    generators.mode[ni] = was.mode[gi];
                 }
             }
         }

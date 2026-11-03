@@ -1,7 +1,8 @@
 //! Collectable generators: the handlers for `ToggleGenerator` (`capital.toggle_generator`) and
 //! `CollectGenerator` (`capital.collect_generator`), and the update system that matures every
-//! owned, enabled generator (`capital.run_generators`). A refused intent changes nothing and is
-//! answered by `Refused`; a collection emits `Collected` from the rule.
+//! owned generator not switched off and collects the `auto` ones that are ready
+//! (`capital.run_generators`). A refused intent changes nothing and is answered by `Refused`; a
+//! collection, the player's or an `auto` one, emits `Collected` from the rule.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
@@ -38,7 +39,8 @@ pub fn generators_collect(
     }
 }
 
-/// Accumulate owned, enabled generators toward readiness by this frame's `dt`.
+/// Accumulate owned generators not switched off toward readiness by this frame's `dt`, and
+/// collect each `auto` one that is ready.
 pub fn generators(w: *World, res: *Resources) void {
     capital.run_generators(w, res);
 }
@@ -91,18 +93,18 @@ test "toggle refuses a good that is not an owned generator, without mutating" {
     const spear = rig.res.catalog.goodIndex("spear").?;
     _ = rig.res.events.writer(events.ToggleGenerator).push(.{ .agent = rig.e, .gi = spear });
     ecs.run(&rig.w, &rig.res, generators_toggle);
-    try testing.expect(!rig.w.get(rig.e, comp.Generators).?.off[spear]);
+    try testing.expectEqual(comp.Generators.Mode.on, rig.w.get(rig.e, comp.Generators).?.mode[spear]);
     try testing.expectEqual(events.Refused{ .agent = rig.e, .intent = .toggle_generator, .reason = .unavailable }, rig.refusal().?);
 }
 
-test "toggle switches an owned generator off once per intent" {
+test "toggle moves an owned generator to its next mode once per intent" {
     var rig: Rig = undefined;
     try rig.init();
     defer rig.deinit();
     _ = rig.res.events.writer(events.ToggleGenerator).push(.{ .agent = rig.e, .gi = rig.gi });
     ecs.run(&rig.w, &rig.res, generators_toggle);
     ecs.run(&rig.w, &rig.res, generators_toggle);
-    try testing.expect(rig.w.get(rig.e, comp.Generators).?.off[rig.gi]);
+    try testing.expectEqual(comp.Generators.Mode.auto, rig.w.get(rig.e, comp.Generators).?.mode[rig.gi]);
     try testing.expect(rig.refusal() == null);
 }
 
@@ -110,7 +112,7 @@ test "collect refuses a switched-off generator without mutating and emits Refuse
     var rig: Rig = undefined;
     try rig.init();
     defer rig.deinit();
-    rig.w.get(rig.e, comp.Generators).?.off[rig.gi] = true;
+    rig.w.get(rig.e, comp.Generators).?.mode[rig.gi] = .off;
     _ = rig.res.events.writer(events.CollectGenerator).push(.{ .agent = rig.e, .gi = rig.gi });
     ecs.run(&rig.w, &rig.res, generators_collect);
     try testing.expectEqual(@as(f32, 1e9), rig.w.get(rig.e, comp.Generators).?.progress[rig.gi]);

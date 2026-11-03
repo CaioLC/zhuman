@@ -51,8 +51,9 @@ values and emits nothing new, and a test says so.
   agent they charge, and carry the crossing on `WorkBegun.weary`, because the log words labor's
   toll ("You feel weak. Work will yield less.") apart from hunger ("You feel weak with
   hunger.") and a writer that only compares with the previous band cannot tell the two causes
-  apart; `capital.collect_generator` refreshes for the same reason, since a collection's energy
-  can outweigh the vigor it restores. Every crossing the writer reports is the metabolism's.
+  apart; a generator's collection (the player's through `capital.collect_generator`, or an
+  `auto` generator's own) refreshes for the same reason, since a collection's energy can
+  outweigh the vigor it restores. Every crossing the writer reports is the metabolism's.
 - `comp.Outlook` is the BODY projection: the days the larder lasts at the current rate
   (`food_days`) and a tagged `Recovery`, `at_ceiling`, `no_food`, `no_quality`,
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
@@ -326,7 +327,7 @@ The `handle` sets:
 | `labor.labor` | `BeginLabor` | `actions.begin`: pays and starts the work, `WorkBegun` |
 | `build.build` | `BeginBuild` | `capital.begin`: pays and starts the build, `WorkBegun` |
 | `build.cancel` | `CancelBuild` | `capital.cancel_build`: the salvage, `BuildCancelled` |
-| `generators.generators_toggle` | `ToggleGenerator` | `capital.toggle_generator` |
+| `generators.generators_toggle` | `ToggleGenerator` | `capital.toggle_generator`: the generator's next mode, on → auto → off → on |
 | `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
@@ -346,7 +347,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
-| `generators.generators` | ✓ | ✓ | ✓ | matures every owned, enabled generator by `dt` (`capital.run_generators`) |
+| `generators.generators` | ✓ | ✓ | ✓ | matures every owned generator not switched off by `dt`, and collects each `auto` one whose collection is ready (`capital.run_generators`) |
 | `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |
 | `tick.mark_dead` | ✓ | ✓ | ✓ | tags `Dead` at `vigor ≤ 0`, `Died` |
 | `tick.despawn_dead` | ✓ | ✓ | ✓ | reaps them |
@@ -450,9 +451,13 @@ is flat rather than prorated because the order is charged in full at `begin` and
 draws it down over time. It refuses on a labor verb — half-foraging is not a thing you can
 take materials back from — and on an idle body, with `nothing_to_cancel`.
 
-`run_generators` ticks every owned good with `day` lines on every agent: if this tick's
-slice of the upkeep is payable, pay it and deposit the same slice of the flow. Both are
-authored **per in-game day** and scaled by the frame's dt, so a flow reads as a trickle.
+`run_generators` matures every owned generator whose mode is not `off` by the frame's dt, up
+to its cycle, then collects each `auto` generator whose `generator_quote` is ready. A
+collection, the player's (`collect_generator`, which refuses with the quote's standing) or an
+`auto` one, is one private path: it pays the cycle's energy and its `day` inputs scaled to the
+cycle, draws the `day` outputs, restores the spec's vigor, refreshes the condition band, zeroes
+the progress and emits `Collected`. An `auto` generator the agent cannot pay for (`energy`,
+`short`) holds its full cycle and collects on the first frame it can; it never skips a yield.
 
 `goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
 `ownsMilestone` is what `detect_shelter` reads; `capacity` sums the housing of what is owned.
@@ -510,9 +515,11 @@ behavior (food spoils, coin settles); a line names one by its tag name.
 **Lines.** Every quantity is a `Line { item, n, kind = .fixed, sd, per = .once }`: an item and
 an amount, drawn when `kind` is not `.fixed`, settled `once` (an input at begin, an output at
 completion) or authored per `day` for a collectable generator. A generator carries a cycle
-`generator { energy, hours, vigor = 0 }`: enabled cycles accumulate hours without occupying
-`Busy`; collection pays the low energy cost and the complete cycle-scaled upkeep, then realizes
-all day outputs and optional direct Vigor restoration atomically. Turning one off preserves its
+`generator { energy, hours, vigor = 0 }`: a cycle accumulates hours without occupying `Busy`;
+collection pays the low energy cost and the complete cycle-scaled upkeep, then realizes all day
+outputs and optional direct Vigor restoration atomically. Each owned generator has a mode
+(`comp.Generators.Mode`), which the toggle cycles on → auto → off → on: `on` accumulates and
+waits for the player to collect, `auto` accumulates and collects itself, `off` preserves its
 progress and consumes nothing. A record's ordinary `requires { energy, hours }` remains the
 body-and-time build price, plus its `input` and `output` lists. An intermediate is a good whose
 once-output is a lot of itself.
@@ -637,7 +644,8 @@ order; entity ids are not saved, and a load spawns fresh ones into a cleared wor
 (`World.clear`). Plain components are saved as they are. The components kept by catalog index
 (`Goods`, `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's ids, so a
 save survives a roster edit: a load resolves each id against the roster it finds, drops and
-counts a record whose id is gone (a `Busy` on one is dropped whole), opens a technology new to
+counts a record whose id is gone (a `Busy` on one is dropped whole), reads a generator record's
+`off = true`, the older word for its mode, as mode `off`, opens a technology new to
 the roster at its authored initial, and resettles each agent's body and larder through
 `effects.apply`, which changes nothing on an unchanged roster. `Quotes` is derived, so a save
 says only that an agent carries it; the `quotes` writer refills it on the load frame's tick,

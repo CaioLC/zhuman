@@ -39,7 +39,7 @@ pub const BeginLabor = struct { agent: Entity, ai: u16 };
 pub const BeginBuild = struct { agent: Entity, gi: u16 };
 /// Abandon the build in progress (`capital.cancel_build`).
 pub const CancelBuild = struct { agent: Entity };
-/// Switch generator `gi` on or off (`capital.toggle_generator`).
+/// Move generator `gi` to its next mode: on, auto, off, on (`capital.toggle_generator`).
 pub const ToggleGenerator = struct { agent: Entity, gi: u16 };
 /// Collect generator `gi`'s cycle (`capital.collect_generator`).
 pub const CollectGenerator = struct { agent: Entity, gi: u16 };

@@ -37,12 +37,30 @@ pub const Goods = struct {
     count: [roster.max_goods]u32 = @splat(0),
 };
 
-/// Passive progress and on/off state for owned collectable generators, keyed by catalog good
-/// index. `off` defaults false so an acquired generator starts accumulating immediately;
-/// toggling off preserves `progress` and consumes nothing.
+/// Passive progress and mode for owned collectable generators, keyed by catalog good index.
+/// `mode` defaults to `on` so an acquired generator starts accumulating immediately; `off`
+/// preserves `progress` and consumes nothing.
 pub const Generators = struct {
+    /// What a generator does with its time (`capital.run_generators`): `on` accumulates and
+    /// waits for the player to collect; `auto` accumulates and collects itself whenever the
+    /// collection is payable; `off` is paused.
+    pub const Mode = enum {
+        on,
+        auto,
+        off,
+
+        /// The mode one toggle moves to: on, auto, off, then on again.
+        pub fn next(self: Mode) Mode {
+            return switch (self) {
+                .on => .auto,
+                .auto => .off,
+                .off => .on,
+            };
+        }
+    };
+
     progress: [roster.max_goods]f32 = @splat(0),
-    off: [roster.max_goods]bool = @splat(false),
+    mode: [roster.max_goods]Mode = @splat(.on),
 };
 
 /// What the owned goods currently contribute to the body and the larder, so those
