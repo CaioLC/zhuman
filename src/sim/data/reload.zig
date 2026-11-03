@@ -1,12 +1,12 @@
 //! `reload` — the authored roster, reloaded while the game runs.
 //!
-//! A `data/` directory in the working directory — beside `assets/`, where the game finds its
-//! other files — overrides the shipped files one by one: at startup (`Resources.init` reads it
-//! through `roster.loadData`) and whenever one of its files changes. `Watch` looks at their
-//! modification times at most twice a second, and `reload` re-parses. A load that fails — a
-//! parse error, a broken reference, an unreadable file — keeps the catalog in place and logs
-//! why, to the console in full and to the event log in one line; a load that succeeds says
-//! so in the event log.
+//! An `assets/roster/` directory in the working directory — under `assets/`, where the game
+//! finds its other files — overrides the shipped files one by one: at startup
+//! (`Resources.init` reads it through `roster.loadData`) and whenever one of its files
+//! changes. `Watch` looks at their modification times at most twice a second, and `reload`
+//! re-parses. A load that fails — a parse error, a broken reference, an unreadable file —
+//! keeps the catalog in place and logs why, to the console in full and to the event log in
+//! one line; a load that succeeds says so in the event log.
 //!
 //! A load that succeeds is swapped in. Everything kept by catalog index is carried to the new
 //! indices by id: each agent's goods, generator progress/toggles and research, the work in
@@ -32,7 +32,7 @@ const Catalog = roster.Catalog;
 
 const file_names = @typeInfo(roster.File).@"enum".field_names;
 
-/// The modification times of the data files, looked at on a timer.
+/// The modification times of the roster files, looked at on a timer.
 pub const Watch = struct {
     stamps: [file_names.len]i128 = @splat(0),
     primed: bool = false,
@@ -41,14 +41,14 @@ pub const Watch = struct {
     /// How often, in seconds, the files are looked at.
     pub const period: f32 = 0.5;
 
-    /// Whether a data file appeared, changed or went away since the last look. Looks at most
+    /// Whether a roster file appeared, changed or went away since the last look. Looks at most
     /// every `period` seconds of `dt`; the first look only records what is there, since the
     /// startup load already read it.
     pub fn poll(self: *Watch, io: std.Io, dt: f32) bool {
         self.wait -= dt;
         if (self.wait > 0) return false;
         self.wait = period;
-        var dir = std.Io.Dir.cwd().openDir(io, roster.data_dir, .{}) catch return self.look(io, null);
+        var dir = std.Io.Dir.cwd().openDir(io, roster.roster_dir, .{}) catch return self.look(io, null);
         defer dir.close(io);
         return self.look(io, dir);
     }
@@ -69,13 +69,13 @@ pub const Watch = struct {
     }
 };
 
-/// Re-read `data/` (the shipped files where it has none) and swap the result in, or keep the
-/// catalog and log why.
+/// Re-read `assets/roster/` (the shipped files where it has none) and swap the result in, or
+/// keep the catalog and log why.
 pub fn reload(io: std.Io, res: *Resources, w: *World) void {
     var diag = roster.Diagnostics{};
     const next = roster.loadData(res.catalog.arena.child_allocator, io, &diag) catch |err| return refuse(res, err, &diag);
     swap(res, w, next);
-    res.sim.log.push(.dim, "The roster reloaded from data/.");
+    res.sim.log.push(.dim, "The roster reloaded from assets/roster/.");
 }
 
 /// `reload` from a given directory.
@@ -83,7 +83,7 @@ pub fn reloadDir(io: std.Io, res: *Resources, w: *World, dir: std.Io.Dir) void {
     var diag = roster.Diagnostics{};
     const next = roster.loadDir(res.catalog.arena.child_allocator, io, dir, &diag) catch |err| return refuse(res, err, &diag);
     swap(res, w, next);
-    res.sim.log.push(.dim, "The roster reloaded from data/.");
+    res.sim.log.push(.dim, "The roster reloaded from assets/roster/.");
 }
 
 fn refuse(res: *Resources, err: roster.Error, diag: *const roster.Diagnostics) void {
@@ -92,8 +92,8 @@ fn refuse(res: *Resources, err: roster.Error, diag: *const roster.Diagnostics) v
         error.Invalid => std.log.warn("roster reload: {s}", .{diag.message()}),
     }
     var buf: [96]u8 = undefined;
-    const msg = std.mem.print(&buf, "The data did not load ({s}); the old roster stays.", .{diag.file.path()}) catch
-        "The data did not load; the old roster stays.";
+    const msg = std.mem.print(&buf, "The roster did not load ({s}); the old roster stays.", .{diag.file.path()}) catch
+        "The roster did not load; the old roster stays.";
     res.sim.log.push(.danger, msg);
 }
 
@@ -315,7 +315,7 @@ test "a bad file keeps the catalog and logs why" {
     reloadDir(testing.io, &res, &w, tmp.dir);
     try testing.expectEqual(@as(usize, 3), res.catalog.goods.len); // the old roster stays
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
-    try testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "data/goods.zon") != null);
+    try testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "assets/roster/goods.zon") != null);
 }
 
 test "a directory overrides the files it holds and falls back for the rest" {

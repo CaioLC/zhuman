@@ -1,6 +1,6 @@
 //! `roster` — the **authored roster**: the labor verbs, the capital goods and the technologies
-//! as data, loaded from `data/actions.zon`, `data/goods.zon` and `data/technologies.zon` into
-//! one `Catalog`.
+//! as data, loaded from `assets/roster/actions.zon`, `assets/roster/goods.zon` and
+//! `assets/roster/technologies.zon` into one `Catalog`.
 //!
 //! The record grammar is the contract content is written against (the prose is in
 //! `src/README.md`, "The authored roster"): one flat id space shared by resources, actions
@@ -417,9 +417,9 @@ pub const File = enum {
 
     pub fn path(self: File) []const u8 {
         return switch (self) {
-            .actions => "data/actions.zon",
-            .goods => "data/goods.zon",
-            .technologies => "data/technologies.zon",
+            .actions => "assets/roster/actions.zon",
+            .goods => "assets/roster/goods.zon",
+            .technologies => "assets/roster/technologies.zon",
         };
     }
 };
@@ -439,10 +439,10 @@ pub const shipped = Sources{
 };
 
 /// The directory, relative to the working directory, whose files override the shipped copy
-/// one by one — beside `assets/`, where the game finds its other files.
-pub const data_dir = "data";
+/// one by one — under `assets/`, where the game finds its other files.
+pub const roster_dir = "assets/roster";
 
-/// The most bytes one data file may hold.
+/// The most bytes one roster file may hold.
 const max_file_bytes = 4 << 20;
 
 /// Load the roster from `dir`: each file it holds replaces the shipped copy of that file, and
@@ -471,9 +471,9 @@ pub fn loadDir(gpa: Allocator, io: std.Io, dir: std.Io.Dir, diag: ?*Diagnostics)
     return load(gpa, src, diag);
 }
 
-/// Load from `data_dir` when the working directory has one, else the shipped copy.
+/// Load from `roster_dir` when the working directory has one, else the shipped copy.
 pub fn loadData(gpa: Allocator, io: std.Io, diag: ?*Diagnostics) Error!Catalog {
-    var dir = std.Io.Dir.cwd().openDir(io, data_dir, .{}) catch return load(gpa, shipped, diag);
+    var dir = std.Io.Dir.cwd().openDir(io, roster_dir, .{}) catch return load(gpa, shipped, diag);
     defer dir.close(io);
     return loadDir(gpa, io, dir, diag);
 }
@@ -896,7 +896,7 @@ test "a parse error names the file, the line and the column" {
     try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions = bad, .goods = ok_goods }, &d));
     try testing.expectEqual(File.actions, d.file);
     try testing.expect(d.rule == null);
-    try testing.expect(std.mem.startsWith(u8, d.message(), "data/actions.zon: 2:"));
+    try testing.expect(std.mem.startsWith(u8, d.message(), "assets/roster/actions.zon: 2:"));
 }
 
 test "ids are plain, unique, and never a resource name" {

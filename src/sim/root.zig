@@ -6,7 +6,7 @@
 //! over `std`) and `data` (the authored roster, its reload, the act migration and the save).
 //!
 //! It is also the root of `test-sim`, which compiles the simulation with no UI host and no SDL.
-//! That module is given only `ecs` and the three roster data files, so a sim file that imports
+//! That module is given only `ecs` and the three roster files, so a sim file that imports
 //! `ui_client/`, the host `res.zig` or `sdl3` fails the step. The `test` block names every file,
 //! because Zig analyses a file only when something references it.
 

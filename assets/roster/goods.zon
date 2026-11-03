@@ -315,7 +315,7 @@
 
     // —— Act II infrastructure (act = 2) ————————————————————————————————————————————————
     // The fifty population-scale recipes. Each carries `.act = 2` so the Act I surfaces skip
-    // it; most wait on a research tile through `tech` (an id from `data/technologies.zon`),
+    // it; most wait on a research tile through `tech` (an id from `assets/roster/technologies.zon`),
     // offered only once that tile reads researched. A recipe with no `tech` is open from the
     // curtain. Intermediates (worked stone, boards, brick, cloth) output a lot of themselves;
     // generators grant an Act II verb or run a day line; the rest are capital that is simply

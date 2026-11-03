@@ -159,7 +159,7 @@ pub const Resources = struct {
     sim: Sim = .{},
     config: Config = .{},
     time: Time = .{},
-    /// The authored roster (`roster.zig`): loaded at init from `data/` where it has a file,
+    /// The authored roster (`roster.zig`): loaded at init from `assets/roster/` where it has a file,
     /// the shipped copy for the rest, and replaced only by `reload.swap`, between frames. A
     /// system reads it as `*const roster.Catalog`. Defaults to no records, so a rig that never
     /// reads the roster needs nothing.

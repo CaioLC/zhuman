@@ -151,8 +151,9 @@ const App = struct {
     ui_capture: ui_client.FrameCapture = .{},
     /// The once-only trigger for the development layout dump (`HA_LAYOUT_DUMP`).
     layout_dump: ui_client.layout_dump.Trigger = .{},
-    /// The `data/` files' modification times; a change reloads the roster between frames.
-    data_watch: ha.sim.data.reload.Watch = .{},
+    /// The `assets/roster/` files' modification times; a change reloads the roster between
+    /// frames.
+    roster_watch: ha.sim.data.reload.Watch = .{},
 
     fn init(process: std.process.Init) !App {
         try sdl.init(.{ .video = true, .events = true });
@@ -383,9 +384,9 @@ pub fn main(process: std.process.Init) !void {
         const real_dt = app.frame_capper.delay();
         app.resources.game.time.real_dt = real_dt;
         app.resources.game.time.dt = app.resources.playback.simulationDelta(real_dt);
-        // 2. a changed `data/` file reloads the roster here, between frames: before the systems
-        // read it and before the page build, so nothing holds the records being replaced.
-        if (app.data_watch.poll(app.io, real_dt)) ha.sim.data.reload.reload(app.io, &app.resources.game, &app.world);
+        // 2. a changed `assets/roster/` file reloads the roster here, between frames: before the
+        // systems read it and before the page build, so nothing holds the records being replaced.
+        if (app.roster_watch.poll(app.io, real_dt)) ha.sim.data.reload.reload(app.io, &app.resources.game, &app.world);
         // A save or a load the menu or the title asked for, here for the same reason: a load
         // replaces the world before the tick refills its derived components and the build reads it.
         applySaveRequest(&app.resources, &app.world, app.io, app.gpa);

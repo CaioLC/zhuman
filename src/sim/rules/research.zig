@@ -75,7 +75,7 @@ fn lineResource(item: []const u8) ?Resource {
 }
 
 /// The authored research cost of the tile at catalog `index` as a resource/amount pair for each
-/// line. The authored quantities are whole numbers (`data/technologies.zon`); they are rounded
+/// line. The authored quantities are whole numbers (`assets/roster/technologies.zon`); they are rounded
 /// to the nearest unit for the integer balance the board spends.
 fn lineAmount(n: f32) u32 {
     return @intFromFloat(@round(n));

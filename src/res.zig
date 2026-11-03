@@ -408,11 +408,12 @@ pub const Resources = struct {
     environ: ?*const std.process.Environ.Map = null,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, environ: *const std.process.Environ.Map, f: *fontmod.Fonts, r: *const sdl.render.Renderer, w: sdl.video.Window) !Resources {
-        // A broken `data/` file does not stop the game: it starts on the shipped copy and says why.
+        // A broken `assets/roster/` file does not stop the game: it starts on the shipped copy
+        // and says why.
         var diag = rostermod.Diagnostics{};
         var catalog = rostermod.loadData(gpa, io, &diag) catch |err| blk: {
             if (err == error.OutOfMemory) return err;
-            std.log.err("data/ did not load, starting on the shipped roster: {s}", .{diag.message()});
+            std.log.err("assets/roster/ did not load, starting on the shipped roster: {s}", .{diag.message()});
             break :blk try rostermod.load(gpa, rostermod.shipped, null);
         };
         errdefer catalog.deinit();

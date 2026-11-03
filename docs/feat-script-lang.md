@@ -45,8 +45,8 @@ A script that fails mid-frame paints one error root for that page and says why, 
 ## Files
 
 A script file holds one or more file-scope declarations: `page`, `template`, `style`, `look`.
-The shipped scripts are embedded at build time; a `pages/` directory in the working directory,
-beside `data/`, overrides them file by file and is watched the way `data/` is (`src/reload.zig`),
+The shipped scripts are embedded at build time; an `assets/pages/` directory in the working directory,
+beside `assets/roster/`, overrides them file by file and is watched the way `assets/roster/` is (`src/sim/data/reload.zig`),
 so a saved file reloads within half a second.
 
 All script files form one namespace. A file-scope name is visible from every file; two

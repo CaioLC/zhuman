@@ -95,7 +95,7 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const roster.Catalog) bool
     // 5. Seed the Act II research board. One `comp.Research` carries every tile's state by
     // catalog index, seeded from each tile's authored `initial` (Foraging/Woodcutting
     // Researched, the other four ring-1 tiles Available, the rest Locked; see
-    // `data/technologies.zon`). The `has` guard keeps a re-seed from clobbering a board
+    // `assets/roster/technologies.zon`). The `has` guard keeps a re-seed from clobbering a board
     // already written.
     if (!w.has(e, comp.Research)) w.add(e, comp.Research.entry(cat));
 
@@ -202,7 +202,7 @@ test "migration seeds the research board from the authored initial states" {
     _ = migrate_to_act_two(&w, e, &cat);
 
     // One `comp.Research` now carries every tile's state by catalog index, seeded from each
-    // tile's authored `initial` (`data/technologies.zon`).
+    // tile's authored `initial` (`assets/roster/technologies.zon`).
     const research = w.get(e, comp.Research).?;
     const S = roster.TechState;
     // Foraging and Woodcutting carried over from Act I as Researched.

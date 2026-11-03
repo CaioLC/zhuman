@@ -1,6 +1,6 @@
 //! Capital: the build path over the authored roster, and what owning a good does.
 //!
-//! A good is a record in `data/goods.zon` (`roster.zig`); an agent owns it as a count on
+//! A good is a record in `assets/roster/goods.zon` (`roster.zig`); an agent owns it as a count on
 //! `comp.Goods`. Building, buying, selling and breaking all move that count, and every change
 //! of ownership *settles* the body and larder (`effects.apply`). What a good does to a **verb**
 //! is never stored —

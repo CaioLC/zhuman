@@ -61,12 +61,12 @@ pub fn build(b: *std.Build) void {
     ha_mod.addImport("sdl3", sdl3.module("sdl3"));
     ha_mod.addImport("ui", ui_mod);
     ha_mod.addImport("ecs", ecs_mod);
-    // The authored roster (`src/sim/data/roster.zig`) compiles the shipped data files in by name
+    // The authored roster (`src/sim/data/roster.zig`) compiles the shipped roster files in by name
     // (`@embedFile("actions.zon")`), so a release build carries its content and the parser
-    // runs over the same bytes a dev build reads from `data/`.
-    ha_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
-    ha_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
-    ha_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
+    // runs over the same bytes a dev build reads from `assets/roster/`.
+    ha_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("assets/roster/actions.zon") });
+    ha_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("assets/roster/goods.zon") });
+    ha_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("assets/roster/technologies.zon") });
 
     // Executable
     const exe_mod = b.createModule(.{
@@ -124,11 +124,11 @@ pub fn build(b: *std.Build) void {
     ui_test_mod.addImport("sdl3", sdl3.module("sdl3"));
     ui_test_mod.addImport("ui", ui_mod);
     // `res.zig` embeds `sim/res.zig`, which carries the authored roster and the event store, and
-    // the UI tests compile `res.zig`, so the data files and the `ecs` package resolve here too.
+    // the UI tests compile `res.zig`, so the roster files and the `ecs` package resolve here too.
     ui_test_mod.addImport("ecs", ecs_mod);
-    ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
-    ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
-    ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
+    ui_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("assets/roster/actions.zon") });
+    ui_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("assets/roster/goods.zon") });
+    ui_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("assets/roster/technologies.zon") });
     const ui_tests = b.addTest(.{ .root_module = ui_test_mod, .use_llvm = true });
     const run_ui_tests = b.addRunArtifact(ui_tests);
 
@@ -155,9 +155,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     sim_test_mod.addImport("ecs", ecs_mod);
-    sim_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("data/actions.zon") });
-    sim_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("data/goods.zon") });
-    sim_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("data/technologies.zon") });
+    sim_test_mod.addAnonymousImport("actions.zon", .{ .root_source_file = b.path("assets/roster/actions.zon") });
+    sim_test_mod.addAnonymousImport("goods.zon", .{ .root_source_file = b.path("assets/roster/goods.zon") });
+    sim_test_mod.addAnonymousImport("technologies.zon", .{ .root_source_file = b.path("assets/roster/technologies.zon") });
     const sim_tests = b.addTest(.{ .root_module = sim_test_mod, .use_llvm = true });
     const run_sim_tests = b.addRunArtifact(sim_tests);
 

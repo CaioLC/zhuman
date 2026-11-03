@@ -1,6 +1,6 @@
 //! Actions: per-agent labor over the authored roster.
 //!
-//! A verb is a record in `data/actions.zon` (`roster.zig`). Whether an agent holds it, and
+//! A verb is a record in `assets/roster/actions.zon` (`roster.zig`). Whether an agent holds it, and
 //! on what terms, is derived from the goods it owns (`effects.verb`) and, for a verb that names
 //! a `tech`, from the agent's research (`verbOf`); nothing about a verb is stored on the agent.
 //! `quote` is the one gate calculation: the `quotes` system writes its answer onto `comp.Quotes`

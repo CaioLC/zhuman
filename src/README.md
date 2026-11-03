@@ -491,14 +491,15 @@ and returns the `Refused.Reason`, a quote's `market.Refusal` mapped onto it by n
 (`barter.reasonOf`). `market` stays world-free; `barter` is the only place a `Quote` meets an
 entity.
 
-## The authored roster (`sim/data/roster.zig`, `data/`)
+## The authored roster (`sim/data/roster.zig`, `assets/roster/`)
 
-The labor verbs, the capital goods and the technologies are data: `data/actions.zon`,
-`data/goods.zon` and `data/technologies.zon`, parsed at load by `std.zon.parse` into one
-`roster.Catalog`, which is what the sim runs on (`actions.zig`, `capital.zig`, `effects.zig`)
-and the pages read. No component type stands for a verb, a good or a technology: an agent
-holds goods as counts and research as one state per tile, and everything else is derived from
-the records. The files are the contract new content is written against.
+The labor verbs, the capital goods and the technologies are data: `assets/roster/actions.zon`,
+`assets/roster/goods.zon` and `assets/roster/technologies.zon`, parsed at load by
+`std.zon.parse` into one `roster.Catalog`, which is what the sim runs on (`actions.zig`,
+`capital.zig`, `effects.zig`) and the pages read. No component type stands for a verb, a good
+or a technology: an agent holds goods as counts and research as one state per tile, and
+everything else is derived from the records. The files are the contract new content is
+written against.
 
 **One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
 the file is its kind. Resources, actions and goods share the space: a reference resolves by
@@ -532,8 +533,8 @@ a name. Per agent the board is `comp.Research`, one `TechState` per catalog inde
 curtain by `Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
 `researched`, and a verb that names one is held from then on, as a grant would hold it.
 
-**The research board.** The sixty records in `data/technologies.zon` are the tiles; the rules
-they obey are here. The board is an adoption board: research establishes already-known
+**The research board.** The sixty records in `assets/roster/technologies.zon` are the tiles;
+the rules they obey are here. The board is an adoption board: research establishes already-known
 technology at the settlement's scale and is priced in resources, so there is no knowledge
 currency and nothing to discover.
 
@@ -616,8 +617,8 @@ coordinate, more records than the per-agent containers hold (`max_goods`, `max_t
 shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
 same path, so `zig build test` validates the real content.
 
-**Live reload (`reload.zig`).** A `data/` directory in the working directory — beside
-`assets/` — overrides the shipped files one by one: `Resources.init` loads through
+**Live reload (`reload.zig`).** An `assets/roster/` directory in the working directory overrides
+the shipped files one by one: `Resources.init` loads through
 `roster.loadData`, and a broken file there starts the game on the shipped copy with the reason
 in the console. While the game runs, `reload.Watch` looks at the files' modification times
 twice a second from the main loop, and a change re-parses them between frames. A load that
@@ -762,7 +763,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | File | Holds |
 |---|---|
 | `roster.zig` | the authored roster: the record grammar for verbs, goods and technologies, the ZON loader and validator. Reaches only `std` and `dist`, since `sim/res.zig` carries it |
-| `reload.zig` | live reload: the `data/` watch, and the swap that carries index-keyed state to a new catalog by id |
+| `reload.zig` | live reload: the `assets/roster/` watch, and the swap that carries index-keyed state to a new catalog by id |
 | `migration.zig` | the Act I → II curtain, run by `cross_curtain`: Biomass from Materials, the other Act II stocks opened, the board's entry state, the version stamp; the cross-act cost parity test |
 | `save.zig` | a run as a ZON file: `capture`/`apply` between the world, `Sim`, the state and the `Save` shape, `write`/`read` through a caller's directory, `summary`/`peek` for a slot, `canSave` |
 
@@ -781,8 +782,9 @@ Every file under `sim/` imports its siblings by relative path, and nothing in `s
 
 ## Assets
 
-- `data/actions.zon`, `data/goods.zon`, `data/technologies.zon` — the authored roster,
-  compiled in by `build.zig`, and read from `data/` at startup and whenever a file changes.
+- `assets/roster/actions.zon`, `assets/roster/goods.zon`, `assets/roster/technologies.zon` — the
+  authored roster, compiled in by `build.zig`, and read from `assets/roster/` at startup and
+  whenever a file changes.
 - `assets/fonts/` — TTF variants; `JetBrainsMonoNL-Regular.ttf` is the one loaded.
 - `assets/icons.png` — a 2×2 sheet of 512px capital-good icons, sampled by
   `ui_client.icon_sprite`. Unused.
