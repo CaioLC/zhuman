@@ -10,11 +10,6 @@ const el = uic.elements;
 const style = uic.style;
 const El = el.El;
 
-/// A catalog's count line under its controls — `20 of 20 actions shown` — small and dim.
-pub fn summary_line(parent: El, id: []const u8, text: []const u8) !El {
-    return (try parent.text(id, text)).with_style(.{ style.small, style.muted });
-}
-
 /// What a list says when nothing matches: body size in the quiet `line2`.
 pub fn empty_line(parent: El, id: []const u8, text: []const u8) !El {
     return (try parent.text(id, text)).with_style(.{ style.body, style.faint });

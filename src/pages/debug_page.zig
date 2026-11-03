@@ -49,6 +49,7 @@ const entries = [_][]const u8{
     "rail",
     "holdings",
     "action_tile",
+    "generator_tile",
     "actions_section",
     "build_section",
     "act_one_surface",
@@ -252,11 +253,33 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }
+    } else if (eq(name, "generator_tile")) {
+        if (player.get()) |a| {
+            // Both densities of one owned generator, sized as the ACTIONS pane sizes them: Act
+            // I's regular tile above Act II's compact one. The corner cycles the mode live and a
+            // ready tile collects, as in the pane.
+            fixtureGoods(ctx, a[0], &.{.{ "wire_snares", 1 }});
+            const gi: u16 = @intCast(ctx.res.game.catalog.goodIndex("wire_snares").?);
+            const col = try stage.box("densities", .{
+                .w = .{ .fixed = 300 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+                .gap = 10,
+            }, .{});
+            // The tile is keyed by the good's id, so each density gets a lane of its own.
+            inline for (.{ .{ "gt", t.ActionDensity.regular }, .{ "gtc", t.ActionDensity.compact } }) |d| {
+                const lane = try col.box(d[0], .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children }, .{});
+                _ = try t.generatorTile(lane, world, a[0], act, gi, d[1], .none);
+            }
+        } else {
+            try stage.label("na", "(needs a live player)", .{});
+        }
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
-            // The live debug player starts with only the two innate verbs. Own the three tools
-            // that grant the rest, so the assembly audit shows the complete five-verb reference.
-            fixtureGoods(ctx, a[0], &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 } });
+            // The complete Act I pane: the four verbs (the hatchet and the rod grant the two
+            // beyond the innate pair), then the two generators, the snares and the garden bed on
+            // auto; the kind toggles count both, and the toolbar holds the summary and the sort
+            // chips.
+            fixtureGoods(ctx, a[0], &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
+            fixtureMode(ctx, a[0], "garden_bed", .auto);
             const demo = try stage.box("actions_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
             _ = try t.actions_section(demo, world, a[0], "actions", @import("./templates/act_one_surface.zig").actions_shelf, null, null, null);
         } else {
@@ -390,9 +413,12 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "catalog_controls")) {
-        // The field spans its parent, so the audit gives it a catalog-sized width.
-        const demo = try stage.box("cc_demo", .{ .w = .{ .fixed = 560 }, .h = .fit_children }, .{});
+        // The field spans its parent, so the audit gives it a catalog-sized width. Under it, the
+        // ACTIONS toolbar's sort chips on the demo's own catalog state: click a chip to sort, again
+        // to flip.
+        const demo = try stage.box("cc_demo", .{ .w = .{ .fixed = 560 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 10 }, .{});
         _ = try t.catalog_controls(demo, "cc", t.recipes_placeholder, null, null);
+        _ = try t.sort_chips(demo, "sort", "Sort actions", &t.actions_sort_keys, demo.state(uic.UiState.CatalogState));
     } else if (eq(name, "milestone_goal")) {
         const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         var resource_label_buf: [16]u8 = undefined;
@@ -469,9 +495,16 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_two_actions")) {
-        // The shared ACTIONS pane with Act II's shelf. The debug actor has not crossed the
-        // curtain, so it holds no Act II verb: this shows the pane's empty state.
+        // The shared ACTIONS pane with Act II's shelf, compact: the settlement's verbs, then
+        // both acts' generators as slim tiles with their mode corners (the garden bed on auto,
+        // the second bed off), under the kind toggles and the toolbar.
         if (player.get()) |a| {
+            fixtureGoods(ctx, a[0], &.{
+                .{ "firepit", 1 },     .{ "spring_well", 1 }, .{ "forge", 1 },          .{ "lean_to", 1 },
+                .{ "wire_snares", 1 }, .{ "garden_bed", 1 },  .{ "garden_bed_two", 1 },
+            });
+            fixtureMode(ctx, a[0], "garden_bed", .auto);
+            fixtureMode(ctx, a[0], "garden_bed_two", .off);
             const demo = try stage.box("a2a_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
             _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null, null);
         } else {
@@ -531,7 +564,6 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const demo = try stage.box("copy_demo", .{ .flow = .{ .dir = .column }, .gap = 6 }, .{});
         _ = try t.headline(demo, "h", "Two others asked to move in.");
         _ = try t.lede(demo, "l", "You are not alone here anymore. Act I ends, and the settlement begins with whoever walked in.", 320);
-        _ = try t.summary_line(demo, "s", "20 of 20 actions shown");
         _ = try t.empty_line(demo, "e", "No action matches your search.");
     } else {
         try stage.label("unknown", "(unknown template)", .{});
@@ -584,6 +616,11 @@ fn fixtureGoods(ctx: *UiCtx, e: Entity, counts: []const struct { []const u8, u32
         if (cat.goodIndex(c[0])) |gi| poke(ctx, e, .{ .good = .{ .gi = @intCast(gi), .count = c[1] } });
     }
     poke(ctx, e, .settle);
+}
+
+/// Debug-only generator mode: poke good `id`'s mode, as the tile's corner would leave it.
+fn fixtureMode(ctx: *UiCtx, e: Entity, id: []const u8, mode: comp.Generators.Mode) void {
+    if (ctx.res.game.catalog.goodIndex(id)) |gi| poke(ctx, e, .{ .generator_mode = .{ .gi = @intCast(gi), .mode = mode } });
 }
 
 fn eq(a: []const u8, b: []const u8) bool {
