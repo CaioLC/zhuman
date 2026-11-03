@@ -1,7 +1,7 @@
 //! The `quotes` system: the one writer of `comp.Quotes`. For every agent it asks the gate rules
 //! what each verb, recipe and generator would answer right now (`actions.quote`,
 //! `capital.quote`, `capital.generator_quote`) and writes each standing into its slot, so the
-//! ACTIONS tile, the BUILD row, the GENERATORS tile and a decider read the same answer. It runs
+//! ACTIONS tile (a verb or a generator), the BUILD row and a decider read the same answer. It runs
 //! before `log` in each act's `handle` and `update` sets, after every writer of what a quote
 //! reads (the ledger, the goods, the busy body, the condition band), so an intent applied while
 //! the run is paused shows in the tiles the next frame. Running it again on an unchanged world

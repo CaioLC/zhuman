@@ -1,5 +1,5 @@
 /// The live Act-I page while the actor is alive: header and run context, the complete
-/// HOLDINGS/ACTIONS/BUILD/GENERATORS workspace, the event log, and an optional trade overlay.
+/// HOLDINGS/ACTIONS/BUILD workspace, the event log, and an optional trade overlay.
 const std = @import("std");
 // general lib ECS
 const ha = @import("ha");
@@ -36,7 +36,7 @@ pub const Options = struct {
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Trees {
     // `shell` supplies the same responsive terminal geometry used by the debug fixture's
     // `shell_content`;
-    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD/GENERATORS surface.
+    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
     const page = try t.act_page(ctx, .{ .id = "play", .act = .act_one });
     const body = page.regions.body;
     // Header stock data is passed raw, then assembled with the run context by `header`.

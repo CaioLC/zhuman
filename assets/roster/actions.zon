@@ -49,7 +49,7 @@
             .{ .item = "food", .n = 3.0, .kind = .poisson },
         },
     },
-    // Check traps is resolved by Wire snares on the GENERATORS surface. It remains a roster
+    // Check traps is resolved by the Wire snares generator on ACTIONS. It remains a roster
     // record for vocabulary/history but is not held or shown as body-occupying labor.
     .{
         .id = "check_traps",

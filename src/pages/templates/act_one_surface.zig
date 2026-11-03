@@ -1,6 +1,6 @@
-//! `act_one_surface` — Act I's content on the shared `act_surface`: the ACTIONS / BUILD /
-//! GENERATORS views under the passerby and activity strips. The surface owns the tabs, strips
-//! and per-view state; this file only says what Act I's three views are.
+//! `act_one_surface` — Act I's content on the shared `act_surface`: the ACTIONS / BUILD views
+//! under the passerby and activity strips. The surface owns the tabs, strips and per-view state;
+//! this file only says what Act I's two views are.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -16,18 +16,14 @@ const scroll_view_mod = @import("./scroll_view.zig");
 const market_strip_mod = @import("./market_strip.zig");
 const actions_section_mod = @import("./actions_section.zig");
 const build_section_mod = @import("./build_section.zig");
-const generator_section_mod = @import("./generator_section.zig");
 
-const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "GENERATORS" };
+const view_labels = [_][]const u8{ "ACTIONS", "BUILD" };
 
 /// Act I's ACTIONS content: one body's verbs. Its eating policy rides the Household rail.
 pub const actions_shelf = actions_section_mod.Shelf{
     .act = 1,
     .subtitle = "What will this body do now?",
 };
-
-/// Act I's GENERATORS content: the body's own generators, at the regular density.
-pub const generator_shelf = generator_section_mod.Shelf{ .through_act = 1 };
 
 /// Act I's BUILD content: personal crafting (the crude tier) and the Shelter that ends the act.
 pub const build_shelf = build_section_mod.Shelf{
@@ -49,7 +45,7 @@ pub const Options = struct {
     market: market_strip_mod.MarketKind = .passerby,
     market_available: bool = true,
     activity: Activity,
-    /// Open on this view (0 ACTIONS, 1 BUILD, 2 GENERATORS) instead of the remembered one —
+    /// Open on this view (0 ACTIONS, 1 BUILD) instead of the remembered one —
     /// a fixture's first frame. Null keeps the tabs' own selection.
     initial_view: ?usize = null,
     /// Seed the view's search text and sort, and open the Shelter card (a fixture's first frame).
@@ -78,8 +74,8 @@ pub fn act_one_surface(parent: El, world: *const World, e: Entity, id: []const u
         .initial_sort = opts.initial_sort,
     });
 
-    // ACTIONS and GENERATORS scroll whole; BUILD keeps its heading, search and column header
-    // put and scrolls only its table, so it takes the view directly.
+    // ACTIONS scrolls whole; BUILD keeps its heading, search and column header put and scrolls
+    // only its table, so it takes the view directly.
     switch (s.active) {
         0 => {
             const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Available actions" }, s.scroll);
@@ -89,10 +85,6 @@ pub fn act_one_surface(parent: El, world: *const World, e: Entity, id: []const u
             var shelf = build_shelf;
             if (opts.milestone_open) shelf.milestone.?.expand = true;
             _ = try build_section_mod.build_section(s.view, world, e, "buildsection", shelf, s.catalog, s.owner, s.scroll);
-        },
-        2 => {
-            const scroll = try scroll_view_mod.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Owned generators" }, s.scroll);
-            _ = try generator_section_mod.generator_section(scroll.content, world, e, "generator_section", generator_shelf);
         },
         else => unreachable,
     }

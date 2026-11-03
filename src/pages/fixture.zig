@@ -34,6 +34,7 @@ const p_act_two = @import("./act_two/page.zig").ui_act_two;
 const p_gameover = @import("./gameover.zig").ui_gameover;
 const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
 const p_title = @import("./title.zig").ui_title;
+const t = @import("./templates/root.zig");
 const run_sys = ha.sim.systems.run;
 const spawn_player = run_sys.spawn_player;
 
@@ -84,8 +85,8 @@ pub const Spec = struct {
     /// A one-line description for the dev index / an unknown-name listing.
     about: []const u8,
     screen: Screen = .act_one,
-    /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD, 2 GENERATORS; Act II:
-    /// 0 ACTIONS, 1 BUILD, 2 GENERATORS, 3 RESEARCH, 4 MARKET.
+    /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD; Act II: 0 ACTIONS, 1 BUILD,
+    /// 2 RESEARCH, 3 MARKET.
     view: usize = 0,
     /// The deterministic logical window size. Feeds `view.compute`, so it fixes the responsive
     /// width class (`full`/`w760`/`w560`/`w440`) and the centered-terminal geometry. Defaults to
@@ -126,7 +127,7 @@ pub const Spec = struct {
     /// The title screen's screen and the attract loop's pinned time (`screen = .title`).
     title_screen: ha.res.TitleScreen = .menu,
     attract_s: f32 = 6,
-    /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 4`).
+    /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 3`).
     market: ?uic.UiState.MarketState = null,
     /// The Exchange on the first frame (standing or not), the settlement's population
     /// (`Sim.population`; null keeps the stand-in), and whether the Exchange card opens with
@@ -134,11 +135,17 @@ pub const Spec = struct {
     exchange: ha.sim.Sim.Exchange = .{},
     population: ?f32 = null,
     exchange_open: bool = false,
-    /// The RESEARCH board's opening (`screen = .act_two`, `view = 3`).
+    /// The RESEARCH board's opening (`screen = .act_two`, `view = 2`).
     research: ?@import("./act_two/page.zig").ResearchSeed = null,
     /// The active catalog's search text and sort on the first frame (ACTIONS or BUILD).
     query: ?[]const u8 = null,
     sort: ?uic.UiState.CatalogState = null,
+    /// The ACTIONS pane's catalog state on the first frame, folded in with `sort`: the kind its
+    /// eyebrow toggles show, the verbs and generators hidden (by record id), and whether it
+    /// opens on the hidden view.
+    kind: t.ActionsShow = .all,
+    hidden: []const []const u8 = &.{},
+    show_hidden: bool = false,
     /// Open the Shelter card's details on the first frame (Act I BUILD).
     milestone_open: bool = false,
     /// The trade dialog's tab, applied on frame 2: a fresh open starts on BUY, so the tab is
@@ -455,7 +462,7 @@ pub const catalog = [_]Spec{
         .name = "act_two_research_w560",
         .about = "Act II RESEARCH at the 560 width class: a 560px board with the detail beneath.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .window_w = 560,
         .window_h = 1240,
         .day = 112,
@@ -463,10 +470,10 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
     },
     .{
-        .name = "act_one_generators",
-        .about = "Act I GENERATORS: the owned generators with their mode corners and underbars.",
+        .name = "act_one_actions_generators",
+        .about = "Act I ACTIONS with the GENERATORS kind toggle pressed: the owned generators alone, their mode corners and underbars.",
         .day = 19,
-        .view = 2,
+        .kind = .generators,
         .balances = .{
             .food = 11.6,
             .biomass = 31,
@@ -553,7 +560,7 @@ pub const catalog = [_]Spec{
         .name = "act_two_research",
         .about = "Act II RESEARCH: the focus view, Household forced collapsed, strips and log hidden.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -562,7 +569,7 @@ pub const catalog = [_]Spec{
         .name = "research_available",
         .about = "RESEARCH filtered to available: locked tiles fade, the researched and available stay lit.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -572,7 +579,7 @@ pub const catalog = [_]Spec{
         .name = "research_researched",
         .about = "RESEARCH filtered to researched only.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -582,7 +589,7 @@ pub const catalog = [_]Spec{
         .name = "research_search",
         .about = "RESEARCH searching \"iron\": everything else dims.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -592,7 +599,7 @@ pub const catalog = [_]Spec{
         .name = "research_deficit",
         .about = "RESEARCH with an available tile the stocks cannot pay for: NEEDS ….",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = lean_settlement,
@@ -602,7 +609,7 @@ pub const catalog = [_]Spec{
         .name = "research_outward",
         .about = "RESEARCH on a researched tile whose outward neighbours are available (warn, dashed).",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -612,7 +619,7 @@ pub const catalog = [_]Spec{
         .name = "research_tooltip",
         .about = "RESEARCH with the tooltip over Field cultivation.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -622,7 +629,7 @@ pub const catalog = [_]Spec{
         .name = "research_focus",
         .about = "RESEARCH with keyboard focus on the board (the arrows walk the tiles).",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -683,7 +690,7 @@ pub const catalog = [_]Spec{
         .name = "research_household",
         .about = "RESEARCH with the Household opened again beside the board.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -694,7 +701,7 @@ pub const catalog = [_]Spec{
         .name = "research_zoom_75",
         .about = "RESEARCH at the 75% camera floor.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -704,7 +711,7 @@ pub const catalog = [_]Spec{
         .name = "research_zoom_250",
         .about = "RESEARCH at the 250% camera ceiling, panned onto the Food wedge.",
         .screen = .act_two,
-        .view = 3,
+        .view = 2,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -744,11 +751,12 @@ pub const catalog = [_]Spec{
         .exchange_open = true,
     },
     .{
-        .name = "act_two_generators",
-        .about = "Act II GENERATORS: both acts' generators the settlement owns, compact.",
+        .name = "act_two_actions_hidden",
+        .about = "Act II ACTIONS on the hidden view: Draw water and the auto Garden bed hidden, dashed and dim.",
         .screen = .act_two,
-        .view = 2,
         .day = 112,
+        .hidden = &.{ "draw_water", "garden_bed" },
+        .show_hidden = true,
         .balances = settlement_generator_balances,
         .settlement = settlement,
     },
@@ -756,7 +764,7 @@ pub const catalog = [_]Spec{
         .name = "act_two_market",
         .about = "Act II MARKET: the neighbours focus view, by good (24 neighbours).",
         .screen = .act_two,
-        .view = 4,
+        .view = 3,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -765,7 +773,7 @@ pub const catalog = [_]Spec{
         .name = "market_people",
         .about = "MARKET by person, with a neighbour's deal open on the slip.",
         .screen = .act_two,
-        .view = 4,
+        .view = 3,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -784,7 +792,7 @@ pub const catalog = [_]Spec{
         .name = "market_good",
         .about = "MARKET by good, with a good's cheapest sellers and best buyers on the slip.",
         .screen = .act_two,
-        .view = 4,
+        .view = 3,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -930,7 +938,7 @@ pub const catalog = [_]Spec{
         .name = "market_stall",
         .about = "MARKET's stall: the player's posts and who would take them.",
         .screen = .act_two,
-        .view = 4,
+        .view = 3,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
@@ -1189,7 +1197,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
             .initial_collapsed = collapsed,
             .open_trade = open_trade,
             .initial_query = if (first) spec.query else null,
-            .initial_sort = if (first) spec.sort else null,
+            .initial_sort = if (first) catalogOf(spec, &ctx.res.game.catalog) else null,
             .milestone_open = first and spec.milestone_open,
             .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
         }),
@@ -1201,7 +1209,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
             .exchange_open = first and spec.exchange_open,
             .research = if (first) spec.research else null,
             .initial_query = if (first) spec.query else null,
-            .initial_sort = if (first) spec.sort else null,
+            .initial_sort = if (first) catalogOf(spec, &ctx.res.game.catalog) else null,
             .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
         }),
         .gameover => try p_gameover(ctx, world),
@@ -1215,6 +1223,17 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
             break :blk try p_title(ctx, world);
         },
     };
+}
+
+/// The first frame's catalog state: `sort` with the ACTIONS pane's kind, hidden set and hidden
+/// view folded in. Null when the spec seeds none of them, so the view keeps its own.
+fn catalogOf(spec: Spec, cat: *const ha.sim.data.roster.Catalog) ?uic.UiState.CatalogState {
+    if (spec.sort == null and spec.kind == .all and spec.hidden.len == 0 and !spec.show_hidden) return null;
+    var cs = spec.sort orelse uic.UiState.CatalogState{};
+    cs.kind = @intFromEnum(spec.kind);
+    cs.show_hidden = spec.show_hidden;
+    for (spec.hidden) |id| if (t.actionsSlotOf(cat, id)) |n| cs.hidden.set(n);
+    return cs;
 }
 
 /// The state a spec's screen shows: Act II with the Exchange standing is Act III, and the
@@ -1343,6 +1362,21 @@ test "an Act II fixture seeds a settlement holding every verb of the act" {
 test "the Act II build fixture opens on BUILD" {
     try testing.expectEqual(@as(usize, 0), find("act_two_actions").?.view);
     try testing.expectEqual(@as(usize, 1), find("act_two_build").?.view);
+}
+
+test "the ACTIONS fixtures open on the kind and the hidden view they name" {
+    var rig = try seedRig(find("act_two_actions_hidden").?);
+    defer freeRig(&rig);
+    const cat = &rig.res.game.catalog;
+    const hidden = catalogOf(find("act_two_actions_hidden").?, cat).?;
+    try testing.expect(hidden.show_hidden);
+    try testing.expectEqual(@as(usize, 2), hidden.hidden.count());
+    try testing.expect(hidden.hidden.isSet(t.actionsSlotOf(cat, "draw_water").?));
+    try testing.expect(hidden.hidden.isSet(t.actionsSlotOf(cat, "garden_bed").?));
+    const kind = catalogOf(find("act_one_actions_generators").?, cat).?;
+    try testing.expectEqual(@as(u8, @intFromEnum(t.ActionsShow.generators)), kind.kind);
+    try testing.expectEqual(@as(usize, 0), kind.hidden.count());
+    try testing.expect(catalogOf(find("act_one_default").?, cat) == null);
 }
 
 test "the default fixture leaves the spawn baseline untouched" {

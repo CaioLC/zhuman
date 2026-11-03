@@ -72,7 +72,8 @@ pub const Options = struct {
     nav_gap: f32 = 12,
     /// Open on this view this frame instead of the remembered one (a fixture's first frame).
     initial_view: ?usize = null,
-    /// Seed the active view's search text and sort this frame (a fixture's first frame).
+    /// Seed the active view's search text and catalog state (its sort, and on ACTIONS its kind
+    /// and hidden set) this frame (a fixture's first frame).
     initial_query: ?[]const u8 = null,
     initial_sort: ?CatalogState = null,
 };

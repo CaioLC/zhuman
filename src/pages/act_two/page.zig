@@ -3,8 +3,8 @@
 //!
 //! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, WA, FU,
 //! ME, MI, BI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
-//! and the surface's five-view nav — ACTIONS / BUILD / GENERATORS / RESEARCH / MARKET. RESEARCH
-//! and MARKET are focus views: the Merchant and Activity strips and the event log step aside
+//! and the surface's four-view nav — ACTIONS / BUILD / RESEARCH / MARKET. RESEARCH and MARKET
+//! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
 //! the page, not the strips. The Household column (holdings, BODY, the eating policy) rides the
 //! shell rail; the event log rides the shell footer.
@@ -38,7 +38,8 @@ const El = el.El;
 
 const t = @import("../templates/root.zig");
 const fx = @import("./fixtures.zig");
-/// Act II's ACTIONS content — the same pane as Act I's: the settlement's verbs.
+/// Act II's ACTIONS content — the same pane as Act I's: the settlement's verbs, then the
+/// generators of both acts it owns (the settlement keeps what the household planted).
 const actions_shelf = t.ActionsShelf{
     .act = 2,
     .subtitle = "What will the settlement do now?",
@@ -56,23 +57,16 @@ const build_shelf = t.BuildShelf{
     // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
     .carry_owned = true,
 };
-/// Act II's GENERATORS content — the same view as Act I's, over both acts' generators: the
-/// settlement keeps what the household planted. Compact, like the action catalog.
-const generator_shelf = t.GeneratorShelf{
-    .through_act = 2,
-    .density = .compact,
-    .subtitle = "Let time accumulate, then collect without stopping the work.",
-};
 const a2_holdings = @import("./holdings.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 
 /// The surface's views, in tab order.
-pub const View = enum(usize) { actions, build, generators, research, market };
-const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "GENERATORS", "RESEARCH", "MARKET" };
+pub const View = enum(usize) { actions, build, research, market };
+const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "RESEARCH", "MARKET" };
 /// RESEARCH and MARKET own the whole surface: no strips, no log, the Household collapsed.
 const focus_views = [_]usize{ @intFromEnum(View.research), @intFromEnum(View.market) };
 /// Each view keys its own rail, so each remembers its collapse.
-const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_generators", "a2_rail_research", "a2_rail_market" };
+const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_research", "a2_rail_market" };
 
 /// The stocks the stockline reads from the ledger, in its order after Vigor.
 const ledger_stocks = [_]ha.sim.data.roster.Resource{
@@ -179,9 +173,9 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     if (opts.trade_mode) |mode| trade_owner.state(uic.UiState.TradeState).mode = mode;
 
     // --- the rail: the Household column, collapsing with it ---------------------------------
-    // Each view keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse
-    // separately; a focus view collapses its rail on entry without touching those memories,
-    // and the player may open it again while there.
+    // Each view keys its own rail, so ACTIONS and BUILD remember their collapse separately; a
+    // focus view collapses its rail on entry without touching those memories, and the player
+    // may open it again while there.
     const vm = trade_owner.state(uic.UiState.ViewMemory);
     const entered = vm.last == null or vm.last.? != s.active;
     vm.last = s.active;
@@ -200,7 +194,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     }
 
     if (agent) |e| switch (@as(View, @enumFromInt(s.active))) {
-        // ACTIONS fills the view: its heading, search and summary stay put, only the tiles scroll.
+        // ACTIONS fills the view: its heading, search and toolbar stay put, only the tiles scroll.
         .actions => _ = try t.actions_section(s.view, world, e, "a2_actions", actions_shelf, s.catalog, s.owner, s.scroll),
         // BUILD is the shared pane: it fills the view and scrolls only its table.
         .build => {
@@ -215,10 +209,6 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
             shelf.raised = &raised;
             _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
             if (raised) _ = ctx.res.game.events.writer(ha.sim.events.RaiseExchange).push(.{ .agent = e });
-        },
-        .generators => {
-            const scroll = try t.scroll_view(s.view, "scroll", .{ .height = 0, .framed = false, .name = "Owned generators" }, s.scroll);
-            _ = try t.generator_section(scroll.content, world, e, "a2_generators", generator_shelf);
         },
         .research => try researchView(ctx, world, e, s, opts.research),
         .market => try market(ctx, world, e, s, opts.market),

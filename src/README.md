@@ -64,7 +64,7 @@ values and emits nothing new, and a test says so.
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
   reach, per generator the standing and its progress, and in each the first unpayable line by
   its index. The `quotes` system fills every slot through `actions.quote`, `capital.quote` and
-  `capital.generator_quote`, so the ACTIONS tile, the BUILD row, the GENERATORS tile and a
+  `capital.generator_quote`, so the ACTIONS tile (a verb or a generator), the BUILD row and a
   decider read one answer; the handlers still ask the rule at apply time, and the rule is the
   authority. It holds standings and not a verb's terms, which stay the pure read
   `actions.verbOf`, because the world stores every component for its full `MAX_ENTITIES`

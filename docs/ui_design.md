@@ -76,7 +76,22 @@ returns to the full grid, as the view does by itself when its last tile is unhid
 per-view UI state and is not saved. The heading's eyebrow, `{n} VERBS · {m} GENERATORS`, is
 two kind toggles: pressing one shows that kind alone, pressing it again shows everything.
 Every act uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs
-and generators, and the subtitle).
+and generators, the subtitle and the density). Act I lists the body's verbs and generators at the
+regular density; Act II lists the settlement's verbs and the union of both acts' owned
+generators, compact.
+
+**A generator is collectable passive capital.** Its tile's underbar fills from authoritative
+simulation progress; while charging it is not collectable, at completion its state line reads
+`ready — collect`, and collection pays the displayed small Vigor/upkeep price and realizes the
+complete cycle immediately. Collection never creates or interrupts `Busy`, so a trap round, food
+bed, or medicinal herb bed can be collected while the body is already working. The mode corner
+cycles `● ON`, `◉ AUTO` and `○ OFF` with one click. On accumulates and waits to be collected;
+auto collects each complete cycle itself whenever it is payable; off freezes its current progress
+and consumes nothing, and turning it on resumes from that exact point. At Act II's compact
+density the state word rides the name row, so a generator tile stands as tall as a verb tile.
+Garden bed and Wire snares realize their authored per-day resource rates over their cycle
+duration. Medicinal herb bed restores direct Vigor without raising its ceiling. No generator
+transfers resources every frame.
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named
@@ -136,7 +151,7 @@ every recipe reachable without typing. ACTIONS and BUILD use one shared catalog 
 and the same global scrollbar treatment. The six-column heading is sticky, and a long list
 leaves search, Exchange and the event log fixed.
 
-**The log is part of ACTIONS, BUILD, and GENERATORS.** One four-line live event log occupies the terminal footer
+**The log is part of ACTIONS and BUILD.** One four-line live event log occupies the terminal footer
 on both panes and keeps its place while their result collections scroll. Lines read newest
 first, each stamped with the game day and time it happened (`D19 11:45`); the newest is painted
 at full tone while older lines dim a step; a gain
@@ -144,7 +159,7 @@ reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-ro
 so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
 hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
 scroll, the Household rail sits above the surface (HOLDINGS and BODY side by side at 760, stacked below 560),
-ACTIONS, BUILD and GENERATORS take their natural height, narrow BUILD drops lower-priority columns, and the log
+ACTIONS and BUILD take their natural height, narrow BUILD drops lower-priority columns, and the log
 remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
 
 **Every scroll answers the keyboard.** A scroll region that overflows is a Tab stop and the scroll owner of the
@@ -168,28 +183,11 @@ with a permanent Exchange, and opens Act III. A compact Exchange bar remains fix
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
 
-## GENERATORS — collectable passive capital
-
-Act I's third work view lists only owned generators as the same compact, action-like tiles used
-for labor. A tile's underbar fills from authoritative simulation progress; while charging it is
-not collectable, at completion it changes to `ready — collect`, and collection pays the displayed
-small Vigor/upkeep price and realizes the complete cycle immediately. Collection never creates or
-interrupts `Busy`, so a trap round, food bed, or medicinal herb bed can be collected while the body
-is already working.
-
-Every generator carries an independent lower-right mode corner that cycles `● ON`, `◉ AUTO` and
-`○ OFF` with one click. On accumulates and waits to be collected; auto collects each complete cycle
-itself whenever it is payable; off freezes its current progress and consumes nothing, and turning
-it on resumes from that exact point. At Act II's compact density the state word rides the name row,
-so a generator tile stands as tall as a verb tile. Garden bed and
-Wire snares realize their authored per-day resource rates over their cycle duration. Medicinal herb
-bed restores direct Vigor without raising its ceiling. No generator transfers resources every frame.
-
 ## HOLDINGS — the readout
 
 A panel, never opened, because its value peaks while you are looking at something else. It
 lives in the left rail, which collapses to a 36 px strip carrying a chevron and the label set
-vertically; ACTIONS, BUILD and GENERATORS each remember their own collapse, and entering RESEARCH or
+vertically; ACTIONS and BUILD each remember their own collapse, and entering RESEARCH or
 MARKET forces the rail closed without touching those memories.
 
 Three blocks. The **roster** names each owned kind with its count, since a good is not

@@ -1,8 +1,8 @@
 //! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
-//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD/GENERATORS
-//! surface. Each view keys its own rail, so each remembers its collapse; the rail owns its
-//! width tween, and this outer composition synchronizes the inter-column gap with the same
-//! 120ms policy (22px expanded, 12px collapsed) and keeps one surface alive across all three.
+//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD surface. Each
+//! view keys its own rail, so each remembers its collapse; the rail owns its width tween, and
+//! this outer composition synchronizes the inter-column gap with the same 120ms policy (22px
+//! expanded, 12px collapsed) and keeps one surface alive across both.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -51,8 +51,8 @@ pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const
     }, .{});
 
     // The rail lane comes first in the row, but its rail is built after the surface: each view
-    // keys its own rail, so ACTIONS, BUILD and GENERATORS remember their collapse separately,
-    // and the active view is known only once the surface's tabs are built.
+    // keys its own rail, so ACTIONS and BUILD remember their collapse separately, and the
+    // active view is known only once the surface's tabs are built.
     const rail_lane = try workspace.box("rail", .{
         .w = if (stack) .{ .pct_of_parent = 1.0 } else .fit_children,
         .h = if (stack) .fit_children else .{ .pct_of_parent = 1.0 },
@@ -64,7 +64,7 @@ pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const
     }, .{});
     const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts.surface);
 
-    const rail_ids = [_][]const u8{ "rail_actions", "rail_build", "rail_generators" };
+    const rail_ids = [_][]const u8{ "rail_actions", "rail_build" };
     const built_rail = try rail_mod.rail(rail_lane, .{
         .id = rail_ids[@min(surface.active, rail_ids.len - 1)],
         .label = "HOUSEHOLD",

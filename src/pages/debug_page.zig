@@ -52,7 +52,6 @@ const entries = [_][]const u8{
     "actions_section",
     "build_section",
     "act_one_surface",
-    "generator_section",
     "act_two_holdings",
     "act_two_actions",
     "act_one_workspace",
@@ -460,15 +459,6 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 st.sort = next.sort;
                 st.dir = next.dir;
             }
-        }
-    } else if (eq(name, "generator_section")) {
-        if (player.get()) |a| {
-            // Own the two generator goods so both rows show.
-            fixtureGoods(ctx, a[0], &.{ .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });
-            const demo = try stage.box("gen_demo", .{ .w = .{ .fixed = 594 }, .h = .fit_children }, .{});
-            _ = try t.generator_section(demo, world, a[0], "gens", .{ .through_act = 1 });
-        } else {
-            try stage.label("na", "(needs a live player)", .{});
         }
     } else if (eq(name, "act_two_holdings")) {
         if (player.get()) |a| {

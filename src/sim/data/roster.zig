@@ -292,7 +292,7 @@ pub const Good = struct {
     /// `once` lines are the product — absent means one of itself; `day` lines are the
     /// generator's authored rate, realized only on collection.
     output: []const Line = &.{},
-    /// Passive cycle metadata. Null means this good is not shown on the GENERATORS surface.
+    /// Passive cycle metadata. Null means this good is not a generator on ACTIONS.
     generator: ?Generator = null,
     /// The verb (or tool) a modifier works on; must be held before the good is offered.
     needs: []const []const u8 = &.{},

@@ -258,6 +258,14 @@ pub fn slot(ent: *const Entry) usize {
     };
 }
 
+/// The hidden set's number for the verb or generator record `id`, as `slot` numbers its entry;
+/// null when the catalog holds no such record.
+pub fn slotOf(cat: *const roster.Catalog, id: []const u8) ?usize {
+    if (cat.actionIndex(id)) |ai| return ai;
+    if (cat.goodIndex(id)) |gi| return max_verbs + @as(usize, gi);
+    return null;
+}
+
 comptime {
     std.debug.assert(max_verbs >= roster.max_actions);
     std.debug.assert(max_verbs + roster.max_goods <= CatalogState.max_hidden);
