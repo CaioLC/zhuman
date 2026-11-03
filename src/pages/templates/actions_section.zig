@@ -1,10 +1,16 @@
 //! `actions_section` — the ACTIONS pane, the same template on every act: the heading with the
-//! act's kind counts as two toggles, one search field, a count-only summary, and the held verbs
-//! then the owned generators in two growing columns (one at the compact breakpoint). A verb is
-//! an `action_tile`, a generator a `generator_tile`. Only the content differs per act (`Shelf`:
-//! which verbs and generators, the subtitle, the density); the behavior is one.
+//! act's kind counts as two toggles, one search field, a toolbar with the count-only summary
+//! and the sort chips, and the held verbs then the owned generators in two growing columns (one
+//! at the compact breakpoint). A verb is an `action_tile`, a generator a `generator_tile`. Only
+//! the content differs per act (`Shelf`: which verbs and generators, the subtitle, the density);
+//! the behavior is one.
 //!
-//! **No sorting.** Verbs read in authored order, then the generators in authored good order. A
+//! **Sort chips.** `SORT DEFAULT · STATE · NAME · COST · TIME` (`cc.sort_chips`, the catalog
+//! state's `sort`/`dir`): a chip pressed first sorts by its key in its natural direction, and
+//! pressed again flips it. `DEFAULT` is the authored order, the verbs then the generators in
+//! authored good order, and descending its reverse; `STATE` ranks ready, then working or
+//! accumulating, then short, then off, ready first; `NAME`, `COST` (the entry's energy) and
+//! `TIME` (its hours) ascend. Equal keys fall back to the name, A to Z in either direction. A
 //! blank query lists every entry, the ones that cannot run now dimmed; the shared `query` parser
 //! answers `type:` with `verb` or `generator`, `in:`/`out:` from a verb's lines or a
 //! generator's daily lines, `state:` from the standing (a verb: ready, busy, short; a
@@ -99,7 +105,7 @@ pub const Show = enum(u8) {
 };
 
 /// One entry this frame, a held verb or an owned generator: its kind and catalog index, its id
-/// and name, its standing, and its line items joined for `in:`/`out:`.
+/// and name, its standing, what it sorts by, and its line items joined for `in:`/`out:`.
 pub const Entry = struct {
     kind: Kind,
     /// The verb's index in `cat.actions`, or the generator's in `cat.goods`.
@@ -113,6 +119,14 @@ pub const Entry = struct {
     state: []const u8,
     /// Whether it can run now: the verb can begin, the generator can be collected.
     ready: bool,
+    /// Its place in the authored order, the `DEFAULT` sort.
+    order: u16 = 0,
+    /// The energy a begin or a collection costs, the `COST` sort.
+    energy: f32 = 0,
+    /// The verb's hours or the generator's cycle, the `TIME` sort.
+    hours: f32 = 0,
+    /// The `STATE` sort's rank: ready 3, working or accumulating 2, short 1, off 0.
+    rank: u8 = 0,
     in_buf: [64]u8 = undefined,
     in_len: usize = 0,
     out_buf: [64]u8 = undefined,
@@ -125,6 +139,14 @@ pub const Entry = struct {
         return self.out_buf[0..self.out_len];
     }
 };
+
+/// The `STATE` sort's rank of a standing word, the prototype's `actionStateRank`: a busy verb is
+/// working, ranked with an accumulating generator.
+fn stateRank(state: []const u8) u8 {
+    const ranks = [_]struct { []const u8, u8 }{ .{ "ready", 3 }, .{ "busy", 2 }, .{ "accumulating", 2 }, .{ "short", 1 } };
+    for (ranks) |r| if (std.mem.eql(u8, r[0], state)) return r[1];
+    return 0;
+}
 
 /// The word a verb's `state:` answers with. Energy and inputs both read as short.
 fn verbState(s: actions.Standing) []const u8 {
@@ -187,7 +209,11 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
         const ai: u16 = @intCast(i);
         const q = quotes.verbs[ai] orelse continue;
         const verb = actions.verbOf(world, e, cat, ai) orelse continue;
-        buf[n] = .{ .kind = .verb, .index = ai, .id = rec.id, .name = rec.name, .state = verbState(q.standing), .ready = q.standing == .ready };
+        const state = verbState(q.standing);
+        buf[n] = .{
+            .kind = .verb, .index = ai, .id = rec.id, .name = rec.name, .state = state, .ready = q.standing == .ready,
+            .order = @intCast(n), .energy = verb.requires.energy, .hours = verb.requires.hours, .rank = stateRank(state),
+        };
         buf[n].in_len = join(&buf[n].in_buf, verb.input.slice());
         buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
         n += 1;
@@ -198,8 +224,12 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
         if (n == buf.len) break;
         const gi: u16 = @intCast(i);
         const q = quotes.generators[gi] orelse continue;
-        const label = rec.generator.?.label;
-        buf[n] = .{ .kind = .generator, .index = gi, .id = rec.id, .name = if (label.len > 0) label else rec.name, .state = generatorState(q), .ready = q.ready() };
+        const spec = rec.generator.?;
+        const state = generatorState(q);
+        buf[n] = .{
+            .kind = .generator, .index = gi, .id = rec.id, .name = if (spec.label.len > 0) spec.label else rec.name, .state = state, .ready = q.ready(),
+            .order = @intCast(n), .energy = spec.energy, .hours = spec.hours, .rank = stateRank(state),
+        };
         const ins = roster.Lines.only(rec.input, .day);
         const outs = roster.Lines.only(rec.output, .day);
         buf[n].in_len = join(&buf[n].in_buf, ins.slice());
@@ -222,6 +252,39 @@ pub fn filter(list: []Entry, query_text: []const u8, show: Show) []Entry {
         }
     }
     return list[0..n];
+}
+
+/// The sort keys, in chip order; the index is `CatalogState.sort`.
+pub const Sort = enum(usize) { default = 0, state = 1, name = 2, cost = 3, time = 4 };
+
+/// The chips: each key's label and the direction it sorts in when first pressed.
+pub const sort_keys = [_]cc.SortKey{
+    .{ .label = "DEFAULT", .natural = .ascending },
+    .{ .label = "STATE", .natural = .descending },
+    .{ .label = "NAME", .natural = .ascending },
+    .{ .label = "COST", .natural = .ascending },
+    .{ .label = "TIME", .natural = .ascending },
+};
+
+/// Order `list` by `sort` in `dir`, stably; `none` is the key's natural direction. Equal keys
+/// fall back to the name, A to Z in either direction (the prototype's `compareActionCells`).
+pub fn sortEntries(list: []Entry, sort: Sort, dir: CatalogState.Direction) void {
+    const Ctx = struct { sort: Sort, desc: bool };
+    const Cmp = struct {
+        fn less(c: Ctx, a: Entry, b: Entry) bool {
+            if (c.sort == .name) return cc.lessThan(if (c.desc) .descending else .ascending, false, true, a.name, b.name);
+            const x: f32, const y: f32 = switch (c.sort) {
+                .default => .{ @floatFromInt(a.order), @floatFromInt(b.order) },
+                .state => .{ @floatFromInt(a.rank), @floatFromInt(b.rank) },
+                .cost => .{ a.energy, b.energy },
+                .time => .{ a.hours, b.hours },
+                .name => unreachable,
+            };
+            return cc.lessThan(.ascending, if (c.desc) y < x else x < y, x == y, a.name, b.name);
+        }
+    };
+    const eff = if (dir != .none) dir else sort_keys[@intFromEnum(sort)].natural;
+    std.sort.insertion(Entry, list, Ctx{ .sort = sort, .desc = eff == .descending }, Cmp.less);
 }
 
 /// A kind toggle's label: the eyebrow's dim at rest, fg while pressed, accent while hot.
@@ -260,7 +323,7 @@ fn kindToggles(top: El, list: []const Entry, st: *CatalogState) !void {
 /// the pane's own node keeps the catalog state.
 ///
 /// With `scroll` the pane fills its parent's height, which must be definite: the heading,
-/// search and summary stay put and only the tiles scroll (Act II's long catalog). Without it
+/// search and toolbar stay put and only the tiles scroll (Act II's long catalog). Without it
 /// the pane is content-high and the caller scrolls it whole (Act I's short roster).
 pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u8, shelf: Shelf, catalog_state: ?*CatalogState, search_owner: ?El, scroll: ?*uic.UiState.ScrollState) !El {
     const ctx = parent.ctx;
@@ -282,13 +345,20 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
     const controls = try cc.catalog_controls(section, "actions_ctl", cc.actions_placeholder, st, search_owner);
     const shown = filter(all, controls.query_text, Show.of(st.kind));
 
+    // The toolbar: the summary on the left, the sort chips on the right, on one baseline.
+    const toolbar = try section.box("toolbar", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline }, .gap = 12,
+    }, .{});
     var sbuf: [40]u8 = undefined;
     const summary = std.mem.print(&sbuf, "{d} of {d} actions shown", .{ shown.len, all.len }) catch "?";
-    _ = try copy.summary_line(section, "summary", summary);
+    _ = try copy.summary_line(toolbar, "summary", summary);
+    const sorted = try cc.sort_chips(toolbar, "sort", "Sort actions", &sort_keys, st);
+    sortEntries(shown, @enumFromInt(sorted.sort), sorted.dir);
 
     const compact = ctx.res.view.metrics.width_class.atMost(.w440);
     // The tiles' host: the pane itself, or a scroll viewport filling the height left under
-    // the summary.
+    // the toolbar.
     const host = if (scroll) |sc| blk: {
         const area = try section.box("results", .{ .w = .{ .pct_of_parent = 1.0 }, .h = @import("./terminal.zig").grow_h(ctx) }, .{});
         const sv = try scroll_view_mod.scroll_view(area, "scroll", .{ .height = 0, .framed = false, .name = "Available actions; scroll for more" }, sc);
@@ -300,7 +370,7 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
         _ = try copy.empty_line(grid.grid, "empty", msg);
     }
     const act = ha.sim.data.migration.actOf(world, e);
-    // Keyed by the verb's or the good's id, so focus follows it as the query changes.
+    // Keyed by the verb's or the good's id, so focus follows it through a re-sort or a query.
     for (shown, 0..) |ent, pos| {
         const lane = grid.lanes[pos % 2];
         switch (ent.kind) {
@@ -517,4 +587,107 @@ test "actions tiles keep their height" {
     // 82px / 52px outer, including the tile's 1px bottom inset.
     try testing.expectEqual(@as(f32, 81), action_tile_mod.height(.regular));
     try testing.expectEqual(@as(f32, 51), action_tile_mod.height(.compact));
+}
+
+/// An entry with only what the sort reads: its name, its authored place and its keys.
+fn sortable(name: []const u8, order: u16, rank: u8, energy: f32, hours: f32) Entry {
+    return .{ .kind = .verb, .index = order, .id = name, .name = name, .state = "", .ready = false, .order = order, .energy = energy, .hours = hours, .rank = rank };
+}
+
+/// The names of `list` in order, joined by spaces, into `buf`.
+fn names(buf: []u8, list: []const Entry) []const u8 {
+    var w = std.Io.Writer.fixed(buf);
+    for (list, 0..) |ent, i| {
+        if (i > 0) w.writeByte(' ') catch break;
+        w.writeAll(ent.name) catch break;
+    }
+    return w.buffered();
+}
+
+/// Five entries sorted by `sort` in `dir`, as their names.
+fn sortedNames(buf: []u8, sort: Sort, dir: CatalogState.Direction) []const u8 {
+    // Authored order: Forage, Chop, Rest, then the generators Snares and Bed. Chop and Forage
+    // tie on state and cost, Rest and Bed on time.
+    var list = [_]Entry{
+        sortable("Forage", 0, 3, 2, 4),
+        sortable("Chop", 1, 3, 2, 6),
+        sortable("Rest", 2, 1, 0, 8),
+        sortable("Snares", 3, 2, 1, 24),
+        sortable("Bed", 4, 0, 3, 8),
+    };
+    sortEntries(&list, sort, dir);
+    return names(buf, &list);
+}
+
+test "each sort key orders the entries in its natural direction, equal keys by name" {
+    var b: [64]u8 = undefined;
+    // `none` is the key's natural direction.
+    try testing.expectEqualStrings("Forage Chop Rest Snares Bed", sortedNames(&b, .default, .none));
+    try testing.expectEqualStrings("Forage Chop Rest Snares Bed", sortedNames(&b, .default, .ascending));
+    try testing.expectEqualStrings("Chop Forage Snares Rest Bed", sortedNames(&b, .state, .none));
+    try testing.expectEqualStrings("Bed Chop Forage Rest Snares", sortedNames(&b, .name, .none));
+    try testing.expectEqualStrings("Rest Snares Chop Forage Bed", sortedNames(&b, .cost, .none));
+    try testing.expectEqualStrings("Forage Chop Bed Rest Snares", sortedNames(&b, .time, .none));
+}
+
+test "the flip reverses each key, and equal keys still read by name" {
+    var b: [64]u8 = undefined;
+    // `DEFAULT` descending is the authored order reversed.
+    try testing.expectEqualStrings("Bed Snares Rest Chop Forage", sortedNames(&b, .default, .descending));
+    try testing.expectEqualStrings("Bed Rest Snares Chop Forage", sortedNames(&b, .state, .ascending));
+    try testing.expectEqualStrings("Snares Rest Forage Chop Bed", sortedNames(&b, .name, .descending));
+    try testing.expectEqualStrings("Bed Chop Forage Snares Rest", sortedNames(&b, .cost, .descending));
+    try testing.expectEqualStrings("Snares Bed Rest Chop Forage", sortedNames(&b, .time, .descending));
+}
+
+test "a chip pressed first takes its natural direction; pressed again it flips" {
+    var st: CatalogState = .{};
+    const press = struct {
+        fn f(s: *CatalogState, key: Sort) void {
+            const cur: CatalogState.Direction = if (s.dir != .none) s.dir else sort_keys[s.sort].natural;
+            const next = cc.nextSort(s.sort, cur, @intFromEnum(key), sort_keys[@intFromEnum(key)].natural);
+            s.sort = next.sort;
+            s.dir = next.dir;
+        }
+    }.f;
+    // A fresh state is `DEFAULT` ascending; pressing it flips to the reverse authored order.
+    press(&st, .default);
+    try testing.expectEqual(CatalogState.Direction.descending, st.dir);
+    press(&st, .state);
+    try testing.expectEqual(@as(usize, @intFromEnum(Sort.state)), st.sort);
+    try testing.expectEqual(CatalogState.Direction.descending, st.dir);
+    press(&st, .state);
+    try testing.expectEqual(CatalogState.Direction.ascending, st.dir);
+    press(&st, .cost);
+    try testing.expectEqual(CatalogState.Direction.ascending, st.dir);
+    press(&st, .default);
+    try testing.expectEqual(@as(usize, 0), st.sort);
+    try testing.expectEqual(CatalogState.Direction.ascending, st.dir);
+}
+
+test "the held entries carry their authored place, price and state rank" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const e = settler(&w, &cat);
+    establishAll(&w, e, &cat);
+    ownGenerators(&w, e, &cat);
+    var buf: [max_entries]Entry = undefined;
+    const list = held(&w, e, &cat, act_two_test, &buf);
+    for (list, 0..) |ent, i| try testing.expectEqual(@as(u16, @intCast(i)), ent.order);
+    const verbs = authoredTotal(&cat, act_two_test);
+    // The generators: the snares accumulating, the ready bed, the bed switched off.
+    try testing.expectEqual(@as(u8, 2), list[verbs].rank);
+    try testing.expectEqual(@as(u8, 3), list[verbs + 1].rank);
+    try testing.expectEqual(@as(u8, 0), list[verbs + 2].rank);
+    const spec = cat.goods[list[verbs].index].generator.?;
+    try testing.expectEqual(spec.energy, list[verbs].energy);
+    try testing.expectEqual(spec.hours, list[verbs].hours);
+    // `STATE` puts a ready entry first and the bed that is off last.
+    var work: [max_entries]Entry = undefined;
+    @memcpy(work[0..list.len], list);
+    sortEntries(work[0..list.len], .state, .none);
+    try testing.expectEqual(@as(u8, 3), work[0].rank);
+    try testing.expectEqualStrings("garden_bed_two", work[list.len - 1].id);
 }

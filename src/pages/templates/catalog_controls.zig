@@ -1,6 +1,7 @@
-//! `catalog_controls` — the search field above a catalog's results (BUILD and ACTIONS), and
-//! the sort helpers a sortable table's column headers use. The field is `uic.text_input`
-//! (editor, with the `/` shortcut); the query language is `query.zig`.
+//! `catalog_controls` — the search field above a catalog's results (BUILD and ACTIONS), the
+//! sort helpers a sortable table's column headers use, and `sort_chips`, the same headers as a
+//! row of chips for a catalog that is not a table. The field is `uic.text_input` (editor, with
+//! the `/` shortcut); the query language is `query.zig`.
 //!
 //! Contract:
 //!   - **`/` focuses the search field of the *active* view only** — only the active catalog
@@ -20,6 +21,8 @@ const El = el.El;
 const style = uic.style;
 const CatalogState = uic.UiState.CatalogState;
 const Direction = CatalogState.Direction;
+const Style = style.Style;
+const table = @import("./table.zig");
 
 /// The controls' resolved output for this frame: the live `query_text` (a slice into the
 /// field's editor buffer — valid until the next edit) and the catalog state in force, which a
@@ -70,6 +73,49 @@ pub fn catalog_controls(parent: El, id: []const u8, placeholder: []const u8, sta
 pub fn nextSort(sort: usize, dir: Direction, clicked: usize, natural: Direction) struct { sort: usize, dir: Direction } {
     if (clicked != sort) return .{ .sort = clicked, .dir = natural };
     return .{ .sort = sort, .dir = if (dir == .descending) .ascending else .descending };
+}
+
+/// One key of a chip row: its label, uppercase as drawn, which is also the chip's accessible
+/// name, and the direction it sorts in when first pressed.
+pub const SortKey = struct { label: []const u8, natural: Direction };
+
+/// The sort in force after a chip row's click: `sort` indexes the row's keys and `dir` is never
+/// `none`.
+pub const Sorted = struct { el: El, sort: usize, dir: Direction };
+
+/// A row of sort chips, the prototype's `.sort-chips`: the word `SORT` in line2, then one chip
+/// per key in the column headers' 9px type, 10px apart. A chip is a `table.sort_header_cell`,
+/// so the chip in force reads fg with its arrow, `↑` ascending or `↓` descending, and the
+/// others line2, all accent while hot; the row publishes them as one group named `name`, the
+/// way a sortable table's header does. A click goes through `nextSort` with the key's natural
+/// direction into `st.sort`/`st.dir`; `dir == .none` reads as the key's natural direction, so a
+/// fresh state shows key 0 in force. The arrow and the published `selected` follow a click on the
+/// next frame, as a table header's do. Returns the sort in force, the click included.
+pub fn sort_chips(parent: El, id: []const u8, name: []const u8, keys: []const SortKey, st: *CatalogState) !Sorted {
+    const ctx = parent.ctx;
+    const row = try parent.box(id, .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row }, .gap = 10 }, .{});
+    if (st.sort >= keys.len) st.sort = 0;
+    const cur_dir: Direction = if (st.dir != .none) st.dir else keys[st.sort].natural;
+    try row.label("sort", "SORT", .{ Style{ .font = 9, .tracking = 0.07 }, style.faint });
+    const group = row.get().key;
+    var members: [16]u64 = undefined;
+    var out: Sorted = .{ .el = row, .sort = st.sort, .dir = cur_dir };
+    for (keys[0..@min(keys.len, members.len)], 0..) |k, i| {
+        const shown: table.SortShown = if (i == st.sort) (if (cur_dir == .descending) .descending else .ascending) else .none;
+        const chip = try table.sort_header_cell(row, k.label, k.label, shown, group);
+        members[i] = chip.key;
+        if (chip.clicked) {
+            const next = nextSort(st.sort, cur_dir, i, k.natural);
+            out.sort = next.sort;
+            out.dir = next.dir;
+        }
+    }
+    if (out.sort != st.sort or out.dir != cur_dir) {
+        st.sort = out.sort;
+        st.dir = out.dir;
+    }
+    ctx.res.semantics.publish(uic.semantic.describeGroup(group, name, members[0..@min(keys.len, members.len)]));
+    return out;
 }
 
 /// Compose a caller's key comparison with the **deterministic name tie-break**. Given
