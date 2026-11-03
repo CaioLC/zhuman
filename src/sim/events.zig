@@ -64,7 +64,7 @@ pub const NeighbourDeal = struct {
 pub const NewRun = struct {};
 /// The template audit harness's door: a debug-only poke of one component, applied by `systems/debug.zig`.
 pub const DebugPoke = struct {
-    pub const What = union(enum) { food: f32, vigor: struct { v: f32, max: f32 }, rate: f32, biomass: f32, good: struct { gi: u16, count: u32 }, settle };
+    pub const What = union(enum) { food: f32, vigor: struct { v: f32, max: f32 }, rate: f32, biomass: f32, good: struct { gi: u16, count: u32 }, settle, generator_mode: struct { gi: u16, mode: comp.Generators.Mode } };
     agent: Entity,
     what: What,
 };
