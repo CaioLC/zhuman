@@ -2,8 +2,8 @@
 //! view in every act (`Shelf`: which acts' generators, the tile density).
 //!
 //! Generators mature on simulation time without occupying `Busy`. A ready tile collects its
-//! complete cycle immediately; the lower-right ON/OFF control pauses accumulation while preserving
-//! progress. Readiness and progress come from the agent's `comp.Quotes`, cost and output from
+//! complete cycle immediately; the lower-right mode corner cycles the generator on (accumulates and
+//! waits to be collected), auto (collects itself) and off (paused, progress kept). Readiness and progress come from the agent's `comp.Quotes`, cost and output from
 //! the record's generator.
 
 const std = @import("std");
@@ -137,10 +137,10 @@ fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, d
         density,
     );
     // A regular tile stands as tall as the prototype's (`min-height: 82px` plus the state
-    // line: 87px outer); a compact one fits its content, which already matches.
+    // line: 87px outer); a compact one, its state on the name row, as tall as a compact verb.
     tile.el.set(.{
         .w = .{ .pct_of_parent = 1.0 },
-        .h = if (density == .regular) .{ .fixed = generator_regular_h } else .fit_children,
+        .h = .{ .fixed = if (density == .regular) generator_regular_h else action_tile.height(.compact) },
         .flow = .{ .dir = .column, .main = .center },
     }, .{});
 
@@ -152,42 +152,54 @@ fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, d
     const toggle = try tile.el.box("toggle", .{
         .anchor = .bottom_right, .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row },
     }, .{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
-    const is_on = toggleAndCollect(tile.el, toggle, world, e, gi);
-    try toggle.label("label", if (is_on) "● ON" else "○ OFF", .{ style.small, toggle_label });
+    const mode = toggleAndCollect(tile.el, toggle, world, e, gi, display_name);
+    const size: Style = if (density == .compact) .{ .font = 10 } else style.small;
+    try toggle.label("label", mode_labels.get(mode), .{ size, mode_inks.get(mode) });
 }
 
-/// The ON/OFF label: good while the toggle is checked (on), dim off, accent while hot either way.
-pub const toggle_label = Style{ .ink = .dim, .on = &.{ .{ .when = .checked, .ink = .good }, .{ .when = .hot, .ink = .acc } } };
+/// The mode corner's text per mode.
+const mode_labels = std.EnumArray(comp.Generators.Mode, []const u8).init(.{
+    .on = "\u{25CF} ON",
+    .auto = "\u{25C9} AUTO",
+    .off = "\u{25CB} OFF",
+});
+
+/// The mode corner's inks: ON good, AUTO fg, OFF dim at rest; accent while hot in every mode.
+pub const mode_inks = std.EnumArray(comp.Generators.Mode, Style).init(.{
+    .on = .{ .ink = .good, .on = &.{.{ .when = .hot, .ink = .acc }} },
+    .auto = .{ .ink = .fg, .on = &.{.{ .when = .hot, .ink = .acc }} },
+    .off = .{ .ink = .dim, .on = &.{.{ .when = .hot, .ink = .acc }} },
+});
 
 /// Resolve one generator tile's activations once the tile (`action_tile.tile`, built and
-/// lifecycle-run before this child existed) and its ON/OFF `toggle` stand. A click on the
+/// lifecycle-run before this child existed) and its mode corner `toggle` stand. A click on the
 /// toggle, a pointer release or Enter/Space on its focus, is routed to the toggle and bubbles
 /// to the tile, so:
 ///
-/// - the toggle writes `ToggleGenerator` on the click and reads the state that intent asks for
-///   before its lifecycle publishes `checked`, so the published state, the accessible name and
-///   the label (from the returned value) are current on the click frame, as `tabs` and `rail`
-///   do; the handler applies it before the next build;
+/// - the toggle writes `ToggleGenerator` on the click and reads the mode that intent asks for
+///   (`Mode.next`) before its lifecycle publishes, so the accessible name and the label (from
+///   the returned mode) are current on the click frame, as `tabs` and `rail` do; the handler
+///   applies it before the next build;
 /// - the flip is gated by the same `enabled` the lifecycle receives, so a click the lifecycle
 ///   would consume as disabled can never flip it;
 /// - the toggle then consumes its click, and the tile is re-queried after it, as
 ///   `capital_row` does: only a click on the tile body writes `CollectGenerator`.
 ///
-/// Returns whether the generator is on after this frame's activation.
-fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u16) bool {
+/// The corner is a button named for the generator and its mode (`Garden bed generator · auto`):
+/// a three-way cycle has no `checked` to publish. Returns the mode after this frame's activation.
+fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u16, display_name: []const u8) comp.Generators.Mode {
     const ctx = toggle.ctx;
     // A generator can always be paused or resumed. The flip and the lifecycle share this gate.
     const enabled = true;
     const flip = enabled and toggle.query().clicked;
     if (flip) _ = ctx.res.game.events.writer(ha.sim.events.ToggleGenerator).push(.{ .agent = e, .gi = gi });
     const was = world.get(e, comp.Generators).?.mode[gi];
-    const is_on = (if (flip) was.next() else was) != .off;
+    const mode = if (flip) was.next() else was;
     const q = toggle.control(.{
         .enabled = enabled,
-        .name = if (is_on) "Turn generator off" else "Turn generator on",
-        .role = .checkbox,
-        .checked = is_on,
-        .ring = false, // the ON/OFF label lifts to accent
+        .name = ctx.arena.print("{s} generator \u{00B7} {s}", .{ display_name, @tagName(mode) }) catch display_name,
+        .role = .button,
+        .ring = false, // the mode label lifts to accent
     });
     // The flip read exactly the activation the lifecycle reports.
     std.debug.assert(q.clicked == flip);
@@ -195,7 +207,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u1
     // The tile's lifecycle gated its own click on readiness (a disabled tile consumed it);
     // read it again now that the toggle has taken its click.
     if (tile.query().clicked) _ = ctx.res.game.events.writer(ha.sim.events.CollectGenerator).push(.{ .agent = e, .gi = gi });
-    return is_on;
+    return mode;
 }
 
 /// A regular generator tile's outer height (border included), logical px.
@@ -307,7 +319,8 @@ const GenFixture = struct {
     gi: u16,
     tile_key: u64 = 0,
     toggle_key: u64 = 0,
-    on: bool = true,
+    /// The mode `toggleAndCollect` returned, the one the corner's label reads.
+    shown: comp.Generators.Mode = .on,
     /// The click the tile's own lifecycle reported (before its toggle was built).
     tile_lifecycle_click: bool = false,
     /// The tile's click once the toggle resolved, the one that decides a collect.
@@ -326,7 +339,7 @@ const GenFixture = struct {
         const ready = self.world.get(self.e, comp.Quotes).?.generators[self.gi].?.ready();
         self.tile_lifecycle_click = tile.control(.{ .enabled = ready, .name = "Garden bed", .role = .tile }).clicked;
         const toggle = try place(tile, "toggle", 240, 60, 60, 27);
-        self.on = toggleAndCollect(tile, toggle, self.world, self.e, self.gi);
+        self.shown = toggleAndCollect(tile, toggle, self.world, self.e, self.gi, "Garden bed");
         self.tile_collect_click = tile.query().clicked;
         self.tile_key = tile.get().key;
         self.toggle_key = toggle.get().key;
@@ -364,7 +377,7 @@ test "generator: a pointer click on the toggle toggles once and does not collect
     try r.idle(1);
 
     try genClick(&r, 270, 73);
-    try testing.expect(fx.mode() == .auto and fx.on);
+    try testing.expect(fx.mode() == .auto and fx.shown == .auto);
     // The click reached the ready tile's lifecycle by bubbling; the toggle took it back first.
     try testing.expect(fx.tile_lifecycle_click);
     try testing.expect(!fx.tile_collect_click);
@@ -374,9 +387,9 @@ test "generator: a pointer click on the toggle toggles once and does not collect
     // The next click turns it off, the one after back on (a full cycle is ready again); none
     // collects.
     try genClick(&r, 270, 73);
-    try testing.expect(fx.mode() == .off and !fx.on);
+    try testing.expect(fx.mode() == .off and fx.shown == .off);
     try genClick(&r, 270, 73);
-    try testing.expect(fx.mode() == .on and fx.on);
+    try testing.expect(fx.mode() == .on and fx.shown == .on);
     try testing.expect(!fx.collected());
     try r.idle(1);
     try testing.expect(fx.mode() == .on and !fx.collected()); // exactly once per click
@@ -393,7 +406,7 @@ test "generator: a pointer click on the tile body collects and does not toggle" 
     try genClick(&r, 50, 30);
     try testing.expect(fx.tile_collect_click);
     try testing.expect(fx.collected());
-    try testing.expect(fx.mode() == .on and fx.on);
+    try testing.expect(fx.mode() == .on and fx.shown == .on);
     try testing.expect(rig.world.get(fx.e, comp.InventoryFood).?.v > 0);
 }
 
@@ -412,18 +425,18 @@ test "generator: Tab to the toggle and Enter toggles it and does not collect" {
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 
     try r.frame(&.{.{ .key_press = .{ .key = .return_key } }});
-    try testing.expect(fx.mode() == .auto and fx.on);
+    try testing.expect(fx.mode() == .auto and fx.shown == .auto);
     try testing.expect(fx.tile_lifecycle_click and !fx.tile_collect_click);
     try testing.expect(!fx.collected());
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 
     // Space as well: off, still uncollected, focus kept.
     try r.frame(&.{.{ .key_press = .{ .key = .space } }});
-    try testing.expect(fx.mode() == .off and !fx.on and !fx.collected());
+    try testing.expect(fx.mode() == .off and fx.shown == .off and !fx.collected());
     try testing.expectEqual(@as(?u64, fx.toggle_key), rig.ui.focusedKey());
 }
 
-test "generator: the published checked state and name match the label on the toggle frame" {
+test "generator: the published name carries the mode the label shows on the toggle frame" {
     var rig: GenRig = undefined;
     try rig.setUp();
     defer rig.tearDown();
@@ -432,22 +445,24 @@ test "generator: the published checked state and name match the label on the tog
     try r.idle(1);
     {
         const n = rig.res.semantics.find(fx.toggle_key).?;
-        try testing.expect(n.state.checked and fx.on);
-        try testing.expectEqualStrings("Turn generator off", n.label.slice());
+        try testing.expect(fx.shown == .on);
+        try testing.expectEqual(uic.SemanticRole.button, n.role);
+        try testing.expectEqualStrings("Garden bed generator \u{00B7} on", n.label.slice());
     }
 
-    try genClick(&r, 270, 73); // on -> auto, still checked
-    try testing.expect(fx.on);
-    try genClick(&r, 270, 73); // auto -> off
-    {
-        // The label reads `fx.on`; the snapshot published on the same frame agrees with it.
+    // The label reads `fx.shown`; the snapshot published on the same frame agrees with it, and
+    // a three-way cycle publishes no `checked`.
+    const want = [_]struct { comp.Generators.Mode, []const u8 }{
+        .{ .auto, "Garden bed generator \u{00B7} auto" },
+        .{ .off, "Garden bed generator \u{00B7} off" },
+        .{ .on, "Garden bed generator \u{00B7} on" },
+    };
+    for (want) |w| {
+        try genClick(&r, 270, 73);
         const n = rig.res.semantics.find(fx.toggle_key).?;
-        try testing.expect(!fx.on and !n.state.checked);
-        try testing.expectEqual(semantics_role_checkbox, n.role);
-        try testing.expectEqualStrings("Turn generator on", n.label.slice());
-        try testing.expect(!rig.ui.interactionOf(fx.toggle_key).checked);
+        try testing.expect(fx.shown == w[0]);
+        try testing.expectEqualStrings(w[1], n.label.slice());
+        try testing.expect(!n.state.checked and !rig.ui.interactionOf(fx.toggle_key).checked);
     }
 }
-
-const semantics_role_checkbox = uic.SemanticRole.checkbox;
 

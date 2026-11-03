@@ -164,8 +164,11 @@ small Vigor/upkeep price and realizes the complete cycle immediately. Collection
 interrupts `Busy`, so a trap round, food bed, or medicinal herb bed can be collected while the body
 is already working.
 
-Every generator carries an independent lower-left `ON`/`OFF` checkbox. Turning it off freezes its
-current progress and consumes nothing; turning it on resumes from that exact point. Garden bed and
+Every generator carries an independent lower-right mode corner that cycles `● ON`, `◉ AUTO` and
+`○ OFF` with one click. On accumulates and waits to be collected; auto collects each complete cycle
+itself whenever it is payable; off freezes its current progress and consumes nothing, and turning
+it on resumes from that exact point. At Act II's compact density the state word rides the name row,
+so a generator tile stands as tall as a verb tile. Garden bed and
 Wire snares realize their authored per-day resource rates over their cycle duration. Medicinal herb
 bed restores direct Vigor without raising its ceiling. No generator transfers resources every frame.
 

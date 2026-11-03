@@ -203,9 +203,13 @@ fn oldCtaLabel(f: Facts, q: Interaction) Want {
     return .{ .text = if (!f.enabled) .line2 else if (lit) .acc else .fg };
 }
 
-// generator_section.zig: `.ink = if (is_on) .good else .dim, .on = hot → acc`.
-fn oldGeneratorToggle(f: Facts, q: Interaction) Want {
-    return .{ .text = if (!q.disabled and q.hot()) .acc else if (f.on) .good else .dim };
+// generator_section.zig mode corner: `.ink = ON good, AUTO fg, OFF dim, .on = hot → acc`.
+fn oldGeneratorMode(comptime rest: Role) OldFn {
+    return struct {
+        fn f(_: Facts, q: Interaction) Want {
+            return .{ .text = if (!q.disabled and q.hot()) .acc else rest };
+        }
+    }.f;
 }
 
 // market_view.zig segButton: `hot = q.hover_focus()`,
@@ -473,7 +477,7 @@ test "state rules: rows, menus and the rail" {
     _ = try rig.expectLook("rail ink", rail.toggle_ink, .child, .{}, oldRailInk);
 }
 
-test "state rules: chips, choices, tabs, sort headers and the generator toggle" {
+test "state rules: chips, choices, tabs, sort headers and the generator mode corner" {
     var rig: Rig = undefined;
     try rig.setUp();
     defer rig.tearDown();
@@ -485,7 +489,9 @@ test "state rules: chips, choices, tabs, sort headers and the generator toggle" 
     _ = try rig.expectLook("settings choice label", settings_panel.choice_label, .child, pressed, oldChoiceLabel);
     _ = try rig.expectLook("tab label", tabs.tab_label, .child, .{ .selected = true }, oldTab);
     _ = try rig.expectLook("sort header label", table.sort_label, .child, .{ .selected = true }, oldSortLabel);
-    _ = try rig.expectLook("generator toggle", generator_section.toggle_label, .child, .{ .checked = true }, oldGeneratorToggle);
+    _ = try rig.expectLook("generator mode on", generator_section.mode_inks.get(.on), .child, .{}, oldGeneratorMode(.good));
+    _ = try rig.expectLook("generator mode auto", generator_section.mode_inks.get(.auto), .child, .{}, oldGeneratorMode(.fg));
+    _ = try rig.expectLook("generator mode off", generator_section.mode_inks.get(.off), .child, .{}, oldGeneratorMode(.dim));
 }
 
 test "look tables: every action tile state paints what its chain did, in every state" {

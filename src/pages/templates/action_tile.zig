@@ -26,6 +26,9 @@ const info = @import("./action_info.zig");
 
 /// Curve icon edge, in px — sized to ride beside body text.
 const icon_px: f32 = 14;
+/// The room a compact tile keeps right of its name-row state word, the width a top-right corner
+/// control takes.
+const compact_state_clear: f32 = 28;
 
 pub const Tile = struct { el: El, clicked: bool };
 
@@ -98,7 +101,8 @@ fn focusRegistrationEnabled(enabled: bool, running: bool, focused: bool) bool {
 /// from pre-formatted strings. Reports the (affordability-gated) click; the caller
 /// acts on it. A non-null `progress` marks the tile as *running*: fg chrome, inert, and a
 /// bottom underbar filling left-to-right (0..1) — a discrete task completing once. `state` is
-/// an optional short status word ("short", "working") rendered **only when nonempty**;
+/// an optional short status word ("accumulating") rendered **only when nonempty**: its own line
+/// on a regular tile, beside the name on a compact one, so the compact height holds;
 /// `cost_txt` is the price segment (`−{energy}e {optional input costs}`) and `duration_txt`
 /// the trailing duration, joined by a middot. `kind` selects the curve glyph and its shared
 /// accessible label.
@@ -154,12 +158,17 @@ pub fn tile(
         .flow = .{ .dir = .column, .cross = .start }, .gap = 2,
     }, .{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
 
-    try inner.label("name", name, .{ name_role, look.name });
-
-    // An optional state line, rendered **only when nonempty** (e.g. "short",
-    // "working"). Dim, small — it qualifies the tile without competing with the name.
-    if (state.len > 0) {
-        try inner.label("state", state, .{ style.small, look.state });
+    // An optional state word, rendered **only when nonempty** (e.g. "accumulating"). Dim,
+    // small — it qualifies the tile without competing with the name. A regular tile gives it
+    // its own line; a compact one rides it on the name row at the metrics' 10px, 8px right of the
+    // name, so a compact tile with a state stands as tall as one without.
+    if (state.len > 0 and compact) {
+        const head = try inner.box("head", .{ .flow = .{ .dir = .row }, .gap = 8 }, .{});
+        try head.label("name", name, .{ name_role, look.name });
+        _ = (try head.text("state", state)).with_style(.{ metric_role, look.state }).with_margin(0, compact_state_clear);
+    } else {
+        try inner.label("name", name, .{ name_role, look.name });
+        if (state.len > 0) try inner.label("state", state, .{ style.small, look.state });
     }
 
     // Info row: metrics `−{energy}e {input costs} · {duration}`, then the risk-shape glyph and

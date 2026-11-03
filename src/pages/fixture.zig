@@ -46,8 +46,9 @@ pub const Screen = enum { act_one, act_two, gameover, act_one_end, title };
 /// open. Mirrors `market.Phase` but names only the two states a fixture cares to reach.
 pub const Encounter = enum { absent, present };
 
-/// One owned good for a fixture: a record id and how many.
-pub const Owned = struct { id: []const u8, n: u32 };
+/// One owned good for a fixture: a record id, how many, and for a generator the mode its corner
+/// shows, seeded every frame like the count (null leaves the run's mode).
+pub const Owned = struct { id: []const u8, n: u32, mode: ?comp.Generators.Mode = null };
 
 /// Owning the hatchet, fishing rod and spear puts all five body-occupying verbs on ACTIONS.
 const five_verbs = [_]Owned{
@@ -262,8 +263,8 @@ const settlement_generator_balances = Balances{
         .{ .id = "forge", .n = 1 },
         .{ .id = "lean_to", .n = 1 },
         .{ .id = "wire_snares", .n = 1 },
-        .{ .id = "garden_bed", .n = 1 },
-        .{ .id = "garden_bed_two", .n = 1 },
+        .{ .id = "garden_bed", .n = 1, .mode = .auto },
+        .{ .id = "garden_bed_two", .n = 1, .mode = .off },
     },
 };
 
@@ -456,7 +457,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_generators",
-        .about = "Act I GENERATORS: the owned generators with their switches and underbars.",
+        .about = "Act I GENERATORS: the owned generators with their mode corners and underbars.",
         .day = 19,
         .view = 2,
         .balances = .{
@@ -464,7 +465,7 @@ pub const catalog = [_]Spec{
             .biomass = 31,
             .goods = &.{
                 .{ .id = "wire_snares", .n = 1 },
-                .{ .id = "garden_bed", .n = 1 },
+                .{ .id = "garden_bed", .n = 1, .mode = .auto },
             },
         },
     },
@@ -1038,6 +1039,9 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
             for (b.goods) |pair| {
                 if (res.game.catalog.goodIndex(pair.id)) |gi| {
                     goods.count[gi] = pair.n;
+                    if (pair.mode) |mode| {
+                        if (world.get(player, comp.Generators)) |gens| gens.mode[gi] = mode;
+                    }
                 }
             }
 
