@@ -68,7 +68,6 @@
         <nav class="surface-nav" aria-label="Act II surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
-          <button class="tab" id="tab-generators" type="button" role="tab" aria-selected="false" aria-controls="view-generators" data-view="generators">GENERATORS</button>
           <button class="tab" id="tab-research" type="button" role="tab" aria-selected="false" aria-controls="view-research" data-view="research">RESEARCH</button>
           <button class="tab" id="tab-market" type="button" role="tab" aria-selected="false" aria-controls="view-market" data-view="market">MARKET</button>
         </nav>
@@ -88,16 +87,19 @@
         <section class="catalog-view action-view" id="view-actions" role="tabpanel" aria-labelledby="tab-actions">
           <div class="surface-heading action-heading">
             <div><h1>ACTIONS</h1><p>What will the settlement do now?</p></div>
-            <span class="eyebrow" id="action-catalog-count">20 verbs</span>
+            <span class="eyebrow kind-filter" id="action-catalog-count" role="group" aria-label="Show one kind"><button class="text-button kind-toggle" type="button" data-kind="verb" aria-pressed="false">20 verbs</button><span aria-hidden="true"> · </span><button class="text-button kind-toggle" type="button" data-kind="generator" aria-pressed="false">4 generators</button></span>
           </div>
 
           <div class="build-query-bar action-query-bar">
             <label class="build-query-field" for="action-query"><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
           </div>
 
-          <div class="build-summary action-summary" id="action-summary" aria-live="polite">20 of 20 actions shown</div>
+          <div class="action-toolbar">
+            <div class="build-summary action-summary" id="action-summary" aria-live="polite">0 hidden out of 24</div>
+            <div class="sort-chips" id="action-sort" role="group" aria-label="Sort actions"><span>sort</span><button class="sort-header" type="button" data-sort="default" aria-sort="ascending">default</button><button class="sort-header" type="button" data-sort="state">state</button><button class="sort-header" type="button" data-sort="name">name</button><button class="sort-header" type="button" data-sort="cost">cost</button><button class="sort-header" type="button" data-sort="time">time</button></div>
+          </div>
           <div class="catalog-scroll action-results" id="action-results" tabindex="0" aria-label="Available actions; scroll for more">
-            <div class="action-grid" id="action-rows"></div>
+            <div class="action-grid" id="action-rows"><p class="empty-copy" id="action-empty" hidden>No action matches your search.</p></div>
           </div>
 
         </section>
@@ -130,40 +132,6 @@
               <div class="exchange-action-row"><span id="exchange-detail">Research any ring-4 technology and grow beyond 500 people.</span></div>
             </div>
           </section>
-        </section>
-
-        <section id="view-generators" role="tabpanel" aria-labelledby="tab-generators" hidden>
-          <div class="surface-heading">
-            <div><h1>GENERATORS</h1><p>Let time accumulate, then collect without stopping the work.</p></div>
-            <span class="eyebrow">4 owned</span>
-          </div>
-
-          <div class="action-grid" aria-label="Owned generators">
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Check traps" aria-disabled="true">
-              <span class="action-name">Check traps</span>
-              <span class="action-state">accumulating</span>
-              <span class="action-metrics"><span>−1e −1b · 24h</span><img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution"><span class="yield">+1–5f</span></span>
-              <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Check traps generator">● ON</button></div>
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Garden bed" aria-disabled="true">
-              <span class="action-name">Garden bed</span>
-              <span class="action-state">accumulating</span>
-              <span class="action-metrics"><span>−0.5e −0.2b · 48h</span><img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution"><span class="yield">+0–1f</span></span>
-              <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Garden bed generator">● ON</button></div>
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Charcoal kiln" aria-disabled="true">
-              <span class="action-name">Charcoal kiln</span>
-              <span class="action-state">accumulating</span>
-              <span class="action-metrics"><span>−1e −4b · 36h</span><img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution"><span class="yield">+3–5fu</span></span>
-              <span class="generator-progress" style="width: 71%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Charcoal kiln generator">● ON</button></div>
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Spring well" aria-disabled="true">
-              <span class="action-name">Spring well</span>
-              <span class="action-state">off</span>
-              <span class="action-metrics"><span>−0.5e · 12h</span><img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution"><span class="yield">+2–4w</span></span>
-              <span class="generator-progress" style="width: 33%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="false" aria-label="Spring well generator">○ OFF</button></div>
-          </div>
         </section>
 
         <section id="view-research" role="tabpanel" aria-labelledby="tab-research" hidden>
@@ -216,7 +184,6 @@
       const views = {
         actions: document.querySelector('#view-actions'),
         build: document.querySelector('#view-build'),
-        generators: document.querySelector('#view-generators'),
         research: document.querySelector('#view-research'),
         market: document.querySelector('#view-market')
       };
@@ -258,7 +225,6 @@
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
         build: requestedHoldingsState === 'collapsed',
-        generators: requestedHoldingsState === 'collapsed',
         research: requestedHoldingsState !== 'expanded',
         market: requestedHoldingsState !== 'expanded'
       };
@@ -329,14 +295,6 @@
       });
       setSpeed(1);
 
-      // GENERATORS: the ON/OFF switch pauses accumulation and keeps the progress made.
-      document.querySelectorAll('.generator-toggle').forEach(toggle => toggle.addEventListener('click', () => {
-        const on = toggle.getAttribute('aria-checked') !== 'true';
-        toggle.setAttribute('aria-checked', String(on));
-        toggle.textContent = on ? '● ON' : '○ OFF';
-        toggle.closest('.generator-cell').querySelector('.action-state').textContent = on ? 'accumulating' : 'off';
-      }));
-
       const actionCatalog = [
         { name: 'Forage', type: 'gather', energy: 1.7, time: 4, duration: '4h', inputs: [], outputs: ['food'], yield: '+1–3f', distribution: 'normal', state: 'ready', stateCopy: 'ready' },
         { name: 'Scavenge', type: 'gather', energy: 2.0, time: 5, duration: '5h', inputs: [], outputs: ['biomass', 'minerals'], yield: '+0–7b', distribution: 'exponential', state: 'ready', stateCopy: 'ready' },
@@ -357,31 +315,80 @@
         { name: 'Mill grain', type: 'process', energy: 2.0, time: 5, duration: '5h', inputs: ['food'], outputs: ['food'], yield: '+4–7f', distribution: 'normal', state: 'short', stateCopy: 'short grain' },
         { name: 'Bake bread', type: 'process', energy: 1.8, time: 4, duration: '4h', inputs: ['food', 'fuel'], outputs: ['food'], yield: '+3–6f', distribution: 'uniform', state: 'short', stateCopy: 'short fuel' },
         { name: 'Weave cloth', type: 'craft', energy: 2.2, time: 6, duration: '6h', inputs: ['biomass'], outputs: ['comfort'], yield: '+1 cloth', distribution: 'normal', state: 'short', stateCopy: 'short fiber' },
-        { name: 'Treat illness', type: 'care', energy: 1.5, time: 5, duration: '5h', inputs: ['food', 'water'], outputs: ['comfort'], yield: 'recovery +', distribution: 'exponential', state: 'short', stateCopy: 'short herbs' }
+        { name: 'Treat illness', type: 'care', energy: 1.5, time: 5, duration: '5h', inputs: ['food', 'water'], outputs: ['comfort'], yield: 'recovery +', distribution: 'exponential', state: 'short', stateCopy: 'short herbs' },
+        // The generators the settlement owns, both acts': the same tile with a state line, an
+        // accumulation underbar and a mode corner (on, auto, off). `cost` carries the cycle's upkeep.
+        { name: 'Check traps', type: 'generator', energy: 1.0, time: 24, duration: '24h', cost: '−1e −1b', inputs: ['biomass'], outputs: ['food'], yield: '+1–5f', distribution: 'poisson', state: 'accumulating', stateCopy: 'accumulating', progress: 46, mode: 'on' },
+        { name: 'Garden bed', type: 'generator', energy: 0.5, time: 48, duration: '48h', cost: '−0.5e −0.2b', inputs: ['biomass'], outputs: ['food'], yield: '+0–1f', distribution: 'uniform', state: 'accumulating', stateCopy: 'accumulating', progress: 18, mode: 'auto' },
+        { name: 'Charcoal kiln', type: 'generator', energy: 1.0, time: 36, duration: '36h', cost: '−1e −4b', inputs: ['biomass'], outputs: ['fuel'], yield: '+3–5fu', distribution: 'uniform', state: 'accumulating', stateCopy: 'accumulating', progress: 71, mode: 'on' },
+        { name: 'Spring well', type: 'generator', energy: 0.5, time: 12, duration: '12h', cost: '−0.5e', inputs: [], outputs: ['water'], yield: '+2–4w', distribution: 'normal', state: 'off', stateCopy: 'off', progress: 33, mode: 'off' }
       ];
-      // Verbs read in authored order (no sorting, as in the game); search only narrows them.
-      const actionControls = { query: prototypeParams.get('actionq') || '' };
+      // One grid of verbs and generators behind the shared query language, sorted from the
+      // chips. The hidden tiles are counted on the summary and listed on their own on request:
+      // the summary `n hidden out of N →` opens that list and, pressed, returns from it.
+      const naturalSortDirection = { default: 'ascending', state: 'descending', name: 'ascending', cost: 'ascending', time: 'ascending' };
+      const actionStateRank = { ready: 3, working: 2, accumulating: 2, short: 1, off: 0 };
+      const actionControls = {
+        query: prototypeParams.get('actionq') || '',
+        sort: naturalSortDirection[prototypeParams.get('sort')] ? prototypeParams.get('sort') : 'default',
+        dir: null,
+        hidden: new Set((prototypeParams.get('hidden') || '').split(',').filter(Boolean)),
+        showHidden: prototypeParams.get('showhidden') === '1',
+        kind: ['verb', 'generator'].includes(prototypeParams.get('kind')) ? prototypeParams.get('kind') : 'all'
+      };
+      actionControls.dir = ['ascending', 'descending'].includes(prototypeParams.get('dir')) ? prototypeParams.get('dir') : naturalSortDirection[actionControls.sort];
       const actionQuery = document.querySelector('#action-query');
       const actionResults = document.querySelector('#action-results');
       const actionHost = document.querySelector('#action-rows');
+      const actionEmpty = document.querySelector('#action-empty');
       const actionSummary = document.querySelector('#action-summary');
+      const actionSortChips = [...document.querySelectorAll('#action-sort [data-sort]')];
+      const actionKindToggles = [...document.querySelectorAll('#action-catalog-count [data-kind]')];
+      // A generator's corner cycles its mode: ON accumulates and waits to be collected, AUTO
+      // collects by itself when the cycle completes, OFF pauses and keeps the progress made.
+      const generatorModes = ['on', 'auto', 'off'];
+      const generatorModeLabels = { on: '● ON', auto: '◉ AUTO', off: '○ OFF' };
+      function setGeneratorMode(toggle, name, mode) {
+        toggle.dataset.mode = mode;
+        toggle.textContent = generatorModeLabels[mode];
+        toggle.setAttribute('aria-label', `${name} generator · ${mode}`);
+      }
       const actionEscapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
       const escapeActionMarkup = value => String(value).replace(/[&<>"']/g, character => actionEscapes[character]);
       const distributionLabels = { normal: 'normal distribution', exponential: 'exponential distribution', uniform: 'uniform distribution', poisson: 'Poisson distribution' };
-      const actionRows = actionCatalog.map(action => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = `action-tile${action.state === 'ready' ? '' : ' unavailable'}`;
-        row.dataset.action = action.name;
-        row.dataset.duration = action.duration;
-        row.dataset.state = action.state;
-        row.disabled = action.state !== 'ready';
-        row.innerHTML = `<span class="action-name">${escapeActionMarkup(action.name)}</span><span class="action-metrics"><span>−${action.energy}e · ${escapeActionMarkup(action.duration)}</span><img class="dist-icon" src="../assets/svg/dist_${action.distribution}.svg" alt="${distributionLabels[action.distribution]}"><span class="yield">${escapeActionMarkup(action.yield)}</span></span>`;
-        actionHost.append(row);
-        return { action, row };
+      const actionCells = actionCatalog.map((action, order) => {
+        const generator = action.type === 'generator';
+        const cell = document.createElement('div');
+        cell.className = 'action-cell';
+        cell.dataset.action = action.name;
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = `action-tile${generator ? ' generator-tile' : action.state === 'ready' ? '' : ' unavailable'}`;
+        if (generator) tile.setAttribute('aria-disabled', String(action.state !== 'ready'));
+        else tile.disabled = action.state !== 'ready';
+        tile.innerHTML = `<span class="action-name">${escapeActionMarkup(action.name)}</span>`
+          + (generator ? `<span class="action-state">${escapeActionMarkup(action.state)}</span>` : '')
+          + `<span class="action-metrics"><span>${escapeActionMarkup(action.cost || `−${action.energy}e`)} · ${escapeActionMarkup(action.duration)}</span><img class="dist-icon" src="../assets/svg/dist_${action.distribution}.svg" alt="${distributionLabels[action.distribution]}"><span class="yield">${escapeActionMarkup(action.yield)}</span></span>`
+          + (generator ? `<span class="generator-progress" style="width: ${action.progress}%" aria-hidden="true"></span>` : '');
+        cell.append(tile);
+        if (generator) {
+          const toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'generator-toggle';
+          setGeneratorMode(toggle, action.name, action.mode);
+          cell.append(toggle);
+        }
+        const corner = document.createElement('button');
+        corner.type = 'button';
+        corner.className = 'tile-hide';
+        cell.append(corner);
+        actionHost.append(cell);
+        return { action, cell, order };
       });
       actionQuery.value = actionControls.query;
-      document.querySelector('#action-catalog-count').textContent = `${actionCatalog.length} verbs`;
+      const verbCount = actionCatalog.filter(action => action.type !== 'generator').length;
+      document.querySelector('[data-kind="verb"]').textContent = `${verbCount} verbs`;
+      document.querySelector('[data-kind="generator"]').textContent = `${actionCatalog.length - verbCount} generators`;
 
       function actionQueryTerms(value) {
         return value.trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
@@ -418,30 +425,113 @@
         });
       }
 
+      // The chip in force orders the grid; equal keys fall back to the name, so a sort is
+      // stable. `default` is the authored order: the verbs, then the generators.
+      function compareActionEntries(a, b) {
+        const byName = a.action.name.localeCompare(b.action.name);
+        let delta = 0;
+        if (actionControls.sort === 'default') delta = a.order - b.order;
+        if (actionControls.sort === 'state') delta = (actionStateRank[a.action.state] ?? 0) - (actionStateRank[b.action.state] ?? 0);
+        if (actionControls.sort === 'name') delta = byName;
+        if (actionControls.sort === 'cost') delta = a.action.energy - b.action.energy;
+        if (actionControls.sort === 'time') delta = a.action.time - b.action.time;
+        if (actionControls.dir === 'descending') delta = -delta;
+        return delta || byName;
+      }
+
       function syncActionUrl() {
         const nextUrl = new URL(location.href);
-        if (actionControls.query.trim()) nextUrl.searchParams.set('actionq', actionControls.query.trim());
-        else nextUrl.searchParams.delete('actionq');
+        const set = (key, value) => value ? nextUrl.searchParams.set(key, value) : nextUrl.searchParams.delete(key);
+        set('actionq', actionControls.query.trim());
+        set('sort', actionControls.sort === 'default' ? '' : actionControls.sort);
+        set('dir', actionControls.dir === naturalSortDirection[actionControls.sort] ? '' : actionControls.dir);
+        set('hidden', [...actionControls.hidden].join(','));
+        set('showhidden', actionControls.showHidden ? '1' : '');
+        set('kind', actionControls.kind === 'all' ? '' : actionControls.kind);
         history.replaceState(null, '', nextUrl);
       }
 
-      function applyActionView(updateUrl = false) {
+      function applyActionView(updateUrl = false, rescroll = false) {
+        const hiddenCount = actionControls.hidden.size;
+        if (hiddenCount === 0) actionControls.showHidden = false;
+        const hiddenView = actionControls.showHidden;
         let visible = 0;
-        actionRows.forEach(({ action, row }) => {
-          row.hidden = !matchesActionQuery(action);
-          if (!row.hidden) visible += 1;
+        actionCells.sort(compareActionEntries).forEach(({ action, cell }) => {
+          const hidden = actionControls.hidden.has(action.name);
+          const corner = cell.querySelector('.tile-hide');
+          cell.classList.toggle('is-hidden', hidden);
+          corner.textContent = hidden ? 'unhide' : 'hide';
+          corner.setAttribute('aria-label', `${hidden ? 'Unhide' : 'Hide'} ${action.name}`);
+          const kindMiss = actionControls.kind !== 'all' && (action.type === 'generator') !== (actionControls.kind === 'generator');
+          cell.hidden = hidden !== hiddenView || kindMiss || !matchesActionQuery(action);
+          if (!cell.hidden) visible += 1;
+          actionHost.append(cell);
         });
-        actionSummary.textContent = `${visible} of ${actionCatalog.length} actions shown`;
-        if (updateUrl) { actionResults.scrollTop = 0; syncActionUrl(); }
+        actionHost.append(actionEmpty);
+        actionEmpty.hidden = visible > 0;
+        actionEmpty.textContent = hiddenView ? 'No hidden action matches your search.' : 'No action matches your search.';
+        // The summary is the hidden view's toggle; with nothing hidden it is inert and only counts.
+        // The hidden view adds `unhide all`, which empties the set and so returns to the full grid.
+        actionSummary.innerHTML = `<button class="text-button hidden-toggle" type="button" aria-pressed="${hiddenView}"${hiddenCount ? '' : ' disabled'}>${hiddenView ? '← ' : ''}${hiddenCount} hidden out of ${actionCatalog.length}${hiddenCount && !hiddenView ? ' →' : ''}</button>`
+          + (hiddenView ? ' · <button class="text-button unhide-all" type="button">unhide all</button>' : '');
+        actionSortChips.forEach(chip => {
+          if (chip.dataset.sort === actionControls.sort) chip.setAttribute('aria-sort', actionControls.dir);
+          else chip.removeAttribute('aria-sort');
+        });
+        actionKindToggles.forEach(toggle => toggle.setAttribute('aria-pressed', String(toggle.dataset.kind === actionControls.kind)));
+        if (rescroll) actionResults.scrollTop = 0;
+        if (updateUrl) syncActionUrl();
       }
 
-      actionQuery.addEventListener('input', () => { actionControls.query = actionQuery.value; applyActionView(true); });
+      // A kind toggle shows that kind alone; the pressed one, clicked again, shows everything.
+      actionKindToggles.forEach(toggle => toggle.addEventListener('click', () => {
+        actionControls.kind = actionControls.kind === toggle.dataset.kind ? 'all' : toggle.dataset.kind;
+        applyActionView(true, true);
+      }));
+      actionSortChips.forEach(chip => chip.addEventListener('click', () => {
+        const key = chip.dataset.sort;
+        if (key === actionControls.sort) actionControls.dir = actionControls.dir === 'ascending' ? 'descending' : 'ascending';
+        else { actionControls.sort = key; actionControls.dir = naturalSortDirection[key]; }
+        applyActionView(true, true);
+      }));
+      actionHost.addEventListener('click', event => {
+        const corner = event.target.closest('.tile-hide');
+        if (corner) {
+          const name = corner.closest('.action-cell').dataset.action;
+          if (actionControls.hidden.has(name)) actionControls.hidden.delete(name); else actionControls.hidden.add(name);
+          applyActionView(true);
+          actionSummary.querySelector('.hidden-toggle')?.focus();
+          return;
+        }
+        const toggle = event.target.closest('.generator-toggle');
+        if (!toggle) return;
+        const cell = toggle.closest('.action-cell');
+        const entry = actionCells.find(candidate => candidate.cell === cell);
+        entry.action.mode = generatorModes[(generatorModes.indexOf(entry.action.mode) + 1) % generatorModes.length];
+        setGeneratorMode(toggle, entry.action.name, entry.action.mode);
+        entry.action.state = entry.action.stateCopy = entry.action.mode === 'off' ? 'off' : 'accumulating';
+        cell.querySelector('.action-state').textContent = entry.action.state;
+        applyActionView();
+      });
+      actionSummary.addEventListener('click', event => {
+        if (event.target.closest('.unhide-all')) {
+          actionControls.hidden.clear();
+          applyActionView(true);
+          actionHost.querySelector('.action-cell:not([hidden]) .action-tile:not([disabled])')?.focus();
+          return;
+        }
+        if (!event.target.closest('.hidden-toggle')) return;
+        actionControls.showHidden = !actionControls.showHidden;
+        applyActionView(true);
+        actionSummary.querySelector('.hidden-toggle')?.focus();
+      });
+      actionQuery.addEventListener('input', () => { actionControls.query = actionQuery.value; applyActionView(true, true); });
       actionQuery.addEventListener('keydown', event => {
         if (event.key === 'Escape' && actionQuery.value) {
           event.preventDefault();
           actionQuery.value = '';
           actionControls.query = '';
-          applyActionView(true);
+          applyActionView(true, true);
         }
       });
       addEventListener('keydown', event => {
@@ -455,8 +545,12 @@
       window.prototypeActions = {
         actions: actionCatalog,
         controls: actionControls,
-        setQuery(value) { actionQuery.value = String(value); actionControls.query = actionQuery.value; applyActionView(true); },
-        visibleNames: () => [...actionHost.querySelectorAll('.action-tile:not([hidden])')].map(row => row.dataset.action)
+        setQuery(value) { actionQuery.value = String(value); actionControls.query = actionQuery.value; applyActionView(true, true); },
+        setSort(key, dir) { actionControls.sort = naturalSortDirection[key] ? key : 'default'; actionControls.dir = dir || naturalSortDirection[actionControls.sort]; applyActionView(true, true); },
+        setHidden(name, hidden = true) { if (hidden) actionControls.hidden.add(name); else actionControls.hidden.delete(name); applyActionView(true); },
+        setShowHidden(show) { actionControls.showHidden = Boolean(show); applyActionView(true); },
+        setKind(kind) { actionControls.kind = ['verb', 'generator'].includes(kind) ? kind : 'all'; applyActionView(true, true); },
+        visibleNames: () => [...actionHost.querySelectorAll('.action-cell:not([hidden])')].map(cell => cell.dataset.action)
       };
 
       const eatingSlider = document.querySelector('#eating-policy-range');

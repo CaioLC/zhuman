@@ -118,15 +118,33 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 4. Actions surface
 
-- **[decided]** Both acts use the same ACTIONS catalog: heading + count, a search field
-  (`Search actions · out:food state:ready`, `/` focuses it), `{n} of {m} actions shown`, and
-  the tiles in authored order. **No sorting** for actions. Act I's grid is regular density
-  (82px tiles); Act II's is **compact** (52px tiles, 6px gaps). In both acts the eating
-  policy rides the **rail under BODY**, out of the catalog.
-- **[decided]** Both acts have a **GENERATORS** tab, one shared view: owned generators as
-  action-like tiles with a state line, an accumulation underbar and an ON/OFF switch in the
-  lower-right corner. Act II lists the union of the Act I and Act II generators the
-  settlement owns, at the act's compact density.
+- **[decided]** Both acts use the same ACTIONS catalog: heading, a search field
+  (`Search actions · out:food state:ready`; fields `in`, `out`, `state`, `type`, `is`; `/`
+  focuses it, Escape clears it), a toolbar, and one grid holding the verbs and the owned
+  generators. Act I's grid is regular density (82px tiles); Act II's is **compact** (52px
+  tiles, 6px gaps). In both acts the eating policy rides the **rail under BODY**, out of the
+  catalog.
+- **[decided]** The heading's eyebrow counts the kinds, `4 verbs · 2 generators` (Act II
+  `20 verbs · 4 generators`), and each count is a toggle (`aria-pressed`): pressed, it shows
+  that kind alone; pressed again, everything.
+- **[decided]** The toolbar: on the left, the summary `{n} hidden out of {N} →` is one toggle
+  that opens the **hidden view** — only the hidden tiles, each in a dashed line-2 outline and
+  dim ink, plus an `unhide all` button — and then reads `← {n} hidden out of {N}`; with
+  nothing hidden it is inert and only counts. On the right, sort chips
+  `default · state · name · cost · time`: a chip opens in its natural direction (state
+  descending, the rest ascending) and pressed again flips it; `aria-sort` marks the chip in
+  force. `default` is the authored order, the verbs then the generators.
+- **[decided]** Every tile has a `hide` corner at the top right; in the hidden view it reads
+  `unhide`.
+- **[decided]** A generator tile keeps its state line (`accumulating`, `off`), its
+  accumulation underbar, and a mode corner at the lower right that cycles on one click:
+  `● ON` (accumulates and waits to be collected, good ink) → `◉ AUTO` (collects by itself
+  when the cycle completes, fg ink) → `○ OFF` (pauses, keeps its progress, dim ink). Act I
+  lists Check traps and Garden bed; Act II lists the union of the Act I and Act II generators
+  the settlement owns (adding Charcoal kiln and Spring well). Act II's generator tile is
+  slim: the state word rides the name row, so it stands 52px tall like a verb.
+- **[decided]** URL parameters seed the pane: `actionq`, `sort`, `dir`, `hidden` (a comma
+  list of names), `showhidden=1`, `kind=verb|generator`.
 - **[proposal, item 8]** Normalize the **action tile** to Act II's format in both acts:
   - Metrics string: `−{energy}e · {duration}` (middot separator).
   - One left-aligned metrics run: `−{energy}e {inputs} · {duration} {curve} +{lo}–{hi}{unit}`
@@ -190,8 +208,8 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 7. Tabs, RESEARCH and MARKET
 
-- **[decided]** Act I tabs: `ACTIONS · BUILD · GENERATORS`. Act II tabs:
-  `ACTIONS · BUILD · GENERATORS · RESEARCH · MARKET`.
+- **[decided]** Act I tabs: `ACTIONS · BUILD`. Act II tabs:
+  `ACTIONS · BUILD · RESEARCH · MARKET`.
 - **[decided]** RESEARCH (formerly STRUCTURE) and its hex board exist only in Act II.
   Population is an Act II concept.
 - **[decided]** MARKET is the neighbours view (`market.html`, framed by `act-ii.html`). It
@@ -276,7 +294,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   collapsing with them.
 
 - **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
-  acts: ACTIONS, BUILD and GENERATORS each remember their own collapse.
+  acts: ACTIONS and BUILD each remember their own collapse.
 - **[decided, item 17]** **Entering a focus view (RESEARCH, MARKET) always collapses
   holdings** on each entry, without overwriting the other views' memory.
 - **[decided, item 18]** Holdings "MARGINS" contents are act-specific by design (resource
@@ -320,7 +338,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 4 | barter vs coin | decided | Coin = Act II only |
 | 5 | materials vs typed | decided | 1:1 Materials→Biomass; equal costs |
 | 6 | header glyphs | proposal | two-letter tokens; energy in runline (§2) |
-| 7 | actions grid vs catalog | decided | Act I static, Act II catalog |
+| 7 | actions grid vs catalog | decided | one ACTIONS catalog both acts: verbs + generators, kind toggles, hide, sort chips |
 | 8 | tile metric format | proposal | Act II format `−Xe · Yh`, optional state line |
 | 9 | yields resource | decided | act-specific units, equal numbers |
 | 10 | dist alt text | proposal | shared `distributionLabels` map |
@@ -329,7 +347,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 13 | row schema | proposal | Act II data-generated schema both acts |
 | 14 | blocked state | decided (revised) | show every recipe; `needs {tech}` rows; log unlocks; "recipe" |
 | 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible |
-| 16 | RESEARCH only in Act II | decided | Act II tabs ACTIONS · BUILD · GENERATORS · RESEARCH · MARKET |
+| 16 | RESEARCH only in Act II | decided | Act II tabs ACTIONS · BUILD · RESEARCH · MARKET |
 | 17 | holdings collapse | decided | per-view memory; focus views force collapse |
 | 18 | margins contents | decided | act-specific |
 | 19 | footer id | proposal | shared `id="event-log"` + `addLog()` |

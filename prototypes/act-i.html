@@ -65,7 +65,6 @@
         <nav class="surface-nav" aria-label="Act I surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
-          <button class="tab" id="tab-generators" type="button" role="tab" aria-selected="false" aria-controls="view-generators" data-view="generators">GENERATORS</button>
         </nav>
 
         <div class="merchant-strip" role="status">
@@ -86,87 +85,99 @@
               <h1>ACTIONS</h1>
               <p>What will this body do now?</p>
             </div>
-            <span class="eyebrow" id="action-catalog-count">4 verbs</span>
+            <span class="eyebrow kind-filter" id="action-catalog-count" role="group" aria-label="Show one kind"><button class="text-button kind-toggle" type="button" data-kind="verb" aria-pressed="false">4 verbs</button><span aria-hidden="true"> · </span><button class="text-button kind-toggle" type="button" data-kind="generator" aria-pressed="false">2 generators</button></span>
           </div>
 
           <div class="build-query-bar">
             <label class="build-query-field" for="action-query"><input id="action-query" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions · out:food state:ready" aria-label="Search and filter actions"><kbd aria-hidden="true">/</kbd></label>
           </div>
-          <div class="build-summary" id="action-summary" aria-live="polite">4 of 4 actions shown</div>
+          <div class="action-toolbar">
+            <div class="build-summary action-summary" id="action-summary" aria-live="polite">0 hidden out of 6</div>
+            <div class="sort-chips" id="action-sort" role="group" aria-label="Sort actions"><span>sort</span><button class="sort-header" type="button" data-sort="default" aria-sort="ascending">default</button><button class="sort-header" type="button" data-sort="state">state</button><button class="sort-header" type="button" data-sort="name">name</button><button class="sort-header" type="button" data-sort="cost">cost</button><button class="sort-header" type="button" data-sort="time">time</button></div>
+          </div>
 
           <div class="action-grid" id="action-rows" aria-label="Available actions">
-            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="food" data-action="Forage" data-duration="4h">
-              <span class="action-name">Forage</span>
-              <span class="action-metrics">
-                <span>−1.7e · 4h</span>
-                <img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution">
-                <span class="yield">+1–3f</span>
-              </span>
-            </button>
+            <div class="action-cell" data-action="Forage" data-type="verb" data-state="ready" data-in="" data-out="food" data-energy="1.7" data-time="4" data-order="0">
+              <button class="action-tile" type="button">
+                <span class="action-name">Forage</span>
+                <span class="action-metrics">
+                  <span>−1.7e · 4h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution">
+                  <span class="yield">+1–3f</span>
+                </span>
+              </button>
+              <button class="tile-hide" type="button" aria-label="Hide Forage">hide</button>
+            </div>
 
-            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="materials" data-action="Scavenge" data-duration="5h">
-              <span class="action-name">Scavenge</span>
-              <span class="action-metrics">
-                <span>−2e · 5h</span>
-                <img class="dist-icon" src="../assets/svg/dist_exponential.svg" alt="exponential distribution">
-                <span class="yield">+0–7m</span>
-              </span>
-            </button>
+            <div class="action-cell" data-action="Scavenge" data-type="verb" data-state="ready" data-in="" data-out="materials" data-energy="2" data-time="5" data-order="1">
+              <button class="action-tile" type="button">
+                <span class="action-name">Scavenge</span>
+                <span class="action-metrics">
+                  <span>−2e · 5h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_exponential.svg" alt="exponential distribution">
+                  <span class="yield">+0–7m</span>
+                </span>
+              </button>
+              <button class="tile-hide" type="button" aria-label="Hide Scavenge">hide</button>
+            </div>
 
-            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="materials" data-action="Split wood" data-duration="5h">
-              <span class="action-name">Split wood</span>
-              <span class="action-metrics">
-                <span>−2.5e · 5h</span>
-                <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
-                <span class="yield">+3–5m</span>
-              </span>
-            </button>
+            <div class="action-cell" data-action="Split wood" data-type="verb" data-state="ready" data-in="" data-out="materials" data-energy="2.5" data-time="5" data-order="2">
+              <button class="action-tile" type="button">
+                <span class="action-name">Split wood</span>
+                <span class="action-metrics">
+                  <span>−2.5e · 5h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
+                  <span class="yield">+3–5m</span>
+                </span>
+              </button>
+              <button class="tile-hide" type="button" aria-label="Hide Split wood">hide</button>
+            </div>
 
-            <button class="action-tile" type="button" data-state="ready" data-in="" data-out="food" data-action="Fish" data-duration="6h">
-              <span class="action-name">Fish</span>
-              <span class="action-metrics">
-                <span>−2e · 6h</span>
-                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
-                <span class="yield">+2–5f</span>
-              </span>
-            </button>
+            <div class="action-cell" data-action="Fish" data-type="verb" data-state="ready" data-in="" data-out="food" data-energy="2" data-time="6" data-order="3">
+              <button class="action-tile" type="button">
+                <span class="action-name">Fish</span>
+                <span class="action-metrics">
+                  <span>−2e · 6h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
+                  <span class="yield">+2–5f</span>
+                </span>
+              </button>
+              <button class="tile-hide" type="button" aria-label="Hide Fish">hide</button>
+            </div>
+
+            <div class="action-cell" data-action="Check traps" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="1" data-time="24" data-order="4">
+              <button class="action-tile generator-tile" type="button" aria-disabled="true">
+                <span class="action-name">Check traps</span>
+                <span class="action-state">accumulating</span>
+                <span class="action-metrics">
+                  <span>−1e −1m · 24h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
+                  <span class="yield">+1–5f</span>
+                </span>
+                <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
+              </button>
+              <button class="generator-toggle" type="button" data-mode="on" aria-label="Check traps generator · on">● ON</button>
+              <button class="tile-hide" type="button" aria-label="Hide Check traps">hide</button>
+            </div>
+
+            <div class="action-cell" data-action="Garden bed" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="0.5" data-time="48" data-order="5">
+              <button class="action-tile generator-tile" type="button" aria-disabled="true">
+                <span class="action-name">Garden bed</span>
+                <span class="action-state">accumulating</span>
+                <span class="action-metrics">
+                  <span>−0.5e −0.2m · 48h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
+                  <span class="yield">+0–1f</span>
+                </span>
+                <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
+              </button>
+              <button class="generator-toggle" type="button" data-mode="auto" aria-label="Garden bed generator · auto">◉ AUTO</button>
+              <button class="tile-hide" type="button" aria-label="Hide Garden bed">hide</button>
+            </div>
 
             <p class="empty-copy" id="action-empty" hidden>No action matches your search.</p>
           </div>
 
-        </section>
-
-        <section id="view-generators" role="tabpanel" aria-labelledby="tab-generators" hidden>
-          <div class="surface-heading">
-            <div>
-              <h1>GENERATORS</h1>
-              <p>Let time accumulate, then collect without stopping your work.</p>
-            </div>
-            <span class="eyebrow">2 owned</span>
-          </div>
-
-          <div class="action-grid" aria-label="Owned generators">
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Check traps" aria-disabled="true">
-              <span class="action-name">Check traps</span>
-              <span class="action-state">accumulating</span>
-              <span class="action-metrics">
-                <span>−1e −1m · 24h</span>
-                <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
-                <span class="yield">+1–5f</span>
-              </span>
-              <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Check traps generator">● ON</button></div>
-            <div class="generator-cell"><button class="action-tile generator-tile" type="button" data-generator="Garden bed" aria-disabled="true">
-              <span class="action-name">Garden bed</span>
-              <span class="action-state">accumulating</span>
-              <span class="action-metrics">
-                <span>−0.5e −0.2m · 48h</span>
-                <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
-                <span class="yield">+0–1f</span>
-              </span>
-              <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
-            </button><button class="generator-toggle" type="button" role="switch" aria-checked="true" aria-label="Garden bed generator">● ON</button></div>
-          </div>
         </section>
 
         <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
@@ -216,8 +227,7 @@
       const tabs = [...document.querySelectorAll('[data-view]')];
       const views = {
         actions: document.querySelector('#view-actions'),
-        build: document.querySelector('#view-build'),
-        generators: document.querySelector('#view-generators')
+        build: document.querySelector('#view-build')
       };
       const prototypeParams = new URLSearchParams(location.search);
       let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
@@ -228,8 +238,7 @@
       const requestedHoldingsState = prototypeParams.get('holdings');
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
-        build: requestedHoldingsState === 'collapsed',
-        generators: requestedHoldingsState === 'collapsed'
+        build: requestedHoldingsState === 'collapsed'
       };
       let activeView = null;
       let holdingsCollapsed = false;
@@ -287,36 +296,153 @@
       });
       setSpeed(1);
 
-      // ACTIONS search: the shared query language over the held verbs (no sorting).
+      // ACTIONS: one grid of verbs and generators behind the shared query language, sorted
+      // from the chips. The hidden tiles are counted on the summary and listed on their own on request:
+      // the summary `n hidden out of N →` opens that list and, pressed, returns from it.
       const actionQuery = document.querySelector('#action-query');
-      const actionTiles = [...document.querySelectorAll('#action-rows [data-action]')];
+      const actionHost = document.querySelector('#action-rows');
+      const actionCells = [...actionHost.querySelectorAll('.action-cell')];
       const actionSummary = document.querySelector('#action-summary');
       const actionEmpty = document.querySelector('#action-empty');
-      function actionMatches(tile, rawTerm) {
+      const actionSortChips = [...document.querySelectorAll('#action-sort [data-sort]')];
+      const actionKindToggles = [...document.querySelectorAll('#action-catalog-count [data-kind]')];
+      // A generator's corner cycles its mode: ON accumulates and waits to be collected, AUTO
+      // collects by itself when the cycle completes, OFF pauses and keeps the progress made.
+      const generatorModes = ['on', 'auto', 'off'];
+      const generatorModeLabels = { on: '● ON', auto: '◉ AUTO', off: '○ OFF' };
+      function setGeneratorMode(toggle, name, mode) {
+        toggle.dataset.mode = mode;
+        toggle.textContent = generatorModeLabels[mode];
+        toggle.setAttribute('aria-label', `${name} generator · ${mode}`);
+      }
+      const naturalSortDirection = { default: 'ascending', state: 'descending', name: 'ascending', cost: 'ascending', time: 'ascending' };
+      const actionStateRank = { ready: 3, working: 2, accumulating: 2, short: 1, off: 0 };
+      const actionControls = {
+        query: prototypeParams.get('actionq') || '',
+        sort: naturalSortDirection[prototypeParams.get('sort')] ? prototypeParams.get('sort') : 'default',
+        dir: null,
+        hidden: new Set((prototypeParams.get('hidden') || '').split(',').filter(Boolean)),
+        showHidden: prototypeParams.get('showhidden') === '1',
+        kind: ['verb', 'generator'].includes(prototypeParams.get('kind')) ? prototypeParams.get('kind') : 'all'
+      };
+      actionControls.dir = ['ascending', 'descending'].includes(prototypeParams.get('dir')) ? prototypeParams.get('dir') : naturalSortDirection[actionControls.sort];
+      actionQuery.value = actionControls.query;
+
+      function actionMatches(cell, rawTerm) {
         let term = rawTerm.toLowerCase();
         let excluded = false;
         if (term.startsWith('-') && term.length > 1) { excluded = true; term = term.slice(1); }
         const separator = term.indexOf(':');
         const field = separator > 0 ? term.slice(0, separator) : '';
         const value = separator > 0 ? term.slice(separator + 1) : term;
-        const fields = { in: tile.dataset.in, out: tile.dataset.out, state: tile.dataset.state };
-        const haystack = field ? fields[field] : tile.dataset.action;
+        const fields = { in: cell.dataset.in, out: cell.dataset.out, state: cell.dataset.state, type: cell.dataset.type, is: `${cell.dataset.state} ${cell.dataset.type}` };
+        const haystack = field ? fields[field] : cell.dataset.action;
         const matched = value === '*' || Boolean(haystack && value.split(',').some(option => haystack.toLowerCase().includes(option)));
         return excluded ? !matched : matched;
       }
-      function applyActionQuery() {
-        const terms = actionQuery.value.trim().split(/\s+/).filter(Boolean);
-        let visible = 0;
-        actionTiles.forEach(tile => {
-          tile.hidden = !terms.every(term => actionMatches(tile, term));
-          if (!tile.hidden) visible += 1;
-        });
-        actionEmpty.hidden = visible > 0;
-        actionSummary.textContent = `${visible} of ${actionTiles.length} actions shown`;
+
+      // The chip in force orders the grid; equal keys fall back to the name, so a sort is
+      // stable. `default` is the authored order: the verbs, then the generators.
+      function compareActionCells(a, b) {
+        const byName = a.dataset.action.localeCompare(b.dataset.action);
+        let delta = 0;
+        if (actionControls.sort === 'default') delta = Number(a.dataset.order) - Number(b.dataset.order);
+        if (actionControls.sort === 'state') delta = (actionStateRank[a.dataset.state] ?? 0) - (actionStateRank[b.dataset.state] ?? 0);
+        if (actionControls.sort === 'name') delta = byName;
+        if (actionControls.sort === 'cost') delta = Number(a.dataset.energy) - Number(b.dataset.energy);
+        if (actionControls.sort === 'time') delta = Number(a.dataset.time) - Number(b.dataset.time);
+        if (actionControls.dir === 'descending') delta = -delta;
+        return delta || byName;
       }
-      actionQuery.addEventListener('input', applyActionQuery);
+
+      function syncActionUrl() {
+        const nextUrl = new URL(location.href);
+        const set = (key, value) => value ? nextUrl.searchParams.set(key, value) : nextUrl.searchParams.delete(key);
+        set('actionq', actionControls.query.trim());
+        set('sort', actionControls.sort === 'default' ? '' : actionControls.sort);
+        set('dir', actionControls.dir === naturalSortDirection[actionControls.sort] ? '' : actionControls.dir);
+        set('hidden', [...actionControls.hidden].join(','));
+        set('showhidden', actionControls.showHidden ? '1' : '');
+        set('kind', actionControls.kind === 'all' ? '' : actionControls.kind);
+        history.replaceState(null, '', nextUrl);
+      }
+
+      function applyActionView(updateUrl = false) {
+        const terms = actionControls.query.trim().split(/\s+/).filter(Boolean);
+        const hiddenCount = actionControls.hidden.size;
+        if (hiddenCount === 0) actionControls.showHidden = false;
+        const hiddenView = actionControls.showHidden;
+        let visible = 0;
+        actionCells.sort(compareActionCells).forEach(cell => {
+          const hidden = actionControls.hidden.has(cell.dataset.action);
+          const corner = cell.querySelector('.tile-hide');
+          cell.classList.toggle('is-hidden', hidden);
+          corner.textContent = hidden ? 'unhide' : 'hide';
+          corner.setAttribute('aria-label', `${hidden ? 'Unhide' : 'Hide'} ${cell.dataset.action}`);
+          const kindMiss = actionControls.kind !== 'all' && cell.dataset.type !== actionControls.kind;
+          cell.hidden = hidden !== hiddenView || kindMiss || !terms.every(term => actionMatches(cell, term));
+          if (!cell.hidden) visible += 1;
+          actionHost.append(cell);
+        });
+        actionHost.append(actionEmpty);
+        actionEmpty.hidden = visible > 0;
+        actionEmpty.textContent = hiddenView ? 'No hidden action matches your search.' : 'No action matches your search.';
+        // The summary is the hidden view's toggle; with nothing hidden it is inert and only counts.
+        // The hidden view adds `unhide all`, which empties the set and so returns to the full grid.
+        actionSummary.innerHTML = `<button class="text-button hidden-toggle" type="button" aria-pressed="${hiddenView}"${hiddenCount ? '' : ' disabled'}>${hiddenView ? '← ' : ''}${hiddenCount} hidden out of ${actionCells.length}${hiddenCount && !hiddenView ? ' →' : ''}</button>`
+          + (hiddenView ? ' · <button class="text-button unhide-all" type="button">unhide all</button>' : '');
+        actionSortChips.forEach(chip => {
+          if (chip.dataset.sort === actionControls.sort) chip.setAttribute('aria-sort', actionControls.dir);
+          else chip.removeAttribute('aria-sort');
+        });
+        actionKindToggles.forEach(toggle => toggle.setAttribute('aria-pressed', String(toggle.dataset.kind === actionControls.kind)));
+        if (updateUrl) syncActionUrl();
+      }
+
+      // A kind toggle shows that kind alone; the pressed one, clicked again, shows everything.
+      actionKindToggles.forEach(toggle => toggle.addEventListener('click', () => {
+        actionControls.kind = actionControls.kind === toggle.dataset.kind ? 'all' : toggle.dataset.kind;
+        applyActionView(true);
+      }));
+      actionSortChips.forEach(chip => chip.addEventListener('click', () => {
+        const key = chip.dataset.sort;
+        if (key === actionControls.sort) actionControls.dir = actionControls.dir === 'ascending' ? 'descending' : 'ascending';
+        else { actionControls.sort = key; actionControls.dir = naturalSortDirection[key]; }
+        applyActionView(true);
+      }));
+      actionHost.addEventListener('click', event => {
+        const corner = event.target.closest('.tile-hide');
+        if (corner) {
+          const name = corner.closest('.action-cell').dataset.action;
+          if (actionControls.hidden.has(name)) actionControls.hidden.delete(name); else actionControls.hidden.add(name);
+          applyActionView(true);
+          actionSummary.querySelector('.hidden-toggle')?.focus();
+          return;
+        }
+        const toggle = event.target.closest('.generator-toggle');
+        if (!toggle) return;
+        const cell = toggle.closest('.action-cell');
+        const mode = generatorModes[(generatorModes.indexOf(toggle.dataset.mode) + 1) % generatorModes.length];
+        setGeneratorMode(toggle, cell.dataset.action, mode);
+        cell.dataset.state = mode === 'off' ? 'off' : 'accumulating';
+        cell.querySelector('.action-state').textContent = cell.dataset.state;
+        applyActionView();
+      });
+      actionSummary.addEventListener('click', event => {
+        if (event.target.closest('.unhide-all')) {
+          actionControls.hidden.clear();
+          applyActionView(true);
+          actionHost.querySelector('.action-cell:not([hidden]) .action-tile:not([disabled])')?.focus();
+          return;
+        }
+        if (!event.target.closest('.hidden-toggle')) return;
+        actionControls.showHidden = !actionControls.showHidden;
+        applyActionView(true);
+        actionSummary.querySelector('.hidden-toggle')?.focus();
+      });
+      actionQuery.addEventListener('input', () => { actionControls.query = actionQuery.value; applyActionView(true); });
       actionQuery.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && actionQuery.value) { event.preventDefault(); actionQuery.value = ''; applyActionQuery(); }
+        if (event.key === 'Escape' && actionQuery.value) { event.preventDefault(); actionQuery.value = ''; actionControls.query = ''; applyActionView(true); }
       });
       addEventListener('keydown', event => {
         const editable = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -325,7 +451,7 @@
           actionQuery.focus();
         }
       });
-      applyActionQuery();
+      applyActionView();
 
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
@@ -710,14 +836,6 @@
       }
       window.refreshPrototypeShelter = refreshShelter;
       refreshShelter();
-
-      // GENERATORS: the ON/OFF switch pauses accumulation and keeps the progress made.
-      document.querySelectorAll('.generator-toggle').forEach(toggle => toggle.addEventListener('click', () => {
-        const on = toggle.getAttribute('aria-checked') !== 'true';
-        toggle.setAttribute('aria-checked', String(on));
-        toggle.textContent = on ? '● ON' : '○ OFF';
-        toggle.closest('.generator-cell').querySelector('.action-state').textContent = on ? 'accumulating' : 'off';
-      }));
 
       const seededActivity = prototypeParams.get('activity');
       if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');

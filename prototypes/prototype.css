@@ -855,11 +855,17 @@ button:disabled {
   display: none;
 }
 
-/* Act I GENERATORS: action-like tiles with an ON/OFF toggle in the lower-right corner and
-   the accumulation underbar along the bottom edge (the game's `generator_section`). */
-.generator-cell {
+/* ACTIONS cells: a tile with its `hide` corner at the top right; a generator's cell also
+   carries the mode corner (ON, AUTO, OFF) at the lower right and the accumulation underbar along
+   the tile's bottom edge (the game's `actions_section`). */
+.action-cell {
   position: relative;
   min-width: 0;
+}
+
+.action-cell .action-tile {
+  display: block;
+  width: 100%;
 }
 
 .generator-tile {
@@ -893,7 +899,12 @@ button:disabled {
   font: 11px var(--font);
 }
 
-.generator-toggle[aria-checked="false"] {
+/* The mode corner's rest inks: ON good, AUTO fg, OFF dim. */
+.generator-toggle[data-mode="auto"] {
+  color: var(--fg);
+}
+
+.generator-toggle[data-mode="off"] {
   color: var(--dim);
 }
 
@@ -908,6 +919,82 @@ button:disabled {
   left: 0;
   height: 3px;
   background: var(--acc);
+}
+
+/* The `hide` corner: line-2 at rest so it reads as chrome, accent under the pointer. The
+   summary, `n hidden out of N →`, lists the hidden tiles on their own: each wears a dashed
+   line-2 outline and dim ink, and its corner reads `unhide`. With nothing hidden the summary
+   is inert and only counts. */
+.tile-hide {
+  position: absolute;
+  top: 7px;
+  right: 10px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  color: var(--line-2);
+  background: transparent;
+  font: 10px var(--font);
+}
+
+.tile-hide:hover,
+.tile-hide:focus-visible {
+  color: var(--acc);
+}
+
+.action-cell.is-hidden .action-tile {
+  border-style: dashed;
+  border-color: var(--line-2);
+  color: var(--dim);
+}
+
+.action-cell.is-hidden .action-metrics .yield,
+.action-cell.is-hidden .generator-tile .action-state,
+.action-cell.is-hidden .generator-toggle,
+.action-cell.is-hidden .tile-hide {
+  color: var(--dim);
+}
+
+/* The summary and the sort chips share one line above the grid; the chips inherit the
+   build header's 9px uppercase and `.sort-header`'s arrow grammar. */
+.action-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.action-toolbar .build-summary {
+  margin-bottom: 0;
+}
+
+.hidden-toggle[disabled] {
+  cursor: default;
+  color: var(--line-2);
+}
+
+/* The heading's counts are kind toggles: the pressed one shows its kind alone and reads in
+   fg; the rest of the eyebrow stays dim. */
+.kind-toggle {
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.kind-toggle:hover,
+.kind-toggle:focus-visible {
+  color: var(--acc);
+}
+
+.sort-chips {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  color: var(--line-2);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 
@@ -1581,7 +1668,7 @@ button:disabled {
   margin-bottom: 7px;
 }
 
-.act-two .action-summary {
+.act-two .action-toolbar {
   flex: none;
 }
 
@@ -1623,6 +1710,44 @@ button:disabled {
 .act-two .dist-icon {
   width: 12px;
   height: 12px;
+}
+
+.act-two .tile-hide {
+  top: 5px;
+  right: 8px;
+}
+
+/* The slim generator tile: at the compact density the state word rides the name row (the
+   name ellipsizes first, the state keeps clear of the `hide` corner), so a generator stands
+   as tall as a verb. The mode corner and the hide corner sit on the compact padding. */
+.act-two .generator-tile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+}
+
+.act-two .generator-tile .action-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.act-two .generator-tile .action-state {
+  flex: none;
+  margin: 0 28px 0 0;
+  font-size: 10px;
+}
+
+.act-two .generator-tile .action-metrics {
+  flex: 1 0 100%;
+  margin-top: 3px;
+}
+
+.act-two .generator-toggle {
+  right: 8px;
+  bottom: 5px;
+  font-size: 10px;
 }
 
 .act-two .screen-footer {

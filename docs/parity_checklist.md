@@ -44,7 +44,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_two_build`     | Act II shell BUILD / recipe catalog | `legacy/act-ii-focus-build.png` |
 | `act_two_w560`      | Act II narrow, 560 width class | `act-ii.html` ≤560 media query |
 | `act_two_build_w560` | Act II BUILD stacked: the page scrolls, the table takes its height | `act-ii.html` ≤560 media query |
-| `act_two_generators` | Act II GENERATORS over both acts' generators | `act-ii.html#generators` |
+| `act_two_generators` | Act II GENERATORS over both acts' generators | `act-ii.html?kind=generator` |
 | `act_two_collapsed` | Act II Household rail collapsed | `act-ii.html?holdings=collapsed` |
 | `act_two_research`  | RESEARCH opening: Gamekeeping selected, `all` filter, 100% camera | `act-ii.html#research` |
 | `act_two_research_w560` | RESEARCH stacked: 560px board, detail beneath | `act-ii.html#research` ≤560 media query |
