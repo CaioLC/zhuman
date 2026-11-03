@@ -728,7 +728,9 @@ hidden direct child's slot alive from its always-built owner, without building t
 **Who owns a template's state.** Every stateful template takes an optional pointer: null and
 it owns the slot on its own node; a pointer and the caller owns it — the tab strip's `active`,
 a select's `value`, a disclosure's `expanded`, the rail's `collapsed`, a scroll view's
-`ScrollState`, the catalog's `CatalogState`. A view that is only sometimes built keeps its state
+`ScrollState`, the catalog's `CatalogState` (its sort, direction, open sort row and `kind`, a
+kind filter whose index the caller interprets, 0 being every kind). A view that is only
+sometimes built keeps its state
 on the node that is always built and passes pointers down: the Act I surface holds BUILD's
 catalog state and search editor, so hiding the tab prunes nothing. A pointer from `state(T)`
 is valid for the frame as long as no slot of the same type is acquired after it (the pool may

@@ -61,9 +61,12 @@ Twenty unlocked verbs do not fit as large cards, so ACTIONS is one search-first 
 with compact two-column rows. Each row is one full button and carries name, readiness, energy,
 time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
-`*` use the same grammar as BUILD. ACTIONS does not sort: verbs read in authored order. Every act
-uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs and the
-subtitle).
+`*` use the same grammar as BUILD. The grid also lists the owned generators, after the verbs, as
+the generator tile (collect on the body, the mode corner on its lower right); a generator answers
+`type:generator`, a verb `type:verb`. ACTIONS does not sort: verbs read in authored order. The
+heading's eyebrow, `{n} VERBS · {m} GENERATORS`, is two kind toggles: pressing one shows that
+kind alone, pressing it again shows everything. Every act uses the same ACTIONS pane
+(`actions_section`); only its content differs (which verbs and generators, and the subtitle).
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named

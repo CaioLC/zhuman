@@ -240,6 +240,12 @@ const shelter_goods = [_]Owned{
     .{ .id = "wire_snares", .n = 1 },
 };
 
+/// Act I's two generators: the snares on, the garden bed on auto.
+const act_one_generators = [_]Owned{
+    .{ .id = "wire_snares", .n = 1 },
+    .{ .id = "garden_bed", .n = 1, .mode = .auto },
+};
+
 /// The settlement's body and goods: the three tools that grant a verb and a lean-to.
 const settlement_balances = Balances{
     .vigor = .{ .v = 6, .max = 15 },
@@ -275,8 +281,9 @@ const settlement_generator_balances = Balances{
 pub const catalog = [_]Spec{
     .{
         .name = "act_one_default",
-        .about = "Act I at the 900x820 reference: rested actor, empty stockpile, no passerby.",
+        .about = "Act I at the 900x820 reference: rested actor, empty stockpile, no passerby, the snares and an auto garden bed.",
         .day = 1,
+        .balances = .{ .goods = &act_one_generators },
     },
     .{
         .name = "act_one_working",
@@ -408,10 +415,10 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_actions",
-        .about = "Act II shared shell on ACTIONS: PO..CO stockline, 20-action browser, merchant strip.",
+        .about = "Act II shared shell on ACTIONS: PO..CO stockline, 20 verbs then both acts' generators, merchant strip.",
         .screen = .act_two,
         .day = 112,
-        .balances = settlement_balances,
+        .balances = settlement_generator_balances,
         .settlement = settlement,
     },
     .{
@@ -1342,11 +1349,11 @@ test "the default fixture leaves the spawn baseline untouched" {
     var rig = try seedRig(find("act_one_default").?);
     defer freeRig(&rig);
     const e = rig.player;
-    // No balances named → rested spawn vigor (10/10), the thin larder, empty stockpile.
+    // No body balance named → rested spawn vigor (10/10), the thin larder, empty stockpile.
     try testing.expectEqual(ha.sim.baselines.vigor_ceiling, rig.world.get(e, comp.Vigor).?.v);
     try testing.expectEqual(ha.sim.baselines.food_units, rig.world.get(e, comp.InventoryFood).?.v);
     try testing.expectEqual(@as(f32, 0), rig.world.get(e, comp.InventoryBiomass).?.v);
-    // No goods specified → should have empty goods component
+    // Only the two generators are named: no tool is owned.
     const goods = rig.world.get(e, comp.Goods).?;
     const sandals_gi = rig.res.game.catalog.goodIndex("sandals").?;
     try testing.expectEqual(@as(u32, 0), goods.count[sandals_gi]);
