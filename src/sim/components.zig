@@ -53,9 +53,9 @@ pub const Verbs = struct {
     }
 };
 
-/// Passive progress and mode for owned collectable generators, keyed by catalog good index.
-/// `mode` defaults to `on` so an acquired generator starts accumulating immediately; `off`
-/// preserves `progress` and consumes nothing.
+/// Passive progress and mode for the agent's generator verbs, keyed by catalog action index.
+/// `mode` defaults to `on` so a generator starts accumulating as soon as its verb is held;
+/// `off` preserves `progress` and consumes nothing, and so does a verb no longer held.
 pub const Generators = struct {
     /// What a generator does with its time (`capital.run_generators`): `on` accumulates and
     /// waits for the player to collect; `auto` accumulates and collects itself whenever the
@@ -75,8 +75,8 @@ pub const Generators = struct {
         }
     };
 
-    progress: [roster.max_goods]f32 = @splat(0),
-    mode: [roster.max_goods]Mode = @splat(.on),
+    progress: [roster.max_actions]f32 = @splat(0),
+    mode: [roster.max_actions]Mode = @splat(.on),
 };
 
 /// What the owned goods currently contribute to the body and the larder, so those
@@ -237,7 +237,7 @@ pub const Quotes = struct {
     pub const VerbStanding = enum { ready, busy, energy, short };
     /// Why a build cannot begin right now, or `ready`, in precedence order (`capital.Standing`).
     pub const BuildStanding = enum { ready, tech, needs, unlock, busy, energy, short };
-    /// Where an owned generator's cycle stands (`capital.GeneratorStanding`).
+    /// Where a held generator's cycle stands (`capital.GeneratorStanding`).
     pub const GeneratorStanding = enum { charging, off, ready, energy, short };
 
     /// `short`: index of the first unpayable line in the effective verb's `input` (`none` when payable).
@@ -290,6 +290,6 @@ pub const Quotes = struct {
     verbs: [roster.max_actions]?Verb = @splat(null),
     /// By good index; null: not buildable, or the agent has no holdings.
     builds: [roster.max_goods]?Build = @splat(null),
-    /// By good index; null: not an owned generator.
-    generators: [roster.max_goods]?Generator = @splat(null),
+    /// By verb index; null: not a held generator verb.
+    generators: [roster.max_actions]?Generator = @splat(null),
 };

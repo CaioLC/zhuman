@@ -46,13 +46,14 @@
             .{ .item = "food", .n = 3.0, .kind = .poisson },
         },
     },
-    // Check traps is resolved by the Wire snares generator on ACTIONS. It remains a roster
-    // record for vocabulary/history but is not held or shown as body-occupying labor.
+    // Check traps: the wire snares' round, collected without occupying the body. Its cycle
+    // accumulates while the snares are owned; collecting pays the energy and the bait and draws
+    // the catch.
     .{
         .id = "check_traps",
         .name = "Check traps",
-        .on_surface = false,
-        .requires = .{ .energy = 1.0, .hours = 2.0 },
+        .generator = true,
+        .requires = .{ .energy = 1.0, .hours = 24.0 },
         .input = .{
             .{ .item = "biomass", .n = 1.0 },
         },
@@ -71,6 +72,41 @@
         },
         .output = .{
             .{ .item = "food", .n = 6.0, .kind = .poisson },
+        },
+    },
+
+    // Tend garden: the garden bed's two-day crop, collected without occupying the body.
+    .{
+        .id = "tend_garden",
+        .name = "Tend garden",
+        .generator = true,
+        .requires = .{ .energy = 0.5, .hours = 48.0 },
+        .input = .{
+            .{ .item = "biomass", .n = 0.2 },
+        },
+        .output = .{
+            .{ .item = "food", .n = 1.0, .kind = .uniform },
+        },
+    },
+    // Gather remedy: the medicinal herb bed's remedy, a direct restoration of vigor.
+    .{
+        .id = "gather_remedy",
+        .name = "Gather remedy",
+        .generator = true,
+        .requires = .{ .energy = 0.25, .hours = 48.0 },
+        .vigor = 1.5,
+    },
+    // Collect eggs: the chicken coop's daily lay.
+    .{
+        .id = "collect_eggs",
+        .name = "Collect eggs",
+        .generator = true,
+        .requires = .{ .energy = 0.5, .hours = 24.0 },
+        .input = .{
+            .{ .item = "biomass", .n = 0.3 },
+        },
+        .output = .{
+            .{ .item = "food", .n = 2.5, .kind = .poisson },
         },
     },
 
@@ -335,6 +371,20 @@
         },
         .output = .{
             .{ .item = "metal", .n = 3.0, .kind = .uniform },
+        },
+    },
+    // Tend garden (the settlement's bed): the Act II garden bed's two-day crop.
+    .{
+        .id = "tend_garden_two",
+        .name = "Tend garden",
+        .act = 2,
+        .generator = true,
+        .requires = .{ .energy = 0.5, .hours = 48.0 },
+        .input = .{
+            .{ .item = "biomass", .n = 0.2 },
+        },
+        .output = .{
+            .{ .item = "food", .n = 3.0, .kind = .uniform },
         },
     },
 }

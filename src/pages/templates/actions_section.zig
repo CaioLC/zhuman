@@ -1,6 +1,6 @@
 //! `actions_section` — the ACTIONS pane, the same template on every act: the heading with the
 //! act's kind counts as two toggles, one search field, a toolbar with the hidden-tile summary
-//! and the sort chips, and the held verbs then the owned generators in two growing columns (one
+//! and the sort chips, and the held verbs then the held generators in two growing columns (one
 //! at the compact breakpoint). A verb is an `action_tile`, a generator a `generator_tile`. Only
 //! the content differs per act (`Shelf`: which verbs and generators, the subtitle, the density);
 //! the behavior is one.
@@ -8,22 +8,23 @@
 //! **Sort chips.** `SORT DEFAULT · STATE · NAME · COST · TIME` (`cc.sort_chips`, the catalog
 //! state's `sort`/`dir`): a chip pressed first sorts by its key in its natural direction, and
 //! pressed again flips it. `DEFAULT` is the authored order, the verbs then the generators in
-//! authored good order, and descending its reverse; `STATE` ranks ready, then working or
+//! authored verb order, and descending its reverse; `STATE` ranks ready, then working or
 //! accumulating, then short, then off, ready first; `NAME`, `COST` (the entry's energy) and
 //! `TIME` (its hours) ascend. Equal keys fall back to the name, A to Z in either direction. A
 //! blank query lists every entry, the ones that cannot run now dimmed; the shared `query` parser
-//! answers `type:` with `verb` or `generator`, `in:`/`out:` from a verb's lines or a
-//! generator's daily lines, `state:` from the standing (a verb: ready, busy, short; a
+//! answers `type:` with `verb` or `generator`, `in:`/`out:` from a verb's lines (a generator's
+//! are per cycle), `state:` from the standing (a verb: ready, busy, short; a
 //! generator: ready, accumulating, off, short) and free text from the name. The standing is the
-//! agent's `comp.Quotes`; a verb's lines are its terms (`actions.verbOf`).
+//! agent's `comp.Quotes`; a verb's lines are its terms (`actions.verbOf`). A generator is a verb
+//! the roster marks `generator`, listed while the agent holds it.
 //!
 //! **Kind toggles.** The eyebrow `{n} VERBS · {m} GENERATORS` is two toggles: pressing one shows
 //! that kind alone, pressing it again shows every kind. The kind lives in the catalog state's
 //! `kind` (`Show`), beside the view's query.
 //!
 //! **Hidden tiles.** Every tile carries a `hide` corner at its top right; pressing it adds the
-//! entry to the view's hidden set (`CatalogState.hidden`, a verb numbered by its action index, a
-//! generator by `max_verbs` plus its good index) and it leaves the grid. A hidden generator keeps
+//! entry to the view's hidden set (`CatalogState.hidden`, numbered by the entry's action index)
+//! and it leaves the grid. A hidden generator keeps
 //! running; it is only out of sight. The summary is one toggle, `{n} hidden out of {N} →`, `N`
 //! every entry of the pane: pressed, it opens the hidden view (`show_hidden`), which lists only
 //! the hidden entries, dashed and dim with an `unhide` corner, under `← {n} hidden out of {N} ·
@@ -61,8 +62,8 @@ const grid_gap: f32 = 10;
 const compact_grid_gap: f32 = 6;
 /// The most verbs one frame lists.
 const max_verbs = 64;
-/// The most entries one frame lists: the verbs and every good.
-const max_entries = max_verbs + roster.max_goods;
+/// The most entries one frame lists: the verbs and the generators share the action indices.
+const max_entries = max_verbs;
 
 /// One act's ACTIONS content.
 pub const Shelf = struct {
@@ -71,19 +72,19 @@ pub const Shelf = struct {
     /// The tiles' type scale: Act II's long catalog lists its tiles compact.
     density: action_tile_mod.Density = .regular,
 
-    /// Whether a verb record is one of this shelf's: on the surface and of this act.
+    /// Whether a verb record is one of this shelf's labor verbs: not a generator, of this act.
     pub fn holds(self: Shelf, rec: *const roster.Action) bool {
-        return rec.on_surface and rec.act == self.act;
+        return !rec.generator and rec.act == self.act;
     }
 
-    /// Whether a good is one of this shelf's generators: a generator of this act or an earlier
-    /// one (the settlement keeps what the household built).
-    pub fn holdsGenerator(self: Shelf, rec: *const roster.Good) bool {
-        return rec.generator != null and rec.act <= self.act;
+    /// Whether a verb record is one of this shelf's generators: a generator of this act or an
+    /// earlier one (the settlement keeps what the household built).
+    pub fn holdsGenerator(self: Shelf, rec: *const roster.Action) bool {
+        return rec.generator and rec.act <= self.act;
     }
 };
 
-/// The verbs the act authors on its surface.
+/// The labor verbs the act authors.
 pub fn authoredTotal(cat: *const roster.Catalog, shelf: Shelf) usize {
     var n: usize = 0;
     for (cat.actions) |*rec| n += @intFromBool(shelf.holds(rec));
@@ -114,16 +115,15 @@ pub const Show = enum(u8) {
     }
 };
 
-/// One entry this frame, a held verb or an owned generator: its kind and catalog index, its id
+/// One entry this frame, a held verb or a held generator: its kind and catalog index, its id
 /// and name, its standing, what it sorts by, and its line items joined for `in:`/`out:`.
 pub const Entry = struct {
     kind: Kind,
-    /// The verb's index in `cat.actions`, or the generator's in `cat.goods`.
+    /// The entry's index in `cat.actions`.
     index: u16,
-    /// The tile's key: the verb's or the good's id. Actions and goods share one id space, which
-    /// the roster loader holds unique.
+    /// The tile's key: the verb's id.
     id: []const u8,
-    /// What free text searches: the verb's name, the generator's label or its good's name.
+    /// What free text searches: the verb's name.
     name: []const u8,
     /// The word `state:` answers with.
     state: []const u8,
@@ -209,7 +209,7 @@ const ActionRow = struct {
 };
 
 /// Every entry of the shelf: the verbs the agent's `comp.Quotes` answers for in authored order,
-/// then the owned generators it quotes in authored good order. Pure over world + catalog.
+/// then the generators it quotes in authored order. Pure over world + catalog.
 pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, buf: []Entry) []Entry {
     const quotes = world.get(e, comp.Quotes) orelse return buf[0..0];
     var n: usize = 0;
@@ -228,47 +228,38 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
         buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
         n += 1;
     }
-    const goods = world.get(e, comp.Goods) orelse return buf[0..n];
-    for (cat.goods, 0..) |*rec, i| {
-        if (!shelf.holdsGenerator(rec) or goods.count[i] == 0) continue;
+    for (cat.actions, 0..) |*rec, i| {
+        if (!shelf.holdsGenerator(rec)) continue;
         if (n == buf.len) break;
-        const gi: u16 = @intCast(i);
-        const q = quotes.generators[gi] orelse continue;
-        const spec = rec.generator.?;
+        const ai: u16 = @intCast(i);
+        const q = quotes.generators[ai] orelse continue;
+        const verb = actions.verbOf(world, e, cat, ai) orelse continue;
         const state = generatorState(q);
         buf[n] = .{
-            .kind = .generator, .index = gi, .id = rec.id, .name = if (spec.label.len > 0) spec.label else rec.name, .state = state, .ready = q.ready(),
-            .order = @intCast(n), .energy = spec.energy, .hours = spec.hours, .rank = stateRank(state),
+            .kind = .generator, .index = ai, .id = rec.id, .name = rec.name, .state = state, .ready = q.ready(),
+            .order = @intCast(n), .energy = verb.requires.energy, .hours = verb.requires.hours, .rank = stateRank(state),
         };
-        const ins = roster.Lines.only(rec.input, .day);
-        const outs = roster.Lines.only(rec.output, .day);
-        buf[n].in_len = join(&buf[n].in_buf, ins.slice());
-        buf[n].out_len = join(&buf[n].out_buf, outs.slice());
+        buf[n].in_len = join(&buf[n].in_buf, verb.input.slice());
+        buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
         n += 1;
     }
     return buf[0..n];
 }
 
-/// The hidden set's number for an entry: a verb's action index, a generator's good index past
-/// the verbs.
+/// The hidden set's number for an entry: its action index.
 pub fn slot(ent: *const Entry) usize {
-    return switch (ent.kind) {
-        .verb => ent.index,
-        .generator => max_verbs + @as(usize, ent.index),
-    };
+    return ent.index;
 }
 
 /// The hidden set's number for the verb or generator record `id`, as `slot` numbers its entry;
 /// null when the catalog holds no such record.
 pub fn slotOf(cat: *const roster.Catalog, id: []const u8) ?usize {
-    if (cat.actionIndex(id)) |ai| return ai;
-    if (cat.goodIndex(id)) |gi| return max_verbs + @as(usize, gi);
-    return null;
+    return if (cat.actionIndex(id)) |ai| ai else null;
 }
 
 comptime {
     std.debug.assert(max_verbs >= roster.max_actions);
-    std.debug.assert(max_verbs + roster.max_goods <= CatalogState.max_hidden);
+    std.debug.assert(max_verbs <= CatalogState.max_hidden);
 }
 
 /// Whether the view's hidden set holds `ent`.
@@ -487,7 +478,7 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
         _ = try copy.empty_line(grid.grid, "empty", msg);
     }
     const act = ha.sim.data.migration.actOf(world, e);
-    // Keyed by the verb's or the good's id, so focus follows it through a re-sort or a query.
+    // Keyed by the verb's id, so focus follows it through a re-sort or a query.
     for (shown, 0..) |*ent, pos| {
         const lane = grid.lanes[pos % 2];
         const tile: ?action_tile_mod.Tile = switch (ent.kind) {
@@ -542,14 +533,14 @@ fn establishAll(w: *World, e: Entity, cat: *const roster.Catalog) void {
     requote(w, e, cat);
 }
 
-/// Own the snares, a ready garden bed and the settlement's bed switched off: one generator of
-/// each act, accumulating, ready and off.
+/// Own the snares, a garden bed whose Tend garden is ready and the settlement's bed with its
+/// Tend garden switched off: generators of each act, accumulating, ready and off.
 fn ownGenerators(w: *World, e: Entity, cat: *const roster.Catalog) void {
     const goods = w.get(e, comp.Goods).?;
     const gens = w.get(e, comp.Generators).?;
     for ([_][]const u8{ "wire_snares", "garden_bed", "garden_bed_two" }) |id| goods.count[cat.goodIndex(id).?] = 1;
-    gens.progress[cat.goodIndex("garden_bed").?] = 1e9;
-    gens.mode[cat.goodIndex("garden_bed_two").?] = .off;
+    gens.progress[cat.actionIndex("tend_garden").?] = 1e9;
+    gens.mode[cat.actionIndex("tend_garden_two").?] = .off;
     requote(w, e, cat);
 }
 
@@ -588,7 +579,7 @@ test "an established settlement lists every verb of the act in authored order" {
     for (list[1..], 0..) |ent, i| try testing.expect(ent.index > list[i].index);
 }
 
-test "the list is the verbs, then the owned generators of the act and earlier ones" {
+test "the list is the verbs, then the held generators of the act and earlier ones" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
@@ -601,13 +592,13 @@ test "the list is the verbs, then the owned generators of the act and earlier on
     const verbs = authoredTotal(&cat, act_two_test);
     try testing.expectEqual(verbs + 3, list.len);
     for (list[0..verbs]) |ent| try testing.expectEqual(Kind.verb, ent.kind);
-    const want = [_][]const u8{ "wire_snares", "garden_bed", "garden_bed_two" };
+    const want = [_][]const u8{ "check_traps", "tend_garden", "tend_garden_two" };
     for (list[verbs..], want) |ent, id| {
         try testing.expectEqual(Kind.generator, ent.kind);
         try testing.expectEqualStrings(id, ent.id);
-        try testing.expectEqualStrings(id, cat.goods[ent.index].id);
+        try testing.expectEqualStrings(id, cat.actions[ent.index].id);
     }
-    // The snares search by their label; Act I lists only its own generators.
+    // The snares' round searches by its verb's name; Act I lists only its own generators.
     try testing.expectEqualStrings("Check traps", list[verbs].name);
     var one: [max_entries]Entry = undefined;
     const act_one = held(&w, e, &cat, .{ .act = 1, .subtitle = "" }, &one);
@@ -650,7 +641,7 @@ test "type: and the catalog state's kind keep one kind" {
     try testing.expectEqual(Show.all, Show.of(9));
 }
 
-test "a generator answers in: and out: from its daily lines, state: from its standing" {
+test "a generator answers in: and out: from its cycle's lines, state: from its standing" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
@@ -662,18 +653,18 @@ test "a generator answers in: and out: from its daily lines, state: from its sta
     const list = held(&w, e, &cat, act_two_test, &buf);
     var work: [max_entries]Entry = undefined;
 
-    // Every generator eats biomass and yields food by the day.
+    // Every generator eats biomass and yields food each cycle.
     try testing.expectEqual(@as(usize, 3), filtered(&work, list, "type:generator in:biomass out:food", .all).len);
 
     const ready = filtered(&work, list, "type:generator state:ready", .all);
     try testing.expectEqual(@as(usize, 1), ready.len);
-    try testing.expectEqualStrings("garden_bed", ready[0].id);
+    try testing.expectEqualStrings("tend_garden", ready[0].id);
     const off = filtered(&work, list, "state:off", .all);
     try testing.expectEqual(@as(usize, 1), off.len);
-    try testing.expectEqualStrings("garden_bed_two", off[0].id);
+    try testing.expectEqualStrings("tend_garden_two", off[0].id);
     const accumulating = filtered(&work, list, "state:accumulating", .all);
     try testing.expectEqual(@as(usize, 1), accumulating.len);
-    try testing.expectEqualStrings("wire_snares", accumulating[0].id);
+    try testing.expectEqualStrings("check_traps", accumulating[0].id);
     // `is:` reads the type as well as the state.
     try testing.expectEqual(@as(usize, 3), filtered(&work, list, "is:generator", .all).len);
 }
@@ -800,7 +791,7 @@ test "the held entries carry their authored place, price and state rank" {
     try testing.expectEqual(@as(u8, 2), list[verbs].rank);
     try testing.expectEqual(@as(u8, 3), list[verbs + 1].rank);
     try testing.expectEqual(@as(u8, 0), list[verbs + 2].rank);
-    const spec = cat.goods[list[verbs].index].generator.?;
+    const spec = cat.actions[list[verbs].index].requires;
     try testing.expectEqual(spec.energy, list[verbs].energy);
     try testing.expectEqual(spec.hours, list[verbs].hours);
     // `STATE` puts a ready entry first and the bed that is off last.
@@ -808,7 +799,7 @@ test "the held entries carry their authored place, price and state rank" {
     @memcpy(work[0..list.len], list);
     sortEntries(work[0..list.len], .state, .none);
     try testing.expectEqual(@as(u8, 3), work[0].rank);
-    try testing.expectEqualStrings("garden_bed_two", work[list.len - 1].id);
+    try testing.expectEqualStrings("tend_garden_two", work[list.len - 1].id);
 }
 
 /// The view of `list` in force under `st`, filtered by `query_text` and its kind and sorted by
@@ -856,8 +847,8 @@ test "hiding moves an entry from the full grid to the hidden view; unhide all re
     try testing.expectEqual(@as(usize, 2), hidden.len);
     try testing.expect(has(hidden, list[0].id) and has(hidden, list[verbs].id));
 
-    // The numbering keeps a verb and a good of the same index apart.
-    try testing.expect(slot(&list[verbs]) >= max_verbs);
+    // A generator is numbered by its action index, as a verb is.
+    try testing.expectEqual(@as(usize, list[verbs].index), slot(&list[verbs]));
 
     // Unhiding one keeps the view open on the other.
     toggleHidden(&st, &list[0]);
@@ -903,9 +894,9 @@ test "the kind, the query and the sort apply in the hidden view" {
 
     const off = viewed(&work, list, &st, "state:off");
     try testing.expectEqual(@as(usize, 1), off.len);
-    try testing.expectEqualStrings("garden_bed_two", off[0].id);
+    try testing.expectEqualStrings("tend_garden_two", off[0].id);
 
-    // `NAME` orders the hidden entries A to Z (the two garden beds share a name); `DEFAULT`
+    // `NAME` orders the hidden entries A to Z (the two Tend garden verbs share a name); `DEFAULT`
     // descending reverses the authored order.
     st.sort = @intFromEnum(Sort.name);
     st.dir = .ascending;

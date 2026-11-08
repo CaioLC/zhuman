@@ -353,11 +353,11 @@ fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, ink: 
 }
 
 /// The word a recipe's row names its kind with, under the name and for `type:` — what the
-/// good *does*, read from its record: a generator accumulates, a shelter houses, storage keeps
+/// good *does*, read from its record: a generator runs a cycle, a shelter houses, storage keeps
 /// food, comfort raises the vigor ceiling, a material is a product made for other orders, and
 /// a tool grants or tunes a verb.
-pub fn recipeType(rec: *const roster.Good) []const u8 {
-    if (rec.generator != null) return "generator";
+pub fn recipeType(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
+    if (ha.sim.rules.capital.generatorOf(cat, rec.id) != null) return "generator";
     if (rec.capacity > 0) return "shelter";
     for (rec.effects) |fx| switch (fx) {
         .spoil_scale, .food_quality => return "storage",
@@ -412,7 +412,7 @@ pub fn capital_row(
     }, .{ style.pad_sym(row_pad_x, 6), Style{ .on = &.{.{ .when = .hot, .fill_ink = .panel }} } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
-    place(try name_cell(row, "nm", rec.name, recipeType(rec), look.name), .recipe, 1);
+    place(try name_cell(row, "nm", rec.name, recipeType(cat, rec), look.name), .recipe, 1);
 
     place(try cost_cell(row, "co", act, rec, look.ink), .cost, 1);
 
@@ -740,8 +740,8 @@ test "the cost cell is the order, then the energy" {
 test "recipeType reads what the good does" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
-    try std.testing.expectEqualStrings("generator", recipeType(cat.good("garden_bed").?));
-    try std.testing.expectEqualStrings("storage", recipeType(cat.good("root_cellar").?));
-    try std.testing.expectEqualStrings("comfort", recipeType(cat.good("leaf_bed").?));
-    try std.testing.expectEqualStrings("tool", recipeType(cat.good("sandals").?));
+    try std.testing.expectEqualStrings("generator", recipeType(&cat, cat.good("garden_bed").?));
+    try std.testing.expectEqualStrings("storage", recipeType(&cat, cat.good("root_cellar").?));
+    try std.testing.expectEqualStrings("comfort", recipeType(&cat, cat.good("leaf_bed").?));
+    try std.testing.expectEqualStrings("tool", recipeType(&cat, cat.good("sandals").?));
 }

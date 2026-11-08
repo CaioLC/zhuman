@@ -1,15 +1,14 @@
 // The capital goods — recipes for the BUILD shelf, plus the two tools only the passerby
 // carries. The grammar is described in `src/README.md` ("The authored roster"). `requires`
-// is the build price in body and time; `input` lines are the build order (`once`) or cycle
-// upkeep (`per = .day`); day outputs are rates realized only on generator collection. What
+// is the build price in body and time; `input` lines are the build order. What
 // owning a good does is its `effects`, from a fixed vocabulary; `family` + `rank` say which
 // tool a better one supersedes; `needs` names the verb a modifier works on. `copy` is the
 // player's words.
 //
 // Crude goods are what one person can build in Act I. Manufactured unlockers are acquired
 // from the passerby instead; the remaining manufactured records stay catalogued for later
-// progression but never enter the Act I BUILD shelf. A generator's hours accumulate without
-// occupying the body; its low energy price and complete cycle settle only when collected.
+// progression but never enter the Act I BUILD shelf. A good that grants a generator verb
+// (`assets/roster/actions.zon`) runs that verb's cycle while it is owned.
 .{
     // —— Manufactured unlockers: passerby-only in Act I ———————————————————————————————
     .{
@@ -40,20 +39,15 @@
             .built = "You built a hatchet. You can split wood now.",
         },
     },
-    // Wire snares accumulate a trap round without occupying the body. Bait and yield are
-    // authored per cycle-day and settle together only when collected.
+    // Wire snares grant Check traps, a round collected without occupying the body.
     .{
         .id = "wire_snares",
         .name = "Wire snares",
         .tier = .crude,
         .requires = .{ .energy = 2.0, .hours = 8.0 },
-        .generator = .{ .energy = 1.0, .hours = 24.0, .label = "Check traps" },
-        .input = .{
-            .{ .item = "biomass", .n = 5.0 },
-            .{ .item = "biomass", .n = 1.0, .per = .day },
-        },
-        .output = .{
-            .{ .item = "food", .n = 3.0, .kind = .poisson, .per = .day },
+        .input = .{.{ .item = "biomass", .n = 5.0 }},
+        .effects = .{
+            .{ .grant = "check_traps" },
         },
         .copy = .{
             .effect = "readies game to collect",
@@ -213,7 +207,9 @@
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 12.0 },
         .input = .{.{ .item = "biomass", .n = 10.0 }},
-        .generator = .{ .energy = 0.25, .hours = 48.0, .vigor = 1.5 },
+        .effects = .{
+            .{ .grant = "gather_remedy" },
+        },
         .copy = .{
             .effect = "readies a small vigor remedy",
             .short = "grows remedies",
@@ -221,19 +217,15 @@
         },
     },
 
-    // —— Generators: passive cycles collected by the player; day lines are rates —————————
+    // —— Generators: each grants the verb whose cycle it runs ————————————————————————————
     .{
         .id = "garden_bed",
         .name = "Garden bed",
         .tier = .crude,
         .requires = .{ .energy = 8.0, .hours = 16.0 },
-        .generator = .{ .energy = 0.5, .hours = 48.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 8.0 },
-            .{ .item = "biomass", .n = 0.1, .per = .day },
-        },
-        .output = .{
-            .{ .item = "food", .n = 0.5, .kind = .uniform, .per = .day },
+        .input = .{.{ .item = "biomass", .n = 8.0 }},
+        .effects = .{
+            .{ .grant = "tend_garden" },
         },
         .copy = .{
             .effect = "grows food on its own",
@@ -246,13 +238,9 @@
         .name = "Chicken coop",
         .tier = .manufactured,
         .requires = .{ .energy = 3.0, .hours = 200.0 },
-        .generator = .{ .energy = 0.5, .hours = 24.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 144.0 },
-            .{ .item = "biomass", .n = 0.3, .per = .day },
-        },
-        .output = .{
-            .{ .item = "food", .n = 2.5, .kind = .poisson, .per = .day },
+        .input = .{.{ .item = "biomass", .n = 144.0 }},
+        .effects = .{
+            .{ .grant = "collect_eggs" },
         },
         .copy = .{
             .effect = "the hens lay for you",
@@ -318,7 +306,7 @@
     // it; most wait on a research tile through `tech` (an id from `assets/roster/technologies.zon`),
     // offered only once that tile reads researched. A recipe with no `tech` is open from the
     // curtain. Intermediates (worked stone, boards, brick, cloth) output a lot of themselves;
-    // generators grant an Act II verb or run a day line; the rest are capital that is simply
+    // generators grant an Act II verb; the rest are capital that is simply
     // owned. Items name only the `Resource` enum. Costs follow the prototype's 50-recipe
     // BUILD fixture, converted to lines; the three openers (firepit, spring well, lean-to)
     // keep their original shape.
@@ -376,14 +364,10 @@
         .act = 2,
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 7.0 },
-        .generator = .{ .energy = 0.5, .hours = 48.0 },
         // Act I's garden bed in biomass, number for number: the curtain converts 1:1.
-        .input = .{
-            .{ .item = "biomass", .n = 8.0 },
-            .{ .item = "biomass", .n = 0.1, .per = .day },
-        },
-        .output = .{
-            .{ .item = "food", .n = 1.5, .kind = .uniform, .per = .day },
+        .input = .{.{ .item = "biomass", .n = 8.0 }},
+        .effects = .{
+            .{ .grant = "tend_garden_two" },
         },
         .copy = .{
             .effect = "grows food on its own",
@@ -554,7 +538,6 @@
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 8.0 },
         .input = .{.{ .item = "biomass", .n = 14.0 }},
-        .output = .{.{ .item = "ropewalk", .n = 2.0, .per = .day }},
         .tech = "loom_ropewalk",
         .copy = .{
             .effect = "turns Biomass into rope",
@@ -569,7 +552,6 @@
         .tier = .crude,
         .requires = .{ .energy = 2.0, .hours = 12.0 },
         .input = .{.{ .item = "biomass", .n = 12.0 }},
-        .output = .{.{ .item = "food", .n = 1.0, .kind = .poisson, .per = .day }},
         .tech = "net_fishery",
         .copy = .{
             .effect = "raises fish yield",
@@ -607,7 +589,6 @@
             .{ .item = "metal", .n = 28.0 },
             .{ .item = "biomass", .n = 16.0 },
         },
-        .output = .{.{ .item = "water", .n = 2.0, .per = .day }},
         .tech = "pumping_station",
         .copy = .{
             .effect = "moves Water without river access",
@@ -926,7 +907,6 @@
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 24.0 },
         .input = .{.{ .item = "biomass", .n = 26.0 }},
-        .output = .{.{ .item = "food", .n = 1.0, .kind = .uniform, .per = .day }},
         .tech = "field_cultivation",
         .copy = .{
             .effect = "adds honey and wax yield",
@@ -1200,7 +1180,6 @@
             .{ .item = "fuel", .n = 20.0 },
             .{ .item = "minerals", .n = 18.0 },
         },
-        .output = .{.{ .item = "water", .n = 3.0, .per = .day }},
         .tech = "pumping_station",
         .copy = .{
             .effect = "pressurizes Water for a district",

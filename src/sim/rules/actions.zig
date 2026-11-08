@@ -86,9 +86,11 @@ pub fn holds(w: *const World, e: Entity, cat: *const Catalog, ai: u16) bool {
     return verbOf(w, e, cat, ai) != null;
 }
 
-/// The quote for verb `ai`, or null when the agent does not hold it or has no body (no
-/// `Vigor` or no `Condition`).
+/// The quote for verb `ai`, or null when the agent does not hold it, has no body (no `Vigor`
+/// or no `Condition`), or the verb is a generator, which is collected rather than begun
+/// (`capital.generator_quote`).
 pub fn quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?Quote {
+    if (cat.actions[ai].generator) return null;
     const v = verbOf(w, e, cat, ai) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
     const cond = w.get(e, comp.Condition) orelse return null;

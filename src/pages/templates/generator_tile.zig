@@ -1,21 +1,23 @@
-//! `generator_tile` — one owned generator as an action-like tile: its name (the generator's
-//! label when it has one), a state line (accumulating, off, ready — collect, needs vigor, needs
-//! input), the cycle's cost, duration and yield, the underbar filling while it accumulates, and
-//! a mode corner in the lower right that cycles the generator on (accumulates and waits to be
-//! collected), auto (collects itself) and off (paused, progress kept).
+//! `generator_tile` — one held generator verb as an action-like tile: its name, a state line
+//! (accumulating, off, ready — collect, needs vigor, needs input), the cycle's cost, duration
+//! and yield, the underbar filling while it accumulates, and a mode corner in the lower right
+//! that cycles the generator on (accumulates and waits to be collected), auto (collects itself)
+//! and off (paused, progress kept).
 //!
 //! A click on the ready tile writes `CollectGenerator`; a click on the corner writes
 //! `ToggleGenerator` and never collects. Readiness and progress come from the agent's
-//! `comp.Quotes`, cost and output from the record's generator. At the compact density the
-//! state word rides the name row and the tile stands at verb height. In a catalog that hides
-//! entries the tile carries the hide corner at its top right (`action_tile.Hide`), and a
-//! hidden tile dims its mode corner with the rest.
+//! `comp.Quotes`, cost and output from the verb's terms (`actions.verbOf`). At the compact
+//! density the state word rides the name row and the tile stands at verb height. In a catalog
+//! that hides entries the tile carries the hide corner at its top right (`action_tile.Hide`),
+//! and a hidden tile dims its mode corner with the rest.
 
 const std = @import("std");
 const ha = @import("ha");
 
 const comp = ha.sim.comp;
 const roster = ha.sim.data.roster;
+const actions = ha.sim.rules.actions;
+const Verb = ha.sim.rules.effects.Verb;
 const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
@@ -28,19 +30,14 @@ const action_tile = @import("./action_tile.zig");
 const info = @import("./action_info.zig");
 const fmt = @import("../fmt.zig");
 
-/// A cycle's length in days.
-fn cycleDays(spec: roster.Generator) f32 {
-    return spec.hours / 24.0;
-}
-
-fn cycleCost(act: u8, buf: []u8, rec: *const roster.Good, spec: roster.Generator) []const u8 {
+/// What a collection pays: the energy, then every input.
+fn cycleCost(act: u8, buf: []u8, verb: *const Verb) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     var ebuf: [8]u8 = undefined;
-    wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, spec.energy)}) catch {};
-    for (rec.input) |line| {
-        if (line.per != .day) continue;
+    wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, verb.requires.energy)}) catch {};
+    for (verb.input.slice()) |line| {
         var nbuf: [8]u8 = undefined;
-        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n * cycleDays(spec)), info.letterOf(act, line.item) }) catch {};
+        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n), info.letterOf(act, line.item) }) catch {};
     }
     return wr.buffered();
 }
@@ -50,29 +47,18 @@ const Yield = struct {
     text: []const u8,
 };
 
-fn cycleYield(act: u8, buf: []u8, rec: *const roster.Good, spec: roster.Generator) Yield {
-    const cycle_days = cycleDays(spec);
-    var best: ?roster.Line = null;
-    var best_mean: f32 = -1;
-    for (rec.output) |line| {
-        if (line.per != .day) continue;
-        const mean = ha.sim.kernel.dist.stats(line.asDist()).mean * cycle_days;
-        if (mean > best_mean) {
-            best = line;
-            best_mean = mean;
-        }
-    }
-    if (best) |line| {
-        const stats = ha.sim.kernel.dist.stats(line.asDist());
-        const lo = @round(stats.p10 * cycle_days);
-        const hi = @round(stats.p90 * cycle_days);
+/// What a collection draws: the dominant output's band, or the vigor it restores.
+fn cycleYield(act: u8, buf: []u8, cat: *const roster.Catalog, verb: *const Verb, vigor: f32) Yield {
+    if (info.dominant(act, cat, verb.output.slice())) |dom| {
+        const lo = @round(dom.band.p10);
+        const hi = @round(dom.band.p90);
         const text = if (lo == hi)
-            std.mem.print(buf, "+{d:.0}{s}", .{ hi, info.letterOf(act, line.item) }) catch "+?"
+            std.mem.print(buf, "+{d:.0}{s}", .{ hi, dom.letter }) catch "+?"
         else
-            std.mem.print(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, info.letterOf(act, line.item) }) catch "+?";
-        return .{ .kind = line.kind, .text = text };
+            std.mem.print(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "+?";
+        return .{ .kind = dom.kind, .text = text };
     }
-    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{spec.vigor}) catch "+?v" };
+    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{vigor}) catch "+?v" };
 }
 
 fn stateWord(q: comp.Quotes.Generator) []const u8 {
@@ -85,31 +71,33 @@ fn stateWord(q: comp.Quotes.Generator) []const u8 {
     };
 }
 
-/// Build the tile for owned generator `gi` into `parent`, keyed by the good's id. `act` picks
-/// the item letters of the cost and yield; `hide` the hide corner and the look. Returns the tile
-/// and its hide corner's click, which neither collects nor cycles the mode; the tile collects on
-/// its own, so `clicked` is false. Null when the agent does not own a quoted generator `gi`.
-pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u16, density: action_tile.Density, hide: action_tile.Hide) !?action_tile.Tile {
+/// Build the tile for held generator verb `ai` into `parent`, keyed by the verb's id. `act`
+/// picks the item letters of the cost and yield; `hide` the hide corner and the look. Returns
+/// the tile and its hide corner's click, which neither collects nor cycles the mode; the tile
+/// collects on its own, so `clicked` is false. Null when the agent does not hold a quoted
+/// generator `ai`.
+pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, ai: u16, density: action_tile.Density, hide: action_tile.Hide) !?action_tile.Tile {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
-    const rec = &cat.goods[gi];
-    const spec = rec.generator orelse return null;
+    const rec = &cat.actions[ai];
+    if (!rec.generator) return null;
     const quotes = world.get(e, comp.Quotes) orelse return null;
-    const q = quotes.generators[gi] orelse return null;
+    const q = quotes.generators[ai] orelse return null;
+    const verb = actions.verbOf(world, e, cat, ai) orelse return null;
 
     var cost_buf: [40]u8 = undefined;
     var duration_buf: [12]u8 = undefined;
     var yield_buf: [20]u8 = undefined;
-    const duration = std.mem.print(&duration_buf, "{d:.0}h", .{spec.hours}) catch "?";
-    const yield = cycleYield(act, &yield_buf, rec, spec);
+    const duration = std.mem.print(&duration_buf, "{d:.0}h", .{verb.requires.hours}) catch "?";
+    const yield = cycleYield(act, &yield_buf, cat, &verb, rec.vigor);
     const progress: ?f32 = if (q.standing == .charging) q.fraction() else null;
-    const display_name = if (spec.label.len > 0) spec.label else rec.name;
+    const display_name = rec.name;
     const tile = try action_tile.tile(
         parent,
         rec.id,
         display_name,
         stateWord(q),
-        cycleCost(act, &cost_buf, rec, spec),
+        cycleCost(act, &cost_buf, &verb),
         duration,
         yield.kind,
         yield.text,
@@ -134,7 +122,7 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, gi: u1
     const toggle = try tile.el.box("toggle", .{
         .anchor = .bottom_right, .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row },
     }, .{if (density == .compact) style.pad_each(8, 8, 4, 5) else style.pad_each(12, 12, 5, 6)});
-    const mode = toggleAndCollect(tile.el, toggle, world, e, gi, display_name);
+    const mode = toggleAndCollect(tile.el, toggle, world, e, ai, display_name);
     const size: Style = if (density == .compact) .{ .font = 10 } else style.small;
     try toggle.label("label", mode_labels.get(mode), .{ size, if (hide == .hidden) hidden_mode_ink else mode_inks.get(mode) });
     return .{ .el = tile.el, .clicked = false, .hide_clicked = tile.hide_clicked };
@@ -171,15 +159,15 @@ pub const hidden_mode_ink = Style{ .ink = .dim, .on = &.{.{ .when = .hot, .ink =
 /// - the toggle then consumes its click, and the tile is re-queried after it, as
 ///   `capital_row` does: only a click on the tile body writes `CollectGenerator`.
 ///
-/// The corner is a button named for the generator and its mode (`Garden bed generator · auto`):
+/// The corner is a button named for the generator and its mode (`Tend garden generator · auto`):
 /// a three-way cycle has no `checked` to publish. Returns the mode after this frame's activation.
-fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u16, display_name: []const u8) comp.Generators.Mode {
+fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, ai: u16, display_name: []const u8) comp.Generators.Mode {
     const ctx = toggle.ctx;
     // A generator can always be paused or resumed. The flip and the lifecycle share this gate.
     const enabled = true;
     const flip = enabled and toggle.query().clicked;
-    if (flip) _ = ctx.res.game.events.writer(ha.sim.events.ToggleGenerator).push(.{ .agent = e, .gi = gi });
-    const was = world.get(e, comp.Generators).?.mode[gi];
+    if (flip) _ = ctx.res.game.events.writer(ha.sim.events.ToggleGenerator).push(.{ .agent = e, .ai = ai });
+    const was = world.get(e, comp.Generators).?.mode[ai];
     const mode = if (flip) was.next() else was;
     const q = toggle.control(.{
         .enabled = enabled,
@@ -192,7 +180,7 @@ fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, gi: u1
     _ = toggle.consume(.clicked);
     // The tile's lifecycle gated its own click on readiness (a disabled tile consumed it);
     // read it again now that the toggle has taken its click.
-    if (tile.query().clicked) _ = ctx.res.game.events.writer(ha.sim.events.CollectGenerator).push(.{ .agent = e, .gi = gi });
+    if (tile.query().clicked) _ = ctx.res.game.events.writer(ha.sim.events.CollectGenerator).push(.{ .agent = e, .ai = ai });
     return mode;
 }
 
@@ -234,7 +222,7 @@ const GenRig = struct {
         self.res.game.catalog.deinit();
     }
 
-    /// An agent owning one garden bed whose cycle is complete: ready to collect.
+    /// An agent owning one garden bed whose Tend garden cycle is complete: ready to collect.
     fn gardener(self: *GenRig) GenFixture {
         const e = self.world.spawn(.{
             comp.Vigor{ .v = 10, .max = 10 },
@@ -246,11 +234,12 @@ const GenRig = struct {
             comp.Condition{},
             comp.Quotes{},
         });
-        const gi: u16 = @intCast(self.res.game.catalog.goodIndex("garden_bed").?);
-        self.world.get(e, comp.Goods).?.count[gi] = 1;
-        self.world.get(e, comp.Generators).?.progress[gi] = 1e9;
+        const cat = &self.res.game.catalog;
+        const ai: u16 = cat.actionIndex("tend_garden").?;
+        self.world.get(e, comp.Goods).?.count[cat.goodIndex("garden_bed").?] = 1;
+        self.world.get(e, comp.Generators).?.progress[ai] = 1e9;
         ha.sim.ecs.run(&self.world, &self.res.game, ha.sim.systems.quotes.quotes);
-        return .{ .world = &self.world, .e = e, .gi = gi };
+        return .{ .world = &self.world, .e = e, .ai = ai };
     }
 };
 
@@ -258,7 +247,7 @@ const GenRig = struct {
 const GenFixture = struct {
     world: *World,
     e: Entity,
-    gi: u16,
+    ai: u16,
     tile_key: u64 = 0,
     toggle_key: u64 = 0,
     /// The mode `toggleAndCollect` returned, the one the corner's label reads.
@@ -284,7 +273,7 @@ const GenFixture = struct {
     pub fn build(self: *GenFixture, ctx: *UiCtx) anyerror!uic.Trees {
         const root = try el.root(ctx, "root");
         const tile = try place(root, "tile", 0, 0, 300, 87);
-        const ready = self.world.get(self.e, comp.Quotes).?.generators[self.gi].?.ready();
+        const ready = self.world.get(self.e, comp.Quotes).?.generators[self.ai].?.ready();
         self.tile_lifecycle_click = tile.control(.{ .enabled = ready, .name = "Garden bed", .role = .tile }).clicked;
         if (self.with_hide) {
             const corner = try place(tile, "hide", 240, 0, 60, 20);
@@ -292,7 +281,7 @@ const GenFixture = struct {
             self.hide_key = corner.get().key;
         }
         const toggle = try place(tile, "toggle", 240, 60, 60, 27);
-        self.shown = toggleAndCollect(tile, toggle, self.world, self.e, self.gi, "Garden bed");
+        self.shown = toggleAndCollect(tile, toggle, self.world, self.e, self.ai, "Garden bed");
         self.tile_collect_click = tile.query().clicked;
         self.tile_key = tile.get().key;
         self.toggle_key = toggle.get().key;
@@ -308,12 +297,12 @@ const GenFixture = struct {
     }
 
     fn mode(self: *const GenFixture) comp.Generators.Mode {
-        return self.world.get(self.e, comp.Generators).?.mode[self.gi];
+        return self.world.get(self.e, comp.Generators).?.mode[self.ai];
     }
 
     /// A collect restarts the cycle; an uncollected bed keeps its full progress.
     fn collected(self: *const GenFixture) bool {
-        return self.world.get(self.e, comp.Generators).?.progress[self.gi] == 0;
+        return self.world.get(self.e, comp.Generators).?.progress[self.ai] == 0;
     }
 };
 

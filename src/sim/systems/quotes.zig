@@ -33,8 +33,8 @@ pub fn quotes(
     while (it.next()) |entry| fill(w, entry[0], cat, cfg.*, entry[1]);
 }
 
-/// Write every slot of agent `e`'s quotes: the verbs the catalog has, then its goods; every slot
-/// past the catalog's records is null.
+/// Write every slot of agent `e`'s quotes: the verbs the catalog has, its generator verbs, then
+/// its goods; every slot past the catalog's records is null.
 pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, out: *Quotes) void {
     out.* = .{};
     for (0..cat.actions.len) |i| {
@@ -46,6 +46,16 @@ pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config
             .quality = vq.quality,
         };
     }
+    for (0..cat.actions.len) |i| {
+        const ai: u16 = @intCast(i);
+        const gq = capital.generator_quote(w, e, cat, cfg, ai) orelse continue;
+        out.generators[i] = .{
+            .standing = gq.standing,
+            .short = if (gq.short) |l| indexOf(gq.verb.input.slice(), l) else Quotes.none,
+            .progress = gq.progress,
+            .total = gq.total,
+        };
+    }
     for (cat.goods, 0..) |*rec, i| {
         const gi: u16 = @intCast(i);
         if (capital.quote(w, e, cat, gi)) |bq| out.builds[i] = .{
@@ -53,12 +63,6 @@ pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config
             .short = if (bq.short) |l| indexOf(rec.input, l) else Quotes.none,
             .count = bq.count,
             .reach = bq.reach,
-        };
-        if (capital.generator_quote(w, e, cat, cfg, gi)) |gq| out.generators[i] = .{
-            .standing = gq.standing,
-            .short = if (gq.short) |l| indexOf(rec.input, l) else Quotes.none,
-            .progress = gq.progress,
-            .total = gq.total,
         };
     }
 }
@@ -96,10 +100,10 @@ test "quotes answers what the rules answer, slot by slot" {
         comp.Quotes{},
     });
     const spear = cat.goodIndex("spear").?;
-    const garden = cat.goodIndex("garden_bed").?;
+    const garden = cat.actionIndex("tend_garden").?;
     const hunt = cat.actionIndex("hunt").?;
     w.get(e, comp.Goods).?.count[spear] = 1; // the spear grants the hunt, whose bait is short
-    w.get(e, comp.Goods).?.count[garden] = 1;
+    w.get(e, comp.Goods).?.count[cat.goodIndex("garden_bed").?] = 1;
 
     ecs.run(&w, &res, quotes);
     const got = w.get(e, comp.Quotes).?;
@@ -110,6 +114,7 @@ test "quotes answers what the rules answer, slot by slot" {
             try testing.expectEqual(v.standing, got.verbs[i].?.standing);
             try testing.expectEqual(v.quality, got.verbs[i].?.quality);
         }
+        try testing.expectEqual(capital.generator_quote(&w, e, cat, res.config, @intCast(i)) == null, got.generators[i] == null);
     }
     for (0..cat.goods.len) |i| {
         const want = capital.quote(&w, e, cat, @intCast(i));
@@ -119,7 +124,6 @@ test "quotes answers what the rules answer, slot by slot" {
             try testing.expectEqual(b.count, got.builds[i].?.count);
             try testing.expectEqual(b.reach, got.builds[i].?.reach);
         }
-        try testing.expectEqual(capital.generator_quote(&w, e, cat, res.config, @intCast(i)) == null, got.generators[i] == null);
     }
     for (cat.actions.len..roster.max_actions) |i| try testing.expect(got.verbs[i] == null);
 

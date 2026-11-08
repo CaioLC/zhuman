@@ -47,7 +47,7 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
     while (collected.next()) |f| {
         var buf: [120]u8 = undefined;
         var wr = std.Io.Writer.fixed(&buf);
-        wr.print("{s} cycle collected", .{cat.goods[f.gi].name}) catch {};
+        wr.print("{s} cycle collected", .{cat.actions[f.ai].name}) catch {};
         if (f.receipt.len > 0 or f.vigor > 0) {
             wr.writeAll(": ") catch {};
             var wrote = false;
@@ -314,14 +314,14 @@ test "a cancelled build names its salvage; a collected cycle lists its yield and
     crop.add(.{ .resource = .food }, 2);
     rig.emit(events.BuildCancelled{ .agent = 0, .gi = cat.goodIndex("spear").?, .refund = refund, .act = 1 });
     rig.emit(events.BuildCancelled{ .agent = 0, .gi = cat.goodIndex("spear").? });
-    rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").?, .receipt = crop, .vigor = 0.5 });
-    rig.emit(events.Collected{ .agent = 0, .gi = cat.goodIndex("garden_bed").? });
+    rig.emit(events.Collected{ .agent = 0, .ai = cat.actionIndex("tend_garden").?, .receipt = crop, .vigor = 0.5 });
+    rig.emit(events.Collected{ .agent = 0, .ai = cat.actionIndex("tend_garden").? });
     try rig.run();
     try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
     try expectLine(&rig, 3, .warn, "You gave up on the spear. Salvaged 5 materials.");
     try expectLine(&rig, 2, .warn, "You gave up on the spear. Salvaged 0 units.");
-    try expectLine(&rig, 1, .good, "Garden bed cycle collected: 2.0 food, +0.5 vigor.");
-    try expectLine(&rig, 0, .good, "Garden bed cycle collected.");
+    try expectLine(&rig, 1, .good, "Tend garden cycle collected: 2.0 food, +0.5 vigor.");
+    try expectLine(&rig, 0, .good, "Tend garden cycle collected.");
 }
 
 test "arrivals and departures of the passerby and the merchant; Refused says nothing" {

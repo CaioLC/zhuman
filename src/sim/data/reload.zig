@@ -134,7 +134,7 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
         }
     }
 
-    // Generator progress and toggles follow the good id independently of ownership counts.
+    // Generator progress and modes follow the verb's id, whether or not the verb is held.
     {
         var q: ecs.Query(.{comp.Generators}) = .{ .world = w };
         var it = q.iter();
@@ -142,10 +142,10 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
             const generators: *comp.Generators = entry;
             const was = generators.*;
             generators.* = .{};
-            for (old.goods, 0..) |g, gi| {
-                if (cat.goodIndex(g.id)) |ni| {
-                    generators.progress[ni] = was.progress[gi];
-                    generators.mode[ni] = was.mode[gi];
+            for (old.actions, 0..) |a, ai| {
+                if (cat.actionIndex(a.id)) |ni| {
+                    generators.progress[ni] = was.progress[ai];
+                    generators.mode[ni] = was.mode[ai];
                 }
             }
         }

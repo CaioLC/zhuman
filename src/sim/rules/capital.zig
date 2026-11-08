@@ -205,11 +205,13 @@ pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
     const cat = &res.catalog;
     const goods = w.get(e, comp.Goods) orelse return;
     const rec = &cat.goods[gi];
-    if (rec.generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
     const units = lot(rec);
     goods.count[gi] += units;
-    if (was == 0) settle(w, e, cat);
+    if (was == 0) {
+        settle(w, e, cat);
+        ensureIfGenerating(w, e, cat);
+    }
     var receipt = ledger.Receipt{};
     receipt.add(.{ .good = gi }, @floatFromInt(units));
     _ = res.events.writer(events.WorkDone).push(.{
@@ -226,10 +228,12 @@ pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
 /// on the way in from absent. Emits `GoodsChanged`; the trade states its own outcome.
 pub fn acquire(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) void {
     const goods = w.get(e, comp.Goods) orelse return;
-    if (units > 0 and res.catalog.goods[gi].generator != null) _ = ensureGenerators(w, e);
     const was = goods.count[gi];
     goods.count[gi] += units;
-    if (was == 0 and units > 0) settle(w, e, &res.catalog);
+    if (was == 0 and units > 0) {
+        settle(w, e, &res.catalog);
+        ensureIfGenerating(w, e, &res.catalog);
+    }
     if (units > 0) _ = res.events.writer(events.GoodsChanged).push(.{ .agent = e });
 }
 
@@ -240,13 +244,7 @@ pub fn release(w: *World, e: Entity, res: *Resources, gi: u16, units: u32) u32 {
     const had = goods.count[gi];
     const taken = @min(had, units);
     goods.count[gi] -= taken;
-    if (had > 0 and goods.count[gi] == 0) {
-        if (w.get(e, comp.Generators)) |state| {
-            state.progress[gi] = 0;
-            state.mode[gi] = .on;
-        }
-        settle(w, e, &res.catalog);
-    }
+    if (had > 0 and goods.count[gi] == 0) settle(w, e, &res.catalog);
     if (taken > 0) _ = res.events.writer(events.GoodsChanged).push(.{ .agent = e });
     return taken;
 }
@@ -303,20 +301,21 @@ pub fn lowerName(name: []const u8, buf: *[48]u8) []const u8 {
     return buf[0..n];
 }
 
-// --- collectable generators ---------------------------------------------------------------
+// --- generators ---------------------------------------------------------------------------
 
-/// Where an owned generator's cycle stands: the standing `comp.Quotes` carries per generator.
+/// Where a held generator's cycle stands: the standing `comp.Quotes` carries per generator.
 pub const GeneratorStanding = comp.Quotes.GeneratorStanding;
 
-/// One owned generator's authoritative state and collection gate.
+/// One held generator verb's authoritative state and collection gate.
 pub const GeneratorQuote = struct {
-    gi: u16,
-    rec: *const roster.Good,
-    spec: roster.Generator,
+    ai: u16,
+    rec: *const roster.Action,
+    /// The verb's effective terms: the cycle's hours, the collection's energy and inputs, and
+    /// the yield.
+    verb: effects.Verb,
     standing: GeneratorStanding,
     progress: f32,
     total: f32,
-    cycle_days: f32,
     short: ?roster.Line = null,
 
     pub fn ready(self: GeneratorQuote) bool {
@@ -335,61 +334,78 @@ fn ensureGenerators(w: *World, e: Entity) *comp.Generators {
     return w.get(e, comp.Generators).?;
 }
 
+/// Give the agent its generator state once it holds a generator verb, so the cycle starts
+/// accumulating; an agent that holds none is left without one.
+fn ensureIfGenerating(w: *World, e: Entity, cat: *const Catalog) void {
+    if (w.has(e, comp.Generators)) return;
+    for (cat.actions, 0..) |a, i| {
+        if (a.generator and actions.holds(w, e, cat, @intCast(i))) {
+            w.add(e, comp.Generators{});
+            return;
+        }
+    }
+}
+
+/// The generator verb the good `id` opens, if it opens one: what its BUILD row calls a
+/// generator and a fixture's mode corner names.
+pub fn generatorOf(cat: *const Catalog, id: []const u8) ?u16 {
+    const g = cat.good(id) orelse return null;
+    for (g.effects) |fx| switch (fx) {
+        .grant => |verb| if (cat.actionIndex(verb)) |ai| {
+            if (cat.actions[ai].generator) return ai;
+        },
+        else => {},
+    };
+    return null;
+}
+
 /// Quote collection without consulting `Busy`: generators mature beside body-occupying work.
-pub fn generator_quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, gi: u16) ?GeneratorQuote {
-    const rec = &cat.goods[gi];
-    const spec = rec.generator orelse return null;
-    const goods = w.get(e, comp.Goods) orelse return null;
-    if (goods.count[gi] == 0) return null;
+/// Null when `ai` is not a generator verb the agent holds, or the agent has no generator state
+/// or no body.
+pub fn generator_quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config, ai: u16) ?GeneratorQuote {
+    const rec = &cat.actions[ai];
+    if (!rec.generator) return null;
+    const v = actions.verbOf(w, e, cat, ai) orelse return null;
     const state = w.get(e, comp.Generators) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
-    const total = res_mod.hours_to_secs(spec.hours, cfg.secs_per_day);
-    const progress = @min(state.progress[gi], total);
-    const cycle_days = spec.hours / 24.0;
-    var q = GeneratorQuote{
-        .gi = gi,
-        .rec = rec,
-        .spec = spec,
-        .standing = .ready,
-        .progress = progress,
-        .total = total,
-        .cycle_days = cycle_days,
-    };
-    if (state.mode[gi] == .off) {
+    const total = res_mod.hours_to_secs(v.requires.hours, cfg.secs_per_day);
+    const progress = @min(state.progress[ai], total);
+    var q = GeneratorQuote{ .ai = ai, .rec = rec, .verb = v, .standing = .ready, .progress = progress, .total = total };
+    if (state.mode[ai] == .off) {
         q.standing = .off;
     } else if (progress < total) {
         q.standing = .charging;
-    } else if (spec.energy >= vigor.v) {
+    } else if (v.requires.energy >= vigor.v) {
         q.standing = .energy;
-    } else if (ledger.short(w, e, cat, roster.Lines.only(rec.input, .day).slice(), cycle_days)) |line| {
+    } else if (ledger.short(w, e, cat, v.input.slice(), 1)) |line| {
         q.standing = .short;
         q.short = line;
     }
     return q;
 }
 
-/// Accumulate owned generators that are not `off` toward readiness, then collect every `auto`
-/// generator whose quote is ready, through the same settlement a player's collection takes
-/// (`collect`). An `auto` generator the agent cannot pay for (`energy`, `short`) keeps its full
-/// cycle and is collected on the first frame it can be. `Busy` is deliberately ignored. The
-/// collections run after the query, since a collection writes beyond the iterated storages.
+/// Accumulate every held generator verb that is not `off` toward readiness, then collect every
+/// `auto` generator whose quote is ready, through the same settlement a player's collection
+/// takes (`collect`). An `auto` generator the agent cannot pay for (`energy`, `short`) keeps its
+/// full cycle and is collected on the first frame it can be; one whose verb is no longer held
+/// keeps its progress and does not accumulate. `Busy` is deliberately ignored. The collections
+/// run after the query, since a collection writes beyond the iterated storages.
 pub fn run_generators(w: *World, res: *Resources) void {
     const cat = &res.catalog;
     var due: [ecs.MAX_ENTITIES]Entity = undefined;
     var n: usize = 0;
-    var q: ecs.Query(.{ Entity, comp.Goods, comp.Generators }) = .{ .world = w };
+    var q: ecs.Query(.{ Entity, comp.Generators }) = .{ .world = w };
     var it = q.iter();
     while (it.next()) |entry| {
         const e: Entity = entry[0];
-        const goods: *comp.Goods = entry[1];
-        const state: *comp.Generators = entry[2];
+        const state: *comp.Generators = entry[1];
         var auto_full = false;
-        for (cat.goods, 0..) |rec, gi| {
-            const spec = rec.generator orelse continue;
-            if (goods.count[gi] == 0 or state.mode[gi] == .off) continue;
-            const total = res_mod.hours_to_secs(spec.hours, res.config.secs_per_day);
-            state.progress[gi] = @min(total, state.progress[gi] + res.time.dt);
-            if (state.mode[gi] == .auto and state.progress[gi] >= total) auto_full = true;
+        for (cat.actions, 0..) |rec, i| {
+            if (!rec.generator or state.mode[i] == .off) continue;
+            const v = actions.verbOf(w, e, cat, @intCast(i)) orelse continue;
+            const total = res_mod.hours_to_secs(v.requires.hours, res.config.secs_per_day);
+            state.progress[i] = @min(total, state.progress[i] + res.time.dt);
+            if (state.mode[i] == .auto and state.progress[i] >= total) auto_full = true;
         }
         if (auto_full) {
             due[n] = e;
@@ -397,11 +413,12 @@ pub fn run_generators(w: *World, res: *Resources) void {
         }
     }
     for (due[0..n]) |e| {
-        for (cat.goods, 0..) |_, i| {
-            const gi: u16 = @intCast(i);
+        for (cat.actions, 0..) |rec, i| {
+            if (!rec.generator) continue;
+            const ai: u16 = @intCast(i);
             const state = w.get(e, comp.Generators) orelse break;
-            if (state.mode[gi] != .auto) continue;
-            const gq = generator_quote(w, e, cat, res.config, gi) orelse continue;
+            if (state.mode[ai] != .auto) continue;
+            const gq = generator_quote(w, e, cat, res.config, ai) orelse continue;
             if (gq.ready()) collect(w, e, res, gq);
         }
     }
@@ -409,24 +426,23 @@ pub fn run_generators(w: *World, res: *Resources) void {
 
 /// Move a generator to its next mode: on, auto, off, then on again (`Generators.Mode.next`).
 /// Every mode keeps the accumulated progress. Returns `unavailable`, changing nothing, for a
-/// good that is not an owned generator.
-pub fn toggle_generator(w: *World, e: Entity, cat: *const Catalog, gi: u16) ?Reason {
-    if (gi >= cat.goods.len or cat.goods[gi].generator == null) return .unavailable;
-    const goods = w.get(e, comp.Goods) orelse return .unavailable;
-    if (goods.count[gi] == 0) return .unavailable;
+/// verb that is not a generator the agent holds.
+pub fn toggle_generator(w: *World, e: Entity, cat: *const Catalog, ai: u16) ?Reason {
+    if (ai >= cat.actions.len or !cat.actions[ai].generator) return .unavailable;
+    if (!actions.holds(w, e, cat, ai)) return .unavailable;
     const state = ensureGenerators(w, e);
-    state.mode[gi] = state.mode[gi].next();
+    state.mode[ai] = state.mode[ai].next();
     return null;
 }
 
 /// The player's collection: refuses unless the quote is ready, then settles the cycle
 /// (`collect`). This never creates or inspects `Busy`, so collecting does not interrupt other
-/// work. Returns why it refused (`unavailable` for a good that is not an owned generator, else
+/// work. Returns why it refused (`unavailable` for a verb that is not a held generator, else
 /// the quote's standing), changing nothing, or null.
-pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
+pub fn collect_generator(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason {
     const cat = &res.catalog;
-    if (gi >= cat.goods.len) return .unavailable;
-    const q = generator_quote(w, e, cat, res.config, gi) orelse return .unavailable;
+    if (ai >= cat.actions.len) return .unavailable;
+    const q = generator_quote(w, e, cat, res.config, ai) orelse return .unavailable;
     switch (q.standing) {
         .ready => {},
         .charging => return .not_ready,
@@ -439,23 +455,23 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason
 }
 
 /// Settle one ready cycle, the one path for both a player's and an `auto` collection: pay the
-/// spec's energy from vigor and the day-lines input, draw the yield, restore the spec's vigor,
-/// refresh the condition band, restart accumulation and emit `Collected`. `q` must be ready.
+/// verb's energy from vigor and its inputs, draw its yield, restore its vigor, refresh the
+/// condition band, restart accumulation and emit `Collected`. `q` must be ready.
 fn collect(w: *World, e: Entity, res: *Resources, q: GeneratorQuote) void {
     std.debug.assert(q.ready());
     const cat = &res.catalog;
-    const gi = q.gi;
+    const ai = q.ai;
     const vigor = w.get(e, comp.Vigor).?;
-    vigor.v -= q.spec.energy;
-    ledger.pay(w, e, cat, roster.Lines.only(q.rec.input, .day).slice(), q.cycle_days);
-    const receipt = ledger.draw(w, e, cat, roster.Lines.only(q.rec.output, .day).slice(), res.random(), 1, q.cycle_days);
-    const restored = @min(q.spec.vigor, vigor.max - vigor.v);
+    vigor.v -= q.verb.requires.energy;
+    ledger.pay(w, e, cat, q.verb.input.slice(), 1);
+    const receipt = ledger.draw(w, e, cat, q.verb.output.slice(), res.random(), 1, 1);
+    const restored = @max(0, @min(q.rec.vigor, vigor.max - vigor.v));
     vigor.v += restored;
     // A collection's net toll is the collection's, not hunger: the band takes it silently
     // (`rules/condition`).
     if (w.get(e, comp.Condition)) |c| _ = condition.refresh(&res.config, vigor, c);
-    ensureGenerators(w, e).progress[gi] = 0;
-    _ = res.events.writer(events.Collected).push(.{ .agent = e, .gi = gi, .receipt = receipt, .vigor = restored, .act = migration.actOf(w, e) });
+    ensureGenerators(w, e).progress[ai] = 0;
+    _ = res.events.writer(events.Collected).push(.{ .agent = e, .ai = ai, .receipt = receipt, .vigor = restored, .act = migration.actOf(w, e) });
 }
 
 // ============================ Tests ==========================================
@@ -639,8 +655,8 @@ test "a generator accumulates without moving resources and settles only when col
         comp.Generators{},
         comp.Granted{},
     });
-    const garden = res.catalog.goodIndex("garden_bed").?;
-    w.get(e, comp.Goods).?.count[garden] = 1;
+    const garden = res.catalog.actionIndex("tend_garden").?;
+    w.get(e, comp.Goods).?.count[res.catalog.goodIndex("garden_bed").?] = 1;
 
     run_generators(&w, &res); // halfway through a 48h cycle
     try testing.expectApproxEqAbs(@as(f32, 0.2), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
@@ -676,7 +692,7 @@ test "the toggle cycles a generator on, auto, off and on again, keeping its prog
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const garden = cat.goodIndex("garden_bed").?;
+    const garden = cat.actionIndex("tend_garden").?;
     const e = spawn_gardener(&w, cat, 0);
     const state = w.get(e, comp.Generators).?;
     state.progress[garden] = 3;
@@ -695,8 +711,8 @@ test "an off generator keeps its progress; on accumulates and waits for the play
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const garden = cat.goodIndex("garden_bed").?;
-    const total = res_mod.hours_to_secs(cat.goods[garden].generator.?.hours, res.config.secs_per_day);
+    const garden = cat.actionIndex("tend_garden").?;
+    const total = res_mod.hours_to_secs(cat.actions[garden].requires.hours, res.config.secs_per_day);
     const e = spawn_gardener(&w, cat, 1);
     const state = w.get(e, comp.Generators).?;
     state.progress[garden] = 3;
@@ -713,14 +729,40 @@ test "an off generator keeps its progress; on accumulates and waits for the play
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v);
 }
 
+test "a generator whose good is gone keeps its progress and does not accumulate" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try test_res();
+    defer res.catalog.deinit();
+    const cat = &res.catalog;
+    const garden = cat.actionIndex("tend_garden").?;
+    const bed = cat.goodIndex("garden_bed").?;
+    const e = spawn_gardener(&w, cat, 1);
+    const state = w.get(e, comp.Generators).?;
+    state.progress[garden] = 3;
+    state.mode[garden] = .auto;
+    res.time = .{ .dt = 5 };
+
+    try testing.expectEqual(@as(u32, 1), release(&w, e, &res, bed, 1));
+    run_generators(&w, &res);
+    try testing.expectEqual(@as(f32, 3), state.progress[garden]);
+    try testing.expectEqual(comp.Generators.Mode.auto, state.mode[garden]);
+    try testing.expect(generator_quote(&w, e, cat, res.config, garden) == null);
+    try testing.expectEqual(Reason.unavailable, collect_generator(&w, e, &res, garden).?);
+
+    acquire(&w, e, &res, bed, 2); // a second bed is stock: one cycle runs
+    run_generators(&w, &res);
+    try testing.expectEqual(@as(f32, 8), state.progress[garden]);
+}
+
 test "an auto generator collects itself in the run that completes its cycle" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const garden = cat.goodIndex("garden_bed").?;
-    const spec = cat.goods[garden].generator.?;
+    const garden = cat.actionIndex("tend_garden").?;
+    const spec = cat.actions[garden].requires;
     const e = spawn_gardener(&w, cat, 0.2); // exactly one two-day cycle of upkeep
     w.get(e, comp.Generators).?.mode[garden] = .auto;
     res.time = .{ .dt = res.config.secs_per_day }; // one full day per tick
@@ -734,9 +776,9 @@ test "an auto generator collects itself in the run that completes its cycle" {
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.Generators).?.progress[garden]);
     try testing.expect(w.get(e, comp.InventoryFood).?.v > 0);
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
-    try testing.expectApproxEqAbs(@min(10, 10 - spec.energy + spec.vigor), w.get(e, comp.Vigor).?.v, 1e-6);
+    try testing.expectApproxEqAbs(@min(10, 10 - spec.energy + cat.actions[garden].vigor), w.get(e, comp.Vigor).?.v, 1e-6);
     var cursor: u64 = 0;
-    try testing.expectEqual(garden, res.events.readerAt(events.Collected, &cursor).next().?.gi);
+    try testing.expectEqual(garden, res.events.readerAt(events.Collected, &cursor).next().?.ai);
     try testing.expectEqual(comp.Generators.Mode.auto, w.get(e, comp.Generators).?.mode[garden]);
 }
 
@@ -746,8 +788,8 @@ test "an auto generator the agent cannot pay for waits with its full cycle, then
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const garden = cat.goodIndex("garden_bed").?;
-    const spec = cat.goods[garden].generator.?;
+    const garden = cat.actionIndex("tend_garden").?;
+    const spec = cat.actions[garden].requires;
     const total = res_mod.hours_to_secs(spec.hours, res.config.secs_per_day);
     const e = spawn_gardener(&w, cat, 1);
     const state = w.get(e, comp.Generators).?;

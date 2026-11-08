@@ -20,10 +20,10 @@
 //! merchant's visit are saved as they are: their arrays index static tables in code, not the
 //! roster, so a change to those tables is a change of `version`.
 //!
-//! `version` guards the shape: `read` refuses a file whose version is not this one
-//! (`error.UnknownVersion`) before it parses the rest. A write goes to a temporary file that is
-//! renamed over the slot (`std.Io.Dir.createFileAtomic`), so a failed write leaves the slot as
-//! it was. File IO goes through the `std.Io.Dir` the caller passes.
+//! `version` guards the shape: `read` refuses a file whose version is not between `oldest` and
+//! `version` (`error.UnknownVersion`) before it parses the rest. A write goes to a temporary
+//! file that is renamed over the slot (`std.Io.Dir.createFileAtomic`), so a failed write leaves
+//! the slot as it was. File IO goes through the `std.Io.Dir` the caller passes.
 
 const std = @import("std");
 const comp = @import("../components.zig");
@@ -35,6 +35,7 @@ const logmod = @import("../log.zig");
 const market = @import("../rules/market.zig");
 const neighbours = @import("../rules/neighbours.zig");
 const effects = @import("../rules/effects.zig");
+const capital = @import("../rules/capital.zig");
 const GameState = @import("../state.zig").GameState;
 
 const Allocator = std.mem.Allocator;
@@ -43,8 +44,13 @@ const Entity = ecs.Entity;
 const Resources = res_mod.Resources;
 const Sim = res_mod.Sim;
 
-/// The shape's version; a file holding any other is refused.
-pub const version: u32 = 2;
+/// The shape's version: what a capture writes.
+pub const version: u32 = 3;
+
+/// The oldest version a load reads. A version-2 file keys a generator record by the good that
+/// ran it; a load reads such an id as the generator verb that good opens
+/// (`capital.generatorOf`), so the file loads unchanged.
+pub const oldest: u32 = 2;
 
 /// The largest file `read` accepts.
 pub const max_bytes: usize = 4 * 1024 * 1024;
@@ -102,8 +108,9 @@ comptime {
 }
 
 pub const GoodSave = struct { id: []const u8, count: u32 };
-/// A generator whose progress or mode differs from the default. `off` is the older record's
-/// word for the mode: a load reads `off = true` as `mode = .off`; a capture never writes it.
+/// A generator verb whose progress or mode differs from the default, by the verb's id. `off` is
+/// the older record's word for the mode: a load reads `off = true` as `mode = .off`; a capture
+/// never writes it.
 pub const GeneratorSave = struct { id: []const u8, progress: f32 = 0, mode: comp.Generators.Mode = .on, off: bool = false };
 pub const ResearchSave = struct { id: []const u8, state: roster.TechState };
 pub const BusySave = struct {
@@ -231,8 +238,8 @@ fn captureAgent(arena: Allocator, cat: *const roster.Catalog, w: *const World, e
     }
     if (w.get(e, comp.Generators)) |g| {
         var list: std.ArrayList(GeneratorSave) = .empty;
-        for (cat.goods, 0..) |rec, gi| {
-            if (g.progress[gi] != 0 or g.mode[gi] != .on) try list.append(arena, .{ .id = try arena.dupe(u8, rec.id), .progress = g.progress[gi], .mode = g.mode[gi] });
+        for (cat.actions, 0..) |rec, ai| {
+            if (g.progress[ai] != 0 or g.mode[ai] != .on) try list.append(arena, .{ .id = try arena.dupe(u8, rec.id), .progress = g.progress[ai], .mode = g.mode[ai] });
         }
         a.generators = list.items;
     }
@@ -295,14 +302,14 @@ fn encode(arena: Allocator, s: *const Save) ![]const u8 {
     return out.written();
 }
 
-/// ZON text as a `Save`: `error.UnknownVersion` when its version is not `version`,
+/// ZON text as a `Save`: `error.UnknownVersion` when its version is outside `oldest`..`version`,
 /// `error.ParseZon` when it is not a save.
 fn decode(arena: Allocator, src: [:0]const u8) !Save {
     var diag: std.zon.parse.Diagnostics = undefined;
     const head = std.zon.parse.fromSlice(struct { version: u32 }, .{
         .gpa = arena, .arena = arena, .source = src, .diagnostics = &diag, .ignore_unknown_fields = true,
     }) catch |err| return logged(err, &diag);
-    if (head.version != version) return error.UnknownVersion;
+    if (head.version < oldest or head.version > version) return error.UnknownVersion;
     return std.zon.parse.fromSlice(Save, .{ .gpa = arena, .arena = arena, .source = src, .diagnostics = &diag }) catch |err| logged(err, &diag);
 }
 
@@ -335,8 +342,8 @@ pub const Loaded = struct {
     }
 };
 
-/// Read and parse `sub_path` in `dir`. `error.UnknownVersion` when the file's version is not
-/// `version`; a file that is not a save is `error.ParseZon`, its errors logged as warnings.
+/// Read and parse `sub_path` in `dir`. `error.UnknownVersion` when the file's version is outside
+/// `oldest`..`version`; a file that is not a save is `error.ParseZon`, its errors logged as warnings.
 pub fn read(io: std.Io, dir: std.Io.Dir, sub_path: []const u8, gpa: Allocator) !Loaded {
     var arena = std.heap.ArenaAllocator.init(gpa);
     errdefer arena.deinit();
@@ -367,6 +374,13 @@ pub fn apply(res: *Resources, w: *World, s: *const Save) Report {
     return report;
 }
 
+/// The verb a generator record names: the verb by its id, or, for a version-2 record, the
+/// generator verb the named good opens.
+fn generatorIndex(cat: *const roster.Catalog, id: []const u8) ?u16 {
+    if (cat.actionIndex(id)) |ai| return ai;
+    return capital.generatorOf(cat, id);
+}
+
 fn applyAgent(w: *World, cat: *const roster.Catalog, a: *const AgentSave, report: *Report) void {
     const e = w.spawn(.{});
     for (a.tags) |t| switch (t) {
@@ -395,9 +409,9 @@ fn applyAgent(w: *World, cat: *const roster.Catalog, a: *const AgentSave, report
     if (a.generators) |list| {
         var gens = comp.Generators{};
         for (list) |r| {
-            if (cat.goodIndex(r.id)) |gi| {
-                gens.progress[gi] = r.progress;
-                gens.mode[gi] = if (r.off) .off else r.mode;
+            if (generatorIndex(cat, r.id)) |ai| {
+                gens.progress[ai] = r.progress;
+                gens.mode[ai] = if (r.off) .off else r.mode;
             } else report.dropped += 1;
         }
         w.add(e, gens);
@@ -516,9 +530,9 @@ fn settle(res: *Resources, w: *World) Entity {
     goods.count[cat.goodIndex("garden_bed").?] = 1;
     effects.apply(w, e, cat);
     const gens = w.get(e, comp.Generators).?;
-    gens.progress[cat.goodIndex("garden_bed").?] = 3.75;
-    gens.mode[cat.goodIndex("sandals").?] = .off;
-    gens.mode[cat.goodIndex("garden_bed").?] = .auto;
+    gens.progress[cat.actionIndex("tend_garden").?] = 3.75;
+    gens.mode[cat.actionIndex("check_traps").?] = .off;
+    gens.mode[cat.actionIndex("tend_garden").?] = .auto;
     w.add(e, comp.Busy{ .doing = .{ .build = cat.goodIndex("hatchet").? }, .total = 5, .remaining = 2.125, .quality = 0.7 });
     _ = migration.migrate_to_act_two(w, e, cat);
     const research = w.get(e, comp.Research).?;
@@ -663,7 +677,7 @@ test "a record naming an id the roster no longer has is dropped and counted" {
     try testing.expect(w.has(0, tags.Player));
 }
 
-test "a generator record round-trips its mode; an older record's off reads as the mode" {
+test "a version-2 generator record, keyed by its good, loads as the verb; a capture keys it by the verb" {
     var res = Resources{ .catalog = try shipped() };
     defer res.catalog.deinit();
     const cat = &res.catalog;
@@ -684,14 +698,15 @@ test "a generator record round-trips its mode; an older record's off reads as th
     const old = try decode(a, try a.dupeSentinel(u8, src, 0));
     try testing.expectEqual(@as(u32, 0), apply(&res, &w, &old).dropped);
     const gens = w.get(0, comp.Generators).?;
-    try testing.expectEqual(comp.Generators.Mode.off, gens.mode[cat.goodIndex("wire_snares").?]);
-    try testing.expectEqual(comp.Generators.Mode.on, gens.mode[cat.goodIndex("garden_bed").?]);
-    try testing.expectEqual(@as(f32, 2.5), gens.progress[cat.goodIndex("garden_bed").?]);
-    try testing.expectEqual(comp.Generators.Mode.auto, gens.mode[cat.goodIndex("chicken_coop").?]);
+    try testing.expectEqual(comp.Generators.Mode.off, gens.mode[cat.actionIndex("check_traps").?]);
+    try testing.expectEqual(comp.Generators.Mode.on, gens.mode[cat.actionIndex("tend_garden").?]);
+    try testing.expectEqual(@as(f32, 2.5), gens.progress[cat.actionIndex("tend_garden").?]);
+    try testing.expectEqual(comp.Generators.Mode.auto, gens.mode[cat.actionIndex("collect_eggs").?]);
 
-    // A capture writes the mode and never the older word.
+    // A capture writes the mode under the verb's id, and never the older word.
     const text = try encode(a, &(try capture(a, &res, &w)));
     try testing.expect(std.mem.indexOf(u8, text, ".off = ") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "\"tend_garden\"") != null and std.mem.indexOf(u8, text, "\"garden_bed\"") == null);
     var w2 = try World.init(testing.allocator);
     defer w2.deinit();
     _ = apply(&res, &w2, &(try decode(a, try a.dupeSentinel(u8, text, 0))));

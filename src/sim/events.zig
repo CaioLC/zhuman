@@ -39,10 +39,10 @@ pub const BeginLabor = struct { agent: Entity, ai: u16 };
 pub const BeginBuild = struct { agent: Entity, gi: u16 };
 /// Abandon the build in progress (`capital.cancel_build`).
 pub const CancelBuild = struct { agent: Entity };
-/// Move generator `gi` to its next mode: on, auto, off, on (`capital.toggle_generator`).
-pub const ToggleGenerator = struct { agent: Entity, gi: u16 };
-/// Collect generator `gi`'s cycle (`capital.collect_generator`).
-pub const CollectGenerator = struct { agent: Entity, gi: u16 };
+/// Move generator verb `ai` to its next mode: on, auto, off, on (`capital.toggle_generator`).
+pub const ToggleGenerator = struct { agent: Entity, ai: u16 };
+/// Collect generator verb `ai`'s cycle (`capital.collect_generator`).
+pub const CollectGenerator = struct { agent: Entity, ai: u16 };
 /// Set the metabolism rate; the handler clamps it into the configured band.
 pub const SetRation = struct { agent: Entity, rate: f32 };
 /// Take `lots` of the passerby's offer `quote` (`barter.resolve`), every line scaled by `lots`.
@@ -64,7 +64,7 @@ pub const NeighbourDeal = struct {
 pub const NewRun = struct {};
 /// The template audit harness's door: a debug-only poke of one component, applied by `systems/debug.zig`.
 pub const DebugPoke = struct {
-    pub const What = union(enum) { food: f32, vigor: struct { v: f32, max: f32 }, rate: f32, biomass: f32, good: struct { gi: u16, count: u32 }, settle, generator_mode: struct { gi: u16, mode: comp.Generators.Mode } };
+    pub const What = union(enum) { food: f32, vigor: struct { v: f32, max: f32 }, rate: f32, biomass: f32, good: struct { gi: u16, count: u32 }, settle, generator_mode: struct { ai: u16, mode: comp.Generators.Mode } };
     agent: Entity,
     what: What,
 };
@@ -166,8 +166,8 @@ pub const BuildCancelled = struct { agent: Entity, gi: u16, refund: Receipt = .{
 /// One unit of `agent`'s good `gi` broke.
 pub const GoodBroke = struct { agent: Entity, gi: u16 };
 
-/// `agent` collected generator `gi`: `receipt` landed and `vigor` was restored.
-pub const Collected = struct { agent: Entity, gi: u16, receipt: Receipt = .{}, vigor: f32 = 0, act: u8 = 1 };
+/// `agent` collected generator verb `ai`: `receipt` landed and `vigor` was restored.
+pub const Collected = struct { agent: Entity, ai: u16, receipt: Receipt = .{}, vigor: f32 = 0, act: u8 = 1 };
 
 /// `agent`'s condition band changed.
 pub const BandCrossed = struct { agent: Entity, from: Band, to: Band };

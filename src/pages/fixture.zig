@@ -47,8 +47,8 @@ pub const Screen = enum { act_one, act_two, gameover, act_one_end, title };
 /// open. Mirrors `market.Phase` but names only the two states a fixture cares to reach.
 pub const Encounter = enum { absent, present };
 
-/// One owned good for a fixture: a record id, how many, and for a generator the mode its corner
-/// shows, seeded every frame like the count (null leaves the run's mode).
+/// One owned good for a fixture: a record id, how many, and for a good that opens a generator the
+/// mode the verb's corner shows, seeded every frame like the count (null leaves the run's mode).
 pub const Owned = struct { id: []const u8, n: u32, mode: ?comp.Generators.Mode = null };
 
 /// Owning the hatchet, fishing rod and spear puts all five body-occupying verbs on ACTIONS.
@@ -471,7 +471,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_actions_generators",
-        .about = "Act I ACTIONS with the GENERATORS kind toggle pressed: the owned generators alone, their mode corners and underbars.",
+        .about = "Act I ACTIONS with the GENERATORS kind toggle pressed: the held generators alone, their mode corners and underbars.",
         .day = 19,
         .kind = .generators,
         .balances = .{
@@ -755,7 +755,7 @@ pub const catalog = [_]Spec{
         .about = "Act II ACTIONS on the hidden view: Draw water and the auto Garden bed hidden, dashed and dim.",
         .screen = .act_two,
         .day = 112,
-        .hidden = &.{ "draw_water", "garden_bed" },
+        .hidden = &.{ "draw_water", "tend_garden" },
         .show_hidden = true,
         .balances = settlement_generator_balances,
         .settlement = settlement,
@@ -1055,7 +1055,10 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
                 if (res.game.catalog.goodIndex(pair.id)) |gi| {
                     goods.count[gi] = pair.n;
                     if (pair.mode) |mode| {
-                        if (world.get(player, comp.Generators)) |gens| gens.mode[gi] = mode;
+                        const ai = ha.sim.rules.capital.generatorOf(&res.game.catalog, pair.id);
+                        if (ai != null) if (world.get(player, comp.Generators)) |gens| {
+                            gens.mode[ai.?] = mode;
+                        };
                     }
                 }
             }
@@ -1354,7 +1357,7 @@ test "an Act II fixture seeds a settlement holding every verb of the act" {
     try testing.expectEqual(@as(f32, 9), ha.sim.rules.ledger.balance(&rig.world, e, .water));
     try testing.expect(rig.world.get(e, comp.Busy).?.isBuild(cat.goodIndex("granary").?));
     for (cat.actions, 0..) |a, ai| {
-        if (a.act != 2 or !a.on_surface) continue;
+        if (a.act != 2 or a.generator) continue;
         try testing.expect(ha.sim.rules.actions.holds(&rig.world, e, cat, @intCast(ai)));
     }
 }
@@ -1372,7 +1375,7 @@ test "the ACTIONS fixtures open on the kind and the hidden view they name" {
     try testing.expect(hidden.show_hidden);
     try testing.expectEqual(@as(usize, 2), hidden.hidden.count());
     try testing.expect(hidden.hidden.isSet(t.actionsSlotOf(cat, "draw_water").?));
-    try testing.expect(hidden.hidden.isSet(t.actionsSlotOf(cat, "garden_bed").?));
+    try testing.expect(hidden.hidden.isSet(t.actionsSlotOf(cat, "tend_garden").?));
     const kind = catalogOf(find("act_one_actions_generators").?, cat).?;
     try testing.expectEqual(@as(u8, @intFromEnum(t.ActionsShow.generators)), kind.kind);
     try testing.expectEqual(@as(usize, 0), kind.hidden.count());

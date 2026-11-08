@@ -111,8 +111,7 @@ test "materials is not a catalog resource id" {
 }
 
 /// When a line settles. `once` is paid at begin (an input) or lands at completion (an
-/// output); `day` is an authored per-day rate on a generator and is realized as one complete,
-/// cycle-scaled amount when the player collects.
+/// output), or for a generator verb at each collection; the validator refuses `day`.
 pub const Cadence = enum { once, day };
 
 /// One quantity of one item — the only shape a cost, an upkeep, a yield, a satchel or a
@@ -182,17 +181,6 @@ pub const Price = struct {
     hours: f32,
 };
 
-/// A collectable generator's cycle. `hours` is passive accumulation time; `energy` is paid
-/// only when collecting and never occupies the actor. Day-cadence input/output lines remain
-/// rates and are multiplied by the cycle's fraction of a day. `vigor` is a fixed direct
-/// restoration for generators such as a medicinal herb bed.
-pub const Generator = struct {
-    energy: f32,
-    hours: f32,
-    vigor: f32 = 0,
-    /// Optional action label when collecting is a verb distinct from the owned good's name.
-    label: []const u8 = "",
-};
 
 /// What an effect tweaks on its target verb: the price, or one named input/output line.
 pub const Stat = union(enum) {
@@ -263,8 +251,9 @@ pub const Action = struct {
     name: []const u8,
     /// The first act the verb exists in.
     act: u8 = 1,
-    /// Whether the ACTIONS surface lists it. A verb can exist, and be granted, off-surface.
-    on_surface: bool = true,
+    /// A generator accumulates `requires.hours` passively without occupying `Busy`; collecting
+    /// pays the energy and the input lines and draws the output, all per cycle.
+    generator: bool = false,
     /// Resource domains the verb works in; the specialization model's key.
     sectors: []const []const u8 = &.{},
     /// Retained tooling: ids that must be held for the verb to be offered.
@@ -274,6 +263,8 @@ pub const Action = struct {
     requires: Price,
     input: []const Line = &.{},
     output: []const Line = &.{},
+    /// Direct vigor restoration at a generator's collection, clamped at the ceiling.
+    vigor: f32 = 0,
 };
 
 pub const Good = struct {
@@ -285,13 +276,10 @@ pub const Good = struct {
     tier: ?Tier = null,
     sectors: []const []const u8 = &.{},
     requires: ?Price = null,
-    /// `once` lines are the build order; `day` lines are the upkeep.
+    /// The build order.
     input: []const Line = &.{},
-    /// `once` lines are the product — absent means one of itself; `day` lines are the
-    /// generator's authored rate, realized only on collection.
+    /// The product — absent means one of itself.
     output: []const Line = &.{},
-    /// Passive cycle metadata. Null means this good is not a generator on ACTIONS.
-    generator: ?Generator = null,
     /// The verb (or tool) a modifier works on; must be held before the good is offered.
     needs: []const []const u8 = &.{},
     family: ?Family = null,
@@ -502,9 +490,10 @@ pub const Rule = enum {
     output_not_self,
     /// A buildable good lacks a price or tier, or a traded one carries them.
     buildable_shape,
-    /// An action carries a day line; actions resolve once.
+    /// A line carries the `day` cadence; every line settles once.
     bad_cadence,
-    /// A negative quantity, a drawn input, a non-positive scale, or a zero research cost.
+    /// A negative quantity, a drawn input, a non-positive scale, a zero research cost, or a
+    /// generator with no cycle.
     bad_number,
     /// A technology sits on the foundation (ring 0) or shares a coordinate with another.
     bad_coord,
@@ -672,6 +661,8 @@ const Validator = struct {
 
     fn checkAction(self: *Validator, a: Action) Error!void {
         try self.checkPrice(.actions, a.id, a.requires);
+        if (a.generator and a.requires.hours <= 0) return self.fail(.actions, .bad_number, a.id, "a generator with no cycle");
+        if (a.vigor < 0) return self.fail(.actions, .bad_number, a.id, "a negative vigor");
         for (a.input) |l| {
             try self.checkLine(.actions, a.id, a.act, l, true);
             if (l.per == .day) return self.fail(.actions, .bad_cadence, a.id, l.item);
@@ -695,13 +686,14 @@ const Validator = struct {
             return self.fail(.goods, .buildable_shape, g.id, "a traded good has no price or tier");
         }
         if (g.requires) |p| try self.checkPrice(.goods, g.id, p);
-        if (g.generator) |gen| {
-            if (gen.energy < 0 or gen.hours <= 0 or gen.vigor < 0) return self.fail(.goods, .bad_number, g.id, "invalid generator cycle");
+        for (g.input) |l| {
+            try self.checkLine(.goods, g.id, g.act, l, true);
+            if (l.per == .day) return self.fail(.goods, .bad_cadence, g.id, l.item);
         }
-        for (g.input) |l| try self.checkLine(.goods, g.id, g.act, l, true);
         for (g.output) |l| {
             try self.checkLine(.goods, g.id, g.act, l, false);
-            if (l.per == .once and !eql(l.item, g.id)) return self.fail(.goods, .output_not_self, g.id, l.item);
+            if (l.per == .day) return self.fail(.goods, .bad_cadence, g.id, l.item);
+            if (!eql(l.item, g.id)) return self.fail(.goods, .output_not_self, g.id, l.item);
         }
         for (g.sectors) |s| if (Catalog.resource(s) == null) return self.fail(.goods, .unknown_sector, g.id, s);
         for (g.needs) |n| try self.checkNeed(.goods, g.id, g.act, n);
@@ -908,6 +900,9 @@ test "lines name real items of the record's own act" {
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .output = .{ .{ .item = "food", .n = 1.0, .per = .day } } } }
     , ok_goods, .bad_cadence);
+    try expectRule(
+        \\.{ .{ .id = "traps", .name = "Traps", .generator = true, .requires = .{ .energy = 1.0, .hours = 0.0 } } }
+    , ok_goods, .bad_number);
 }
 
 test "effects point at verbs the good can reach" {
@@ -940,6 +935,10 @@ test "goods keep their shape" {
         \\.{ .{ .id = "kiln", .name = "Kiln", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .output = .{ .{ .item = "food", .n = 4.0 } } } }
     , .output_not_self);
+    try expectRule(ok_actions,
+        \\.{ .{ .id = "bed", .name = "Bed", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
+        \\     .input = .{ .{ .item = "biomass", .n = 0.1, .per = .day } } } }
+    , .bad_cadence);
     try expectRule(ok_actions,
         \\.{
         \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },

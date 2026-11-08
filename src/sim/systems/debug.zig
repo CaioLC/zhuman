@@ -6,7 +6,7 @@
 //! `rate` is clamped into the configured band by `Config.clampMetabolism`, as `SetRation` is;
 //! `good` sets one good's count and `settle` then lets the goods' effects follow
 //! (`capital.settle`), so a harness sets several counts and settles once. `generator_mode` sets
-//! one generator's mode, as the toggle's cycle would leave it.
+//! one generator verb's mode, as the toggle's cycle would leave it.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
@@ -43,7 +43,7 @@ pub fn poke(
         },
         .settle => if (w.has(it.agent, comp.Goods)) capital.settle(w, it.agent, cat),
         .generator_mode => |g| if (w.get(it.agent, comp.Generators)) |gens| {
-            if (g.gi < gens.mode.len) gens.mode[g.gi] = g.mode;
+            if (g.ai < gens.mode.len) gens.mode[g.ai] = g.mode;
         },
     };
 }
@@ -64,7 +64,7 @@ test "a poke sets the named component, the rate clamped into the band" {
     _ = poker.push(.{ .agent = e, .what = .{ .rate = 99 } });
     _ = poker.push(.{ .agent = e, .what = .{ .biomass = 31 } });
     _ = poker.push(.{ .agent = e, .what = .{ .good = .{ .gi = 2, .count = 3 } } });
-    _ = poker.push(.{ .agent = e, .what = .{ .generator_mode = .{ .gi = 4, .mode = .auto } } });
+    _ = poker.push(.{ .agent = e, .what = .{ .generator_mode = .{ .ai = 4, .mode = .auto } } });
     ecs.run(&w, &res, poke);
     try testing.expectEqual(@as(f32, 7.8), w.get(e, comp.InventoryFood).?.v);
     try testing.expectEqual(comp.Vigor{ .v = 14.4, .max = 15 }, w.get(e, comp.Vigor).?.*);
@@ -92,7 +92,7 @@ test "a poke at a missing agent or a missing component changes nothing" {
     _ = poker.push(.{ .agent = e, .what = .{ .rate = 2 } });
     _ = poker.push(.{ .agent = e, .what = .{ .good = .{ .gi = 0, .count = 1 } } });
     _ = poker.push(.{ .agent = e, .what = .settle });
-    _ = poker.push(.{ .agent = e, .what = .{ .generator_mode = .{ .gi = 0, .mode = .off } } });
+    _ = poker.push(.{ .agent = e, .what = .{ .generator_mode = .{ .ai = 0, .mode = .off } } });
     ecs.run(&w, &res, poke);
     try testing.expectEqual(comp.Vigor{}, w.get(e, comp.Vigor).?.*);
     try testing.expect(!w.has(e, comp.InventoryFood));

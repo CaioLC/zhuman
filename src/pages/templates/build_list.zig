@@ -271,7 +271,7 @@ pub fn collect(world: *const World, e: Entity, cat: *const roster.Catalog, shelf
             .inputs = orderTotal(rec),
             .hours = rec.requires.?.hours,
             .name = rec.name,
-            .type_word = row_mod.recipeType(rec),
+            .type_word = row_mod.recipeType(cat, rec),
             .state_word = stateWord(kind),
             .tech = if (rec.tech) |t| (if (cat.technology(t)) |tr| tr.name else t) else "",
         };

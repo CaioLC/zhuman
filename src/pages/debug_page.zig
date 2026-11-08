@@ -255,11 +255,11 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         }
     } else if (eq(name, "generator_tile")) {
         if (player.get()) |a| {
-            // Both densities of one owned generator, sized as the ACTIONS pane sizes them: Act
+            // Both densities of one held generator, sized as the ACTIONS pane sizes them: Act
             // I's regular tile above Act II's compact one. The corner cycles the mode live and a
             // ready tile collects, as in the pane.
             fixtureGoods(ctx, a[0], &.{.{ "wire_snares", 1 }});
-            const gi: u16 = @intCast(ctx.res.game.catalog.goodIndex("wire_snares").?);
+            const ai: u16 = ctx.res.game.catalog.actionIndex("check_traps").?;
             const col = try stage.box("densities", .{
                 .w = .{ .fixed = 300 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
                 .gap = 10,
@@ -267,7 +267,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             // The tile is keyed by the good's id, so each density gets a lane of its own.
             inline for (.{ .{ "gt", t.ActionDensity.regular }, .{ "gtc", t.ActionDensity.compact } }) |d| {
                 const lane = try col.box(d[0], .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children }, .{});
-                _ = try t.generatorTile(lane, world, a[0], act, gi, d[1], .none);
+                _ = try t.generatorTile(lane, world, a[0], act, ai, d[1], .none);
             }
         } else {
             try stage.label("na", "(needs a live player)", .{});
@@ -618,9 +618,10 @@ fn fixtureGoods(ctx: *UiCtx, e: Entity, counts: []const struct { []const u8, u32
     poke(ctx, e, .settle);
 }
 
-/// Debug-only generator mode: poke good `id`'s mode, as the tile's corner would leave it.
+/// Debug-only generator mode: poke the mode of the generator verb good `id` opens, as the tile's
+/// corner would leave it.
 fn fixtureMode(ctx: *UiCtx, e: Entity, id: []const u8, mode: comp.Generators.Mode) void {
-    if (ctx.res.game.catalog.goodIndex(id)) |gi| poke(ctx, e, .{ .generator_mode = .{ .gi = @intCast(gi), .mode = mode } });
+    if (ha.sim.rules.capital.generatorOf(&ctx.res.game.catalog, id)) |ai| poke(ctx, e, .{ .generator_mode = .{ .ai = ai, .mode = mode } });
 }
 
 fn eq(a: []const u8, b: []const u8) bool {
