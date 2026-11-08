@@ -1,9 +1,10 @@
 //! `effects` — the interpreter of the authored roster's `Effect` vocabulary.
 //!
-//! What an agent can do, and on what terms, is a pure function of the catalog and the goods
-//! the agent owns: `verb` returns a verb's effective terms by folding every applying good's
-//! effects into the base record, in roster order, and returns null when nothing grants the
-//! verb. Nothing is cached and there is no remove path — losing a good is just a different
+//! What an agent can do, and on what terms, is a pure function of the catalog, the verbs the
+//! agent holds of its own (`comp.Verbs`) and the goods it owns: `verb` returns a verb's
+//! effective terms by folding every applying good's effects into the base record, in roster
+//! order, and returns null when the agent neither holds the verb nor owns a good that grants
+//! it. Nothing is cached and there is no remove path — losing a good is just a different
 //! input to the same function, which is what keeps a build → sell → build cycle bit-exact.
 //!
 //! **A family's best rank wins.** A good in a family applies only while it is the highest
@@ -54,10 +55,11 @@ pub fn applies(cat: *const Catalog, goods: *const comp.Goods, gi: usize) bool {
     return f.rank == bestRank(cat, goods, f.name);
 }
 
-/// Whether the agent holds verb `ai`: innate, or granted by an applying good.
-pub fn held(cat: *const Catalog, goods: *const comp.Goods, ai: usize) bool {
+/// Whether the agent holds verb `ai`: its own (`verbs`; an agent without the component holds
+/// none of its own), or granted by an applying good.
+pub fn held(cat: *const Catalog, verbs: ?*const comp.Verbs, goods: *const comp.Goods, ai: usize) bool {
     const id = cat.actions[ai].id;
-    if (cat.actions[ai].innate) return true;
+    if (verbs) |v| if (v.held[ai]) return true;
     for (cat.goods, 0..) |g, gi| {
         if (!applies(cat, goods, gi)) continue;
         for (g.effects) |e| switch (e) {
@@ -68,14 +70,15 @@ pub fn held(cat: *const Catalog, goods: *const comp.Goods, ai: usize) bool {
     return false;
 }
 
-/// The effective terms of verb `ai` for an agent owning `goods`, or null if not held.
-pub fn verb(cat: *const Catalog, goods: *const comp.Goods, ai: usize) ?Verb {
-    if (!held(cat, goods, ai)) return null;
+/// The effective terms of verb `ai` for an agent holding `verbs` and owning `goods`, or null
+/// if not held.
+pub fn verb(cat: *const Catalog, verbs: ?*const comp.Verbs, goods: *const comp.Goods, ai: usize) ?Verb {
+    if (!held(cat, verbs, goods, ai)) return null;
     return terms(cat, goods, ai);
 }
 
 /// Verb `ai`'s terms with every applying good's effects folded in, without asking whether the
-/// goods hold it — for a caller that opens the verb another way, as research does
+/// agent holds it — for a caller that opens the verb another way, as research does
 /// (`actions.verbOf`).
 pub fn terms(cat: *const Catalog, goods: *const comp.Goods, ai: usize) Verb {
     const rec = cat.actions[ai];
@@ -190,8 +193,9 @@ fn fixture() !Catalog {
     return roster.load(testing.allocator, roster.shipped, null);
 }
 
-fn spawnAgent(w: *World) Entity {
-    return w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryBiomass{}, comp.Goods{}, comp.Granted{} });
+/// An agent holding the starting pair of its own, as the player spawns.
+fn spawnAgent(w: *World, cat: *const Catalog) Entity {
+    return w.spawn(.{ comp.Vigor{}, comp.InventoryFood{}, comp.InventoryBiomass{}, comp.Goods{}, comp.Granted{}, comp.Verbs.of(cat, &.{ "forage", "scavenge" }) });
 }
 
 /// Own one more of good `id`, settling the body and larder as the build path does.
@@ -207,7 +211,7 @@ fn lose(w: *World, e: Entity, cat: *const Catalog, id: []const u8) void {
 }
 
 fn verbOf(w: *World, e: Entity, cat: *const Catalog, id: []const u8) ?Verb {
-    return verb(cat, w.get(e, comp.Goods).?, cat.actionIndex(id).?);
+    return verb(cat, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, cat.actionIndex(id).?);
 }
 
 /// What an agent can do and how its body stands: every Act I verb's terms, the vigor and the
@@ -229,7 +233,7 @@ const Snapshot = struct {
         var n: usize = 0;
         for (cat.actions, 0..) |a, ai| {
             if (a.act != 1) continue;
-            s.verbs[n] = verb(cat, w.get(e, comp.Goods).?, ai);
+            s.verbs[n] = verb(cat, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, ai);
             n += 1;
         }
         return s;
@@ -263,20 +267,22 @@ fn expectSnapshot(a: Snapshot, b: Snapshot) !void {
     try testing.expectEqual(a.spoils, b.spoils);
 }
 
-test "with nothing owned, the innate verbs are the base records and nothing else is held" {
+test "with nothing owned, the agent's own verbs are the base records and nothing else is held" {
     var cat = try fixture();
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    const e = spawnAgent(&w);
+    const e = spawnAgent(&w, &cat);
     const goods = w.get(e, comp.Goods).?;
+    const verbs = w.get(e, comp.Verbs);
     const forage = cat.action("forage").?;
     const v = verbOf(&w, e, &cat, "forage").?;
     try testing.expectEqual(forage.requires.energy, v.requires.energy);
     try testing.expectEqual(forage.requires.hours, v.requires.hours);
     try expectLines(&Lines.of(forage.output), &v.output);
-    try testing.expect(held(&cat, goods, cat.actionIndex("scavenge").?));
-    try testing.expect(!held(&cat, goods, cat.actionIndex("fish").?));
+    try testing.expect(held(&cat, verbs, goods, cat.actionIndex("scavenge").?));
+    try testing.expect(!held(&cat, verbs, goods, cat.actionIndex("fish").?));
+    try testing.expect(!held(&cat, null, goods, cat.actionIndex("forage").?)); // none of its own
 }
 
 test "owning a good and losing it again leaves every verb, the ceiling and the larder as they were" {
@@ -291,7 +297,7 @@ test "owning a good and losing it again leaves every verb, the ceiling and the l
 }
 
 fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
-    const e = spawnAgent(w);
+    const e = spawnAgent(w, cat);
     w.get(e, comp.Vigor).?.v = 7; // under the ceiling, so a fill on the way in shows
     // A modifier on Split wood works only once the hatchet is owned.
     if (cat.good(id).?.needs.len > 0) own(w, e, cat, "hatchet");
@@ -306,7 +312,7 @@ test "goods on one verb stack; a spare carries no second effect" {
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    const e = spawnAgent(&w);
+    const e = spawnAgent(&w, &cat);
     own(&w, e, &cat, "sandals");
     own(&w, e, &cat, "bicycle");
     const both = verbOf(&w, e, &cat, "forage").?.requires.energy;
@@ -325,7 +331,7 @@ test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersede
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    const e = spawnAgent(&w);
+    const e = spawnAgent(&w, &cat);
     own(&w, e, &cat, "hatchet");
     own(&w, e, &cat, "work_gloves");
     own(&w, e, &cat, "chainsaw");
@@ -347,7 +353,7 @@ test "fifty rod → net → sell → sell cycles leave the fishing terms bit-exa
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    const e = spawnAgent(&w);
+    const e = spawnAgent(&w, &cat);
     own(&w, e, &cat, "fish_rod");
     const rod = verbOf(&w, e, &cat, "fish").?;
     own(&w, e, &cat, "fish_net");
@@ -373,7 +379,7 @@ test "the body and larder: ceilings fill on the way up and clamp on the way down
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    const e = spawnAgent(&w);
+    const e = spawnAgent(&w, &cat);
     w.get(e, comp.Vigor).?.v = 8;
     own(&w, e, &cat, "leaf_bed"); // max 11, v 9
     own(&w, e, &cat, "rope_bag"); // max 12, v 10

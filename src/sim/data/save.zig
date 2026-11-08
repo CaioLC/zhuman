@@ -3,7 +3,7 @@
 //! A run is the world, `Sim` and the state, and a save holds those three, as ZON: written by
 //! `std.zon.stringify.serialize` and read by `std.zon.parse.fromSlice`. One record per live
 //! entity, in entity order; entity ids are not saved, so a load spawns fresh ones. The plain
-//! components are saved as they are. The components kept by catalog index (`Goods`,
+//! components are saved as they are. The components kept by catalog index (`Verbs`, `Goods`,
 //! `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's ids, so a save
 //! survives a roster edit: a load resolves each id against the roster it finds, and a record
 //! naming an id the roster no longer has is dropped and counted (`Report.dropped`). `Quotes` is
@@ -44,7 +44,7 @@ const Resources = res_mod.Resources;
 const Sim = res_mod.Sim;
 
 /// The shape's version; a file holding any other is refused.
-pub const version: u32 = 1;
+pub const version: u32 = 2;
 
 /// The largest file `read` accepts.
 pub const max_bytes: usize = 4 * 1024 * 1024;
@@ -69,7 +69,7 @@ const plain = .{
     .{ "outlook", comp.Outlook },
 };
 /// Kept by catalog index, saved as records keyed by id.
-const keyed = .{ comp.Goods, comp.Generators, comp.Research, comp.Busy };
+const keyed = .{ comp.Verbs, comp.Goods, comp.Generators, comp.Research, comp.Busy };
 /// Derived: saved as presence only.
 const presence = .{comp.Quotes};
 /// Not saved.
@@ -130,6 +130,8 @@ pub const AgentSave = struct {
     metabolism: ?comp.Metabolism = null,
     condition: ?comp.Condition = null,
     outlook: ?comp.Outlook = null,
+    /// The ids of the verbs the agent holds of its own.
+    verbs: ?[]const []const u8 = null,
     /// Only the goods owned (a count above zero).
     goods: ?[]const GoodSave = null,
     generators: ?[]const GeneratorSave = null,
@@ -212,6 +214,13 @@ fn captureAgent(arena: Allocator, cat: *const roster.Catalog, w: *const World, e
     a.tags = tag_list.items;
     inline for (plain) |p| {
         if (w.get(e, p[1])) |v| @field(a, p[0]) = v.*;
+    }
+    if (w.get(e, comp.Verbs)) |v| {
+        var list: std.ArrayList([]const u8) = .empty;
+        for (cat.actions, 0..) |rec, ai| {
+            if (v.held[ai]) try list.append(arena, try arena.dupe(u8, rec.id));
+        }
+        a.verbs = list.items;
     }
     if (w.get(e, comp.Goods)) |g| {
         var list: std.ArrayList(GoodSave) = .empty;
@@ -339,8 +348,8 @@ pub fn read(io: std.Io, dir: std.Io.Dir, sub_path: []const u8, gpa: Allocator) !
 
 /// What a load could not place.
 pub const Report = struct {
-    /// Records naming an id the roster no longer has: a good, a generator, a technology, a
-    /// reach bit, or the work in progress.
+    /// Records naming an id the roster no longer has: a verb, a good, a generator, a
+    /// technology, a reach bit, or the work in progress.
     dropped: u32 = 0,
 };
 
@@ -368,6 +377,13 @@ fn applyAgent(w: *World, cat: *const roster.Catalog, a: *const AgentSave, report
     };
     inline for (plain) |p| {
         if (@field(a, p[0])) |v| w.add(e, v);
+    }
+    if (a.verbs) |list| {
+        var verbs = comp.Verbs{};
+        for (list) |id| {
+            if (cat.actionIndex(id)) |ai| verbs.held[ai] = true else report.dropped += 1;
+        }
+        w.add(e, verbs);
     }
     if (a.goods) |list| {
         var goods = comp.Goods{};
@@ -493,7 +509,7 @@ fn shipped() !roster.Catalog {
 /// merchant away, neighbours seeded and the Exchange standing.
 fn settle(res: *Resources, w: *World) Entity {
     const cat = &res.catalog;
-    const e = run.spawn_player(w);
+    const e = run.spawn_player(w, cat);
     const goods = w.get(e, comp.Goods).?;
     goods.count[cat.goodIndex("sandals").?] = 2;
     goods.count[cat.goodIndex("hatchet").?] = 1;
@@ -607,7 +623,7 @@ test "a run survives capture, ZON and apply exactly" {
     defer res2.catalog.deinit();
     var w2 = try World.init(testing.allocator);
     defer w2.deinit();
-    _ = run.spawn_player(&w2); // what the load replaces
+    _ = run.spawn_player(&w2, &res2.catalog); // what the load replaces
     res2.states.set(.act_one);
     const report = apply(&res2, &w2, &back);
     try testing.expectEqual(@as(u32, 0), report.dropped);
@@ -624,10 +640,12 @@ test "a record naming an id the roster no longer has is dropped and counted" {
     var w = try World.init(testing.allocator);
     defer w.deinit();
     const goods = [_]GoodSave{ .{ .id = "sandals", .count = 1 }, .{ .id = "no_such_good", .count = 3 } };
+    const verbs = [_][]const u8{ "forage", "no_such_verb" };
     const agents = [_]AgentSave{.{
         .tags = &.{.Player},
         .vigor = .{},
         .granted = .{},
+        .verbs = &verbs,
         .goods = &goods,
         .busy = .{ .doing = .{ .labor = "no_such_verb" }, .total = 1, .remaining = 1, .quality = 1 },
     }};
@@ -638,7 +656,8 @@ test "a record naming an id the roster no longer has is dropped and counted" {
         .agents = &agents,
     };
     const report = apply(&res, &w, &s);
-    try testing.expectEqual(@as(u32, 3), report.dropped);
+    try testing.expectEqual(@as(u32, 4), report.dropped);
+    try testing.expect(w.get(0, comp.Verbs).?.held[res.catalog.actionIndex("forage").?]);
     try testing.expectEqual(@as(u32, 1), w.get(0, comp.Goods).?.count[res.catalog.goodIndex("sandals").?]);
     try testing.expect(!w.has(0, comp.Busy));
     try testing.expect(w.has(0, tags.Player));
@@ -654,7 +673,7 @@ test "a generator record round-trips its mode; an older record's off reads as th
     defer arena.deinit();
     const a = arena.allocator();
     const src =
-        \\.{ .version = 1, .state = .act_one,
+        \\.{ .version = 2, .state = .act_one,
         \\   .sim = .{ .elapsed = 0, .tutorial_done = false, .prng = .{ 1, 2, 3, 4 }, .reach_seen = .{}, .encounter = .{}, .merchant = .{}, .exchange = .{}, .population = 48, .neighbours = .{}, .log = .{} },
         \\   .agents = .{ .{ .generators = .{
         \\       .{ .id = "wire_snares", .off = true },

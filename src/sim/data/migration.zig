@@ -181,13 +181,13 @@ test "migration preserves built goods, their counts, and their granted effects" 
     // Check counts in Goods component and effects.held
     const goods = w.get(e, comp.Goods).?;
     try std.testing.expectEqual(@as(u32, 2), goods.count[fish_rod_gi]);
-    try std.testing.expect(effects.held(&res.catalog, goods, fish_ai)); // the granted effect
+    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Verbs), goods, fish_ai)); // the granted effect
 
     _ = migrate_to_act_two(&w, e, &res.catalog);
 
     // The good count and granted effect cross the curtain untouched.
     try std.testing.expectEqual(@as(u32, 2), w.get(e, comp.Goods).?.count[fish_rod_gi]);
-    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Goods).?, fish_ai));
+    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, fish_ai));
 }
 
 test "migration seeds the research board from the authored initial states" {

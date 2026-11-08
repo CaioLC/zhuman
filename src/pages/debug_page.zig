@@ -275,7 +275,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
             // The complete Act I pane: the four verbs (the hatchet and the rod grant the two
-            // beyond the innate pair), then the two generators, the snares and the garden bed on
+            // beyond the starting pair), then the two generators, the snares and the garden bed on
             // auto; the kind toggles count both, and the toolbar holds the summary and the sort
             // chips.
             fixtureGoods(ctx, a[0], &.{ .{ "hatchet", 1 }, .{ "fish_rod", 1 }, .{ "wire_snares", 1 }, .{ "garden_bed", 1 } });

@@ -265,8 +265,6 @@ pub const Action = struct {
     act: u8 = 1,
     /// Whether the ACTIONS surface lists it. A verb can exist, and be granted, off-surface.
     on_surface: bool = true,
-    /// Spawned on every agent, bare-handed; everything else arrives by a grant.
-    innate: bool = false,
     /// Resource domains the verb works in; the specialization model's key.
     sectors: []const []const u8 = &.{},
     /// Retained tooling: ids that must be held for the verb to be offered.
@@ -496,10 +494,6 @@ pub const Rule = enum {
     unknown_tech,
     /// A record references an item or verb from a later act than its own.
     later_act,
-    /// A grant targets an innate verb.
-    grant_innate,
-    /// A scale/add targets a verb the good neither needs nor grants, and that is not innate.
-    target_not_held,
     /// Two goods share a rank in one family, or a rank is zero.
     rank_collision,
     /// Two goods claim the same milestone.
@@ -755,12 +749,10 @@ const Validator = struct {
             .grant => |t| {
                 const a = self.findAction(t) orelse return self.fail(.goods, .unknown_target, g.id, t);
                 if (a.act > g.act) return self.fail(.goods, .later_act, g.id, t);
-                if (a.innate) return self.fail(.goods, .grant_innate, g.id, t);
             },
             .scale, .add => |tw| {
                 const a = self.findAction(tw.target) orelse return self.fail(.goods, .unknown_target, g.id, tw.target);
                 if (a.act > g.act) return self.fail(.goods, .later_act, g.id, tw.target);
-                if (!a.innate and !self.holds(g, tw.target)) return self.fail(.goods, .target_not_held, g.id, tw.target);
                 switch (tw.stat) {
                     .energy, .hours => {},
                     .input, .output => |item| {
@@ -773,18 +765,6 @@ const Validator = struct {
             .food_quality => {},
             .spoil_scale => |s| if (s <= 0) return self.fail(.goods, .bad_number, g.id, "spoil_scale must be positive"),
         }
-    }
-
-    /// Whether `g` guarantees the verb `target` exists when its effects apply: it needs it or
-    /// grants it itself.
-    fn holds(self: *Validator, g: Good, target: []const u8) bool {
-        _ = self;
-        for (g.needs) |n| if (eql(n, target)) return true;
-        for (g.effects) |e| switch (e) {
-            .grant => |t| if (eql(t, target)) return true,
-            else => {},
-        };
-        return false;
     }
 
     /// A tile: a plain id unique among technologies, off the foundation and on a coordinate
@@ -856,7 +836,7 @@ test "the shipped files load and validate" {
 
 const ok_actions =
     \\.{
-    \\    .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+    \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\}
 ;
@@ -936,14 +916,9 @@ test "effects point at verbs the good can reach" {
         \\     .effects = .{ .{ .grant = "swim" } } } }
     , .unknown_target);
     try expectRule(ok_actions,
-        \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .effects = .{ .{ .grant = "forage" } } } }
-    , .grant_innate);
-    // A modifier on a non-innate verb must need it or grant it.
-    try expectRule(ok_actions,
         \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .effects = .{ .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.5 } } } } }
-    , .target_not_held);
+        \\     .effects = .{ .{ .scale = .{ .target = "fsh", .stat = .energy, .by = 0.5 } } } } }
+    , .unknown_target);
     try expectRule(ok_actions,
         \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .needs = .{"fish"}, .effects = .{ .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.0 } } } } }

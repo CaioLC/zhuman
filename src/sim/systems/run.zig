@@ -9,6 +9,7 @@ const events = @import("../events.zig");
 const comp = @import("../components.zig");
 const tag = @import("../tags.zig");
 const res_mod = @import("../res.zig");
+const roster = @import("../data/roster.zig");
 const States = @import("../state.zig").States;
 
 const World = ecs.World;
@@ -20,7 +21,11 @@ const LivingPlayer = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player)
 /// The opening line every run begins with; the log words `RunBegun` as it.
 pub const opening_line = "You wake alone. Cold. Hungry.";
 
-fn spawn_agent(world: *World) Entity {
+/// The verbs the player holds of its own from the first breath, by roster id; every other verb
+/// arrives by a good's grant or a researched technology.
+pub const starting_verbs = [_][]const u8{ "forage", "scavenge" };
+
+fn spawn_agent(world: *World, cat: *const roster.Catalog) Entity {
     // Spawn from the components' authoritative default baselines (see `baselines.zig`)
     // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
     // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
@@ -30,7 +35,8 @@ fn spawn_agent(world: *World) Entity {
         comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
         comp.InventoryBiomass{ .v = 0 }, // nothing stockpiled yet
         comp.Metabolism{}, // eats continuously from the first breath (normal rate)
-        comp.Goods{}, // owns nothing yet; what it can do is derived from this and the roster
+        comp.Verbs.of(cat, &starting_verbs), // the starting verbs; an id the catalog lacks is skipped
+        comp.Goods{}, // owns nothing yet; what else it can do is derived from this and the roster
         comp.Generators{}, // collectable capital accumulates independently of the body's work
         comp.Granted{}, // and the goods contribute nothing to the body or larder yet
         comp.Condition{}, // rested; the `condition` system keeps the band
@@ -39,10 +45,11 @@ fn spawn_agent(world: *World) Entity {
     });
 }
 
-/// Spawn an agent at the spawn baselines and tag it `Player`. `begin_run` calls it; a fixture
-/// or a test that needs the player without a run calls it directly.
-pub fn spawn_player(world: *World) Entity {
-    const e = spawn_agent(world);
+/// Spawn an agent at the spawn baselines, holding the starting verbs `cat` resolves, and tag it
+/// `Player`. `begin_run` calls it; a fixture or a test that needs the player without a run
+/// calls it directly.
+pub fn spawn_player(world: *World, cat: *const roster.Catalog) Entity {
+    const e = spawn_agent(world, cat);
     world.add(e, tag.Player{});
     return e;
 }
@@ -56,9 +63,9 @@ pub fn new_run(intents: ecs.EventReader(events.NewRun, .run), states: *States) v
 /// Begin a fresh run, entering Act I: retire any living player (a settled actor is still alive
 /// at a restart, so spawning over them would leave two), spawn the new one, reset `Sim` (the
 /// clock, the log, the encounters; the prng carries over) and emit `RunBegun`.
-pub fn begin_run(w: *World, sim: *res_mod.Sim, living: LivingPlayer, begun: ecs.EventWriter(events.RunBegun)) void {
+pub fn begin_run(w: *World, sim: *res_mod.Sim, cat: *const roster.Catalog, living: LivingPlayer, begun: ecs.EventWriter(events.RunBegun)) void {
     if (living.get()) |entry| w.despawn(entry[0]);
-    _ = spawn_player(w);
+    _ = spawn_player(w, cat);
     sim.reset();
     _ = begun.push(.{});
 }
@@ -92,7 +99,7 @@ test "begin_run retires the living player, spawns one, resets Sim and emits RunB
     defer w.deinit();
     var res = res_mod.Resources{};
     res.events.update();
-    const old = spawn_player(&w);
+    const old = spawn_player(&w, &res.catalog);
     res.sim.elapsed = 99;
     const prng_before = res.sim.prng;
     ecs.run(&w, &res, begin_run);
@@ -109,10 +116,31 @@ test "detect_death requests game over only when no player remains" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = res_mod.Resources{ .states = .{ .current = .act_one } };
-    const e = spawn_player(&w);
+    const e = spawn_player(&w, &res.catalog);
     ecs.run(&w, &res, detect_death);
     try testing.expectEqual(@as(?@TypeOf(res.states.current), null), res.states.next);
     w.despawn(e);
     ecs.run(&w, &res, detect_death);
     try testing.expectEqual(@as(?@TypeOf(res.states.current), .game_over), res.states.next);
+}
+
+test "the player spawns holding the starting verbs its catalog has, and no others" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    // No scavenge in this roster: its id is skipped.
+    var cat = try roster.load(testing.allocator, .{
+        .actions =
+        \\.{
+        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\}
+        ,
+        .goods = ".{}",
+    }, null);
+    defer cat.deinit();
+    const e = spawn_player(&w, &cat);
+    const verbs = w.get(e, comp.Verbs).?;
+    try testing.expect(verbs.held[cat.actionIndex("forage").?]);
+    try testing.expect(!verbs.held[cat.actionIndex("fish").?]);
+    for (cat.actions.len..roster.max_actions) |i| try testing.expect(!verbs.held[i]);
 }

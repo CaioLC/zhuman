@@ -292,7 +292,7 @@ is a restart). The transitions, and who requests them:
 
 | Transition | Requested by | On entering |
 |---|---|---|
-| any → `act_one` | `run.new_run`, reading `NewRun`, in every state's `handle` set | `run.begin_run`: retires any living player, spawns one (`spawn_player`), `Sim.reset` (the prng carries over), `RunBegun` |
+| any → `act_one` | `run.new_run`, reading `NewRun`, in every state's `handle` set | `run.begin_run`: retires any living player, spawns one holding the starting verbs (`spawn_player`), `Sim.reset` (the prng carries over), `RunBegun` |
 | `act_one` → `act_two` | `curtain.detect_shelter`, the tick the player owns the Act I milestone (`capital.ownsMilestone`); it emits `ActEnded{ .act_one }` with the request, once | `curtain.cross_curtain`: `migration.migrate_to_act_two` on the player |
 | `act_two` → `act_three` | `curtain.detect_exchange`, once `Sim.exchange` stands | — |
 | an act → `game_over` | `run.detect_death`, after `despawn_dead`, when no player remains | — |
@@ -380,17 +380,18 @@ ALIVE/WEARY/SPENT thresholds, applied in `rules/condition.refresh` alone.
 ## Actions and capital (`sim/rules/actions.zig`, `sim/rules/capital.zig`)
 
 **An agent owns goods as counts, and everything it can do follows from them.** `comp.Goods`
-is one count per record of the authored roster (below); zero is not owned. A verb is never
-stored on the agent: `effects.verb` derives its effective terms from the base record and
-the goods owned, so each agent's Forage has its own price once it owns sandals, and a good
+is one count per record of the authored roster (below); zero is not owned. `comp.Verbs` is
+the verbs the agent holds of its own, one flag per record. A verb's terms are never stored on
+the agent: `effects.verb` derives them from the base record and the goods owned, so each agent's Forage has its own price once it owns sandals, and a good
 is owned by exactly one agent and stacks only as a count. `comp.Granted` records what the
 goods contribute to the body and larder, so those deltas stay relative.
 
 ### Actions
 
-Innate verbs are the records flagged `innate`; every other verb exists while an owned good
-`grant`s it or, for a verb that names a `tech`, once that technology is researched
-(`actions.verbOf`). `actions.quote` is the one gate calculation: the verb's effective terms, the
+An agent holds a verb that is its own (`comp.Verbs`), that an owned good `grant`s or, for a
+verb that names a `tech`, once that technology is researched (`actions.verbOf`). The player's
+own verbs are the starting verbs `run.starting_verbs` names, Forage and Scavenge, resolved
+against the catalog at spawn; an id the catalog lacks is skipped. `actions.quote` is the one gate calculation: the verb's effective terms, the
 quality a begin would lock (`yield_factor` over the agent's `Condition` band), and a `Standing`
 of `ready`, `busy`, `energy` or `short` with the first unpayable line. It fills the verb slots
 of `comp.Quotes`, which the tile reads, and `begin` asks it again at apply
@@ -600,9 +601,9 @@ content is authored into the same files without leaking back; the Act II pages
 (`pages/act_two/`) read the records of act 2.
 
 **The interpreter (`effects.zig`, `ledger.zig`).** What an agent can do, and on what
-terms, is a pure function of the catalog and the goods it owns: `effects.verb` folds every
-applying good's effects into the base record, in roster order, and returns null when
-nothing grants the verb. Nothing is cached and there is no remove path — losing a good is a
+terms, is a pure function of the catalog, the verbs it holds of its own and the goods it owns:
+`effects.verb` folds every applying good's effects into the base record, in roster order, and
+returns null when the agent neither holds the verb nor owns a good that grants it. Nothing is cached and there is no remove path — losing a good is a
 different input to the same function, which is what keeps a build → sell → build cycle
 bit-exact. A family's best rank owned is the only member of that family that applies. The
 body and larder are the one exception to derive-never-store, because their components have
@@ -612,13 +613,13 @@ and applies the delta — a raised ceiling fills what it adds, a lowered one onl
 components — the Act II ones opened at the curtain, none for coin, since the simulation
 recognizes no medium of exchange (a stand-in; see [`../docs/roadmap.md`](../docs/roadmap.md)) — plus `comp.Goods` counts for a good item, with
 `short`/`pay`/`draw` over a list
-of lines. Per agent that leaves `Goods` (a count per catalog index) and `Granted`; the
+of lines. Per agent that leaves `Verbs` (a flag per catalog index), `Goods` (a count per
+catalog index) and `Granted`; the
 catalog itself sits on `sim.Resources` as `catalog`, so a system declares `*const roster.Catalog`.
 
 **Validation.** `roster.load` refuses a file whole: a parse error carries its line and
 column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
-or target, a later-act reference, a grant on an innate verb, a modifier on a verb the good
-neither needs nor grants, a rank or milestone collision, a drawn input, a day line on an
+or target, a later-act reference, a rank or milestone collision, a drawn input, a day line on an
 action, a recipe or verb waiting on no technology, a tile on the foundation or on another's
 coordinate, more records than the per-agent containers hold (`max_goods`, `max_techs`). The
 shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
@@ -630,9 +631,9 @@ the shipped files one by one: `Resources.init` loads through
 in the console. While the game runs, `reload.Watch` looks at the files' modification times
 twice a second from the main loop, and a change re-parses them between frames. A load that
 fails keeps the catalog and logs why, in full to the console and in one line to the event
-log. A load that succeeds is swapped in: each agent's goods and research, the work in
-progress and the reach seen-set move to the new catalog indices by id, a record the files no
-longer hold takes its count and any work on it with it, and every agent resettles its body and
+log. A load that succeeds is swapped in: each agent's own verbs, goods and research, the work
+in progress and the reach seen-set move to the new catalog indices by id, a record the files
+no longer hold takes its flag, its count and any work on it with it, and every agent resettles its body and
 larder. Rows that repeat are keyed by the record's id, so focus survives a reload that reorders
 a file.
 
@@ -642,8 +643,8 @@ A run is the world, `Sim` and the state, and a save holds those three as one ZON
 by `std.zon.stringify` and read by `std.zon.parse`. Each live entity is one record, in entity
 order; entity ids are not saved, and a load spawns fresh ones into a cleared world
 (`World.clear`). Plain components are saved as they are. The components kept by catalog index
-(`Goods`, `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's ids, so a
-save survives a roster edit: a load resolves each id against the roster it finds, drops and
+(`Verbs`, `Goods`, `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's
+ids — the verbs as a list of ids — so a save survives a roster edit: a load resolves each id against the roster it finds, drops and
 counts a record whose id is gone (a `Busy` on one is dropped whole), reads a generator record's
 `off = true`, the older word for its mode, as mode `off`, opens a technology new to
 the roster at its authored initial, and resettles each agent's body and larder through
@@ -740,7 +741,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
 | `neighbours.zig` | the reserve table (a stand-in), `heldItem`, and the `NeighbourDeal` handler that settles both sides of a deal |
 | `passerby.zig` | the passerby's update system |
-| `run.zig` | the run's lifecycle: `spawn_player`, `new_run`, `begin_run`, `detect_death`, and the opening line |
+| `run.zig` | the run's lifecycle: `spawn_player`, `new_run`, `begin_run`, `detect_death`, the starting verbs and the opening line |
 | `curtain.zig` | the act boundaries: `detect_shelter`, `cross_curtain`, `detect_exchange` |
 | `debug.zig` | the `DebugPoke` handler, `poke`: sets one component of an agent for the debug page; never refused, and a missing component changes nothing |
 | `log.zig` | the log system: every fact into its `Log` line |

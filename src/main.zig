@@ -544,7 +544,7 @@ test "a save request writes the slot's file, and a load request restores it and 
     defer tmp.cleanup();
     res.saves.dir = tmp.dir;
 
-    const e = ha.sim.systems.run.spawn_player(&world);
+    const e = ha.sim.systems.run.spawn_player(&world, &res.game.catalog);
     world.get(e, ha.sim.comp.Vigor).?.v = 6.5;
     res.game.states = .{ .current = .act_one };
     res.game.sim.elapsed = 45;

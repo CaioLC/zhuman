@@ -1135,7 +1135,7 @@ pub fn prepare(ctx: *uic.UiCtx, world: *World, name: []const u8) void {
     if (first) {
         const living = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
         if (living.get() == null) {
-            _ = spawn_player(world);
+            _ = spawn_player(world, &ctx.res.game.catalog);
             ctx.res.game.sim.log.push(.dim, run_sys.opening_line);
         }
         ctx.res.game.states = .{ .current = stateOf(spec) };
@@ -1266,7 +1266,7 @@ fn seedRig(spec: Spec) !Rig {
     errdefer res.game.catalog.deinit();
 
     var world = try World.init(testing.allocator);
-    const player = spawn_player(&world);
+    const player = spawn_player(&world, &res.game.catalog);
     seed(&res, &world, player, spec);
     return .{ .res = res, .world = world, .player = player };
 }
@@ -1337,10 +1337,10 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     try testing.expectEqual(@as(u32, 1), goods.count[root_cellar_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[leaf_bed_gi]);
 
-    // The owned tools grant the three verbs beyond the innate two.
+    // The owned tools grant the three verbs beyond the starting two.
     const cat = &rig.res.game.catalog;
     for ([_][]const u8{ "chop_wood", "fish", "hunt" }) |verb| {
-        try testing.expect(ha.sim.rules.effects.held(cat, goods, cat.actionIndex(verb).?));
+        try testing.expect(ha.sim.rules.effects.held(cat, rig.world.get(e, comp.Verbs), goods, cat.actionIndex(verb).?));
     }
 }
 

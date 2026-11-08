@@ -37,6 +37,22 @@ pub const Goods = struct {
     count: [roster.max_goods]u32 = @splat(0),
 };
 
+/// The verbs an agent holds of its own, by catalog index of the authored roster: held before
+/// any good grants one or research opens one (`effects.held`). The player spawns with the
+/// starting verbs `systems/run.zig` names.
+pub const Verbs = struct {
+    held: [roster.max_actions]bool = @splat(false),
+
+    /// The verbs `ids` name, resolved against `cat`; an id the catalog lacks is skipped.
+    pub fn of(cat: *const roster.Catalog, ids: []const []const u8) Verbs {
+        var v = Verbs{};
+        for (ids) |id| {
+            if (cat.actionIndex(id)) |ai| v.held[ai] = true;
+        }
+        return v;
+    }
+};
+
 /// Passive progress and mode for owned collectable generators, keyed by catalog good index.
 /// `mode` defaults to `on` so an acquired generator starts accumulating immediately; `off`
 /// preserves `progress` and consumes nothing.

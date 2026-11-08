@@ -539,7 +539,7 @@ const act_two_test = Shelf{ .act = 2, .subtitle = "" };
 test "the authored total counts this shelf's recipes only" {
     var cat = try roster.load(testing.allocator, .{
         .actions =
-        \\.{ .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
         ,
         .goods =
         \\.{

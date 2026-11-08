@@ -1,8 +1,9 @@
 //! Actions: per-agent labor over the authored roster.
 //!
 //! A verb is a record in `assets/roster/actions.zon` (`roster.zig`). Whether an agent holds it, and
-//! on what terms, is derived from the goods it owns (`effects.verb`) and, for a verb that names
-//! a `tech`, from the agent's research (`verbOf`); nothing about a verb is stored on the agent.
+//! on what terms, is derived from the verbs it holds of its own (`comp.Verbs`) and the goods it
+//! owns (`effects.verb`) and, for a verb that names a `tech`, from the agent's research
+//! (`verbOf`); a verb's terms are never stored on the agent.
 //! `quote` is the one gate calculation: the `quotes` system writes its answer onto `comp.Quotes`
 //! for the tile and a decider, and `begin` asks it again at apply time. Labor resolves in
 //! two halves because it takes time:
@@ -70,12 +71,12 @@ fn researched(w: *const World, e: Entity, cat: *const Catalog, ai: u16) bool {
     return research.state[ti] == .researched;
 }
 
-/// Verb `ai`'s effective terms for agent `e`, or null when the agent does not hold it: innate,
-/// granted by an applying good, or opened by its researched technology. Owned goods modify it
-/// the same way in every case.
+/// Verb `ai`'s effective terms for agent `e`, or null when the agent does not hold it: its own
+/// (`comp.Verbs`), granted by an applying good, or opened by its researched technology. Owned
+/// goods modify it the same way in every case.
 pub fn verbOf(w: *const World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb {
     const goods = w.get(e, comp.Goods) orelse return null;
-    if (effects.verb(cat, goods, ai)) |v| return v;
+    if (effects.verb(cat, w.get(e, comp.Verbs), goods, ai)) |v| return v;
     if (!researched(w, e, cat, ai)) return null;
     return effects.terms(cat, goods, ai);
 }
@@ -250,8 +251,10 @@ fn logged(w: *World, res: *Resources) void {
     world.run(w, res, @import("../systems/log.zig").log);
 }
 
-fn spawn_agent(w: *World, vigor: f32, materials: f32) Entity {
+/// An agent holding Forage of its own.
+fn spawn_agent(w: *World, cat: *const Catalog, vigor: f32, materials: f32) Entity {
     const e = w.spawn(.{
+        comp.Verbs.of(cat, &.{"forage"}),
         comp.Vigor{ .v = vigor, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryBiomass{ .v = materials },
@@ -275,7 +278,7 @@ test "begin pays upfront and starts the work; finish deposits and logs the recei
     var res = try test_res();
     defer res.catalog.deinit();
     // 0 materials on purpose: a zero-input action must act at stock 0.
-    const e = spawn_agent(&w, 10, 0);
+    const e = spawn_agent(&w, &res.catalog, 10, 0);
     const forage = res.catalog.actionIndex("forage").?;
 
     try testing.expect(begin(&w, e, &res, forage) == null);
@@ -308,7 +311,7 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
-    const e = spawn_agent(&w, 10, 0);
+    const e = spawn_agent(&w, &res.catalog, 10, 0);
     const traps = cat.actionIndex("hunt").?;
     w.get(e, comp.Goods).?.count[cat.goodIndex("spear").?] = 1;
     const q = quote(&w, e, cat, res.config, traps).?;
@@ -348,7 +351,7 @@ test "begin warns once when its own toll crosses into weakness, and locks pre-pa
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
-    const e = spawn_agent(&w, 4, 0); // 40% — paying 1.7 lands at 23%, across the WEARY line
+    const e = spawn_agent(&w, &res.catalog, 4, 0); // 40% — paying 1.7 lands at 23%, across the WEARY line
     const forage = res.catalog.actionIndex("forage").?;
 
     _ = begin(&w, e, &res, forage);
@@ -364,7 +367,7 @@ test "begin refuses when energy would hit zero, leaving no trace" {
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
-    const e = spawn_agent(&w, 1.7, 0); // exactly the price — strict gate must refuse
+    const e = spawn_agent(&w, &res.catalog, 1.7, 0); // exactly the price — strict gate must refuse
     const forage = res.catalog.actionIndex("forage").?;
 
     try testing.expectEqual(Reason.energy, begin(&w, e, &res, forage).?);
@@ -381,7 +384,7 @@ test "an input is paid at begin and named in the payment line" {
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
-    const e = spawn_agent(&w, 10, 3);
+    const e = spawn_agent(&w, &res.catalog, 10, 3);
     w.get(e, comp.Goods).?.count[res.catalog.goodIndex("spear").?] = 1;
     const traps = res.catalog.actionIndex("hunt").?;
     _ = begin(&w, e, &res, traps);
@@ -395,7 +398,7 @@ test "a verb lost mid-task finishes as nothing" {
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
-    const e = spawn_agent(&w, 10, 0);
+    const e = spawn_agent(&w, &res.catalog, 10, 0);
     const fish = res.catalog.actionIndex("fish").?;
     // Never held the rod: the busy marker is stale, and finishing it must not crash.
     finish(&w, e, &res, fish, 1);

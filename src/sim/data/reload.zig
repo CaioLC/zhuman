@@ -9,10 +9,10 @@
 //! one line; a load that succeeds says so in the event log.
 //!
 //! A load that succeeds is swapped in. Everything kept by catalog index is carried to the new
-//! indices by id: each agent's goods, generator progress/modes and research, the work in
-//! progress, and the reach seen-set.
-//! A record the new files no longer hold takes its count, its research state and any work on
-//! it with it. Then every agent resettles its body and larder against the new records. The
+//! indices by id: each agent's own verbs, goods, generator progress/modes and research, the
+//! work in progress, and the reach seen-set.
+//! A record the new files no longer hold takes its count, its research state, its place among
+//! an agent's verbs and any work on it with it. Then every agent resettles its body and larder against the new records. The
 //! swap runs between frames, before the systems and the page build, so nothing still reads the
 //! old records when they are freed: the text caches, the semantic snapshot and the event log
 //! copy their strings, and a node tree lives one frame.
@@ -119,6 +119,21 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
         }
     }
 
+    // An agent's own verbs: each follows its id.
+    {
+        var q: ecs.Query(.{comp.Verbs}) = .{ .world = w };
+        var it = q.iter();
+        while (it.next()) |entry| {
+            const verbs: *comp.Verbs = entry;
+            const was = verbs.*;
+            verbs.* = .{};
+            for (old.actions, 0..) |a, ai| {
+                if (!was.held[ai]) continue;
+                if (cat.actionIndex(a.id)) |ni| verbs.held[ni] = true;
+            }
+        }
+    }
+
     // Generator progress and toggles follow the good id independently of ownership counts.
     {
         var q: ecs.Query(.{comp.Generators}) = .{ .world = w };
@@ -200,9 +215,13 @@ const testing = std.testing;
 
 const actions_a =
     \\.{
-    \\    .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+    \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\}
+;
+/// The verbs of `actions_a` without Forage.
+const actions_fish =
+    \\.{ .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
 ;
 const goods_a =
     \\.{
@@ -223,7 +242,7 @@ const actions_b =
     \\.{
     \\    .{ .id = "hunt", .name = "Hunt", .requires = .{ .energy = 2.0, .hours = 2.0 } },
     \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
-    \\    .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+    \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\}
 ;
 const goods_b =
@@ -250,13 +269,14 @@ fn agent(w: *World) Entity {
     return w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{} });
 }
 
-test "a swap carries goods, research, work and the reach seen-set to the new indices by id" {
+test "a swap carries verbs, goods, research, work and the reach seen-set to the new indices by id" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
     defer res.catalog.deinit();
     const e = agent(&w);
     const a = &res.catalog;
+    w.add(e, comp.Verbs.of(a, &.{"forage"}));
     w.get(e, comp.Goods).?.count[a.goodIndex("rod").?] = 2;
     w.get(e, comp.Goods).?.count[a.goodIndex("bed").?] = 1;
     capital.settle(&w, e, a);
@@ -273,6 +293,10 @@ test "a swap carries goods, research, work and the reach seen-set to the new ind
     try testing.expectEqual(@as(u32, 2), goods.count[b.goodIndex("rod").?]);
     try testing.expectEqual(@as(u32, 1), goods.count[b.goodIndex("bed").?]);
     try testing.expectEqual(@as(u32, 0), goods.count[b.goodIndex("net").?]);
+    const verbs = w.get(e, comp.Verbs).?;
+    try testing.expect(verbs.held[b.actionIndex("forage").?]); // index 0 there, 2 here
+    try testing.expect(!verbs.held[b.actionIndex("hunt").?]);
+    try testing.expect(!verbs.held[b.actionIndex("fish").?]);
     try testing.expectEqual(@as(f32, 12), w.get(e, comp.Vigor).?.max); // the bed still counts once
     const r = w.get(e, comp.Research).?;
     try testing.expectEqual(roster.TechState.researched, r.state[b.techIndex("wells").?]);
@@ -293,14 +317,18 @@ test "a record the new files drop takes its count and its work with it" {
     w.get(e, comp.Goods).?.count[a.goodIndex("bed").?] = 1;
     capital.settle(&w, e, a);
     w.add(e, comp.Busy{ .doing = .{ .build = a.goodIndex("bed").? }, .total = 1, .remaining = 1, .quality = 1 });
+    w.add(e, comp.Verbs.of(a, &.{ "forage", "fish" }));
 
-    // The bed is gone from the new goods.
-    swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_a, .goods =
+    // The bed is gone from the new goods, and Forage from the new verbs.
+    swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_fish, .goods =
         \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } } }
     , .technologies = techs_a }, null));
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max); // its ceiling went with it
     try testing.expect(!w.has(e, comp.Busy));
     try testing.expectEqual(@as(usize, 1), res.sim.log.count);
+    const verbs = w.get(e, comp.Verbs).?;
+    try testing.expect(verbs.held[res.catalog.actionIndex("fish").?]);
+    for (1..roster.max_actions) |i| try testing.expect(!verbs.held[i]);
 }
 
 test "a bad file keeps the catalog and logs why" {

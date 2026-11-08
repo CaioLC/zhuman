@@ -494,7 +494,7 @@ fn count(w: *World, e: Entity, cat: *const Catalog, id: []const u8) u32 {
 }
 
 fn heldVerb(w: *World, e: Entity, cat: *const Catalog, id: []const u8) bool {
-    return effects.held(cat, w.get(e, comp.Goods).?, cat.actionIndex(id).?);
+    return effects.held(cat, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, cat.actionIndex(id).?);
 }
 
 test "build pays upfront and starts the work; finish owns the spear and grants the verb" {
@@ -566,13 +566,14 @@ test "a repeat build is stock: the count rises, the effect does not" {
     const sandals = cat.goodIndex("sandals").?;
     const forage = cat.actionIndex("forage").?;
     const e = spawn_test_agent(&w, cat.goods[sandals].input[0].n * 3);
+    w.add(e, comp.Verbs.of(cat, &.{"forage"}));
     const goods = w.get(e, comp.Goods).?;
-    const base = effects.verb(cat, goods, forage).?.requires.energy;
+    const base = effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy;
 
     _ = begin(&w, e, &res, sandals);
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
-    const once = effects.verb(cat, goods, forage).?.requires.energy;
+    const once = effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy;
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "sandals"));
     try testing.expect(once < base); // the first pair is capital in use
 
@@ -580,7 +581,7 @@ test "a repeat build is stock: the count rises, the effect does not" {
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
     try testing.expectEqual(@as(u32, 2), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(once, effects.verb(cat, goods, forage).?.requires.energy); // no second discount
+    try testing.expectEqual(once, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy); // no second discount
     logged(&w, &res);
     try testing.expectEqualStrings("Another sandals. You have 2.", res.sim.log.get(0).text());
     try testing.expectEqual(@as(u32, 1), goodsOwned(&w, e, cat)); // kinds, not units
@@ -588,10 +589,10 @@ test "a repeat build is stock: the count rises, the effect does not" {
     // Losing a spare keeps the discount; losing the last pair takes it back.
     break_one(&w, e, &res, sandals);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(once, effects.verb(cat, goods, forage).?.requires.energy);
+    try testing.expectEqual(once, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy);
     break_one(&w, e, &res, sandals);
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(base, effects.verb(cat, goods, forage).?.requires.energy);
+    try testing.expectEqual(base, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy);
     logged(&w, &res);
     try testing.expectEqualStrings("Your sandals broke.", res.sim.log.get(0).text());
 }
@@ -605,7 +606,7 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
     const e = spawn_test_agent(&w, 100);
     const hatchet = cat.goodIndex("hatchet").?;
     const gloves = cat.goodIndex("work_gloves").?;
-    try testing.expect(!heldVerb(&w, e, cat, "chop_wood")); // not innate
+    try testing.expect(!heldVerb(&w, e, cat, "chop_wood")); // not held bare-handed
 
     // No hatchet ⟹ no Split wood ⟹ gloves have nothing to improve.
     try testing.expectEqual(Standing.needs, quote(&w, e, cat, gloves).?.standing);
@@ -861,7 +862,7 @@ test "a recipe that names a technology waits on the board" {
     defer w.deinit();
     var res = try test_res_over(.{
         .actions =
-        \\.{ .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
         ,
         .goods =
         \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
@@ -956,16 +957,16 @@ test "a bought tool supersedes the built one; selling it restores the next-best 
     const goods = w.get(e, comp.Goods).?;
     acquire(&w, e, &res, rod, 1);
     const base_energy = cat.actions[fish].requires.energy;
-    try testing.expectEqual(base_energy, effects.verb(cat, goods, fish).?.requires.energy);
+    try testing.expectEqual(base_energy, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy);
 
     acquire(&w, e, &res, net, 1); // rank 2: the stats replace the rod's, not stack
-    try testing.expectApproxEqAbs(base_energy * 0.7, effects.verb(cat, goods, fish).?.requires.energy, 1e-6);
+    try testing.expectApproxEqAbs(base_energy * 0.7, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy, 1e-6);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "fish_rod")); // the rod is still owned (sellable)
 
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, net, 1)); // sell the net
-    try testing.expectEqual(base_energy, effects.verb(cat, goods, fish).?.requires.energy); // the rod's rank
+    try testing.expectEqual(base_energy, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy); // the rod's rank
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, rod, 1)); // sell the rod too
-    try testing.expect(effects.verb(cat, goods, fish) == null); // no fishing tool left ⇒ the verb goes
+    try testing.expect(effects.verb(cat, w.get(e, comp.Verbs), goods, fish) == null); // no fishing tool left ⇒ the verb goes
     try testing.expectEqual(@as(u32, 0), release(&w, e, &res, rod, 1)); // nothing left to release
 }
 

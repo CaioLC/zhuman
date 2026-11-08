@@ -37,7 +37,7 @@ test "labor refuses without mutating and emits Refused" {
     defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
-    const e = w.spawn(.{ comp.Vigor{ .v = 1.7, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{}, comp.Condition{} });
+    const e = w.spawn(.{ comp.Vigor{ .v = 1.7, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{}, comp.Condition{}, comp.Verbs.of(&res.catalog, &.{"forage"}) });
     const forage = res.catalog.actionIndex("forage").?;
     res.events.update();
     _ = res.events.writer(events.BeginLabor).push(.{ .agent = e, .ai = forage });
@@ -58,7 +58,7 @@ test "labor begins the work once and emits WorkBegun" {
     defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
-    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{}, comp.Condition{} });
+    const e = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{}, comp.Condition{}, comp.Verbs.of(&res.catalog, &.{"forage"}) });
     const forage = res.catalog.actionIndex("forage").?;
     res.events.update();
     _ = res.events.writer(events.BeginLabor).push(.{ .agent = e, .ai = forage });

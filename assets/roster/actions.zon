@@ -1,4 +1,4 @@
-// The labor verbs — what a body can do with its hours. The grammar is described in
+// The labor verbs. The grammar is described in
 // `src/README.md` ("The authored roster"): `requires` is the body-and-time price, paid at
 // begin; `input` is what the act consumes, paid at begin; `output` is what it draws at
 // completion. A line's `kind` defaults to `.fixed` (exact); the other kinds draw, and the
@@ -9,20 +9,17 @@
     .{
         .id = "forage",
         .name = "Forage",
-        .innate = true,
         .requires = .{ .energy = 1.7, .hours = 4.0 },
         .output = .{
             .{ .item = "food", .n = 1.8, .kind = .normal },
         },
     },
-    // Scavenge: pick through the derelict edge of town. The day-one Biomass verb (shown as
-    // Materials in Act I) —
-    // exponential on both sides: mostly scraps, occasionally a jackpot find, and sometimes
+    // Scavenge: pick through the derelict edge of town.
+    // Mostly scraps, occasionally a jackpot find, and sometimes
     // a forgotten can of food. This is what bootstraps the first tool.
     .{
         .id = "scavenge",
         .name = "Scavenge",
-        .innate = true,
         .requires = .{ .energy = 2.0, .hours = 5.0 },
         .output = .{
             .{ .item = "food", .n = 0.3, .kind = .exponential },

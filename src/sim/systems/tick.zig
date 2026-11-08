@@ -204,8 +204,9 @@ test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
     res.time.dt = res_mod.hours_to_secs(2, res.config.secs_per_day); // 2h per tick
-    const forage = res.catalog.actionIndex("forage").?; // 4h of work, innate
+    const forage = res.catalog.actionIndex("forage").?; // 4h of work
     const e = w.spawn(.{
+        comp.Verbs.of(&res.catalog, &.{"forage"}),
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
         comp.InventoryBiomass{ .v = 0 },
@@ -338,7 +339,7 @@ test "track_reach announces this act's recipes only" {
     res.catalog = try roster.load(std.testing.allocator, .{
         .actions =
         \\.{
-        \\    .{ .id = "forage", .name = "Forage", .innate = true, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
         \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
         \\}
         ,

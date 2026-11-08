@@ -84,7 +84,7 @@ test "detect_shelter waits for the milestone, then requests Act II and emits Act
     var res = try rig();
     defer res.catalog.deinit();
     res.events.update();
-    const e = spawn_player(&w);
+    const e = spawn_player(&w, &res.catalog);
     ecs.run(&w, &res, detect_shelter);
     try testing.expectEqual(@as(usize, 0), res.events.len(events.ActEnded));
     try testing.expect(res.states.next == null);
@@ -103,7 +103,7 @@ test "cross_curtain migrates the player once" {
     defer w.deinit();
     var res = try rig();
     defer res.catalog.deinit();
-    const e = spawn_player(&w);
+    const e = spawn_player(&w, &res.catalog);
     ecs.run(&w, &res, cross_curtain);
     try testing.expect(migration.is_migrated(&w, e));
     try testing.expectEqual(@as(u8, 2), migration.actOf(&w, e));
