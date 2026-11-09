@@ -830,7 +830,7 @@ pub const catalog = [_]Spec{
         .day = 40,
         .view = 1,
         .milestone_open = true,
-        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 14, .biomass = 31, .goods = &shelter_goods },
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 31, .goods = &shelter_goods },
     },
     .{
         .name = "act_one_shelter_ready",
@@ -838,7 +838,7 @@ pub const catalog = [_]Spec{
         .day = 44,
         .view = 1,
         .milestone_open = true,
-        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 14, .biomass = 72, .goods = &shelter_goods },
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 72, .goods = &shelter_goods },
     },
     .{
         .name = "act_one_trade_sell",
@@ -1073,6 +1073,12 @@ pub fn seed(res: *Resources, world: *World, player: Entity, spec: Spec) void {
     if (res.game.sim.merchant.remaining < 0) res.game.sim.merchant.remaining = 2.4 * res.game.config.secs_per_day;
     if (spec.building) |id| seedBuild(res, world, player, id);
     if (spec.working) |id| seedWork(res, world, player, id);
+    // A seeded state is set, not reached: the Act I recipes already listed and affordable are
+    // seen, so `track_reach` does not announce a fixture's stock as news.
+    const cat = &res.game.catalog;
+    for (cat.goods, 0..) |rec, gi| {
+        if (ha.sim.rules.capital.listed(world, player, cat, @intCast(gi), 1) and ha.sim.rules.ledger.short(world, player, &rec.requires, 1) == null) res.game.sim.reach_seen[gi] = true;
+    }
     derive(res, world);
 }
 
