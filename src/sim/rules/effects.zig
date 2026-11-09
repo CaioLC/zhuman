@@ -368,7 +368,7 @@ test "goods on one verb stack; a spare carries no second effect" {
     try testing.expectEqual(cat.action("forage").?.requires.energy, verbOf(&w, e, &cat, "forage").?.requires.energy);
 }
 
-test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersedes the hatchet" {
+test "the chopping stack: hatchet, gloves, then the hand axe supersedes the hatchet" {
     var cat = try fixture();
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
@@ -376,13 +376,12 @@ test "the chopping stack: hatchet, gloves, chainsaw, then the hand axe supersede
     const e = spawnAgent(&w, &cat);
     own(&w, e, &cat, "hatchet");
     own(&w, e, &cat, "work_gloves");
-    own(&w, e, &cat, "chainsaw");
     const with_hatchet = verbOf(&w, e, &cat, "chop_wood").?;
+    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.75), with_hatchet.requires.energy, 1e-5);
     own(&w, e, &cat, "hand_axe");
     const chop = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 5.0 * 0.7 * 0.75 * 0.3), chop.requires.energy, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 5.0 * 1.4 * 2.5), chop.output.biomass.?.scale(), 1e-4);
-    try testing.expectEqual(@as(f32, 1.0), chop.requires.biomass); // the chainsaw's fuel
+    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7 * 0.75), chop.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 8.0 * 1.4), chop.output.biomass.?.scale(), 1e-4);
     lose(&w, e, &cat, "hand_axe"); // back to the hatchet's rank, modifiers kept
     const again = verbOf(&w, e, &cat, "chop_wood").?;
     try expectTerms(&with_hatchet, &again);

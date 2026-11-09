@@ -6,9 +6,9 @@
 // which tool a better one supersedes. A good opens a verb by being named in that verb's gate
 // (`assets/roster/actions.zon`). `copy` is the player's words.
 //
-// Crude goods are what one person can build in Act I. Manufactured unlockers are acquired
-// from the passerby instead; the remaining manufactured records stay catalogued for later
-// progression but never enter the Act I BUILD shelf.
+// Crude goods are what one person builds from scratch. The tools the passerby carries
+// (`buildable = false`) are acquired from it instead. A manufactured recipe is the late-act
+// tier: its gate is the crude good or the verb that precedes it.
 .{
     // —— Manufactured unlockers: passerby-only in Act I ———————————————————————————————
     .{
@@ -19,7 +19,7 @@
         .copy = .{
             .effect = "you can fish",
             .short = "can fish",
-            .built = "You built a fish rod. Fishing is now possible.",
+            .built = "The passerby's fishing rod is yours. You can fish now.",
         },
     },
     .{
@@ -30,7 +30,7 @@
         .copy = .{
             .effect = "you can split wood",
             .short = "can split wood",
-            .built = "You built a hatchet. You can split wood now.",
+            .built = "The passerby's hatchet is yours. You can split wood now.",
         },
     },
     // Wire snares open Check traps, a round collected without occupying the body.
@@ -90,7 +90,7 @@
         .id = "bicycle",
         .name = "Bicycle",
         .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 140.0, .biomass = 280.0 },
+        .requires = .{ .energy = 2.0, .hours = 140.0, .biomass = 280.0, .all = .{"sandals"} },
         .effects = .{
             .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.6 } },
             .{ .scale = .{ .target = "scavenge", .stat = .energy, .by = 0.6 } },
@@ -105,7 +105,7 @@
         .id = "cookpot",
         .name = "Cookpot",
         .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 80.0, .biomass = 56.0 },
+        .requires = .{ .energy = 2.0, .hours = 80.0, .biomass = 56.0, .all = .{"root_cellar"} },
         .effects = .{
             .{ .food_quality = 1 },
         },
@@ -129,25 +129,6 @@
             .built = "You dug a root cellar. Food keeps twice as long.",
         },
     },
-    // The Act One capstone and the Act II teaser: the first substitution of external energy
-    // for muscle. Splitting wood stops pricing the body and starts pricing fuel.
-    .{
-        .id = "chainsaw",
-        .name = "Chainsaw",
-        .tier = .manufactured,
-        .requires = .{ .energy = 3.0, .hours = 300.0, .biomass = 480.0, .all = .{"chop_wood"} },
-        .effects = .{
-            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.3 } },
-            .{ .add = .{ .target = "chop_wood", .stat = .{ .input = .biomass }, .by = 1.0 } },
-            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = .biomass }, .by = 2.5 } },
-        },
-        .copy = .{
-            .effect = "fuel does the work, not you",
-            .short = "fuel does the work",
-            .built = "You got a chainsaw running. The engine works, not your back.",
-        },
-    },
-
     // —— Health goods: capacity capital — each raises the vigor ceiling ——————————————————
     .{
         .id = "leaf_bed",
@@ -165,7 +146,7 @@
     },
     .{
         .id = "rope_bag",
-        .name = "Rope Bag",
+        .name = "Rope bag",
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 8.0, .biomass = 15.0 },
         .effects = .{
@@ -174,7 +155,7 @@
         .copy = .{
             .effect = "+1 vigor ceiling",
             .short = "vigor ceiling +1",
-            .built = "You have a simple bag. Carrying is easier now now.",
+            .built = "You knotted a rope bag. Carrying is easier now.",
         },
     },
     .{
@@ -205,7 +186,7 @@
         .id = "chicken_coop",
         .name = "Chicken coop",
         .tier = .manufactured,
-        .requires = .{ .energy = 3.0, .hours = 200.0, .biomass = 144.0 },
+        .requires = .{ .energy = 3.0, .hours = 200.0, .biomass = 144.0, .all = .{"garden_bed"} },
         .copy = .{
             .effect = "the hens lay for you",
             .short = "hens lay food",
@@ -220,8 +201,8 @@
         .id = "shelter",
         .name = "Shelter",
         .tier = .crude,
-        .requires = .{ .energy = 12.0, .hours = 144.0, .biomass = 60.0 },
-        .unlock = .{ .vigor_abs = 15.0, .food = 12.0, .goods = 5 },
+        .requires = .{ .energy = 8.0, .hours = 144.0, .biomass = 60.0 },
+        .unlock = .{ .vigor_abs = 12.0, .food = 15.0, .goods = 5 },
         .capacity = 4,
         .milestone = .act_one,
         .copy = .{
@@ -245,6 +226,7 @@
         .copy = .{
             .effect = "fishing costs less and catches more",
             .short = "fish better",
+            .built = "The passerby's fishing net is yours. Fishing costs less and catches more.",
         },
     },
     .{
@@ -259,6 +241,7 @@
         .copy = .{
             .effect = "splitting wood costs less and yields more",
             .short = "split wood better",
+            .built = "The passerby's hand axe is yours. Splitting wood costs less and yields more.",
         },
     },
 

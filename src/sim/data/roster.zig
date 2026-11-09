@@ -841,9 +841,9 @@ test "a record's demands and yields read by resource" {
     defer cat.deinit();
     const traps = cat.action("check_traps").?;
     try testing.expect(traps.generator);
-    try testing.expectEqual(@as(f32, 1.0), traps.requires.get(.biomass));
+    try testing.expectEqual(@as(f32, 2.0), traps.requires.get(.biomass));
     try testing.expectEqual(dist.Kind.poisson, traps.output.get(.food).?.kind());
-    try testing.expectEqual(@as(f32, 3.0), traps.output.get(.food).?.scale());
+    try testing.expectEqual(@as(f32, 2.5), traps.output.get(.food).?.scale());
     try testing.expect(traps.output.get(.biomass) == null);
     try testing.expectEqualStrings("wire_snares", traps.requires.all[0]);
     try testing.expectEqual(@as(f32, 60.0), cat.good("shelter").?.requires.biomass);

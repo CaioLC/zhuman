@@ -90,6 +90,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
 
     // --- apply (both bundles move, or neither — we are past every gate now) ------------------
     var biomass_moved: f32 = 0;
+    var acquired: ?u16 = null;
     for (q.give.slice()) |line| enc.visit[@backingInt(line.item)] -= line.qty;
     for (q.receive.slice()) |line| enc.visit[@backingInt(line.item)] += line.qty;
 
@@ -126,6 +127,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
                 const units: u32 = @intFromFloat(@ceil(line.qty));
                 capital.acquire(w, e, res, gi, units);
                 enc.take(line.item, @intCast(units)); // out of the finite satchel
+                acquired = gi;
             },
         }
     }
@@ -135,6 +137,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
         .with = .passerby,
         .direction = q.direction,
         .biomass_moved = biomass_moved,
+        .acquired = acquired,
         .act = migration.actOf(w, e),
     });
     return null;

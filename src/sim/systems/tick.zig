@@ -299,19 +299,19 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
     const hatchet = res.catalog.goodIndex("hatchet").?;
-    // A player without Split wood: Work gloves / Chainsaw (both need it) are not in reach
+    // A player without Split wood: Work gloves (which needs it) is not in reach
     // yet, and goods that need nothing never announce.
     const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing became reachable
 
-    // Own the hatchet (as finishing its build would): both goods that need Split wood
-    // transition false→true this tick — two announcements, once each.
+    // Own the hatchet (as buying it would): the good that needs Split wood transitions
+    // false→true this tick — one announcement.
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
     try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
     // The message names the good and uses the exact copy.
     try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
@@ -319,17 +319,17 @@ test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms
     // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // no repeat
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // no repeat
 
     // The prerequisite going away (tool broke) re-arms the announcement; regaining it logs again.
     w.get(e, comp.Goods).?.count[hatchet] = 0;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // losing it does not log
+    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // losing it does not log
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 4), res.sim.log.count); // re-armed: two more
+    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // re-armed: one more
 }
 
 test "track_reach announces this act's recipes only" {

@@ -813,8 +813,8 @@ test "an auto generator the agent cannot pay for waits with its full cycle, then
 /// materials for the price.
 fn spawn_settler(w: *World, cat: *const Catalog) Entity {
     const e = w.spawn(.{
-        comp.Vigor{ .v = 16, .max = 20 }, // 16 >= the absolute 15, max is irrelevant
-        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the unlock's 12
+        comp.Vigor{ .v = 13, .max = 20 }, // 13 >= the absolute 12, max is irrelevant
+        comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the unlock's 15
         comp.InventoryBiomass{ .v = 100 }, // >= the 60 price
         comp.Goods{},
         comp.Granted{},
@@ -841,10 +841,10 @@ test "the shelter is offered only once its standing conditions are met" {
 
     _ = begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
-    try testing.expectEqual(@as(f32, 4), w.get(e, comp.Vigor).?.v); // 16 - 12 energy
+    try testing.expectEqual(@as(f32, 5), w.get(e, comp.Vigor).?.v); // 13 - 8 energy
     try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v); // 100 - 60
 
-    // Vigor fell below the absolute 15 mid-build — the work is already paid for, so it stands.
+    // Vigor fell below the absolute 12 mid-build — the work is already paid for, so it stands.
     try testing.expect(!unlockMet(&w, e, cat, shelter));
 
     finish(&w, e, &res, shelter);
@@ -859,7 +859,7 @@ test "each standing condition refuses the shelter on its own" {
     const shelter = cat.goodIndex("shelter").?;
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    // Too tired: below the absolute 15 current vigor refuses, regardless of the ceiling.
+    // Too tired: below the absolute 12 current vigor refuses, regardless of the ceiling.
     {
         const e = spawn_settler(&w, cat);
         w.get(e, comp.Vigor).?.v = 7;
@@ -867,22 +867,22 @@ test "each standing condition refuses the shelter on its own" {
         try testing.expectEqual(Reason.unlock, begin(&w, e, &res, shelter).?);
         try testing.expect(!w.has(e, comp.Busy));
     }
-    // Boundary: an *absolute* 15, independent of `max`.
+    // Boundary: an *absolute* 12, independent of `max`.
     {
         const e = spawn_settler(&w, cat);
         const v = w.get(e, comp.Vigor).?;
-        for ([_]f32{ 15, 20, 100 }) |ceiling| {
+        for ([_]f32{ 12, 20, 100 }) |ceiling| {
             v.max = ceiling;
-            v.v = 14.99;
+            v.v = 11.99;
             try testing.expect(!unlockMet(&w, e, cat, shelter));
-            v.v = 15;
+            v.v = 12;
             try testing.expect(unlockMet(&w, e, cat, shelter));
         }
     }
     // Larder too thin.
     {
         const e = spawn_settler(&w, cat);
-        w.get(e, comp.InventoryFood).?.v = 11;
+        w.get(e, comp.InventoryFood).?.v = 14;
         try testing.expect(!unlockMet(&w, e, cat, shelter));
     }
     // Nothing built yet - a full larder is not a settled life.

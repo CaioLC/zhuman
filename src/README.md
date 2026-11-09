@@ -432,7 +432,7 @@ spear opens Hunt.
 units owned, the `reach` of the build cost (the smallest held-over-needed across its
 resources), and a `Standing` in precedence order — `tech` (the technology the recipe's
 `requires.tech` names is not researched on the agent's board), `needs` (an `any`/`all` gate
-does not pass — a modifier lists the verb it works on, so a chainsaw is never offered without
+does not pass — a modifier lists the verb it works on, so work gloves are never offered without
 Split wood; the gates read the same way a verb's do, `effects.gatesMet`), `unlock` (the
 shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
 good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
@@ -451,7 +451,7 @@ net outranks the rod and the hand axe the hatchet; `effects.applies` lets only t
 owned of a family apply, so same-family stats replace rather than stack, losing the better
 tool restores the next-best exactly, and any number of build → sell → build cycles leaves the
 terms bit-exact, because nothing is ever mutated in place. Goods outside a family stack
-freely (gloves and a chainsaw on the same verb).
+freely (sandals and a bicycle on the same verb).
 
 `cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the build's
 resources and frees the body, while the energy and every hour already spent are gone. The
