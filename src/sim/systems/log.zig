@@ -72,7 +72,7 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
             .passerby => sim.log.push(.good, switch (f.direction) {
                 // A tool bought is an acquisition: its own line, the good's `copy.built`.
                 .buy => if (f.acquired) |gi| (if (gi < cat.goods.len and cat.goods[gi].copy.built.len > 0) cat.goods[gi].copy.built else "You trade with the passerby.") else "You trade with the passerby.",
-                .sell => std.mem.print(&buf, "You sell to the passerby for {d:.0} {s}.", .{ f.biomass_moved, roster.Resource.biomass.wordIn(f.act) }) catch "You sell.",
+                .sell => if (f.paid) |p| std.mem.print(&buf, "You sell to the passerby for {d:.1} {s}.", .{ p.qty, (if (p.item == .food) roster.Resource.food else roster.Resource.biomass).wordIn(f.act) }) catch "You sell." else "You sell to the passerby.",
             }),
             .merchant => sim.log.push(.good, std.mem.print(&buf, "You trade {d} lot{s} of {s} with the merchant.", .{
                 f.lots,
@@ -348,14 +348,14 @@ test "Traded with the passerby: a buy, and a sell naming the materials paid in t
     var rig = try Rig.init();
     defer rig.deinit();
     rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .buy, .biomass_moved = 4 });
-    rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .sell, .biomass_moved = 5, .act = 1 });
+    rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .sell, .biomass_moved = 5, .paid = .{ .item = .biomass, .qty = 5 }, .act = 1 });
     const hatchet = rig.res.catalog.goodIndex("hatchet").?;
     rig.emit(events.Traded{ .agent = 0, .with = .passerby, .direction = .buy, .acquired = hatchet });
     try rig.run();
     try testing.expectEqual(@as(usize, 3), rig.res.sim.log.count);
     try expectLine(&rig, 2, .good, "You trade with the passerby.");
     try expectLine(&rig, 0, .good, rig.res.catalog.goods[hatchet].copy.built);
-    try expectLine(&rig, 1, .good, "You sell to the passerby for 5 materials.");
+    try expectLine(&rig, 1, .good, "You sell to the passerby for 5.0 materials.");
 }
 
 test "Traded with the merchant names the lots and the lot's record" {

@@ -33,7 +33,7 @@ const roster = @import("../data/roster.zig");
 fn rig() !Resources {
     var res = Resources{ .catalog = try roster.load(testing.allocator, roster.shipped, null) };
     res.sim.encounter = .{ .phase = .present, .id = 1 };
-    res.sim.encounter.stock = .{ 8, 20, 1, 1 };
+    res.sim.encounter.stock = (market.Schedule{}).satchel;
     res.events.update();
     return res;
 }

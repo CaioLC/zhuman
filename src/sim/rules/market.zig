@@ -11,9 +11,17 @@
 //! carries that id, so a barter can tell "the passerby I was dealing with" from "a different one
 //! who has since arrived" — the revision check `barter.resolve` revalidates against.
 //!
-//! **Finite inventory.** A visit refills a small satchel (per-good stock counts); selling into
-//! it and buying out of it decrement those counts, and they do not regenerate until the *next*
-//! arrival — scarcity is per-encounter, not per-frame.
+//! **Finite inventory.** A visit refills a small satchel (per-ware amounts). Whatever the
+//! passerby hands over comes out of it — the food, materials or tool a buy receives, and the
+//! payment for a sell — and whatever the player hands over goes into it; a quote that would
+//! overdraw it is refused, and it does not regenerate until the *next* arrival — scarcity is
+//! per-encounter, not per-frame.
+//!
+//! **The spread.** The passerby values a food at 2 materials when the player gives food and at 3
+//! when the player takes it, so a round trip loses a third: buying food is 3 materials a unit,
+//! buying materials 2 for a food. A sell is the same exchange at a price that falls with each lot
+//! sold this visit (`sell_value`). A rank-2 tool is offered only to a player holding the rank-1
+//! tool of its family (`prerequisite`).
 //!
 //! The encounter clock and its finite satchel are here, with the typed bundle/quote contracts
 //! and the diminishing sell-price schedule below; `barter.zig` resolves a quote atomically and
@@ -27,11 +35,12 @@ const std = @import("std");
 /// so the departure reads as an event rather than a silent disappearance).
 pub const Phase = enum { absent, approaching, present, departed };
 
-/// The kinds of thing a passerby's satchel can hold in Act I. Deliberately coarse — Act I trades
-/// Food, generic Materials, and a couple of small tools — but named so the typed bundles
-/// and the tool families have stable slots to fill. The `count`-per-slot lives in
-/// `Encounter.stock`, indexed by `@backingInt`.
-pub const Ware = enum { food, biomass, fish_hook, whetstone };
+/// The kinds of thing a passerby's satchel can hold in Act I: Food, generic Materials, and the
+/// four tools it carries — the fishing rod (`fish_hook`) and hatchet (`whetstone`), and their
+/// rank-2 successors, the fishing net and hand axe. The amount per slot lives in
+/// `Encounter.stock`, indexed by `@backingInt`; a ware appended here reads as zero from a save
+/// written before it.
+pub const Ware = enum { food, biomass, fish_hook, whetstone, fish_net, hand_axe };
 pub const ware_count = @typeInfo(Ware).@"enum".field_names.len;
 
 /// The authoritative encounter. Held on `Sim`; ticked once per frame from the clock.
@@ -42,12 +51,17 @@ pub const Encounter = struct {
     id: u32 = 0,
     /// Seconds left in the current phase. Drives the deterministic transitions in `tick`.
     remaining: f32 = 0,
-    /// The current visit's finite satchel — units of each `Ware` still available. Refilled on
-    /// arrival, decremented by trades, never regenerated until the next arrival.
-    stock: [ware_count]u16 = @splat(0),
+    /// The current visit's finite satchel — the amount of each `Ware` still available.
+    /// Fractional, since a sell's falling price pays fractions. Refilled on arrival, drawn down
+    /// by what the passerby hands over and topped up by what it takes, never regenerated until
+    /// the next arrival.
+    stock: [ware_count]f32 = @splat(0),
     /// What this visit has moved, from the player's side — signed units of each `Ware` (paid
     /// out negative, received positive). The trade dialog's footer reads it; arrival clears it.
     visit: [ware_count]f32 = @splat(0),
+    /// Lots of each `Ware` the player has sold this visit: where its sell price stands on the
+    /// falling schedule (`sell_value`). Arrival clears it.
+    sold: [ware_count]u16 = @splat(0),
 
     /// Whether a deal can be opened right now — only while the passerby is actually present.
     /// The UI gates the TRADE action on this; tab visibility never enters into it.
@@ -55,20 +69,31 @@ pub const Encounter = struct {
         return self.phase == .present;
     }
 
-    /// Units of `w` still in the satchel this visit.
-    pub fn stockOf(self: *const Encounter, w: Ware) u16 {
+    /// The amount of `w` still in the satchel this visit.
+    pub fn stockOf(self: *const Encounter, w: Ware) f32 {
         return self.stock[@backingInt(w)];
     }
 
-    /// Take `n` units of `w` from the satchel (a completed buy). Saturates at 0 — the caller
-    /// revalidates stock first, so this is the mechanical decrement.
-    pub fn take(self: *Encounter, w: Ware, n: u16) void {
-        const i = @backingInt(w);
-        self.stock[i] -= @min(self.stock[i], n);
+    /// Lots of `w` sold this visit.
+    pub fn soldOf(self: *const Encounter, w: Ware) u16 {
+        return self.sold[@backingInt(w)];
     }
 
-    /// Add `n` units of `w` to the satchel (a completed sell — the passerby now carries it).
-    pub fn give(self: *Encounter, w: Ware, n: u16) void {
+    /// Whether the satchel holds `n` of `w` (a hair of float slack, so a quote built from the
+    /// satchel's own amount is never refused by rounding).
+    pub fn holds(self: *const Encounter, w: Ware, n: f32) bool {
+        return self.stockOf(w) + 1e-4 >= n;
+    }
+
+    /// Take `n` of `w` from the satchel (what the passerby hands over). Saturates at 0 — the
+    /// caller revalidates stock first, so this is the mechanical decrement.
+    pub fn take(self: *Encounter, w: Ware, n: f32) void {
+        const i = @backingInt(w);
+        self.stock[i] = @max(0, self.stock[i] - n);
+    }
+
+    /// Add `n` of `w` to the satchel (what the passerby takes — it now carries it).
+    pub fn give(self: *Encounter, w: Ware, n: f32) void {
         self.stock[@backingInt(w)] += n;
     }
 };
@@ -85,14 +110,16 @@ pub const Schedule = struct {
     linger_days: f32 = 2.0,
     /// The brief beat after leaving before the gap resets (departed → absent).
     depart_days: f32 = 0.15,
-    /// A fresh satchel, per `Ware` (indexed by `@backingInt`): food, materials, fish_hook,
-    /// whetstone. Finite and modest — the passerby is a trickle, not a shop.
-    satchel: [ware_count]u16 = blk: {
-        var s: [ware_count]u16 = @splat(0);
+    /// A fresh satchel, per `Ware` (indexed by `@backingInt`): food, materials and one of each
+    /// tool. Finite and modest — the passerby is a trickle, not a shop.
+    satchel: [ware_count]f32 = blk: {
+        var s: [ware_count]f32 = @splat(0);
         s[@backingInt(Ware.food)] = 8;
         s[@backingInt(Ware.biomass)] = 20;
         s[@backingInt(Ware.fish_hook)] = 1;
         s[@backingInt(Ware.whetstone)] = 1;
+        s[@backingInt(Ware.fish_net)] = 1;
+        s[@backingInt(Ware.hand_axe)] = 1;
         break :blk s;
     },
 };
@@ -123,6 +150,7 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32) Event {
             enc.remaining = sched.linger_days * spd;
             enc.stock = sched.satchel;
             enc.visit = @splat(0);
+            enc.sold = @splat(0);
             return .arrived;
         },
         .present => {
@@ -223,29 +251,35 @@ pub const Refusal = enum {
 /// and everything the dialog needs to render. Captured against a specific encounter visit (`rev` =
 /// the encounter `id` at capture) so barter can tell a live quote from one whose passerby has left
 /// or been replaced. `id` is a stable per-catalog offer identity (which line of the passerby's
-/// board this is). `next` is the **next marginal sell quote** — for a sell, what the *following*
-/// unit would fetch (filled by the diminishing schedule); null when not applicable.
+/// board this is). A sell is captured at a point on its falling schedule (`nth`), and
+/// `next_unit` is what the *following* lot would fetch.
 pub const Quote = struct {
     id: u32,
     rev: u32,
     direction: Direction,
     give: Bundle,
     receive: Bundle,
-    /// Units of this offer still available this visit (buy: the passerby's stock; sell: how many
-    /// the player may sell before the schedule bottoms out). 0 ⇒ sold out.
+    /// Lots of this offer still available this visit: a buy, what the satchel holds of it; a
+    /// sell, one while the satchel can pay for the next lot (its price falls lot by lot, so each
+    /// is quoted on its own). 0 ⇒ sold out.
     stock: u16 = 1,
-    /// The Materials the *next* unit of a sell would fetch, if this is a sell with more to sell —
-    /// exposed before confirmation so diminishing returns are visible, not a surprise.
+    /// For a sell: the lots of its ware already sold this visit when it was quoted — the point
+    /// on the schedule its price was read at. A sale since makes it stale.
+    nth: ?u16 = null,
+    /// What the *next* lot of a sell would fetch — exposed before confirmation so diminishing
+    /// returns are visible, not a surprise.
     next_unit: ?f32 = null,
 
     /// Whether this quote is takeable against a live encounter and the player's holdings.
-    /// `enc_id` is the current encounter identity; `food`/`biomass` the player's holdings; a
-    /// sell also needs the player to own the good, which the caller checks (component ownership is
-    /// outside this leaf module). Returns the specific `Refusal`.
+    /// `food`/`biomass` are the player's holdings; a sell also needs the player to own the good,
+    /// which the caller checks (component ownership is outside this leaf module). The satchel
+    /// must hold everything the passerby is to hand over. Returns the specific `Refusal`.
     pub fn refusal(self: *const Quote, enc: *const Encounter, food: f32, biomass: f32) Refusal {
         if (!enc.dealable()) return .departed;
         if (self.rev != enc.id) return .stale;
+        if (self.nth) |n| if (self.give.len > 0 and enc.soldOf(self.give.lines[0].item) != n) return .stale;
         if (self.stock == 0) return .sold_out;
+        for (self.receive.slice()) |l| if (!enc.holds(l.item, l.qty)) return .sold_out;
         // Affordability: the player must hold every Food/Biomass line on the give side.
         if (self.give.qtyOf(.food) > food) return .unaffordable;
         if (self.give.qtyOf(.biomass) > biomass) return .unaffordable;
@@ -266,47 +300,102 @@ pub const Quote = struct {
     }
 };
 
-// ============================ Diminishing sell prices ==========================
+// ============================ The passerby's board ==========================
 //
-// The first explicit exchange numbers Act I teaches, and the largest unset numbers in it — so
-// they are a product-design choice, not fixture tuning. A passerby values the *first* unit of a
-// surplus most and each further unit less: `sell_value(n)` is the Materials the passerby pays for
-// the **n-th** unit sold this visit (n = 0 for the first). The decline is geometric toward a
-// **floor**, never to zero — so selling always beats throwing surplus away, yet a long sell-off
-// earns less per unit than the first trade. Finite stock and the passerby's short window
-// do the rest: you cannot dump an unbounded surplus at the top price, but neither is production
-// for sale strictly dominated by scavenging — the first few units pay well.
+// The posted prices and the falling sell schedule. A buy is a flat price at the passerby's
+// taking rate (a food for 3 materials, 2 materials for a food); a sell starts at its giving
+// rate (a food fetches 2 materials, 3 materials fetch a food) and falls with each lot sold this
+// visit, geometrically toward a floor that is never zero — so selling always beats throwing
+// surplus away, yet a long sell-off earns less per lot than the first, and the spread means a
+// round trip loses a third.
 
-/// The Materials the passerby pays for the **`n`-th** unit of `ware` sold this visit (0-based).
-/// Geometric decline (`base · ratio^n`) clamped to a `floor`, so it is **monotonically
-/// non-increasing** and always positive. Authored per ware: bulk Food/Materials start modest and
-/// decay; the two tool wares are one-off (a second identical tool is worth little).
+/// The tool a rank-2 tool's lot waits on: the passerby offers the fishing net only to a holder
+/// of the fishing rod, the hand axe only to a holder of the hatchet. Null for every other ware.
+pub fn prerequisite(w: Ware) ?Ware {
+    return switch (w) {
+        .fish_net => .fish_hook,
+        .hand_axe => .whetstone,
+        else => null,
+    };
+}
+
+/// What the passerby pays for the **`n`-th** lot of `ware` sold this visit (0-based): materials
+/// for a food or a tool, food for a lot of 3 materials. Geometric decline (`base · ratio^n`)
+/// clamped to a `floor`, so it is **monotonically non-increasing** and always positive.
 pub fn sell_value(ware: Ware, n: u32) f32 {
     const base: f32, const ratio: f32, const floor: f32 = switch (ware) {
-        // Surplus food: the passerby is glad of the first, indifferent to the tenth.
-        .food => .{ 2.5, 0.75, 0.5 },
-        // Surplus materials are common; they decay faster to a low floor.
-        .biomass => .{ 1.5, 0.6, 0.25 },
+        // Surplus food: 2 materials for the first, falling to half a material.
+        .food => .{ 2.0, 0.75, 0.5 },
+        // Surplus materials, by the lot of 3: a food for the first, falling faster.
+        .biomass => .{ 1.0, 0.6, 0.25 },
         // A tool: the first fetches real value, a duplicate almost nothing.
         .fish_hook => .{ 8.0, 0.3, 1.0 },
         .whetstone => .{ 6.0, 0.3, 1.0 },
+        .fish_net => .{ 16.0, 0.3, 1.0 },
+        .hand_axe => .{ 13.0, 0.3, 1.0 },
     };
     const raw = base * std.math.pow(f32, ratio, @floatFromInt(n));
     return @max(floor, raw);
 }
 
-/// Build a **sell `Quote`** for the next unit of `ware`, given how many were `already_sold` this
-/// visit — with `next_unit` already filled from the *following* unit's value, so the diminishing
-/// return is visible before the player confirms. `rev` binds it to the current encounter visit.
-pub fn sell_quote(ware: Ware, already_sold: u32, id: u32, rev: u32) Quote {
-    const this_unit = sell_value(ware, already_sold);
+/// The units of `ware` one sell lot gives: 3 materials, otherwise one.
+pub fn sell_lot(ware: Ware) f32 {
+    return if (ware == .biomass) 3 else 1;
+}
+
+/// What a sell of `ware` is paid in: food for materials, materials for anything else.
+pub fn paid_in(ware: Ware) Ware {
+    return if (ware == .biomass) .food else .biomass;
+}
+
+/// The passerby's buy offer for `ware` this visit, its stock the whole lots the satchel holds.
+pub fn buy_quote(enc: *const Encounter, ware: Ware) Quote {
+    var q = Quote{ .id = 1 + @as(u32, @backingInt(ware)), .rev = enc.id, .direction = .buy, .give = .{}, .receive = .{} };
+    var per_lot: f32 = 1;
+    switch (ware) {
+        .food => q.give.add(.biomass, 3),
+        .biomass => {
+            q.give.add(.food, 1);
+            per_lot = 2;
+        },
+        .fish_hook => {
+            q.give.add(.food, 2);
+            q.give.add(.biomass, 8);
+        },
+        .whetstone => {
+            q.give.add(.food, 2);
+            q.give.add(.biomass, 6);
+        },
+        .fish_net => {
+            q.give.add(.food, 5);
+            q.give.add(.biomass, 20);
+        },
+        .hand_axe => {
+            q.give.add(.food, 4);
+            q.give.add(.biomass, 16);
+        },
+    }
+    q.receive = Bundle.one(ware, per_lot);
+    q.stock = @intFromFloat(@min(@floor((enc.stockOf(ware) + 1e-4) / per_lot), std.math.maxInt(u16)));
+    return q;
+}
+
+/// The passerby's offer for the next lot of `ware` the player sells this visit, at its point on
+/// the falling schedule, with `next_unit` already filled so the decline is visible before the
+/// player confirms. Its stock is one lot while the satchel can pay for it, else zero.
+pub fn sell_quote(enc: *const Encounter, ware: Ware) Quote {
+    const n = enc.soldOf(ware);
+    const pay = sell_value(ware, n);
+    const in = paid_in(ware);
     return .{
-        .id = id,
-        .rev = rev,
+        .id = 101 + @as(u32, @backingInt(ware)),
+        .rev = enc.id,
         .direction = .sell,
-        .give = Bundle.one(ware, 1),
-        .receive = Bundle.one(.biomass, this_unit),
-        .next_unit = sell_value(ware, already_sold + 1),
+        .give = Bundle.one(ware, sell_lot(ware)),
+        .receive = Bundle.one(in, pay),
+        .stock = @intFromBool(enc.holds(in, pay)),
+        .nth = n,
+        .next_unit = sell_value(ware, n + 1),
     };
 }
 
@@ -376,7 +465,7 @@ test "encounter walks absent → approaching → present → departed → absent
     try testing.expectEqual(Phase.present, enc.phase);
     try testing.expectEqual(@as(u32, 1), enc.id);
     try testing.expect(enc.dealable());
-    try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass));
+    try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass));
 
     // Burn the linger window → departed.
     try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day));
@@ -386,7 +475,7 @@ test "encounter walks absent → approaching → present → departed → absent
     // Burn the depart beat → absent (satchel cleared, no event).
     try testing.expectEqual(Event.none, tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day));
     try testing.expectEqual(Phase.absent, enc.phase);
-    try testing.expectEqual(@as(u16, 0), enc.stockOf(.biomass));
+    try testing.expectEqual(@as(f32, 0), enc.stockOf(.biomass));
 }
 
 test "each visit bumps a stable identity and refills the satchel" {
@@ -400,14 +489,14 @@ test "each visit bumps a stable identity and refills the satchel" {
 
     // Spend some stock this visit, then complete the cycle back to a second arrival.
     enc.take(.biomass, 5);
-    try testing.expectEqual(@as(u16, 15), enc.stockOf(.biomass));
+    try testing.expectEqual(@as(f32, 15), enc.stockOf(.biomass));
     _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day); // → departed
     _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day); // → absent
     _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day); // → approaching
     _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present (id 2)
 
     try testing.expectEqual(@as(u32, 2), enc.id); // a *different* passerby
-    try testing.expectEqual(@as(u16, 20), enc.stockOf(.biomass)); // the satchel refilled
+    try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass)); // the satchel refilled
 }
 
 test "dealability is present-only and independent of any day/tab" {
@@ -425,9 +514,9 @@ test "take saturates at zero and give adds to the satchel" {
     var enc = Encounter{};
     enc.stock[@backingInt(Ware.food)] = 3;
     enc.take(.food, 5); // more than held
-    try testing.expectEqual(@as(u16, 0), enc.stockOf(.food));
+    try testing.expectEqual(@as(f32, 0), enc.stockOf(.food));
     enc.give(.food, 4);
-    try testing.expectEqual(@as(u16, 4), enc.stockOf(.food));
+    try testing.expectEqual(@as(f32, 4), enc.stockOf(.food));
 }
 
 test "bundle carries typed lines and reports quantities" {
@@ -446,6 +535,7 @@ test "bundle carries typed lines and reports quantities" {
 test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and takeable" {
     var enc = Encounter{ .phase = .present, .id = 3 };
     enc.stock[@backingInt(Ware.biomass)] = 10;
+    enc.stock[@backingInt(Ware.fish_hook)] = 1;
 
     // A buy: give 2 food + 4 materials, receive a fish hook, captured at the live revision.
     var q = Quote{
@@ -472,6 +562,10 @@ test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and t
     q.stock = 0;
     try testing.expectEqual(Refusal.sold_out, q.refusal(&enc, 5, 10));
     q.stock = 1;
+    // The satchel no longer holds the rod ⇒ sold_out.
+    enc.stock[@backingInt(Ware.fish_hook)] = 0;
+    try testing.expectEqual(Refusal.sold_out, q.refusal(&enc, 5, 10));
+    enc.stock[@backingInt(Ware.fish_hook)] = 1;
     // A different passerby now (id moved) ⇒ stale.
     enc.id = 4;
     try testing.expectEqual(Refusal.stale, q.refusal(&enc, 5, 10));
@@ -484,7 +578,7 @@ test "quote refusal distinguishes departed, stale, sold-out, unaffordable, and t
 }
 
 test "sell value declines monotonically to a positive floor" {
-    inline for ([_]Ware{ .food, .biomass, .fish_hook, .whetstone }) |ware| {
+    inline for (std.enums.values(Ware)) |ware| {
         var prev = sell_value(ware, 0);
         try testing.expect(prev > 0); // the first unit always pays something
         var n: u32 = 1;
@@ -502,13 +596,49 @@ test "sell value declines monotonically to a positive floor" {
 }
 
 test "sell_quote exposes the next unit's diminished value before confirmation" {
-    const q = sell_quote(.food, 0, 7, 3);
+    var enc = Encounter{ .phase = .present, .id = 3, .stock = (Schedule{}).satchel };
+    const q = sell_quote(&enc, .food);
     try testing.expectEqual(Direction.sell, q.direction);
     try testing.expectEqual(@as(u32, 3), q.rev);
     // This unit is the 0-th value; next_unit is the 1st — strictly lower.
-    try testing.expectApproxEqAbs(sell_value(.food, 0), q.receive.qtyOf(.biomass), 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 2), q.receive.qtyOf(.biomass), 1e-5);
     try testing.expect(q.next_unit.? < q.receive.qtyOf(.biomass));
     try testing.expectApproxEqAbs(sell_value(.food, 1), q.next_unit.?, 1e-5);
+    try testing.expect(q.takeable(&enc, 1, 0));
+    // A lot sold since the quote was read moves the price: the quote is stale.
+    enc.sold[@backingInt(Ware.food)] = 1;
+    try testing.expectEqual(Refusal.stale, q.refusal(&enc, 1, 0));
+    try testing.expectApproxEqAbs(@as(f32, 1.5), sell_quote(&enc, .food).receive.qtyOf(.biomass), 1e-5);
+}
+
+test "the board's spread: food buys at 3 materials and sells for 2, so a round trip loses a third" {
+    const enc = Encounter{ .phase = .present, .id = 1, .stock = (Schedule{}).satchel };
+    const buy_food = buy_quote(&enc, .food);
+    try testing.expectApproxEqAbs(@as(f32, 3), buy_food.give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 1), buy_food.receive.qtyOf(.food), 1e-6);
+    try testing.expectEqual(@as(u16, 8), buy_food.stock); // eight food in the satchel
+    const buy_mat = buy_quote(&enc, .biomass);
+    try testing.expectApproxEqAbs(@as(f32, 1), buy_mat.give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 2), buy_mat.receive.qtyOf(.biomass), 1e-6);
+    try testing.expectEqual(@as(u16, 10), buy_mat.stock); // twenty materials, two a lot
+    const sell_mat = sell_quote(&enc, .biomass);
+    try testing.expectApproxEqAbs(@as(f32, 3), sell_mat.give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 1), sell_mat.receive.qtyOf(.food), 1e-6);
+    // 3 materials buy a food, which buys back 2 materials.
+    try testing.expectApproxEqAbs(@as(f32, 2.0 / 3.0), buy_mat.receive.qtyOf(.biomass) / buy_food.give.qtyOf(.biomass), 1e-6);
+    // The tools' prices.
+    try testing.expectApproxEqAbs(@as(f32, 20), buy_quote(&enc, .fish_net).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 4), buy_quote(&enc, .hand_axe).give.qtyOf(.food), 1e-6);
+    try testing.expectEqual(@as(?Ware, .whetstone), prerequisite(.hand_axe));
+    try testing.expectEqual(@as(?Ware, null), prerequisite(.whetstone));
+}
+
+test "a sell the satchel cannot pay for is out of stock" {
+    var enc = Encounter{ .phase = .present, .id = 1 };
+    enc.stock[@backingInt(Ware.biomass)] = 1.5; // less than a food's 2 materials
+    const q = sell_quote(&enc, .food);
+    try testing.expectEqual(@as(u16, 0), q.stock);
+    try testing.expectEqual(Refusal.sold_out, q.refusal(&enc, 5, 0));
 }
 
 test "the merchant stays, leaves, and returns as a new visit" {

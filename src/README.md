@@ -481,30 +481,46 @@ second unit of the good runs no second cycle.
 machine `absent → approaching → present → departed → absent`, ticked by `market.tick` from
 the `passerby` system off the
 sim clock (never a calendar day). Each arrival bumps a monotonic `id` and refills a finite
-satchel of `Ware`s (food, materials, fish_hook, whetstone); stock does not regenerate until
-the next visit. `dealable()` is `phase == .present`, the only gate the UI reads, so hiding the
-strip cannot change whether a passerby is here.
+satchel of `Ware`s: 8 food, 20 materials, and one each of the fishing rod (`fish_hook`), the
+hatchet (`whetstone`), the fishing net and the hand axe. The satchel is finite both ways:
+whatever the passerby hands over — the food, materials or tool a buy receives, and the payment
+for a sell — comes out of it, whatever the player hands over goes into it, and it does not
+regenerate until the next visit. `dealable()` is `phase == .present`, the only gate the UI
+reads, so hiding the strip cannot change whether a passerby is here.
 
 **One transfer grammar.** A `Line{item, qty}` and a fixed-cap `Bundle` express both sides of
 any deal; a `Quote` carries the offer's stable `id`, the encounter `rev` it was captured
-under, its `Direction`, give/receive bundles, remaining `stock`, and
-`next_unit` — what the *following* unit of a sell would fetch, shown before confirmation.
-`Quote.refusal` is the single revalidation everyone shares, in precedence order: `departed`,
-then `stale` (the passerby changed), then `sold_out`, then `unaffordable`; every refusal has
-player-readable copy.
+under, its `Direction`, give/receive bundles, remaining `stock` in lots, for a sell the `nth`
+lot of its ware this visit it was priced at, and `next_unit` — what the *following* lot of a
+sell would fetch, shown before confirmation. `Quote.refusal` is the single revalidation
+everyone shares, in precedence order: `departed`, then `stale` (the passerby changed, or a sell
+of that ware settled since), then `sold_out` (no stock, or the satchel cannot hand over the
+receive side), then `unaffordable`; every refusal has player-readable copy.
 
-**Sell prices diminish.** `sell_value(ware, n)` is a geometric decline `base·ratio^n` clamped
-to a positive floor, authored per ware: Food `2.5 / 0.75 / 0.5`, Materials `1.5 / 0.6 /
-0.25`, the tools `~6–8 / 0.3 / 1.0`. The floor is the anti-domination guarantee — selling
-always beats discarding, and the first units pay well — while the satchel and the visit
-window cap how much can be dumped at the top price.
+**The board has a spread.** `market.buy_quote` and `market.sell_quote` are the passerby's
+offers, which the page lists and a scripted test takes alike. The passerby values a food at 2
+materials when the player gives food and at 3 when the player takes it: buying food costs 3
+materials a unit and buying materials 2 for a food, a sell of food fetches 2 materials and a
+sell of 3 materials a food, so a round trip loses a third. The tools cost the fishing rod
+`2f + 8m`, the hatchet `2f + 6m`, the fishing net `5f + 20m` and the hand axe `4f + 16m`; a
+rank-2 tool is offered only to the holder of the rank-1 tool of its family
+(`market.prerequisite`, `barter.offered`) and is absent otherwise.
+
+**Sell prices diminish.** `sell_value(ware, n)` is what the passerby pays for the `n`-th lot
+sold this visit (`Encounter.sold`), a geometric decline `base·ratio^n` clamped to a positive
+floor, authored per ware: Food `2 / 0.75 / 0.5` materials, Materials (a lot of 3)
+`1 / 0.6 / 0.25` food, the tools `6–16 / 0.3 / 1.0` materials. A sell is quoted one lot at a
+time, so the price the player confirms is the price paid. The floor is the anti-domination
+guarantee — selling always beats discarding — while the satchel and the visit window cap how
+much can be sold at all.
 
 **`barter.resolve` is all-or-nothing.** The `barter` handler calls it for each `Barter`
 intent. It revalidates the quote plus give-side ownership before touching anything, then moves
 both bundles: Food/Materials on the inventory components, a sold good through
 `capital.release` (its effect leaves with the last unit), a bought good through
-`capital.acquire` (its effect lands once; a repeat is stock), the satchel decremented, and one
-`Traded{ .with = .passerby }` emitted with the materials moved. A failed check mutates nothing
+`capital.acquire` (its effect lands once; a repeat is stock), the satchel paid out and topped
+up, a sell's lots counted, and one `Traded{ .with = .passerby }` emitted with the materials
+moved, the good a buy `acquired` (the log reads its `copy.built`) and what a sell was `paid`. A failed check mutates nothing
 and returns the `Refused.Reason`, a quote's `market.Refusal` mapped onto it by name
 (`barter.reasonOf`). `market` stays world-free; `barter` is the only place a `Quote` meets an
 entity.
@@ -688,9 +704,10 @@ seen-set as good ids; the log as its lines, oldest first, pushed back in order w
 own time, and its count of lines ever pushed.
 
 `version` guards the shape: `read` parses the version alone first and refuses one outside
-`oldest` (2) to `version` (3) (`error.UnknownVersion`). The encounter and the merchant's visit are saved as they are, and
-their arrays index tables in code rather than the roster, so a change to those tables is a
-change of version. A write goes to a temporary file renamed over the slot
+`oldest` (2) to `version` (3) (`error.UnknownVersion`). The merchant's visit is saved as it is,
+and its array indexes a table in code rather than the roster, so a change to that table is a
+change of version. The encounter's per-ware arrays are saved as lists in `market.Ware` order,
+so a ware appended to the end reads as zero from an older file. A write goes to a temporary file renamed over the slot
 (`std.Io.Dir.createFileAtomic`), so a failed write leaves the slot as it was.
 
 The host's side is `Resources.saves` (`res.zig`): the saves folder, SDL's per-user preference

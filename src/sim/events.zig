@@ -187,14 +187,15 @@ pub const RecipeInReach = struct { agent: Entity, gi: u16 };
 /// `agent` traded with `with` in `direction`, moving `biomass_moved` materials (for a sell to
 /// the passerby, what it paid). A merchant trade names the lot by index in the merchant's
 /// records (`systems/merchant.zig`) and how many lots it took. `acquired` is the good a buy from
-/// the passerby brought in, by catalog index, when it was one. `act` is the act the agent's
-/// words are in.
+/// the passerby brought in, by catalog index, when it was one; `paid` is what the passerby paid
+/// for a sell. `act` is the act the agent's words are in.
 pub const Traded = struct {
     agent: Entity,
     with: Who,
     direction: market.Direction,
     biomass_moved: f32 = 0,
     acquired: ?u16 = null,
+    paid: ?market.Line = null,
     lot: u32 = 0,
     lots: u32 = 0,
     act: u8 = 1,

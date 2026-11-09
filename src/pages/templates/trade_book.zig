@@ -29,7 +29,8 @@ pub const Lot = struct {
     price: []const Term,
     /// What the player receives for one lot.
     receive: []const Term,
-    /// Lots the counterparty still has (a buy); null for a sell, which is bounded by holdings.
+    /// Lots the counterparty still has (a buy), or still can pay for (a sell); null for a sell
+    /// bounded by holdings alone.
     stock: ?u32 = null,
     /// What owning the lot changes, shown in the slip.
     consequence: []const u8 = "",
@@ -82,7 +83,7 @@ pub const Book = struct {
     /// The most lots one settlement can take.
     pub fn maxLots(self: Book, lot: *const Lot) u32 {
         const can = self.affordable(lot);
-        return if (lot.mode == .buy) @min(lot.stock orelse 0, can) else can;
+        return if (lot.mode == .buy) @min(lot.stock orelse 0, can) else @min(lot.stock orelse can, can);
     }
 
     /// The first price line the player cannot cover for one lot, and by how much.
@@ -106,6 +107,10 @@ pub const Book = struct {
         if (lot.mode == .buy and (lot.stock orelse 0) == 0) return .{
             .short = "sold out",
             .long = "This lot is gone. The counterparty has no more.",
+        };
+        if (lot.mode == .sell and (lot.stock orelse 1) == 0) return .{
+            .short = "can't pay",
+            .long = "The counterparty has nothing left to pay for this lot.",
         };
         const missing = self.shortfall(lot) orelse return null;
         if (lot.mode == .sell) {

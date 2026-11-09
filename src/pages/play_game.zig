@@ -103,8 +103,8 @@ const barter = ha.sim.rules.barter;
 const Ware = market.Ware;
 
 /// The passerby's wares in the order the dialog lists their balances (the AFTER rows, the
-/// visit ledger): the two stocks, then the two tools.
-const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone };
+/// visit ledger): the two stocks, then the tools.
+const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone, .fish_net, .hand_axe };
 
 /// The player's word for a ware (`food`, `materials`, `fishing rod`, `hatchet`).
 fn wareKey(act: u8, w: Ware) []const u8 {
@@ -113,6 +113,8 @@ fn wareKey(act: u8, w: Ware) []const u8 {
         .biomass => ha.sim.data.roster.Resource.biomass.wordIn(act),
         .fish_hook => "fishing rod",
         .whetstone => "hatchet",
+        .fish_net => "fishing net",
+        .hand_axe => "hand axe",
     };
 }
 
@@ -130,63 +132,25 @@ fn termsOf(arena: std.mem.Allocator, act: u8, b: *const market.Bundle) ![]t.Trad
 /// One lot the dialog shows and the quote that backs it.
 const Backed = struct { lot: t.TradeLot, quote: market.Quote };
 
-fn buyQuote(enc: *const market.Encounter, ware: Ware) market.Quote {
-    var q = market.Quote{ .id = 1 + @as(u32, @backingInt(ware)), .rev = enc.id, .direction = .buy, .give = .{}, .receive = .{}, .stock = enc.stockOf(ware) };
-    switch (ware) {
-        // A modest posted price: the passerby wants materials for food, food for materials,
-        // and both for a tool.
-        .food => {
-            q.give = market.Bundle.one(.biomass, 2);
-            q.receive = market.Bundle.one(.food, 1);
-        },
-        .biomass => {
-            q.give = market.Bundle.one(.food, 1);
-            q.receive = market.Bundle.one(.biomass, 3);
-        },
-        .fish_hook => {
-            q.give.add(.food, 2);
-            q.give.add(.biomass, 8);
-            q.receive = market.Bundle.one(.fish_hook, 1);
-        },
-        .whetstone => {
-            q.give.add(.food, 2);
-            q.give.add(.biomass, 6);
-            q.receive = market.Bundle.one(.whetstone, 1);
-        },
-    }
-    return q;
-}
-
-/// The lots the player can sell: surplus food, a bundle of materials, and either tool. Lots
-/// scale linearly; a sell is bounded by what the player holds.
-fn sellQuote(enc: *const market.Encounter, ware: Ware) market.Quote {
-    const id = 101 + @as(u32, @backingInt(ware));
-    return switch (ware) {
-        .biomass => .{ .id = id, .rev = enc.id, .direction = .sell, .give = market.Bundle.one(.biomass, 10), .receive = market.Bundle.one(.food, 3), .stock = std.math.maxInt(u16) },
-        else => blk: {
-            var q = market.sell_quote(ware, 0, id, enc.id);
-            q.stock = std.math.maxInt(u16);
-            break :blk q;
-        },
-    };
-}
-
-fn buyCopy(act: u8, ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
-    _ = act;
+fn buyCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
     return switch (ware) {
         .food => .{ .lot = "Preserved food \u{00d7}1", .effect = "keeps well", .consequence = "" },
-        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "useful stock", .consequence = "" },
+        .biomass => .{ .lot = "Materials \u{00d7}2", .effect = "useful stock", .consequence = "" },
         .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "unlocks Fish", .consequence = "Fishing becomes available while you own it." },
         .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "unlocks Split wood", .consequence = "Split wood becomes available while you own it." },
+        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "fish better", .consequence = "Fishing costs less and catches more; it outranks the rod." },
+        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "split wood better", .consequence = "Splitting wood costs less and yields more; it outranks the hatchet." },
     };
 }
 
 fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
     return switch (ware) {
-        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "" },
-        .biomass => .{ .lot = "Materials \u{00d7}10", .effect = "raw stock", .consequence = "" },
+        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "Each lot sold this visit fetches less." },
+        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "raw stock", .consequence = "Each lot sold this visit fetches less." },
         .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the rod you use keeps Fish open." },
         .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
+        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the net you use keeps fishing better." },
+        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the axe you use keeps splitting better." },
     };
 }
 
@@ -219,8 +183,10 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
 
     var backed: std.ArrayList(Backed) = .empty;
     for (ware_order) |ware| {
-        const q = buyQuote(enc, ware);
-        const c = buyCopy(act, ware);
+        // A rank-2 tool is offered only to the holder of the rank-1 tool: otherwise absent.
+        if (!barter.offered(world, e, cat, ware)) continue;
+        const q = market.buy_quote(enc, ware);
+        const c = buyCopy(ware);
         try backed.append(a, .{ .quote = q, .lot = .{
             .id = q.id,
             .mode = .buy,
@@ -232,8 +198,10 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
             .consequence = c.consequence,
         } });
     }
-    for (ware_order) |ware| {
-        const q = sellQuote(enc, ware);
+    for (ware_order, &balances) |ware, b| {
+        // A rank-2 tool's sell lot shows only while it is held.
+        if (market.prerequisite(ware) != null and b.held <= 0) continue;
+        const q = market.sell_quote(enc, ware);
         const c = sellCopy(ware);
         try backed.append(a, .{ .quote = q, .lot = .{
             .id = q.id,
@@ -242,6 +210,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
             .effect = c.effect,
             .price = try termsOf(a, act, &q.give),
             .receive = try termsOf(a, act, &q.receive),
+            .stock = q.stock,
             .consequence = c.consequence,
         } });
     }

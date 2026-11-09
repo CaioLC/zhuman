@@ -16,9 +16,11 @@
 //!
 //! `Sim` is saved field by field: the prng's state is kept, so a load carries the run's luck as
 //! `Sim.reset` does; the reach seen-set as good ids; the log as its lines, oldest first, which
-//! a load pushes back in order and then stamps with each line's own time. The encounter and the
-//! merchant's visit are saved as they are: their arrays index static tables in code, not the
-//! roster, so a change to those tables is a change of `version`.
+//! a load pushes back in order and then stamps with each line's own time. The merchant's visit
+//! is saved as it is: its array indexes a static table in code, not the roster, so a change to
+//! that table is a change of `version`. The encounter's per-ware arrays are saved as lists in
+//! `market.Ware` order, so a ware appended to the end reads as zero from a file written before
+//! it.
 //!
 //! `version` guards the shape: `read` refuses a file whose version is not between `oldest` and
 //! `version` (`error.UnknownVersion`) before it parses the rest. A write goes to a temporary
@@ -167,6 +169,16 @@ pub const NeighboursSave = struct {
     seeded: bool = false,
 };
 
+/// The passerby's encounter, its per-ware arrays as lists in `market.Ware` order.
+pub const EncounterSave = struct {
+    phase: market.Phase = .absent,
+    id: u32 = 0,
+    remaining: f32 = 0,
+    stock: []const f32 = &.{},
+    visit: []const f32 = &.{},
+    sold: []const u16 = &.{},
+};
+
 pub const SimSave = struct {
     elapsed: f32,
     tutorial_done: bool,
@@ -174,7 +186,7 @@ pub const SimSave = struct {
     prng: [4]u64,
     /// The good ids whose reach bit is set.
     reach_seen: []const []const u8,
-    encounter: market.Encounter,
+    encounter: EncounterSave,
     merchant: market.MerchantVisit,
     exchange: Sim.Exchange,
     population: f32,
@@ -279,7 +291,14 @@ fn captureSim(arena: Allocator, res: *const Resources) !SimSave {
         .tutorial_done = s.tutorial_done,
         .prng = s.prng.s,
         .reach_seen = reach.items,
-        .encounter = s.encounter,
+        .encounter = .{
+            .phase = s.encounter.phase,
+            .id = s.encounter.id,
+            .remaining = s.encounter.remaining,
+            .stock = try arena.dupe(f32, &s.encounter.stock),
+            .visit = try arena.dupe(f32, &s.encounter.visit),
+            .sold = try arena.dupe(u16, &s.encounter.sold),
+        },
         .merchant = s.merchant,
         .exchange = s.exchange,
         .population = s.population,
@@ -447,7 +466,10 @@ fn applySim(sim: *Sim, cat: *const roster.Catalog, s: *const SimSave, report: *R
     for (s.reach_seen) |id| {
         if (cat.goodIndex(id)) |gi| sim.reach_seen[gi] = true else report.dropped += 1;
     }
-    sim.encounter = s.encounter;
+    sim.encounter = .{ .phase = s.encounter.phase, .id = s.encounter.id, .remaining = s.encounter.remaining };
+    for (s.encounter.stock[0..@min(s.encounter.stock.len, market.ware_count)], 0..) |v, i| sim.encounter.stock[i] = v;
+    for (s.encounter.visit[0..@min(s.encounter.visit.len, market.ware_count)], 0..) |v, i| sim.encounter.visit[i] = v;
+    for (s.encounter.sold[0..@min(s.encounter.sold.len, market.ware_count)], 0..) |v, i| sim.encounter.sold[i] = v;
     sim.merchant = s.merchant;
     sim.exchange = s.exchange;
     sim.population = s.population;
@@ -548,7 +570,7 @@ fn settle(res: *Resources, w: *World) Entity {
     sim.tutorial_done = true;
     _ = res.random().int(u64);
     sim.reach_seen[cat.goodIndex("hatchet").?] = true;
-    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2, 3, 4 }, .visit = .{ -1, 2.5, 0, 1 } };
+    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2.5, 3, 4, 1, 0 }, .visit = .{ -1, 2.5, 0, 1, 0, 0 }, .sold = .{ 2, 0, 0, 0, 0, 1 } };
     sim.merchant = .{ .present = false, .id = 4, .remaining = 9.25 };
     sim.neighbours.seed(10);
     sim.population = 61;
@@ -688,7 +710,7 @@ test "a version-2 generator record, keyed by its good, loads as the verb; a capt
     const a = arena.allocator();
     const src =
         \\.{ .version = 2, .state = .act_one,
-        \\   .sim = .{ .elapsed = 0, .tutorial_done = false, .prng = .{ 1, 2, 3, 4 }, .reach_seen = .{}, .encounter = .{}, .merchant = .{}, .exchange = .{}, .population = 48, .neighbours = .{}, .log = .{} },
+        \\   .sim = .{ .elapsed = 0, .tutorial_done = false, .prng = .{ 1, 2, 3, 4 }, .reach_seen = .{}, .encounter = .{ .phase = .present, .id = 2, .stock = .{ 8, 20, 1, 0 } }, .merchant = .{}, .exchange = .{}, .population = 48, .neighbours = .{}, .log = .{} },
         \\   .agents = .{ .{ .generators = .{
         \\       .{ .id = "wire_snares", .off = true },
         \\       .{ .id = "garden_bed", .progress = 2.5, .off = false },
@@ -702,6 +724,10 @@ test "a version-2 generator record, keyed by its good, loads as the verb; a capt
     try testing.expectEqual(comp.Generators.Mode.on, gens.mode[cat.actionIndex("tend_garden").?]);
     try testing.expectEqual(@as(f32, 2.5), gens.progress[cat.actionIndex("tend_garden").?]);
     try testing.expectEqual(comp.Generators.Mode.auto, gens.mode[cat.actionIndex("collect_eggs").?]);
+    // Its encounter, written before the rank-2 wares, loads with them at zero.
+    try testing.expectEqual(@as(f32, 20), res.sim.encounter.stockOf(.biomass));
+    try testing.expectEqual(@as(f32, 0), res.sim.encounter.stockOf(.whetstone));
+    try testing.expectEqual(@as(f32, 0), res.sim.encounter.stockOf(.hand_axe));
 
     // A capture writes the mode under the verb's id, and never the older word.
     const text = try encode(a, &(try capture(a, &res, &w)));
