@@ -89,4 +89,5 @@ test {
     std.testing.refAllDecls(rules);
     std.testing.refAllDecls(kernel);
     std.testing.refAllDecls(data);
+    _ = @import("./playthrough.zig");
 }

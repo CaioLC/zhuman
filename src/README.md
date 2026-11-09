@@ -772,6 +772,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `schedule.zig` | `schedule`, the systems per state in the order they run, and `tick`, the host's one call per frame |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
+| `playthrough.zig` | a test, no API: Act I played from a new run to the shelter through the schedule and the pages' intents under a greedy policy, on several seeds, each before day 40 without dying |
 
 `sim/systems/` holds the systems the schedule runs.
 
