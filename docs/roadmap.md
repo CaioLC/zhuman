@@ -38,7 +38,7 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 - Energy is a flow/rate in the runline, never a stockline balance.
 - Act I has ACTIONS and BUILD. Act II has ACTIONS, BUILD, RESEARCH (the board, formerly STRUCTURE), and MARKET (the neighbours view). ACTIONS lists the held generator verbs after the labor verbs; Act II's lists the union of the Act I and Act II generators held.
 - ACTIONS is one pane in both acts: it searches, sorts and hides its tiles. Act I's tiles are at the regular density, Act II's compact.
-- BUILD uses one data-generated six-column recipe catalog in both acts. Act I shows its complete crude shelf and dims rows that are currently short; Act II keeps technology/prerequisite-locked recipes absent. Newly eligible recipes appear with an event-log announcement.
+- BUILD uses one data-generated six-column recipe catalog in both acts. Act I lists the recipes whose gates pass, so a manufactured recipe appears once the crude good before it is owned, and dims the ones short; Act II lists its complete shelf, research-gated rows dimmed. Newly eligible recipes appear with an event-log announcement.
 - Recipe states visible to the player are `ready`, `reach`, `owned`, and `building`; milestone states are `locked`, `unfunded`, `ready`, and `done` (`built`/`standing` copy is act-specific).
 - Shelter and Exchange share one milestone component. Passerby, Merchant, and Exchange share one market-strip/trade-dialog skeleton with identity-specific wording.
 - Holdings collapse is remembered separately for ACTIONS and BUILD. Entering a focus view (RESEARCH, MARKET) forces collapse each time without overwriting those memories.

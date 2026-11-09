@@ -25,16 +25,17 @@ pub const actions_shelf = actions_section_mod.Shelf{
     .subtitle = "What will this body do now?",
 };
 
-/// Act I's BUILD content: personal crafting (the crude tier) and the Shelter that ends the act.
+/// Act I's BUILD content: personal crafting — the recipes whose gates pass, so a manufactured
+/// recipe appears once the crude good before it is owned — and the Shelter that ends the act.
 pub const build_shelf = build_section_mod.Shelf{
     .act = 1,
-    .crude_only = true,
+    .gates_hide = true,
     .subtitle = "Find the next useful recipe your own hands can raise.",
     .milestone = .{
         .which = .act_one,
         .kicker = "A PLACE FOR OTHERS",
         .copy = "a roof with room for four. you're not alone anymore.",
-        .explanation = std.fmt.comptimePrint("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(1)}),
+        .explanation = std.fmt.comptimePrint("Hold 60 {s} with a settled body and five kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(1)}),
         .action = "RAISE SHELTER \u{2192}",
     },
 };

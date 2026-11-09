@@ -130,10 +130,14 @@ tool, comfort, storage and shelter; `state:<state>`/`is:<value>` inspect current
 state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` excludes, and
 `*` exposes the complete catalog. `/` focuses the field and Escape clears it.
 
-A blank query shows the act's complete shelf — owned, distant, prerequisite-short and
-research-gated recipes included, disabled rather than hidden — and typing only narrows it. Every
-act uses the same BUILD pane (`build_section`); only its content differs: which records are the
-act's recipes, the subtitle, and the milestone card. So no FILTER, SHOW, built, preset or
+A blank query shows the act's complete shelf — owned and distant recipes included, disabled
+rather than hidden — and typing only narrows it. Act I's shelf is what its gates allow: a recipe
+is listed once every gate of its `requires` passes, so the manufactured tier (gloves, cookpot,
+bicycle, chicken coop) appears when the crude good or verb before it is held, and its row names
+the tier beside its kind (`tool · manufactured`); a recipe whose gate fails is absent. Act II
+lists research-gated and prerequisite-short recipes disabled. Every act uses the same BUILD pane
+(`build_section`); only its content differs: which records are the act's recipes, whether a
+failed gate hides one, the subtitle, and the milestone card. So no FILTER, SHOW, built, preset or
 syntax-help rows are needed, and every recipe stays reachable.
 
 **Sort from the column headers.** RECIPE (name), COST (order size), TIME and STATE (reach) are

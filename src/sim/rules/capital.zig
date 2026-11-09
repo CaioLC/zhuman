@@ -106,6 +106,17 @@ pub fn techMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
     return effects.techMet(cat, h, &cat.goods[gi].requires);
 }
 
+/// Whether good `gi` is one of act `act`'s recipes listed for this agent: buildable, of the
+/// act, not its milestone, and every gate of its `requires` passing (`effects.gatesMet`). A
+/// recipe whose gate fails is absent from Act I's BUILD shelf, and `track_reach` announces a
+/// recipe only once it is listed.
+pub fn listed(w: *const World, e: Entity, cat: *const Catalog, gi: u16, act: u8) bool {
+    const rec = &cat.goods[gi];
+    if (!rec.buildable or rec.milestone != null or rec.act != act) return false;
+    const h = effects.holdingsOf(w, e) orelse return false;
+    return effects.gatesMet(cat, h, &rec.requires);
+}
+
 /// Whether a recipe's `any` and `all` gates pass for this agent: a good owned, a verb held.
 pub fn gatesMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
     return firstUnmetGate(w, e, cat, gi) == null;

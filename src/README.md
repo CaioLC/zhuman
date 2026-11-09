@@ -345,7 +345,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
 | `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
-| `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `any`/`all` gates (`capital.gatesMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `tick.track_reach` | ✓ | | | `RecipeInReach` once when an Act I recipe is first both listed (`capital.listed`: buildable, not the milestone, every gate passing) and affordable; the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce, falling short again does not re-arm it, and leaving the shelf (a gate's tool lost) does |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
 | `generators.generators` | ✓ | ✓ | ✓ | matures every held generator verb not switched off by `dt`, and collects each `auto` one whose collection is ready (`capital.run_generators`) |
 | `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |

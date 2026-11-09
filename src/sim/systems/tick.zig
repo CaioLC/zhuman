@@ -6,6 +6,7 @@ const res_mod = @import("../res.zig");
 const world = @import("../ecs.zig");
 const actions = @import("../rules/actions.zig");
 const capital = @import("../rules/capital.zig");
+const ledger = @import("../rules/ledger.zig");
 const roster = @import("../data/roster.zig");
 const events = @import("../events.zig");
 const Resources = res_mod.Resources;
@@ -149,15 +150,15 @@ pub fn despawn_dead(
     for (dead[0..n]) |e| w.despawn(e);
 }
 
-/// **Eligibility transition tracking.** For each prerequisite-gated good of this act, when
-/// its prerequisite becomes satisfied for the first time this run, emit one `RecipeInReach`
-/// (the log's "A new recipe is within reach: {name}."). Only goods with an `any`/`all` gate participate:
-/// a good with no prerequisite is reachable from the first breath, so it is not a *transition*
-/// and never logs. The seen-set
-/// is sim state (`Sim.reach_seen`, by catalog index), so it survives
-/// frames untouched by the UI — tab switches, filter/sort changes, and rebuilds cannot re-emit
-/// the fact; only this tick, on the actual false→true edge, does. Cleared by `Sim.reset` so a
-/// fresh run re-announces. Runs once per frame over the player.
+/// **Eligibility transition tracking.** For each Act I recipe, when it is first both listed on
+/// the BUILD shelf (`capital.listed`: its gates pass) and affordable (the ledger covers its
+/// resources), emit one `RecipeInReach` (the log's "A new recipe is within reach: {name}.").
+/// A recipe whose gate fails is absent and never announced. The seen-set is sim state
+/// (`Sim.reach_seen`, by catalog index), so it survives frames untouched by the UI — tab
+/// switches, filter/sort changes, and rebuilds cannot re-emit the fact; only this tick, on the
+/// actual false→true edge, does. A recipe that leaves the shelf (its gate's tool sold or broke)
+/// re-arms; one that only falls short again does not. Cleared by `Sim.reset` so a fresh run
+/// re-announces. Runs once per frame over the player.
 pub fn track_reach(
     res: *Resources,
     w: *World,
@@ -168,19 +169,16 @@ pub fn track_reach(
     while (it.next()) |entry| {
         const e: Entity = entry[0];
         for (cat.goods, 0..) |rec, gi| {
-            // Only this act's goods with an `any`/`all` gate; one without is reachable from
-            // the start and would false-fire on the first tick, so it is skipped entirely, and
-            // a later act's recipe is announced by that act's own edge detector.
-            if ((rec.requires.any.len == 0 and rec.requires.all.len == 0) or rec.act > 1) continue;
-            const met = capital.gatesMet(w, e, cat, @intCast(gi));
-            if (met and !res.sim.reach_seen[gi]) {
-                res.sim.reach_seen[gi] = true;
-                _ = res.events.writer(events.RecipeInReach).push(.{ .agent = e, .gi = @intCast(gi) });
-            } else if (!met) {
-                // The prerequisite went away (tool broke) — allow a fresh announcement if it
-                // returns, so the transition tracking is symmetric.
+            // A later act's recipe is announced by that act's own edge detector.
+            if (!capital.listed(w, e, cat, @intCast(gi), 1)) {
+                // Absent: its gate failed (a tool sold or broke). Re-arm, so it is announced
+                // again when it returns.
                 res.sim.reach_seen[gi] = false;
+                continue;
             }
+            if (res.sim.reach_seen[gi] or ledger.short(w, e, &rec.requires, 1) != null) continue;
+            res.sim.reach_seen[gi] = true;
+            _ = res.events.writer(events.RecipeInReach).push(.{ .agent = e, .gi = @intCast(gi) });
         }
     }
 }
@@ -292,44 +290,57 @@ test "metabolize starves vigor down on an empty larder; the condition writer log
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
 }
 
-test "track_reach logs a newly in-reach recipe once, not on repeats, and re-arms if the prereq goes away" {
+test "track_reach logs a recipe once it is listed and affordable, not on repeats, and re-arms when it leaves the shelf" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = test_res(0);
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
     const hatchet = res.catalog.goodIndex("hatchet").?;
-    // A player without Split wood: Work gloves (which needs it) is not in reach
-    // yet, and goods that need nothing never announce.
-    const e = w.spawn(.{ comp.Vigor{}, comp.Goods{}, comp.Granted{}, tag.Player{} });
+    // Nothing stockpiled: every recipe is short, so nothing is in reach.
+    const e = w.spawn(.{ comp.Vigor{}, comp.InventoryBiomass{ .v = 0 }, comp.Goods{}, comp.Granted{}, tag.Player{} });
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing became reachable
+    try std.testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
-    // Own the hatchet (as buying it would): the good that needs Split wood transitions
-    // false→true this tick — one announcement.
+    // Thirty materials: every listed recipe the stock covers is announced, once each; Work
+    // gloves (gated on Split wood) is absent, so it is not.
+    w.get(e, comp.InventoryBiomass).?.v = 30;
+    ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
+    const crude = res.sim.log.count;
+    try std.testing.expect(crude > 0);
+    for (0..crude) |k| try std.testing.expect(std.mem.find(u8, res.sim.log.get(k).text(), "work gloves") == null);
+    try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
+    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
+
+    // Spending the stock and gathering it again announces nothing new.
+    w.get(e, comp.InventoryBiomass).?.v = 0;
+    ecs.run(&w, &res, track_reach);
+    w.get(e, comp.InventoryBiomass).?.v = 30;
+    ecs.run(&w, &res, track_reach);
+    logged(&w, &res);
+    try std.testing.expectEqual(crude, res.sim.log.count);
+
+    // Own the hatchet (as buying it would): Work gloves is listed and affordable — one line.
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
-    try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
-    // The message names the good and uses the exact copy.
-    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
-
-    // A rebuild/tab-switch/sort does not re-run the tick; running it again emits nothing new.
+    try std.testing.expectEqual(crude + 1, res.sim.log.count);
+    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "work gloves") != null);
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // no repeat
+    try std.testing.expectEqual(crude + 1, res.sim.log.count); // no repeat
 
-    // The prerequisite going away (tool broke) re-arms the announcement; regaining it logs again.
+    // The gate going away (the hatchet sold) re-arms the announcement; regaining it logs again.
     w.get(e, comp.Goods).?.count[hatchet] = 0;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 1), res.sim.log.count); // losing it does not log
+    try std.testing.expectEqual(crude + 1, res.sim.log.count); // losing it does not log
     w.get(e, comp.Goods).?.count[hatchet] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(usize, 2), res.sim.log.count); // re-armed: one more
+    try std.testing.expectEqual(crude + 2, res.sim.log.count); // re-armed: one more
 }
 
 test "track_reach announces this act's recipes only" {
@@ -345,7 +356,7 @@ test "track_reach announces this act's recipes only" {
         ,
         .goods =
         \\.{
-        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .biomass = 1.0 } },
         \\    .{ .id = "hook", .name = "Hook", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .all = .{"fish"} } },
         \\    .{ .id = "weir", .name = "Weir", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .all = .{"fish"} } },
         \\}

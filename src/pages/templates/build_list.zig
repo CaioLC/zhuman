@@ -8,8 +8,10 @@
 //! to sort on it — again to flip the direction — with the arrow on the column in force.
 //!
 //! **What the list shows.** With no query the list shows the act's complete shelf, including
-//! owned, unaffordable, prerequisite-short, and research-gated rows; those rows stay visible and
-//! disabled instead of disappearing. Search only narrows that shelf. A **build in progress is
+//! owned and unaffordable rows, which stay visible and disabled instead of disappearing. A shelf
+//! with `gates_hide` (Act I's) lists a recipe only while every gate of its `requires` passes
+//! (`capital.listed`), so a recipe whose gate fails is absent; without it (Act II's), gated and
+//! research-gated rows are listed disabled. Search only narrows that shelf. A **build in progress is
 //! always visible and pinned to the top** (you need the way out). The summary reports the
 //! shelf's authored total; the milestone remains outside it because it is the act goal rather
 //! than an ordinary recipe.
@@ -66,8 +68,9 @@ pub const MilestoneCopy = struct {
 /// milestone pinned below the list (null while the act authors none).
 pub const Shelf = struct {
     act: u8,
-    /// Act I personal crafting lists only the crude tier.
-    crude_only: bool = false,
+    /// Whether a recipe whose gates fail is absent rather than listed disabled: Act I lists
+    /// what its gates allow (`capital.listed`).
+    gates_hide: bool = false,
     subtitle: []const u8,
     milestone: ?MilestoneCopy = null,
     /// A milestone the act composes itself rather than from a good's record (Act II's
@@ -82,11 +85,10 @@ pub const Shelf = struct {
     /// the same name, which then stands for it.
     carry_owned: bool = false,
 
-    /// Whether a record is one of this shelf's recipes: buildable, of this act, of an allowed
-    /// tier, and not a milestone (which is the goal, not a row).
+    /// Whether a record is one of this shelf's recipes: buildable, of this act, and not a
+    /// milestone (which is the goal, not a row). Its gates are the agent's (`onShelf`).
     pub fn holds(self: Shelf, g: *const roster.Good) bool {
-        return g.buildable and g.milestone == null and g.act == self.act and
-            (!self.crude_only or g.tier == .crude);
+        return g.buildable and g.milestone == null and g.act == self.act;
     }
 };
 
@@ -104,11 +106,12 @@ fn authorsName(cat: *const roster.Catalog, shelf: Shelf, name: []const u8) bool 
     return false;
 }
 
-/// Whether good `gi` is on agent `e`'s shelf: one of the act's recipes, or — with
-/// `carry_owned` — a buildable earlier-act good the agent owns that the act does not shadow.
+/// Whether good `gi` is on agent `e`'s shelf: one of the act's recipes (with `gates_hide`, one
+/// whose gates pass), or — with `carry_owned` — a buildable earlier-act good the agent owns
+/// that the act does not shadow.
 pub fn onShelf(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: Shelf, gi: usize) bool {
     const rec = &cat.goods[gi];
-    if (shelf.holds(rec)) return true;
+    if (shelf.holds(rec)) return !shelf.gates_hide or capital.listed(world, e, cat, @intCast(gi), shelf.act);
     if (!shelf.carry_owned or !rec.buildable or rec.milestone != null or rec.act >= shelf.act) return false;
     const goods = world.get(e, comp.Goods) orelse return false;
     return goods.count[gi] > 0 and !authorsName(cat, shelf, rec.name);
@@ -536,7 +539,7 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
 
 const testing = std.testing;
 
-const act_one_test = Shelf{ .act = 1, .crude_only = true, .subtitle = "" };
+const act_one_test = Shelf{ .act = 1, .gates_hide = true, .subtitle = "" };
 const act_two_test = Shelf{ .act = 2, .subtitle = "" };
 
 test "the authored total counts this shelf's recipes only" {
@@ -684,4 +687,33 @@ test "sortEntries: name ascending is A–Z" {
     const list = collect(&w, e, &cat, act_two_test, "", &buf);
     sortEntries(list, .name, .ascending);
     for (list[1..], 0..) |ent, i| try testing.expect(std.ascii.lessThanIgnoreCase(list[i].name, ent.name) or std.ascii.eqlIgnoreCase(list[i].name, ent.name));
+}
+
+test "Act I: the shelf lists the recipes whose gates pass; a manufactured one appears with the good before it" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const e = ha.sim.systems.run.spawn_player(&w, &cat);
+    requote(&w, e, &cat);
+    var buf: [roster.max_goods]Entry = undefined;
+    // A fresh body: every crude recipe, none of the manufactured tier (each gates on a crude
+    // good or a verb not yet held).
+    const fresh = collect(&w, e, &cat, act_one_test, "", &buf);
+    try testing.expectEqual(shelfTotal(&w, e, &cat, act_one_test), fresh.len);
+    for (fresh) |ent| try testing.expectEqual(roster.Tier.crude, ent.rec.tier.?);
+    const bicycle = cat.goodIndex("bicycle").?;
+    try testing.expect(!onShelf(&w, e, &cat, act_one_test, bicycle));
+
+    // Own sandals: the bicycle is listed (short, so dimmed), and the shelf grows by one.
+    w.get(e, comp.Goods).?.count[cat.goodIndex("sandals").?] = 1;
+    requote(&w, e, &cat);
+    try testing.expect(onShelf(&w, e, &cat, act_one_test, bicycle));
+    const after = collect(&w, e, &cat, act_one_test, "", &buf);
+    try testing.expectEqual(fresh.len + 1, after.len);
+    var kind: ?Kind = null;
+    for (after) |ent| if (ent.gi == bicycle) {
+        kind = ent.kind;
+    };
+    try testing.expectEqual(@as(?Kind, .reach), kind);
 }

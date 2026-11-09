@@ -413,7 +413,9 @@ pub fn capital_row(
     }, .{ style.pad_sym(row_pad_x, 6), Style{ .on = &.{.{ .when = .hot, .fill_ink = .panel }} } }); // the row is enabled only when ready
 
     // Name + the recipe's kind under it (`generator`, `tool`…), the row's type sub-label.
-    place(try name_cell(row, "nm", rec.name, recipeType(cat, rec), look.name), .recipe, 1);
+    // A manufactured recipe names its tier beside the kind (`tool · manufactured`).
+    const kind_label = if (rec.tier == .manufactured) try ctx.arena.print("{s} \u{00B7} manufactured", .{recipeType(cat, rec)}) else recipeType(cat, rec);
+    place(try name_cell(row, "nm", rec.name, kind_label, look.name), .recipe, 1);
 
     place(try cost_cell(row, "co", act, rec, look.ink), .cost, 1);
 
