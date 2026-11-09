@@ -62,8 +62,8 @@ values and emits nothing new, and a test says so.
   read it.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
-  reach, per generator the standing and its progress, and in each the first unpayable line by
-  its index. The `quotes` system fills every slot through `actions.quote`, `capital.quote` and
+  reach, per generator the standing and its progress, and in each the first resource it cannot
+  pay. The `quotes` system fills every slot through `actions.quote`, `capital.quote` and
   `capital.generator_quote`, so the ACTIONS tile (a verb or a generator), the BUILD row and a
   decider read one answer; the handlers still ask the rule at apply time, and the rule is the
   authority. It holds standings and not a verb's terms, which stay the pure read
@@ -345,9 +345,9 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
 | `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
-| `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `needs` (`capital.needsMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
+| `tick.track_reach` | ✓ | | | `RecipeInReach` once on the false→true edge of an Act I good's `any`/`all` gates (`capital.gatesMet`); the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce and a lost prerequisite re-arms it |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
-| `generators.generators` | ✓ | ✓ | ✓ | matures every owned generator not switched off by `dt`, and collects each `auto` one whose collection is ready (`capital.run_generators`) |
+| `generators.generators` | ✓ | ✓ | ✓ | matures every held generator verb not switched off by `dt`, and collects each `auto` one whose collection is ready (`capital.run_generators`) |
 | `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |
 | `tick.mark_dead` | ✓ | ✓ | ✓ | tags `Dead` at `vigor ≤ 0`, `Died` |
 | `tick.despawn_dead` | ✓ | ✓ | ✓ | reaps them |
@@ -382,51 +382,58 @@ ALIVE/WEARY/SPENT thresholds, applied in `rules/condition.refresh` alone.
 **An agent owns goods as counts, and everything it can do follows from them.** `comp.Goods`
 is one count per record of the authored roster (below); zero is not owned. `comp.Verbs` is
 the verbs the agent holds of its own, one flag per record. A verb's terms are never stored on
-the agent: `effects.verb` derives them from the base record and the goods owned, so each agent's Forage has its own price once it owns sandals, and a good
-is owned by exactly one agent and stacks only as a count. `comp.Granted` records what the
-goods contribute to the body and larder, so those deltas stay relative.
+the agent: `effects.verb` derives them from the base record and the goods owned, so each
+agent's Forage has its own price once it owns sandals, and a good is owned by exactly one
+agent and stacks only as a count. `comp.Granted` records what the goods contribute to the
+body and larder, so those deltas stay relative.
 
 ### Actions
 
-An agent holds a verb that is its own (`comp.Verbs`), that an owned good `grant`s or, for a
-verb that names a `tech`, once that technology is researched (`actions.verbOf`). The player's
-own verbs are the starting verbs `run.starting_verbs` names, Forage and Scavenge, resolved
-against the catalog at spawn; an id the catalog lacks is skipped. `actions.quote` is the one gate calculation: the verb's effective terms, the
-quality a begin would lock (`yield_factor` over the agent's `Condition` band), and a `Standing`
-of `ready`, `busy`, `energy` or `short` with the first unpayable line. It fills the verb slots
-of `comp.Quotes`, which the tile reads, and `begin` asks it again at apply
-time. An agent without a `Vigor` or a `Condition` has no quote.
+An agent holds a verb that is its own (`comp.Verbs`), or one that carries a gate and whose
+every gate passes: a researched `tech`, one of an `any` list and every one of an `all` list of
+goods and verbs, a good passing while one unit is owned and a verb while it is held
+(`effects.held`, read from the world by `actions.verbOf`). A verb with no gate is held only as
+an agent's own. The player's own verbs are the starting verbs `run.starting_verbs` names,
+Forage and Scavenge, resolved against the catalog at spawn; an id the catalog lacks is
+skipped, and a test holds every other Act I verb to a gate. `actions.quote` is the one gate
+calculation: the verb's effective terms, the quality a begin would lock (`yield_factor` over
+the agent's `Condition` band), and a `Standing` of `ready`, `busy`, `energy` or `short` with
+the first resource it cannot pay. It fills the verb slots of `comp.Quotes`, which the tile
+reads, and `begin` asks it again at apply time. An agent without a `Vigor` or a `Condition`
+has no quote, and a generator verb has none: it is collected, not begun.
 
 **Labor resolves in two halves,** because actions take time:
 
-- `begin` — refuse unless the quote is ready (one body, one act; energy strict; inputs
-  payable), returning the `Refused.Reason`; pay the energy and the input lines upfront; lock
+- `begin` — refuse unless the quote is ready (one body, one act; energy strict; resources
+  payable), returning the `Refused.Reason`; pay the energy and the resources upfront; lock
   `quality` at the *advertised* pre-payment band; refresh the agent's `Condition`; add
   `comp.Busy{ .doing = .{ .labor = index } }`; emit `WorkBegun`, `weary` when the toll crossed
   out of `alive`.
-- `finish` — draw each output line at the locked quality (**the spread is the risk**, there
-  is no separate success roll), deposit through `ledger.draw`, emit `WorkDone` with the
-  receipt of what landed. A verb lost mid-task — the rod sold while fishing — finishes as
+- `finish` — draw each yield at the locked quality (**the spread is the risk**, there is no
+  separate success roll), deposit through `ledger.draw`, restore the verb's `vigor` up to the
+  ceiling, emit `WorkDone` with the receipt of what landed. A verb lost mid-task — the rod sold while fishing — finishes as
   nothing, `WorkLost`.
 
 Both take a catalog index; `systems.resolve_busy` dispatches on the busy marker's tag.
 The affordability gates are asymmetric on purpose — **energy is strict** (vigor must stay
-above zero), **an item may be spent to exactly zero** (a `>=` gate would refuse every action
-that costs no materials at all).
+above zero), **a resource may be spent to exactly zero** (a `>=` gate would refuse every
+action that costs no materials at all).
 
 ### Capital
 
-Every buildable record goes through one path — `quote`, `begin`, `finish` — and what it does
-once owned is its `effects`, interpreted by `effects.zig`: a grant, a scale or offset on a
-verb's price or lines, a ceiling, a larder quality step, a spoilage factor. Generators are
-the goods with `day` lines, intermediates the goods whose once-output is a lot of themselves;
-neither is a category in code.
+Every buildable record goes through one path — `quote`, `begin`, `finish` — and a build
+yields one unit. What a good does once owned is its `effects`, interpreted by `effects.zig`:
+a scale or offset on a verb's energy, hours, a resource it requires or one it yields, a
+ceiling, a larder quality step, a spoilage factor. What it opens is the other side: a verb
+whose gate names it is held while one unit is owned, so a garden bed opens Tend garden and a
+spear opens Hunt.
 
-`capital.quote` answers for the BUILD row (through `comp.Quotes`) and the gate at once: the units owned, the `reach`
-of the build order (the smallest held-over-needed across its once-inputs), and a `Standing`
-in precedence order — `tech` (the technology the recipe waits on is not researched on the
-agent's board), `needs` (the verb or tool a modifier works on is not held, so a chainsaw is
-never offered without Split wood), `unlock` (the
+`capital.quote` answers for the BUILD row (through `comp.Quotes`) and the gate at once: the
+units owned, the `reach` of the build cost (the smallest held-over-needed across its
+resources), and a `Standing` in precedence order — `tech` (the technology the recipe's
+`requires.tech` names is not researched on the agent's board), `needs` (an `any`/`all` gate
+does not pass — a modifier lists the verb it works on, so a chainsaw is never offered without
+Split wood; the gates read the same way a verb's do, `effects.gatesMet`), `unlock` (the
 shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
 good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
 paid for), `busy`, `energy`, `short`, `ready`.
@@ -446,19 +453,24 @@ tool restores the next-best exactly, and any number of build → sell → build 
 terms bit-exact, because nothing is ever mutated in place. Goods outside a family stack
 freely (gloves and a chainsaw on the same verb).
 
-`cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the build
-order and frees the body, while the energy and every hour already spent are gone. The refund
-is flat rather than prorated because the order is charged in full at `begin` and nothing
-draws it down over time. It refuses on a labor verb — half-foraging is not a thing you can
+`cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the build's
+resources and frees the body, while the energy and every hour already spent are gone. The
+refund is flat rather than prorated because the resources are charged in full at `begin` and
+nothing draws them down over time. It refuses on a labor verb — half-foraging is not a thing you can
 take materials back from — and on an idle body, with `nothing_to_cancel`.
 
-`run_generators` matures every owned generator whose mode is not `off` by the frame's dt, up
-to its cycle, then collects each `auto` generator whose `generator_quote` is ready. A
-collection, the player's (`collect_generator`, which refuses with the quote's standing) or an
-`auto` one, is one private path: it pays the cycle's energy and its `day` inputs scaled to the
-cycle, draws the `day` outputs, restores the spec's vigor, refreshes the condition band, zeroes
-the progress and emits `Collected`. An `auto` generator the agent cannot pay for (`energy`,
-`short`) holds its full cycle and collects on the first frame it can; it never skips a yield.
+**Generators are verbs.** A verb the roster marks `generator` accumulates its
+`requires.hours` without occupying `Busy`, while the agent holds it; its state is
+`comp.Generators`, a progress and a mode per action index. `run_generators` matures every held
+generator verb whose mode is not `off` by the frame's dt, up to its cycle, then collects each
+`auto` one whose `generator_quote` is ready. A collection, the player's (`collect_generator`,
+which refuses with the quote's standing) or an `auto` one, is one private path: it pays the
+verb's whole `requires` (the energy, strictly, and the resources), draws its `output`, restores
+its `output.vigor`, refreshes the condition band, zeroes the progress and emits `Collected`.
+An `auto` generator the agent cannot pay for (`energy`, `short`) holds its full cycle and
+collects on the first frame it can; it never skips a yield. A verb no longer held — its good
+sold — keeps its progress and mode the way an `off` one does and accumulates nothing; a
+second unit of the good runs no second cycle.
 
 `goodsOwned` counts **kinds** — four pairs of sandals are never four goods built;
 `ownsMilestone` is what `detect_shelter` reads; `capacity` sums the housing of what is owned.
@@ -507,39 +519,52 @@ or a technology: an agent holds goods as counts and research as one state per ti
 everything else is derived from the records. The files are the contract new content is
 written against.
 
-**One id space.** A record's id is plain snake case — `forage`, `hatchet`, `charcoal` — and
-the file is its kind. Resources, actions and goods share the space: a reference resolves by
-lookup, and a collision is a load error. Resources are the `Resource` enum in code, not data,
-because each one is structural (a stockline, a palette hue, a board wedge) and has its own
-behavior (food spoils, coin settles); a line names one by its tag name.
+**One id space.** A record's id is plain snake case — `forage`, `hatchet`, `garden_bed` — and
+the file is its kind. Actions and goods share the space, and neither may take a resource's
+name: a gate or an effect target resolves by lookup, and a collision is a load error.
+Resources are the `Resource` enum in code, not data, because each one is structural (a
+stockline, a palette hue, a board wedge) and has its own behavior (food spoils, coin
+settles); a record keys an amount by its tag name.
 
-**Lines.** Every quantity is a `Line { item, n, kind = .fixed, sd, per = .once }`: an item and
-an amount, drawn when `kind` is not `.fixed`, settled `once` (an input at begin, an output at
-completion) or authored per `day` for a collectable generator. A generator carries a cycle
-`generator { energy, hours, vigor = 0 }`: a cycle accumulates hours without occupying `Busy`;
-collection pays the low energy cost and the complete cycle-scaled upkeep, then realizes all day
-outputs and optional direct Vigor restoration atomically. Each owned generator has a mode
+**Amounts are keyed by resource.** A record never lists items: every amount is a field named
+for a `Resource`, so a new resource fails to compile until each keyed shape follows (a
+`comptime` check against the enum's tags). `Requires { energy, hours, food … coin, tech, any,
+all }` is everything a record demands — the body's energy (strictly below current vigor), the
+hours, an amount of each resource, spendable to zero, and its gates. `Output { food … coin,
+vigor }` is what a verb yields: a `Draw` per resource, `.{ .poisson = 3.0 }` (`fixed`,
+`normal`, `poisson`, `uniform`, `exponential`, the number the scale `dist.Dist.s`, so the
+spread is the risk), and `vigor` restored directly, clamped at the ceiling. A technology's
+`cost` is a `Stock`, an amount per resource.
+
+**The hierarchy is research → build → action.** A verb is an `Action { id, name, act,
+sectors, generator, requires, output }`. Its `requires` is paid at begin and `output` drawn at
+completion; a `generator` verb instead accumulates `requires.hours` passively and pays the
+whole `requires` and draws `output` at each collection. A gate entry is a good id (passing
+while one unit is owned) or a verb id (passing while that verb is held); `tech` names a
+technology that must read researched. A verb with a gate is held while every gate passes, one
+without only as an agent's own. A `Good { id, name, act, buildable, tier, sectors, requires,
+family, effects, unlock, capacity, milestone, copy }` has a `requires` that is its build cost
+and gates, and a build yields one unit of it. Each held generator verb has a mode
 (`comp.Generators.Mode`), which the toggle cycles on → auto → off → on: `on` accumulates and
 waits for the player to collect, `auto` accumulates and collects itself, `off` preserves its
-progress and consumes nothing. A record's ordinary `requires { energy, hours }` remains the
-body-and-time build price, plus its `input` and `output` lists. An intermediate is a good whose
-once-output is a lot of itself.
+progress and consumes nothing.
 
-**Effects.** What owning a good does is a list from a fixed vocabulary: `grant` a verb;
-`scale` or `add` a verb's `energy`, `hours`, or a named `input`/`output` line;
-`vigor_ceiling`; `food_quality`; `spoil_scale`. A `family { name, rank }` says a better tool
-supersedes a weaker one; `needs` names the verb a modifier works on; `unlock`, `capacity` and
-`milestone` are the shelter's. `copy` carries the player's words — the BUILD effect sentence,
-the rail's short form, the receipt line.
+**Effects.** What owning a good does is a list from a fixed vocabulary: `scale` or `add` a
+verb's `energy`, `hours`, a resource it requires (`.{ .input = .biomass }`) or one it yields
+(`.{ .output = .food }`) — an `add` to an absent yield inserts it as `fixed`; `vigor_ceiling`;
+`food_quality`; `spoil_scale`. A `family { name, rank }` says a better tool supersedes a
+weaker one; `unlock`, `capacity` and `milestone` are the shelter's. `copy` carries the
+player's words — the BUILD effect sentence, the rail's short form, the receipt line.
 
 **Technologies.** A tile of the research board is a `Technology { id, name, short, act, coord,
-cost, initial, effect, enables }`: a `short` board label of a few capitals, an axial `coord` the ring and wedge derive from, a research
-`cost` as once-lines, and the `initial` state the act opens on (`locked`, `available`,
-`researched`). Technologies have an id space of their own — a tile is never an item, and only
-a good's or a verb's `tech` names one — so a recipe and the technology that opens it may share
-a name. Per agent the board is `comp.Research`, one `TechState` per catalog index, seeded at the
-curtain by `Research.entry`; a recipe that names a `tech` quotes `tech` until that state reads
-`researched`, and a verb that names one is held from then on, as a grant would hold it.
+cost, initial, effect, enables }`: a `short` board label of a few capitals, an axial `coord`
+the ring and wedge derive from, a research `cost` keyed by resource, and the `initial` state
+the act opens on (`locked`, `available`, `researched`). Technologies have an id space of their
+own — a tile is never an item, and only a `requires.tech` names one — so a recipe and the
+technology that opens it may share a name. Per agent the board is `comp.Research`, one
+`TechState` per catalog index, seeded at the curtain by `Research.entry`; a recipe that names a
+`tech` quotes `tech` until that state reads `researched`, and a verb that names one is held
+from then on, once its other gates pass.
 
 **The research board.** The sixty records in `assets/roster/technologies.zon` are the tiles;
 the rules they obey are here. The board is an adoption board: research establishes already-known
@@ -576,10 +601,10 @@ the rule computes from the two Researched tiles carried over from Act I.
 
 *Researching.* `research.research` takes a tile that is Available and whose whole cost is held,
 deducts the complete bundle (never part of it), marks the tile Researched and promotes only its
-outward neighbors; on any failure nothing changes. A cost is a list of once-lines in the six
+outward neighbors; on any failure nothing changes. A cost is an amount of each of the six
 research resources: never Coin, vigor, population, finished goods or Materials. A tile's wedge or
 hybrid pair names its domain, not its recipe, so a cost may name resources outside it. Every
-resource a cost names has an authored source (an action or a good that outputs it), checked by
+resource a cost names has an authored source (an action that yields it), checked by
 test. Affordability is not a state: a tile that cannot be paid stays Available and `deficits`
 reports the shortfall per resource, with no advice on how to cover it. Research builds no
 good: it unlocks actions, transformations and BUILD recipes, and the goods are made in BUILD.
@@ -601,27 +626,32 @@ content is authored into the same files without leaking back; the Act II pages
 (`pages/act_two/`) read the records of act 2.
 
 **The interpreter (`effects.zig`, `ledger.zig`).** What an agent can do, and on what
-terms, is a pure function of the catalog, the verbs it holds of its own and the goods it owns:
-`effects.verb` folds every applying good's effects into the base record, in roster order, and
-returns null when the agent neither holds the verb nor owns a good that grants it. Nothing is cached and there is no remove path — losing a good is a
-different input to the same function, which is what keeps a build → sell → build cycle
+terms, is a pure function of the catalog and its `Holdings` — the verbs it holds of its own,
+the goods it owns and its research: `effects.held` reads the gates, and `effects.verb` folds
+every applying good's effects into the base record, in roster order, and returns null when the
+agent does not hold the verb. Nothing is cached and there is no remove path — losing a good is
+a different input to the same function, which is what keeps a build → sell → build cycle
 bit-exact. A family's best rank owned is the only member of that family that applies. The
 body and larder are the one exception to derive-never-store, because their components have
 other writers: `effects.apply` computes the contribution, diffs it against `comp.Granted`,
 and applies the delta — a raised ceiling fills what it adds, a lowered one only clamps.
-`ledger.zig` is where a line meets holdings: the one switch over `Resource` to the inventory
+`ledger.zig` is where an amount meets holdings: the one switch over `Resource` to the inventory
 components — the Act II ones opened at the curtain, none for coin, since the simulation
-recognizes no medium of exchange (a stand-in; see [`../docs/roadmap.md`](../docs/roadmap.md)) — plus `comp.Goods` counts for a good item, with
-`short`/`pay`/`draw` over a list
-of lines. Per agent that leaves `Verbs` (a flag per catalog index), `Goods` (a count per
-catalog index) and `Granted`; the
-catalog itself sits on `sim.Resources` as `catalog`, so a system declares `*const roster.Catalog`.
+recognizes no medium of exchange (a stand-in; see [`../docs/roadmap.md`](../docs/roadmap.md))
+— plus `comp.Goods` counts for a traded good, with `short`/`pay`/`refund` over a `Requires`
+and `draw` over an `Output`, in `Resource` order. Per agent that leaves `Verbs` (a flag per
+catalog index), `Goods` (a count per catalog index), `Generators` and `Granted`; the catalog
+itself sits on `sim.Resources` as `catalog`, so a system declares `*const roster.Catalog`.
 
 **Validation.** `roster.load` refuses a file whole: a parse error carries its line and
-column, a shape or cross-reference failure its `Rule` and the offending id — an unknown item
-or target, a later-act reference, a rank or milestone collision, a drawn input, a day line on an
-action, a recipe or verb waiting on no technology, a tile on the foundation or on another's
-coordinate, more records than the per-agent containers hold (`max_goods`, `max_techs`). The
+column — a field naming no resource is one — and a shape or cross-reference failure its `Rule`
+and the offending id: an effect target that is no verb, a gate entry naming neither a good nor
+a verb, a verb whose gates lead back to itself, a technology that does not exist, a later-act
+reference (a resource, a gate, a target or a technology), a rank or milestone collision, a
+buildable good without a tier or a traded one with a tier or any `requires`, a negative
+amount, a non-positive draw scale, a generator with no cycle, a tile not established at the
+curtain with no cost, a tile on the foundation or on another's coordinate, more records than
+the per-agent containers hold (`max_actions`, `max_goods`, `max_techs`). The
 shipped files are compiled in (`roster.shipped`, wired in `build.zig`) and parsed through the
 same path, so `zig build test` validates the real content.
 
@@ -631,8 +661,8 @@ the shipped files one by one: `Resources.init` loads through
 in the console. While the game runs, `reload.Watch` looks at the files' modification times
 twice a second from the main loop, and a change re-parses them between frames. A load that
 fails keeps the catalog and logs why, in full to the console and in one line to the event
-log. A load that succeeds is swapped in: each agent's own verbs, goods and research, the work
-in progress and the reach seen-set move to the new catalog indices by id, a record the files
+log. A load that succeeds is swapped in: each agent's own verbs, goods, generator state and
+research, the work in progress and the reach seen-set move to the new catalog indices by id, a record the files
 no longer hold takes its flag, its count and any work on it with it, and every agent resettles its body and
 larder. Rows that repeat are keyed by the record's id, so focus survives a reload that reorders
 a file.
@@ -646,7 +676,8 @@ order; entity ids are not saved, and a load spawns fresh ones into a cleared wor
 (`Verbs`, `Goods`, `Generators`, `Research`, `Busy`) are saved as records keyed by the roster's
 ids — the verbs as a list of ids — so a save survives a roster edit: a load resolves each id against the roster it finds, drops and
 counts a record whose id is gone (a `Busy` on one is dropped whole), reads a generator record's
-`off = true`, the older word for its mode, as mode `off`, opens a technology new to
+`off = true`, the older word for its mode, as mode `off`, reads a version-2 generator record,
+keyed by the good that ran it, as the generator verb that good opens, opens a technology new to
 the roster at its authored initial, and resettles each agent's body and larder through
 `effects.apply`, which changes nothing on an unchanged roster. `Quotes` is derived, so a save
 says only that an agent carries it; the `quotes` writer refills it on the load frame's tick,
@@ -656,8 +687,8 @@ prng's state is kept, so the run's luck carries over as it does across `Sim.rese
 seen-set as good ids; the log as its lines, oldest first, pushed back in order with each line's
 own time, and its count of lines ever pushed.
 
-`version` guards the shape: `read` parses the version alone first and refuses any other
-(`error.UnknownVersion`). The encounter and the merchant's visit are saved as they are, and
+`version` guards the shape: `read` parses the version alone first and refuses one outside
+`oldest` (2) to `version` (3) (`error.UnknownVersion`). The encounter and the merchant's visit are saved as they are, and
 their arrays index tables in code rather than the roster, so a change to those tables is a
 change of version. A write goes to a temporary file renamed over the slot
 (`std.Io.Dir.createFileAtomic`), so a failed write leaves the slot as it was.

@@ -61,8 +61,9 @@ Twenty unlocked verbs do not fit as large cards, so ACTIONS is one search-first 
 with compact two-column rows. Each row is one full button and carries name, readiness, energy,
 time, distribution shape and expected output. Plain text plus `in:`, `out:`, `type:`/`kind:`,
 `state:`/`status:` and `is:` qualifiers search all 20 actions; comma alternatives, leading `-` and
-`*` use the same grammar as BUILD. The grid also lists the owned generators, after the verbs, as
-the generator tile (collect on the body, the mode corner on its lower right); a generator answers
+`*` use the same grammar as BUILD. The grid also lists the held generator verbs, after the labor
+verbs, as the generator tile (collect on the body, the mode corner on its lower right): Check
+traps while the wire snares are owned, Tend garden while a garden bed is; a generator answers
 `type:generator`, a verb `type:verb`. A toolbar under the search holds the hidden count on the
 left and the sort chips `SORT DEFAULT · STATE · NAME · COST · TIME` on the right: a chip
 pressed first sorts in its natural direction (DEFAULT the authored order, verbs then
@@ -77,21 +78,21 @@ per-view UI state and is not saved. The heading's eyebrow, `{n} VERBS · {m} GEN
 two kind toggles: pressing one shows that kind alone, pressing it again shows everything.
 Every act uses the same ACTIONS pane (`actions_section`); only its content differs (which verbs
 and generators, the subtitle and the density). Act I lists the body's verbs and generators at the
-regular density; Act II lists the settlement's verbs and the union of both acts' owned
+regular density; Act II lists the settlement's verbs and the union of both acts' held
 generators, compact.
 
 **A generator is collectable passive capital.** Its tile's underbar fills from authoritative
 simulation progress; while charging it is not collectable, at completion its state line reads
 `ready — collect`, and collection pays the displayed small Vigor/upkeep price and realizes the
-complete cycle immediately. Collection never creates or interrupts `Busy`, so a trap round, food
-bed, or medicinal herb bed can be collected while the body is already working. The mode corner
+complete cycle immediately. Collection never creates or interrupts `Busy`, so a trap round, a
+garden's crop, a remedy or the eggs can be collected while the body is already working. The mode corner
 cycles `● ON`, `◉ AUTO` and `○ OFF` with one click. On accumulates and waits to be collected;
 auto collects each complete cycle itself whenever it is payable; off freezes its current progress
 and consumes nothing, and turning it on resumes from that exact point. At Act II's compact
 density the state word rides the name row, so a generator tile stands as tall as a verb tile.
-Garden bed and Wire snares realize their authored per-day resource rates over their cycle
-duration. Medicinal herb bed restores direct Vigor without raising its ceiling. No generator
-transfers resources every frame.
+A generator's cost and yield are authored per cycle. Gather remedy restores direct Vigor
+without raising its ceiling. No generator transfers resources every frame. Selling the good
+that opens a generator stops its cycle where it stands; a second unit runs no second cycle.
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named
@@ -125,7 +126,7 @@ build with an emptying larder needs a visible way out.
 **Search first; sort on demand.** A larger catalog makes fixed groups less useful, not more.
 BUILD remains one list behind one search field. Plain text searches names, effects and costs;
 `in:<resource>` and `out:<resource>` inspect recipe edges; `type:<kind>` covers generator,
-tool, comfort, storage, transport and material; `state:<state>`/`is:<value>` inspect current
+tool, comfort, storage and shelter; `state:<state>`/`is:<value>` inspect current
 state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` excludes, and
 `*` exposes the complete catalog. `/` focuses the field and Escape clears it.
 
