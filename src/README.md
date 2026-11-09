@@ -21,7 +21,9 @@ The resource model separates survival from accounting:
 - **Vigor** (`comp.Vigor { v, max }`) is that source, and **`vigor == 0` is death**. The
   fraction `v/max` also scales an action's output quality, so a tired actor produces less.
 - **Food** (`comp.InventoryFood { v, quality, spoils }`) is a perishable larder — produced by
-  labor, consumed continuously by the metabolism, and always spoiling.
+  labor, consumed continuously by the metabolism, and always spoiling: `spoils` is the fraction
+  of the stock that rots per in-game day (a tenth at spawn, halved by a root cellar), so a
+  larder of 10 loses one a day and a larder of 3 loses 0.3.
 - **Biomass** (`comp.InventoryBiomass { v }`) is the fungible durable stockpile in every act:
   Act I UI and log prose cover its official name as **Materials**, while Act II shows Biomass.
   The curtain carries the same balance unchanged.
@@ -342,7 +344,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | System | `act_one` | `act_two` | `act_three` | Does |
 |---|---|---|---|---|
 | `tick.advance_clock` | ✓ | ✓ | ✓ | bumps `sim.elapsed`, only while a player exists |
-| `tick.update_food` | ✓ | ✓ | ✓ | spoils each larder toward zero at its own `spoils` rate |
+| `tick.update_food` | ✓ | ✓ | ✓ | rots each larder by its `spoils` fraction per day, in proportion to what it holds |
 | `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once when an Act I recipe is first both listed (`capital.listed`: buildable, not the milestone, every gate passing) and affordable; the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce, falling short again does not re-arm it, and leaving the shelf (a gate's tool lost) does |

@@ -20,10 +20,12 @@ pub const Vigor = struct {
     max: f32 = 10,
 };
 
+/// The larder. `spoils` is the fraction of the stock that rots per in-game day
+/// (`systems.update_food`): a larder of 10 loses one a day, a larder of 3 loses 0.3.
 pub const InventoryFood = struct {
     v: f32 = 4,
     quality: u8 = 1,
-    spoils: f32 = 0.05,
+    spoils: f32 = 0.1,
 };
 
 pub const InventoryBiomass = struct {

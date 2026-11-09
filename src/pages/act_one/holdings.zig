@@ -74,7 +74,7 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
         try margins.append(a, .{
             .key = "spoilage",
             .label = "Food spoilage",
-            .value = try a.print("{d:.2} \u{2192} {d:.2}/day", .{ s0, food.spoils }),
+            .value = try a.print("{d:.0}% \u{2192} {d:.0}%/day", .{ s0 * 100, food.spoils * 100 }),
             .verdict = vd.margin(food.spoils, s0, .lower),
         });
     }

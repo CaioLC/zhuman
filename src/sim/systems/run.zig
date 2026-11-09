@@ -32,7 +32,7 @@ fn spawn_agent(world: *World, cat: *const roster.Catalog) Entity {
     // starting state has exactly one source.
     return world.spawn(.{
         comp.Vigor{}, // rested at the ceiling (10/10)
-        comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, spoils 0.05)
+        comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, a tenth rots a day)
         comp.InventoryBiomass{ .v = 0 }, // nothing stockpiled yet
         comp.Metabolism{}, // eats continuously from the first breath (normal rate)
         comp.Verbs.of(cat, &starting_verbs), // the starting verbs; an id the catalog lacks is skipped

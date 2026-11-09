@@ -435,11 +435,11 @@ test "the body and larder: ceilings fill on the way up and clamp on the way down
     own(&w, e, &cat, "cookpot");
     own(&w, e, &cat, "root_cellar");
     try testing.expectEqual(@as(u8, 2), w.get(e, comp.InventoryFood).?.quality);
-    try testing.expectApproxEqAbs(@as(f32, 0.025), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
+    try testing.expectApproxEqAbs(@as(f32, 0.05), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
     lose(&w, e, &cat, "root_cellar");
     lose(&w, e, &cat, "cookpot");
     try testing.expectEqual(@as(u8, 1), w.get(e, comp.InventoryFood).?.quality);
-    try testing.expectApproxEqAbs(@as(f32, 0.05), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
+    try testing.expectApproxEqAbs(@as(f32, 0.1), w.get(e, comp.InventoryFood).?.spoils, 1e-7);
 }
 
 test "a scale on an absent output is nothing to scale; an add inserts it, or adds to an input" {

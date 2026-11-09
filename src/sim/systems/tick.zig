@@ -30,16 +30,17 @@ pub fn advance_clock(
     sim.log.now = sim.elapsed; // lines pushed this frame carry the current game time
 }
 
-/// Spoil the larder toward zero at `spoils` units/second — food rots, so a surplus can't
-/// simply be banked forever.
+/// Spoil each larder by its `spoils` fraction per in-game day, in proportion to what it holds —
+/// food rots, so a surplus can't simply be banked forever, and a big larder rots fastest.
 pub fn update_food(
     time: *const res_mod.Time,
+    cfg: *const res_mod.Config,
     q: Query(.{comp.InventoryFood}),
 ) void {
-    const dt = time.dt;
+    const dt_days = time.dt / cfg.secs_per_day;
     var it = q.iter();
     while (it.next()) |f| {
-        f.v -= dt * f.spoils;
+        f.v -= f.v * f.spoils * dt_days;
         if (f.v < 0) f.v = 0;
     }
 }
@@ -227,6 +228,19 @@ test "resolve_busy ticks the work and resolves it exactly once, at completion" {
     ecs.run(&w, &res, resolve_busy); // idle tick — nothing to resolve
     logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 1), res.sim.log.count);
+}
+
+test "update_food rots a share of the larder, not a flat amount" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day / 1000; // a thousandth of a day
+    const big = w.spawn(.{comp.InventoryFood{ .v = 10 }});
+    const small = w.spawn(.{comp.InventoryFood{ .v = 3 }});
+    for (0..1000) |_| ecs.run(&w, &res, update_food);
+    // A tenth a day: 10 loses about one, 3 about 0.3 (compounding takes a hair less).
+    try std.testing.expectApproxEqAbs(@as(f32, 10 * @exp(-0.1)), w.get(big, comp.InventoryFood).?.v, 1e-2);
+    try std.testing.expectApproxEqAbs(@as(f32, 3 * @exp(-0.1)), w.get(small, comp.InventoryFood).?.v, 1e-2);
 }
 
 test "metabolize eats continuously, converting food to vigor (clamped at max)" {

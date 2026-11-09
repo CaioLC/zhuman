@@ -28,6 +28,6 @@ test "baselines mirror the component defaults (single source, no drift)" {
     try std.testing.expectEqual((comp.Vigor{}).v, vigor_ceiling); // rested: v == max at spawn
     try std.testing.expectEqual(@as(f32, 4), food_units);
     try std.testing.expectEqual(@as(u8, 1), food_quality);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.05), food_spoils, 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), food_spoils, 1e-6);
     try std.testing.expectEqual((comp.InventoryFood{}).quality, food_quality);
 }
