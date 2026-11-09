@@ -8,11 +8,12 @@
 //! answer onto `comp.Quotes` for the BUILD row and a decider, and `begin` asks it again at
 //! apply time.
 //!
-//! Two gates beside the price. `needs` — the verb or tool a modifier works on must be held
-//! (the roster's only tech-tree edge: you need the hatchet before the tools that sharpen it).
-//! `unlock` — standing conditions, read at `begin` and not again, so a dip mid-build doesn't
-//! stop work already paid for. The affordability gates are asymmetric on purpose: energy is
-//! strict (vigor may never reach zero), an item may be spent to exactly zero.
+//! Gates beside the price. A good's `requires` names a `tech` that must read researched, and
+//! `any`/`all` lists of goods and verbs (`effects.gatesMet`, the verbs' own gate reading): a
+//! modifier lists the verb it works on, so you need the hatchet before the tools that sharpen
+//! it. `unlock` — standing conditions, read at `begin` and not again, so a dip mid-build
+//! doesn't stop work already paid for. The affordability gates are asymmetric on purpose:
+//! energy is strict (vigor may never reach zero), a resource may be spent to exactly zero.
 //!
 //! Every good carries a count, and owning one is no reason you can't make another — building
 //! for someone else is what a count is for. **Only the first unit carries the effect**: a
@@ -42,7 +43,8 @@ const Reason = events.Refused.Reason;
 
 /// Why a build cannot begin right now, or `ready`: the standing `comp.Quotes` carries per
 /// recipe. The order is the precedence: a technology not yet researched says "tech" before
-/// anything else, then a missing prerequisite "needs", standing conditions before the body.
+/// anything else, then an `any`/`all` gate that does not pass "needs", standing conditions
+/// before the body.
 pub const Standing = comp.Quotes.BuildStanding;
 
 pub const Quote = struct {
@@ -51,10 +53,10 @@ pub const Quote = struct {
     /// Units already owned. Owning some is no reason not to build more.
     count: u32,
     standing: Standing,
-    /// The first unpayable line of the build order when `standing == .short`.
-    short: ?roster.Line = null,
-    /// How close the build order is to affordable: the smallest held/needed over its
-    /// once-inputs, 1 when it has none.
+    /// The first unpayable resource of the build cost when `standing == .short`.
+    short: ?roster.Resource = null,
+    /// How close the build cost is to affordable: the smallest held/needed over its
+    /// resources, 1 when it names none.
     reach: f32,
 
     pub fn ready(self: Quote) bool {
@@ -66,33 +68,33 @@ pub const Quote = struct {
 pub fn quote(w: *const World, e: Entity, cat: *const Catalog, gi: u16) ?Quote {
     const rec = &cat.goods[gi];
     if (!rec.buildable) return null;
-    const goods = w.get(e, comp.Goods) orelse return null;
+    const h = effects.holdingsOf(w, e) orelse return null;
     const vigor = w.get(e, comp.Vigor) orelse return null;
-    const price = rec.requires.?;
-    const order = roster.Lines.only(rec.input, .once);
-    var q = Quote{ .gi = gi, .rec = rec, .count = goods.count[gi], .standing = .ready, .reach = reachOf(w, e, cat, order.slice()) };
-    if (!techMet(w, e, cat, gi)) {
+    const req = &rec.requires;
+    var q = Quote{ .gi = gi, .rec = rec, .count = h.goods.count[gi], .standing = .ready, .reach = reachOf(w, e, req) };
+    if (!effects.techMet(cat, h, req)) {
         q.standing = .tech;
-    } else if (!needsMet(w, e, cat, gi)) {
+    } else if (!effects.listsMet(cat, h, req)) {
         q.standing = .needs;
     } else if (!unlockMet(w, e, cat, gi)) {
         q.standing = .unlock;
     } else if (w.has(e, comp.Busy)) {
         q.standing = .busy;
-    } else if (price.energy >= vigor.v) {
+    } else if (req.energy >= vigor.v) {
         q.standing = .energy;
-    } else if (ledger.short(w, e, cat, order.slice(), 1)) |l| {
+    } else if (ledger.short(w, e, req, 1)) |r| {
         q.standing = .short;
-        q.short = l;
+        q.short = r;
     }
     return q;
 }
 
-fn reachOf(w: *const World, e: Entity, cat: *const Catalog, order: []const roster.Line) f32 {
+fn reachOf(w: *const World, e: Entity, req: *const roster.Requires) f32 {
     var r: f32 = 1;
-    for (order) |l| {
-        if (l.n <= 0) continue;
-        r = @min(r, ledger.held(w, e, cat, l) / l.n);
+    for (std.enums.values(roster.Resource)) |res| {
+        const n = req.get(res);
+        if (n <= 0) continue;
+        r = @min(r, ledger.balance(w, e, res) / n);
     }
     return r;
 }
@@ -100,23 +102,21 @@ fn reachOf(w: *const World, e: Entity, cat: *const Catalog, order: []const roste
 /// Whether the technology a recipe waits on is researched for this agent. No `tech` means
 /// yes; an agent without a board has researched nothing.
 pub fn techMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
-    const id = cat.goods[gi].tech orelse return true;
-    const ti = cat.techIndex(id) orelse return false;
-    const research = w.get(e, comp.Research) orelse return false;
-    return research.state[ti] == .researched;
+    const h = effects.holdingsOf(w, e) orelse return false;
+    return effects.techMet(cat, h, &cat.goods[gi].requires);
 }
 
-/// Whether every `needs` entry is held: a verb as `actions.holds` answers it, a tool by count.
-pub fn needsMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
-    const goods = w.get(e, comp.Goods) orelse return false;
-    for (cat.goods[gi].needs) |n| {
-        if (cat.actionIndex(n)) |ai| {
-            if (!actions.holds(w, e, cat, ai)) return false;
-        } else if (cat.goodIndex(n)) |ng| {
-            if (goods.count[ng] == 0) return false;
-        } else return false;
-    }
-    return true;
+/// Whether a recipe's `any` and `all` gates pass for this agent: a good owned, a verb held.
+pub fn gatesMet(w: *const World, e: Entity, cat: *const Catalog, gi: u16) bool {
+    return firstUnmetGate(w, e, cat, gi) == null;
+}
+
+/// The id of the first `any`/`all` gate entry that stands in the way of recipe `gi`, or null
+/// when they pass (`effects.firstUnmet`).
+pub fn firstUnmetGate(w: *const World, e: Entity, cat: *const Catalog, gi: u16) ?[]const u8 {
+    const req = &cat.goods[gi].requires;
+    const h = effects.holdingsOf(w, e) orelse return if (req.any.len > 0) req.any[0] else if (req.all.len > 0) req.all[0] else null;
+    return effects.firstUnmet(cat, h, req);
 }
 
 /// Whether the builder meets the good's standing conditions. No `unlock` means none.
@@ -165,7 +165,7 @@ pub fn capacity(w: *const World, e: Entity, cat: *const Catalog) u32 {
 
 // --- build / acquire / release ------------------------------------------------------------
 
-/// Begin building `gi`: pay the price and the build order upfront and start the work — the
+/// Begin building `gi`: pay the energy and the resources upfront and start the work — the
 /// good, and whatever it does, arrives only when `finish` resolves, `requires.hours` later.
 /// Emits `WorkBegun` and returns null; when the quote is not ready it changes nothing and
 /// returns why. Dying mid-build loses the work.
@@ -177,19 +177,18 @@ pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
         .ready => unreachable,
         inline else => |t| @field(Reason, @tagName(t)),
     };
-    const price = q.rec.requires.?;
-    const order = roster.Lines.only(q.rec.input, .once);
+    const price = &q.rec.requires;
     const vigor = w.get(e, comp.Vigor).?;
     vigor.v -= price.energy;
     // The band the toll moves is the build's, not the metabolism's (`rules/condition`).
     const crossing = if (w.get(e, comp.Condition)) |c| condition.refresh(&res.config, vigor, c) else null;
-    ledger.pay(w, e, cat, order.slice(), 1);
+    ledger.pay(w, e, price, 1);
     _ = res.events.writer(events.WorkBegun).push(.{
         .agent = e,
         .doing = .{ .build = gi },
         .weary = condition.wearied(crossing),
         .energy = price.energy,
-        .paid = ledger.receiptOf(cat, order.slice(), 1),
+        .paid = ledger.receiptOf(price, 1),
         .act = migration.actOf(w, e),
     });
     const total = res_mod.hours_to_secs(price.hours, res.config.secs_per_day);
@@ -198,15 +197,14 @@ pub fn begin(w: *World, e: Entity, res: *Resources, gi: u16) ?Reason {
     return null;
 }
 
-/// Completion of a build: own the lot, settle its effect if this is the first unit (a repeat
-/// build is stock, not a second effect), and emit `WorkDone` with the lot as its receipt and
+/// Completion of a build: own one more unit, settle its effect if this is the first (a repeat
+/// build is stock, not a second effect), and emit `WorkDone` with the unit as its receipt and
 /// the count now owned, then `GoodsChanged`. Called by `systems.resolve_busy`.
 pub fn finish(w: *World, e: Entity, res: *Resources, gi: u16) void {
     const cat = &res.catalog;
     const goods = w.get(e, comp.Goods) orelse return;
-    const rec = &cat.goods[gi];
     const was = goods.count[gi];
-    const units = lot(rec);
+    const units: u32 = 1;
     goods.count[gi] += units;
     if (was == 0) {
         settle(w, e, cat);
@@ -256,11 +254,11 @@ pub fn break_one(w: *World, e: Entity, res: *Resources, gi: u16) void {
     _ = res.events.writer(events.GoodBroke).push(.{ .agent = e, .gi = gi });
 }
 
-/// Abandon a build in progress: salvage `config.cancel_refund` of the build order and free
-/// the body. The energy and every hour already spent are gone — this is an exit from a
+/// Abandon a build in progress: salvage `config.cancel_refund` of the build's resources and
+/// free the body. The energy and every hour already spent are gone — this is an exit from a
 /// four-day build with an emptying larder, not an undo. The refund is flat rather than
-/// prorated because the order is charged in full at `begin` and nothing draws it down over
-/// time. Refuses on a labor verb (half-foraging is not a thing you can take materials back
+/// prorated because the resources are charged in full at `begin` and nothing draws them down
+/// over time. Refuses on a labor verb (half-foraging is not a thing you can take materials back
 /// from) and on an idle body, returning `nothing_to_cancel`; otherwise emits `BuildCancelled`
 /// with what came back and returns null.
 pub fn cancel_build(w: *World, e: Entity, res: *Resources) ?Reason {
@@ -270,9 +268,7 @@ pub fn cancel_build(w: *World, e: Entity, res: *Resources) ?Reason {
         .labor => return .nothing_to_cancel,
     };
     const cat = &res.catalog;
-    const order = roster.Lines.only(cat.goods[gi].input, .once);
-    const refund = ledger.receiptOf(cat, order.slice(), res.config.cancel_refund);
-    for (order.slice()) |l| _ = ledger.give(w, e, cat, l.item, l.n * res.config.cancel_refund);
+    const refund = ledger.refund(w, e, &cat.goods[gi].requires, res.config.cancel_refund);
     w.remove(e, comp.Busy);
     _ = res.events.writer(events.BuildCancelled).push(.{ .agent = e, .gi = gi, .refund = refund, .act = migration.actOf(w, e) });
     return null;
@@ -284,13 +280,6 @@ pub fn settle(w: *World, e: Entity, cat: *const Catalog) void {
     effects.apply(w, e, cat);
 }
 
-/// A built lot: a once-output naming the good itself, else one unit.
-fn lot(rec: *const roster.Good) u32 {
-    for (rec.output) |l| {
-        if (l.per == .once and std.mem.eql(u8, l.item, rec.id)) return @intFromFloat(@round(l.n));
-    }
-    return 1;
-}
 
 /// A record name in sentence position — "Your fishing rod broke." — by lowering the first
 /// letter; names are authored in sentence case.
@@ -310,13 +299,13 @@ pub const GeneratorStanding = comp.Quotes.GeneratorStanding;
 pub const GeneratorQuote = struct {
     ai: u16,
     rec: *const roster.Action,
-    /// The verb's effective terms: the cycle's hours, the collection's energy and inputs, and
-    /// the yield.
+    /// The verb's effective terms: the cycle's hours, the collection's energy and resources,
+    /// and the yield.
     verb: effects.Verb,
     standing: GeneratorStanding,
     progress: f32,
     total: f32,
-    short: ?roster.Line = null,
+    short: ?roster.Resource = null,
 
     pub fn ready(self: GeneratorQuote) bool {
         return self.standing == .ready;
@@ -346,16 +335,24 @@ fn ensureIfGenerating(w: *World, e: Entity, cat: *const Catalog) void {
     }
 }
 
-/// The generator verb the good `id` opens, if it opens one: what its BUILD row calls a
-/// generator and a fixture's mode corner names.
+/// The first generator verb whose gate names the good `id`, if one does: what its BUILD row
+/// calls a generator and a fixture's mode corner names.
 pub fn generatorOf(cat: *const Catalog, id: []const u8) ?u16 {
-    const g = cat.good(id) orelse return null;
-    for (g.effects) |fx| switch (fx) {
-        .grant => |verb| if (cat.actionIndex(verb)) |ai| {
-            if (cat.actions[ai].generator) return ai;
-        },
-        else => {},
-    };
+    return gatedBy(cat, id, true);
+}
+
+/// The first verb whose gate names the good `id`, if one does: the verb owning it opens.
+pub fn opens(cat: *const Catalog, id: []const u8) ?u16 {
+    return gatedBy(cat, id, false);
+}
+
+fn gatedBy(cat: *const Catalog, id: []const u8, generator_only: bool) ?u16 {
+    for (cat.actions, 0..) |a, i| {
+        if (generator_only and !a.generator) continue;
+        for ([_][]const []const u8{ a.requires.any, a.requires.all }) |list| for (list) |gate| {
+            if (std.mem.eql(u8, gate, id)) return @intCast(i);
+        };
+    }
     return null;
 }
 
@@ -377,9 +374,9 @@ pub fn generator_quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res
         q.standing = .charging;
     } else if (v.requires.energy >= vigor.v) {
         q.standing = .energy;
-    } else if (ledger.short(w, e, cat, v.input.slice(), 1)) |line| {
+    } else if (ledger.short(w, e, &v.requires, 1)) |r| {
         q.standing = .short;
-        q.short = line;
+        q.short = r;
     }
     return q;
 }
@@ -455,17 +452,16 @@ pub fn collect_generator(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason
 }
 
 /// Settle one ready cycle, the one path for both a player's and an `auto` collection: pay the
-/// verb's energy from vigor and its inputs, draw its yield, restore its vigor, refresh the
+/// verb's energy from vigor and its resources, draw its yield, restore its vigor, refresh the
 /// condition band, restart accumulation and emit `Collected`. `q` must be ready.
 fn collect(w: *World, e: Entity, res: *Resources, q: GeneratorQuote) void {
     std.debug.assert(q.ready());
-    const cat = &res.catalog;
     const ai = q.ai;
     const vigor = w.get(e, comp.Vigor).?;
     vigor.v -= q.verb.requires.energy;
-    ledger.pay(w, e, cat, q.verb.input.slice(), 1);
-    const receipt = ledger.draw(w, e, cat, q.verb.output.slice(), res.random(), 1, 1);
-    const restored = @max(0, @min(q.rec.vigor, vigor.max - vigor.v));
+    ledger.pay(w, e, &q.verb.requires, 1);
+    const receipt = ledger.draw(w, e, &q.verb.output, res.random(), 1, 1);
+    const restored = @max(0, @min(q.verb.output.vigor, vigor.max - vigor.v));
     vigor.v += restored;
     // A collection's net toll is the collection's, not hunger: the band takes it silently
     // (`rules/condition`).
@@ -510,18 +506,18 @@ fn count(w: *World, e: Entity, cat: *const Catalog, id: []const u8) u32 {
 }
 
 fn heldVerb(w: *World, e: Entity, cat: *const Catalog, id: []const u8) bool {
-    return effects.held(cat, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, cat.actionIndex(id).?);
+    return effects.held(cat, effects.holdingsOf(w, e).?, cat.actionIndex(id).?);
 }
 
-test "build pays upfront and starts the work; finish owns the spear and grants the verb" {
+test "build pays upfront and starts the work; finish owns the spear and opens the verb" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const rod = cat.goodIndex("spear").?;
-    const price = cat.goods[rod].requires.?;
-    const order = cat.goods[rod].input[0].n;
+    const price = cat.goods[rod].requires;
+    const order = cat.goods[rod].requires.biomass;
     const e = spawn_test_agent(&w, order); // exactly the order — spendable to 0
     try testing.expect(!heldVerb(&w, e, cat, "hunt")); // no spear, no verb
 
@@ -551,11 +547,11 @@ test "begin refuses when unaffordable or busy; the quote says why" {
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const rod = cat.goodIndex("spear").?;
-    const order = cat.goods[rod].input[0].n;
+    const order = cat.goods[rod].requires.biomass;
     const e = spawn_test_agent(&w, order - 1); // one material short
 
     try testing.expectEqual(Standing.short, quote(&w, e, cat, rod).?.standing);
-    try testing.expectEqualStrings("biomass", quote(&w, e, cat, rod).?.short.?.item);
+    try testing.expectEqual(roster.Resource.biomass, quote(&w, e, cat, rod).?.short.?);
     try testing.expectEqual(Reason.short, begin(&w, e, &res, rod).?);
     try testing.expect(!w.has(e, comp.Busy)); // refused, no work started
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.v); // unpaid
@@ -581,15 +577,14 @@ test "a repeat build is stock: the count rises, the effect does not" {
     const cat = &res.catalog;
     const sandals = cat.goodIndex("sandals").?;
     const forage = cat.actionIndex("forage").?;
-    const e = spawn_test_agent(&w, cat.goods[sandals].input[0].n * 3);
+    const e = spawn_test_agent(&w, cat.goods[sandals].requires.biomass * 3);
     w.add(e, comp.Verbs.of(cat, &.{"forage"}));
-    const goods = w.get(e, comp.Goods).?;
-    const base = effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy;
+    const base = effects.verb(cat, effects.holdingsOf(&w, e).?, forage).?.requires.energy;
 
     _ = begin(&w, e, &res, sandals);
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
-    const once = effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy;
+    const once = effects.verb(cat, effects.holdingsOf(&w, e).?, forage).?.requires.energy;
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "sandals"));
     try testing.expect(once < base); // the first pair is capital in use
 
@@ -597,7 +592,7 @@ test "a repeat build is stock: the count rises, the effect does not" {
     finish(&w, e, &res, sandals);
     w.remove(e, comp.Busy);
     try testing.expectEqual(@as(u32, 2), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(once, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy); // no second discount
+    try testing.expectEqual(once, effects.verb(cat, effects.holdingsOf(&w, e).?, forage).?.requires.energy); // no second discount
     logged(&w, &res);
     try testing.expectEqualStrings("Another sandals. You have 2.", res.sim.log.get(0).text());
     try testing.expectEqual(@as(u32, 1), goodsOwned(&w, e, cat)); // kinds, not units
@@ -605,10 +600,10 @@ test "a repeat build is stock: the count rises, the effect does not" {
     // Losing a spare keeps the discount; losing the last pair takes it back.
     break_one(&w, e, &res, sandals);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(once, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy);
+    try testing.expectEqual(once, effects.verb(cat, effects.holdingsOf(&w, e).?, forage).?.requires.energy);
     break_one(&w, e, &res, sandals);
     try testing.expectEqual(@as(u32, 0), count(&w, e, cat, "sandals"));
-    try testing.expectEqual(base, effects.verb(cat, w.get(e, comp.Verbs), goods, forage).?.requires.energy);
+    try testing.expectEqual(base, effects.verb(cat, effects.holdingsOf(&w, e).?, forage).?.requires.energy);
     logged(&w, &res);
     try testing.expectEqualStrings("Your sandals broke.", res.sim.log.get(0).text());
 }
@@ -632,7 +627,7 @@ test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
 
     acquire(&w, e, &res, hatchet, 1);
     try testing.expect(heldVerb(&w, e, cat, "chop_wood"));
-    try testing.expect(needsMet(&w, e, cat, gloves));
+    try testing.expect(gatesMet(&w, e, cat, gloves));
     _ = begin(&w, e, &res, gloves);
     try testing.expect(w.has(e, comp.Busy));
     w.remove(e, comp.Busy);
@@ -776,7 +771,7 @@ test "an auto generator collects itself in the run that completes its cycle" {
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.Generators).?.progress[garden]);
     try testing.expect(w.get(e, comp.InventoryFood).?.v > 0);
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
-    try testing.expectApproxEqAbs(@min(10, 10 - spec.energy + cat.actions[garden].vigor), w.get(e, comp.Vigor).?.v, 1e-6);
+    try testing.expectApproxEqAbs(@min(10, 10 - spec.energy + cat.actions[garden].output.vigor), w.get(e, comp.Vigor).?.v, 1e-6);
     var cursor: u64 = 0;
     try testing.expectEqual(garden, res.events.readerAt(events.Collected, &cursor).next().?.ai);
     try testing.expectEqual(comp.Generators.Mode.auto, w.get(e, comp.Generators).?.mode[garden]);
@@ -907,12 +902,12 @@ test "a recipe that names a technology waits on the board" {
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
         ,
         .goods =
-        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "biomass", .n = 2.0 } }, .tech = "kilns" } }
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude,
+        \\     .requires = .{ .energy = 1.0, .hours = 1.0, .biomass = 2.0, .tech = "kilns" } } }
         ,
         .technologies =
         \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
-        \\     .cost = .{ .{ .item = "food", .n = 2.0 } }, .initial = .available } }
+        \\     .cost = .{ .food = 2.0 }, .initial = .available } }
         ,
     });
     defer res.catalog.deinit();
@@ -946,15 +941,15 @@ test "a good with no unlock has no standing conditions, and a traded good has no
     try testing.expect(quote(&w, e, cat, cat.goodIndex("fish_rod").?) == null);
 }
 
-test "cancel salvages half the build order, frees the body, and grants nothing" {
+test "cancel salvages half the build order, frees the body, and opens nothing" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const rod = cat.goodIndex("spear").?;
-    const order = cat.goods[rod].input[0].n;
-    const price = cat.goods[rod].requires.?;
+    const order = cat.goods[rod].requires.biomass;
+    const price = cat.goods[rod].requires;
     const e = spawn_test_agent(&w, order);
 
     _ = begin(&w, e, &res, rod);
@@ -996,19 +991,18 @@ test "a bought tool supersedes the built one; selling it restores the next-best 
     const net = cat.goodIndex("fish_net").?;
     const fish = cat.actionIndex("fish").?;
     const e = spawn_test_agent(&w, 0);
-    const goods = w.get(e, comp.Goods).?;
     acquire(&w, e, &res, rod, 1);
     const base_energy = cat.actions[fish].requires.energy;
-    try testing.expectEqual(base_energy, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy);
+    try testing.expectEqual(base_energy, effects.verb(cat, effects.holdingsOf(&w, e).?, fish).?.requires.energy);
 
     acquire(&w, e, &res, net, 1); // rank 2: the stats replace the rod's, not stack
-    try testing.expectApproxEqAbs(base_energy * 0.7, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy, 1e-6);
+    try testing.expectApproxEqAbs(base_energy * 0.7, effects.verb(cat, effects.holdingsOf(&w, e).?, fish).?.requires.energy, 1e-6);
     try testing.expectEqual(@as(u32, 1), count(&w, e, cat, "fish_rod")); // the rod is still owned (sellable)
 
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, net, 1)); // sell the net
-    try testing.expectEqual(base_energy, effects.verb(cat, w.get(e, comp.Verbs), goods, fish).?.requires.energy); // the rod's rank
+    try testing.expectEqual(base_energy, effects.verb(cat, effects.holdingsOf(&w, e).?, fish).?.requires.energy); // the rod's rank
     try testing.expectEqual(@as(u32, 1), release(&w, e, &res, rod, 1)); // sell the rod too
-    try testing.expect(effects.verb(cat, w.get(e, comp.Verbs), goods, fish) == null); // no fishing tool left ⇒ the verb goes
+    try testing.expect(effects.verb(cat, effects.holdingsOf(&w, e).?, fish) == null); // no fishing tool left ⇒ the verb goes
     try testing.expectEqual(@as(u32, 0), release(&w, e, &res, rod, 1)); // nothing left to release
 }
 

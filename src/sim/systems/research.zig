@@ -54,9 +54,9 @@ fn establish(w: *World, cat: *const roster.Catalog, it: events.Research, newly: 
         .unaffordable => return .unaffordable,
         .researched => {},
     }
-    for (cat.technologies[it.ti].cost) |line| {
-        const r = roster.Catalog.resource(line.item) orelse continue;
-        _ = ledger.move(w, it.agent, r, -@round(line.n));
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = board_rule.costOf(&cat.technologies[it.ti], r);
+        if (n > 0) _ = ledger.move(w, it.agent, r, -@as(f32, @floatFromInt(n)));
     }
     newly.* = 0;
     for (0..@min(cat.technologies.len, newly_bits)) |i| {
@@ -107,7 +107,7 @@ const Rig = struct {
     fn openTile(self: *Rig) u16 {
         const board = self.w.get(self.e, comp.Research).?;
         for (self.res.catalog.technologies, 0..) |t, i| {
-            if (board.state[i] == .available and t.cost.len > 0) return @intCast(i);
+            if (board.state[i] == .available and !t.cost.isEmpty()) return @intCast(i);
         }
         unreachable;
     }
@@ -156,9 +156,9 @@ test "research establishes the tile, pays its cost from the ledger and names wha
 
     const board = rig.w.get(rig.e, comp.Research).?;
     try testing.expectEqual(roster.TechState.researched, board.state[ti]);
-    for (tech.cost) |line| {
-        const r = roster.Catalog.resource(line.item).?;
-        try testing.expectEqual(500 - @round(line.n), ledger.balance(&rig.w, rig.e, r));
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = tech.cost.get(r);
+        if (n > 0) try testing.expectEqual(500 - @round(n), ledger.balance(&rig.w, rig.e, r));
     }
     try testing.expect(rig.refusal() == null);
     var cursor: u64 = 0;

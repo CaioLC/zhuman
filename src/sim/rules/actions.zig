@@ -1,9 +1,9 @@
 //! Actions: per-agent labor over the authored roster.
 //!
 //! A verb is a record in `assets/roster/actions.zon` (`roster.zig`). Whether an agent holds it, and
-//! on what terms, is derived from the verbs it holds of its own (`comp.Verbs`) and the goods it
-//! owns (`effects.verb`) and, for a verb that names a `tech`, from the agent's research
-//! (`verbOf`); a verb's terms are never stored on the agent.
+//! on what terms, is derived from the verbs it holds of its own (`comp.Verbs`), the goods it
+//! owns and its research (`effects.verb`, read from the world by `verbOf`); a verb's terms are
+//! never stored on the agent.
 //! `quote` is the one gate calculation: the `quotes` system writes its answer onto `comp.Quotes`
 //! for the tile and a decider, and `begin` asks it again at apply time. Labor resolves in
 //! two halves because it takes time:
@@ -52,8 +52,8 @@ pub const Standing = comp.Quotes.VerbStanding;
 pub const Quote = struct {
     verb: effects.Verb,
     standing: Standing,
-    /// The first unpayable input when `standing == .short`.
-    short: ?roster.Line = null,
+    /// The first unpayable resource when `standing == .short`.
+    short: ?roster.Resource = null,
     /// The yield multiplier a begin right now would lock.
     quality: f32,
 
@@ -62,23 +62,12 @@ pub const Quote = struct {
     }
 };
 
-/// Whether verb `ai`'s technology is researched for this agent. A verb without one is not
-/// opened by research.
-fn researched(w: *const World, e: Entity, cat: *const Catalog, ai: u16) bool {
-    const id = cat.actions[ai].tech orelse return false;
-    const ti = cat.techIndex(id) orelse return false;
-    const research = w.get(e, comp.Research) orelse return false;
-    return research.state[ti] == .researched;
-}
-
 /// Verb `ai`'s effective terms for agent `e`, or null when the agent does not hold it: its own
-/// (`comp.Verbs`), granted by an applying good, or opened by its researched technology. Owned
-/// goods modify it the same way in every case.
+/// (`comp.Verbs`), or every gate passing on its goods, verbs and research (`effects.held`).
+/// Owned goods modify it the same way in every case. An agent without `comp.Goods` holds none.
 pub fn verbOf(w: *const World, e: Entity, cat: *const Catalog, ai: u16) ?effects.Verb {
-    const goods = w.get(e, comp.Goods) orelse return null;
-    if (effects.verb(cat, w.get(e, comp.Verbs), goods, ai)) |v| return v;
-    if (!researched(w, e, cat, ai)) return null;
-    return effects.terms(cat, goods, ai);
+    const h = effects.holdingsOf(w, e) orelse return null;
+    return effects.verb(cat, h, ai);
 }
 
 /// Whether agent `e` holds verb `ai` (see `verbOf`).
@@ -99,9 +88,9 @@ pub fn quote(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Confi
         q.standing = .busy; // one body, one act
     } else if (v.requires.energy >= vigor.v) {
         q.standing = .energy; // strict: spending vigor to exactly 0 is death
-    } else if (ledger.short(w, e, cat, v.input.slice(), 1)) |l| {
+    } else if (ledger.short(w, e, &v.requires, 1)) |r| {
         q.standing = .short;
-        q.short = l;
+        q.short = r;
     }
     return q;
 }
@@ -122,7 +111,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason {
     // moves is labor's, carried on `WorkBegun.weary`, not the metabolism's (`rules/condition`).
     vigor.v -= q.verb.requires.energy;
     const crossing = condition.refresh(&res.config, vigor, w.get(e, comp.Condition).?);
-    ledger.pay(w, e, cat, q.verb.input.slice(), 1);
+    ledger.pay(w, e, &q.verb.requires, 1);
 
     // The feed shows the debit the moment the work begins; the yield is the receipt later.
     _ = res.events.writer(events.WorkBegun).push(.{
@@ -130,7 +119,7 @@ pub fn begin(w: *World, e: Entity, res: *Resources, ai: u16) ?Reason {
         .doing = .{ .labor = ai },
         .weary = condition.wearied(crossing),
         .energy = q.verb.requires.energy,
-        .paid = ledger.receiptOf(cat, q.verb.input.slice(), 1),
+        .paid = ledger.receiptOf(&q.verb.requires, 1),
         .act = migration.actOf(w, e),
     });
 
@@ -149,17 +138,20 @@ fn refusal(s: Standing) Reason {
     };
 }
 
-/// The **finish** half: draw each output line at the quality locked at begin (the spread
-/// *is* the risk — no separate success roll), deposit, and emit `WorkDone` with the receipt.
-/// A verb lost mid-task (the tool was sold while fishing) finishes as nothing, `WorkLost`,
-/// rather than a crash.
+/// The **finish** half: draw each yield at the quality locked at begin (the spread *is* the
+/// risk — no separate success roll), deposit, restore the verb's `vigor` up to the ceiling,
+/// and emit `WorkDone` with the receipt. A verb lost mid-task (the tool was sold while
+/// fishing) finishes as nothing, `WorkLost`, rather than a crash.
 pub fn finish(w: *World, e: Entity, res: *Resources, ai: u16, quality: f32) void {
     const cat = &res.catalog;
     const v = verbOf(w, e, cat, ai) orelse {
         _ = res.events.writer(events.WorkLost).push(.{ .agent = e, .doing = .{ .labor = ai } });
         return;
     };
-    const receipt = ledger.draw(w, e, cat, v.output.slice(), res.random(), quality, 1);
+    const receipt = ledger.draw(w, e, &v.output, res.random(), quality, 1);
+    if (v.output.vigor > 0) if (w.get(e, comp.Vigor)) |vigor| {
+        vigor.v = @max(vigor.v, @min(vigor.v + v.output.vigor, vigor.max));
+    };
     _ = res.events.writer(events.WorkDone).push(.{
         .agent = e,
         .doing = .{ .labor = ai },
@@ -186,14 +178,7 @@ pub fn is_build(d: comp.Busy.Doing) bool {
 
 pub const nothing_text = "You gathered nothing.";
 
-/// The display word for an item in a sentence: a resource's tag name, a good's name.
-pub fn itemWord(cat: *const Catalog, id: []const u8, act: u8) []const u8 {
-    if (Catalog.resource(id)) |r| return r.wordIn(act);
-    if (cat.good(id)) |g| return g.name;
-    return id;
-}
-
-/// `itemWord` for an item already resolved against the catalog.
+/// The display word for an item in a sentence: a resource's word, a good's name.
 pub fn itemWordOf(cat: *const Catalog, it: ledger.Item, act: u8) []const u8 {
     return switch (it) {
         .resource => |r| r.wordIn(act),
@@ -223,7 +208,7 @@ pub fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) [
     return wr.buffered();
 }
 
-/// "You spend 1.7e 1m to begin." — the energy, then every input line paid.
+/// "You spend 1.7e 1m to begin." — the energy, then every amount paid.
 pub fn paymentText(buf: []u8, cat: *const Catalog, energy: f32, paid: ledger.Receipt, act: u8) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     wr.print("You spend {d:.1}e", .{energy}) catch {};
@@ -318,7 +303,7 @@ test "quote: not held, then short, ready, energy, weary quality, busy" {
     w.get(e, comp.Goods).?.count[cat.goodIndex("spear").?] = 1;
     const q = quote(&w, e, cat, res.config, traps).?;
     try testing.expectEqual(Standing.short, q.standing);
-    try testing.expectEqualStrings("biomass", q.short.?.item);
+    try testing.expectEqual(roster.Resource.biomass, q.short.?);
     try testing.expectEqual(@as(f32, 1.0), q.quality);
 
     w.get(e, comp.InventoryBiomass).?.v = 1; // exactly the bait — spendable to 0
@@ -381,7 +366,7 @@ test "begin refuses when energy would hit zero, leaving no trace" {
     try testing.expect(!res.sim.tutorial_done); // a refused action records no progress
 }
 
-test "an input is paid at begin and named in the payment line" {
+test "a resource amount is paid at begin and named in the payment line" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try test_res();
@@ -429,11 +414,11 @@ test "a verb that names a technology is held once that technology is researched"
     defer w.deinit();
     var cat = try roster.load(testing.allocator, .{
         .actions =
-        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "kilns" } } }
         ,
         .goods = ".{}",
         .technologies =
-        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .initial = .available } }
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 }, .initial = .available } }
         ,
     }, null);
     defer cat.deinit();

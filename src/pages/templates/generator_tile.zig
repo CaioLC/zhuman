@@ -30,14 +30,16 @@ const action_tile = @import("./action_tile.zig");
 const info = @import("./action_info.zig");
 const fmt = @import("../fmt.zig");
 
-/// What a collection pays: the energy, then every input.
+/// What a collection pays: the energy, then every resource the verb requires.
 fn cycleCost(act: u8, buf: []u8, verb: *const Verb) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     var ebuf: [8]u8 = undefined;
     wr.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, verb.requires.energy)}) catch {};
-    for (verb.input.slice()) |line| {
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = verb.requires.get(r);
+        if (n <= 0) continue;
         var nbuf: [8]u8 = undefined;
-        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, line.n), info.letterOf(act, line.item) }) catch {};
+        wr.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, n), info.letterOf(act, r) }) catch {};
     }
     return wr.buffered();
 }
@@ -48,8 +50,8 @@ const Yield = struct {
 };
 
 /// What a collection draws: the dominant output's band, or the vigor it restores.
-fn cycleYield(act: u8, buf: []u8, cat: *const roster.Catalog, verb: *const Verb, vigor: f32) Yield {
-    if (info.dominant(act, cat, verb.output.slice())) |dom| {
+fn cycleYield(act: u8, buf: []u8, verb: *const Verb) Yield {
+    if (info.dominant(act, &verb.output)) |dom| {
         const lo = @round(dom.band.p10);
         const hi = @round(dom.band.p90);
         const text = if (lo == hi)
@@ -58,7 +60,7 @@ fn cycleYield(act: u8, buf: []u8, cat: *const roster.Catalog, verb: *const Verb,
             std.mem.print(buf, "+{d:.0}\u{2013}{d:.0}{s}", .{ lo, hi, dom.letter }) catch "+?";
         return .{ .kind = dom.kind, .text = text };
     }
-    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{vigor}) catch "+?v" };
+    return .{ .text = std.mem.print(buf, "+{d:.1}v", .{verb.output.vigor}) catch "+?v" };
 }
 
 fn stateWord(q: comp.Quotes.Generator) []const u8 {
@@ -89,7 +91,7 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, ai: u1
     var duration_buf: [12]u8 = undefined;
     var yield_buf: [20]u8 = undefined;
     const duration = std.mem.print(&duration_buf, "{d:.0}h", .{verb.requires.hours}) catch "?";
-    const yield = cycleYield(act, &yield_buf, cat, &verb, rec.vigor);
+    const yield = cycleYield(act, &yield_buf, &verb);
     const progress: ?f32 = if (q.standing == .charging) q.fraction() else null;
     const display_name = rec.name;
     const tile = try action_tile.tile(

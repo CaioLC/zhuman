@@ -1,10 +1,10 @@
-//! `ledger` — where a `roster.Line` meets an agent's holdings.
+//! `ledger` — where a record's amounts meet an agent's holdings.
 //!
-//! A line names an item: a resource, held on that resource's inventory component, or a
-//! good, held as a count on `comp.Goods`. This module is the one switch over `Resource` to
-//! those components, so the labor, build, generator and barter paths can check, pay and
-//! deposit a list of lines without naming a stock. An item may be spent to exactly zero —
-//! the strict gate is energy's, and energy is a price, not a line.
+//! A resource is held on that resource's inventory component; a good, as a count on
+//! `comp.Goods`. This module is the one switch over `Resource` to those components, so the
+//! labor, build, generator and barter paths can check, pay and deposit a `roster.Requires` or a
+//! `roster.Output` without naming a stock. An amount may be spent to exactly zero — the strict
+//! gate is energy's, and energy is the body's, not the ledger's.
 
 const std = @import("std");
 const comp = @import("../components.zig");
@@ -14,7 +14,6 @@ const roster = @import("../data/roster.zig");
 const World = @import("../ecs.zig").World;
 const Entity = @import("../ecs.zig").Entity;
 const Catalog = roster.Catalog;
-const Line = roster.Line;
 const Resource = roster.Resource;
 
 /// The inventory component that holds a resource's balance, or null when the resource has
@@ -59,7 +58,7 @@ pub fn move(w: *World, e: Entity, r: Resource, amount: f32) bool {
     }
 }
 
-/// An item a line can name: a resource, or a good by catalog index.
+/// An item a trade or a receipt can name: a resource, or a good by catalog index.
 pub const Item = union(enum) {
     resource: Resource,
     good: u16,
@@ -72,9 +71,9 @@ pub fn item(cat: *const Catalog, id: []const u8) ?Item {
     return null;
 }
 
-/// How much of a line's item the agent holds.
-pub fn held(w: *const World, e: Entity, cat: *const Catalog, l: Line) f32 {
-    switch (item(cat, l.item) orelse return 0) {
+/// How much of an item the agent holds: a resource's balance, a good's count.
+pub fn heldItem(w: *const World, e: Entity, it: Item) f32 {
+    switch (it) {
         .resource => |r| return balance(w, e, r),
         .good => |gi| {
             const g = w.get(e, comp.Goods) orelse return 0;
@@ -83,15 +82,22 @@ pub fn held(w: *const World, e: Entity, cat: *const Catalog, l: Line) f32 {
     }
 }
 
-/// The first line the agent cannot pay at `scale`, or null when every line is affordable.
-pub fn short(w: *const World, e: Entity, cat: *const Catalog, lines: []const Line, scale: f32) ?Line {
-    for (lines) |l| if (held(w, e, cat, l) < l.n * scale) return l;
+/// The first resource, in `Resource` order, whose amount in `req` at `scale` the agent cannot
+/// pay, or null when every one is affordable. An amount may be spent to exactly zero.
+pub fn short(w: *const World, e: Entity, req: *const roster.Requires, scale: f32) ?Resource {
+    for (std.enums.values(Resource)) |r| {
+        const n = req.get(r);
+        if (n > 0 and balance(w, e, r) < n * scale) return r;
+    }
     return null;
 }
 
-/// Pay every line at `scale`. The caller has checked `short`.
-pub fn pay(w: *World, e: Entity, cat: *const Catalog, lines: []const Line, scale: f32) void {
-    for (lines) |l| _ = give(w, e, cat, l.item, -(l.n * scale));
+/// Pay every resource amount of `req` at `scale`. The caller has checked `short`.
+pub fn pay(w: *World, e: Entity, req: *const roster.Requires, scale: f32) void {
+    for (std.enums.values(Resource)) |r| {
+        const n = req.get(r);
+        if (n > 0) _ = move(w, e, r, -(n * scale));
+    }
 }
 
 /// Deposit `amount` of `id` (negative to take). A good moves in whole units, rounded, and
@@ -108,11 +114,11 @@ pub fn give(w: *World, e: Entity, cat: *const Catalog, id: []const u8, amount: f
     }
 }
 
-/// What a payment, a draw or a refund moved: one line per item, in line order, at most a
-/// record's `roster.max_lines`. Plain fixed-size data naming items by `Item`, so a fact event
-/// can carry it (`sim/events.zig`).
+/// What a payment, a draw or a refund moved: one line per item, in `Resource` order, at most
+/// one per resource. Plain fixed-size data naming items by `Item`, so a fact event can carry
+/// it (`sim/events.zig`).
 pub const Receipt = struct {
-    lines: [roster.max_lines]Deposit = undefined,
+    lines: [@typeInfo(Resource).@"enum".field_names.len]Deposit = undefined,
     len: u8 = 0,
 
     /// One moved amount of one item.
@@ -121,7 +127,7 @@ pub const Receipt = struct {
         qty: f32,
     };
 
-    /// Append a line; a line past `max_lines` is dropped (no record has one).
+    /// Append a line; a line past the capacity is dropped (no record has one).
     pub fn add(self: *Receipt, it: Item, qty: f32) void {
         if (self.len == self.lines.len) return;
         self.lines[self.len] = .{ .item = it, .qty = qty };
@@ -140,23 +146,34 @@ pub const Receipt = struct {
     }
 };
 
-/// The lines as a receipt at `scale`, resolved against the catalog; a line naming an item the
-/// catalog does not know is left out, as `give` would move nothing for it.
-pub fn receiptOf(cat: *const Catalog, lines: []const Line, scale: f32) Receipt {
+/// `req`'s resource amounts at `scale` as a receipt, in `Resource` order.
+pub fn receiptOf(req: *const roster.Requires, scale: f32) Receipt {
     var r = Receipt{};
-    for (lines) |l| if (item(cat, l.item)) |it| r.add(it, l.n * scale);
+    for (std.enums.values(Resource)) |res| {
+        const n = req.get(res);
+        if (n > 0) r.add(.{ .resource = res }, n * scale);
+    }
     return r;
 }
 
-/// Draw every line at `quality` and `scale` and deposit what comes up. Returns what landed,
-/// in line order, so the caller can write the receipt; an item the catalog does not know is
-/// left out.
-pub fn draw(w: *World, e: Entity, cat: *const Catalog, lines: []const Line, rng: std.Random, quality: f32, scale: f32) Receipt {
+/// Give back `req`'s resource amounts at `scale` — a cancelled build's salvage — and return
+/// what came back.
+pub fn refund(w: *World, e: Entity, req: *const roster.Requires, scale: f32) Receipt {
+    const r = receiptOf(req, scale);
+    for (r.slice()) |d| _ = move(w, e, d.item.resource, d.qty);
+    return r;
+}
+
+/// Draw every yield of `out` at `quality` and `scale` and deposit what comes up. Returns what
+/// landed, in `Resource` order, so the caller can write the receipt. `out.vigor` is the
+/// caller's.
+pub fn draw(w: *World, e: Entity, out: *const roster.Output, rng: std.Random, quality: f32, scale: f32) Receipt {
     var r = Receipt{};
-    for (lines) |l| {
-        const amount = quality * dist.sample(l.asDist(), rng) * scale;
-        _ = give(w, e, cat, l.item, amount);
-        if (item(cat, l.item)) |it| r.add(it, amount);
+    for (std.enums.values(Resource)) |res| {
+        const d = out.get(res) orelse continue;
+        const amount = quality * dist.sample(d.asDist(), rng) * scale;
+        _ = move(w, e, res, amount);
+        r.add(.{ .resource = res }, amount);
     }
     return r;
 }
@@ -169,7 +186,7 @@ fn fixture() !Catalog {
     return roster.load(testing.allocator, roster.shipped, null);
 }
 
-test "a resource line reads and moves the inventory component; a missing stock holds nothing" {
+test "a resource reads and moves the inventory component; a missing stock holds nothing" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     const e = w.spawn(.{ comp.InventoryFood{ .v = 3, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 2 } });
@@ -184,27 +201,24 @@ test "a resource line reads and moves the inventory component; a missing stock h
     try testing.expect(!move(&w, bare, .food, 1));
 }
 
-test "short names the first unpayable line; an item may be spent to exactly zero" {
-    var cat = try fixture();
-    defer cat.deinit();
+test "short names the first unpayable resource; an amount may be spent to exactly zero" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 5 } });
-    const lines = [_]Line{
-        .{ .item = "biomass", .n = 5 },
-        .{ .item = "food", .n = 1 },
-    };
-    const s = short(&w, e, &cat, &lines, 1).?;
-    try testing.expectEqualStrings("food", s.item); // materials are exactly affordable
-    try testing.expect(short(&w, e, &cat, lines[0..1], 1) == null);
-    pay(&w, e, &cat, lines[0..1], 1);
+    const both = roster.Requires{ .biomass = 5, .food = 1 };
+    try testing.expectEqual(Resource.food, short(&w, e, &both, 1).?); // materials are exactly affordable
+    const materials = roster.Requires{ .energy = 9, .biomass = 5 };
+    try testing.expect(short(&w, e, &materials, 1) == null); // energy is not the ledger's
+    pay(&w, e, &materials, 1);
     try testing.expectEqual(@as(f32, 0), balance(&w, e, .biomass));
-    // Scaled: a tenth of a day's upkeep.
-    const upkeep = [_]Line{.{ .item = "biomass", .n = 1, .per = .day }};
-    try testing.expect(short(&w, e, &cat, &upkeep, 0.1) != null);
+    try testing.expectEqual(Resource.biomass, short(&w, e, &.{ .biomass = 1 }, 0.1).?); // scaled
+    const r = receiptOf(&both, 0.5);
+    try testing.expectEqual(@as(usize, 2), r.slice().len);
+    try testing.expectEqual(Item{ .resource = .food }, r.slice()[0].item); // `Resource` order
+    try testing.expectEqual(@as(f32, 2.5), r.slice()[1].qty);
 }
 
-test "a good line counts units on Goods, rounded and never negative" {
+test "a good item counts units on Goods, rounded and never negative" {
     var cat = try fixture();
     defer cat.deinit();
     var w = try World.init(std.testing.allocator);
@@ -213,24 +227,19 @@ test "a good line counts units on Goods, rounded and never negative" {
     const gi = cat.goodIndex("sandals").?;
     try testing.expect(give(&w, e, &cat, "sandals", 2.4));
     try testing.expectEqual(@as(u32, 2), w.get(e, comp.Goods).?.count[gi]);
-    try testing.expectEqual(@as(f32, 2), held(&w, e, &cat, .{ .item = "sandals", .n = 1 }));
+    try testing.expectEqual(@as(f32, 2), heldItem(&w, e, .{ .good = gi }));
     try testing.expect(give(&w, e, &cat, "sandals", -5));
     try testing.expectEqual(@as(u32, 0), w.get(e, comp.Goods).?.count[gi]);
     try testing.expect(!give(&w, e, &cat, "nothing", 1)); // unknown item
 }
 
-test "draw samples each line at quality and scale and reports what landed" {
-    var cat = try fixture();
-    defer cat.deinit();
+test "draw samples each yield at quality and scale and reports what landed" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var prng = std.Random.DefaultPrng.init(5);
     const e = w.spawn(.{ comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 }, comp.InventoryBiomass{ .v = 0 } });
-    const lines = [_]Line{
-        .{ .item = "food", .n = 4 }, // fixed: exact
-        .{ .item = "biomass", .n = 2, .kind = .uniform },
-    };
-    const r = draw(&w, e, &cat, &lines, prng.random(), 0.5, 1);
+    const out = roster.Output{ .food = .{ .fixed = 4 }, .biomass = .{ .uniform = 2 } };
+    const r = draw(&w, e, &out, prng.random(), 0.5, 1);
     try testing.expectEqual(@as(usize, 2), r.slice().len);
     try testing.expectEqual(@as(f32, 2), r.slice()[0].qty); // 4 × 0.5 quality
     try testing.expectEqual(@as(f32, 2), balance(&w, e, .food));

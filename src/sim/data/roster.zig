@@ -3,12 +3,12 @@
 //! `assets/roster/technologies.zon` into one `Catalog`.
 //!
 //! The record grammar is the contract content is written against (the prose is in
-//! `src/README.md`, "The authored roster"): one flat id space shared by resources, actions
-//! and goods; every quantity a `Line` naming an item, with a cadence of `once` or `day`; a
-//! good's behavior a list of `Effect`s from a fixed vocabulary. Loading parses with
-//! `std.zon.parse` and then validates every cross-reference and shape rule before the catalog
-//! is handed out, so a bad file is refused whole — with a line and column, or a rule and the
-//! offending id — never half-applied.
+//! `src/README.md`, "The authored roster"): one flat id space shared by actions and goods,
+//! beside the `Resource` enum; every amount keyed by resource name (`Requires`, `Output`,
+//! `Stock`); a record's gates naming a technology, goods and verbs; a good's behavior a list of
+//! `Effect`s from a fixed vocabulary. Loading parses with `std.zon.parse` and then validates
+//! every cross-reference and shape rule before the catalog is handed out, so a bad file is
+//! refused whole — with a line and column, or a rule and the offending id — never half-applied.
 //!
 //! The sim runs on the catalog (`actions.zig`, `capital.zig`, `effects.zig`), and so do the
 //! pages.
@@ -24,8 +24,8 @@ const Allocator = std.mem.Allocator;
 
 /// The ledger's columns — the fungible stocks an agent holds. In code, because each one is
 /// structural (a stockline, a palette hue, a board wedge) and each has its own behavior
-/// (food spoils, coin settles). A `Line` names one by its tag name, so the spelling here is
-/// part of the content contract.
+/// (food spoils, coin settles). A record's amounts are keyed by its tag name, so the spelling
+/// here is part of the content contract.
 pub const Resource = enum {
     food,
     biomass,
@@ -110,94 +110,184 @@ test "materials is not a catalog resource id" {
     try std.testing.expectEqual(Resource.biomass, Catalog.resource("biomass").?);
 }
 
-/// When a line settles. `once` is paid at begin (an input) or lands at completion (an
-/// output), or for a generator verb at each collection; the validator refuses `day`.
-pub const Cadence = enum { once, day };
-
-/// One quantity of one item — the only shape a cost, an upkeep, a yield, a satchel or a
-/// quote is written in. `item` is a resource name or a good id. `kind` defaults to `.fixed`,
-/// an exact amount; the other kinds draw, and `n` is then the scale (`dist.Dist.s`).
-pub const Line = struct {
-    item: []const u8,
-    n: f32,
-    kind: dist.Kind = .fixed,
-    sd: f32 = 0,
-    per: Cadence = .once,
-
-    /// The line as the distribution the sim samples.
-    pub fn asDist(self: Line) dist.Dist {
-        return .{ .kind = self.kind, .s = self.n, .sd = self.sd };
-    }
-};
-
 /// The caps the sim's bounded per-agent containers rely on (`comp.Goods`, `comp.Research`,
-/// `comp.Quotes`); the validator holds the files to them. `max_lines` bounds one side of a verb
-/// *after* every `add` effect on it has inserted its line.
+/// `comp.Quotes`); the validator holds the files to them.
 pub const max_actions = 64;
 pub const max_goods = 128;
-pub const max_lines = 4;
 pub const max_techs = 128;
 
-/// A bounded list of lines — one side of a verb's effective terms, or a receipt.
-pub const Lines = struct {
-    items: [max_lines]Line = undefined,
-    len: u8 = 0,
+/// Whether struct `T` carries exactly one field per `Resource` tag beside the `extra` fields,
+/// so adding a resource fails to compile until every keyed shape follows.
+fn keyedByResource(comptime T: type, comptime extra: []const []const u8) bool {
+    const fields = @typeInfo(T).@"struct".field_names;
+    const tags = @typeInfo(Resource).@"enum".field_names;
+    if (fields.len != tags.len + extra.len) return false;
+    for (tags) |t| {
+        if (!@hasField(T, t)) return false;
+    }
+    for (extra) |x| {
+        if (!@hasField(T, x)) return false;
+    }
+    return true;
+}
 
-    pub fn of(src: []const Line) Lines {
-        var l = Lines{};
-        for (src) |x| l.push(x);
-        return l;
+/// An amount of each resource, keyed by name: a technology's research price. Absent is zero.
+pub const Stock = struct {
+    food: f32 = 0,
+    biomass: f32 = 0,
+    water: f32 = 0,
+    fuel: f32 = 0,
+    metal: f32 = 0,
+    minerals: f32 = 0,
+    coin: f32 = 0,
+
+    pub fn get(self: *const Stock, r: Resource) f32 {
+        return switch (r) {
+            inline else => |t| @field(self, @tagName(t)),
+        };
     }
 
-    /// The lines of `src` at one cadence: a build order or a flow, an upkeep or a product.
-    pub fn only(src: []const Line, per: Cadence) Lines {
-        var l = Lines{};
-        for (src) |x| if (x.per == per) l.push(x);
-        return l;
+    /// Whether every amount is zero.
+    pub fn isEmpty(self: *const Stock) bool {
+        for (std.enums.values(Resource)) |r| if (self.get(r) != 0) return false;
+        return true;
     }
 
-    pub fn slice(self: *const Lines) []const Line {
-        return self.items[0..self.len];
-    }
-
-    pub fn push(self: *Lines, l: Line) void {
-        std.debug.assert(self.len < max_lines);
-        self.items[self.len] = l;
-        self.len += 1;
-    }
-
-    /// The line for `item` at cadence `per`, if present.
-    pub fn find(self: *Lines, item: []const u8, per: Cadence) ?*Line {
-        for (self.items[0..self.len]) |*l| if (l.per == per and eql(l.item, item)) return l;
-        return null;
+    comptime {
+        std.debug.assert(keyedByResource(Stock, &.{}));
     }
 };
 
-/// The body-and-time price of an act: energy, a flow that is never a stock, and hours. Kept
-/// apart from the lines because energy's gate is strict (vigor may never reach zero) where
-/// an item's is not.
-pub const Price = struct {
-    energy: f32,
-    hours: f32,
+/// Everything a record demands: the body's energy (strictly below current vigor), the hours,
+/// an amount of each resource, and the gates. For a labor verb the price is paid at begin; for
+/// a generator verb at each collection, `hours` being the cycle; for a good it is the build
+/// cost. A gate entry is a good id, satisfied while the agent owns at least one unit, or a
+/// verb id, satisfied while the agent holds that verb.
+pub const Requires = struct {
+    energy: f32 = 0,
+    hours: f32 = 0,
+    food: f32 = 0,
+    biomass: f32 = 0,
+    water: f32 = 0,
+    fuel: f32 = 0,
+    metal: f32 = 0,
+    minerals: f32 = 0,
+    coin: f32 = 0,
+    /// Gate: this technology must read researched (`comp.Research`).
+    tech: ?[]const u8 = null,
+    /// Gate: at least one of these ids is satisfied.
+    any: []const []const u8 = &.{},
+    /// Gate: every one of these ids is satisfied.
+    all: []const []const u8 = &.{},
+
+    pub fn get(self: *const Requires, r: Resource) f32 {
+        return switch (r) {
+            inline else => |t| @field(self, @tagName(t)),
+        };
+    }
+
+    pub fn ptr(self: *Requires, r: Resource) *f32 {
+        return switch (r) {
+            inline else => |t| &@field(self, @tagName(t)),
+        };
+    }
+
+    /// Whether the record carries any gate. A verb with none is held only as an agent's own.
+    pub fn gated(self: *const Requires) bool {
+        return self.tech != null or self.any.len > 0 or self.all.len > 0;
+    }
+
+    /// Whether it demands nothing at all: no energy, hours, resource or gate.
+    pub fn isEmpty(self: *const Requires) bool {
+        if (self.energy != 0 or self.hours != 0 or self.gated()) return false;
+        for (std.enums.values(Resource)) |r| if (self.get(r) != 0) return false;
+        return true;
+    }
+
+    comptime {
+        std.debug.assert(keyedByResource(Requires, &.{ "energy", "hours", "tech", "any", "all" }));
+    }
 };
 
+/// One drawn amount: the distribution and its scale (`dist.Dist.s`). `fixed` is exact; the
+/// other kinds draw, and the spread is the risk. Written `.{ .poisson = 3.0 }`.
+pub const Draw = union(enum) {
+    fixed: f32,
+    normal: f32,
+    poisson: f32,
+    uniform: f32,
+    exponential: f32,
 
-/// What an effect tweaks on its target verb: the price, or one named input/output line.
+    pub fn scale(self: Draw) f32 {
+        return switch (self) {
+            inline else => |s| s,
+        };
+    }
+
+    pub fn scalePtr(self: *Draw) *f32 {
+        return switch (self.*) {
+            inline else => |*s| s,
+        };
+    }
+
+    pub fn kind(self: Draw) dist.Kind {
+        return switch (self) {
+            inline else => |_, t| @field(dist.Kind, @tagName(t)),
+        };
+    }
+
+    /// The draw as the distribution the sim samples.
+    pub fn asDist(self: Draw) dist.Dist {
+        return .{ .kind = self.kind(), .s = self.scale() };
+    }
+};
+
+/// What a verb yields at completion, or a generator at each collection: a draw per resource,
+/// keyed by name, and a direct vigor restoration.
+pub const Output = struct {
+    food: ?Draw = null,
+    biomass: ?Draw = null,
+    water: ?Draw = null,
+    fuel: ?Draw = null,
+    metal: ?Draw = null,
+    minerals: ?Draw = null,
+    coin: ?Draw = null,
+    /// Direct vigor restoration at completion, clamped at the ceiling.
+    vigor: f32 = 0,
+
+    pub fn get(self: *const Output, r: Resource) ?Draw {
+        return switch (r) {
+            inline else => |t| @field(self, @tagName(t)),
+        };
+    }
+
+    pub fn ptr(self: *Output, r: Resource) *?Draw {
+        return switch (r) {
+            inline else => |t| &@field(self, @tagName(t)),
+        };
+    }
+
+    comptime {
+        std.debug.assert(keyedByResource(Output, &.{"vigor"}));
+    }
+};
+
+/// What an effect tweaks on its target verb: the energy, the hours, one resource it requires
+/// or one it yields.
 pub const Stat = union(enum) {
     energy,
     hours,
-    input: []const u8,
-    output: []const u8,
+    input: Resource,
+    output: Resource,
 };
 
 /// What owning a good does. A small fixed vocabulary; the sim is its interpreter, and a new
 /// kind of effect is a code change while a new good is not.
 pub const Effect = union(enum) {
-    /// The target verb exists while this good is held.
-    grant: []const u8,
-    /// Multiply a stat on the target verb. A yield scale moves `s` and `sd` together.
+    /// Multiply a stat on the target verb. A yield's scale moves; an absent one stays absent.
     scale: Tweak,
-    /// Offset a stat on the target verb; a line that is absent is inserted.
+    /// Offset a stat on the target verb: an absent output is inserted as `fixed`, and an input
+    /// adds to its resource's amount.
     add: Tweak,
     /// Raise the vigor ceiling by this much and fill what it adds; losing it only clamps.
     vigor_ceiling: f32,
@@ -220,8 +310,8 @@ pub const Family = struct {
     rank: u8,
 };
 
-/// Standing conditions a good asks of its builder, read once at begin — as against `input`,
-/// which is what the build spends.
+/// Standing conditions a good asks of its builder, read once at begin — as against its
+/// resources, which are what the build spends.
 pub const Unlock = struct {
     /// Absolute current vigor, not a fraction of the ceiling.
     vigor_abs: f32,
@@ -251,45 +341,32 @@ pub const Action = struct {
     name: []const u8,
     /// The first act the verb exists in.
     act: u8 = 1,
-    /// A generator accumulates `requires.hours` passively without occupying `Busy`; collecting
-    /// pays the energy and the input lines and draws the output, all per cycle.
-    generator: bool = false,
     /// Resource domains the verb works in; the specialization model's key.
     sectors: []const []const u8 = &.{},
-    /// Retained tooling: ids that must be held for the verb to be offered.
-    needs: []const []const u8 = &.{},
-    /// The technology that opens the verb: held once it is researched, as a grant would.
-    tech: ?[]const u8 = null,
-    requires: Price,
-    input: []const Line = &.{},
-    output: []const Line = &.{},
-    /// Direct vigor restoration at a generator's collection, clamped at the ceiling.
-    vigor: f32 = 0,
+    /// A generator accumulates `requires.hours` passively without occupying `Busy`; collecting
+    /// pays `requires` and draws `output`, both per cycle.
+    generator: bool = false,
+    requires: Requires = .{},
+    output: Output = .{},
 };
 
 pub const Good = struct {
     id: []const u8,
     name: []const u8,
     act: u8 = 1,
-    /// False for a good the passerby carries and no one builds; it then has no price or tier.
+    /// False for a good the passerby carries and no one builds; it then has no tier and an
+    /// empty `requires`.
     buildable: bool = true,
     tier: ?Tier = null,
     sectors: []const []const u8 = &.{},
-    requires: ?Price = null,
-    /// The build order.
-    input: []const Line = &.{},
-    /// The product — absent means one of itself.
-    output: []const Line = &.{},
-    /// The verb (or tool) a modifier works on; must be held before the good is offered.
-    needs: []const []const u8 = &.{},
+    /// The build cost and its gates. A build yields one unit of the good.
+    requires: Requires = .{},
     family: ?Family = null,
     effects: []const Effect = &.{},
     unlock: ?Unlock = null,
     /// How many humans it houses. Zero for everything but a shelter.
     capacity: u32 = 0,
     milestone: ?Milestone = null,
-    /// The technology a recipe waits on: offered only once it is researched.
-    tech: ?[]const u8 = null,
     copy: Copy = .{},
 };
 
@@ -308,10 +385,10 @@ pub const Coord = struct {
 pub const TechState = enum { locked, available, researched };
 
 /// A tile of the research board. Technologies have an id space of their own — a tile is
-/// never an item and only a good's `tech` names one — so a recipe and the technology that
-/// opens it may share a name. `cost` is the research price as once-lines; a tile established
-/// at the curtain has none. `initial` is its state when the act opens; the board promotes
-/// and establishes from there (`comp.Research`).
+/// never an item and only a `requires.tech` names one — so a recipe and the technology that
+/// opens it may share a name. `cost` is the research price, keyed by resource; a tile
+/// established at the curtain has none. `initial` is its state when the act opens; the board
+/// promotes and establishes from there (`comp.Research`).
 pub const Technology = struct {
     id: []const u8,
     name: []const u8,
@@ -319,7 +396,7 @@ pub const Technology = struct {
     short: []const u8 = "",
     act: u8 = 2,
     coord: Coord,
-    cost: []const Line = &.{},
+    cost: Stock = .{},
     initial: TechState = .locked,
     /// What establishing it does, in the player's words.
     effect: []const u8 = "",
@@ -386,13 +463,6 @@ pub const Catalog = struct {
     /// The resource an id names, if it names one.
     pub fn resource(id: []const u8) ?Resource {
         return std.meta.stringToEnum(Resource, id);
-    }
-
-    /// The first act an item (a resource or a good) exists in, or null for an unknown id.
-    pub fn itemAct(self: *const Catalog, id: []const u8) ?u8 {
-        if (resource(id)) |r| return r.act();
-        if (self.good(id)) |g| return g.act;
-        return null;
     }
 };
 
@@ -470,36 +540,31 @@ pub const Rule = enum {
     bad_id,
     /// An id is used twice, or collides with a resource name.
     duplicate_id,
-    /// A line names an item that is neither a resource nor a good.
-    unknown_item,
     /// An effect names a verb that does not exist.
     unknown_target,
-    /// A `needs` entry names nothing.
-    unknown_need,
+    /// A gate entry names neither a good nor a verb.
+    unknown_gate,
     /// A sector is not a resource name.
     unknown_sector,
-    /// A good's or a verb's `tech` names no technology.
+    /// A `requires.tech` names no technology.
     unknown_tech,
-    /// A record references an item or verb from a later act than its own.
+    /// A record references a resource, a good, a verb or a technology from a later act than
+    /// its own.
     later_act,
+    /// A verb's gates lead back to itself through other verbs' gates.
+    gate_cycle,
     /// Two goods share a rank in one family, or a rank is zero.
     rank_collision,
     /// Two goods claim the same milestone.
     milestone_twice,
-    /// A good's once-output names something other than itself.
-    output_not_self,
-    /// A buildable good lacks a price or tier, or a traded one carries them.
+    /// A buildable good lacks a tier, or a traded one carries a tier or any `requires`.
     buildable_shape,
-    /// A line carries the `day` cadence; every line settles once.
-    bad_cadence,
-    /// A negative quantity, a drawn input, a non-positive scale, a zero research cost, or a
-    /// generator with no cycle.
+    /// A negative amount, a non-positive draw scale or effect scale, a tile not established at
+    /// the curtain with no research cost, or a generator with no cycle.
     bad_number,
     /// A technology sits on the foundation (ring 0) or shares a coordinate with another.
     bad_coord,
-    /// More verbs than `max_actions`, goods than `max_goods` or technologies than `max_techs`,
-    /// or more lines on one side of a record than `max_lines` once every `add` on it has
-    /// inserted its line.
+    /// More verbs than `max_actions`, goods than `max_goods` or technologies than `max_techs`.
     too_many,
 };
 
@@ -579,12 +644,16 @@ const Validator = struct {
     }
 
     fn run(self: *Validator) Error!void {
+        try self.checkCapacity();
         try self.ids();
         for (self.actions) |a| try self.checkAction(a);
         var claimed: [@typeInfo(Milestone).@"enum".field_names.len]bool = @splat(false);
         for (self.goods, 0..) |g, gi| try self.checkGood(g, gi, &claimed);
         for (self.technologies, 0..) |t, ti| try self.checkTech(t, ti);
-        try self.checkCapacity();
+        var state: [max_actions]u8 = @splat(0);
+        for (self.actions, 0..) |a, ai| {
+            if (self.cyclic(ai, &state)) return self.fail(.actions, .gate_cycle, a.id, "its own gate");
+        }
     }
 
     /// The caps the sim's bounded containers rely on.
@@ -592,46 +661,6 @@ const Validator = struct {
         if (self.actions.len > max_actions) return self.fail(.actions, .too_many, self.actions[max_actions].id, "actions");
         if (self.goods.len > max_goods) return self.fail(.goods, .too_many, self.goods[max_goods].id, "goods");
         if (self.technologies.len > max_techs) return self.fail(.technologies, .too_many, self.technologies[max_techs].id, "technologies");
-        for (self.actions) |a| {
-            try self.checkSide(.actions, a.id, a.input, true);
-            try self.checkSide(.actions, a.id, a.output, false);
-        }
-        for (self.goods) |g| {
-            if (g.input.len > max_lines) return self.fail(.goods, .too_many, g.id, "input lines");
-            if (g.output.len > max_lines) return self.fail(.goods, .too_many, g.id, "output lines");
-        }
-    }
-
-    /// One side of a verb must still fit after every `add` on it has inserted its line.
-    fn checkSide(self: *Validator, file: File, id: []const u8, base: []const Line, is_input: bool) Error!void {
-        if (base.len > max_lines) return self.fail(file, .too_many, id, "lines");
-        var inserted: [max_lines][]const u8 = undefined;
-        var ins: usize = 0;
-        for (self.goods) |g| {
-            for (g.effects) |e| {
-                const tw = switch (e) {
-                    .add => |t| t,
-                    else => continue,
-                };
-                if (!eql(tw.target, id)) continue;
-                const item = switch (tw.stat) {
-                    .input => |i| if (is_input) i else continue,
-                    .output => |o| if (!is_input) o else continue,
-                    else => continue,
-                };
-                var present = false;
-                for (base) |l| if (l.per == .once and eql(l.item, item)) {
-                    present = true;
-                };
-                for (inserted[0..ins]) |x| if (eql(x, item)) {
-                    present = true;
-                };
-                if (present) continue;
-                if (base.len + ins + 1 > max_lines) return self.fail(file, .too_many, id, item);
-                inserted[ins] = item;
-                ins += 1;
-            }
-        }
     }
 
     fn ids(self: *Validator) Error!void {
@@ -655,52 +684,48 @@ const Validator = struct {
         }
     }
 
-    fn checkPrice(self: *Validator, file: File, id: []const u8, p: Price) Error!void {
-        if (p.energy < 0 or p.hours < 0) return self.fail(file, .bad_number, id, "a negative price");
+    /// A record's demands: no negative amount, no resource or gate of a later act, and every
+    /// gate naming something.
+    fn checkRequires(self: *Validator, file: File, id: []const u8, act: u8, r: Requires) Error!void {
+        if (r.energy < 0 or r.hours < 0) return self.fail(file, .bad_number, id, "a negative price");
+        for (std.enums.values(Resource)) |res| {
+            const n = r.get(res);
+            if (n < 0) return self.fail(file, .bad_number, id, @tagName(res));
+            if (n > 0 and res.act() > act) return self.fail(file, .later_act, id, @tagName(res));
+        }
+        if (r.tech) |t| {
+            const rec = self.findTech(t) orelse return self.fail(file, .unknown_tech, id, t);
+            if (rec.act > act) return self.fail(file, .later_act, id, t);
+        }
+        for (r.any) |g| try self.checkGate(file, id, act, g);
+        for (r.all) |g| try self.checkGate(file, id, act, g);
+    }
+
+    fn checkGate(self: *Validator, file: File, id: []const u8, act: u8, gate: []const u8) Error!void {
+        const gate_act = if (self.findAction(gate)) |a| a.act else if (self.findGood(gate)) |g| g.act else return self.fail(file, .unknown_gate, id, gate);
+        if (gate_act > act) return self.fail(file, .later_act, id, gate);
     }
 
     fn checkAction(self: *Validator, a: Action) Error!void {
-        try self.checkPrice(.actions, a.id, a.requires);
+        try self.checkRequires(.actions, a.id, a.act, a.requires);
         if (a.generator and a.requires.hours <= 0) return self.fail(.actions, .bad_number, a.id, "a generator with no cycle");
-        if (a.vigor < 0) return self.fail(.actions, .bad_number, a.id, "a negative vigor");
-        for (a.input) |l| {
-            try self.checkLine(.actions, a.id, a.act, l, true);
-            if (l.per == .day) return self.fail(.actions, .bad_cadence, a.id, l.item);
+        for (std.enums.values(Resource)) |res| {
+            const d = a.output.get(res) orelse continue;
+            if (d.scale() <= 0) return self.fail(.actions, .bad_number, a.id, @tagName(res));
+            if (res.act() > a.act) return self.fail(.actions, .later_act, a.id, @tagName(res));
         }
-        for (a.output) |l| {
-            try self.checkLine(.actions, a.id, a.act, l, false);
-            if (l.per == .day) return self.fail(.actions, .bad_cadence, a.id, l.item);
-        }
+        if (a.output.vigor < 0) return self.fail(.actions, .bad_number, a.id, "a negative vigor");
         for (a.sectors) |s| if (Catalog.resource(s) == null) return self.fail(.actions, .unknown_sector, a.id, s);
-        for (a.needs) |n| try self.checkNeed(.actions, a.id, a.act, n);
-        if (a.tech) |t| {
-            const rec = self.findTech(t) orelse return self.fail(.actions, .unknown_tech, a.id, t);
-            if (rec.act > a.act) return self.fail(.actions, .later_act, a.id, t);
-        }
     }
 
     fn checkGood(self: *Validator, g: Good, gi: usize, claimed: []bool) Error!void {
         if (g.buildable) {
-            if (g.requires == null or g.tier == null) return self.fail(.goods, .buildable_shape, g.id, "a buildable good carries requires and tier");
-        } else if (g.requires != null or g.tier != null) {
-            return self.fail(.goods, .buildable_shape, g.id, "a traded good has no price or tier");
+            if (g.tier == null) return self.fail(.goods, .buildable_shape, g.id, "a buildable good carries a tier");
+        } else if (g.tier != null or !g.requires.isEmpty()) {
+            return self.fail(.goods, .buildable_shape, g.id, "a traded good has no tier and no requires");
         }
-        if (g.requires) |p| try self.checkPrice(.goods, g.id, p);
-        for (g.input) |l| {
-            try self.checkLine(.goods, g.id, g.act, l, true);
-            if (l.per == .day) return self.fail(.goods, .bad_cadence, g.id, l.item);
-        }
-        for (g.output) |l| {
-            try self.checkLine(.goods, g.id, g.act, l, false);
-            if (l.per == .day) return self.fail(.goods, .bad_cadence, g.id, l.item);
-            if (!eql(l.item, g.id)) return self.fail(.goods, .output_not_self, g.id, l.item);
-        }
+        try self.checkRequires(.goods, g.id, g.act, g.requires);
         for (g.sectors) |s| if (Catalog.resource(s) == null) return self.fail(.goods, .unknown_sector, g.id, s);
-        for (g.needs) |n| try self.checkNeed(.goods, g.id, g.act, n);
-        if (g.tech) |t| {
-            const rec = self.findTech(t) orelse return self.fail(.goods, .unknown_tech, g.id, t);
-            if (rec.act > g.act) return self.fail(.goods, .later_act, g.id, t);
-        }
         for (g.effects) |e| try self.checkEffect(g, e);
         if (g.family) |f| {
             if (f.rank == 0) return self.fail(.goods, .rank_collision, g.id, "rank 0");
@@ -717,40 +742,11 @@ const Validator = struct {
         }
     }
 
-    fn checkLine(self: *Validator, file: File, id: []const u8, act: u8, l: Line, is_input: bool) Error!void {
-        const item_act = self.itemAct(l.item) orelse return self.fail(file, .unknown_item, id, l.item);
-        if (item_act > act) return self.fail(file, .later_act, id, l.item);
-        if (l.n < 0 or l.sd < 0) return self.fail(file, .bad_number, id, l.item);
-        if (is_input and l.kind != .fixed) return self.fail(file, .bad_number, id, "an input is an exact amount");
-    }
-
-    fn checkNeed(self: *Validator, file: File, id: []const u8, act: u8, need: []const u8) Error!void {
-        if (self.findAction(need)) |a| {
-            if (a.act > act) return self.fail(file, .later_act, id, need);
-            return;
-        }
-        if (self.findGood(need)) |g| {
-            if (g.act > act) return self.fail(file, .later_act, id, need);
-            return;
-        }
-        return self.fail(file, .unknown_need, id, need);
-    }
-
     fn checkEffect(self: *Validator, g: Good, e: Effect) Error!void {
         switch (e) {
-            .grant => |t| {
-                const a = self.findAction(t) orelse return self.fail(.goods, .unknown_target, g.id, t);
-                if (a.act > g.act) return self.fail(.goods, .later_act, g.id, t);
-            },
             .scale, .add => |tw| {
                 const a = self.findAction(tw.target) orelse return self.fail(.goods, .unknown_target, g.id, tw.target);
                 if (a.act > g.act) return self.fail(.goods, .later_act, g.id, tw.target);
-                switch (tw.stat) {
-                    .energy, .hours => {},
-                    .input, .output => |item| {
-                        if (self.itemAct(item) == null) return self.fail(.goods, .unknown_item, g.id, item);
-                    },
-                }
                 if (e == .scale and tw.by <= 0) return self.fail(.goods, .bad_number, g.id, "a scale must be positive");
             },
             .vigor_ceiling => |v| if (v <= 0) return self.fail(.goods, .bad_number, g.id, "vigor_ceiling must be positive"),
@@ -760,7 +756,8 @@ const Validator = struct {
     }
 
     /// A tile: a plain id unique among technologies, off the foundation and on a coordinate
-    /// of its own, priced in exact once-lines of positive amounts.
+    /// of its own, priced in non-negative amounts of resources of its act — a positive price
+    /// unless it opens established.
     fn checkTech(self: *Validator, t: Technology, ti: usize) Error!void {
         try self.checkId(.technologies, t.id);
         for (self.technologies[0..ti]) |o| {
@@ -768,11 +765,27 @@ const Validator = struct {
             if (o.coord.q == t.coord.q and o.coord.r == t.coord.r) return self.fail(.technologies, .bad_coord, t.id, o.id);
         }
         if (t.coord.ring() == 0) return self.fail(.technologies, .bad_coord, t.id, "the foundation");
-        for (t.cost) |l| {
-            try self.checkLine(.technologies, t.id, t.act, l, true);
-            if (l.per == .day) return self.fail(.technologies, .bad_cadence, t.id, l.item);
-            if (l.n <= 0) return self.fail(.technologies, .bad_number, t.id, l.item);
+        for (std.enums.values(Resource)) |res| {
+            const n = t.cost.get(res);
+            if (n < 0) return self.fail(.technologies, .bad_number, t.id, @tagName(res));
+            if (n > 0 and res.act() > t.act) return self.fail(.technologies, .later_act, t.id, @tagName(res));
         }
+        if (t.initial != .researched and t.cost.isEmpty()) return self.fail(.technologies, .bad_number, t.id, "no research cost");
+    }
+
+    /// Whether the gates reachable from verb `ai` through the verbs they name come back to a
+    /// verb on the path. `state` marks each verb unvisited (0), on the path (1) or done (2).
+    fn cyclic(self: *Validator, ai: usize, state: *[max_actions]u8) bool {
+        if (state[ai] == 1) return true;
+        if (state[ai] == 2) return false;
+        state[ai] = 1;
+        const r = self.actions[ai].requires;
+        for ([_][]const []const u8{ r.any, r.all }) |list| for (list) |gate| {
+            const next = self.actionIndex(gate) orelse continue;
+            if (self.cyclic(next, state)) return true;
+        };
+        state[ai] = 2;
+        return false;
     }
 
     fn findTech(self: *Validator, id: []const u8) ?*const Technology {
@@ -785,14 +798,13 @@ const Validator = struct {
         return null;
     }
 
-    fn findGood(self: *Validator, id: []const u8) ?*const Good {
-        for (self.goods) |*g| if (eql(g.id, id)) return g;
+    fn actionIndex(self: *Validator, id: []const u8) ?usize {
+        for (self.actions, 0..) |a, i| if (eql(a.id, id)) return i;
         return null;
     }
 
-    fn itemAct(self: *Validator, id: []const u8) ?u8 {
-        if (Catalog.resource(id)) |r| return r.act();
-        if (self.findGood(id)) |g| return g.act;
+    fn findGood(self: *Validator, id: []const u8) ?*const Good {
+        for (self.goods) |*g| if (eql(g.id, id)) return g;
         return null;
     }
 };
@@ -824,6 +836,20 @@ test "the shipped files load and validate" {
     try testing.expectEqual(TechState.researched, cat.technology("foraging").?.initial);
 }
 
+test "a record's demands and yields read by resource" {
+    var cat = try loadShipped();
+    defer cat.deinit();
+    const traps = cat.action("check_traps").?;
+    try testing.expect(traps.generator);
+    try testing.expectEqual(@as(f32, 1.0), traps.requires.get(.biomass));
+    try testing.expectEqual(dist.Kind.poisson, traps.output.get(.food).?.kind());
+    try testing.expectEqual(@as(f32, 3.0), traps.output.get(.food).?.scale());
+    try testing.expect(traps.output.get(.biomass) == null);
+    try testing.expectEqualStrings("wire_snares", traps.requires.all[0]);
+    try testing.expectEqual(@as(f32, 60.0), cat.good("shelter").?.requires.biomass);
+    try testing.expect(cat.good("fish_rod").?.requires.isEmpty());
+}
+
 // —— the validator bites ————————————————————————————————————————————————————————————————
 
 const ok_actions =
@@ -835,8 +861,7 @@ const ok_actions =
 
 const ok_goods =
     \\.{
-    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-    \\       .input = .{ .{ .item = "biomass", .n = 1.0 } }, .effects = .{ .{ .grant = "fish" } } },
+    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .biomass = 1.0 } },
     \\}
 ;
 
@@ -869,6 +894,11 @@ test "a parse error names the file, the line and the column" {
     try testing.expectEqual(File.actions, d.file);
     try testing.expect(d.rule == null);
     try testing.expect(std.mem.startsWith(u8, d.message(), "assets/roster/actions.zon: 2:"));
+    // A resource the enum does not name is a parse error too: the fields are the contract.
+    try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
+        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .berries = 1.0 } } }
+    , .goods = ok_goods }, &d));
+    try testing.expect(d.rule == null);
 }
 
 test "ids are plain, unique, and never a resource name" {
@@ -883,45 +913,60 @@ test "ids are plain, unique, and never a resource name" {
     , .duplicate_id);
 }
 
-test "lines name real items of the record's own act" {
+test "amounts and yields name resources of the record's own act" {
     try expectRule(
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .output = .{ .{ .item = "berries", .n = 1.0 } } } }
-    , ok_goods, .unknown_item);
-    try expectRule(
-        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .output = .{ .{ .item = "water", .n = 1.0 } } } }
+        \\     .output = .{ .water = .{ .normal = 1.0 } } } }
     , ok_goods, .later_act);
     try expectRule(
-        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "biomass", .n = 1.0, .kind = .normal } } } }
+        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0, .metal = 1.0 } } }
+    , ok_goods, .later_act);
+    try expectRule(
+        \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0, .biomass = -1.0 } } }
     , ok_goods, .bad_number);
     try expectRule(
         \\.{ .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .output = .{ .{ .item = "food", .n = 1.0, .per = .day } } } }
-    , ok_goods, .bad_cadence);
+        \\     .output = .{ .food = .{ .poisson = 0.0 } } } }
+    , ok_goods, .bad_number);
     try expectRule(
         \\.{ .{ .id = "traps", .name = "Traps", .generator = true, .requires = .{ .energy = 1.0, .hours = 0.0 } } }
     , ok_goods, .bad_number);
 }
 
-test "effects point at verbs the good can reach" {
+test "a gate names a good or a verb of the record's own act, and never loops" {
+    try expectRule(
+        \\.{ .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .any = .{"row"} } } }
+    , ok_goods, .unknown_gate);
     try expectRule(ok_actions,
-        \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .effects = .{ .{ .grant = "swim" } } } }
-    , .unknown_target);
+        \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .all = .{"swim"} } } }
+    , .unknown_gate);
+    try expectRule(
+        \\.{
+        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .any = .{"rod"} } },
+        \\    .{ .id = "weir", .name = "Weir", .act = 2, .requires = .{ .energy = 1.0, .all = .{"fish"} } },
+        \\    .{ .id = "row", .name = "Row", .requires = .{ .energy = 1.0, .all = .{"weir"} } },
+        \\}
+    , ok_goods, .later_act);
+    try expectRule(
+        \\.{
+        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .all = .{"row"} } },
+        \\    .{ .id = "row", .name = "Row", .requires = .{ .energy = 1.0, .any = .{ "rod", "fish" } } },
+        \\}
+    , ok_goods, .gate_cycle);
+    try expectRule(
+        \\.{ .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .all = .{"fish"} } } }
+    , ok_goods, .gate_cycle);
+}
+
+test "effects point at verbs the good can reach" {
     try expectRule(ok_actions,
         \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
         \\     .effects = .{ .{ .scale = .{ .target = "fsh", .stat = .energy, .by = 0.5 } } } } }
     , .unknown_target);
     try expectRule(ok_actions,
-        \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .needs = .{"fish"}, .effects = .{ .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.0 } } } } }
+        \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .all = .{"fish"} },
+        \\     .effects = .{ .{ .scale = .{ .target = "fish", .stat = .{ .output = .food }, .by = 0.0 } } } } }
     , .bad_number);
-    try expectRule(ok_actions,
-        \\.{ .{ .id = "gloves", .name = "Gloves", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .needs = .{"row"} } }
-    , .unknown_need);
 }
 
 test "goods keep their shape" {
@@ -932,13 +977,8 @@ test "goods keep their shape" {
         \\.{ .{ .id = "net", .name = "Net", .buildable = false, .tier = .crude } }
     , .buildable_shape);
     try expectRule(ok_actions,
-        \\.{ .{ .id = "kiln", .name = "Kiln", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .output = .{ .{ .item = "food", .n = 4.0 } } } }
-    , .output_not_self);
-    try expectRule(ok_actions,
-        \\.{ .{ .id = "bed", .name = "Bed", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "biomass", .n = 0.1, .per = .day } } } }
-    , .bad_cadence);
+        \\.{ .{ .id = "net", .name = "Net", .buildable = false, .requires = .{ .biomass = 2.0 } } }
+    , .buildable_shape);
     try expectRule(ok_actions,
         \\.{
         \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
@@ -966,21 +1006,12 @@ test "a roster over the verb cap is refused" {
     try expectRule(many, ok_goods, .too_many);
 }
 
-test "a lot of an intermediate is its own once-output" {
-    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods =
-        \\.{ .{ .id = "charcoal", .name = "Charcoal", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .input = .{ .{ .item = "biomass", .n = 6.0 } }, .output = .{ .{ .item = "charcoal", .n = 4.0 } } } }
-    }, null);
-    defer cat.deinit();
-    try testing.expectEqual(@as(f32, 4.0), cat.good("charcoal").?.output[0].n);
-}
-
 // —— technologies ———————————————————————————————————————————————————————————————————————
 
 const ok_techs =
     \\.{
     \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
-    \\       .cost = .{ .{ .item = "food", .n = 2.0 } }, .initial = .available },
+    \\       .cost = .{ .food = 2.0 }, .initial = .available },
     \\}
 ;
 
@@ -998,70 +1029,66 @@ fn expectTechRule(goods_src: [:0]const u8, techs_src: [:0]const u8, rule: Rule) 
 
 test "a recipe names a technology that exists, of its own act or earlier" {
     var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods =
-        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .tech = "kilns" } }
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "kilns" } } }
     , .technologies = ok_techs }, null);
     defer cat.deinit();
     try testing.expectEqual(@as(u16, 0), cat.techIndex("kilns").?);
-    try testing.expectEqualStrings("kilns", cat.good("oven").?.tech.?);
+    try testing.expectEqualStrings("kilns", cat.good("oven").?.requires.tech.?);
 
     try expectTechRule(
-        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .tech = "glass" } }
+        \\.{ .{ .id = "oven", .name = "Oven", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "glass" } } }
     , ok_techs, .unknown_tech);
     // Act I has no research: a first-act recipe cannot wait on a second-act tile.
     try expectTechRule(
-        \\.{ .{ .id = "oven", .name = "Oven", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 },
-        \\     .tech = "kilns" } }
+        \\.{ .{ .id = "oven", .name = "Oven", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "kilns" } } }
     , ok_techs, .later_act);
 }
 
 test "a verb names a technology that exists, of its own act or earlier" {
     var cat = try load(testing.allocator, .{ .actions =
-        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "kilns" } } }
     , .goods = ".{}", .technologies = ok_techs }, null);
     defer cat.deinit();
-    try testing.expectEqualStrings("kilns", cat.action("fire").?.tech.?);
+    try testing.expectEqualStrings("kilns", cat.action("fire").?.requires.tech.?);
 
     var d = Diagnostics{};
     try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
-        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .tech = "glass", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "fire", .name = "Fire", .act = 2, .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "glass" } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.unknown_tech, d.rule.?);
     try testing.expectError(error.Invalid, load(testing.allocator, .{ .actions =
-        \\.{ .{ .id = "fire", .name = "Fire", .tech = "kilns", .requires = .{ .energy = 1.0, .hours = 1.0 } } }
+        \\.{ .{ .id = "fire", .name = "Fire", .requires = .{ .energy = 1.0, .hours = 1.0, .tech = "kilns" } } }
     , .goods = ".{}", .technologies = ok_techs }, &d));
     try testing.expectEqual(Rule.later_act, d.rule.?);
 }
 
 test "technologies keep their shape" {
     try expectTechRule(ok_goods,
-        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 0 } } }
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 0 }, .cost = .{ .food = 1.0 } } }
     , .bad_coord);
     try expectTechRule(ok_goods,
         \\.{
-        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 } },
-        \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 1, .r = 0 } },
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 } },
+        \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 } },
         \\}
     , .bad_coord);
     try expectTechRule(ok_goods,
         \\.{
-        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 } },
-        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 1 } },
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 } },
+        \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 0, .r = 1 }, .cost = .{ .food = 1.0 } },
         \\}
     , .duplicate_id);
+    // A tile priced at nothing is refused unless it opens established.
     try expectTechRule(ok_goods,
-        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
-        \\     .cost = .{ .{ .item = "food", .n = 0.0 } } } }
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 } } }
     , .bad_number);
     try expectTechRule(ok_goods,
-        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
-        \\     .cost = .{ .{ .item = "food", .n = 2.0, .per = .day } } } }
-    , .bad_cadence);
-    try expectTechRule(ok_goods,
-        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 },
-        \\     .cost = .{ .{ .item = "clay", .n = 2.0 } } } }
-    , .unknown_item);
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = -2.0 } } }
+    , .bad_number);
+    var cat = try load(testing.allocator, .{ .actions = ok_actions, .goods = ok_goods, .technologies =
+        \\.{ .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .initial = .researched } }
+    }, null);
+    cat.deinit();
 }
 
 test "a coordinate's ring is its distance from the foundation" {

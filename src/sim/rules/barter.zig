@@ -168,7 +168,7 @@ fn spawn_trader(w: *World) Entity {
 }
 
 fn held(w: *World, e: Entity, res: *Resources, verb: []const u8) bool {
-    return effects.held(&res.catalog, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, res.catalog.actionIndex(verb).?);
+    return effects.held(&res.catalog, effects.holdingsOf(w, e).?, res.catalog.actionIndex(verb).?);
 }
 
 test "a buy moves both bundles atomically and decrements the satchel" {

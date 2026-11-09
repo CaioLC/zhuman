@@ -80,7 +80,7 @@ pub fn metabolize(
 }
 
 /// Tick every act in progress and resolve the ones whose time is up: dispatch `doing`
-/// back to its completion half (deposit + receipt for labor, the grant for a build) and
+/// back to its completion half (deposit + receipt for labor, the good for a build) and
 /// drop the `Busy`. Collect-then-apply, like `despawn_dead`: finishing removes from the
 /// storage this query iterates. Runs after `metabolize` (the body pays its keep while
 /// working) and before `mark_dead` (a death this frame still forfeits nothing extra —
@@ -151,7 +151,7 @@ pub fn despawn_dead(
 
 /// **Eligibility transition tracking.** For each prerequisite-gated good of this act, when
 /// its prerequisite becomes satisfied for the first time this run, emit one `RecipeInReach`
-/// (the log's "A new recipe is within reach: {name}."). Only goods with `needs` participate:
+/// (the log's "A new recipe is within reach: {name}."). Only goods with an `any`/`all` gate participate:
 /// a good with no prerequisite is reachable from the first breath, so it is not a *transition*
 /// and never logs. The seen-set
 /// is sim state (`Sim.reach_seen`, by catalog index), so it survives
@@ -168,11 +168,11 @@ pub fn track_reach(
     while (it.next()) |entry| {
         const e: Entity = entry[0];
         for (cat.goods, 0..) |rec, gi| {
-            // Only this act's goods with a `needs` transition; one without is reachable from
+            // Only this act's goods with an `any`/`all` gate; one without is reachable from
             // the start and would false-fire on the first tick, so it is skipped entirely, and
             // a later act's recipe is announced by that act's own edge detector.
-            if (rec.needs.len == 0 or rec.act > 1) continue;
-            const met = capital.needsMet(w, e, cat, @intCast(gi));
+            if ((rec.requires.any.len == 0 and rec.requires.all.len == 0) or rec.act > 1) continue;
+            const met = capital.gatesMet(w, e, cat, @intCast(gi));
             if (met and !res.sim.reach_seen[gi]) {
                 res.sim.reach_seen[gi] = true;
                 _ = res.events.writer(events.RecipeInReach).push(.{ .agent = e, .gi = @intCast(gi) });
@@ -340,14 +340,14 @@ test "track_reach announces this act's recipes only" {
         .actions =
         \\.{
         \\    .{ .id = "forage", .name = "Forage", .requires = .{ .energy = 1.0, .hours = 1.0 } },
-        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "fish", .name = "Fish", .requires = .{ .energy = 1.0, .hours = 1.0, .any = .{"rod"} } },
         \\}
         ,
         .goods =
         \\.{
-        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } },
-        \\    .{ .id = "hook", .name = "Hook", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .needs = .{"fish"} },
-        \\    .{ .id = "weir", .name = "Weir", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .needs = .{"fish"} },
+        \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
+        \\    .{ .id = "hook", .name = "Hook", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .all = .{"fish"} } },
+        \\    .{ .id = "weir", .name = "Weir", .act = 2, .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0, .all = .{"fish"} } },
         \\}
         ,
     }, null);

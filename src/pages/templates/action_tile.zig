@@ -290,7 +290,7 @@ pub fn action_tile(
     // The same gates `begin` applies: strict energy, payable inputs, a free body.
     const can = q.ready();
 
-    // Price segment: `−{energy}e` then every input line (e.g. Check traps' `−1m`), all
+    // Price segment: `−{energy}e` then every resource it spends (e.g. Hunt's `−1m`), all
     // *before* the middot; the duration is the trailing segment after it. Amounts use
     // `fmt_amount` (one decimal only when fractional), so Forage reads `−1.7e` while
     // Scavenge reads `−2e` (metric style).
@@ -301,9 +301,11 @@ pub fn action_tile(
         var ebuf: [8]u8 = undefined;
         cw.print("\u{2212}{s}e", .{fmt.fmt_amount(&ebuf, verb.requires.energy)}) catch {};
     }
-    for (verb.input.slice()) |l| {
+    for (std.enums.values(ha.sim.data.roster.Resource)) |r| {
+        const n = verb.requires.get(r);
+        if (n <= 0) continue;
         var nbuf: [8]u8 = undefined;
-        cw.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, l.n), info.letterOf(act, l.item) }) catch {};
+        cw.print(" \u{2212}{s}{s}", .{ fmt.fmt_amount(&nbuf, n), info.letterOf(act, r) }) catch {};
     }
     const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
@@ -320,7 +322,7 @@ pub fn action_tile(
     var ybuf: [16]u8 = undefined;
     var kind: ha.sim.kernel.dist.Kind = .fixed;
     var yield_txt: []const u8 = "+0";
-    if (info.dominant(act, cat, verb.output.slice())) |dom| {
+    if (info.dominant(act, &verb.output)) |dom| {
         kind = dom.kind;
         const lo = @round(dom.band.p10 * q.quality);
         const hi = @round(dom.band.p90 * q.quality);

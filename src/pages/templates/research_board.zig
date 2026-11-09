@@ -268,21 +268,22 @@ fn heldOf(b: Board, r: roster.Resource) f32 {
 }
 
 fn costText(a: std.mem.Allocator, t: *const roster.Technology) ![]const u8 {
-    if (t.cost.len == 0) return "CARRIED FROM ACT I";
+    if (t.cost.isEmpty()) return "CARRIED FROM ACT I";
     var out: std.ArrayList(u8) = .empty;
-    for (t.cost, 0..) |line, i| {
-        if (i > 0) try out.appendSlice(a, " \u{00b7} ");
-        const r = roster.Catalog.resource(line.item) orelse continue;
-        try out.appendSlice(a, try a.print("{} {s}", .{ @as(u32, @intFromFloat(@round(line.n))), try std.ascii.allocUpperString(a, r.labelIn(2)) }));
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = t.cost.get(r);
+        if (n <= 0) continue;
+        if (out.items.len > 0) try out.appendSlice(a, " \u{00b7} ");
+        try out.appendSlice(a, try a.print("{} {s}", .{ @as(u32, @intFromFloat(@round(n))), try std.ascii.allocUpperString(a, r.labelIn(2)) }));
     }
     return out.items;
 }
 
 fn deficitText(a: std.mem.Allocator, b: Board, t: *const roster.Technology) !?[]const u8 {
     var out: std.ArrayList(u8) = .empty;
-    for (t.cost) |line| {
-        const r = roster.Catalog.resource(line.item) orelse continue;
-        const need = @round(line.n);
+    for (std.enums.values(roster.Resource)) |r| {
+        if (t.cost.get(r) <= 0) continue;
+        const need = @round(t.cost.get(r));
         const have = @floor(heldOf(b, r));
         if (have >= need) continue;
         if (out.items.len > 0) try out.appendSlice(a, " \u{00b7} ");
@@ -862,19 +863,22 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         (try detail.text_fit("copy", t.effect, .fill)).set(.{ .margin = .{ .before = 11 } }, .{style.caption});
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
-        if (t.cost.len == 0) try detailRow(costs, 0, "Act I foundation", "paid");
-        for (t.cost, 0..) |line, li| {
-            const r = roster.Catalog.resource(line.item) orelse continue;
-            try detailRow(costs, li, try a.print("{} {s}", .{ @as(u32, @intFromFloat(@round(line.n))), r.labelIn(2) }), try a.print("{} held", .{@as(i64, @intFromFloat(@floor(heldOf(b, r))))}));
+        if (t.cost.isEmpty()) try detailRow(costs, 0, "Act I foundation", "paid");
+        var li: usize = 0;
+        for (std.enums.values(roster.Resource)) |r| {
+            const n = t.cost.get(r);
+            if (n <= 0) continue;
+            try detailRow(costs, li, try a.print("{} {s}", .{ @as(u32, @intFromFloat(@round(n))), r.labelIn(2) }), try a.print("{} held", .{@as(i64, @intFromFloat(@floor(heldOf(b, r))))}));
+            li += 1;
         }
 
         const opens = try detailSection(detail, "opens", "ENABLES OUTWARD");
         var row_n: usize = 0;
-        for (cat.goods) |g| if (g.tech) |gt| if (std.mem.eql(u8, gt, t.id)) {
+        for (cat.goods) |g| if (g.requires.tech) |gt| if (std.mem.eql(u8, gt, t.id)) {
             try detailRow(opens, row_n, try a.print("{s} \u{00b7} BUILD", .{g.name}), "enabled");
             row_n += 1;
         };
-        for (cat.actions) |act| if (act.tech) |at| if (std.mem.eql(u8, at, t.id)) {
+        for (cat.actions) |act| if (act.requires.tech) |at| if (std.mem.eql(u8, at, t.id)) {
             try detailRow(opens, row_n, try a.print("{s} \u{00b7} ACTIONS", .{act.name}), "enabled");
             row_n += 1;
         };

@@ -172,7 +172,8 @@ pub const Entry = struct {
     name: []const u8,
     type_word: []const u8,
     state_word: []const u8,
-    /// The items the build order spends and the recipe yields, space-separated, for `in:`/`out:`.
+    /// The resources the build spends and the effect it yields, space-separated, for
+    /// `in:`/`out:`.
     in_buf: [64]u8 = undefined,
     in_len: usize = 0,
     out_buf: [64]u8 = undefined,
@@ -216,22 +217,22 @@ fn stateWord(kind: Kind) []const u8 {
     };
 }
 
-/// The items of `lines`, space-separated, into `out`; returns the length written.
-fn joinItems(out: []u8, lines: []const roster.Line) usize {
+/// The resources a build spends, by name and space-separated, into `out`; returns the length
+/// written.
+fn joinResources(out: []u8, req: *const roster.Requires) usize {
     var w = std.Io.Writer.fixed(out);
-    for (lines, 0..) |l, i| {
-        if (i > 0) w.writeByte(' ') catch break;
-        w.writeAll(l.item) catch break;
+    for (std.enums.values(roster.Resource)) |r| {
+        if (req.get(r) <= 0) continue;
+        if (w.buffered().len > 0) w.writeByte(' ') catch break;
+        w.writeAll(@tagName(r)) catch break;
     }
     return w.buffered().len;
 }
 
-/// The units in a build order, for the COST sort.
+/// The units a build spends, for the COST sort.
 fn orderTotal(rec: *const roster.Good) f32 {
     var n: f32 = 0;
-    for (rec.input) |l| if (l.per == .once) {
-        n += l.n;
-    };
+    for (std.enums.values(roster.Resource)) |r| n += rec.requires.get(r);
     return n;
 }
 
@@ -269,19 +270,17 @@ pub fn collect(world: *const World, e: Entity, cat: *const roster.Catalog, shelf
             .q = quote,
             .kind = kind,
             .inputs = orderTotal(rec),
-            .hours = rec.requires.?.hours,
+            .hours = rec.requires.hours,
             .name = rec.name,
             .type_word = row_mod.recipeType(cat, rec),
             .state_word = stateWord(kind),
-            .tech = if (rec.tech) |t| (if (cat.technology(t)) |tr| tr.name else t) else "",
+            .tech = if (rec.requires.tech) |t| (if (cat.technology(t)) |tr| tr.name else t) else "",
         };
-        ent.in_len = joinItems(&ent.in_buf, rec.input);
-        // A recipe with no product lines yields itself; `out:` then reads its effect copy.
-        ent.out_len = if (rec.output.len > 0) joinItems(&ent.out_buf, rec.output) else blk: {
-            const n_copy = @min(rec.copy.effect.len, ent.out_buf.len);
-            @memcpy(ent.out_buf[0..n_copy], rec.copy.effect[0..n_copy]);
-            break :blk n_copy;
-        };
+        ent.in_len = joinResources(&ent.in_buf, &rec.requires);
+        // A build yields one of itself; `out:` reads its effect copy.
+        const n_copy = @min(rec.copy.effect.len, ent.out_buf.len);
+        @memcpy(ent.out_buf[0..n_copy], rec.copy.effect[0..n_copy]);
+        ent.out_len = n_copy;
         // The blank view is the complete shelf and a query only narrows it.
         if (kind == .building or blank or query.matches(&q, RecipeRow{ .e = &ent })) {
             buf[n] = ent;
@@ -437,8 +436,9 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     const quotes = world.get(e, comp.Quotes) orelse return;
     const quote = quotes.builds[gi] orelse return;
     const rec = &cat.goods[gi];
-    const price = rec.requires.?;
+    const price = &rec.requires;
     const u = rec.unlock orelse return;
+    const act = ha.sim.data.migration.actOf(world, e);
     const vigor = world.get(e, comp.Vigor).?;
     const food = ledger.balance(world, e, .food);
     const kinds = capital.goodsOwned(world, e, cat);
@@ -455,9 +455,10 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     var cbuf: [48]u8 = undefined;
     const cost_txt = blk: {
         var cw = std.Io.Writer.fixed(&cbuf);
-        for (rec.input) |l| if (l.per == .once) {
-            cw.print("{d:.0}{s} ", .{ l.n, @import("./action_info.zig").letterOf(ha.sim.data.migration.actOf(world, e), l.item) }) catch {};
-        };
+        for (std.enums.values(roster.Resource)) |r| {
+            const n = price.get(r);
+            if (n > 0) cw.print("{d:.0}{s} ", .{ n, @import("./action_info.zig").letterOf(act, r) }) catch {};
+        }
         cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 }) catch {};
         break :blk cw.buffered();
     };
@@ -471,9 +472,10 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     var vigor_buf: [24]u8 = undefined;
     var food_buf: [24]u8 = undefined;
     var recipes_buf: [16]u8 = undefined;
-    var order_bufs: [roster.max_lines][24]u8 = undefined;
-    var order_labels: [roster.max_lines][24]u8 = undefined;
-    var requirements: [3 + roster.max_lines]milestone_mod.Requirement = undefined;
+    const resources = @typeInfo(roster.Resource).@"enum".field_names.len;
+    var order_bufs: [resources][24]u8 = undefined;
+    var order_labels: [resources][24]u8 = undefined;
+    var requirements: [3 + resources]milestone_mod.Requirement = undefined;
     var nreq: usize = 0;
     requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
     nreq += 1;
@@ -483,14 +485,15 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     nreq += 1;
     var compact: []const u8 = "";
     var li: usize = 0;
-    for (rec.input) |l| {
-        if (l.per != .once) continue;
-        const have = ledger.held(world, e, cat, l);
-        const word = ha.sim.rules.actions.itemWord(cat, l.item, ha.sim.data.migration.actOf(world, e));
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = price.get(r);
+        if (n <= 0) continue;
+        const have = ledger.balance(world, e, r);
+        const word = r.wordIn(act);
         const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
-        requirements[nreq] = .{ .label = label, .value = std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, l.n }) catch "?", .met = have >= l.n };
+        requirements[nreq] = .{ .label = label, .value = std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, n }) catch "?", .met = have >= n };
         nreq += 1;
-        if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, l.n }) catch word;
+        if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, n }) catch word;
         li += 1;
     }
     // Locked counts the standing conditions still unmet (`locked · 1 condition`), as the
@@ -622,12 +625,12 @@ test "Act II: tech: finds recipes by technology; a build in progress pins first 
     var buf: [roster.max_goods]Entry = undefined;
     const loom = collect(&w, e, &cat, act_two_test, "tech:loom", &buf);
     try testing.expect(loom.len > 0);
-    for (loom) |ent| try testing.expectEqualStrings("loom_ropewalk", ent.rec.tech.?);
+    for (loom) |ent| try testing.expectEqualStrings("loom_ropewalk", ent.rec.requires.tech.?);
 
     // Establish the loom and begin the ropewalk: it is pinned above everything.
     w.get(e, comp.Research).?.state[cat.techIndex("loom_ropewalk").?] = .researched;
     const ropewalk = cat.goodIndex("ropewalk").?;
-    const total = ha.sim.hours_to_secs(cat.goods[ropewalk].requires.?.hours, 20);
+    const total = ha.sim.hours_to_secs(cat.goods[ropewalk].requires.hours, 20);
     w.add(e, comp.Busy{ .doing = .{ .build = ropewalk }, .total = total, .remaining = total, .quality = 1 });
     requote(&w, e, &cat);
     for ([_]Sort{ .state, .inputs, .time, .name }) |s| {

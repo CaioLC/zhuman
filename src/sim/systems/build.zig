@@ -83,7 +83,7 @@ test "build begins the work and emits WorkBegun; cancel salvages and emits Build
     var res = try rig();
     defer res.catalog.deinit();
     const spear = res.catalog.goodIndex("spear").?;
-    const order = res.catalog.goods[spear].input[0].n;
+    const order = res.catalog.goods[spear].requires.biomass;
     const e = agent(&w, order);
     _ = res.events.writer(events.BeginBuild).push(.{ .agent = e, .gi = spear });
     ecs.run(&w, &res, build);

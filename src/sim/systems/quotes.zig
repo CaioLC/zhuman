@@ -42,7 +42,7 @@ pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config
         const vq = actions.quote(w, e, cat, cfg, ai) orelse continue;
         out.verbs[i] = .{
             .standing = vq.standing,
-            .short = if (vq.short) |l| indexOf(vq.verb.input.slice(), l) else Quotes.none,
+            .short = vq.short,
             .quality = vq.quality,
         };
     }
@@ -51,28 +51,20 @@ pub fn fill(w: *const World, e: Entity, cat: *const Catalog, cfg: res_mod.Config
         const gq = capital.generator_quote(w, e, cat, cfg, ai) orelse continue;
         out.generators[i] = .{
             .standing = gq.standing,
-            .short = if (gq.short) |l| indexOf(gq.verb.input.slice(), l) else Quotes.none,
+            .short = gq.short,
             .progress = gq.progress,
             .total = gq.total,
         };
     }
-    for (cat.goods, 0..) |*rec, i| {
+    for (0..cat.goods.len) |i| {
         const gi: u16 = @intCast(i);
         if (capital.quote(w, e, cat, gi)) |bq| out.builds[i] = .{
             .standing = bq.standing,
-            .short = if (bq.short) |l| indexOf(rec.input, l) else Quotes.none,
+            .short = bq.short,
             .count = bq.count,
             .reach = bq.reach,
         };
     }
-}
-
-/// The index of `line` in `lines`, matched by item and cadence; `none` when it is not there.
-fn indexOf(lines: []const roster.Line, line: roster.Line) u8 {
-    for (lines, 0..) |l, i| {
-        if (l.per == line.per and std.mem.eql(u8, l.item, line.item)) return @intCast(i);
-    }
-    return Quotes.none;
 }
 
 // ============================ Tests ==========================================
@@ -102,7 +94,7 @@ test "quotes answers what the rules answer, slot by slot" {
     const spear = cat.goodIndex("spear").?;
     const garden = cat.actionIndex("tend_garden").?;
     const hunt = cat.actionIndex("hunt").?;
-    w.get(e, comp.Goods).?.count[spear] = 1; // the spear grants the hunt, whose bait is short
+    w.get(e, comp.Goods).?.count[spear] = 1; // the spear opens the hunt, whose bait is short
     w.get(e, comp.Goods).?.count[cat.goodIndex("garden_bed").?] = 1;
 
     ecs.run(&w, &res, quotes);
@@ -127,14 +119,13 @@ test "quotes answers what the rules answer, slot by slot" {
     }
     for (cat.actions.len..roster.max_actions) |i| try testing.expect(got.verbs[i] == null);
 
-    // The short line is named by its index in the lines it indexes.
+    // The short slot names the resource that is short.
     const hunt_q = got.verbs[hunt].?;
     try testing.expectEqual(Quotes.VerbStanding.short, hunt_q.standing);
-    const bait = actions.verbOf(&w, e, cat, hunt).?.input.slice()[hunt_q.short];
-    try testing.expectEqualStrings("biomass", bait.item);
+    try testing.expectEqual(roster.Resource.biomass, hunt_q.short.?);
     const spear_q = got.builds[spear].?;
     try testing.expectEqual(Quotes.BuildStanding.short, spear_q.standing);
-    try testing.expectEqualStrings("biomass", cat.goods[spear].input[spear_q.short].item);
+    try testing.expectEqual(roster.Resource.biomass, spear_q.short.?);
     try testing.expectEqual(Quotes.GeneratorStanding.charging, got.generators[garden].?.standing);
 }
 

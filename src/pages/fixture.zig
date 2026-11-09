@@ -70,7 +70,7 @@ pub const Balances = struct {
     biomass: ?f32 = null,
     /// Metabolism rate multiplier (eating policy). Null keeps the normal rate.
     metabolism: ?f32 = null,
-    /// Owned goods by record id. What they grant and modify follows from the catalog through
+    /// Owned goods by record id. What they open and modify follows from the catalog through
     /// `capital.settle`, so a verb arrives by owning its tool. Empty leaves the actor
     /// empty-handed.
     goods: []const Owned = &.{},
@@ -253,7 +253,7 @@ const act_one_generators = [_]Owned{
     .{ .id = "garden_bed", .n = 1, .mode = .auto },
 };
 
-/// The settlement's body and goods: the three tools that grant a verb and a lean-to.
+/// The settlement's body and goods: the three tools that open a verb and a lean-to.
 const settlement_balances = Balances{
     .vigor = .{ .v = 6, .max = 15 },
     .food = 22,
@@ -1100,7 +1100,7 @@ fn seedWork(res: *Resources, world: *World, player: Entity, id: []const u8) void
 fn seedBuild(res: *Resources, world: *World, player: Entity, id: []const u8) void {
     const cat = &res.game.catalog;
     const gi = cat.goodIndex(id) orelse return;
-    const total = ha.sim.hours_to_secs(cat.goods[gi].requires.?.hours, res.game.config.secs_per_day);
+    const total = ha.sim.hours_to_secs(cat.goods[gi].requires.hours, res.game.config.secs_per_day);
     if (world.has(player, comp.Busy)) world.remove(player, comp.Busy);
     world.add(player, comp.Busy{ .doing = .{ .build = gi }, .total = total, .remaining = total / 2, .quality = 1 });
 }
@@ -1340,10 +1340,10 @@ test "seed writes the exact balances a fixture names and leaves others at baseli
     try testing.expectEqual(@as(u32, 1), goods.count[root_cellar_gi]);
     try testing.expectEqual(@as(u32, 1), goods.count[leaf_bed_gi]);
 
-    // The owned tools grant the three verbs beyond the starting two.
+    // The owned tools open the three verbs beyond the starting two.
     const cat = &rig.res.game.catalog;
     for ([_][]const u8{ "chop_wood", "fish", "hunt" }) |verb| {
-        try testing.expect(ha.sim.rules.effects.held(cat, rig.world.get(e, comp.Verbs), goods, cat.actionIndex(verb).?));
+        try testing.expect(ha.sim.rules.effects.held(cat, ha.sim.rules.effects.holdingsOf(&rig.world, e).?, cat.actionIndex(verb).?));
     }
 }
 

@@ -1,377 +1,260 @@
-// The labor verbs. The grammar is described in
-// `src/README.md` ("The authored roster"): `requires` is the body-and-time price, paid at
-// begin; `input` is what the act consumes, paid at begin; `output` is what it draws at
-// completion. A line's `kind` defaults to `.fixed` (exact); the other kinds draw, and the
-// spread is the risk. Ids are plain and share one space with resources and goods. The order
-// here is the ACTIONS surface's reading order.
+// The verbs: the labor an agent performs and the generators it collects. The grammar is
+// described in `src/README.md` ("The authored roster"). `requires` is everything a verb
+// demands: the energy, paid at begin and strictly below current vigor; the hours it takes; an
+// amount of each resource it spends, paid at begin and spendable to zero; and its gates — a
+// researched `tech`, `any` of a list of goods and verbs, `all` of a list. A verb with a gate is
+// held while every gate passes; a verb without one is held only as an agent's own, the
+// starting verbs. `output` is what it draws at completion: a distribution and its scale per
+// resource (`.fixed` is exact; the other kinds draw, and the spread is the risk), and `vigor`
+// restored directly. A `generator` accumulates its hours without occupying the body, and pays
+// its `requires` and draws its `output` at each collection. Ids are plain and share one space
+// with goods. The order here is the ACTIONS surface's reading order.
 .{
-    // Forage: glean the greenbelt. The safe calorie baseline — normal, steady.
+    // Forage: glean the greenbelt. The safe calorie baseline — normal, steady. A starting verb.
     .{
         .id = "forage",
         .name = "Forage",
         .requires = .{ .energy = 1.7, .hours = 4.0 },
-        .output = .{
-            .{ .item = "food", .n = 1.8, .kind = .normal },
-        },
+        .output = .{ .food = .{ .normal = 1.8 } },
     },
-    // Scavenge: pick through the derelict edge of town.
-    // Mostly scraps, occasionally a jackpot find, and sometimes
-    // a forgotten can of food. This is what bootstraps the first tool.
+    // Scavenge: pick through the derelict edge of town. Mostly scraps, occasionally a jackpot
+    // find, and sometimes a forgotten can of food. This is what bootstraps the first tool. A
+    // starting verb.
     .{
         .id = "scavenge",
         .name = "Scavenge",
         .requires = .{ .energy = 2.0, .hours = 5.0 },
-        .output = .{
-            .{ .item = "food", .n = 0.3, .kind = .exponential },
-            .{ .item = "biomass", .n = 2.5, .kind = .exponential },
-        },
+        .output = .{ .food = .{ .exponential = 0.3 }, .biomass = .{ .exponential = 2.5 } },
     },
-    // Split wood: unlocked by the hatchet — you cannot split logs bare-handed. Steady
+    // Split wood: held with a hatchet or a hand axe — you cannot split logs bare-handed. Steady
     // Biomass (displayed as Materials in Act I); uniform, an even spread rather than a bell.
     .{
         .id = "chop_wood",
         .name = "Split wood",
-        .requires = .{ .energy = 5.0, .hours = 5.0 },
-        .output = .{
-            .{ .item = "biomass", .n = 5.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 5.0, .hours = 5.0, .any = .{ "hatchet", "hand_axe" } },
+        .output = .{ .biomass = .{ .uniform = 5.0 } },
     },
-    // Fish: unlocked by the fishing rod. Better mean than Forage but poisson-lumpy — feast
+    // Fish: held with a fishing rod or a net. Better mean than Forage but poisson-lumpy — feast
     // or famine; wants a larder buffer under the metabolism.
     .{
         .id = "fish",
         .name = "Fish",
-        .requires = .{ .energy = 2.0, .hours = 6.0 },
-        .output = .{
-            .{ .item = "food", .n = 3.0, .kind = .poisson },
-        },
+        .requires = .{ .energy = 2.0, .hours = 6.0, .any = .{ "fish_rod", "fish_net" } },
+        .output = .{ .food = .{ .poisson = 3.0 } },
     },
-    // Check traps: the wire snares' round, collected without occupying the body. Its cycle
-    // accumulates while the snares are owned; collecting pays the energy and the bait and draws
-    // the catch.
+    // Check traps: the wire snares' round, a generator. The day accumulates while the snares
+    // are owned; collecting pays the energy and the bait and draws the catch.
     .{
         .id = "check_traps",
         .name = "Check traps",
         .generator = true,
-        .requires = .{ .energy = 1.0, .hours = 24.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 3.0, .kind = .poisson },
-        },
+        .requires = .{ .energy = 1.0, .hours = 24.0, .biomass = 1.0, .all = .{"wire_snares"} },
+        .output = .{ .food = .{ .poisson = 3.0 } },
     },
-    // Hunt: unlocked by the crude spear. It joins the Act I ACTIONS surface as soon as the
-    // player owns one; before that the grant gate keeps the tile absent.
+    // Hunt: held with the crude spear. The bait is paid at begin.
     .{
         .id = "hunt",
         .name = "Hunt",
-        .requires = .{ .energy = 4.0, .hours = 8.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 6.0, .kind = .poisson },
-        },
+        .requires = .{ .energy = 4.0, .hours = 8.0, .biomass = 1.0, .all = .{"spear"} },
+        .output = .{ .food = .{ .poisson = 6.0 } },
     },
-
-    // Tend garden: the garden bed's two-day crop, collected without occupying the body.
+    // Tend garden: the garden bed's two-day crop, a generator.
     .{
         .id = "tend_garden",
         .name = "Tend garden",
         .generator = true,
-        .requires = .{ .energy = 0.5, .hours = 48.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 0.2 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 1.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 0.5, .hours = 48.0, .biomass = 0.2, .all = .{"garden_bed"} },
+        .output = .{ .food = .{ .uniform = 1.0 } },
     },
-    // Gather remedy: the medicinal herb bed's remedy, a direct restoration of vigor.
+    // Gather remedy: the medicinal herb bed's remedy, a generator that restores vigor directly.
     .{
         .id = "gather_remedy",
         .name = "Gather remedy",
         .generator = true,
-        .requires = .{ .energy = 0.25, .hours = 48.0 },
-        .vigor = 1.5,
+        .requires = .{ .energy = 0.25, .hours = 48.0, .all = .{"medicinal_herb_bed"} },
+        .output = .{ .vigor = 1.5 },
     },
-    // Collect eggs: the chicken coop's daily lay.
+    // Collect eggs: the chicken coop's daily lay, a generator.
     .{
         .id = "collect_eggs",
         .name = "Collect eggs",
         .generator = true,
-        .requires = .{ .energy = 0.5, .hours = 24.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 0.3 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 2.5, .kind = .poisson },
-        },
+        .requires = .{ .energy = 0.5, .hours = 24.0, .biomass = 0.3, .all = .{"chicken_coop"} },
+        .output = .{ .food = .{ .poisson = 2.5 } },
     },
 
     // —— Act II population-scale actions (act = 2) ——————————————————————————————————————
     // The twenty verbs the settlement works at scale. The first five mirror the Act I labor
     // in the Act II resource space (the same Biomass stock sheds its Materials cover);
-    // the rest are the broader production the research board opens. A verb is held through
-    // the good that grants it (the firepit, the spring well, the forge) or through `tech`, the
-    // technology that establishes it, once researched. Items name only the `Resource` enum —
-    // tools/comfort/transport products settle into the nearest stock (metal for tooling, food
-    // for comfort/care, biomass for carried freight). The order is the Act II ACTIONS
-    // browser's authored order.
+    // the rest are the broader production the research board opens. A verb is held while its
+    // gate passes: owning the good it names (the firepit, the spring well, the forge) or its
+    // `tech`, the technology that establishes it, once researched. Amounts name only the
+    // `Resource` enum — tools/comfort/transport products settle into the nearest stock (metal
+    // for tooling, food for comfort/care, biomass for carried freight). The order is the Act II
+    // ACTIONS browser's authored order.
     .{
         .id = "draw_water",
         .name = "Draw water",
         .act = 2,
-        .requires = .{ .energy = 1.2, .hours = 3.0 },
-        .output = .{
-            .{ .item = "water", .n = 4.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 1.2, .hours = 3.0, .all = .{"spring_well"} },
+        .output = .{ .water = .{ .normal = 4.0 } },
     },
     .{
         .id = "tend_gardens",
         .name = "Tend gardens",
         .act = 2,
-        .tech = "field_cultivation",
-        .requires = .{ .energy = 1.5, .hours = 4.0 },
-        .input = .{
-            .{ .item = "water", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 4.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 1.5, .hours = 4.0, .water = 1.0, .tech = "field_cultivation" },
+        .output = .{ .food = .{ .uniform = 4.0 } },
     },
     .{
         .id = "gather_clay",
         .name = "Gather clay",
         .act = 2,
-        .tech = "quarry_pit",
-        .requires = .{ .energy = 2.1, .hours = 5.0 },
-        .input = .{
-            .{ .item = "water", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "minerals", .n = 4.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 2.1, .hours = 5.0, .water = 1.0, .tech = "quarry_pit" },
+        .output = .{ .minerals = .{ .normal = 4.0 } },
     },
     .{
         .id = "burn_charcoal",
         .name = "Burn charcoal",
         .act = 2,
-        .requires = .{ .energy = 1.3, .hours = 7.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 3.0 },
-        },
-        .output = .{
-            .{ .item = "fuel", .n = 4.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 1.3, .hours = 7.0, .biomass = 3.0, .all = .{"firepit"} },
+        .output = .{ .fuel = .{ .uniform = 4.0 } },
     },
     .{
         .id = "quarry_stone",
         .name = "Quarry stone",
         .act = 2,
-        .tech = "stoneworks",
-        .requires = .{ .energy = 3.2, .hours = 6.0 },
-        .output = .{
-            .{ .item = "minerals", .n = 3.5, .kind = .poisson },
-        },
+        .requires = .{ .energy = 3.2, .hours = 6.0, .tech = "stoneworks" },
+        .output = .{ .minerals = .{ .poisson = 3.5 } },
     },
     .{
         .id = "repair_tools",
         .name = "Repair tools",
         .act = 2,
-        .tech = "smithy",
-        .requires = .{ .energy = 1.6, .hours = 3.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 2.0 },
-        },
-        .output = .{
-            .{ .item = "metal", .n = 1.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 1.6, .hours = 3.0, .biomass = 2.0, .tech = "smithy" },
+        .output = .{ .metal = .{ .normal = 1.0 } },
     },
     .{
         .id = "carry_freight",
         .name = "Carry freight",
         .act = 2,
-        .tech = "woodcutting",
-        .requires = .{ .energy = 2.4, .hours = 5.0 },
-        .input = .{
-            .{ .item = "food", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "biomass", .n = 2.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 2.4, .hours = 5.0, .food = 1.0, .tech = "woodcutting" },
+        .output = .{ .biomass = .{ .uniform = 2.0 } },
     },
     .{
         .id = "fell_timber",
         .name = "Fell timber",
         .act = 2,
-        .tech = "woodcutting",
-        .requires = .{ .energy = 3.0, .hours = 6.0 },
-        .output = .{
-            .{ .item = "biomass", .n = 7.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 3.0, .hours = 6.0, .tech = "woodcutting" },
+        .output = .{ .biomass = .{ .normal = 7.0 } },
     },
     .{
         .id = "harvest_reeds",
         .name = "Harvest reeds",
         .act = 2,
-        .tech = "loom_ropewalk",
-        .requires = .{ .energy = 1.4, .hours = 4.0 },
-        .input = .{
-            .{ .item = "water", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "biomass", .n = 4.0, .kind = .exponential },
-        },
+        .requires = .{ .energy = 1.4, .hours = 4.0, .water = 1.0, .tech = "loom_ropewalk" },
+        .output = .{ .biomass = .{ .exponential = 4.0 } },
     },
     .{
         .id = "smelt_ore",
         .name = "Smelt ore",
         .act = 2,
-        .tech = "smelting_hearth",
-        .requires = .{ .energy = 3.0, .hours = 6.0 },
-        .input = .{
-            .{ .item = "minerals", .n = 2.0 },
-            .{ .item = "fuel", .n = 2.0 },
+        .requires = .{
+            .energy = 3.0,
+            .hours = 6.0,
+            .fuel = 2.0,
+            .minerals = 2.0,
+            .tech = "smelting_hearth",
         },
-        .output = .{
-            .{ .item = "metal", .n = 2.0, .kind = .fixed },
-        },
+        .output = .{ .metal = .{ .fixed = 2.0 } },
     },
     .{
         .id = "mine_ore",
         .name = "Mine ore",
         .act = 2,
-        .tech = "surface_ore",
-        .requires = .{ .energy = 3.5, .hours = 8.0 },
-        .input = .{
-            .{ .item = "metal", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "metal", .n = 2.0, .kind = .poisson },
-        },
+        .requires = .{ .energy = 3.5, .hours = 8.0, .metal = 1.0, .tech = "surface_ore" },
+        .output = .{ .metal = .{ .poisson = 2.0 } },
     },
     .{
         .id = "smelt_metal",
         .name = "Smelt metal",
         .act = 2,
-        .tech = "iron_smelting",
-        .requires = .{ .energy = 2.8, .hours = 7.0 },
-        .input = .{
-            .{ .item = "fuel", .n = 2.0 },
-            .{ .item = "minerals", .n = 2.0 },
+        .requires = .{
+            .energy = 2.8,
+            .hours = 7.0,
+            .fuel = 2.0,
+            .minerals = 2.0,
+            .tech = "iron_smelting",
         },
-        .output = .{
-            .{ .item = "metal", .n = 3.0, .kind = .uniform },
-        },
+        .output = .{ .metal = .{ .uniform = 3.0 } },
     },
     .{
         .id = "mill_grain",
         .name = "Mill grain",
         .act = 2,
-        .tech = "water_wheel",
-        .requires = .{ .energy = 2.0, .hours = 5.0 },
-        .input = .{
-            .{ .item = "food", .n = 2.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 5.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 2.0, .hours = 5.0, .food = 2.0, .tech = "water_wheel" },
+        .output = .{ .food = .{ .normal = 5.0 } },
     },
     .{
         .id = "bake_bread",
         .name = "Bake bread",
         .act = 2,
-        .tech = "granary",
-        .requires = .{ .energy = 1.8, .hours = 4.0 },
-        .input = .{
-            .{ .item = "food", .n = 2.0 },
-            .{ .item = "fuel", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 5.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 1.8, .hours = 4.0, .food = 2.0, .fuel = 1.0, .tech = "granary" },
+        .output = .{ .food = .{ .uniform = 5.0 } },
     },
     .{
         .id = "weave_cloth",
         .name = "Weave cloth",
         .act = 2,
-        .tech = "loom_ropewalk",
-        .requires = .{ .energy = 2.2, .hours = 6.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 2.0 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 1.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 2.2, .hours = 6.0, .biomass = 2.0, .tech = "loom_ropewalk" },
+        .output = .{ .food = .{ .normal = 1.0 } },
     },
     .{
         .id = "treat_illness",
         .name = "Treat illness",
         .act = 2,
-        .tech = "sanitation",
-        .requires = .{ .energy = 1.5, .hours = 5.0 },
-        .input = .{
-            .{ .item = "food", .n = 1.0 },
-            .{ .item = "water", .n = 1.0 },
+        .requires = .{
+            .energy = 1.5,
+            .hours = 5.0,
+            .food = 1.0,
+            .water = 1.0,
+            .tech = "sanitation",
         },
-        .output = .{
-            .{ .item = "food", .n = 1.0, .kind = .exponential },
-        },
+        .output = .{ .food = .{ .exponential = 1.0 } },
     },
     .{
         .id = "fire_pottery",
         .name = "Fire pottery",
         .act = 2,
-        .tech = "pottery_works",
-        .requires = .{ .energy = 2.0, .hours = 5.0 },
-        .input = .{
-            .{ .item = "minerals", .n = 2.0 },
-            .{ .item = "fuel", .n = 1.0 },
+        .requires = .{
+            .energy = 2.0,
+            .hours = 5.0,
+            .fuel = 1.0,
+            .minerals = 2.0,
+            .tech = "pottery_works",
         },
-        .output = .{
-            .{ .item = "minerals", .n = 3.0, .kind = .uniform },
-        },
+        .output = .{ .minerals = .{ .uniform = 3.0 } },
     },
     .{
         .id = "haul_water",
         .name = "Haul water",
         .act = 2,
-        .tech = "well_cistern",
-        .requires = .{ .energy = 2.6, .hours = 5.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "water", .n = 6.0, .kind = .normal },
-        },
+        .requires = .{ .energy = 2.6, .hours = 5.0, .biomass = 1.0, .tech = "well_cistern" },
+        .output = .{ .water = .{ .normal = 6.0 } },
     },
     .{
         .id = "cut_peat",
         .name = "Cut peat",
         .act = 2,
-        .tech = "peat_works",
-        .requires = .{ .energy = 2.7, .hours = 6.0 },
-        .input = .{
-            .{ .item = "water", .n = 1.0 },
-        },
-        .output = .{
-            .{ .item = "fuel", .n = 3.0, .kind = .poisson },
-        },
+        .requires = .{ .energy = 2.7, .hours = 6.0, .water = 1.0, .tech = "peat_works" },
+        .output = .{ .fuel = .{ .poisson = 3.0 } },
     },
     .{
         .id = "forge_parts",
         .name = "Forge parts",
         .act = 2,
-        .requires = .{ .energy = 3.0, .hours = 7.0 },
-        .input = .{
-            .{ .item = "metal", .n = 2.0 },
-            .{ .item = "fuel", .n = 2.0 },
-        },
-        .output = .{
-            .{ .item = "metal", .n = 3.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 3.0, .hours = 7.0, .fuel = 2.0, .metal = 2.0, .all = .{"forge"} },
+        .output = .{ .metal = .{ .uniform = 3.0 } },
     },
     // Tend garden (the settlement's bed): the Act II garden bed's two-day crop.
     .{
@@ -379,12 +262,7 @@
         .name = "Tend garden",
         .act = 2,
         .generator = true,
-        .requires = .{ .energy = 0.5, .hours = 48.0 },
-        .input = .{
-            .{ .item = "biomass", .n = 0.2 },
-        },
-        .output = .{
-            .{ .item = "food", .n = 3.0, .kind = .uniform },
-        },
+        .requires = .{ .energy = 0.5, .hours = 48.0, .biomass = 0.2, .all = .{"garden_bed_two"} },
+        .output = .{ .food = .{ .uniform = 3.0 } },
     },
 }

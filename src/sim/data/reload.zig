@@ -225,15 +225,15 @@ const actions_fish =
 ;
 const goods_a =
     \\.{
-    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } },
+    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\    .{ .id = "bed", .name = "Bed", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .vigor_ceiling = 2.0 } } },
     \\    .{ .id = "hut", .name = "Hut", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\}
 ;
 const techs_a =
     \\.{
-    \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .initial = .available },
-    \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 0, .r = 1 }, .initial = .available },
+    \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 }, .initial = .available },
+    \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 0, .r = 1 }, .cost = .{ .food = 1.0 }, .initial = .available },
     \\}
 ;
 
@@ -250,14 +250,14 @@ const goods_b =
     \\    .{ .id = "net", .name = "Net", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\    .{ .id = "hut", .name = "Hut", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\    .{ .id = "bed", .name = "Bed", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .vigor_ceiling = 2.0 } } },
-    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } },
+    \\    .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } },
     \\}
 ;
 const techs_b =
     \\.{
-    \\    .{ .id = "mills", .name = "Mills", .coord = .{ .q = -1, .r = 0 }, .initial = .locked },
-    \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 0, .r = 1 }, .initial = .available },
-    \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .initial = .available },
+    \\    .{ .id = "mills", .name = "Mills", .coord = .{ .q = -1, .r = 0 }, .cost = .{ .food = 1.0 }, .initial = .locked },
+    \\    .{ .id = "wells", .name = "Wells", .coord = .{ .q = 0, .r = 1 }, .cost = .{ .food = 1.0 }, .initial = .available },
+    \\    .{ .id = "kilns", .name = "Kilns", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 1.0 }, .initial = .available },
     \\}
 ;
 
@@ -269,7 +269,7 @@ fn agent(w: *World) Entity {
     return w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{} });
 }
 
-test "a swap carries verbs, goods, research, work and the reach seen-set to the new indices by id" {
+test "a swap carries verbs, goods, generator state, research, work and the reach seen-set to the new indices by id" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
@@ -285,6 +285,10 @@ test "a swap carries verbs, goods, research, work and the reach seen-set to the 
     research.state[a.techIndex("wells").?] = .researched;
     w.add(e, research);
     w.add(e, comp.Busy{ .doing = .{ .labor = a.actionIndex("fish").? }, .total = 1, .remaining = 1, .quality = 1 });
+    var gens = comp.Generators{};
+    gens.progress[a.actionIndex("fish").?] = 2.5;
+    gens.mode[a.actionIndex("forage").?] = .auto;
+    w.add(e, gens);
     res.sim.reach_seen[a.goodIndex("hut").?] = true;
 
     swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_b, .goods = goods_b, .technologies = techs_b }, null));
@@ -303,6 +307,10 @@ test "a swap carries verbs, goods, research, work and the reach seen-set to the 
     try testing.expectEqual(roster.TechState.available, r.state[b.techIndex("kilns").?]);
     try testing.expectEqual(roster.TechState.locked, r.state[b.techIndex("mills").?]); // new: entry state
     try testing.expect(w.get(e, comp.Busy).?.isLabor(b.actionIndex("fish").?));
+    const carried = w.get(e, comp.Generators).?;
+    try testing.expectEqual(@as(f32, 2.5), carried.progress[b.actionIndex("fish").?]); // index 1 there, 1 here
+    try testing.expectEqual(comp.Generators.Mode.auto, carried.mode[b.actionIndex("forage").?]); // index 0 there, 2 here
+    try testing.expectEqual(comp.Generators.Mode.on, carried.mode[0]);
     try testing.expect(res.sim.reach_seen[b.goodIndex("hut").?]);
     try testing.expect(!res.sim.reach_seen[b.goodIndex("net").?]);
 }
@@ -321,7 +329,7 @@ test "a record the new files drop takes its count and its work with it" {
 
     // The bed is gone from the new goods, and Forage from the new verbs.
     swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_fish, .goods =
-        \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "fish" } } } }
+        \\.{ .{ .id = "rod", .name = "Rod", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 } } }
     , .technologies = techs_a }, null));
     try testing.expectEqual(@as(f32, 10), w.get(e, comp.Vigor).?.max); // its ceiling went with it
     try testing.expect(!w.has(e, comp.Busy));
@@ -353,12 +361,13 @@ test "a directory overrides the files it holds and falls back for the rest" {
     defer res.catalog.deinit();
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    // Only the goods file is overridden: one recipe. The verbs and tiles are the shipped ones.
-    try tmp.dir.writeFile(testing.io, .{ .sub_path = "goods.zon", .data =
-        \\.{ .{ .id = "hatchet", .name = "Hatchet", .tier = .crude, .requires = .{ .energy = 1.0, .hours = 1.0 }, .effects = .{ .{ .grant = "chop_wood" } } } }
-    });
+    // Only the goods file is overridden: the shipped goods with the spear renamed, since the
+    // shipped verbs' gates name the shipped goods. The verbs and tiles are the shipped ones.
+    const goods = try std.mem.replaceOwned(u8, testing.allocator, roster.shipped.goods, "\"Spear\"", "\"Long spear\"");
+    defer testing.allocator.free(goods);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "goods.zon", .data = goods });
     reloadDir(testing.io, &res, &w, tmp.dir);
-    try testing.expectEqual(@as(usize, 1), res.catalog.goods.len);
+    try testing.expectEqualStrings("Long spear", res.catalog.good("spear").?.name);
     try testing.expect(res.catalog.action("chop_wood") != null); // from the shipped verbs
     try testing.expect(res.catalog.technologies.len > 0);
 }

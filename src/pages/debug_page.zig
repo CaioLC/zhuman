@@ -274,7 +274,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         }
     } else if (eq(name, "actions_section")) {
         if (player.get()) |a| {
-            // The complete Act I pane: the four verbs (the hatchet and the rod grant the two
+            // The complete Act I pane: the four verbs (the hatchet and the rod open the two
             // beyond the starting pair), then the two generators, the snares and the garden bed on
             // auto; the kind toggles count both, and the toolbar holds the summary and the sort
             // chips.
@@ -609,7 +609,7 @@ fn poke(ctx: *UiCtx, e: Entity, what: ha.sim.events.DebugPoke.What) void {
 }
 
 /// Debug-only holdings: poke the counts of the named goods, then settle, so the verbs they
-/// grant and the margins they move are derived exactly as in production.
+/// open and the margins they move are derived exactly as in production.
 fn fixtureGoods(ctx: *UiCtx, e: Entity, counts: []const struct { []const u8, u32 }) void {
     const cat = &ctx.res.game.catalog;
     for (counts) |c| {

@@ -62,7 +62,7 @@ pub fn actOf(w: *const World, e: Entity) u8 {
 ///  - carries the existing `InventoryBiomass` balance unchanged (or adds it empty if missing);
 ///  - opens the other Act II stocks (water, fuel, metal, minerals) at zero;
 ///  - leaves `InventoryFood` and `comp.Goods` untouched, so every good, its count, and what it
-///    grants cross unchanged;
+///    opens crosses unchanged;
 ///  - seeds the Act II research board as a single `comp.Research`, seeded by `Research.entry(cat)`
 ///    from every tile's authored `initial` state (Foraging/Woodcutting Researched, the other four
 ///    ring-1 tiles Available, the rest Locked) if not already present;
@@ -90,7 +90,7 @@ pub fn migrate_to_act_two(w: *World, e: Entity, cat: *const roster.Catalog) bool
     if (!w.has(e, comp.InventoryCoin)) w.add(e, comp.InventoryCoin{ .v = curtain_coin });
 
     // 4. Goods/counts/effects: nothing to do, because the counts live on `comp.Goods` and what
-    // they grant derives from them. The test asserts the no-op explicitly.
+    // they open derives from them. The test asserts the no-op explicitly.
 
     // 5. Seed the Act II research board. One `comp.Research` carries every tile's state by
     // catalog index, seeded from each tile's authored `initial` (Foraging/Woodcutting
@@ -164,7 +164,7 @@ test "migration carries Food unchanged (never read or written)" {
     try std.testing.expectEqual(food_before.spoils, food_after.spoils);
 }
 
-test "migration preserves built goods, their counts, and their granted effects" {
+test "migration preserves built goods, their counts, and the verbs they open" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try test_res();
@@ -181,13 +181,13 @@ test "migration preserves built goods, their counts, and their granted effects" 
     // Check counts in Goods component and effects.held
     const goods = w.get(e, comp.Goods).?;
     try std.testing.expectEqual(@as(u32, 2), goods.count[fish_rod_gi]);
-    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Verbs), goods, fish_ai)); // the granted effect
+    try std.testing.expect(effects.held(&res.catalog, effects.holdingsOf(&w, e).?, fish_ai)); // the verb it opens
 
     _ = migrate_to_act_two(&w, e, &res.catalog);
 
-    // The good count and granted effect cross the curtain untouched.
+    // The good count and the verb it opens cross the curtain untouched.
     try std.testing.expectEqual(@as(u32, 2), w.get(e, comp.Goods).?.count[fish_rod_gi]);
-    try std.testing.expect(effects.held(&res.catalog, w.get(e, comp.Verbs), w.get(e, comp.Goods).?, fish_ai));
+    try std.testing.expect(effects.held(&res.catalog, effects.holdingsOf(&w, e).?, fish_ai));
 }
 
 test "migration seeds the research board from the authored initial states" {
@@ -284,18 +284,9 @@ test "population/market init seam is accounted exactly once, at the version boun
     try std.testing.expect(population_seeded(&w, e));
 }
 
-/// The quantity of `item` a list of lines names at cadence `per`.
-fn qty(lines: []const roster.Line, item: []const u8, per: roster.Cadence) f32 {
-    var n: f32 = 0;
-    for (lines) |l| {
-        if (l.per == per and std.mem.eql(u8, l.item, item)) n += l.n;
-    }
-    return n;
-}
-
 test "cross-act cost parity: same-named recipes have equal biomass costs" {
-    // Biomass is the authored item in both acts, so a recipe shared by name must price each
-    // cadence identically on either side of the curtain.
+    // Biomass is the authored item in both acts, so a recipe shared by name must price it
+    // identically on either side of the curtain.
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var pairs: usize = 0;
@@ -303,12 +294,9 @@ test "cross-act cost parity: same-named recipes have equal biomass costs" {
         if (one.act != 1) continue;
         for (cat.goods) |two| {
             if (two.act != 2 or !std.mem.eql(u8, one.name, two.name)) continue;
-            for ([_]roster.Cadence{ .once, .day }) |per| {
-                const biomass = qty(one.input, "biomass", per);
-                if (biomass == 0) continue;
-                try std.testing.expectEqual(biomass, qty(two.input, "biomass", per));
-                pairs += 1;
-            }
+            if (one.requires.biomass == 0) continue;
+            try std.testing.expectEqual(one.requires.biomass, two.requires.biomass);
+            pairs += 1;
         }
     }
     try std.testing.expect(pairs > 0); // the garden bed is the canonical pair

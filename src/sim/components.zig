@@ -37,8 +37,8 @@ pub const Goods = struct {
     count: [roster.max_goods]u32 = @splat(0),
 };
 
-/// The verbs an agent holds of its own, by catalog index of the authored roster: held before
-/// any good grants one or research opens one (`effects.held`). The player spawns with the
+/// The verbs an agent holds of its own, by catalog index of the authored roster: held whether
+/// or not any gate passes (`effects.held`). The player spawns with the
 /// starting verbs `systems/run.zig` names.
 pub const Verbs = struct {
     held: [roster.max_actions]bool = @splat(false),
@@ -231,8 +231,6 @@ pub const Outlook = struct {
 /// `MAX_ENTITIES` capacity, and a copy of the terms per verb would add tens of megabytes to it. Every
 /// slot is indexed by the record's catalog index.
 pub const Quotes = struct {
-    /// A `short` index that names no line: the order is payable.
-    pub const none: u8 = 0xff;
     /// Why a verb cannot begin right now, or `ready` (`actions.Standing`).
     pub const VerbStanding = enum { ready, busy, energy, short };
     /// Why a build cannot begin right now, or `ready`, in precedence order (`capital.Standing`).
@@ -240,10 +238,10 @@ pub const Quotes = struct {
     /// Where a held generator's cycle stands (`capital.GeneratorStanding`).
     pub const GeneratorStanding = enum { charging, off, ready, energy, short };
 
-    /// `short`: index of the first unpayable line in the effective verb's `input` (`none` when payable).
+    /// `short`: the first resource the effective verb requires that the agent cannot pay.
     pub const Verb = struct {
         standing: VerbStanding,
-        short: u8 = none,
+        short: ?roster.Resource = null,
         /// The yield multiplier a begin right now would lock.
         quality: f32,
 
@@ -252,14 +250,14 @@ pub const Quotes = struct {
         }
     };
 
-    /// `short`: index of the first unpayable line in the record's `input` (`none` when payable).
+    /// `short`: the first resource the record requires that the agent cannot pay.
     pub const Build = struct {
         standing: BuildStanding,
-        short: u8 = none,
+        short: ?roster.Resource = null,
         /// Units already owned.
         count: u32,
-        /// How close the build order is to affordable: the smallest held/needed over its
-        /// once-inputs, 1 when it has none.
+        /// How close the build cost is to affordable: the smallest held/needed over its
+        /// resources, 1 when it names none.
         reach: f32,
 
         pub fn ready(self: Build) bool {
@@ -267,10 +265,10 @@ pub const Quotes = struct {
         }
     };
 
-    /// `short`: index of the first unpayable line in the record's `input` (`none` when payable).
+    /// `short`: the first resource the record requires that the agent cannot pay.
     pub const Generator = struct {
         standing: GeneratorStanding,
-        short: u8 = none,
+        short: ?roster.Resource = null,
         /// Game-seconds accumulated toward the cycle, and the cycle's length.
         progress: f32,
         total: f32,

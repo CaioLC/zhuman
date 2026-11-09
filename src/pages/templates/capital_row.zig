@@ -298,10 +298,11 @@ fn name_cell(parent: El, id: []const u8, text: []const u8, secondary: []const u8
     return box;
 }
 
-/// The verb or tool a recipe's first `needs` names, in the player's words.
+/// The verb or tool a recipe's first gate names (its `any` list first, then `all`), in the
+/// player's words.
 fn needsName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
-    if (rec.needs.len == 0) return "a tool";
-    const id = rec.needs[0];
+    const req = &rec.requires;
+    const id = if (req.any.len > 0) req.any[0] else if (req.all.len > 0) req.all[0] else return "a tool";
     if (cat.action(id)) |a| return a.name;
     if (cat.good(id)) |g| return g.name;
     return "a tool";
@@ -309,28 +310,30 @@ fn needsName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
 
 /// The technology a research-gated recipe waits on, in the player's words.
 fn techName(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
-    const t = rec.tech orelse return "research";
+    const t = rec.requires.tech orelse return "research";
     return if (cat.technology(t)) |tr| tr.name else t;
 }
 
-/// `36me 24fu 20mi` — the build order's once-lines, the COST cell's lead. "" when the
-/// recipe takes no materials.
+/// `24fu 36me 20mi` — the resources the build spends, in `Resource` order, the COST cell's
+/// lead. "" when the recipe spends none.
 fn orderText(act: u8, buf: []u8, rec: *const roster.Good) []const u8 {
     var cw = std.Io.Writer.fixed(buf);
     var first = true;
-    for (rec.input) |l| if (l.per == .once) {
-        cw.print("{s}{d:.0}{s}", .{ if (first) "" else " ", l.n, info.letterOf(act, l.item) }) catch {};
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = rec.requires.get(r);
+        if (n <= 0) continue;
+        cw.print("{s}{d:.0}{s}", .{ if (first) "" else " ", n, info.letterOf(act, r) }) catch {};
         first = false;
-    };
+    }
     return cw.buffered();
 }
 
 /// `10e` — the energy, the COST cell's tail.
 fn energyText(buf: []u8, rec: *const roster.Good) []const u8 {
-    return std.mem.print(buf, "{d:.0}e", .{rec.requires.?.energy}) catch "?";
+    return std.mem.print(buf, "{d:.0}e", .{rec.requires.energy}) catch "?";
 }
 
-/// The build order's length in characters — what an act's COST width must hold
+/// The build cost's length in characters — what an act's COST width must hold
 /// (`Widths.costFits`).
 pub fn orderChars(act: u8, rec: *const roster.Good) usize {
     var buf: [64]u8 = undefined;
@@ -354,8 +357,7 @@ fn cost_cell(parent: El, id: []const u8, act: u8, rec: *const roster.Good, ink: 
 
 /// The word a recipe's row names its kind with, under the name and for `type:` — what the
 /// good *does*, read from its record: a generator runs a cycle, a shelter houses, storage keeps
-/// food, comfort raises the vigor ceiling, a material is a product made for other orders, and
-/// a tool grants or tunes a verb.
+/// food, comfort raises the vigor ceiling, and a tool opens or tunes a verb.
 pub fn recipeType(cat: *const roster.Catalog, rec: *const roster.Good) []const u8 {
     if (ha.sim.rules.capital.generatorOf(cat, rec.id) != null) return "generator";
     if (rec.capacity > 0) return "shelter";
@@ -367,8 +369,7 @@ pub fn recipeType(cat: *const roster.Catalog, rec: *const roster.Good) []const u
         .vigor_ceiling => return "comfort",
         else => {},
     };
-    for (rec.output) |l| if (l.per == .once) return "material";
-    if (rec.effects.len > 0) return "tool";
+    if (rec.effects.len > 0 or ha.sim.rules.capital.opens(cat, rec.id) != null) return "tool";
     return "good";
 }
 
@@ -418,7 +419,7 @@ pub fn capital_row(
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
-        const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.?.hours / 24.0}) catch "?";
+        const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.hours / 24.0}) catch "?";
         place(try cell(row, "dy", days_txt, look.ink, false), .time, 1);
     }
 
@@ -462,12 +463,13 @@ pub fn capital_row(
             try state_in.label("time", txt, .{ row_type, style.ink(.fg) });
         },
         .reach => {
-            // How far the first line of the order is: `31/48m`.
+            // How far the first resource of the cost is: `31/48m`.
             var rbuf: [24]u8 = undefined;
             var txt: []const u8 = "";
-            for (rec.input) |l| {
-                if (l.per != .once) continue;
-                txt = std.mem.print(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.held(world, e, cat, l), l.n, info.letterOf(act, l.item) }) catch "?";
+            for (std.enums.values(roster.Resource)) |r| {
+                const n = rec.requires.get(r);
+                if (n <= 0) continue;
+                txt = std.mem.print(&rbuf, "{d:.0}/{d:.0}{s}", .{ ledger.balance(world, e, r), n, info.letterOf(act, r) }) catch "?";
                 break;
             }
             try reach_meter(state_in, "meter", q.reach, th.line2);
@@ -732,7 +734,7 @@ test "the cost cell is the order, then the energy" {
     var buf: [40]u8 = undefined;
     try std.testing.expectEqualStrings("10m", orderText(1, &buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("5e", energyText(&buf, cat.good("spear").?));
-    try std.testing.expectEqualStrings("36me 24fu 20mi", orderText(2, &buf, cat.good("cold_store").?));
+    try std.testing.expectEqualStrings("24fu 36me 20mi", orderText(2, &buf, cat.good("cold_store").?));
     try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
     try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
 }

@@ -178,12 +178,26 @@ fn generatorState(q: comp.Quotes.Generator) []const u8 {
     };
 }
 
-/// The items of `lines`, space-separated, into `out`; returns the length written.
-fn join(out: []u8, lines: []const roster.Line) usize {
+/// The resources a verb spends, by name and space-separated, into `out`; returns the length
+/// written.
+fn joinRequires(out: []u8, req: *const roster.Requires) usize {
     var w = std.Io.Writer.fixed(out);
-    for (lines, 0..) |l, i| {
-        if (i > 0) w.writeByte(' ') catch break;
-        w.writeAll(l.item) catch break;
+    for (std.enums.values(roster.Resource)) |r| {
+        if (req.get(r) <= 0) continue;
+        if (w.buffered().len > 0) w.writeByte(' ') catch break;
+        w.writeAll(@tagName(r)) catch break;
+    }
+    return w.buffered().len;
+}
+
+/// The resources a verb yields, by name and space-separated, into `out`; returns the length
+/// written.
+fn joinOutput(out: []u8, o: *const roster.Output) usize {
+    var w = std.Io.Writer.fixed(out);
+    for (std.enums.values(roster.Resource)) |r| {
+        if (o.get(r) == null) continue;
+        if (w.buffered().len > 0) w.writeByte(' ') catch break;
+        w.writeAll(@tagName(r)) catch break;
     }
     return w.buffered().len;
 }
@@ -224,8 +238,8 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
             .kind = .verb, .index = ai, .id = rec.id, .name = rec.name, .state = state, .ready = q.standing == .ready,
             .order = @intCast(n), .energy = verb.requires.energy, .hours = verb.requires.hours, .rank = stateRank(state),
         };
-        buf[n].in_len = join(&buf[n].in_buf, verb.input.slice());
-        buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
+        buf[n].in_len = joinRequires(&buf[n].in_buf, &verb.requires);
+        buf[n].out_len = joinOutput(&buf[n].out_buf, &verb.output);
         n += 1;
     }
     for (cat.actions, 0..) |*rec, i| {
@@ -239,8 +253,8 @@ pub fn held(world: *const World, e: Entity, cat: *const roster.Catalog, shelf: S
             .kind = .generator, .index = ai, .id = rec.id, .name = rec.name, .state = state, .ready = q.ready(),
             .order = @intCast(n), .energy = verb.requires.energy, .hours = verb.requires.hours, .rank = stateRank(state),
         };
-        buf[n].in_len = join(&buf[n].in_buf, verb.input.slice());
-        buf[n].out_len = join(&buf[n].out_buf, verb.output.slice());
+        buf[n].in_len = joinRequires(&buf[n].in_buf, &verb.requires);
+        buf[n].out_len = joinOutput(&buf[n].out_buf, &verb.output);
         n += 1;
     }
     return buf[0..n];
@@ -524,7 +538,7 @@ fn requote(w: *World, e: Entity, cat: *const roster.Catalog) void {
     ha.sim.systems.quotes.fill(w, e, cat, .{}, w.get(e, comp.Quotes).?);
 }
 
-/// Research every technology and own the three goods that grant a verb.
+/// Research every technology and own the three goods that open a verb.
 fn establishAll(w: *World, e: Entity, cat: *const roster.Catalog) void {
     const research = w.get(e, comp.Research).?;
     for (research.state[0..cat.technologies.len]) |*s| s.* = .researched;
@@ -561,7 +575,7 @@ test "the curtain opens only the verbs its researched tiles establish" {
     try testing.expect(list.len > 0 and list.len < authoredTotal(&cat, act_two_test));
     for (list) |ent| {
         try testing.expectEqual(Kind.verb, ent.kind);
-        const t = cat.actions[ent.index].tech orelse return error.UntaggedVerb;
+        const t = cat.actions[ent.index].requires.tech orelse return error.UntaggedVerb;
         try testing.expect(std.mem.eql(u8, t, "foraging") or std.mem.eql(u8, t, "woodcutting"));
     }
 }

@@ -22,7 +22,7 @@ const LivingPlayer = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player)
 pub const opening_line = "You wake alone. Cold. Hungry.";
 
 /// The verbs the player holds of its own from the first breath, by roster id; every other verb
-/// arrives by a good's grant or a researched technology.
+/// is held through its gates (`effects.held`).
 pub const starting_verbs = [_][]const u8{ "forage", "scavenge" };
 
 fn spawn_agent(world: *World, cat: *const roster.Catalog) Entity {
@@ -143,4 +143,18 @@ test "the player spawns holding the starting verbs its catalog has, and no other
     try testing.expect(verbs.held[cat.actionIndex("forage").?]);
     try testing.expect(!verbs.held[cat.actionIndex("fish").?]);
     for (cat.actions.len..roster.max_actions) |i| try testing.expect(!verbs.held[i]);
+}
+
+test "every Act I verb of the shipped roster is a starting verb or carries a gate" {
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    for (cat.actions) |a| {
+        if (a.act != 1) continue;
+        var own = false;
+        for (starting_verbs) |id| own = own or std.mem.eql(u8, id, a.id);
+        if (!own and !a.requires.gated()) {
+            std.debug.print("{s} is neither a starting verb nor gated\n", .{a.id});
+            return error.TestUnexpectedResult;
+        }
+    }
 }

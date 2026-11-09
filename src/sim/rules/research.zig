@@ -66,19 +66,23 @@ pub const Deficit = struct {
     short: u32,
 };
 
-/// The resource a cost line names, as the typed `Resource` the balance is keyed by. A cost line
-/// in the authored roster names its item by id (`"food"`, `"biomass"`, …); the research board
-/// prices only in resources, so a non-resource id is a content error the loader has already
-/// rejected (`roster` validation) — `null` here means the same.
-fn lineResource(item: []const u8) ?Resource {
-    return Catalog.resource(item);
+/// The resources a tile's cost names, in `Resource` order.
+pub fn costResources(tech: *const Technology, out: *[resource_count]Resource) []Resource {
+    var n: usize = 0;
+    for (std.enums.values(Resource)) |r| if (tech.cost.get(r) > 0) {
+        out[n] = r;
+        n += 1;
+    };
+    return out[0..n];
 }
 
-/// The authored research cost of the tile at catalog `index` as a resource/amount pair for each
-/// line. The authored quantities are whole numbers (`assets/roster/technologies.zon`); they are rounded
-/// to the nearest unit for the integer balance the board spends.
-fn lineAmount(n: f32) u32 {
-    return @intFromFloat(@round(n));
+const resource_count = @typeInfo(Resource).@"enum".field_names.len;
+
+/// The research cost of resource `r` on a tile. The authored quantities are whole numbers
+/// (`assets/roster/technologies.zon`); they are rounded to the nearest unit for the integer
+/// balance the board spends.
+pub fn costOf(tech: *const Technology, r: Resource) u32 {
+    return @intFromFloat(@round(tech.cost.get(r)));
 }
 
 /// The number of authored technologies — the number of board tiles (`roster` holds rings 1..4).
@@ -154,20 +158,20 @@ fn promoteOutwardNeighbors(cat: *const Catalog, board: *Research, index: usize) 
 
 /// Whether the given tile's authored cost is fully affordable from `bal`.
 pub fn affordable(tech: *const Technology, bal: Balances) bool {
-    for (tech.cost) |line| {
-        const r = lineResource(line.item) orelse return false;
-        if (bal.get(r) < lineAmount(line.n)) return false;
+    var buf: [resource_count]Resource = undefined;
+    for (costResources(tech, &buf)) |r| {
+        if (bal.get(r) < costOf(tech, r)) return false;
     }
     return true;
 }
 
 /// Fill `out` with the factual deficits for an unaffordable tile and return the slice. `out`
-/// must hold at least `tech.cost.len`.
+/// must hold one per resource the cost names.
 pub fn deficits(tech: *const Technology, bal: Balances, out: []Deficit) []Deficit {
     var n: usize = 0;
-    for (tech.cost) |line| {
-        const r = lineResource(line.item) orelse continue;
-        const need = lineAmount(line.n);
+    var buf: [resource_count]Resource = undefined;
+    for (costResources(tech, &buf)) |r| {
+        const need = costOf(tech, r);
         const have = bal.get(r);
         if (have < need) {
             out[n] = .{ .resource = r, .short = need - have };
@@ -197,10 +201,8 @@ pub fn research(cat: *const Catalog, board: *Research, index: usize, bal: *Balan
     const tech = &cat.technologies[index];
     if (!affordable(tech, bal.*)) return .unaffordable;
     // Atomic deduction — affordability was proven above, so no entry underflows.
-    for (tech.cost) |line| {
-        const r = lineResource(line.item).?;
-        bal.amounts[@backingInt(r)] -= lineAmount(line.n);
-    }
+    var buf: [resource_count]Resource = undefined;
+    for (costResources(tech, &buf)) |r| bal.amounts[@backingInt(r)] -= costOf(tech, r);
     board.state[index] = .researched;
     promoteOutwardNeighbors(cat, board, index);
     return .researched;
@@ -252,9 +254,9 @@ pub fn materialMarkers(t: *const Technology, out: *[3]hex.Wedge) []hex.Wedge {
             n = 2;
         },
     }
-    for (t.cost) |line| {
+    var buf: [resource_count]Resource = undefined;
+    for (costResources(t, &buf)) |r| {
         if (n >= want) break;
-        const r = lineResource(line.item) orelse continue;
         const w = wedgeOf(r) orelse continue;
         if (std.mem.findScalar(hex.Wedge, out[0..n], w) == null) {
             out[n] = w;
@@ -520,29 +522,25 @@ test "research is priced only in the six board resources, and every tile has a l
     defer cat.deinit();
     for (cat.technologies) |t| {
         try testing.expect(t.short.len > 0 and t.short.len <= 7);
-        for (t.cost) |line| {
-            const r = lineResource(line.item) orelse return error.TestUnexpectedResult;
-            try testing.expect(wedgeOf(r) != null); // never coin
-            try testing.expect(line.n > 0);
-        }
+        var buf: [resource_count]Resource = undefined;
+        for (costResources(&t, &buf)) |r| try testing.expect(wedgeOf(r) != null); // never coin
     }
 }
 
 test "every resource a research cost names has an authored way to get it" {
     var cat = try testCatalog();
     defer cat.deinit();
-    for (cat.technologies) |t| for (t.cost) |line| {
-        const r = lineResource(line.item).?;
-        var found = false;
-        for (cat.actions) |a| for (a.output) |o| {
-            if (lineResource(o.item) == r) found = true;
-        };
-        for (cat.goods) |g| for (g.output) |o| {
-            if (lineResource(o.item) == r) found = true;
-        };
-        if (!found) {
-            std.debug.print("{s} costs {s}, which nothing produces\n", .{ t.id, line.item });
-            return error.TestUnexpectedResult;
+    for (cat.technologies) |t| {
+        var buf: [resource_count]Resource = undefined;
+        for (costResources(&t, &buf)) |r| {
+            var found = false;
+            for (cat.actions) |a| {
+                if (a.output.get(r) != null) found = true;
+            }
+            if (!found) {
+                std.debug.print("{s} costs {s}, which nothing produces\n", .{ t.id, @tagName(r) });
+                return error.TestUnexpectedResult;
+            }
         }
-    };
+    }
 }

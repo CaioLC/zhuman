@@ -129,7 +129,7 @@ fn deal(w: *World, res: *Resources, it: events.MerchantDeal) ?Reason {
     const scale: f32 = @floatFromInt(it.lots);
     for (rec.price) |term| {
         const item = ledger.item(&res.catalog, term.item) orelse continue;
-        if (ledger.held(w, it.agent, &res.catalog, .{ .item = term.item, .n = term.n }) < term.n * scale) {
+        if (ledger.heldItem(w, it.agent, item) < term.n * scale) {
             return if (item == .good) .not_owned else .unaffordable;
         }
     }

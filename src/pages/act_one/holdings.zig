@@ -46,10 +46,10 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
 
     // --- MARGINS ---------------------------------------------------------------------------
     var margins: std.ArrayList(Line) = .empty;
-    if (world.get(e, comp.Goods)) |goods| {
+    if (effects.holdingsOf(world, e)) |h| {
         // One line per held verb whose price the goods have moved: `1.7e → 1.4e`.
         for (cat.actions, 0..) |rec, ai| {
-            const live = effects.verb(cat, world.get(e, comp.Verbs), goods, ai) orelse continue;
+            const live = effects.verb(cat, h, ai) orelse continue;
             const base = rec.requires.energy;
             // A lower energy cost is the better margin; an unmoved one shows no line.
             const moved = vd.margin(live.requires.energy, base, .lower);
