@@ -230,8 +230,10 @@ the backdrop does nothing. Opening pauses the simulation and remembers whether i
 behind it is frozen. The kicker reads `PAUSED · ACT {n} · DAY {d}` and the title names the
 screen. The menu lists Continue, Save, Load, Settings and Quit to menu. Save and Load share one
 list of three slots that flips its verbs (`SAVE HERE`/`OVERWRITE`, `LOAD`), each slot describing
-the settlement it holds. Settings is the panel the title screen shares: difficulty, music,
-effects, UI scale, contrast and window. Quit is the one destructive choice, so it is the one that
+the settlement it holds. Settings is the panel the title screen shares: difficulty, tutorial,
+music, effects, UI scale, brightness, contrast and window — gameplay, then sound, then display.
+Brightness (80–140% in fives) multiplies every colour on screen, live while the slider moves,
+the screen behind the panel as well as the panel. Quit is the one destructive choice, so it is the one that
 confirms, naming the day it would lose and offering to save first. Escape on a sub-screen returns
 to the menu; on the menu, Escape or × resumes. Speed is the header stepper's alone.
 

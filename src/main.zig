@@ -151,6 +151,8 @@ const App = struct {
     ui_capture: ui_client.FrameCapture = .{},
     /// The once-only trigger for the development layout dump (`HA_LAYOUT_DUMP`).
     layout_dump: ui_client.layout_dump.Trigger = .{},
+    /// Set once the renderer refuses the brightness lift's blend mode, so the warning logs once.
+    brightness_refused: bool = false,
     /// The `assets/roster/` files' modification times; a change reloads the roster between
     /// frames.
     roster_watch: ha.sim.data.reload.Watch = .{},
@@ -504,6 +506,13 @@ const FrameHost = struct {
 
     fn showThunk(user: *anyopaque) anyerror!void {
         const self: *FrameHost = @ptrCast(@alignCast(user));
+        // BRIGHTNESS: one multiply of the finished frame, so a capture sees what the player does.
+        ui_client.brightness.apply(self.app.renderer, self.app.resources.settings.brightnessFactor()) catch {
+            if (!self.app.brightness_refused) {
+                self.app.brightness_refused = true;
+                std.log.warn("the {s} renderer refuses the brightness pass's blend mode; the frame shows as painted", .{self.app.renderer.getName() catch "current"});
+            }
+        };
         try self.app.renderer.present();
     }
 

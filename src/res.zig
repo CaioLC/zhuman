@@ -180,8 +180,9 @@ pub const TitleState = struct {
 };
 
 /// The player's settings, shared by the title screen and the session menu. Held for the
-/// session. Window size, fullscreen and UI scale act on the host; difficulty, the two volumes
-/// and contrast are held but have no effect (stand-ins; `docs/roadmap.md`).
+/// session. Window size, fullscreen, UI scale and brightness act on the host; difficulty, the
+/// tutorial flag, the two volumes and contrast are held but have no effect (stand-ins;
+/// `docs/roadmap.md`).
 pub const Settings = struct {
     pub const Difficulty = enum {
         abundant,
@@ -222,6 +223,13 @@ pub const Settings = struct {
             };
         }
     };
+    pub const Tutorial = enum { on, off };
+    /// BRIGHTNESS's range and step, in percent; 100 is the palette as authored.
+    pub const Brightness = struct {
+        pub const min: f32 = 80;
+        pub const max: f32 = 140;
+        pub const step: f32 = 5;
+    };
     pub const Contrast = enum { normal, high };
     pub const Window = enum {
         w1280,
@@ -241,12 +249,20 @@ pub const Settings = struct {
     };
 
     difficulty: Difficulty = .temperate,
+    tutorial: Tutorial = .on,
     music: f32 = 60,
     effects: f32 = 75,
     ui_scale: UiScale = .p100,
+    /// Percent; the host multiplies every painted colour by `brightnessFactor` before present.
+    brightness: f32 = 100,
     contrast: Contrast = .normal,
     /// The window choice; null until the player picks one (the launch window is its own size).
     window: ?Window = null,
+
+    /// The multiply brightness asks of every painted colour: 1 at 100%.
+    pub fn brightnessFactor(self: Settings) f32 {
+        return self.brightness / 100;
+    }
 };
 
 /// The save slots: three files in the saves folder, what each holds as the slot list shows it,

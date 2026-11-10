@@ -1,11 +1,14 @@
 //! `settings_panel` — the one settings panel the title screen and the session menu share
-//! (`.panel-body`, `.setting`): one row per setting, a 13ch label lane beside its field. A
-//! field is a `choices` group (`.choices`, one pressed button), a `level` (a slider with its
-//! percentage), and an optional note under it (`.setting-note`).
+//! (`.panel-body`, `.setting`): one row per setting, a 13ch label lane beside its field, in the
+//! order DIFFICULTY, TUTORIAL, MUSIC, EFFECTS, UI SCALE, BRIGHTNESS, CONTRAST, WINDOW. A field
+//! is a `choices` group (`.choices`, one pressed button), a `level` (a slider over its own
+//! range with its percentage), and an optional note under it (`.setting-note`).
 //!
 //! The panel edits `Settings` in place and reports what changed; the caller applies a change
-//! the host owns (the window). Difficulty, the volumes and contrast are held only
-//! (`docs/roadmap.md`): the panel shows them exactly as the prototype does.
+//! the host owns (the window). The host reads UI scale and brightness from `Settings` each
+//! frame, so a drag of BRIGHTNESS lifts the screen live. Difficulty, the tutorial flag, the
+//! volumes and contrast are held only (`docs/roadmap.md`): the panel shows them exactly as the
+//! prototype does.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -27,8 +30,8 @@ const level_out_w: f32 = 5 * 6.6;
 pub const Options = struct {
     /// The panel's width.
     width: f32,
-    /// The title screen's notes under UI SCALE, CONTRAST and WINDOW; the menu shows only
-    /// DIFFICULTY's.
+    /// The title screen's notes under TUTORIAL, UI SCALE, BRIGHTNESS, CONTRAST and WINDOW; the
+    /// menu shows only DIFFICULTY's.
     all_notes: bool = false,
 };
 
@@ -97,15 +100,21 @@ fn difficultyNote(parent: El, d: Settings.Difficulty) !void {
     try terms.label("c", ".", .{quiet});
 }
 
-/// A `.level`: the slider filling the lane, then its value as a percentage.
-fn level(parent: El, id: []const u8, label: []const u8, value: *f32) !void {
+/// A `.level`'s range: the volumes run 0..100 by 1, BRIGHTNESS its own range.
+const Range = struct { min: f32 = 0, max: f32 = 100, step: f32 = 1 };
+const volume: Range = .{};
+const brightness: Range = .{ .min = Settings.Brightness.min, .max = Settings.Brightness.max, .step = Settings.Brightness.step };
+
+/// A `.level`: the slider filling the lane, its fill running from the range's min to its max,
+/// then its value as a percentage.
+fn level(parent: El, id: []const u8, label: []const u8, value: *f32, range: Range) !void {
     const ctx = parent.ctx;
     const row = try parent.box(id, .{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .gap = 10,
     }, .{});
     const lane = try row.box("lane", .{ .w = .grow, .h = .fit_children }, .{});
-    const s = try slider_mod.slider(lane, .{ .id = "range", .label = label, .value = value.*, .min = 0, .max = 100, .step = 1 });
+    const s = try slider_mod.slider(lane, .{ .id = "range", .label = label, .value = value.*, .min = range.min, .max = range.max, .step = range.step });
     value.* = s.value;
     try row.label_fit("out", try ctx.arena.print("{d:.0}%", .{s.value}), .{ .cell = .{ .mode = .clip, .width = level_out_w } }, .{Style{ .font = 11, .ink = .fg }});
 }
@@ -124,12 +133,17 @@ pub fn settings_panel(parent: El, id: []const u8, s: *Settings, opts: Options) !
         try difficultyNote(f, s.difficulty);
     }
     {
+        const f = try settingRow(panel, "tutorial", "TUTORIAL", opts.width);
+        if (try choices(f, "choices", &.{ "ON", "OFF" }, @intFromEnum(s.tutorial))) |i| s.tutorial = @enumFromInt(i);
+        if (opts.all_notes) try note(f, "note", "First-run guidance in the log.");
+    }
+    {
         const f = try settingRow(panel, "music", "MUSIC", opts.width);
-        try level(f, "level", "Music volume", &s.music);
+        try level(f, "level", "Music volume", &s.music, volume);
     }
     {
         const f = try settingRow(panel, "effects", "EFFECTS", opts.width);
-        try level(f, "level", "Effects volume", &s.effects);
+        try level(f, "level", "Effects volume", &s.effects, volume);
     }
     {
         const f = try settingRow(panel, "scale", "UI SCALE", opts.width);
@@ -139,6 +153,11 @@ pub fn settings_panel(parent: El, id: []const u8, s: *Settings, opts: Options) !
             s.ui_scale = next;
         }
         if (opts.all_notes) try note(f, "note", "The interface is dense and mostly small text.");
+    }
+    {
+        const f = try settingRow(panel, "brightness", "BRIGHTNESS", opts.width);
+        try level(f, "level", "Brightness", &s.brightness, brightness);
+        if (opts.all_notes) try note(f, "note", "Lifts every colour on screen together, for a dark monitor.");
     }
     {
         const f = try settingRow(panel, "contrast", "CONTRAST", opts.width);
