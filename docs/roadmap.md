@@ -83,6 +83,7 @@ Prototype catalogs are deterministic UX fixtures, not permission to hardcode eco
 ### Exchange and Act III identity transition
 
 - [ ] **ACT2-20 — Preserve person-level economics through later scale transitions.** Individual decisions remain authoritative throughout the Act II band. If a later aggregate model replaces any of them, it must preserve person-level ownership, subjective ordinal demand, and transaction history as observable economic facts; aggregate totals must never silently become shared inventory.
+- [ ] **ACT2-21 — Raise the Exchange as a build.** The Exchange stands the frame `RaiseExchange` is read, where the prototype and `docs/ui_design.md` make it an 18-day build. It needs a `Busy` it can occupy (a roster good with `.milestone = .act_two` raised through `capital.begin`, or a `Busy.Doing` variant of its own), a `busy` refusal while other work holds the hands, and completion setting `exchange.standing`. Its card then maps `building` and `busy` as the Shelter's does (`build_list.milestoneLifecycle`).
 
 ## 5. Verification and acceptance
 
