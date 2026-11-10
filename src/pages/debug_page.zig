@@ -427,18 +427,18 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             .{ .label = "VIGOR", .value = "14/15" },
             .{ .label = "FOOD", .value = "11.6/12" },
             .{ .label = "RECIPES", .value = "4/5" },
-            .{ .label = resource_label, .value = "31/60" },
+            .{ .label = resource_label, .value = "31/120" },
         };
         _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
             .title = "Shelter",
-            .summary = try ctx.arena.print("{s} 31/60", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
+            .summary = try ctx.arena.print("{s} 31/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .readiness = "locked \u{00B7} 1 condition",
             .kicker = "A PLACE FOR OTHERS",
-            .cost = "60m 6e \u{00B7} 6.0d",
+            .cost = "120m 8e \u{00B7} 6.0d",
             .copy = "a roof with room for four. you're not alone anymore.",
             .requirements = &requirements,
-            .explanation = try ctx.arena.print("Hold 60 {s} with a settled body and four kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
+            .explanation = try ctx.arena.print("Hold 120 {s} with a settled body and five kinds of goods, a rope bag and a leaf bed among them.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .action = "LOCKED",
         });
     } else if (eq(name, "market_strip")) {
