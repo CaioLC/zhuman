@@ -37,7 +37,8 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
         .flow = .{ .dir = .row, .main = .space_between, .cross = .center },
     }, .{});
 
-    const stocks = try stock_mod.stockline(root, "stocks", options.stocks, options.compact_stocks);
+    const line = try stock_mod.stocklineCovering(root, "stocks", options.stocks, options.compact_stocks);
+    const stocks = line.bar;
     // The stockline takes what the run context leaves, 12px clear of it, and wraps when it
     // runs long (`.stockline { flex-wrap: wrap }`): a long line never runs under the run
     // context, and nothing is hidden. Stacked (≤760) the run context holds to the first line.
@@ -52,6 +53,11 @@ pub fn header(parent: El, id: []const u8, options: Options) !Header {
     const run = try run_mod.runline(right, "run", options.run);
     const speed: ?El = if (options.show_speed) try speed_mod.speed_stepper(right, "speed") else null;
     const menu = try speed_mod.menu_control(right, "menu");
+    // A read token's overlay that runs past a line narrower than its read form hides the run
+    // context items it reaches, as it hides the line's own.
+    line.coverChildren(run);
+    if (speed) |s| line.cover(&.{s});
+    line.cover(&.{menu});
 
     return .{ .el = root, .speed = speed, .stocks = stocks, .run = run, .menu = menu };
 }

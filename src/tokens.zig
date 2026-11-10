@@ -87,7 +87,7 @@ pub const rail = struct {
 
 /// Holdings/BODY rail collapse transition (`120ms`).
 pub const dur_rail_s: f32 = tween.holdings_s;
-/// Stock-token font swap transition (`90ms`).
+/// A stock token's read overlay opening and closing (`120ms`, eased out).
 pub const dur_stock_token_s: f32 = tween.stock_token_s;
 /// Board state-change transition (`~105ms`).
 pub const dur_board_s: f32 = tween.board_s;

@@ -317,9 +317,10 @@ pub const UiState = struct {
     /// the details subtree is built only while `expanded`, so a collapsed disclosure has no
     /// details nodes and nothing in them is focusable.
     pub const DisclosureState = struct { expanded: bool = false };
-    /// A stock token's last read state (hovered or focused), keyed by the token, so the change
-    /// starts its font ease from where the token stood.
-    pub const RevealState = struct { shown: bool = false };
+    /// A stock token's last read state (hovered or focused), keyed by the token, and how open
+    /// its read overlay stood when that state last changed (0 closed, 1 open), so a change
+    /// eases from where the overlay stands.
+    pub const RevealState = struct { shown: bool = false, from: f32 = 0 };
     /// A catalog controls bar's persisted state: `sort` is the chosen sort-kind index,
     /// `dir` the direction (`none` disables/resets ordering), `sort_open` whether the disclosed
     /// sort row is showing, `kind` a catalog's kind filter, an index the caller interprets (0 is

@@ -1,6 +1,6 @@
 //! `tween` — a small **host-layer transition/tween state** for the prototype's
 //! few *functional* transitions: the Holdings column/gap collapse (`120ms`), a stock token's
-//! font-size change (`90ms`), and the board's opacity/stroke changes (`100–110ms`). It is a
+//! read overlay (`120ms`), and the board's opacity/stroke changes (`100–110ms`). It is a
 //! deliberately tiny **value provider**, not a general timeline engine and not a node feature:
 //! a consumer keys a scalar tween by a **stable node/domain id** (a `u64`, the same stable-key
 //! discipline the interaction/focus/semantic registries use — so a tween survives reorder,
@@ -26,9 +26,9 @@ const motion = @import("./motion.zig");
 
 /// Prototype functional-transition durations, in **seconds** (the CSS ms ÷ 1000), named so a
 /// consumer cites the prototype token rather than a bare number. Not decorative — these are
-/// the Holdings collapse, the stock-token font swap, and the board state changes.
+/// the Holdings collapse, the stock token's read overlay, and the board state changes.
 pub const holdings_s: f32 = 0.120;
-pub const stock_token_s: f32 = 0.090;
+pub const stock_token_s: f32 = 0.120;
 pub const board_s: f32 = 0.105; // the 100–110ms band, mid value
 
 /// One scalar tween: a linear ramp from `from` to `to` over `duration` seconds, `elapsed`
@@ -243,6 +243,6 @@ test "Registry: a full table drops new ids (the transition snaps via fallback)" 
 
 test "Registry: prototype durations are the CSS ms in seconds" {
     try testing.expectApproxEqAbs(@as(f32, 0.120), holdings_s, 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 0.090), stock_token_s, 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0.120), stock_token_s, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0.105), board_s, 1e-6);
 }

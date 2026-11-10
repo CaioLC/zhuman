@@ -393,7 +393,7 @@ the caller's interpolated `value` otherwise. `src/ui` stays motion-unaware.
 ## Transition/tween state (`tween.zig`)
 
 `tween.zig` is a small **host-layer tween registry** for the prototype's few *functional*
-transitions — the Holdings column/gap collapse (`120ms`), a stock token's font change (`90ms`),
+transitions — the Holdings column/gap collapse (`120ms`), a stock token's read overlay (`120ms`),
 and the board's opacity/stroke changes (`100–110ms`, named `holdings_s`/`stock_token_s`/`board_s`
 as seconds). It is a deliberately tiny **value provider**, not a general timeline engine and not
 a node feature: a consumer keys a scalar `Tween` by a **stable node/domain id** (a `u64`, the
@@ -786,7 +786,9 @@ probe and thumb), `slider` (the lane rect, capture, press-time focus, the drag c
 sub-action relation), `eating_policy` (the richer slider value), `select` (the popup's hover
 cursor), `catalog_controls` (the Escape focus restore), the game's `modal` (dismissal
 consumption), `research_board` (its camera over the pane's prior rect, the pan capture and
-cursors, the tiles placed in device px), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
+cursors, the tiles placed in device px), `stock_token` (the stockline's prior rects, which place
+a read token's overlay on its resting baseline, flip it at the line's right edge and find the
+tokens, separators and run context items it covers), the foundation's `modal`, `tooltip` and `text_input`, and the debug page's
 tooltip fixture (placed and clamped by its prior-frame size, as a production tooltip is).
 `tools/boundary_check.sh` greps the known spellings of these reads — its `inventory` pattern —
 and fails when one appears in a file outside that list; it also fails outright on lifecycle
