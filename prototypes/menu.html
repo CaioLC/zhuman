@@ -48,6 +48,13 @@
 .confirm-row { display: flex; gap: 9px; }
 .danger-action { padding: 5px 9px; cursor: pointer; border: 1px solid var(--danger); color: var(--danger); background: transparent; }
 .danger-action:hover { color: var(--fg); background: #2a1512; }
+
+/* BRIGHTNESS: one linear lift of every painted colour, 1 = as authored. The body fills the
+   viewport and paints its own ground, so its filter lifts the whole page; the modal sits in the
+   top layer, outside that filter, so the dialog and its backdrop carry the same lift. At 100%
+   no filter is set, so the page renders exactly as authored. */
+html { --brightness: 1; }
+html[data-lit] body, html[data-lit] dialog, html[data-lit] dialog::backdrop { filter: brightness(var(--brightness)); }
 </style>
 </head>
 <body>
@@ -107,7 +114,14 @@ const SLOTS = [
   { id: 3, empty: true },
 ];
 
-const settings = { difficulty: 'temperate', music: 60, effects: 75, scale: '100', contrast: 'normal', window: '1600' };
+const settings = { difficulty: 'temperate', tutorial: 'on', music: 60, effects: 75, scale: '100', brightness: 100, contrast: 'normal', window: '1600' };
+function applyBrightness() {
+  const root = document.documentElement;
+  root.style.setProperty('--brightness', settings.brightness / 100);
+  root.toggleAttribute('data-lit', settings.brightness !== 100);
+}
+/* A slider's fill runs from its own min to its own max. */
+const levelPosition = r => `${(r.value - r.min) / (r.max - r.min) * 100}%`;
 const DIFFICULTIES = [
   { key: 'abundant',  name: 'ABUNDANT',  cost: 0.8,  yield: 1.25, note: 'The valley is generous. Mistakes are survivable.' },
   { key: 'temperate', name: 'TEMPERATE', cost: 1.0,  yield: 1.0,  note: 'The valley as it is.' },
@@ -179,6 +193,10 @@ function renderSettings() {
           <span class="setting-note">${d.note} Inputs cost <b>×${d.cost.toFixed(2)}</b>, yields return <b>×${d.yield.toFixed(2)}</b>.</span>
         </span>
       </div>
+      <div class="setting">
+        <span class="setting-label">TUTORIAL</span>
+        <span class="setting-field"><span class="choices">${[['on', 'ON'], ['off', 'OFF']].map(([v, l]) => `<button type="button" data-tutorial="${v}" aria-pressed="${v === settings.tutorial}">${l}</button>`).join('')}</span></span>
+      </div>
       <div class="setting"><span class="setting-label">MUSIC</span><span class="setting-field"><span class="level">
         <input class="eating-slider" type="range" min="0" max="100" value="${settings.music}" data-level="music" aria-label="Music volume" style="--ration-position: ${settings.music}%">
         <output>${settings.music}%</output></span></span></div>
@@ -189,6 +207,9 @@ function renderSettings() {
         <span class="setting-label">UI SCALE</span>
         <span class="setting-field"><span class="choices">${['90', '100', '110', '125'].map(v => `<button type="button" data-scale="${v}" aria-pressed="${v === settings.scale}">${v}%</button>`).join('')}</span></span>
       </div>
+      <div class="setting"><span class="setting-label">BRIGHTNESS</span><span class="setting-field"><span class="level">
+        <input class="eating-slider" type="range" min="80" max="140" step="5" value="${settings.brightness}" data-level="brightness" aria-label="Brightness" style="--ration-position: ${(settings.brightness - 80) / 60 * 100}%">
+        <output>${settings.brightness}%</output></span></span></div>
       <div class="setting">
         <span class="setting-label">CONTRAST</span>
         <span class="setting-field"><span class="choices">${[['normal', 'NORMAL'], ['high', 'HIGH']].map(([v, l]) => `<button type="button" data-contrast="${v}" aria-pressed="${v === settings.contrast}">${l}</button>`).join('')}</span></span>
@@ -199,13 +220,15 @@ function renderSettings() {
       </div>
     </div>`;
   bodyEl.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { settings.difficulty = b.dataset.diff; renderSettings(); }));
+  bodyEl.querySelectorAll('[data-tutorial]').forEach(b => b.addEventListener('click', () => { settings.tutorial = b.dataset.tutorial; renderSettings(); }));
   bodyEl.querySelectorAll('[data-scale]').forEach(b => b.addEventListener('click', () => { settings.scale = b.dataset.scale; renderSettings(); }));
   bodyEl.querySelectorAll('[data-contrast]').forEach(b => b.addEventListener('click', () => { settings.contrast = b.dataset.contrast; renderSettings(); }));
   bodyEl.querySelectorAll('[data-window]').forEach(b => b.addEventListener('click', () => { settings.window = b.dataset.window; renderSettings(); }));
   bodyEl.querySelectorAll('[data-level]').forEach(r => r.addEventListener('input', () => {
     settings[r.dataset.level] = Number(r.value);
-    r.style.setProperty('--ration-position', `${r.value}%`);
+    r.style.setProperty('--ration-position', levelPosition(r));
     r.parentElement.querySelector('output').textContent = `${r.value}%`;
+    if (r.dataset.level === 'brightness') applyBrightness();
   }));
   wire();
 }
@@ -252,7 +275,12 @@ document.addEventListener('keydown', e => {
   if (screen !== 'menu') { screen = 'menu'; render(); }
 });
 
-screen = new URLSearchParams(location.search).get('screen') || 'menu';
+/* Review controls: ?screen= picks the view; &brightness=80..140 and &tutorial=off seed settings. */
+const params = new URLSearchParams(location.search);
+screen = params.get('screen') || 'menu';
+if (params.has('brightness')) settings.brightness = Math.min(140, Math.max(80, Math.round(Number(params.get('brightness')) / 5) * 5 || 100));
+if (params.get('tutorial') === 'off') settings.tutorial = 'off';
+applyBrightness();
 render();
 document.querySelector('#menu-dialog').showModal();
 bodyEl.focus();
