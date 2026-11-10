@@ -846,7 +846,8 @@ test "a record's demands and yields read by resource" {
     try testing.expectEqual(@as(f32, 2.5), traps.output.get(.food).?.scale());
     try testing.expect(traps.output.get(.biomass) == null);
     try testing.expectEqualStrings("wire_snares", traps.requires.all[0]);
-    try testing.expectEqual(@as(f32, 60.0), cat.good("shelter").?.requires.biomass);
+    try testing.expectEqual(@as(f32, 120.0), cat.good("shelter").?.requires.biomass);
+    try testing.expectEqualStrings("rope_bag", cat.good("shelter").?.requires.all[0]);
     try testing.expect(cat.good("fish_rod").?.requires.isEmpty());
 }
 

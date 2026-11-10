@@ -435,7 +435,8 @@ units owned, the `reach` of the build cost (the smallest held-over-needed across
 resources), and a `Standing` in precedence order — `tech` (the technology the recipe's
 `requires.tech` names is not researched on the agent's board), `needs` (an `any`/`all` gate
 does not pass — a modifier lists the verb it works on, so work gloves are never offered without
-Split wood; the gates read the same way a verb's do, `effects.gatesMet`), `unlock` (the
+Split wood, and the shelter names the rope bag and the leaf bed; the gates read the same way a
+verb's do, `effects.gatesMet`), `unlock` (the
 shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
 good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
 paid for), `busy`, `energy`, `short`, `ready`.
@@ -453,7 +454,7 @@ net outranks the rod and the hand axe the hatchet; `effects.applies` lets only t
 owned of a family apply, so same-family stats replace rather than stack, losing the better
 tool restores the next-best exactly, and any number of build → sell → build cycles leaves the
 terms bit-exact, because nothing is ever mutated in place. Goods outside a family stack
-freely (sandals and a bicycle on the same verb).
+freely (the work gloves and the hand axe on the same verb).
 
 `cancel_build` abandons work in progress: it salvages `config.cancel_refund` of the build's
 resources and frees the body, while the energy and every hour already spent are gone. The
@@ -772,7 +773,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `schedule.zig` | `schedule`, the systems per state in the order they run, and `tick`, the host's one call per frame |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
-| `playthrough.zig` | a test, no API: Act I played from a new run to the shelter through the schedule and the pages' intents under a greedy policy, on several seeds, each before day 40 without dying |
+| `playthrough.zig` | a test, no API: Act I played from a new run to the shelter through the schedule and the pages' intents under a greedy policy, on several seeds, each before day 70 without dying |
 
 `sim/systems/` holds the systems the schedule runs.
 

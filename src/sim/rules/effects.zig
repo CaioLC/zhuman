@@ -342,7 +342,7 @@ fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
     const e = spawnAgent(w, cat);
     w.get(e, comp.Vigor).?.v = 7; // under the ceiling, so a fill on the way in shows
     // A modifier on Split wood works only once the hatchet is owned.
-    if (cat.good(id).?.requires.all.len > 0) own(w, e, cat, "hatchet");
+    own(w, e, cat, "hatchet");
     const before = Snapshot.take(w, e, cat);
     own(w, e, cat, id);
     lose(w, e, cat, id);
@@ -355,17 +355,18 @@ test "goods on one verb stack; a spare carries no second effect" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     const e = spawnAgent(&w, &cat);
-    own(&w, e, &cat, "sandals");
-    own(&w, e, &cat, "bicycle");
-    const both = verbOf(&w, e, &cat, "forage").?.requires.energy;
-    try testing.expectApproxEqAbs(@as(f32, 1.7 * 0.85 * 0.6), both, 1e-5);
-    own(&w, e, &cat, "sandals"); // a second pair is stock
-    try testing.expectEqual(both, verbOf(&w, e, &cat, "forage").?.requires.energy);
-    lose(&w, e, &cat, "sandals"); // the spare goes first, the discount stays
-    try testing.expectEqual(both, verbOf(&w, e, &cat, "forage").?.requires.energy);
-    lose(&w, e, &cat, "bicycle");
-    lose(&w, e, &cat, "sandals");
-    try testing.expectEqual(cat.action("forage").?.requires.energy, verbOf(&w, e, &cat, "forage").?.requires.energy);
+    own(&w, e, &cat, "hand_axe");
+    own(&w, e, &cat, "work_gloves");
+    const both = verbOf(&w, e, &cat, "chop_wood").?.requires.energy;
+    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7 * 0.75), both, 1e-5);
+    own(&w, e, &cat, "work_gloves"); // a second pair is stock
+    try testing.expectEqual(both, verbOf(&w, e, &cat, "chop_wood").?.requires.energy);
+    lose(&w, e, &cat, "work_gloves"); // the spare goes first, the discount stays
+    try testing.expectEqual(both, verbOf(&w, e, &cat, "chop_wood").?.requires.energy);
+    lose(&w, e, &cat, "work_gloves");
+    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7), verbOf(&w, e, &cat, "chop_wood").?.requires.energy, 1e-5);
+    lose(&w, e, &cat, "hand_axe");
+    try testing.expect(verbOf(&w, e, &cat, "chop_wood") == null);
 }
 
 test "the chopping stack: hatchet, gloves, then the hand axe supersedes the hatchet" {

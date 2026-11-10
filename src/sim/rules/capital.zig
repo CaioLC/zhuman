@@ -820,18 +820,18 @@ test "an auto generator the agent cannot pay for waits with its full cycle, then
     try testing.expectEqual(@as(usize, 1), res.events.len(events.Collected));
 }
 
-/// An agent stocked to build a shelter: the unlock's three conditions all met, and enough
-/// materials for the price.
+/// An agent stocked to build a shelter: its gate (the rope bag and leaf bed) and the unlock's
+/// three conditions all met, and enough materials for the price.
 fn spawn_settler(w: *World, cat: *const Catalog) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 13, .max = 20 }, // 13 >= the absolute 12, max is irrelevant
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the unlock's 15
-        comp.InventoryBiomass{ .v = 100 }, // >= the 60 price
+        comp.InventoryBiomass{ .v = 200 }, // >= the 120 price
         comp.Goods{},
         comp.Granted{},
     });
     const goods = w.get(e, comp.Goods).?;
-    for ([_][]const u8{ "sandals", "leaf_bed", "cookpot", "root_cellar", "wire_snares" }) |id| {
+    for ([_][]const u8{ "sandals", "leaf_bed", "rope_bag", "root_cellar", "wire_snares" }) |id| {
         goods.count[cat.goodIndex(id).?] = 1; // five goods owned >= the unlock's 5
     }
     return e;
@@ -853,7 +853,7 @@ test "the shelter is offered only once its standing conditions are met" {
     _ = begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
     try testing.expectEqual(@as(f32, 5), w.get(e, comp.Vigor).?.v); // 13 - 8 energy
-    try testing.expectEqual(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v); // 100 - 60
+    try testing.expectEqual(@as(f32, 80), w.get(e, comp.InventoryBiomass).?.v); // 200 - 120
 
     // Vigor fell below the absolute 12 mid-build — the work is already paid for, so it stands.
     try testing.expect(!unlockMet(&w, e, cat, shelter));
@@ -870,6 +870,16 @@ test "each standing condition refuses the shelter on its own" {
     const shelter = cat.goodIndex("shelter").?;
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
+    // Its gate: without the rope bag the shelter needs it, before any standing condition.
+    {
+        const e = spawn_settler(&w, cat);
+        w.get(e, comp.Goods).?.count[cat.goodIndex("rope_bag").?] = 0;
+        w.get(e, comp.Goods).?.count[cat.goodIndex("spear").?] = 1; // five kinds still
+        try testing.expect(unlockMet(&w, e, cat, shelter));
+        try testing.expectEqual(Standing.needs, quote(&w, e, cat, shelter).?.standing);
+        try testing.expectEqualStrings("rope_bag", firstUnmetGate(&w, e, cat, shelter).?);
+        try testing.expectEqual(Reason.needs, begin(&w, e, &res, shelter).?);
+    }
     // Too tired: below the absolute 12 current vigor refuses, regardless of the ceiling.
     {
         const e = spawn_settler(&w, cat);

@@ -4,7 +4,7 @@
 //! passerby who can be paid, split wood for materials and forage when the larder is thin,
 //! collect the generators, build the wire snares, leaf bed, rope bag, garden bed and root
 //! cellar in that order, then gather the shelter's larder and rest to its vigor. It holds the
-//! act completable: on every seed tried the shelter stands before day 40 and the body never
+//! act completable: on every seed tried the shelter stands before day 70 and the body never
 //! dies. Deterministic — the run's prng is seeded.
 
 const std = @import("std");
@@ -176,11 +176,11 @@ fn play(seed: u64, limit_days: f32) !Outcome {
     return out;
 }
 
-test "a greedy policy raises the shelter before day 40 without dying, on every seed tried" {
+test "a greedy policy raises the shelter before day 70 without dying, on every seed tried" {
     for ([_]u64{ 0x5eed, 1, 2, 3 }) |seed| {
-        const out = try play(seed, 40);
+        const out = try play(seed, 70);
         if (out.stood == null) std.debug.print("\nseed {d} stalled: day {d:.1} died {} vigor {d:.1} food {d:.1} materials {d:.1} kinds {d}\n", .{ seed, out.day, out.died, out.vigor, out.food, out.materials, out.kinds });
         try std.testing.expect(!out.died);
         try std.testing.expect(out.stood != null);
     }
-}
+}

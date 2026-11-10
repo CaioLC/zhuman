@@ -70,7 +70,8 @@ ordinal — never a global utility function.
   without cancelling work or accelerating input and interface motion. A session menu exposes only
   playback, reduced motion, resume, and quit; it does not expose economic tuning values.
   *Win condition:* the **Shelter**, a good that houses four. It is offered only to an actor who
-  has already made a life here — rested, a full larder, and several goods built — and it is the
+  has already made a life here — rested, a full larder, and several goods built, a rope bag and
+  a leaf bed among them — and it is the
   largest build in the act. Raising it ends Act I: others ask to move in, and the crossing to
   pop 2 is that invitation.
 - **Act II — First exchange (pop 2 → band).** An autonomous second agent arrives. Generic

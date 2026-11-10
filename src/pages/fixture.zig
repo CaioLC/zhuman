@@ -238,10 +238,11 @@ const poor_settlement = Settlement{
     },
 };
 
-/// Act I goods of five buildable kinds: the Shelter's RECIPES condition met.
+/// Act I goods of five buildable kinds, the rope bag and leaf bed among them: the Shelter's
+/// gate and its RECIPES condition met.
 const shelter_goods = [_]Owned{
     .{ .id = "sandals", .n = 1 },
-    .{ .id = "spear", .n = 1 },
+    .{ .id = "rope_bag", .n = 1 },
     .{ .id = "root_cellar", .n = 1 },
     .{ .id = "leaf_bed", .n = 1 },
     .{ .id = "wire_snares", .n = 1 },
@@ -818,7 +819,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_shelter_locked",
-        .about = "Act I BUILD, the Shelter card open and locked: vigor, food and goods short.",
+        .about = "Act I BUILD, the Shelter card open and locked: the rope bag and leaf bed not owned, vigor, food and goods short.",
         .day = 19,
         .view = 1,
         .milestone_open = true,
@@ -838,7 +839,7 @@ pub const catalog = [_]Spec{
         .day = 44,
         .view = 1,
         .milestone_open = true,
-        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 72, .goods = &shelter_goods },
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 130, .goods = &shelter_goods },
     },
     .{
         .name = "act_one_trade_sell",

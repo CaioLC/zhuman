@@ -478,7 +478,9 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     const resources = @typeInfo(roster.Resource).@"enum".field_names.len;
     var order_bufs: [resources][24]u8 = undefined;
     var order_labels: [resources][24]u8 = undefined;
-    var requirements: [3 + resources]milestone_mod.Requirement = undefined;
+    const max_gates = 4;
+    var gate_labels: [max_gates][24]u8 = undefined;
+    var requirements: [3 + max_gates + resources]milestone_mod.Requirement = undefined;
     var nreq: usize = 0;
     requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
     nreq += 1;
@@ -486,6 +488,16 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     nreq += 1;
     requirements[nreq] = .{ .label = "RECIPES", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met };
     nreq += 1;
+    // Each good or verb its gate names, owned or still needed.
+    var gates_unmet: u32 = 0;
+    for (price.all[0..@min(price.all.len, max_gates)], 0..) |gid, i| {
+        const name = if (cat.good(gid)) |g| g.name else if (cat.action(gid)) |a| a.name else gid;
+        const met = if (cat.goodIndex(gid) != null) capital.owns(world, e, cat, gid) else verbHeld(world, e, cat, gid);
+        gates_unmet += @intFromBool(!met);
+        const label = std.ascii.upperString(&gate_labels[i], name[0..@min(name.len, gate_labels[i].len)]);
+        requirements[nreq] = .{ .label = label, .value = if (met) "owned" else "needed", .met = met };
+        nreq += 1;
+    }
     var compact: []const u8 = "";
     var li: usize = 0;
     for (std.enums.values(roster.Resource)) |r| {
@@ -499,12 +511,14 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
         if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, n }) catch word;
         li += 1;
     }
-    // Locked counts the standing conditions still unmet (`locked · 1 condition`), as the
-    // Exchange card does.
-    const unmet: u32 = @as(u32, @intFromBool(!vigor_met)) + @intFromBool(!food_met) + @intFromBool(!recipes_met);
-    var ready_buf: [32]u8 = undefined;
+    // Locked names the first good its gate still needs (`needs a rope bag`), else counts the
+    // standing conditions still unmet (`locked · 1 condition`), as the Exchange card does.
+    const unmet: u32 = @as(u32, @intFromBool(!vigor_met)) + @intFromBool(!food_met) + @intFromBool(!recipes_met) + gates_unmet;
+    var ready_buf: [64]u8 = undefined;
+    var lower_buf: [48]u8 = undefined;
+    const gate = if (quote.standing == .needs) capital.firstUnmetGate(world, e, cat, gi) else null;
     const readiness = switch (state) {
-        .locked => std.mem.print(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
+        .locked => if (gate) |gid| needsPhrase(&ready_buf, &lower_buf, cat, gid) else std.mem.print(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
         .unfunded => "inputs short",
         .ready => "ready to raise",
         .done => unreachable,
@@ -535,12 +549,41 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     if (m.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = gi });
 }
 
+/// `needs a rope bag` — the gate entry `id` a milestone still waits on, in a sentence: a good
+/// with its article, a verb by its name.
+fn needsPhrase(buf: []u8, lower_buf: *[48]u8, cat: *const roster.Catalog, id: []const u8) []const u8 {
+    if (cat.good(id)) |g| {
+        const name = capital.lowerName(g.name, lower_buf);
+        const article = if (name.len > 0 and std.mem.indexOfScalar(u8, "aeiou", name[0]) != null) "an" else "a";
+        return std.mem.print(buf, "needs {s} {s}", .{ article, name }) catch "locked";
+    }
+    const name = if (cat.action(id)) |a| a.name else id;
+    return std.mem.print(buf, "needs {s}", .{name}) catch "locked";
+}
+
+/// Whether the agent holds verb `id`, as a gate reads it.
+fn verbHeld(world: *const World, e: Entity, cat: *const roster.Catalog, id: []const u8) bool {
+    const effects = ha.sim.rules.effects;
+    const ai = cat.actionIndex(id) orelse return false;
+    const h = effects.holdingsOf(world, e) orelse return false;
+    return effects.held(cat, h, ai);
+}
+
 // ============================ Tests =====================================================
 
 const testing = std.testing;
 
 const act_one_test = Shelf{ .act = 1, .gates_hide = true, .subtitle = "" };
 const act_two_test = Shelf{ .act = 2, .subtitle = "" };
+
+test "the milestone card names the good its gate still needs" {
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    var buf: [64]u8 = undefined;
+    var lower: [48]u8 = undefined;
+    try testing.expectEqualStrings("needs a rope bag", needsPhrase(&buf, &lower, &cat, "rope_bag"));
+    try testing.expectEqualStrings("needs Split wood", needsPhrase(&buf, &lower, &cat, "chop_wood"));
+}
 
 test "the authored total counts this shelf's recipes only" {
     var cat = try roster.load(testing.allocator, .{
@@ -689,7 +732,7 @@ test "sortEntries: name ascending is A–Z" {
     for (list[1..], 0..) |ent, i| try testing.expect(std.ascii.lessThanIgnoreCase(list[i].name, ent.name) or std.ascii.eqlIgnoreCase(list[i].name, ent.name));
 }
 
-test "Act I: the shelf lists the recipes whose gates pass; a manufactured one appears with the good before it" {
+test "Act I: the shelf lists the recipes whose gates pass; a gated one appears with the good before it" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var cat = try roster.load(testing.allocator, roster.shipped, null);
@@ -697,22 +740,22 @@ test "Act I: the shelf lists the recipes whose gates pass; a manufactured one ap
     const e = ha.sim.systems.run.spawn_player(&w, &cat);
     requote(&w, e, &cat);
     var buf: [roster.max_goods]Entry = undefined;
-    // A fresh body: every crude recipe, none of the manufactured tier (each gates on a crude
-    // good or a verb not yet held).
+    // A fresh body: the crude recipes without a gate; the chicken coop, which gates on the
+    // garden bed, is absent.
     const fresh = collect(&w, e, &cat, act_one_test, "", &buf);
     try testing.expectEqual(shelfTotal(&w, e, &cat, act_one_test), fresh.len);
     for (fresh) |ent| try testing.expectEqual(roster.Tier.crude, ent.rec.tier.?);
-    const bicycle = cat.goodIndex("bicycle").?;
-    try testing.expect(!onShelf(&w, e, &cat, act_one_test, bicycle));
+    const coop = cat.goodIndex("chicken_coop").?;
+    try testing.expect(!onShelf(&w, e, &cat, act_one_test, coop));
 
-    // Own sandals: the bicycle is listed (short, so dimmed), and the shelf grows by one.
-    w.get(e, comp.Goods).?.count[cat.goodIndex("sandals").?] = 1;
+    // Own a garden bed: the coop is listed (short, so dimmed), and the shelf grows by one.
+    w.get(e, comp.Goods).?.count[cat.goodIndex("garden_bed").?] = 1;
     requote(&w, e, &cat);
-    try testing.expect(onShelf(&w, e, &cat, act_one_test, bicycle));
+    try testing.expect(onShelf(&w, e, &cat, act_one_test, coop));
     const after = collect(&w, e, &cat, act_one_test, "", &buf);
     try testing.expectEqual(fresh.len + 1, after.len);
     var kind: ?Kind = null;
-    for (after) |ent| if (ent.gi == bicycle) {
+    for (after) |ent| if (ent.gi == coop) {
         kind = ent.kind;
     };
     try testing.expectEqual(@as(?Kind, .reach), kind);

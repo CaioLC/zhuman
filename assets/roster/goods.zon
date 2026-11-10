@@ -38,7 +38,7 @@
         .id = "wire_snares",
         .name = "Wire snares",
         .tier = .crude,
-        .requires = .{ .energy = 2.0, .hours = 8.0, .biomass = 5.0 },
+        .requires = .{ .energy = 6.0, .hours = 16.0, .biomass = 14.0 },
         .copy = .{
             .effect = "readies game to collect",
             .short = "traps game",
@@ -84,21 +84,6 @@
             .effect = "splitting wood costs less",
             .short = "split wood costs less",
             .built = "You stitched work gloves. Splitting wood costs less.",
-        },
-    },
-    .{
-        .id = "bicycle",
-        .name = "Bicycle",
-        .tier = .manufactured,
-        .requires = .{ .energy = 2.0, .hours = 140.0, .biomass = 280.0, .all = .{"sandals"} },
-        .effects = .{
-            .{ .scale = .{ .target = "forage", .stat = .energy, .by = 0.6 } },
-            .{ .scale = .{ .target = "scavenge", .stat = .energy, .by = 0.6 } },
-        },
-        .copy = .{
-            .effect = "roaming costs less",
-            .short = "roaming costs less",
-            .built = "You rebuilt a bicycle. Distance got cheap.",
         },
     },
     .{
@@ -185,7 +170,7 @@
     .{
         .id = "chicken_coop",
         .name = "Chicken coop",
-        .tier = .manufactured,
+        .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 200.0, .biomass = 144.0, .all = .{"garden_bed"} },
         .copy = .{
             .effect = "the hens lay for you",
@@ -201,7 +186,7 @@
         .id = "shelter",
         .name = "Shelter",
         .tier = .crude,
-        .requires = .{ .energy = 8.0, .hours = 144.0, .biomass = 60.0 },
+        .requires = .{ .energy = 8.0, .hours = 144.0, .biomass = 120.0, .all = .{ "rope_bag", "leaf_bed" } },
         .unlock = .{ .vigor_abs = 12.0, .food = 15.0, .goods = 5 },
         .capacity = 4,
         .milestone = .act_one,
