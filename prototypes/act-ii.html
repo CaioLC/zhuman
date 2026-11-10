@@ -195,7 +195,11 @@
       let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
       const requestedPopulation = prototypeParams.get('population');
       const seededPopulation = requestedPopulation === null ? Number.NaN : Number(requestedPopulation);
-      const population = Number.isFinite(seededPopulation) ? Math.max(0, Math.floor(seededPopulation)) : 7;
+      // `?exchange=ready|busy|building|standing` seeds the Exchange card for review; each brings
+      // the settlement past 500 people unless `population` says otherwise.
+      const seededExchange = prototypeParams.get('exchange');
+      const exchangeSeedsConditions = ['ready', 'busy', 'building', 'standing'].includes(seededExchange);
+      const population = Number.isFinite(seededPopulation) ? Math.max(0, Math.floor(seededPopulation)) : exchangeSeedsConditions ? 640 : 7;
       const requestedCapacity = prototypeParams.get('capacity');
       const seededCapacity = requestedCapacity === null ? Number.NaN : Number(requestedCapacity);
       const populationCapacity = Number.isFinite(seededCapacity) ? Math.max(population, Math.floor(seededCapacity)) : population > 12 ? Math.max(640, population) : 12;
@@ -589,13 +593,19 @@
       const activityKind = document.querySelector('#activity-kind');
       const activitySubject = document.querySelector('#activity-subject');
       const activityMeta = document.querySelector('#activity-meta');
+      // The settlement's one occupation (idle, working, building); the Exchange card reads it
+      // to say `hands busy` while other work holds the hands.
+      let activityNow = 'idle';
+      let onActivityChange = () => {};
 
       function setActivity(kind, subject, meta) {
         const labels = { idle: '○ IDLING', working: '● WORKING', building: '■ BUILDING' };
+        activityNow = kind;
         activityStrip.className = `activity-strip is-${kind}`;
         activityKind.textContent = labels[kind];
         activitySubject.textContent = subject;
         activityMeta.textContent = meta;
+        onActivityChange();
       }
 
       document.querySelectorAll('[data-action]').forEach(button => {
@@ -678,6 +688,8 @@
       const escapeMarkup = value => String(value).replace(/[&<>"']/g, character => markupEscapes[character]);
       const recipeByRow = new Map();
       let buildingRow = null;
+      // The Exchange under construction, as its progress in 0..1; null while it is not building.
+      let exchangeBuild = null;
 
       function reachMeter(reach) {
         const active = Math.max(0, Math.min(3, Math.round(reach * 3)));
@@ -705,7 +717,7 @@
         row.querySelector('.build-state').innerHTML = recipeStateMarkup(recipe);
         row.querySelector('.build-action').innerHTML = recipeActionMarkup(recipe);
         const action = row.querySelector('[data-start-build]');
-        if (action && buildingRow) action.disabled = true;
+        if (action && (buildingRow || exchangeBuild !== null)) action.disabled = true;
       }
 
       function createRecipeRow(recipe) {
@@ -870,7 +882,7 @@
       }
 
       function beginPrototypeBuild(row, duration = `${row.dataset.time}d`) {
-        if (buildingRow) return false;
+        if (buildingRow || exchangeBuild !== null) return false;
         const recipe = recipeByRow.get(row);
         if (!recipe || !['ready', 'owned'].includes(recipe.state)) return false;
         buildingRow = row;
@@ -920,8 +932,20 @@
       const exchangeCopy = document.querySelector('#exchange-copy');
       const exchangeDetail = document.querySelector('#exchange-detail');
       const exchangeAction = document.querySelector('#raise-exchange');
-      const requestedExchangeStanding = prototypeParams.get('exchange') === 'standing';
-      let exchangeRingFour = [];
+      const requestedExchangeStanding = seededExchange === 'standing';
+      // A seeded Exchange counts a ring-4 technology as researched (the card only, not the board);
+      // ready and busy also fill the inputs unless a resource is given explicitly, and busy
+      // starts the Garden bed unless `activity` names other work. Building stands at 42%.
+      const seededRingFour = exchangeSeedsConditions ? ['Ice houses'] : [];
+      if (['ready', 'busy'].includes(seededExchange)) {
+        Object.entries(exchangeCost).forEach(([resource, amount]) => {
+          if (!prototypeParams.has(resource)) resourceBalances[resource] = Math.max(resourceBalances[resource], amount);
+        });
+        refreshPrototypeResources();
+      }
+      const exchangeDays = 18;
+      const exchangeLeft = () => `${(exchangeDays * (1 - exchangeBuild)).toFixed(1)}d left`;
+      let exchangeRingFour = [...seededRingFour];
       let exchangeStanding = false;
       let exchangeOpen = prototypeParams.get('exchangeopen') === '1';
 
@@ -963,21 +987,39 @@
         const state = exchangeState();
         if (requestedExchangeStanding && state.unlocked) exchangeStanding = true;
         const current = exchangeState();
-        exchangeGoal.dataset.state = current.standing ? 'standing' : current.ready ? 'ready' : current.unlocked ? 'unfunded' : 'locked';
-        exchangeGoal.classList.toggle('is-ready', current.ready && !current.standing);
+        // With everything met but the hands on other work the card reads `hands busy`; raised,
+        // it is building until it stands.
+        const building = exchangeBuild !== null && !current.standing;
+        const busy = !building && current.ready && !current.standing && activityNow !== 'idle';
+        const paid = current.standing || building;
+        exchangeGoal.dataset.state = current.standing ? 'standing' : building ? 'building' : busy ? 'busy' : current.ready ? 'ready' : current.unlocked ? 'unfunded' : 'locked';
+        exchangeGoal.classList.toggle('is-ready', current.ready && !current.standing && !building && !busy);
+        exchangeGoal.classList.toggle('is-building', building);
         exchangeGoal.classList.toggle('is-standing', current.standing);
         document.querySelector('#exchange-ring-four').textContent = `${current.ringFour.length ? 1 : 0}/1`;
         document.querySelector('#exchange-ring-four').title = current.ringFour.join(', ') || 'No ring-4 technology researched';
         document.querySelector('#exchange-population').textContent = `${population}/501`;
-        document.querySelector('#exchange-biomass').textContent = current.standing ? '80 paid' : `${resourceBalances.biomass}/80`;
-        document.querySelector('#exchange-minerals').textContent = current.standing ? '40 paid' : `${resourceBalances.minerals}/40`;
-        document.querySelector('#exchange-metal').textContent = current.standing ? '24 paid' : `${resourceBalances.metal}/24`;
-        const requirementStates = current.standing
+        document.querySelector('#exchange-biomass').textContent = paid ? '80 paid' : `${resourceBalances.biomass}/80`;
+        document.querySelector('#exchange-minerals').textContent = paid ? '40 paid' : `${resourceBalances.minerals}/40`;
+        document.querySelector('#exchange-metal').textContent = paid ? '24 paid' : `${resourceBalances.metal}/24`;
+        const requirementStates = paid
           ? [true, true, true, true, true]
           : [current.researchMet, current.populationMet, resourceBalances.biomass >= 80, resourceBalances.minerals >= 40, resourceBalances.metal >= 24];
         [...document.querySelectorAll('#exchange-requirements strong')].forEach((output, index) => output.classList.toggle('is-met', requirementStates[index]));
-        exchangeCompact.textContent = current.standing ? 'permanent market · Act III' : current.ready ? `${current.ringFour[0]} · ${population} people · inputs ready` : current.unlocked ? `inputs short · ${current.deficits.length} kind${current.deficits.length === 1 ? '' : 's'}` : `ring 4 ${current.researchMet ? 1 : 0}/1 · people ${population}/501`;
-        if (current.standing) {
+        const percent = `${Math.round((exchangeBuild ?? 0) * 100)}%`;
+        exchangeAction.style.setProperty('--build-progress', percent);
+        exchangeCompact.textContent = current.standing ? 'permanent market · Act III' : building ? percent : current.ready ? `${current.ringFour[0]} · ${population} people · inputs ready` : current.unlocked ? `inputs short · ${current.deficits.length} kind${current.deficits.length === 1 ? '' : 's'}` : `ring 4 ${current.researchMet ? 1 : 0}/1 · people ${population}/501`;
+        if (building) {
+          exchangeReadiness.textContent = `raising · ${exchangeLeft()}`;
+          exchangeDetail.textContent = 'The Exchange is going up. Biomass, minerals and metal are paid.';
+          exchangeAction.textContent = '■ BUILDING';
+          exchangeAction.disabled = true;
+        } else if (busy) {
+          exchangeReadiness.textContent = 'hands busy';
+          exchangeDetail.textContent = 'Everything is on hand; the Exchange waits for free hands.';
+          exchangeAction.textContent = 'HANDS BUSY';
+          exchangeAction.disabled = true;
+        } else if (current.standing) {
           exchangeReadiness.textContent = 'standing · ACT III';
           exchangeCopy.textContent = 'The Exchange gives trade a permanent place. Passing lots become posted offers and the settlement enters Act III.';
           exchangeDetail.textContent = `opened after ${current.ringFour[0] || 'ring-4 research'} · permanent market established`;
@@ -1003,14 +1045,29 @@
         applyMarketIdentity();
       }
 
-      function raiseExchange() {
+      // Raising the Exchange is a build like any recipe's: the inputs are paid at the start, it
+      // holds the hands and the activity strip, and every other build waits on it. When it
+      // finishes the Exchange stands and Act III opens.
+      function raiseExchange(progress = 0, payInputs = true) {
         const state = exchangeState();
-        if (!state.ready || state.standing) return false;
+        if (state.standing || buildingRow || exchangeBuild !== null) return false;
+        if (payInputs && (!state.ready || activityNow !== 'idle')) return false;
+        if (payInputs) Object.entries(exchangeCost).forEach(([resource, amount]) => { resourceBalances[resource] -= amount; });
+        exchangeBuild = progress;
+        setBuildButtonsDisabled(true);
+        setActivity('building', 'Exchange', exchangeLeft());
+        refreshPrototypeResources();
+        if (payInputs) addLog('You begin the Exchange. Biomass, minerals and metal are paid; the work takes 18 days.');
+        return true;
+      }
+
+      function finishExchange() {
+        if (exchangeBuild === null) return false;
+        exchangeBuild = null;
         exchangeStanding = true;
         exchangeOpen = true;
         syncExchangeDisclosure(true);
-        Object.entries(exchangeCost).forEach(([resource, amount]) => { resourceBalances[resource] -= amount; });
-        refreshPrototypeResources();
+        setBuildButtonsDisabled(false);
         refreshExchangeMilestone();
         setActivity('idle', 'Exchange standing', 'Act III open');
         addLog('The Exchange stands. Passing merchants become a permanent market; Act III opens.');
@@ -1018,11 +1075,12 @@
         return true;
       }
 
-      exchangeAction.addEventListener('click', raiseExchange);
+      exchangeAction.addEventListener('click', () => { if (!exchangeAction.disabled) raiseExchange(); });
       exchangeToggle.addEventListener('click', () => { exchangeOpen = !exchangeOpen; syncExchangeDisclosure(true); });
       addEventListener('prototype-resources-changed', refreshExchangeMilestone);
+      onActivityChange = refreshExchangeMilestone;
       window.refreshPrototypeExchange = names => {
-        exchangeRingFour = [...new Set(names)].sort();
+        exchangeRingFour = [...new Set([...seededRingFour, ...names])].sort();
         refreshExchangeMilestone();
       };
 
@@ -1033,10 +1091,11 @@
 
       const seededActivity = prototypeParams.get('activity');
       if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
-      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Garden bed'));
+      if (seededActivity === 'building' || (seededExchange === 'busy' && !seededActivity)) beginPrototypeBuild(rows.find(row => row.dataset.name === 'Garden bed'));
+      if (seededExchange === 'building') raiseExchange(0.42, false);
 
       window.beginBuildFromStructure = (name, duration) => {
-        if (buildingRow) return false;
+        if (buildingRow || exchangeBuild !== null) return false;
         const row = rows.find(candidate => candidate.dataset.name === name);
         if (row?.querySelector('[data-start-build]')) return beginPrototypeBuild(row, duration);
         setActivity('building', name, `${duration} left`);
@@ -1060,7 +1119,8 @@
         begin: name => beginPrototypeBuild(rows.find(row => row.dataset.name === name)),
         cancel: cancelPrototypeBuild,
         exchangeState,
-        raiseExchange,
+        raiseExchange: () => raiseExchange(),
+        finishExchange,
         exchangeOpen: () => exchangeOpen,
         setExchangeOpen(open) { exchangeOpen = Boolean(open); syncExchangeDisclosure(true); return exchangeOpen; }
       };

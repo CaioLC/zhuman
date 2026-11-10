@@ -1511,6 +1511,48 @@ button:disabled {
 .milestone-goal.is-done .milestone-readiness {
   color: var(--good);
 }
+
+/* A milestone under construction, the sibling of a building row: the rail and a 10% wash take
+   the accent, the readiness phrase (`raising · 3.5d left`) reads in accent, and the CTA lane
+   keeps its 132×28 box as a disabled `■ BUILDING` with an accent outline and label, no hover
+   lift, and a 3px accent underbar along its bottom edge as wide as the build's progress
+   (`--build-progress`, set on the button). Shared by the Shelter and the Exchange. */
+.milestone-goal.is-building,
+.exchange-goal.is-building {
+  border-left-color: var(--acc);
+  background: linear-gradient(90deg, rgb(166 150 113 / 10%), transparent 76%);
+}
+
+.milestone-goal.is-building .milestone-readiness,
+.exchange-goal.is-building .exchange-readiness {
+  color: var(--acc);
+}
+
+.milestone-bar > .primary-action,
+.exchange-bar > .primary-action {
+  position: relative;
+  overflow: hidden;
+}
+
+.milestone-goal.is-building .milestone-bar > .primary-action,
+.milestone-goal.is-building .milestone-bar > .primary-action:hover,
+.exchange-goal.is-building .exchange-bar > .primary-action,
+.exchange-goal.is-building .exchange-bar > .primary-action:hover {
+  cursor: default;
+  border-color: var(--acc);
+  color: var(--acc);
+}
+
+.milestone-goal.is-building .milestone-bar > .primary-action::after,
+.exchange-goal.is-building .exchange-bar > .primary-action::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--build-progress, 0%);
+  height: 3px;
+  background: var(--acc);
+}
 .exchange-goal {
   display: grid;
   gap: 5px;

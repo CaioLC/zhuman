@@ -491,13 +491,19 @@
       const activityKind = document.querySelector('#activity-kind');
       const activitySubject = document.querySelector('#activity-subject');
       const activityMeta = document.querySelector('#activity-meta');
+      // The body's one occupation (idle, working, building); the Shelter card reads it to say
+      // `hands busy` while other work holds the hands.
+      let activityNow = 'idle';
+      let onActivityChange = () => {};
 
       function setActivity(kind, subject, meta) {
         const labels = { idle: '○ IDLING', working: '● WORKING', building: '■ BUILDING' };
+        activityNow = kind;
         activityStrip.className = `activity-strip is-${kind}`;
         activityKind.textContent = labels[kind];
         activitySubject.textContent = subject;
         activityMeta.textContent = meta;
+        onActivityChange();
       }
 
       document.querySelectorAll('[data-action]').forEach(button => {
@@ -541,6 +547,8 @@
       const escapeMarkup = value => String(value).replace(/[&<>"']/g, character => markupEscapes[character]);
       const recipeByRow = new Map();
       let buildingRow = null;
+      // The Shelter under construction, as its progress in 0..1; null while it is not building.
+      let shelterBuild = null;
 
       function reachMeter(reach) {
         const active = Math.max(0, Math.min(3, Math.round(reach * 3)));
@@ -568,7 +576,7 @@
         row.querySelector('.build-state').innerHTML = recipeStateMarkup(recipe);
         row.querySelector('.build-action').innerHTML = recipeActionMarkup(recipe);
         const action = row.querySelector('[data-start-build]');
-        if (action && buildingRow) action.disabled = true;
+        if (action && (buildingRow || shelterBuild !== null)) action.disabled = true;
       }
 
       function createRecipeRow(recipe) {
@@ -730,7 +738,7 @@
       }
 
       function beginPrototypeBuild(row, duration = '0.3d') {
-        if (buildingRow) return false;
+        if (buildingRow || shelterBuild !== null) return false;
         const recipe = recipeByRow.get(row);
         if (!recipe || !['ready', 'owned'].includes(recipe.state)) return false;
         buildingRow = row;
@@ -796,14 +804,25 @@
 
       // The Shelter recomputes from the body's stocks, as the game's card does every frame:
       // locked until the standing conditions hold (vigor, larder, kinds of goods owned), then
-      // inputs short until the order is on hand, then ready to raise.
-      const shelterStock = window.prototypeStock = {
-        vigor: Number(prototypeParams.get('vigor') ?? 14),
-        food: Number(prototypeParams.get('food') ?? 11.6),
-        materials: Number(prototypeParams.get('materials') ?? 31)
-      };
+      // inputs short until the order is on hand, then ready to raise. With everything met but
+      // the hands on other work it reads `hands busy`; raised, it is building until it stands.
+      // `?shelter=ready|busy|building|done` seeds a state for review: ready and busy fill the
+      // stocks to the order (an explicit `vigor`/`food`/`materials` still wins), busy also
+      // starts the Spear unless `activity` names other work, building stands at 42%.
+      const seededShelter = prototypeParams.get('shelter');
+      const shelterSeedsStock = ['ready', 'busy'].includes(seededShelter);
       const shelterNeeds = { vigor: 15, food: 12, kinds: 5, materials: 60 };
+      const shelterStock = window.prototypeStock = {
+        vigor: Number(prototypeParams.get('vigor') ?? (shelterSeedsStock ? shelterNeeds.vigor : 14)),
+        food: Number(prototypeParams.get('food') ?? (shelterSeedsStock ? shelterNeeds.food : 11.6)),
+        materials: Number(prototypeParams.get('materials') ?? (shelterSeedsStock ? shelterNeeds.materials : 31))
+      };
+      const shelterDays = 6.0;
       const shelterAction = document.querySelector('#raise-shelter');
+      const shelterDetail = document.querySelector('#shelter-detail');
+      const shelterDetailCopy = shelterDetail.textContent;
+      let shelterDone = false;
+      const shelterLeft = () => `${(shelterDays * (1 - shelterBuild)).toFixed(1)}d left`;
       function refreshShelter() {
         const kinds = document.querySelectorAll('.holdings-list .holding-row').length;
         const met = {
@@ -813,33 +832,82 @@
           materials: shelterStock.materials >= shelterNeeds.materials
         };
         const unmet = Number(!met.vigor) + Number(!met.food) + Number(!met.kinds);
-        const state = unmet > 0 ? 'locked' : met.materials ? 'ready' : 'unfunded';
+        const handsBusy = activityNow !== 'idle';
+        const state = shelterDone ? 'done'
+          : shelterBuild !== null ? 'building'
+          : unmet > 0 ? 'locked'
+          : !met.materials ? 'unfunded'
+          : handsBusy ? 'busy' : 'ready';
+        // Building and standing, every requirement reads met and the materials read paid.
+        const settled = state === 'building' || state === 'done';
         shelterGoal.dataset.state = state;
         shelterGoal.classList.toggle('is-ready', state === 'ready');
+        shelterGoal.classList.toggle('is-building', state === 'building');
+        shelterGoal.classList.toggle('is-done', state === 'done');
         const values = {
           vigor: `${shelterStock.vigor}/${shelterNeeds.vigor}`,
           food: `${shelterStock.food}/${shelterNeeds.food}`,
           recipes: `${kinds}/${shelterNeeds.kinds}`,
-          materials: `${shelterStock.materials}/${shelterNeeds.materials}`
+          materials: settled ? `${shelterNeeds.materials} paid` : `${shelterStock.materials}/${shelterNeeds.materials}`
         };
         Object.entries(values).forEach(([key, text]) => {
           const output = document.querySelector(`#shelter-${key}`);
           output.textContent = text;
-          output.classList.toggle('is-met', key === 'recipes' ? met.kinds : met[key]);
+          output.classList.toggle('is-met', settled || (key === 'recipes' ? met.kinds : met[key]));
         });
-        document.querySelector('#shelter-compact').textContent = `materials ${shelterStock.materials}/${shelterNeeds.materials}`;
-        document.querySelector('#shelter-readiness').textContent = state === 'locked'
-          ? `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`
-          : state === 'unfunded' ? 'inputs short' : 'ready to raise';
-        shelterAction.textContent = state === 'locked' ? 'LOCKED' : state === 'unfunded' ? 'NEEDS INPUTS' : 'RAISE SHELTER →';
+        const percent = `${Math.round((shelterBuild ?? 0) * 100)}%`;
+        shelterAction.style.setProperty('--build-progress', percent);
+        document.querySelector('#shelter-compact').textContent = state === 'building' ? percent
+          : state === 'done' ? 'room for four'
+          : `materials ${shelterStock.materials}/${shelterNeeds.materials}`;
+        document.querySelector('#shelter-readiness').textContent = {
+          locked: `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`,
+          unfunded: 'inputs short',
+          busy: 'hands busy',
+          ready: 'ready to raise',
+          building: `raising · ${shelterBuild !== null ? shelterLeft() : ''}`,
+          done: 'standing'
+        }[state];
+        shelterAction.textContent = { locked: 'LOCKED', unfunded: 'NEEDS INPUTS', busy: 'HANDS BUSY', ready: 'RAISE SHELTER →', building: '■ BUILDING', done: 'STANDING' }[state];
         shelterAction.disabled = state !== 'ready';
+        shelterDetail.textContent = state === 'busy' ? 'Everything is on hand; the Shelter waits for free hands.'
+          : state === 'building' ? 'The Shelter is going up. Materials are paid.'
+          : state === 'done' ? 'The Shelter stands, with room for four.'
+          : shelterDetailCopy;
       }
+
+      // Raising the Shelter is a build like any recipe's: it holds the hands and the activity
+      // strip, and every other build waits on it.
+      function beginShelterBuild(progress = 0) {
+        if (buildingRow || shelterBuild !== null || shelterDone) return false;
+        shelterBuild = progress;
+        setBuildButtonsDisabled(true);
+        setActivity('building', 'Shelter', shelterLeft());
+        addLog('You begin the Shelter. Materials are paid; the work takes six days.');
+        return true;
+      }
+
+      function finishShelterBuild() {
+        if (shelterBuild === null) return false;
+        shelterBuild = null;
+        shelterDone = true;
+        setBuildButtonsDisabled(false);
+        setActivity('idle', 'no work in progress', 'ready');
+        addLog('The Shelter stands. There is room for four.');
+        return true;
+      }
+
+      shelterAction.addEventListener('click', () => { if (!shelterAction.disabled) beginShelterBuild(); });
+      onActivityChange = refreshShelter;
       window.refreshPrototypeShelter = refreshShelter;
+      window.prototypeShelter = { begin: beginShelterBuild, finish: finishShelterBuild };
       refreshShelter();
 
       const seededActivity = prototypeParams.get('activity');
       if (seededActivity === 'working') setActivity('working', 'Forage', '4h left');
-      if (seededActivity === 'building') beginPrototypeBuild(rows.find(row => row.dataset.name === 'Spear'));
+      if (seededActivity === 'building' || (seededShelter === 'busy' && !seededActivity)) beginPrototypeBuild(rows.find(row => row.dataset.name === 'Spear'));
+      if (seededShelter === 'building' || seededShelter === 'done') beginShelterBuild(0.42);
+      if (seededShelter === 'done') finishShelterBuild();
 
       // TRADE → frames trade.html over the page; it reports each settlement for the log and
       // says when it closes, so focus returns to the strip that opened it.
