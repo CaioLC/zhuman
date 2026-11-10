@@ -57,6 +57,18 @@ separator. Tokens present depend on the act.
   disambiguates.
 - **[proposal]** Two-letter labels for the meta stats too: `VI`, `PO`, `CO`.
 - Low/zero stocks keep the `low` value class (existing Act II behavior).
+- **[decided]** Order: Act I `VI FO MA`; Act II `PO VI FO BI WA FU ME MI CO`. Biomass sits
+  directly after food, so materials (Act I) and biomass (Act II) share a slot.
+- **[decided]** A token rests as `AB: value` and its footprint never changes. Under the pointer
+  or focus, the read form `FULL LABEL: value` (label in fg; 17px, 15px stacked at ≤760, 13px
+  over Act II's line at ≤560) opens as an overlay on the token's baseline, starting at its left
+  edge, on an opaque bg box with 4px padding each side. An overlay that would run past the
+  stockline's right edge anchors to the token's right edge instead. It eases in and out over
+  120ms (opacity with a left-to-right width reveal; none under reduced motion). While it is
+  open, every other token, `|` separator and runline item whose box it overlaps, or comes
+  within 4px of, fades out whole over the same 120ms and keeps its footprint; everything else
+  stays as it rests. The overlay takes no pointer: hit-testing stays on the resting boxes, and
+  a covered token can still be hovered at its resting box, which hands the read to it.
 
 ### 2.2 Runline (right side): Act/Day + Energy
 
@@ -130,6 +142,9 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   generators. Act I's grid is regular density (82px tiles); Act II's is **compact** (52px
   tiles, 6px gaps). In both acts the eating policy rides the **rail under BODY**, out of the
   catalog.
+- **[decided]** Every tile in an ACTIONS row is as tall as the row's tallest, with its edges,
+  underbar and corners on the row's real edges; a stretched verb keeps its name and metrics
+  where an 82px verb has them (name 16.2px from the top), and the extra height falls below.
 - **[decided]** The heading's eyebrow counts the kinds, `4 verbs · 2 generators` (Act II
   `20 verbs · 4 generators`), and each count is a toggle (`aria-pressed`): pressed, it shows
   that kind alone; pressed again, everything.
@@ -200,9 +215,20 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 - **[proposal]** Shared anatomy:
   - **Bar**: `<strong>{title}</strong>` + readiness pill + compact summary +
     `details ↓ / close ↑` toggle + primary action button.
-  - **States** (shared): `locked → unfunded → ready → done`.
-    - Act I Shelter: locked → unfunded (inputs short) → ready → built.
-    - Act II Exchange: locked → unfunded → ready → standing (opens Act III).
+  - **States** (shared): `locked → unfunded → ready → building → done`, with `busy` beside
+    ready.
+    - Act I Shelter: locked → unfunded (inputs short) → ready → building → standing.
+    - Act II Exchange: locked → unfunded → ready → building → standing (opens Act III).
+  - **[decided]** `building` is the sibling of a building row. Raising the card is a build
+    like any recipe's: the inputs are paid, it holds the hands and the activity strip
+    (`■ BUILDING Shelter · 6.0d left`), and every other build waits on it. The rail and wash
+    take the accent, the readiness reads `raising · {d.d}d left` in accent, the compact
+    summary reads the progress (`42%`), and every requirement reads met (`60 paid`). The CTA
+    keeps its 132×28 lane as a disabled `■ BUILDING` with an accent outline and label, no
+    hover lift, and a 3px accent underbar along its bottom edge filling left to right with
+    the build's progress.
+  - **[decided]** `busy`: conditions and inputs are all met but the hands are on other work.
+    The card stays danger-toned and reads `hands busy` / `HANDS BUSY`, never `inputs short`.
   - **Requirements row**: same markup; act-specific tokens.
     - Act I: `VIGOR · FOOD · RECIPES · MATERIALS`.
     - Act II: `RING4 · PEOPLE · BIOMASS · MINERALS · METAL`.
@@ -250,7 +276,9 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 - The board is the 620-unit viewBox fitted to the pane: a neutral hub, sixty tiles over rings
   1–4, sector labels at the rim. Locked tiles are silhouettes with no label; available and
   researched tiles carry a short label, resource rails, material dots, and (researched) a
-  marker. The selection strokes `fg`; its outward neighbours stroke `warn`, dashed.
+  marker. The selection strokes `fg`; its outward neighbours stroke `warn`, dashed. Resting
+  fill opacity: locked 0.14 (stroke 0.38), available 0.50 (full stroke), researched 1; hover
+  lifts an available tile to 0.84, selection to 0.9.
 - Camera: wheel zoom about the pointer (×1.12), drag pan past 4px, `−` / `%` / `+` / `reset`,
   zoom 0.75–2.5 in 0.2 steps. Filters and search dim (opacity 0.11), never remove.
 - Detail: `RING n · ERA`, name, `PURE|HYBRID` · resources · state tags, `RESEARCH →` (or
@@ -260,8 +288,8 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 - **[decided]** RESEARCH is real: `RESEARCH →` pays the cost from the stocks, establishes the
   tile, opens its outward neighbours, and logs `{name} is established. {cost} paid.`
 - **[decided]** The Exchange card (BUILD) unlocks on any ring-4 technology and more than 500
-  people; raising it pays 80 biomass · 40 minerals · 24 metal and the page reads as Act III
-  (`◆ EXCHANGE`, `ENTER →`, the act label).
+  people; raising it pays 80 biomass · 40 minerals · 24 metal and begins an 18-day build, and
+  when it stands the page reads as Act III (`◆ EXCHANGE`, `ENTER →`, the act label).
 
 ## 7.2 Session menu and title screen
 
