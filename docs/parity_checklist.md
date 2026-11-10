@@ -72,6 +72,8 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_one_build_query` | BUILD searched `type:tool`, sorted by TIME ascending | `act-i.html` BUILD with a query and a sort |
 | `act_one_building` | a build half done: the row's meter, time left and cancel corner; other rows "hands busy" | `act-i.html` `.build-row.is-building` |
 | `act_one_shelter_locked` / `_unfunded` / `_ready` | the Shelter card's details open in each lifecycle state | `act-i.html` milestone card |
+| `act_one_shelter_busy` | the Shelter's inputs on hand, the hands on a Spear: `hands busy` / `HANDS BUSY` | `act-i.html?shelter=busy&shelteropen=1` |
+| `act_one_shelter_building` / `_building_closed` | the Shelter half built, details open and closed: accent rail, `raising · 3.0d left`, `50%`, `■ BUILDING` with its underbar, the order `120 paid` | `act-i.html?shelter=building&shelteropen=1`, `act-i.html?shelter=building` |
 | `act_one_trade_sell` | the passerby dialog on SELL | `trade.html` SELL |
 | `act_two_actions_filtered` | ACTIONS filtered `out:food` | `act-ii.html` ACTIONS with a query |
 | `act_two_build_none` | BUILD with a query nothing answers (the active build is not filtered out) | `act-ii.html` BUILD, empty result |
