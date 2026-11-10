@@ -310,48 +310,49 @@ test "track_reach logs a recipe once it is listed and affordable, not on repeats
     var res = test_res(0);
     res.catalog = try roster.load(std.testing.allocator, roster.shipped, null);
     defer res.catalog.deinit();
-    const hatchet = res.catalog.goodIndex("hatchet").?;
+    const garden = res.catalog.goodIndex("garden_bed").?;
     // Nothing stockpiled: every recipe is short, so nothing is in reach.
     const e = w.spawn(.{ comp.Vigor{}, comp.InventoryBiomass{ .v = 0 }, comp.Goods{}, comp.Granted{}, tag.Player{} });
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count);
 
-    // Thirty materials: every listed recipe the stock covers is announced, once each; Work
-    // gloves (gated on Split wood) is absent, so it is not.
-    w.get(e, comp.InventoryBiomass).?.v = 30;
+    // A hundred and fifty materials: every listed recipe the stock covers is announced, once
+    // each; the chicken coop (gated on a garden bed) is absent, so it is not.
+    w.get(e, comp.InventoryBiomass).?.v = 150;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     const crude = res.sim.log.count;
     try std.testing.expect(crude > 0);
-    for (0..crude) |k| try std.testing.expect(std.mem.find(u8, res.sim.log.get(k).text(), "work gloves") == null);
+    for (0..crude) |k| try std.testing.expect(std.mem.find(u8, res.sim.log.get(k).text(), "chicken coop") == null);
     try std.testing.expectEqual(@import("../log.zig").Tone.good, res.sim.log.get(0).tone);
     try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "within reach") != null);
 
     // Spending the stock and gathering it again announces nothing new.
     w.get(e, comp.InventoryBiomass).?.v = 0;
     ecs.run(&w, &res, track_reach);
-    w.get(e, comp.InventoryBiomass).?.v = 30;
+    w.get(e, comp.InventoryBiomass).?.v = 150;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(crude, res.sim.log.count);
 
-    // Own the hatchet (as buying it would): Work gloves is listed and affordable — one line.
-    w.get(e, comp.Goods).?.count[hatchet] = 1;
+    // Own a garden bed: the chicken coop is listed and affordable — one line.
+    w.get(e, comp.Goods).?.count[garden] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(crude + 1, res.sim.log.count);
-    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "work gloves") != null);
+    try std.testing.expect(std.mem.find(u8, res.sim.log.get(0).text(), "chicken coop") != null);
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(crude + 1, res.sim.log.count); // no repeat
 
-    // The gate going away (the hatchet sold) re-arms the announcement; regaining it logs again.
-    w.get(e, comp.Goods).?.count[hatchet] = 0;
+    // The gate going away (the garden bed lost) re-arms the announcement; regaining it logs
+    // again.
+    w.get(e, comp.Goods).?.count[garden] = 0;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(crude + 1, res.sim.log.count); // losing it does not log
-    w.get(e, comp.Goods).?.count[hatchet] = 1;
+    w.get(e, comp.Goods).?.count[garden] = 1;
     ecs.run(&w, &res, track_reach);
     logged(&w, &res);
     try std.testing.expectEqual(crude + 2, res.sim.log.count); // re-armed: one more

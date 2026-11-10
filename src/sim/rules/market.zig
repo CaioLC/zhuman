@@ -21,7 +21,7 @@
 //! when the player takes it, so a round trip loses a third: buying food is 3 materials a unit,
 //! buying materials 2 for a food. A sell is the same exchange at a price that falls with each lot
 //! sold this visit (`sell_value`). A rank-2 tool is offered only to a player holding the rank-1
-//! tool of its family (`prerequisite`).
+//! tool of its family, and the work gloves only to a holder of the hatchet (`prerequisite`).
 //!
 //! The encounter clock and its finite satchel are here, with the typed bundle/quote contracts
 //! and the diminishing sell-price schedule below; `barter.zig` resolves a quote atomically and
@@ -36,11 +36,11 @@ const std = @import("std");
 pub const Phase = enum { absent, approaching, present, departed };
 
 /// The kinds of thing a passerby's satchel can hold in Act I: Food, generic Materials, and the
-/// four tools it carries — the fishing rod (`fish_hook`) and hatchet (`whetstone`), and their
-/// rank-2 successors, the fishing net and hand axe. The amount per slot lives in
-/// `Encounter.stock`, indexed by `@backingInt`; a ware appended here reads as zero from a save
-/// written before it.
-pub const Ware = enum { food, biomass, fish_hook, whetstone, fish_net, hand_axe };
+/// six goods it carries — the fishing rod (`fish_hook`) and hatchet (`whetstone`), their
+/// rank-2 successors, the fishing net and hand axe, and the work gloves and cookpot. The amount
+/// per slot lives in `Encounter.stock`, indexed by `@backingInt`; a ware appended here reads as
+/// zero from a save written before it.
+pub const Ware = enum { food, biomass, fish_hook, whetstone, fish_net, hand_axe, work_gloves, cookpot };
 pub const ware_count = @typeInfo(Ware).@"enum".field_names.len;
 
 /// The authoritative encounter. Held on `Sim`; ticked once per frame from the clock.
@@ -120,6 +120,8 @@ pub const Schedule = struct {
         s[@backingInt(Ware.whetstone)] = 1;
         s[@backingInt(Ware.fish_net)] = 1;
         s[@backingInt(Ware.hand_axe)] = 1;
+        s[@backingInt(Ware.work_gloves)] = 1;
+        s[@backingInt(Ware.cookpot)] = 1;
         break :blk s;
     },
 };
@@ -174,8 +176,8 @@ pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32) Event {
 // One **transfer representation** for everything a trade moves — Food, generic Materials, and
 // owned goods — so barter resolution has a single shape to validate and apply.
 
-/// A thing a bundle can carry: Food, generic Materials, and the two small tools the passerby
-/// deals in (which map to owned-good components on the player side). `Item = Ware`.
+/// A thing a bundle can carry: Food, generic Materials, and the goods the passerby deals in
+/// (which map to owned-good components on the player side). `Item = Ware`.
 pub const Item = Ware;
 
 /// One line of a transfer: a quantity of an `Item`. `qty` is `f32` because Food is fractional;
@@ -309,12 +311,13 @@ pub const Quote = struct {
 // surplus away, yet a long sell-off earns less per lot than the first, and the spread means a
 // round trip loses a third.
 
-/// The tool a rank-2 tool's lot waits on: the passerby offers the fishing net only to a holder
-/// of the fishing rod, the hand axe only to a holder of the hatchet. Null for every other ware.
+/// The tool a lot waits on: the passerby offers the fishing net only to a holder of the fishing
+/// rod, the hand axe and the work gloves only to a holder of the hatchet. Null for every other
+/// ware.
 pub fn prerequisite(w: Ware) ?Ware {
     return switch (w) {
         .fish_net => .fish_hook,
-        .hand_axe => .whetstone,
+        .hand_axe, .work_gloves => .whetstone,
         else => null,
     };
 }
@@ -329,10 +332,12 @@ pub fn sell_value(ware: Ware, n: u32) f32 {
         // Surplus materials, by the lot of 3: a food for the first, falling faster.
         .biomass => .{ 1.0, 0.6, 0.25 },
         // A tool: the first fetches real value, a duplicate almost nothing.
-        .fish_hook => .{ 8.0, 0.3, 1.0 },
-        .whetstone => .{ 6.0, 0.3, 1.0 },
-        .fish_net => .{ 16.0, 0.3, 1.0 },
-        .hand_axe => .{ 13.0, 0.3, 1.0 },
+        .fish_hook => .{ 10.0, 0.3, 1.0 },
+        .whetstone => .{ 12.0, 0.3, 1.0 },
+        .fish_net => .{ 28.0, 0.3, 1.0 },
+        .hand_axe => .{ 24.0, 0.3, 1.0 },
+        .work_gloves => .{ 18.0, 0.3, 1.0 },
+        .cookpot => .{ 40.0, 0.3, 1.0 },
     };
     const raw = base * std.math.pow(f32, ratio, @floatFromInt(n));
     return @max(floor, raw);
@@ -359,20 +364,28 @@ pub fn buy_quote(enc: *const Encounter, ware: Ware) Quote {
             per_lot = 2;
         },
         .fish_hook => {
-            q.give.add(.food, 2);
-            q.give.add(.biomass, 8);
+            q.give.add(.food, 3);
+            q.give.add(.biomass, 10);
         },
         .whetstone => {
-            q.give.add(.food, 2);
-            q.give.add(.biomass, 6);
+            q.give.add(.food, 4);
+            q.give.add(.biomass, 12);
         },
         .fish_net => {
-            q.give.add(.food, 5);
-            q.give.add(.biomass, 20);
+            q.give.add(.food, 7);
+            q.give.add(.biomass, 28);
         },
         .hand_axe => {
-            q.give.add(.food, 4);
-            q.give.add(.biomass, 16);
+            q.give.add(.food, 6);
+            q.give.add(.biomass, 24);
+        },
+        .work_gloves => {
+            q.give.add(.food, 5);
+            q.give.add(.biomass, 18);
+        },
+        .cookpot => {
+            q.give.add(.food, 10);
+            q.give.add(.biomass, 40);
         },
     }
     q.receive = Bundle.one(ware, per_lot);
@@ -627,10 +640,18 @@ test "the board's spread: food buys at 3 materials and sells for 2, so a round t
     // 3 materials buy a food, which buys back 2 materials.
     try testing.expectApproxEqAbs(@as(f32, 2.0 / 3.0), buy_mat.receive.qtyOf(.biomass) / buy_food.give.qtyOf(.biomass), 1e-6);
     // The tools' prices.
-    try testing.expectApproxEqAbs(@as(f32, 20), buy_quote(&enc, .fish_net).give.qtyOf(.biomass), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 4), buy_quote(&enc, .hand_axe).give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 28), buy_quote(&enc, .fish_net).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 6), buy_quote(&enc, .hand_axe).give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 4), buy_quote(&enc, .whetstone).give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 18), buy_quote(&enc, .work_gloves).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 40), buy_quote(&enc, .cookpot).give.qtyOf(.biomass), 1e-6);
+    try testing.expectEqual(@as(u16, 1), buy_quote(&enc, .cookpot).stock);
     try testing.expectEqual(@as(?Ware, .whetstone), prerequisite(.hand_axe));
+    try testing.expectEqual(@as(?Ware, .whetstone), prerequisite(.work_gloves));
     try testing.expectEqual(@as(?Ware, null), prerequisite(.whetstone));
+    try testing.expectEqual(@as(?Ware, null), prerequisite(.cookpot));
+    // A good sells first for the materials half of its price.
+    try testing.expectApproxEqAbs(@as(f32, 40), sell_value(.cookpot, 0), 1e-6);
 }
 
 test "a sell the satchel cannot pay for is out of stock" {

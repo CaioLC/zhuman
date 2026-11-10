@@ -434,9 +434,9 @@ spear opens Hunt.
 units owned, the `reach` of the build cost (the smallest held-over-needed across its
 resources), and a `Standing` in precedence order — `tech` (the technology the recipe's
 `requires.tech` names is not researched on the agent's board), `needs` (an `any`/`all` gate
-does not pass — a modifier lists the verb it works on, so work gloves are never offered without
-Split wood, and the shelter names the rope bag and the leaf bed; the gates read the same way a
-verb's do, `effects.gatesMet`), `unlock` (the
+does not pass — the chicken coop is never offered without a garden bed, and the shelter names
+the rope bag and the leaf bed; the gates read the same way a verb's do, `effects.gatesMet`),
+`unlock` (the
 shelter's standing conditions: an absolute current-vigor floor, a larder floor, a count of
 good kinds owned — read at `begin` and not again, so a dip mid-build doesn't stop work already
 paid for), `busy`, `energy`, `short`, `ready`.
@@ -485,7 +485,8 @@ machine `absent → approaching → present → departed → absent`, ticked by 
 the `passerby` system off the
 sim clock (never a calendar day). Each arrival bumps a monotonic `id` and refills a finite
 satchel of `Ware`s: 8 food, 20 materials, and one each of the fishing rod (`fish_hook`), the
-hatchet (`whetstone`), the fishing net and the hand axe. The satchel is finite both ways:
+hatchet (`whetstone`), the fishing net, the hand axe, the work gloves and the cookpot — goods
+no one builds in Act I (`buildable = false`). The satchel is finite both ways:
 whatever the passerby hands over — the food, materials or tool a buy receives, and the payment
 for a sell — comes out of it, whatever the player hands over goes into it, and it does not
 regenerate until the next visit. `dealable()` is `phase == .present`, the only gate the UI
@@ -504,15 +505,17 @@ receive side), then `unaffordable`; every refusal has player-readable copy.
 offers, which the page lists and a scripted test takes alike. The passerby values a food at 2
 materials when the player gives food and at 3 when the player takes it: buying food costs 3
 materials a unit and buying materials 2 for a food, a sell of food fetches 2 materials and a
-sell of 3 materials a food, so a round trip loses a third. The tools cost the fishing rod
-`2f + 8m`, the hatchet `2f + 6m`, the fishing net `5f + 20m` and the hand axe `4f + 16m`; a
-rank-2 tool is offered only to the holder of the rank-1 tool of its family
-(`market.prerequisite`, `barter.offered`) and is absent otherwise.
+sell of 3 materials a food, so a round trip loses a third. The goods cost the fishing rod
+`3f + 10m`, the hatchet `4f + 12m`, the fishing net `7f + 28m`, the hand axe `6f + 24m`, the
+work gloves `5f + 18m` and the cookpot `10f + 40m`; a rank-2 tool is offered only to the
+holder of the rank-1 tool of its family, and the work gloves only to the holder of the hatchet
+(`market.prerequisite`, `barter.offered`), each absent otherwise.
 
 **Sell prices diminish.** `sell_value(ware, n)` is what the passerby pays for the `n`-th lot
 sold this visit (`Encounter.sold`), a geometric decline `base·ratio^n` clamped to a positive
 floor, authored per ware: Food `2 / 0.75 / 0.5` materials, Materials (a lot of 3)
-`1 / 0.6 / 0.25` food, the tools `6–16 / 0.3 / 1.0` materials. A sell is quoted one lot at a
+`1 / 0.6 / 0.25` food, a good the materials of its price `/ 0.3 / 1.0` (the fishing rod 10,
+the cookpot 40). A sell is quoted one lot at a
 time, so the price the player confirms is the price paid. The floor is the anti-domination
 guarantee — selling always beats discarding — while the satchel and the visit window cap how
 much can be sold at all.

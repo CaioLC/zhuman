@@ -41,9 +41,9 @@ pub fn reasonOf(r: market.Refusal) ?Reason {
 }
 
 /// The roster id a tradeable tool `Ware` maps to, or null for the bulk resources (food /
-/// materials, which move on inventory rather than as a good). The passerby's tool slots carry
-/// the manufactured Act I unlockers, the fishing rod and hatchet, and their rank-2 successors,
-/// the fishing net and hand axe.
+/// materials, which move on inventory rather than as a good). The passerby's good slots carry
+/// the manufactured Act I unlockers, the fishing rod and hatchet, their rank-2 successors, the
+/// fishing net and hand axe, and the work gloves and cookpot.
 pub fn goodOf(w: Ware) ?[]const u8 {
     return switch (w) {
         .food, .biomass => null,
@@ -51,12 +51,14 @@ pub fn goodOf(w: Ware) ?[]const u8 {
         .whetstone => "hatchet",
         .fish_net => "fish_net",
         .hand_axe => "hand_axe",
+        .work_gloves => "work_gloves",
+        .cookpot => "cookpot",
     };
 }
 
-/// Whether the passerby offers `ware` to agent `e`: a rank-2 tool only to a holder of the
-/// rank-1 tool of its family (`market.prerequisite`); every other ware always. A lot not
-/// offered is absent from the dialog, and a buy of one is refused.
+/// Whether the passerby offers `ware` to agent `e`: a lot with a prerequisite only to a holder
+/// of that tool (`market.prerequisite`); every other ware always. A lot not offered is absent
+/// from the dialog, and a buy of one is refused.
 pub fn offered(w: *const World, e: Entity, cat: *const roster.Catalog, ware: Ware) bool {
     const pre = market.prerequisite(ware) orelse return true;
     return capital.owns(w, e, cat, goodOf(pre).?);
@@ -110,7 +112,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
                 stock.v -= line.qty;
                 biomass_moved += line.qty;
             },
-            .fish_hook, .whetstone, .fish_net, .hand_axe => {
+            .fish_hook, .whetstone, .fish_net, .hand_axe, .work_gloves, .cookpot => {
                 // Selling a good: its effect leaves with the last unit, spares first.
                 const gi = cat.goodIndex(goodOf(line.item).?).?;
                 const units: u32 = @intFromFloat(@ceil(line.qty));
@@ -128,7 +130,7 @@ pub fn resolve(w: *World, e: Entity, res: *Resources, base: *const Quote, lots: 
                 stock.v += line.qty;
                 biomass_moved += line.qty;
             },
-            .fish_hook, .whetstone, .fish_net, .hand_axe => {
+            .fish_hook, .whetstone, .fish_net, .hand_axe, .work_gloves, .cookpot => {
                 // Buying a good: own it and its effect lands once (a repeat is stock, not a second
                 // effect — the same rule a build follows).
                 const gi = cat.goodIndex(goodOf(line.item).?).?;
@@ -413,6 +415,31 @@ test "a rank-2 tool is the rank-1 holder's: the net is refused to a player witho
     try testing.expect(offered(&w, e, &res.catalog, .fish_net));
     try testing.expect(resolve(&w, e, &res, &net, 1) == null);
     try testing.expect(capital.owns(&w, e, &res.catalog, "fish_net"));
-    try testing.expectApproxEqAbs(@as(f32, 5), w.get(e, comp.InventoryFood).?.v, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 20), w.get(e, comp.InventoryBiomass).?.v, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 3), w.get(e, comp.InventoryFood).?.v, 1e-5); // 10 - 7
+    try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 40 - 28
+}
+
+test "the cookpot is anyone's to buy; the work gloves are the hatchet holder's" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try test_res();
+    defer res.catalog.deinit();
+    const e = spawn_trader(&w);
+    w.get(e, comp.InventoryFood).?.v = 20;
+    w.get(e, comp.InventoryBiomass).?.v = 80;
+
+    const pot = market.buy_quote(&res.sim.encounter, .cookpot);
+    try testing.expect(offered(&w, e, &res.catalog, .cookpot));
+    try testing.expect(resolve(&w, e, &res, &pot, 1) == null);
+    try testing.expect(capital.owns(&w, e, &res.catalog, "cookpot"));
+    try testing.expectEqual(@as(u8, 2), w.get(e, comp.InventoryFood).?.quality); // its effect landed
+    try testing.expectApproxEqAbs(@as(f32, 10), w.get(e, comp.InventoryFood).?.v, 1e-5); // 20 - 10
+    try testing.expectApproxEqAbs(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 80 - 40
+
+    const gloves = market.buy_quote(&res.sim.encounter, .work_gloves);
+    try testing.expect(!offered(&w, e, &res.catalog, .work_gloves));
+    try testing.expectEqual(Reason.not_owned, resolve(&w, e, &res, &gloves, 1).?);
+    capital.acquire(&w, e, &res, res.catalog.goodIndex("hatchet").?, 1);
+    try testing.expect(resolve(&w, e, &res, &gloves, 1) == null);
+    try testing.expect(capital.owns(&w, e, &res.catalog, "work_gloves"));
 }

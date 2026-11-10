@@ -622,7 +622,20 @@ test "a repeat build is stock: the count rises, the effect does not" {
 test "the hatchet unlocks splitting wood; a modifier on it refuses until then" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
-    var res = try test_res();
+    var res = try test_res_over(.{
+        .actions =
+        \\.{ .{ .id = "chop_wood", .name = "Split wood", .requires = .{ .energy = 3.0, .hours = 5.0, .any = .{"hatchet"} },
+        \\      .output = .{ .biomass = .{ .uniform = 8.0 } } } }
+        ,
+        .goods =
+        \\.{
+        \\    .{ .id = "hatchet", .name = "Hatchet", .buildable = false },
+        \\    .{ .id = "work_gloves", .name = "Work gloves", .tier = .crude,
+        \\       .requires = .{ .energy = 1.0, .hours = 4.0, .biomass = 4.0, .all = .{"chop_wood"} },
+        \\       .effects = .{ .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.75 } } } },
+        \\}
+        ,
+    });
     defer res.catalog.deinit();
     const cat = &res.catalog;
     const e = spawn_test_agent(&w, 100);

@@ -63,7 +63,8 @@ ordinal — never a global utility function.
   and the few capital goods a single individual can build from scavenged scrap — rudimentary
   sandals, a leaf bed, wire snares, a dug root cellar, a garden bed. A passerby brings the two manufactured unlockers—a fishing rod and a
   hatchet—in exchange for food and raw materials, and to their holder the better net and hand
-  axe. Garden beds, wire snares, and medicinal
+  axe; it also carries work gloves and a cookpot, which no one here can make. Garden beds, wire
+  snares, and medicinal
   herb beds accumulate independently of the body; the player collects each completed cycle for
   a small Vigor cost, and may pause an individual generator without losing progress. The HUD's
   persistent `<< {speed} >>` stepper (PAUSE, 1×, 2×, 3×) freezes or scales every simulation clock together

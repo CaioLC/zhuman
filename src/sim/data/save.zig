@@ -570,7 +570,7 @@ fn settle(res: *Resources, w: *World) Entity {
     sim.tutorial_done = true;
     _ = res.random().int(u64);
     sim.reach_seen[cat.goodIndex("hatchet").?] = true;
-    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2.5, 3, 4, 1, 0 }, .visit = .{ -1, 2.5, 0, 1, 0, 0 }, .sold = .{ 2, 0, 0, 0, 0, 1 } };
+    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2.5, 3, 4, 1, 0, 1, 1 }, .visit = .{ -1, 2.5, 0, 1, 0, 0, 0, -1 }, .sold = .{ 2, 0, 0, 0, 0, 1, 0, 1 } };
     sim.merchant = .{ .present = false, .id = 4, .remaining = 9.25 };
     sim.neighbours.seed(10);
     sim.population = 61;
@@ -728,6 +728,7 @@ test "a version-2 generator record, keyed by its good, loads as the verb; a capt
     try testing.expectEqual(@as(f32, 20), res.sim.encounter.stockOf(.biomass));
     try testing.expectEqual(@as(f32, 0), res.sim.encounter.stockOf(.whetstone));
     try testing.expectEqual(@as(f32, 0), res.sim.encounter.stockOf(.hand_axe));
+    try testing.expectEqual(@as(f32, 0), res.sim.encounter.stockOf(.cookpot));
 
     // A capture writes the mode under the verb's id, and never the older word.
     const text = try encode(a, &(try capture(a, &res, &w)));

@@ -103,8 +103,8 @@ const barter = ha.sim.rules.barter;
 const Ware = market.Ware;
 
 /// The passerby's wares in the order the dialog lists their balances (the AFTER rows, the
-/// visit ledger): the two stocks, then the tools.
-const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone, .fish_net, .hand_axe };
+/// visit ledger): the two stocks, then the goods.
+const ware_order = [_]Ware{ .food, .biomass, .fish_hook, .whetstone, .fish_net, .hand_axe, .work_gloves, .cookpot };
 
 /// The player's word for a ware (`food`, `materials`, `fishing rod`, `hatchet`).
 fn wareKey(act: u8, w: Ware) []const u8 {
@@ -115,6 +115,8 @@ fn wareKey(act: u8, w: Ware) []const u8 {
         .whetstone => "hatchet",
         .fish_net => "fishing net",
         .hand_axe => "hand axe",
+        .work_gloves => "work gloves",
+        .cookpot => "cookpot",
     };
 }
 
@@ -140,6 +142,8 @@ fn buyCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence
         .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "unlocks Split wood", .consequence = "Split wood becomes available while you own it." },
         .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "fish better", .consequence = "Fishing costs less and catches more; it outranks the rod." },
         .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "split wood better", .consequence = "Splitting wood costs less and yields more; it outranks the hatchet." },
+        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .effect = "split wood costs less", .consequence = "Splitting wood costs less while you own them." },
+        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .effect = "food feeds further", .consequence = "Cooked food feeds you further while you own it." },
     };
 }
 
@@ -151,6 +155,8 @@ fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequenc
         .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
         .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the net you use keeps fishing better." },
         .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the axe you use keeps splitting better." },
+        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the pair you wear keeps splitting cheaper." },
+        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the pot you cook in keeps food feeding further." },
     };
 }
 
@@ -183,7 +189,8 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
 
     var backed: std.ArrayList(Backed) = .empty;
     for (ware_order) |ware| {
-        // A rank-2 tool is offered only to the holder of the rank-1 tool: otherwise absent.
+        // A lot with a prerequisite (a rank-2 tool, the work gloves) is offered only to the
+        // holder of that tool: otherwise absent.
         if (!barter.offered(world, e, cat, ware)) continue;
         const q = market.buy_quote(enc, ware);
         const c = buyCopy(ware);
@@ -199,7 +206,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
         } });
     }
     for (ware_order, &balances) |ware, b| {
-        // A rank-2 tool's sell lot shows only while it is held.
+        // A sell lot with a prerequisite shows only while its good is held.
         if (market.prerequisite(ware) != null and b.held <= 0) continue;
         const q = market.sell_quote(enc, ware);
         const c = sellCopy(ware);

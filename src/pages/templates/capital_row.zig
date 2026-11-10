@@ -737,7 +737,8 @@ test "the cost cell is the order, then the energy" {
     try std.testing.expectEqualStrings("10m", orderText(1, &buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("5e", energyText(&buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("24fu 36me 20mi", orderText(2, &buf, cat.good("cold_store").?));
-    try std.testing.expectEqualStrings("Split wood", needsName(&cat, cat.good("work_gloves").?));
+    try std.testing.expectEqualStrings("Burn charcoal", needsName(&cat, cat.good("charcoal_kiln").?));
+    try std.testing.expectEqualStrings("Garden bed", needsName(&cat, cat.good("chicken_coop").?));
     try std.testing.expectEqualStrings("a tool", needsName(&cat, cat.good("sandals").?));
 }
 

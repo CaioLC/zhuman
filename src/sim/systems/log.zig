@@ -441,12 +441,12 @@ test "a broken good, a recipe in reach; GoodsChanged says nothing" {
     defer rig.deinit();
     const cat = &rig.res.catalog;
     rig.emit(events.GoodBroke{ .agent = 0, .gi = cat.goodIndex("sandals").? });
-    rig.emit(events.RecipeInReach{ .agent = 0, .gi = cat.goodIndex("work_gloves").? });
+    rig.emit(events.RecipeInReach{ .agent = 0, .gi = cat.goodIndex("chicken_coop").? });
     rig.emit(events.GoodsChanged{ .agent = 0 });
     try rig.run();
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try expectLine(&rig, 1, .warn, "Your sandals broke.");
-    try expectLine(&rig, 0, .good, "A new recipe is within reach: work gloves.");
+    try expectLine(&rig, 0, .good, "A new recipe is within reach: chicken coop.");
 }
 
 test "RunBegun: the opening line, dim; ActEnded says nothing" {
