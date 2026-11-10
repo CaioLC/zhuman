@@ -2363,12 +2363,12 @@ button:disabled {
 }
 
 .tech-tile.locked .hex-shape {
-  fill-opacity: 0.24;
-  stroke-opacity: 0.52;
+  fill-opacity: 0.14;
+  stroke-opacity: 0.38;
 }
 
 .tech-tile.available .hex-shape {
-  fill-opacity: 0.66;
+  fill-opacity: 0.50;
   stroke-opacity: 1;
   stroke-width: 1.25;
 }
