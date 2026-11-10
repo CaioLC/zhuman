@@ -59,6 +59,15 @@ pub fn height(density: Density) f32 {
     };
 }
 
+/// The content's top padding per density: where the name line starts below the tile's top edge,
+/// the same for a verb and a generator.
+pub fn nameTop(density: Density) f32 {
+    return switch (density) {
+        .regular => 12,
+        .compact => 7,
+    };
+}
+
 /// What a tile is showing: an action you can take now, one you cannot afford, or the one the
 /// body is performing. Running wins over affordability: a running tile paints the same whether
 /// or not its price is still payable.
@@ -191,7 +200,7 @@ pub fn tile(
 
     const inner = try box.box("inner", .{
         .flow = .{ .dir = .column, .cross = .start }, .gap = 2,
-    }, .{if (compact) style.pad_sym(8, 5) else style.pad_sym(12, 6)});
+    }, .{if (compact) style.pad_each(nameTop(.compact), 8, 5, 8) else style.pad_each(nameTop(.regular), 12, 6, 12)});
 
     // An optional state word, rendered **only when nonempty** (e.g. "accumulating"). Dim,
     // small — it qualifies the tile without competing with the name. A regular tile gives it
@@ -239,10 +248,10 @@ pub fn tile(
 }
 
 /// Size a built tile into a grid cell: the box fills the parent's width and stands `cell_h`
-/// tall, or `own_h` when the cell is shorter, and its content sits where a tile of its own
-/// height `own_h` centers it, so a tile stretched to a taller row keeps its name and metrics
-/// against its top edge and takes the extra height below them. The underbar, the hide corner
-/// and a generator's mode corner are anchored to the box, so they ride its real edges.
+/// tall, or `own_h` when the cell is shorter, and its content starts at the top padding
+/// (`nameTop`), so the names of a row's verbs and generators stand on one line and the height
+/// the content leaves falls below it. The underbar, the hide corner and a generator's mode
+/// corner are anchored to the box, so they ride its real edges.
 pub fn place(t: Tile, own_h: f32, cell_h: f32) void {
     t.el.set(.{
         .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = @max(own_h, cell_h) },
@@ -250,7 +259,7 @@ pub fn place(t: Tile, own_h: f32, cell_h: f32) void {
     }, .{});
     t.inner.set(.{
         .h = .{ .fixed = own_h - bottom_inset },
-        .flow = .{ .dir = .column, .main = .center, .cross = .start },
+        .flow = .{ .dir = .column, .main = .start, .cross = .start },
     }, .{});
 }
 

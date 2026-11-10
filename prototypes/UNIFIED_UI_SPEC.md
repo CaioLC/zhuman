@@ -143,8 +143,9 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   tiles, 6px gaps). In both acts the eating policy rides the **rail under BODY**, out of the
   catalog.
 - **[decided]** Every tile in an ACTIONS row is as tall as the row's tallest, with its edges,
-  underbar and corners on the row's real edges; a stretched verb keeps its name and metrics
-  where an 82px verb has them (name 16.2px from the top), and the extra height falls below.
+  underbar and corners on the row's real edges. Every tile's content is pinned to its top, so
+  a verb's name and a generator's stand on one line (12px from the tile's top, 7px compact),
+  and the height the content leaves falls below it.
 - **[decided]** The heading's eyebrow counts the kinds, `4 verbs · 2 generators` (Act II
   `20 verbs · 4 generators`), and each count is a toggle (`aria-pressed`): pressed, it shows
   that kind alone; pressed again, everything.
