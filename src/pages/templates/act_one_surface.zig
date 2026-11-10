@@ -35,7 +35,7 @@ pub const build_shelf = build_section_mod.Shelf{
         .which = .act_one,
         .kicker = "A PLACE FOR OTHERS",
         .copy = "a roof with room for four. you're not alone anymore.",
-        .explanation = std.fmt.comptimePrint("Hold 60 {s} with a settled body and five kinds of goods.", .{ha.sim.data.roster.Resource.biomass.wordIn(1)}),
+        .explanation = std.fmt.comptimePrint("Hold 120 {s} with a settled body and five kinds of goods, a rope bag and a leaf bed among them.", .{ha.sim.data.roster.Resource.biomass.wordIn(1)}),
         .action = "RAISE SHELTER \u{2192}",
     },
 };
