@@ -21,8 +21,18 @@ html.is-embedded .proto-switch { display: none; }
 .trade-dialog .dialog-shell { max-height: min(620px, calc(100vh - 28px)); }
 .dialog-kicker em { color: var(--warn); font-style: normal; }
 
-/* A fixed body height: the dialog stays open across trades, so it must not resize as rows sell out. */
-.trade-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; min-height: 330px; }
+/* The shell is a column of header, tabs, body, footer; only the body gives way when the window
+   is shorter than the dialog. */
+.trade-dialog .dialog-shell { display: flex; flex-direction: column; }
+.trade-dialog .dialog-header,
+.trade-dialog .dialog-tabs,
+.trade-dialog .dialog-footer { flex: none; }
+
+/* The body is a fixed 410px tall, whatever is selected: the dialog stays open across trades, so
+   it does not resize as the lot, the tab or the stock changes. 410px holds the tallest slip without
+   scrolling: about 300px of content (a two-resource price, a consequence line, three AFTER rows)
+   inside 100px of padding, heading and CTA. Each column scrolls inside it on its own. */
+.trade-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; flex: 0 1 410px; min-height: 0; }
 
 /* the ledger */
 .ledger { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -57,7 +67,11 @@ html.is-embedded .proto-switch { display: none; }
 .row-corner[data-kind="refusal"] { color: var(--danger); }
 .ledger-empty { padding: 14px 15px; color: var(--dim); font-size: 11px; }
 
-/* the slip */
+/* the slip: the heading, a content region that scrolls, and the CTA pinned at its foot. The CTA
+   sits outside the scrolling region, so a tall lot never pushes it out of the body. */
+.trade-body .slip { overflow: hidden; }
+.slip-content { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.trade-body .slip-action { flex: none; margin-top: 0; }
 .slip-lot { color: var(--fg); font-size: 14px; }
 .slip-lot small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; }
 
@@ -87,7 +101,9 @@ html.is-embedded .proto-switch { display: none; }
 @media (prefers-reduced-motion: reduce) { .is-settled { animation: none; } }
 
 @media (max-width: 760px) {
-  .trade-body { grid-template-columns: minmax(0, 1fr); }
+  /* Stacked, the body is taller and split: the ledger takes what the slip's fixed 250px leaves. */
+  .trade-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 250px; flex-basis: 460px; }
+  .trade-body .slip { border-top: 1px solid var(--line); border-left: 0; }
   .ledger-head { display: none; }
   .ledger-row { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 9px; }
   .row-corner { grid-column: 1 / -1; text-align: left; }
@@ -149,10 +165,11 @@ const ACTS = {
     cta:  { buy: 'TRADE →',  sell: 'TRADE →' },
     stocks: ['food', 'materials'],
     abbrev: { food: 'f', materials: 'm' },
-    order: ['food', 'materials', 'fishing rod', 'hand axe', 'sandals', 'hatchet'],
-    balances: { food: 11.6, materials: 31, 'fishing rod': 0, 'hand axe': 0, sandals: 2, hatchet: 2 },
+    order: ['food', 'materials', 'fishing rod', 'fishing net', 'hand axe', 'sandals', 'hatchet'],
+    balances: { food: 11.6, materials: 31, 'fishing rod': 0, 'hand axe': 0, sandals: 2, hatchet: 2, 'fishing net': 0 },
     offers: [
       { id: 'rod',       mode: 'buy',  lot: 'Fishing rod ×1',    effect: 'unlocks Fish',        price: { food: 2, materials: 8 },  receive: { 'fishing rod': 1 }, stock: 1, consequence: 'Fishing becomes available while you own it.' },
+      { id: 'net',       mode: 'buy',  lot: 'Fishing net ×1',    effect: 'better Fish tool',    price: { food: 5, materials: 20 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.' },
       { id: 'axe',       mode: 'buy',  lot: 'Hand axe ×1',       effect: 'splitting costs less', price: { food: 6, materials: 40 }, receive: { 'hand axe': 1 },    stock: 1, consequence: 'Replaces Hatchet margins: Split wood takes 20% less energy.' },
       { id: 'preserved', mode: 'buy',  lot: 'Preserved food ×10', effect: 'keeps well',          price: { materials: 8 },           receive: { food: 10 },         stock: 2 },
       { id: 'sandals-s', mode: 'sell', lot: 'Sandals ×1',        effect: 'your spare stock',    price: { sandals: 1 },             receive: { food: 6, materials: 5 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
@@ -393,6 +410,7 @@ function renderSlip() {
 
   slipEl.innerHTML = `
     <h3 class="column-heading">THE DEAL</h3>
+    <div class="slip-content">
     <div class="slip-lot">${offer.lot}<small>${offer.effect}</small></div>
     ${refused ? '' : `
       <div class="slip-qty">
@@ -415,6 +433,7 @@ function renderSlip() {
     `}
     ${refused ? `<p class="slip-refusal">${refused.long}</p>` : ''}
     ${offer.consequence && !refused ? `<p class="slip-consequence">${offer.consequence}</p>` : ''}
+    </div>
     <button class="primary-action slip-action" type="button" id="settle" ${refused ? 'disabled' : ''}>${refused ? 'CANNOT TRADE' : act.cta[mode]}</button>
   `;
 
@@ -505,6 +524,14 @@ document.querySelectorAll('[data-act]').forEach(button => {
 document.querySelectorAll('[data-act]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.act === actKey)));
 searchEl.value = query;
 setMode(mode);
+/* Review: `?lot=<id>` opens on that lot (switching to its tab); `?lot=none` opens with nothing picked. */
+if (params.has('lot')) {
+  const seeded = offerById(params.get('lot'));
+  if (seeded && seeded.mode !== mode) setMode(seeded.mode);
+  selectedId = seeded ? seeded.id : null;
+  qty = 1;
+  render();
+}
 for (let i = 0; i < seedSettle; i += 1) settle();
 if (seedQty) { qty = Math.min(seedQty, maxLots(offerById(selectedId))); renderSlip(); }
 dialog.showModal();

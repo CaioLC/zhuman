@@ -90,6 +90,12 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   `of {max}` (1..max), `YOU GIVE|PAY` / `YOU RECEIVE` scaled **linearly** by lots, `AFTER`
   before → after on only the stocks the deal touches (down warn, up good, below zero flagged),
   the consequence copy, and the CTA. A refused lot shows the long refusal and `CANNOT TRADE`.
+- **Sizing.** The body is 410px high whatever lot is selected, whichever tab is open and however
+  many rows have sold out; it gives way only when the window is shorter than the dialog. The
+  slip stacks the heading, a content region and the CTA pinned at its foot: only the content
+  region scrolls, so a tall lot cannot push the CTA out of view. 410px holds the tallest slip
+  (a two-resource price, three AFTER rows, a consequence line) without scrolling. Stacked
+  (≤760px), the ledger sits above a 250px slip and takes the rest of the height.
 - **Behavior.** Selecting a row sets lots to 1; selecting it again deselects. Switching
   direction selects the first takeable lot and resets lots and page. **Settling does not
   close the dialog**: stocks, the visit ledger and the stepper's max update, and the AFTER
