@@ -28,6 +28,11 @@ const motion = @import("./motion.zig");
 /// (`shadow.layers`) with thin `El` emitters (`shadow.drop`, `shadow.backdropColor`).
 pub const shadow = @import("./shadow.zig");
 
+/// The brightness pass: one full-window blended fill after the render walk that multiplies
+/// every painted pixel by a factor (lift above 1, modulate below, nothing at 1). See
+/// `brightness.zig`.
+pub const brightness = @import("./brightness.zig");
+
 /// Host-layer transition/tween state: scalar transitions keyed by stable
 /// node/domain id, interrupt/reverse from current value, obeying the reduced-motion
 /// policy, with the prototype's functional durations. A value provider, not a node feature.
@@ -233,6 +238,7 @@ test {
     _ = tooltip_mod;
     _ = control_mod;
     _ = cursor;
+    _ = brightness;
     _ = drag;
     _ = command;
     _ = @import("./route.zig");

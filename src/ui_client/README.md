@@ -600,7 +600,28 @@ disabled control — **without recomputing any child's color**; the caller sets 
 `El.with_opacity(x)`. Opacity is **purely visual**: hit-testing (`mark`/interaction) never
 reads it, so a dimmed node's clickability is unchanged — state logic decides that separately.
 
+## The brightness pass (`brightness.zig`)
 
+One linear multiply of every painted colour, applied to the finished frame rather than to any
+colour on its way in. The host calls `brightness.apply(renderer, k)` once per frame, after
+every tree is drawn and before present (`main.zig`'s `show`, with the player's BRIGHTNESS over
+100). It draws a single full-window rect with the clip off:
+
+- `k > 1`: colour `k - 1` under a custom blend mode composed with
+  `sdl.blend_mode.Mode.custom(.destination_color, .one, .add, .zero, .one, .add)` — colour
+  `dst + dst·src`, alpha `dst` — so each channel becomes `dst·k`, clamped at white by the
+  8-bit target. One pass lifts by at most ×2 (`max_factor`).
+- `k < 1`: colour `k` under SDL's `.mod` (`dst·src`).
+- `k == 1`: nothing is drawn, so the frame is bit-identical to the walk's own.
+
+Because it multiplies the back buffer, it covers text, lines, fills, gradients, meshes,
+textures and the clear colour with no paint feature involved, the text compositor's cached
+render targets are multiplied once (when they reach the window), and a PrintWindow capture
+sees the same frame the player does. The draw colour is set as floats, so a factor such as
+1.05 is not rounded to a byte. The renderer's clip, draw colour and draw blend mode are
+restored. A backend that refuses the blend mode makes `apply` return `error.Unsupported`
+having drawn nothing; the host logs that once and shows the frame as painted. The pure
+`pass(k)` holds the factor→colour mapping and is unit-tested.
 
 ## Shadow / backdrop composition (`shadow.zig`)
 
