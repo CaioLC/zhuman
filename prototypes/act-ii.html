@@ -11,15 +11,15 @@
   <main class="terminal act-two" aria-label="Human Action Act II interface prototype">
     <header class="hud-header">
       <div class="stockline compact" aria-label="Population and current stocks">
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">PO</span><span class="lbl-full">POPULATION</span>:</span> <span class="stock-value" id="population-value">7/12</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">VI</span><span class="lbl-full">VIGOR</span>:</span> <span class="stock-value">13/15</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FO</span><span class="lbl-full">FOOD</span>:</span> <span class="stock-value" data-resource-balance="food">23</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">WA</span><span class="lbl-full">WATER</span>:</span> <span class="stock-value low" data-resource-balance="water">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FU</span><span class="lbl-full">FUEL</span>:</span> <span class="stock-value low" data-resource-balance="fuel">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">ME</span><span class="lbl-full">METAL</span>:</span> <span class="stock-value low" data-resource-balance="metal">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MI</span><span class="lbl-full">MINERALS</span>:</span> <span class="stock-value low" data-resource-balance="minerals">0</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">BI</span><span class="lbl-full">BIOMASS</span>:</span> <span class="stock-value" data-resource-balance="biomass">30</span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">CO</span><span class="lbl-full">COIN</span>:</span> <span class="stock-value accent" data-coin-balance>42</span></span>
+        <span class="stock-token"><span class="stock-label">PO:</span> <span class="stock-value" id="population-value" data-population-value>7/12</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">POPULATION: <span class="stock-value" data-population-value>7/12</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">13/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">13/15</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value" data-resource-balance="food">23</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value" data-resource-balance="food">23</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">BI:</span> <span class="stock-value" data-resource-balance="biomass">30</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">BIOMASS: <span class="stock-value" data-resource-balance="biomass">30</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">WA:</span> <span class="stock-value low" data-resource-balance="water">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">WATER: <span class="stock-value low" data-resource-balance="water">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">FU:</span> <span class="stock-value low" data-resource-balance="fuel">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FUEL: <span class="stock-value low" data-resource-balance="fuel">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">ME:</span> <span class="stock-value low" data-resource-balance="metal">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">METAL: <span class="stock-value low" data-resource-balance="metal">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">MI:</span> <span class="stock-value low" data-resource-balance="minerals">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MINERALS: <span class="stock-value low" data-resource-balance="minerals">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">CO:</span> <span class="stock-value accent" data-coin-balance>42</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">COIN: <span class="stock-value accent" data-coin-balance>42</span></span></span></span>
       </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span><span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span><button class="menu-button" type="button" aria-label="Open menu">MENU</button></div>
     </header>
 
@@ -203,7 +203,7 @@
       const requestedCapacity = prototypeParams.get('capacity');
       const seededCapacity = requestedCapacity === null ? Number.NaN : Number(requestedCapacity);
       const populationCapacity = Number.isFinite(seededCapacity) ? Math.max(population, Math.floor(seededCapacity)) : population > 12 ? Math.max(640, population) : 12;
-      document.querySelector('#population-value').textContent = `${population}/${populationCapacity}`;
+      document.querySelectorAll('[data-population-value]').forEach(output => { output.textContent = `${population}/${populationCapacity}`; });
       window.prototypePopulation = Object.freeze({ current: population, capacity: populationCapacity });
       const resourceKeys = ['food', 'water', 'fuel', 'metal', 'minerals', 'biomass'];
       const resourceBalances = window.prototypeResources = { food: 23, water: 0, fuel: 0, metal: 0, minerals: 0, biomass: 30 };
@@ -1779,5 +1779,43 @@
       };
     })();
   </script>
-</body>
+  <script>
+    // The stockline's read overlay never half-covers a neighbour: while a token's read form is
+    // open, every other token and `|` in its line, and every runline item, whose box the
+    // overlay's box overlaps, or comes within 4px of, is marked `is-covered` and fades out whole
+    // (prototype.css). The overlay is
+    // measured at its open layout box (its clip and opacity do not change layout), on entry and
+    // on resize while open. Shared, line for line, by act-i.html and act-ii.html.
+    (() => {
+      const clearance = 4;
+      document.querySelectorAll('.stockline').forEach(line => {
+        const runline = line.closest('.hud-header')?.querySelector('.runline');
+        const parts = [...line.children].filter(part => part.matches('.stock-token, .sep')).concat(runline ? [...runline.children] : []);
+        let open = null;
+        function cover() {
+          const box = open?.querySelector('.stock-read').getBoundingClientRect();
+          parts.forEach(part => {
+            if (!box || part === open) { part.classList.remove('is-covered'); return; }
+            const r = part.getBoundingClientRect();
+            const near = r.left < box.right + clearance && r.right > box.left - clearance
+              && r.top < box.bottom - 0.5 && r.bottom > box.top + 0.5;
+            part.classList.toggle('is-covered', near);
+          });
+        }
+        line.querySelectorAll('.stock-token').forEach(token => {
+          const show = () => { open = token; cover(); };
+          const hide = () => {
+            if (open !== token || token.matches(':hover, :focus-within')) return;
+            open = null;
+            cover();
+          };
+          token.addEventListener('pointerenter', show);
+          token.addEventListener('focusin', show);
+          token.addEventListener('pointerleave', hide);
+          token.addEventListener('focusout', () => setTimeout(hide));
+        });
+        addEventListener('resize', () => { if (open) cover(); });
+      });
+    })();
+  </script></body>
 </html>
