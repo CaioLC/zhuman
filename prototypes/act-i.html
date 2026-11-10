@@ -11,11 +11,11 @@
   <main class="terminal act-one" aria-label="Human Action Act I interface prototype">
     <header class="hud-header">
       <div class="stockline" aria-label="Current stocks">
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">VI</span><span class="lbl-full">VIGOR</span>:</span> <span class="stock-value">14/15</span></span>
+        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">14/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">14/15</span></span></span></span>
         <span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">FO</span><span class="lbl-full">FOOD</span>:</span> <span class="stock-value">11.6</span></span>
+        <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value">11.6</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value">11.6</span></span></span></span>
         <span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label"><span class="lbl-abbr">MA</span><span class="lbl-full">MATERIALS</span>:</span> <span class="stock-value">31</span></span>
+        <span class="stock-token"><span class="stock-label">MA:</span> <span class="stock-value">31</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MATERIALS: <span class="stock-value">31</span></span></span></span>
       </div>
       <div class="runline">
         <span>Act I · <strong>Day 19</strong></span>
@@ -940,5 +940,43 @@
       if (prototypeParams.get('modal') === 'merchant') openTrade();
     })();
   </script>
-</body>
+  <script>
+    // The stockline's read overlay never half-covers a neighbour: while a token's read form is
+    // open, every other token and `|` in its line, and every runline item, whose box the
+    // overlay's box overlaps, or comes within 4px of, is marked `is-covered` and fades out whole
+    // (prototype.css). The overlay is
+    // measured at its open layout box (its clip and opacity do not change layout), on entry and
+    // on resize while open. Shared, line for line, by act-i.html and act-ii.html.
+    (() => {
+      const clearance = 4;
+      document.querySelectorAll('.stockline').forEach(line => {
+        const runline = line.closest('.hud-header')?.querySelector('.runline');
+        const parts = [...line.children].filter(part => part.matches('.stock-token, .sep')).concat(runline ? [...runline.children] : []);
+        let open = null;
+        function cover() {
+          const box = open?.querySelector('.stock-read').getBoundingClientRect();
+          parts.forEach(part => {
+            if (!box || part === open) { part.classList.remove('is-covered'); return; }
+            const r = part.getBoundingClientRect();
+            const near = r.left < box.right + clearance && r.right > box.left - clearance
+              && r.top < box.bottom - 0.5 && r.bottom > box.top + 0.5;
+            part.classList.toggle('is-covered', near);
+          });
+        }
+        line.querySelectorAll('.stock-token').forEach(token => {
+          const show = () => { open = token; cover(); };
+          const hide = () => {
+            if (open !== token || token.matches(':hover, :focus-within')) return;
+            open = null;
+            cover();
+          };
+          token.addEventListener('pointerenter', show);
+          token.addEventListener('focusin', show);
+          token.addEventListener('pointerleave', hide);
+          token.addEventListener('focusout', () => setTimeout(hide));
+        });
+        addEventListener('resize', () => { if (open) cover(); });
+      });
+    })();
+  </script></body>
 </html>

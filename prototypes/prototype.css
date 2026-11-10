@@ -154,9 +154,13 @@ button:disabled {
 }
 
 .stockline {
+  position: relative;
   gap: 9px;
   font-size: 17px;
   color: var(--fg);
+  /* The size a token's read form opens at: the line's own size in Act I, 17px over Act II's
+     compact line, and the stacked line's 15px at ≤760px. */
+  --stock-read-size: 17px;
 }
 
 .stockline.compact {
@@ -173,33 +177,98 @@ button:disabled {
   color: var(--dim);
 }
 
-.lbl-full {
-  display: none;
+/* A stock token rests as `AB: value` and its box never changes: under the pointer or focus,
+   the read form `FULL LABEL: value` (label in fg, at the read size) opens as an overlay over
+   the line, on the token's baseline, its text starting at the token's left edge. The overlay
+   is an opaque bg box with 4px of padding each side. It takes no pointer: hit-testing stays on
+   the resting boxes, so moving along the line hands from token to token and nothing under the
+   pointer moves. It eases in and out over 120ms (opacity with a left-to-right width reveal).
+   An overlay that would run past the line's right edge anchors to the token's right edge
+   instead. While it is open, every other token and `|` whose box it overlaps, or comes within
+   4px of, fades out whole over the same 120ms (`is-covered`, set by the page's stockline
+   script), keeping its footprint; the rest of the line stays as it rests. Where a stacked line
+   is narrower than the read form, a runline item it reaches fades the same way. A covered token is
+   still hoverable at its resting box, which hands the read to it.
+   The overlay box is one resting line tall from the token's top, so its strut puts its
+   baseline on the token's; the read text rides that baseline with no line height of its own.
+   Over Act II's 10px line the box bleeds 4px above the line (`--stock-read-bleed`) so its bg
+   spans the 17px read glyphs, and no further, so a wrapped line above it is never touched. */
+.stock-token {
+  position: relative;
 }
 
-.stock-token:hover .lbl-abbr,
-.stock-token:focus-within .lbl-abbr {
-  display: none;
+.stock-read {
+  position: absolute;
+  top: calc(0px - var(--stock-read-bleed, 0px));
+  left: 0;
+  z-index: 1;
+  margin-left: -4px;
+  padding: var(--stock-read-bleed, 0px) 4px 0;
+  background: var(--bg);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  clip-path: inset(-4px 100% -4px 0);
+  transition: opacity 120ms ease-out, clip-path 120ms ease-out;
 }
 
-.stock-token:hover .lbl-full,
-.stock-token:focus-within .lbl-full {
-  display: inline;
-}
-
-.stock-token:hover .stock-label,
-.stock-token:focus-within .stock-label {
+.stock-read-text {
   color: var(--fg);
+  font-size: var(--stock-read-size);
+  line-height: 0;
 }
 
-/* Act II: also enlarge the token on hover for legibility of the fuller word. */
-.stockline.compact .stock-token {
-  transition: font-size 90ms ease-out;
+.stock-token:hover .stock-read,
+.stock-token:focus-within .stock-read {
+  z-index: 2;
+  opacity: 1;
+  clip-path: inset(-4px 0 -4px 0);
 }
 
-.stockline.compact .stock-token:hover,
-.stockline.compact .stock-token:focus-within {
-  font-size: 17px;
+.stockline .stock-token,
+.stockline .sep,
+.runline > * {
+  transition: opacity 120ms ease-out;
+}
+
+.hud-header .is-covered {
+  opacity: 0;
+}
+
+/* Without anchor positioning the line's last token is the one that anchors right. */
+.stock-token:last-child .stock-read {
+  right: 0;
+  left: auto;
+  margin: 0 -4px 0 0;
+}
+
+/* With it, the overlay is placed against the stockline and flips to the token's right edge
+   whenever it would overflow the line's right edge, wherever a wrapped line ends. */
+@supports (anchor-scope: all) {
+  .stock-token {
+    position: static;
+    anchor-name: --stock-token;
+    anchor-scope: --stock-token;
+  }
+
+  .stock-read,
+  .stock-token:last-child .stock-read {
+    position-anchor: --stock-token;
+    top: calc(anchor(top) - var(--stock-read-bleed, 0px));
+    right: auto;
+    left: anchor(left);
+    margin: 0 0 0 -4px;
+    position-try-fallbacks: flip-inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stock-read,
+  .stockline .stock-token,
+  .stockline .sep,
+  .runline > * {
+    transition: none;
+  }
 }
 
 .stock-value {
@@ -2649,6 +2718,7 @@ button:disabled {
 .act-two .stockline.compact {
   gap: 4px;
   font-size: 10px;
+  --stock-read-bleed: 4px;
 }
 
 .act-two .surface-nav {
@@ -2766,6 +2836,7 @@ button:disabled {
   .stockline {
     flex-wrap: wrap;
     font-size: 15px;
+    --stock-read-size: 15px;
   }
 
   .runline {
@@ -2894,6 +2965,12 @@ button:disabled {
 }
 
 @media (max-width: 560px) {
+  /* The stacked Act II line is narrower here than a 15px `POPULATION: 7/12`, so its read form
+     opens at 13px and stays inside the line. */
+  .act-two .stockline.compact {
+    --stock-read-size: 13px;
+  }
+
   .act-two .exchange-bar {
     grid-template-columns: 1fr;
     gap: 4px;

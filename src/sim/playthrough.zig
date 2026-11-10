@@ -183,4 +183,4 @@ test "a greedy policy raises the shelter before day 70 without dying, on every s
         try std.testing.expect(!out.died);
         try std.testing.expect(out.stood != null);
     }
-}
+}
