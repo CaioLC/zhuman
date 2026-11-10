@@ -932,9 +932,29 @@ button:disabled {
   min-width: 0;
 }
 
+/* A tile fills its cell, so every tile of a row is as tall as the row's tallest (a generator's
+   state line makes it 88.4px beside an 82px verb) and its border, underbar and corners sit on
+   the row's real edges. The content is pinned to the top, at the offset an 82px tile gives it,
+   and any extra height falls below it: a button would centre its content, so a verb's top
+   padding carries the centring of its own minimum box instead (60px inside the border and
+   padding; 51.55px of content: the 19px name line, the 7px gap, the 14px metrics line; name
+   at 16.2px from the tile's top). A generator's content already fills its box (name at 12px). */
 .action-cell .action-tile {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   width: 100%;
+  height: 100%;
+}
+
+.action-cell .action-tile:not(.generator-tile) {
+  padding-top: calc(11px + (60px - (19px * 1.35 + 7px + 14px * 1.35)) / 2);
+}
+
+/* Act II's compact verb: 39px inside its 52px minimum; 35.4px of content (the 14px name line,
+   the 3px gap, the 10px metrics line); name at 8.8px. */
+.act-two .action-cell .action-tile:not(.generator-tile) {
+  padding-top: calc(6px + (39px - (14px * 1.35 + 3px + 10px * 1.35)) / 2);
 }
 
 .generator-tile {
@@ -1833,6 +1853,7 @@ button:disabled {
    as tall as a verb. The mode corner and the hide corner sit on the compact padding. */
 .act-two .generator-tile {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: baseline;
   column-gap: 8px;
