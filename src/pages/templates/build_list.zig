@@ -23,7 +23,10 @@
 //!
 //! **Milestone:** the act's milestone good is not a row. It is a `milestone_goal` pinned
 //! below the list, **outside** the filter/sort, because it is how the act ends rather than an
-//! item in it. Its lifecycle and every requirement recompute from authoritative state each frame.
+//! item in it. Its lifecycle and every requirement recompute from authoritative state each frame
+//! (`milestoneLifecycle`): raising it is a build like any recipe's, so while the actor builds it
+//! the card reads `building` with the build's time left and progress, and while other work holds
+//! the hands with everything on hand it reads `busy`.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -58,6 +61,11 @@ pub const MilestoneCopy = struct {
     kicker: []const u8,
     copy: []const u8,
     explanation: []const u8,
+    /// The explanation's lead while the raise is under way (`The Shelter is going up.`); the
+    /// card follows it with the price's resources, paid (`Materials are paid.`).
+    raising: []const u8,
+    /// The explanation while everything is on hand and the hands are on other work.
+    waiting: []const u8,
     /// The CTA once the milestone can be raised (`RAISE SHELTER`).
     action: []const u8,
     /// Open (or close) the card's details this frame; null leaves the player's choice.
@@ -427,7 +435,7 @@ pub fn build_list(parent: El, world: *const World, e: Entity, id: []const u8, sh
 /// The act's milestone good as a `milestone_goal` — outside the recipe filtering/sorting
 /// because it is the act's ending, not an item in it. Its lifecycle and requirements
 /// recompute live from the record's `unlock`; `words` is the act's copy.
-fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, words: MilestoneCopy) !void {
+pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, words: MilestoneCopy) !void {
     const ctx = parent.ctx;
     const cat = &ctx.res.game.catalog;
     if (capital.ownsMilestone(world, e, cat, words.which)) return; // owning it raises the curtain — the act is over
@@ -446,13 +454,16 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     const food = ledger.balance(world, e, .food);
     const kinds = capital.goodsOwned(world, e, cat);
 
-    // Lifecycle from authoritative state: locked until the standing conditions hold, then
-    // unfunded until the order and energy are on hand and hands are free, then ready.
-    const state: milestone_mod.Lifecycle = switch (quote.standing) {
-        .tech, .needs, .unlock => .locked,
-        .busy, .energy, .short => .unfunded,
-        .ready => .ready,
-    };
+    // Lifecycle from authoritative state: the quote's standing, whether the work in progress is
+    // this build, and whether the order and energy are on hand — the reads the quote makes
+    // after its `busy` check, which a `busy` standing does not report.
+    const busy = world.get(e, comp.Busy);
+    const raising: ?*const comp.Busy = if (busy) |b| (if (b.isBuild(gi)) b else null) else null;
+    const on_hand = price.energy < vigor.v and ledger.short(world, e, price, 1) == null;
+    const state = milestoneLifecycle(quote.standing, raising != null, on_hand);
+    // While it is going up every requirement reads met and the order reads paid: the build
+    // read its conditions at begin and paid its order then.
+    const settled = state == .building;
 
     // Cost/copy: `60m 6e · 6.0d` — the order, energy, days.
     var cbuf: [48]u8 = undefined;
@@ -482,11 +493,11 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     var gate_labels: [max_gates][24]u8 = undefined;
     var requirements: [3 + max_gates + resources]milestone_mod.Requirement = undefined;
     var nreq: usize = 0;
-    requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = vigor_met };
+    requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = settled or vigor_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = food_met };
+    requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = settled or food_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "RECIPES", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = recipes_met };
+    requirements[nreq] = .{ .label = "RECIPES", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = settled or recipes_met };
     nreq += 1;
     // Each good or verb its gate names, owned or still needed.
     var gates_unmet: u32 = 0;
@@ -495,7 +506,7 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
         const met = if (cat.goodIndex(gid) != null) capital.owns(world, e, cat, gid) else verbHeld(world, e, cat, gid);
         gates_unmet += @intFromBool(!met);
         const label = std.ascii.upperString(&gate_labels[i], name[0..@min(name.len, gate_labels[i].len)]);
-        requirements[nreq] = .{ .label = label, .value = if (met) "owned" else "needed", .met = met };
+        requirements[nreq] = .{ .label = label, .value = if (met) "owned" else "needed", .met = settled or met };
         nreq += 1;
     }
     var compact: []const u8 = "";
@@ -506,11 +517,19 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
         const have = ledger.balance(world, e, r);
         const word = r.wordIn(act);
         const label = std.ascii.upperString(&order_labels[li], word[0..@min(word.len, order_labels[li].len)]);
-        requirements[nreq] = .{ .label = label, .value = std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, n }) catch "?", .met = have >= n };
+        const value = if (settled)
+            std.mem.print(&order_bufs[li], "{d:.0} paid", .{n}) catch "?"
+        else
+            std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, n }) catch "?";
+        requirements[nreq] = .{ .label = label, .value = value, .met = settled or have >= n };
         nreq += 1;
         if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, n }) catch word;
         li += 1;
     }
+    // Raising, the bar reads the build's progress and time left, as the activity strip does.
+    const spd = ctx.res.game.config.secs_per_day;
+    const progress: ?f32 = if (raising) |b| (if (b.total > 0) 1.0 - b.remaining / b.total else 1.0) else null;
+    if (progress) |p| compact = std.mem.print(&compact_buf, "{d:.0}%", .{std.math.clamp(p, 0, 1) * 100}) catch "";
     // Locked names the first good its gate still needs (`needs a rope bag`), else counts the
     // standing conditions still unmet (`locked · 1 condition`), as the Exchange card does.
     const unmet: u32 = @as(u32, @intFromBool(!vigor_met)) + @intFromBool(!food_met) + @intFromBool(!recipes_met) + gates_unmet;
@@ -520,15 +539,26 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
     const readiness = switch (state) {
         .locked => if (gate) |gid| needsPhrase(&ready_buf, &lower_buf, cat, gid) else std.mem.print(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
         .unfunded => "inputs short",
+        .busy => "hands busy",
         .ready => "ready to raise",
+        .building => std.mem.print(&ready_buf, "raising \u{00B7} {d:.1}d left", .{raising.?.remaining / spd}) catch "raising",
         .done => unreachable,
     };
-    // The CTA names the state it waits on (the Exchange card's `LOCKED`), then the act's verb.
+    // The CTA names the state it waits on (the Exchange card's `LOCKED`), then the act's verb;
+    // a raise under way shows the activity strip's building glyph.
     const action = switch (state) {
         .locked => "LOCKED",
         .unfunded => "NEEDS INPUTS",
+        .busy => "HANDS BUSY",
         .ready => words.action,
+        .building => "\u{25A0} BUILDING",
         .done => unreachable,
+    };
+    var explain_buf: [160]u8 = undefined;
+    const explanation = switch (state) {
+        .busy => words.waiting,
+        .building => paidSentence(&explain_buf, words.raising, price, act),
+        else => words.explanation,
     };
 
     const m = try milestone_mod.milestone_goal(parent, id, .{
@@ -540,13 +570,55 @@ fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8, wo
         .cost = cost_txt,
         .copy = words.copy,
         .requirements = requirements[0..nreq],
-        .explanation = words.explanation,
+        .explanation = explanation,
         .action = action,
+        .progress = progress,
         .expand = words.expand,
     });
     // Raising the milestone is the same begin lifecycle; the transition itself happens when
     // the build completes in the simulation (no UI-local shortcut).
     if (m.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginBuild).push(.{ .agent = e, .gi = gi });
+}
+
+/// The milestone card's lifecycle from the build quote's `standing`, whether the actor's work
+/// in progress is this build (`raising`), and whether the order and energy are on hand.
+/// A raise under way is `building` whatever the standing reads: the build read its conditions
+/// at begin and does not again, so a body that dips mid-build does not lock the card. Past the
+/// locked standings, a `busy` standing (checked before energy and the order) is `busy` with
+/// everything on hand and `unfunded` with something short.
+pub fn milestoneLifecycle(standing: comp.Quotes.BuildStanding, raising: bool, on_hand: bool) milestone_mod.Lifecycle {
+    if (raising) return .building;
+    return switch (standing) {
+        .tech, .needs, .unlock => .locked,
+        .busy => if (on_hand) .busy else .unfunded,
+        .energy, .short => .unfunded,
+        .ready => .ready,
+    };
+}
+
+/// `The Shelter is going up. Materials are paid.` — `lead`, then the resources of `price` in
+/// act `act`'s words, joined and capitalised, paid.
+fn paidSentence(buf: []u8, lead: []const u8, price: *const roster.Requires, act: u8) []const u8 {
+    var words: [@typeInfo(roster.Resource).@"enum".field_names.len][]const u8 = undefined;
+    var n: usize = 0;
+    for (std.enums.values(roster.Resource)) |r| {
+        if (price.get(r) <= 0) continue;
+        words[n] = r.wordIn(act);
+        n += 1;
+    }
+    if (n == 0) return lead;
+    var w = std.Io.Writer.fixed(buf);
+    w.print("{s} ", .{lead}) catch return lead;
+    for (words[0..n], 0..) |word, i| {
+        const sep = if (i == 0) "" else if (i + 1 == n) " and " else ", ";
+        w.writeAll(sep) catch return lead;
+        if (i == 0 and word.len > 0) {
+            w.writeByte(std.ascii.toUpper(word[0])) catch return lead;
+            w.writeAll(word[1..]) catch return lead;
+        } else w.writeAll(word) catch return lead;
+    }
+    w.writeAll(" are paid.") catch return lead;
+    return w.buffered();
 }
 
 /// `needs a rope bag` — the gate entry `id` a milestone still waits on, in a sentence: a good
@@ -583,6 +655,42 @@ test "the milestone card names the good its gate still needs" {
     var lower: [48]u8 = undefined;
     try testing.expectEqualStrings("needs a rope bag", needsPhrase(&buf, &lower, &cat, "rope_bag"));
     try testing.expectEqualStrings("needs Split wood", needsPhrase(&buf, &lower, &cat, "chop_wood"));
+}
+
+test "the milestone lifecycle maps every standing, the raise under way and what is on hand" {
+    const S = comp.Quotes.BuildStanding;
+    const L = milestone_mod.Lifecycle;
+    const Row = struct { S, L, L };
+    // standing, then the card with the inputs on hand and with something short, hands not on
+    // this build.
+    const want = [_]Row{
+        .{ .ready, .ready, .ready },
+        .{ .tech, .locked, .locked },
+        .{ .needs, .locked, .locked },
+        .{ .unlock, .locked, .locked },
+        .{ .busy, .busy, .unfunded },
+        .{ .energy, .unfunded, .unfunded },
+        .{ .short, .unfunded, .unfunded },
+    };
+    try testing.expectEqual(std.enums.values(S).len, want.len);
+    for (want) |w| {
+        try testing.expectEqual(w[1], milestoneLifecycle(w[0], false, true));
+        try testing.expectEqual(w[2], milestoneLifecycle(w[0], false, false));
+        // The raise under way is building whatever the quote reads.
+        try testing.expectEqual(L.building, milestoneLifecycle(w[0], true, true));
+        try testing.expectEqual(L.building, milestoneLifecycle(w[0], true, false));
+    }
+}
+
+test "a raise under way names the price's resources paid, in the act's words" {
+    var buf: [160]u8 = undefined;
+    const shelter: roster.Requires = .{ .energy = 8, .hours = 144, .biomass = 120 };
+    try testing.expectEqualStrings("The Shelter is going up. Materials are paid.", paidSentence(&buf, "The Shelter is going up.", &shelter, 1));
+    const three: roster.Requires = .{ .energy = 8, .hours = 1, .biomass = 80, .minerals = 40, .metal = 24 };
+    const got = paidSentence(&buf, "The Exchange is going up.", &three, 2);
+    try testing.expect(std.mem.startsWith(u8, got, "The Exchange is going up. "));
+    try testing.expect(std.mem.endsWith(u8, got, " are paid."));
+    try testing.expect(std.mem.indexOf(u8, got, ", ") != null and std.mem.indexOf(u8, got, " and ") != null);
 }
 
 test "the authored total counts this shelf's recipes only" {

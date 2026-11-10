@@ -176,11 +176,20 @@ or the board never also scrolls the page around it.
 component serves both acts: a fixed semantic bar, a disclosure whose summary carries title,
 readiness and a compact line, a primary action enabled only when ready, and disclosed
 details (kicker, cost, copy, a live requirement row, an explanation). Its lifecycle is
-`locked → unfunded → ready → done`, and every requirement is recomputed from live state each
-frame and shown as `current/required`, so an unmet gate is a readable fact. In Act I this is
+`locked → unfunded → ready → building → done`, with `busy` beside ready, and every requirement
+is recomputed from live state each frame and shown as `current/required`, so an unmet gate is a
+readable fact. Locked names the first good its gate still needs (`needs a rope bag`), else
+counts the standing conditions unmet (`locked · 1 condition`). `busy` is everything on hand
+with the hands on other work: the card stays danger-toned and reads `hands busy` /
+`HANDS BUSY`, never `inputs short`. In Act I this is
 the Shelter, which asks for a rested body, a stocked larder, several kinds of goods already
 made, and the materials for the largest build in the act; raising it pays through the same
-build path as any recipe, and the curtain falls only when the build completes. In Act II it is
+build path as any recipe, so it holds the hands and the activity strip and every other build
+waits on it. While it goes up the card is the sibling of a building row: the rail, wash and
+readiness (`raising · 3.5d left`) take the accent, the compact line reads the progress
+(`42%`), every requirement reads met with the order `paid`, and the CTA keeps its 132×28 lane
+as a disabled `■ BUILDING` with a 3px accent underbar filling with the build. The curtain
+falls only when the build completes. In Act II it is
 the **Exchange**, a standing trading floor. Its recipe is unlocked
 only when population is strictly greater than 500 and at least one ring-4 technology is
 Researched. The recipe costs 80 Biomass, 40 Minerals and 24 Metal and takes 18 days. Raising it pays those inputs, replaces the temporary passerby-descended merchant row

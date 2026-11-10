@@ -275,7 +275,10 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
             .met = standing or have >= c[1],
         });
     }
-    const state: t.MilestoneLifecycle = switch (exchange.lifecycle(standing, people, research_met, short_kinds)) {
+    // The Exchange stands the frame its raise is read (`raise_exchange`), with no build in
+    // between, so its lifecycle is the card's without `busy` or `building`.
+    const ex = exchange.lifecycle(standing, people, research_met, short_kinds);
+    const state: t.MilestoneLifecycle = switch (ex) {
         inline else => |l| @field(t.MilestoneLifecycle, @tagName(l)),
     };
     const people_n: u32 = @intFromFloat(people);
@@ -283,13 +286,13 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
     return .{
         .state = state,
         .title = "Exchange",
-        .readiness = switch (state) {
+        .readiness = switch (ex) {
             .locked => try a.print("locked \u{00b7} {} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }),
             .unfunded => "inputs short",
             .ready => "ready to raise",
             .done => "standing \u{00b7} ACT III",
         },
-        .summary = switch (state) {
+        .summary = switch (ex) {
             .locked => try a.print("ring 4 {}/1 \u{00b7} people {}/501", .{ @intFromBool(research_met), people_n }),
             .unfunded => try a.print("inputs short \u{00b7} {} kind{s}", .{ short_kinds, if (short_kinds == 1) "" else "s" }),
             .ready => try a.print("{s} \u{00b7} {} people \u{00b7} inputs ready", .{ four.?, people_n }),
@@ -302,13 +305,13 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
         else
             "Raise a standing trading floor. Once it opens, passing lots give way to a permanent market and Act III begins.",
         .requirements = reqs.items,
-        .explanation = switch (state) {
+        .explanation = switch (ex) {
             .locked => if (!research_met and !people_met) "Research any ring-4 technology and grow beyond 500 people." else if (!research_met) "Research any ring-4 technology." else try a.print("Grow beyond 500 people \u{00b7} {}/501.", .{people_n}),
             .unfunded => try a.print("needs {s}", .{short.items}),
             .ready => try a.print("{s} established \u{00b7} {} people \u{00b7} all inputs held", .{ four.?, people_n }),
             .done => try a.print("opened after {s} \u{00b7} permanent market established", .{four orelse "ring-4 research"}),
         },
-        .action = switch (state) {
+        .action = switch (ex) {
             .locked => "LOCKED",
             .unfunded => "NEEDS INPUTS",
             .ready => "RAISE EXCHANGE \u{2192}",

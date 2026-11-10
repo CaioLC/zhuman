@@ -909,7 +909,7 @@ sets exactly the fields of its literal, with no added tracking or transform:
 value (a gradient stop, a helper that takes a color).
 
 **One tone mapping.** Templates keep their own `Tone` enums (`holdings`, `log`, `market_strip`,
-`milestone_goal`, `stock_token`), and they all map a tag to the role of the same name, with
+`stock_token`), and they all map a tag to the role of the same name, with
 `normal` → `fg` and `accent` → `acc`. `style.toneRole(tone)` is that mapping for any of them
 (resolved at comptime; a tag with no role is a compile error), `style.toneColor(ctx, tone)` its
 color and `style.tone(t)` its ink fragment.
@@ -997,7 +997,9 @@ the state to its look, or to a struct of `Style`s when one state styles several 
   `research_board.tileStroke(out, lit)`), and the template writes `.{ looks.get(state) }`.
   Per-node facts that are not control state are inputs to that function, not rules.
 - **Lifts.** A lift on the owner's control state rides the entry as an `on` rule: a ready
-  tile's or row's name lifts while hot, and the other states publish `disabled`.
+  tile's or row's name lifts while hot, and the other states publish `disabled`. A disabled
+  state that still reads as live carries its ink at rest and no rule: a building milestone's
+  CTA rests in the accent.
 - **Tests.** Each table has a unit test beside it that pins every entry, and
   `src/pages/templates/state_rules_test.zig` resolves the entries with rules in every pointer
   and focus state against the equivalent explicit chains.

@@ -420,7 +420,8 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         _ = try t.catalog_controls(demo, "cc", t.recipes_placeholder, null, null);
         _ = try t.sort_chips(demo, "sort", "Sort actions", &t.actions_sort_keys, demo.state(uic.UiState.CatalogState));
     } else if (eq(name, "milestone_goal")) {
-        const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
+        // The shelter locked, then going up at 42% and waiting on busy hands.
+        const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 10 }, .{});
         var resource_label_buf: [16]u8 = undefined;
         const resource_label = std.ascii.upperString(&resource_label_buf, ha.sim.data.roster.Resource.biomass.labelIn(act));
         const requirements = [_]t.MilestoneRequirement{
@@ -440,6 +441,44 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             .requirements = &requirements,
             .explanation = try ctx.arena.print("Hold 120 {s} with a settled body and five kinds of goods, a rope bag and a leaf bed among them.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .action = "LOCKED",
+        });
+        const paid = [_]t.MilestoneRequirement{
+            .{ .label = "VIGOR", .value = "14/15", .met = true },
+            .{ .label = "FOOD", .value = "11.6/12", .met = true },
+            .{ .label = "RECIPES", .value = "5/5", .met = true },
+            .{ .label = resource_label, .value = "120 paid", .met = true },
+        };
+        _ = try t.milestone_goal(demo, "mg_building", .{
+            .state = .building,
+            .title = "Shelter",
+            .summary = "42%",
+            .readiness = "raising \u{00B7} 3.5d left",
+            .kicker = "A PLACE FOR OTHERS",
+            .cost = "120m 8e \u{00B7} 6.0d",
+            .requirements = &paid,
+            .explanation = blk: {
+                const word = ha.sim.data.roster.Resource.biomass.wordIn(act);
+                break :blk try ctx.arena.print("The Shelter is going up. {c}{s} are paid.", .{ std.ascii.toUpper(word[0]), word[1..] });
+            },
+            .action = "\u{25A0} BUILDING",
+            .progress = 0.42,
+        });
+        const on_hand = [_]t.MilestoneRequirement{
+            .{ .label = "VIGOR", .value = "15/15", .met = true },
+            .{ .label = "FOOD", .value = "16.0/12", .met = true },
+            .{ .label = "RECIPES", .value = "5/5", .met = true },
+            .{ .label = resource_label, .value = "120/120", .met = true },
+        };
+        _ = try t.milestone_goal(demo, "mg_busy", .{
+            .state = .busy,
+            .title = "Shelter",
+            .summary = try ctx.arena.print("{s} 120/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
+            .readiness = "hands busy",
+            .kicker = "A PLACE FOR OTHERS",
+            .cost = "120m 8e \u{00B7} 6.0d",
+            .requirements = &on_hand,
+            .explanation = "Everything is on hand; the Shelter waits for free hands.",
+            .action = "HANDS BUSY",
         });
     } else if (eq(name, "market_strip")) {
         const demo = try stage.box("market_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});

@@ -401,22 +401,28 @@ fn OldCapitalRow(comptime kind: capital_row.Kind) type {
 fn OldMilestone(comptime state: milestone_goal.Lifecycle) type {
     return struct {
         // milestone_goal.zig: `tone = toneColor(presentationOf(state).tone)`, danger while
-        //   locked/unfunded, good while ready/done; readiness `.text = tone`;
-        //   action_ink = if (ready) fg else dim, with `.on = hover_focus → acc` on the outline
-        //   and the label (the CTA publishes `.enabled = ready`).
-        const ready = state == .ready;
+        //   locked/unfunded/busy, good while ready/done, acc while building; readiness
+        //   `.text = tone`; action_ink = if (ready) fg else if (building) acc else dim, with
+        //   `.on = hover_focus → acc` on the outline and the label (the CTA publishes
+        //   `.enabled = ready`, so only the ready CTA ever lifts).
+        const rest: Role = switch (state) {
+            .ready => .fg,
+            .building => .acc,
+            else => .dim,
+        };
         const tone: Role = switch (state) {
-            .locked, .unfunded => .danger,
+            .locked, .unfunded, .busy => .danger,
             .ready, .done => .good,
+            .building => .acc,
         };
         fn readiness(_: Facts, _: Interaction) Want {
             return .{ .text = tone };
         }
         fn outline(_: Facts, q: Interaction) Want {
-            return .{ .outline = if (!q.disabled and q.hover_focus()) .acc else if (ready) .fg else .dim };
+            return .{ .outline = if (!q.disabled and q.hover_focus()) .acc else rest };
         }
         fn label(_: Facts, q: Interaction) Want {
-            return .{ .text = if (!q.disabled and q.hover_focus()) .acc else if (ready) .fg else .dim };
+            return .{ .text = if (!q.disabled and q.hover_focus()) .acc else rest };
         }
     };
 }
@@ -551,7 +557,7 @@ test "look tables: every milestone lifecycle paints what its chain did, in every
         n += try rig.expectLook(tag ++ "cta outline", look.action_outline, .owner, p, Old.outline);
         n += try rig.expectLook(tag ++ "cta label", look.action_label, .child, p, Old.label);
     }
-    try std.testing.expectEqual(@as(usize, 4 * 3 * 12), n);
+    try std.testing.expectEqual(@as(usize, 6 * 3 * 12), n);
 }
 
 // ---- the scroll thumb ------------------------------------------------------------------------

@@ -6,6 +6,12 @@
 //! followed by an optional full-width details region. A 2px lifecycle rail and a subtle
 //! horizontal wash belong to the card itself. This template owns that anatomy while callers
 //! supply all act-specific wording, requirements, and lifecycle facts.
+//!
+//! The lifecycle runs `locked → unfunded → ready → building → done`, with `busy` beside ready
+//! (everything on hand, the hands on other work). A building card is the sibling of a building
+//! row: accent rail, wash and readiness, and its CTA keeps the 132×28 lane as a disabled
+//! control with an accent outline and label and a 3px accent underbar along its bottom edge,
+//! as wide as the build's `progress`.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -19,7 +25,10 @@ const El = el.El;
 const Color = uic.Color;
 const DisclosureState = uic.UiState.DisclosureState;
 
-pub const Lifecycle = enum { locked, unfunded, ready, done };
+/// Where the milestone stands: `locked` until its standing conditions hold, `unfunded` while an
+/// input is short, `busy` when everything is on hand but the hands are on other work, `ready`
+/// to raise, `building` while the raise is under way, then `done`.
+pub const Lifecycle = enum { locked, unfunded, busy, ready, building, done };
 pub const Presentation = struct { readiness: []const u8 };
 
 /// The readiness word each lifecycle shows. Callers may provide a more specific phrase.
@@ -27,7 +36,9 @@ pub fn presentationOf(state: Lifecycle) Presentation {
     return switch (state) {
         .locked => .{ .readiness = "locked" },
         .unfunded => .{ .readiness = "inputs short" },
+        .busy => .{ .readiness = "hands busy" },
         .ready => .{ .readiness = "ready" },
+        .building => .{ .readiness = "raising" },
         .done => .{ .readiness = "done" },
     };
 }
@@ -43,13 +54,25 @@ pub const Look = struct {
     kicker: Style,
 };
 
-fn lifecycleLook(comptime tone: style.ThemeRole, comptime ready: bool, comptime done: bool) Look {
-    const lift: []const style.Rule = if (ready) &.{.{ .when = .hover_focus, .ink = .acc }} else &.{};
-    const outline_lift: []const style.Rule = if (ready) &.{.{ .when = .hover_focus, .outline_ink = .acc }} else &.{};
-    const rest: style.ThemeRole = if (ready) .fg else .dim;
+/// How a lifecycle's CTA rests: dim, fg lifting to accent on hover or focus (the one enabled
+/// CTA), or accent with no lift (the building one).
+const Cta = enum { dim, lift, accent };
+
+fn lifecycleLook(comptime tone: style.ThemeRole, comptime cta: Cta, comptime done: bool) Look {
+    const lift: []const style.Rule = if (cta == .lift) &.{.{ .when = .hover_focus, .ink = .acc }} else &.{};
+    const outline_lift: []const style.Rule = if (cta == .lift) &.{.{ .when = .hover_focus, .outline_ink = .acc }} else &.{};
+    const rest: style.ThemeRole = switch (cta) {
+        .dim => .dim,
+        .lift => .fg,
+        .accent => .acc,
+    };
     return .{
         .tone = tone,
-        .wash_alpha = if (tone == .good) 28 else 20,
+        .wash_alpha = switch (tone) {
+            .good => 28,
+            .acc => 26,
+            else => 20,
+        },
         .readiness = .{ .ink = tone },
         .action_outline = .{ .outline_ink = rest, .on = outline_lift },
         .action_label = .{ .ink = rest, .on = lift },
@@ -57,15 +80,18 @@ fn lifecycleLook(comptime tone: style.ThemeRole, comptime ready: bool, comptime 
     };
 }
 
-/// Every lifecycle's inks, following the vetted CSS: locked/unfunded use the danger rail and
-/// an 8% wash, ready/done the good rail and an 11% wash. Only a ready card's CTA is an enabled
-/// control, and it lifts to accent on hover or focus; the others rest dim. A done card's
+/// Every lifecycle's inks, following the vetted CSS: locked/unfunded/busy use the danger rail
+/// and an 8% wash, ready/done the good rail and an 11% wash, building the accent rail and a 10%
+/// wash. Only a ready card's CTA is an enabled control, and it lifts to accent on hover or
+/// focus; a building card's rests accent without a lift; the others rest dim. A done card's
 /// kicker reads `met`.
 pub const looks = std.EnumArray(Lifecycle, Look).init(.{
-    .locked = lifecycleLook(.danger, false, false),
-    .unfunded = lifecycleLook(.danger, false, false),
-    .ready = lifecycleLook(.good, true, false),
-    .done = lifecycleLook(.good, false, true),
+    .locked = lifecycleLook(.danger, .dim, false),
+    .unfunded = lifecycleLook(.danger, .dim, false),
+    .busy = lifecycleLook(.danger, .dim, false),
+    .ready = lifecycleLook(.good, .lift, false),
+    .building = lifecycleLook(.acc, .accent, false),
+    .done = lifecycleLook(.good, .dim, true),
 });
 
 fn alpha(c: Color, a: u8) Color {
@@ -93,6 +119,8 @@ pub const Goal = struct {
     requirements: []const Requirement = &.{},
     explanation: []const u8 = "",
     action: []const u8 = "",
+    /// The raise's progress (0..1), the CTA's underbar; drawn only while `building`.
+    progress: ?f32 = null,
     /// Open (or close) the details on this frame — a fixture's first frame; null leaves the
     /// disclosure to the player.
     expand: ?bool = null,
@@ -120,7 +148,7 @@ const detail_right: f32 = 10;
 const detail_wrap_w: f32 = 560;
 
 /// Build one Shelter/Exchange milestone. The disclosure row and CTA are separate hit targets;
-/// only a `.ready` CTA reports `clicked`.
+/// only a `.ready` CTA reports `clicked`. A `.building` CTA speaks its progress as its value.
 pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
     const ctx = parent.ctx;
     const pres = presentationOf(goal.state);
@@ -197,12 +225,25 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .w = .{ .fixed = action_w }, .h = .{ .fixed = action_h },
             .offset = .{ .y = bar_control_offset_y },
         }, .{});
-        const aq = action.control(.{ .enabled = ready, .name = goal.action, .role = .button, .ring = false });
-        // The lifecycle's CTA look: only a ready card's lifts; a disabled one rests dim.
+        // A building CTA's underbar fills with the raise: its spoken value is the same fraction.
+        const progress: ?f32 = if (goal.state == .building) std.math.clamp(goal.progress orelse 0, 0, 1) else null;
+        const value: ?[]const u8 = if (progress) |p| try ctx.arena.print("{d:.0}%", .{p * 100}) else null;
+        const aq = action.control(.{ .enabled = ready, .name = goal.action, .value = value, .role = .button, .ring = false });
+        // The lifecycle's CTA look: only a ready card's lifts; a building one rests accent and
+        // the others dim.
         action.set(.{}, .{look.action_outline});
         (try action.text("label", goal.action)).set(.{
             .anchor = .center,
         }, .{ Style{ .font = 9 }, look.action_label });
+        // The underbar: progress × the CTA's width inside its inward 1px outline, along its
+        // bottom edge, as the CSS bar sits in the button's padding box. Out of flow, a
+        // percentage of the box it is anchored in, so it never resizes the lane.
+        if (progress) |p| {
+            try action.leaf("bar", .{
+                .anchor = .bottom_left, .offset = .{ .x = 1, .y = -1 },
+                .w = .{ .pct_of_parent = p }, .pct_less = .{ .w = 2 * p }, .h = .{ .fixed = 3 },
+            }, .{Style{ .fill_ink = .acc }});
+        }
         clicked = ready and aq.clicked;
     }
 
@@ -259,7 +300,9 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
 test "milestone lifecycle readiness words" {
     try std.testing.expectEqualStrings("locked", presentationOf(.locked).readiness);
     try std.testing.expectEqualStrings("inputs short", presentationOf(.unfunded).readiness);
+    try std.testing.expectEqualStrings("hands busy", presentationOf(.busy).readiness);
     try std.testing.expectEqualStrings("ready", presentationOf(.ready).readiness);
+    try std.testing.expectEqualStrings("raising", presentationOf(.building).readiness);
     try std.testing.expectEqualStrings("done", presentationOf(.done).readiness);
 }
 
@@ -271,9 +314,12 @@ test "milestone looks pin every lifecycle's inks" {
     const want = [_]Row{
         .{ .locked, .danger, 20, .dim, null },
         .{ .unfunded, .danger, 20, .dim, null },
+        .{ .busy, .danger, 20, .dim, null },
         .{ .ready, .good, 28, .fg, null },
+        .{ .building, .acc, 26, .acc, null },
         .{ .done, .good, 28, .dim, .met },
     };
+    try x(std.enums.values(Lifecycle).len, want.len);
     for (want) |w| {
         const l = looks.get(w[0]);
         try x(w[1], l.tone);
