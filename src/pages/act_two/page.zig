@@ -1,8 +1,8 @@
 //! `act_two/page` — the Act II **shared-shell instantiation** and the composition
 //! root for the Act II catalogs.
 //!
-//! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, WA, FU,
-//! ME, MI, BI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
+//! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, BI, WA,
+//! FU, ME, MI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
 //! and the surface's four-view nav — ACTIONS / BUILD / RESEARCH / MARKET. RESEARCH and MARKET
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
@@ -68,14 +68,15 @@ const focus_views = [_]usize{ @intFromEnum(View.research), @intFromEnum(View.mar
 /// Each view keys its own rail, so each remembers its collapse.
 const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_research", "a2_rail_market" };
 
-/// The stocks the stockline reads from the ledger, in its order after Vigor.
+/// The stocks the stockline reads from the ledger, in its order after Vigor. Biomass follows
+/// food, so it holds the slot Act I's materials hold.
 const ledger_stocks = [_]ha.sim.data.roster.Resource{
     .food,
+    .biomass,
     .water,
     .fuel,
     .metal,
     .minerals,
-    .biomass,
 };
 
 /// What a caller may ask of the page beyond the world.
