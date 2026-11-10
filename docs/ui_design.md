@@ -132,9 +132,9 @@ state or kind. Tokens are ANDed, comma values are alternatives, a leading `-` ex
 
 A blank query shows the act's complete shelf — owned and distant recipes included, disabled
 rather than hidden — and typing only narrows it. Act I's shelf is what its gates allow: a recipe
-is listed once every gate of its `requires` passes, so the manufactured tier (gloves, cookpot,
-bicycle, chicken coop) appears when the crude good or verb before it is held, and its row names
-the tier beside its kind (`tool · manufactured`); a recipe whose gate fails is absent. Act II
+is listed once every gate of its `requires` passes, so the chicken coop appears once the garden bed
+is owned, and a recipe whose gate fails is absent; every Act I recipe is crude, and a manufactured
+row (Act II's tier) names the tier beside its kind (`tool · manufactured`). Act II
 lists research-gated and prerequisite-short recipes disabled. Every act uses the same BUILD pane
 (`build_section`); only its content differs: which records are the act's recipes, whether a
 failed gate hides one, the subtitle, and the milestone card. So no FILTER, SHOW, built, preset or

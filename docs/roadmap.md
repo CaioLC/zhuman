@@ -57,7 +57,7 @@ Live Act II UI requires typed ledgers and catalog snapshots (`ACT2-01..07`); a f
 ## 2. Engine and host gaps — `src/ui/`, `src/ui_client/`, the shell
 
 - [ ] **UIE-11 — Give an in-tree popup a top layer.** *Deferred: no screen has an in-tree popup (nothing uses `select`); pick this up only when one is designed.* The paint walk is pre-order and the hit test follows paint order, so an anchored child such as the select's popup is painted under, and loses pointer hits to, every node that comes later in the tree: a `select` opened above later siblings sits beneath them (no shipped screen uses `select` today; the debug page does). The only overlays that float today are separate roots (tooltip, modal). Either a deferred-paint flag that the stamp and render walks honour after the rest of the tree, which keeps hit order consistent with paint order, or the popup as its own root handed up through the page's root list. Until then a select's options are reliable only where nothing follows them in the tree.
-- [ ] **SHELL-05 — Settings that act and persist.** Difficulty, music, effects and contrast on `Resources.settings` are shown and held but drive nothing (window size, fullscreen and UI scale do act), and no setting survives a launch: a save holds a run, not the settings.
+- [ ] **SHELL-05 — Settings that act and persist.** Difficulty, tutorial, music, effects and contrast on `Resources.settings` are shown and held but drive nothing (window size, fullscreen, UI scale and brightness do act), and no setting survives a launch: a save holds a run, not the settings.
 
 ## 3. Act I — act transition
 

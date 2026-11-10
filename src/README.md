@@ -111,8 +111,9 @@ Each frame:
    exact capture owner. Scroll consumers require routed `.wheel`, not merely hover; their
    thumbs preserve the press origin, capture through outside movement, apply the release
    position, and owner-release. UI build resets and resolves cursor requests (pointer,
-   text, grab/grabbing, horizontal-resize, not-allowed) before SDL applies the supported
-   system shape, with default/move fallbacks where needed. Key events normalize into
+   text, grab/grabbing, horizontal-resize, not-allowed) before SDL applies the shape: a system
+   cursor, or for grab/grabbing the host's open- and closed-hand colour cursors, with
+   move/default fallbacks where needed. Key events normalize into
    semantic commands before build: Tab traverses, arrows move/activate roving groups,
    Enter/Space emit the same `.clicked` as pointer release, `/` focuses registered search,
    and editing/text reach registered text owners only. Escape is focus/overlay dismissal;
