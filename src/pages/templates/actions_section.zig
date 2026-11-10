@@ -1,7 +1,9 @@
 //! `actions_section` — the ACTIONS pane, the same template on every act: the heading with the
 //! act's kind counts as two toggles, one search field, a toolbar with the hidden-tile summary
 //! and the sort chips, and the held verbs then the held generators in two growing columns (one
-//! at the compact breakpoint). A verb is an `action_tile`, a generator a `generator_tile`. Only
+//! at the compact breakpoint). A verb is an `action_tile`, a generator a `generator_tile`; the
+//! tiles of one row stand as tall as its tallest (`rowHeight`), so a verb beside a regular
+//! generator takes the generator's 87px, its content where an 81px verb keeps it. Only
 //! the content differs per act (`Shelf`: which verbs and generators, the subtitle, the density);
 //! the behavior is one.
 //!
@@ -498,17 +500,34 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
         const tile: ?action_tile_mod.Tile = switch (ent.kind) {
             .generator => try generator_tile.generatorTile(lane, world, e, act, ent.index, shelf.density, hide),
             .verb => if (try action_tile_mod.action_tile(lane, world, e, ent.index, ent.id, shelf.density, hide)) |tl| blk: {
-                tl.el.set(.{
-                    .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = action_tile_mod.height(shelf.density) },
-                    .flow = .{ .dir = .column, .main = .center },
-                }, .{});
                 if (tl.clicked) _ = ctx.res.game.events.writer(ha.sim.events.BeginLabor).push(.{ .agent = e, .ai = ent.index });
                 break :blk tl;
             } else null,
         };
-        if (tile) |tl| if (tl.hide_clicked) toggleHidden(st, ent);
+        if (tile) |tl| {
+            action_tile_mod.place(tl, ownHeight(ent.kind, shelf.density), rowHeight(shown, pos, if (compact) 1 else 2, shelf.density));
+            if (tl.hide_clicked) toggleHidden(st, ent);
+        }
     }
     return section;
+}
+
+/// An entry's own tile height at `density`: a verb's or a generator's.
+pub fn ownHeight(kind: Kind, density: action_tile_mod.Density) f32 {
+    return switch (kind) {
+        .verb => action_tile_mod.height(density),
+        .generator => generator_tile.height(density),
+    };
+}
+
+/// The height of the grid row holding `list[pos]` when the tiles alternate between `lanes`
+/// columns: the tallest own height among the row's entries, so every tile of a row stands as
+/// tall as the row (the prototype's stretched grid cells) and the lanes' rows line up.
+pub fn rowHeight(list: []const Entry, pos: usize, lanes: usize, density: action_tile_mod.Density) f32 {
+    const first = pos - pos % lanes;
+    var h: f32 = 0;
+    for (list[first..@min(first + lanes, list.len)]) |ent| h = @max(h, ownHeight(ent.kind, density));
+    return h;
 }
 
 // ============================ Tests =====================================================
@@ -711,6 +730,23 @@ test "actions tiles keep their height" {
     // 82px / 52px outer, including the tile's 1px bottom inset.
     try testing.expectEqual(@as(f32, 81), action_tile_mod.height(.regular));
     try testing.expectEqual(@as(f32, 51), action_tile_mod.height(.compact));
+    // A regular generator adds its state line; a compact one rides it on the name row.
+    try testing.expectEqual(@as(f32, 87), generator_tile.height(.regular));
+    try testing.expectEqual(@as(f32, 51), generator_tile.height(.compact));
+}
+
+test "a grid row stands as tall as its tallest tile" {
+    const v = sortable("Forage", 0, 3, 2, 4);
+    var g = sortable("Snares", 1, 2, 1, 24);
+    g.kind = .generator;
+    // Two lanes: verb + generator, then verb + verb, then generator + generator, then a lone verb.
+    const list = [_]Entry{ v, g, v, v, g, g, v };
+    const want = [_]f32{ 87, 87, 81, 81, 87, 87, 81 };
+    for (want, 0..) |h, pos| try testing.expectEqual(h, rowHeight(&list, pos, 2, .regular));
+    // One lane (the compact breakpoint): every tile keeps its own height.
+    for (list, 0..) |ent, pos| try testing.expectEqual(ownHeight(ent.kind, .regular), rowHeight(&list, pos, 1, .regular));
+    // Compact density: a verb and a generator already share a height.
+    for (0..list.len) |pos| try testing.expectEqual(@as(f32, 51), rowHeight(&list, pos, 2, .compact));
 }
 
 /// An entry with only what the sort reads: its name, its authored place and its keys.

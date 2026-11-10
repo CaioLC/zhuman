@@ -108,13 +108,8 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, ai: u1
         density,
         hide,
     );
-    // A regular tile stands as tall as the prototype's (`min-height: 82px` plus the state
-    // line: 87px outer); a compact one, its state on the name row, as tall as a compact verb.
-    tile.el.set(.{
-        .w = .{ .pct_of_parent = 1.0 },
-        .h = .{ .fixed = if (density == .regular) generator_regular_h else action_tile.height(.compact) },
-        .flow = .{ .dir = .column, .main = .center },
-    }, .{});
+    // The tile at its own height; a grid stretches it to its row with `action_tile.place`.
+    action_tile.place(tile, height(density), height(density));
 
     // Nested control, anchored out of flow in the lower-right corner so it never grows the tile.
     // Right/bottom padding mirror the tile's inner padding (12 x 6 regular, 8 x 5 compact, with
@@ -127,7 +122,7 @@ pub fn generatorTile(parent: El, world: *const World, e: Entity, act: u8, ai: u1
     const mode = toggleAndCollect(tile.el, toggle, world, e, ai, display_name);
     const size: Style = if (density == .compact) .{ .font = 10 } else style.small;
     try toggle.label("label", mode_labels.get(mode), .{ size, if (hide == .hidden) hidden_mode_ink else mode_inks.get(mode) });
-    return .{ .el = tile.el, .clicked = false, .hide_clicked = tile.hide_clicked };
+    return .{ .el = tile.el, .inner = tile.inner, .clicked = false, .hide_clicked = tile.hide_clicked };
 }
 
 /// The mode corner's text per mode.
@@ -186,8 +181,15 @@ fn toggleAndCollect(tile: El, toggle: El, world: *const World, e: Entity, ai: u1
     return mode;
 }
 
-/// A regular generator tile's outer height (border included), logical px.
-pub const generator_regular_h: f32 = 87;
+/// A generator tile's own outer height (border included) per density, logical px: a regular
+/// tile stands as tall as the prototype's (`min-height: 82px` plus the state line: 87px outer),
+/// a compact one, its state on the name row, as tall as a compact verb.
+pub fn height(density: action_tile.Density) f32 {
+    return switch (density) {
+        .regular => 87,
+        .compact => action_tile.height(.compact),
+    };
+}
 
 // --- Tests: the toggle and the tile's collect, headless ---------------------------------------
 // The headless replay rig has no font, so it cannot build the real tile's labels. The fixture

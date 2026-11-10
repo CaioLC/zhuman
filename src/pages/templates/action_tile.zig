@@ -33,9 +33,13 @@ const icon_px: f32 = 14;
 /// control takes.
 const compact_state_clear: f32 = 28;
 
-/// The tile, the click on its body, and the click on its hide corner (never both: the corner
-/// takes its own click).
-pub const Tile = struct { el: El, clicked: bool, hide_clicked: bool = false };
+/// The tile, its padded content column (`place` sizes it), the click on its body, and the click
+/// on its hide corner (never both: the corner takes its own click).
+pub const Tile = struct { el: El, inner: El, clicked: bool, hide_clicked: bool = false };
+
+/// The tile box's bottom inset, between its content and the outline's bottom line: the underbar
+/// runs in it.
+const bottom_inset: f32 = 1;
 
 /// Whether a tile carries the hide corner and how it is dressed: `none` has no corner, `shown`
 /// a `hide` corner on the tile's own look, `hidden` an `unhide` corner on the hidden look.
@@ -46,7 +50,8 @@ pub const Hide = enum { none, shown, hidden };
 /// scrolling past the fold. Anatomy, chrome and states are shared.
 pub const Density = enum { regular, compact };
 
-/// The outer tile height (border included) per density; callers size the box to it.
+/// A verb tile's own outer height (border included) per density; `place` sizes the box to it,
+/// or to a taller grid row.
 pub fn height(density: Density) f32 {
     return switch (density) {
         .regular => 81,
@@ -182,7 +187,7 @@ pub fn tile(
     // The box carries only the outline and a 1px bottom inset; the content padding lives
     // on `inner` — so the underbar (anchored in the box's content box, which then spans
     // the full width) runs edge to edge, flush *above* the inward 1px border line.
-    box.set(.{ .flow = .{ .dir = .column } }, .{ look.outline, style.pad_each(0, 0, 1, 0) });
+    box.set(.{ .flow = .{ .dir = .column } }, .{ look.outline, style.pad_each(0, 0, bottom_inset, 0) });
 
     const inner = try box.box("inner", .{
         .flow = .{ .dir = .column, .cross = .start }, .gap = 2,
@@ -226,11 +231,27 @@ pub fn tile(
         }, .{Style{ .fill_ink = .acc }});
     }
 
-    if (hide == .none) return .{ .el = box, .clicked = !running and can and q.clicked };
+    if (hide == .none) return .{ .el = box, .inner = inner, .clicked = !running and can and q.clicked };
     const hide_clicked = try hideCorner(box, name, hide, density);
     // The corner's click bubbled to the tile's lifecycle, which ran first; read the tile's click
     // again now that the corner has taken its own (a disabled tile consumed it in its lifecycle).
-    return .{ .el = box, .clicked = !running and can and box.query().clicked, .hide_clicked = hide_clicked };
+    return .{ .el = box, .inner = inner, .clicked = !running and can and box.query().clicked, .hide_clicked = hide_clicked };
+}
+
+/// Size a built tile into a grid cell: the box fills the parent's width and stands `cell_h`
+/// tall, or `own_h` when the cell is shorter, and its content sits where a tile of its own
+/// height `own_h` centers it, so a tile stretched to a taller row keeps its name and metrics
+/// against its top edge and takes the extra height below them. The underbar, the hide corner
+/// and a generator's mode corner are anchored to the box, so they ride its real edges.
+pub fn place(t: Tile, own_h: f32, cell_h: f32) void {
+    t.el.set(.{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = @max(own_h, cell_h) },
+        .flow = .{ .dir = .column },
+    }, .{});
+    t.inner.set(.{
+        .h = .{ .fixed = own_h - bottom_inset },
+        .flow = .{ .dir = .column, .main = .center, .cross = .start },
+    }, .{});
 }
 
 /// The hide corner, a button anchored out of flow at the tile's top right, so it never grows
