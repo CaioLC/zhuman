@@ -663,8 +663,8 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             const is_out = live and std.mem.findScalar(u16, outs, @intCast(i)) != null;
 
             const fill_op: f32 = tweened(ctx, tile.get().key ^ 0xf111, &st.fill_prev[i], switch (s) {
-                .locked => 0.24,
-                .available => if (selected) 0.9 else if (hot) 0.84 else 0.66,
+                .locked => 0.14,
+                .available => if (selected) 0.9 else if (hot) 0.84 else 0.5,
                 .researched => 1,
             });
             const stroke_w: f32 = if (selected) 2 else if (hot) 1.7 else switch (s) {
@@ -700,7 +700,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
                     }
                 }
             } else {
-                (try tile.polyline("edge", &fill_pts, stroke_w / 2 * px_unit, true, .butt, stroke, if (s == .locked) 0.52 else 1)).set(.{
+                (try tile.polyline("edge", &fill_pts, stroke_w / 2 * px_unit, true, .butt, stroke, if (s == .locked) 0.38 else 1)).set(.{
                     .anchor = .top_left, .w = full, .h = full, .pass_through = true,
                 }, .{});
             }
