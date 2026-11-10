@@ -1,10 +1,16 @@
-//! `deal_slip` — THE DEAL (`.slip`), shared by the trade dialog and the neighbours view: the
+//! `deal_slip` — THE DEAL (`.slip`), the trade dialog's right-hand column, for the passerby and
+//! the merchant alike (the neighbours view composes its own slip in `market_view`): the
 //! chosen lot, a `LOTS − n + of {max}` stepper, what you give and what you receive scaled by the
 //! lots, the before → after of every stock the deal touches, the consequence, and the one
 //! call to action. A lot that cannot be taken shows its long refusal and `CANNOT TRADE`. After
 //! a settlement the AFTER values flash warn and settle back (not under reduced motion).
 //!
-//! It fills its parent's height: the call to action sits at the slip's foot.
+//! The slip is a fixed height (its parent's) in three parts: the heading, a content region that
+//! takes the height the other two leave, and the call to action pinned at the foot, outside the
+//! region. Only the region scrolls when a lot's terms outgrow it, so a tall lot never moves the
+//! call to action: it stands at one place for every lot, refused or not. The region's scrollbar
+//! lies in the slip's right padding, so the content keeps its full width whether or not it
+//! overflows, and a wrapped line breaks at the same place either way.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -15,13 +21,20 @@ const Style = style.Style;
 const El = uic.elements.El;
 
 const book_mod = @import("./trade_book.zig");
+const scroll_mod = @import("./scroll_view.zig");
 const stepper_mod = @import("./quantity_stepper.zig");
 const Book = book_mod.Book;
 const Lot = book_mod.Lot;
 
 pub const width: f32 = 250;
 const pad_x: f32 = 15;
+const pad_top: f32 = 10;
+const pad_bottom: f32 = 13;
+/// The width the heading, the region's content and the call to action share.
 const inner: f32 = width - 2 * pad_x;
+/// The gap between the heading, the region and the call to action, and between the region's
+/// own parts.
+const gap: f32 = 10;
 const flash_s: f32 = 0.7;
 
 pub const Options = struct {
@@ -31,7 +44,7 @@ pub const Options = struct {
     cta: []const u8,
     /// A settlement landed last frame: flash the AFTER values once.
     flash: bool = false,
-    /// The slip's outer height (its parent's); the call to action sits at its foot.
+    /// The slip's outer height (its parent's); the call to action is pinned at its foot.
     height: f32,
 };
 
@@ -74,15 +87,28 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     const a = ctx.arena;
 
     const slip = try parent.div(id);
-    // Fixed sizes are content boxes: the authored 10px/13px padding comes off the height.
+    // Fixed sizes are content boxes: the authored padding comes off the height. The right
+    // padding gives the scrollbar's width to the region, whose track then sits in it.
     slip.set(.{
-        .w = .{ .fixed = inner }, .h = .{ .fixed = opts.height - 10 - 13 },
-        .flow = .{ .dir = .column, .cross = .start }, .gap = 10,
-    }, .{style.pad_each(10, pad_x, 13, pad_x)});
+        .w = .{ .fixed = inner + scroll_mod.scrollbar_w }, .h = .{ .fixed = opts.height - pad_top - pad_bottom },
+        .flow = .{ .dir = .column, .cross = .start }, .gap = gap,
+    }, .{style.pad_each(pad_top, pad_x, pad_bottom, pad_x - scroll_mod.scrollbar_w)});
     try slip.label("heading", "THE DEAL", .{ style.eyebrow, style.muted });
 
+    // The content region (`.slip-content`): the height the heading and the call to action
+    // leave, scrolling on overflow. Its reserved gutter is the scrollbar's width, so the
+    // content is `inner` wide at rest and beside the track alike.
+    const region = try slip.box("region", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .grow, .flow = .{ .dir = .column, .cross = .start },
+    }, .{});
+    const view = try scroll_mod.scroll_view(region, "scroll", .{
+        .height = 0, .gutter = scroll_mod.scrollbar_w, .framed = false, .gap = gap,
+        .name = "The deal", .definite_parent = true,
+    }, null);
+    const body = view.content;
+
     const l = lot orelse {
-        try slip.label_fit("placeholder", "Pick a lot on the left.", .fill, .{style.note});
+        try body.label_fit("placeholder", "Pick a lot on the left.", .fill, .{style.note});
         return .{ .lots = lots, .settle = false, .cta_key = null };
     };
 
@@ -91,8 +117,8 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     var n = std.math.clamp(lots, 1, @max(1, max));
 
     // The wrapped texts below fill their parent's width, so each parent column takes the
-    // slip's content width (a fitted column would leave them one line wide).
-    const head = try slip.box("lot", .{
+    // region's content width (a fitted column would leave them one line wide).
+    const head = try body.box("lot", .{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
         .gap = 3,
     }, .{});
@@ -100,11 +126,11 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
     try head.label_fit("effect", l.effect, .fill, .{style.caption});
 
     if (refused) |r| {
-        try slip.label_fit("refusal", r.long, .fill, .{Style{ .font = 11, .ink = .danger }});
+        try body.label_fit("refusal", r.long, .fill, .{Style{ .font = 11, .ink = .danger }});
     } else {
         // LOTS − n + of {max}, between two rules.
-        try hrule(slip, "qty_top");
-        const qty = try slip.box("qty", .{
+        try hrule(body, "qty_top");
+        const qty = try body.box("qty", .{
             .w = .{ .fixed = inner }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
             .gap = 8,
         }, .{});
@@ -112,10 +138,10 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         n = try stepper_mod.quantity_stepper(qty, "stepper", n, 1, @max(1, max), .{ .less = "One lot fewer", .more = "One lot more" });
         const fill = try qty.box("fill", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
         try fill.label("max", try a.print("of {d}", .{max}), .{style.caption});
-        try hrule(slip, "qty_bottom");
+        try hrule(body, "qty_bottom");
 
         // YOU GIVE / YOU RECEIVE.
-        const terms = try slip.box("terms", .{
+        const terms = try body.box("terms", .{
             .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
             .gap = 7,
         }, .{});
@@ -131,8 +157,8 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         }
 
         // AFTER: before → after on only the stocks the deal touches.
-        try hrule(slip, "after_rule");
-        const after = try slip.box("after", .{
+        try hrule(body, "after_rule");
+        const after = try body.box("after", .{
             .w = .{ .fixed = inner }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
             .gap = 3,
         }, .{});
@@ -156,11 +182,10 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         }
     }
     if (refused == null and l.consequence.len > 0) {
-        try slip.label_fit("consequence", l.consequence, .fill, .{Style{ .font = 10, .ink = .acc }});
+        try body.label_fit("consequence", l.consequence, .fill, .{Style{ .font = 10, .ink = .acc }});
     }
 
-    // The call to action sits at the slip's foot (`.slip-action { margin-top: auto }`).
-    try slip.leaf("push", .{ .w = .{ .fixed = 1 }, .h = .grow }, .{});
+    // The call to action, pinned at the slip's foot below the region (`.slip-action`).
     const cta = try action(slip, if (refused != null) "CANNOT TRADE" else opts.cta, refused == null and max > 0);
     return .{ .lots = n, .settle = cta.clicked, .cta_key = cta.key };
 }

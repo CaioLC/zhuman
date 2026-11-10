@@ -37,17 +37,21 @@ pub const Notation = book_mod.Notation;
 
 /// `.trade-dialog`: 820px.
 pub const width: f32 = 820;
-/// The ledger and slip's height: fixed, so the dialog does not resize as lots sell out, and
-/// tall enough for a full page of lots and the slip (`.trade-body` at its fullest).
-const body_h: f32 = 380;
+/// The ledger and slip's height (`.trade-body`): fixed, so the dialog keeps one size whatever
+/// lot is selected, whichever tab is open and however many lots have sold out, and tall
+/// enough for a full page of lots and the tallest slip without its region scrolling.
+pub const body_h: f32 = 410;
 /// Lots a ledger page holds before search and pages appear.
 pub const per_page: usize = 7;
 const pad_x: f32 = 15;
 const price_w: f32 = 92;
 const corner_w: f32 = 151;
 const col_gap: f32 = 9;
-/// The ledger's rows at narrow widths (`@media (max-width: 760px)`): the slip drops under it.
-const narrow_rows_h: f32 = 260;
+/// The body at narrow widths (`@media (max-width: 760px)`, `flex-basis: 460px`): the slip drops
+/// under the ledger at a fixed 250px, and the ledger's rows take the rest above a 1px rule.
+pub const narrow_body_h: f32 = 460;
+pub const narrow_slip_h: f32 = 250;
+const narrow_rows_h: f32 = narrow_body_h - 1 - narrow_slip_h;
 
 /// The dialog's lanes for this frame: `min(820px, 100vw - 28px)` wide, and at 760 and below
 /// one column (the slip under the ledger, no ledger head, the corner on its own line).
@@ -310,7 +314,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 
     // --- the ledger | the slip ------------------------------------------------------------
     const trade_body = try frame.body.box("trade_body", .{
-        .w = .{ .fixed = ln.width }, .h = .{ .fixed = if (ln.narrow) narrow_rows_h + 1 + body_h else body_h },
+        .w = .{ .fixed = ln.width }, .h = .{ .fixed = if (ln.narrow) narrow_body_h else body_h },
         .flow = .{ .dir = if (ln.narrow) .column else .row, .cross = .start },
     }, .{});
 
@@ -356,7 +360,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
         .give_label = if (mode == .buy) identity.buy_give else identity.sell_give,
         .cta = if (mode == .buy) identity.buy_cta else identity.sell_cta,
         .flash = st.settled,
-        .height = body_h,
+        .height = if (ln.narrow) narrow_slip_h else body_h,
     });
     st.settled = false;
     st.lots = slip.lots;

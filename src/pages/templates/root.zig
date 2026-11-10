@@ -205,6 +205,7 @@ test {
     _ = @import("./pointer_conflicts_test.zig");
     _ = @import("./state_rules_test.zig");
     _ = @import("./menu_dialog_test.zig");
+    _ = @import("./trade_dialog_test.zig");
     _ = button_mod;
     _ = panel_mod;
     _ = scroll_view_mod;

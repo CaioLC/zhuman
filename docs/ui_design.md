@@ -263,6 +263,14 @@ and the log reflect each settlement in the same frame. Search and pages appear o
 direction holds more lots than fit. Switching direction selects the first lot that can be
 taken; closing the dialog returns focus to the control that opened it.
 
+**The dialog holds one size and its call to action holds its place.** The body under the tabs is
+410px high whatever lot is selected, whichever tab is open and however many lots have sold out.
+The slip stacks its heading, a content region and the call to action pinned at its foot: only
+the region scrolls, so a tall lot (a two-resource price, three AFTER rows, a consequence) never
+pushes the call to action out of view, and a short or refused lot leaves it in the same place.
+At 410px the tallest authored slip fits without scrolling. Stacked (≤760px) the body is 460px,
+the ledger above a 250px slip, and the slip's region scrolls there.
+
 In Act I the counterparty is the passerby, who arrives on the simulation's clock, lingers
 with a small satchel, and leaves; the strip reads that state and never infers it from the
 day count. While absent the strip is dim and disabled and its `TRADE →` link is hidden. While

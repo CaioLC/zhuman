@@ -52,6 +52,10 @@ pub const Options = struct {
     gap: f32 = content_gap,
     /// The accessible name of the viewport while it is a focus stop (it overflows).
     name: []const u8 = "scroll region",
+    /// A parent-high view (`height = 0`) whose parent's height is definite on a stacked page
+    /// too (a region growing inside a dialog's fixed-height box): it fills that parent and
+    /// scrolls in its own box at every width, instead of taking its content's height there.
+    definite_parent: bool = false,
 };
 
 pub const ScrollView = struct {
@@ -85,7 +89,7 @@ pub fn scroll_view(parent: El, id: []const u8, opts: Options, state: ?*ScrollSta
     std.debug.assert(opts.gutter == 0 or (fill and opts.gutter >= scrollbar_w));
     // Stacked (≤760) the whole page is the scroll view: a parent-high view has no height to
     // fill, so it takes its content's and lets the page scroll it.
-    if (fill_h and @import("./terminal.zig").stacked(ctx)) {
+    if (fill_h and !opts.definite_parent and @import("./terminal.zig").stacked(ctx)) {
         const outer = try parent.box(id, .{
             .flow = .{ .dir = .row, .cross = .start },
             .w = if (fill) .{ .pct_of_parent = 1.0 } else .fit_children, .h = .fit_children,

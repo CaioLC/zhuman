@@ -492,6 +492,16 @@ from the diminishing schedule), and a confirmed offer is a `Barter` intent: the 
 it at the top of the next frame, and the page sets `TradeState.settled` when it reads the
 `Traded` fact back through the state's `heard` cursor.
 
+The dialog's body is a fixed height (`trade_dialog.body_h`, 410; stacked, `narrow_body_h` 460
+with a `narrow_slip_h` 250 slip under the ledger), so the dialog never resizes as the
+selection changes. `deal_slip` lays that height out as the heading, a content region that
+grows into what is left, and the call to action pinned below the region. The region is a
+`scroll_view` filling its parent (`height = 0`, `definite_parent`, so it keeps its own box on
+a stacked page too) with a reserved gutter of `scrollbar_w`: the slip gives that width out of
+its right padding, so the content keeps its 220px at rest and beside the track alike, and the
+track sits in the padding. Overflowing, the region is a focus stop and reveals a newly focused
+stepper inside it; the call to action stays where it is.
+
 **Resize without state loss.** Because the UI is immediate-mode — `build_ui`'s
 prologue recomputes `ViewMetrics` every frame and the tree is rebuilt from the arena — a
 resize needs no relayout hook: layout, clip, and scroll limits recompute for free, and all
