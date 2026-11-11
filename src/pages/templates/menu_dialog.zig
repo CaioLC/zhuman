@@ -64,7 +64,7 @@ fn actNumeral(act: u8) []const u8 {
 }
 
 fn describe(buf: []u8, act: u8, day: u64, people: u32) []const u8 {
-    return std.mem.print(buf, "Act {s} \u{00b7} Day {d} \u{00b7} {d} {s}", .{ actNumeral(act), day, people, if (people == 1) "person" else "people" }) catch "?";
+    return std.mem.print(buf, "Act {s} \u{00b7} Day {d} \u{00b7} population {d}", .{ actNumeral(act), day, people }) catch "?";
 }
 
 fn title(screen: Screen) []const u8 {

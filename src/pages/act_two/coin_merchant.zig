@@ -118,7 +118,7 @@ pub fn coin_merchant(ctx: *UiCtx, world: *const World, e: Entity, id: []const u8
             .id = src.id,
             .mode = if (src.sell) .sell else .buy,
             .lot = src.lot,
-            .effect = src.effect,
+            .effect = merchant.effectOf(cat, i),
             .price = try termsOf(a, cat, visit_now, i, src.price),
             .receive = try termsOf(a, cat, visit_now, i, src.receive),
             .stock = merchant.stockLeft(visit_now, i),

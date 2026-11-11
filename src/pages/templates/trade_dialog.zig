@@ -114,7 +114,7 @@ pub fn venueIdentity(kind: market.MarketKind) VenueIdentity {
         // label and the CTA change with direction.
         .passerby => .{
             .kicker = "PASSERBY",
-            .title = "What will you trade?",
+            .title = "Goods on offer, and what they cost.",
             .buy_head = .{ .lot = "THEY OFFER", .price = "YOU GIVE", .corner = "STOCK" },
             .sell_head = .{ .lot = "YOU OFFER", .price = "THEY GIVE", .corner = "YOU HOLD" },
             .buy_give = "YOU GIVE",
@@ -124,7 +124,7 @@ pub fn venueIdentity(kind: market.MarketKind) VenueIdentity {
         },
         .merchant => .{
             .kicker = "MERCHANT",
-            .title = "What will you trade?",
+            .title = "Goods on offer, and what they cost.",
             .buy_head = .{ .lot = "THEY OFFER", .price = "PRICE", .corner = "STOCK" },
             .sell_head = .{ .lot = "YOU OFFER", .price = "THEY PAY", .corner = "YOU HOLD" },
             .buy_give = "YOU PAY",
@@ -134,7 +134,7 @@ pub fn venueIdentity(kind: market.MarketKind) VenueIdentity {
         },
         .exchange => .{
             .kicker = "EXCHANGE",
-            .title = "What will the floor clear?",
+            .title = "Goods on offer, and what they cost.",
             .buy_head = .{ .lot = "OFFERED", .price = "BID", .corner = "DEPTH" },
             .sell_head = .{ .lot = "YOU OFFER", .price = "ASK", .corner = "YOU HOLD" },
             .buy_give = "YOU PAY",
@@ -335,7 +335,7 @@ pub fn trade_dialog(ctx: *UiCtx, id: []const u8, kind: market.MarketKind, meta: 
 
     var first_row: ?u64 = null;
     if (list.len == 0) {
-        const msg = if (query.len > 0) "No lot matches that search." else "Nothing to offer in this direction.";
+        const msg = if (query.len > 0) "Nothing matches that search." else if (mode == .sell) "Nothing they want." else "Nothing for sale.";
         try rows.content.label("empty", msg, .{ style.note, style.pad_sym(pad_x, 14) });
     } else {
         const start = @as(usize, st.page) * per_page;

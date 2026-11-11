@@ -35,8 +35,7 @@ pub const Resource = enum {
     minerals,
     coin,
 
-    /// Food and Biomass exist from Act I; the display cover calls Biomass "Materials" until
-    /// the curtain.
+    /// Food and biomass exist from Act I.
     pub fn act(self: Resource) u8 {
         return switch (self) {
             .food, .biomass => 1,
@@ -44,27 +43,36 @@ pub const Resource = enum {
         };
     }
 
+    // The shown names. They are the same in every act — the player reads `biomass` as
+    // "materials" throughout — and take the act so a call site states which act it shows.
+
+    /// The two-letter unit after an amount in a cost or yield (`12ma`, `+1–3fo`).
     pub fn letterIn(self: Resource, shown_act: u8) []const u8 {
+        _ = shown_act;
         return switch (self) {
-            .food => "f",
-            .biomass => if (shown_act <= 1) "m" else "b",
-            .water => "w",
+            .food => "fo",
+            .biomass => "ma",
+            .water => "wa",
             .fuel => "fu",
             .metal => "me",
             .minerals => "mi",
-            .coin => "c",
+            .coin => "co",
         };
     }
 
+    /// The lowercase word in running text.
     pub fn wordIn(self: Resource, shown_act: u8) []const u8 {
-        if (self == .biomass) return if (shown_act <= 1) "materials" else "biomass";
+        _ = shown_act;
+        if (self == .biomass) return "materials";
         return @tagName(self);
     }
 
+    /// The capitalised name on a heading or label.
     pub fn labelIn(self: Resource, shown_act: u8) []const u8 {
+        _ = shown_act;
         return switch (self) {
             .food => "Food",
-            .biomass => if (shown_act <= 1) "Materials" else "Biomass",
+            .biomass => "Materials",
             .water => "Water",
             .fuel => "Fuel",
             .metal => "Metal",
@@ -73,10 +81,12 @@ pub const Resource = enum {
         };
     }
 
+    /// The stock-line code.
     pub fn abbrevIn(self: Resource, shown_act: u8) []const u8 {
+        _ = shown_act;
         return switch (self) {
             .food => "FO",
-            .biomass => if (shown_act <= 1) "MA" else "BI",
+            .biomass => "MA",
             .water => "WA",
             .fuel => "FU",
             .metal => "ME",
@@ -86,18 +96,17 @@ pub const Resource = enum {
     }
 };
 
-test "resource naming cover changes only biomass at the curtain" {
+test "biomass is shown as materials in every act, and every resource has a two-letter unit" {
     try std.testing.expectEqual(@as(u8, 1), Resource.biomass.act());
-    try std.testing.expectEqualStrings("m", Resource.biomass.letterIn(1));
+    try std.testing.expectEqualStrings("ma", Resource.biomass.letterIn(1));
     try std.testing.expectEqualStrings("materials", Resource.biomass.wordIn(1));
     try std.testing.expectEqualStrings("Materials", Resource.biomass.labelIn(1));
     try std.testing.expectEqualStrings("MA", Resource.biomass.abbrevIn(1));
-    try std.testing.expectEqualStrings("b", Resource.biomass.letterIn(2));
-    try std.testing.expectEqualStrings("biomass", Resource.biomass.wordIn(2));
-    try std.testing.expectEqualStrings("Biomass", Resource.biomass.labelIn(2));
-    try std.testing.expectEqualStrings("BI", Resource.biomass.abbrevIn(2));
+    try std.testing.expectEqualStrings("fo", Resource.food.letterIn(1));
+    try std.testing.expectEqualStrings("co", Resource.coin.letterIn(2));
 
-    inline for ([_]Resource{ .food, .water, .fuel, .metal, .minerals, .coin }) |r| {
+    inline for (comptime std.enums.values(Resource)) |r| {
+        try std.testing.expectEqual(@as(usize, 2), r.letterIn(1).len);
         try std.testing.expectEqualStrings(r.letterIn(1), r.letterIn(2));
         try std.testing.expectEqualStrings(r.wordIn(1), r.wordIn(2));
         try std.testing.expectEqualStrings(r.labelIn(1), r.labelIn(2));

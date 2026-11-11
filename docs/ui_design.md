@@ -16,15 +16,16 @@ badly: the shape that serves one question is rarely the shape that serves anothe
 surface with three jobs ends up with the furniture of none of them. A BUILD pane of identical
 tiles would be a shop, a catalog and an inventory at once.
 
-Everything below follows from splitting questions apart and giving each its own shape.
+Everything below follows from splitting questions apart and giving each its own shape. A
+surface's subheading states its answer as a statement, not a question.
 
-| Surface | Question | Shape |
+| Surface | Subheading | Shape |
 |---|---|---|
-| **ACTIONS** | what will this body do now? | a searchable, bounded grid of compact verbs |
-| **BUILD** | what can I make next? | a sorted, filtered list of rows |
-| **HOLDINGS** | what do I own, and what is it doing for me? | a persistent panel |
-| **RESEARCH** | what exists, and what does it take? | a board |
-| **MARKET** | who will trade with you? | a list of people (or goods) and a deal slip |
+| **ACTIONS** | Work available to you. | a searchable, bounded grid of compact verbs |
+| **BUILD** | Recipes available to you. | a sorted, filtered list of rows |
+| **HOLDINGS** | none: it shows what you own and what it is doing for you | a persistent panel |
+| **RESEARCH** | Specialize your skills. | a board |
+| **MARKET** | Neighbours, what they offer and what they want. | a list of people (or goods) and a deal slip |
 
 ## Grammar
 
@@ -183,16 +184,16 @@ counts the standing conditions unmet (`locked · 1 condition`). `busy` is everyt
 with the hands on other work: the card stays danger-toned and reads `hands busy` /
 `HANDS BUSY`, never `inputs short`. In Act I this is
 the Shelter, which asks for a rested body, a stocked larder, several kinds of goods already
-made, and the materials for the largest build in the act; raising it pays through the same
+made, and the materials for the largest build in the act; building it pays through the same
 build path as any recipe, so it holds the hands and the activity strip and every other build
 waits on it. While it goes up the card is the sibling of a building row: the rail, wash and
-readiness (`raising · 3.5d left`) take the accent, the compact line reads the progress
+readiness (`building · 3.5d left`) take the accent, the compact line reads the progress
 (`42%`), every requirement reads met with the order `paid`, and the CTA keeps its 132×28 lane
 as a disabled `■ BUILDING` with a 3px accent underbar filling with the build. The curtain
 falls only when the build completes. In Act II it is
 the **Exchange**, a standing trading floor. Its recipe is unlocked
-only when population is strictly greater than 500 and at least one ring-4 technology is
-Researched. The recipe costs 80 Biomass, 40 Minerals and 24 Metal and takes 18 days. Raising it pays those inputs, replaces the temporary passerby-descended merchant row
+only when population is strictly greater than 500 and at least one ring-4 skill is
+researched. The recipe costs 80 materials, 40 minerals and 24 metal (`80ma 40mi 24me · 18d`) and takes 18 days. Building it pays those inputs, replaces the temporary passerby-descended merchant row
 with a permanent Exchange, and opens Act III. A compact Exchange bar remains fixed below the
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
@@ -290,10 +291,26 @@ present the link returns and opens the dialog.
 Act II's MARKET tab is a view, not a dialog, and its primitive is a person, not a good. With
 few neighbours the list reads as people in sentences; with many it collapses to goods in
 notation, each with a price range drawn only from trades that happened. A deal composes both
-sides on the shared deal slip, and a refusal is answered in the counterparty's own valuation.
-YOUR STALL posts sells and buys at your own prices — what the neighbours read while you work —
-and each post says how many would take it at that price. Like RESEARCH it owns the whole
-surface: the strips and the log step aside and the Household collapses.
+sides on THE DEAL, and a refusal is answered in the counterparty's own valuation. A deal
+opened from a good's detail keeps that good's row lit, and its `← BACK` returns to the detail;
+opened from a person, `← BACK` closes it. INVENTORY, the first control, posts what you offer
+and what you want at your own prices — what the neighbours read while you work — and each post
+says how many would take it at that price. The header is the tab's and stays the same in
+either view: `MARKET`, its subheading, and the whole market's standing total
+(`58 offers · 86 wants`, yours among them). Like RESEARCH it owns the whole surface: the
+strips and the log step aside and the Household collapses.
+
+Act I has the same tab, beside ACTIONS and BUILD, and the same view with nobody in it: your own
+row (no trade named, `NOTHING POSTED`), `No neighbours yet.`, `No deal open.`, and a footer that
+points at the strip (`A passerby trades from the strip.`), where the passerby still trades.
+There is no coin before Act II, so nothing in it speaks of one: INVENTORY has no PRICE column
+and a tally counts only items. It lists what the lone actor holds, food, materials and then
+each good owned, as `{spare} spare of {held} held · {the good's effect}`. The larder and the
+stockpile are the body's and stay whole; a good keeps the unit in use, so only a second pair of
+sandals or a second hatchet is spare, and an offer steps up to the spare and no further. A
+posted offer counts in the header and reads `0 would buy`, and WANTS has nothing to list
+(`Nobody is offering anything yet.`). The offers stay behind at the curtain: Act II's market
+starts from its own neighbours.
 
 ## RESEARCH — the board
 
@@ -313,7 +330,7 @@ removing it, so the map keeps its shape. The filters are cumulative from narrow 
 is neither selectable, clickable nor a focus target. An available tile is at about 66%, labelled
 and interactive. A researched tile is at full opacity with a marker, and stays selectable to
 inspect. Affordability is not a state: an available tile the settlement cannot pay for stays
-available, and its action reads the deficit as a fact, `NEEDS 2 BIOMASS · 1 FOOD`, never a
+available, and its action reads the deficit as a fact, `NEEDS 2 MATERIALS · 1 FOOD`, never a
 route to cover it. A researched tile has no repeat action. Locked labels are hidden so that
 progression and the silhouette of the board stay legible, not because the society lacks the
 knowledge.

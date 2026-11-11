@@ -73,7 +73,7 @@ $matrix = [ordered]@{
     "act_one_building" = "QA-10 Act I active build with cancel"
     "act_one_shelter_locked" = "QA-10 Shelter locked, details open"
     "act_one_shelter_unfunded" = "QA-10 Shelter unfunded"
-    "act_one_shelter_ready" = "QA-10 Shelter ready to raise"
+    "act_one_shelter_ready" = "QA-10 Shelter ready to build"
     "act_one_shelter_busy" = "QA-10 Shelter waiting on busy hands"
     "act_one_shelter_building" = "QA-10 Shelter going up, details open"
     "act_one_shelter_building_closed" = "QA-10 Shelter going up, card closed"
@@ -89,7 +89,7 @@ $matrix = [ordered]@{
     "research_zoom_75" = "RESEARCH 75% camera"
     "research_zoom_250" = "RESEARCH 250% camera, panned"
     "act_two_exchange"  = "Act II Exchange card, details open, locked"
-    "act_two_exchange_ready" = "Act II Exchange ready to raise"
+    "act_two_exchange_ready" = "Act II Exchange ready to build"
     "act_two_exchange_standing" = "Act III identity after the Exchange stands"
     "act_two_trade"     = "Act II merchant trade dialog open"
     "act_two_actions_hidden" = "Act II ACTIONS hidden view, two tiles hidden"
@@ -103,7 +103,11 @@ $matrix = [ordered]@{
     "title_credits"     = "Title screen: credits"
     "market_people"     = "MARKET by person, a deal open"
     "market_good"       = "MARKET by good, a good picked"
-    "market_stall"      = "MARKET stall"
+    "market_deal_good"  = "MARKET deal opened from a good, BACK to its detail"
+    "market_stall"      = "MARKET inventory, offers"
+    "market_stall_wants" = "MARKET inventory, wants"
+    "act_one_market"    = "Act I MARKET focus view, nobody in it"
+    "act_one_market_inventory" = "Act I MARKET inventory, no price"
 }
 
 if (-not (Test-Path $Exe)) {

@@ -28,9 +28,9 @@ const ShelterFixture = struct {
         .kicker = "A PLACE FOR OTHERS",
         .copy = "",
         .explanation = "",
-        .raising = "The Shelter is going up.",
+        .building = "The Shelter is going up.",
         .waiting = "Everything is on hand; the Shelter waits for free hands.",
-        .action = "RAISE SHELTER \u{2192}",
+        .action = "BUILD SHELTER \u{2192}",
     };
 
     pub fn build(self: *ShelterFixture, ctx: *uic.UiCtx) anyerror!uic.Trees {
@@ -58,7 +58,7 @@ fn click(r: *uic.Replay, x: f32, y: f32) !void {
     try r.frame(&.{ .{ .pointer_press = .{ .x = x, .y = y } }, .{ .pointer_release = .{ .x = x, .y = y } } });
 }
 
-test "the Shelter card: busy hands wait, a ready click writes BeginBuild, and raising its CTA is a disabled ■ BUILDING with the build's progress" {
+test "the Shelter card: busy hands wait, a ready click writes BeginBuild, and building, its CTA is a disabled ■ BUILDING with the build's progress" {
     try ha.sdl.ttf.init();
     defer ha.sdl.ttf.quit();
     var fonts = try ha.font.Fonts.init(testing.allocator, "assets/fonts/JetBrainsMonoNL-Regular.ttf", style.default_font);
@@ -97,13 +97,13 @@ test "the Shelter card: busy hands wait, a ready click writes BeginBuild, and ra
     try r.idle(2);
     try testing.expect((controlNamed(&res, "HANDS BUSY") orelse return error.NoSuchControl).state.disabled);
 
-    // Free hands: ready to raise.
+    // Free hands: ready to build.
     w.remove(e, comp.Busy);
     requote(&w, e, cat);
     try r.idle(1);
-    const raise = controlNamed(&res, "RAISE SHELTER \u{2192}") orelse return error.NoSuchControl;
-    try testing.expect(!raise.state.disabled);
-    const rect = ui.rectOf(raise.key) orelse return error.NotStamped;
+    const build = controlNamed(&res, "BUILD SHELTER \u{2192}") orelse return error.NoSuchControl;
+    try testing.expect(!build.state.disabled);
+    const rect = ui.rectOf(build.key) orelse return error.NotStamped;
     const x = rect.x + rect.w / 2;
     const y = rect.y + rect.h / 2;
     try click(&r, x, y);
@@ -115,7 +115,7 @@ test "the Shelter card: busy hands wait, a ready click writes BeginBuild, and ra
     try testing.expectEqual(@as(?ha.sim.events.Refused.Reason, null), capital.begin(&w, e, &res.game, shelter));
     requote(&w, e, cat);
     try r.idle(1);
-    try testing.expect(controlNamed(&res, "RAISE SHELTER \u{2192}") == null);
+    try testing.expect(controlNamed(&res, "BUILD SHELTER \u{2192}") == null);
     const building = controlNamed(&res, "\u{25A0} BUILDING") orelse return error.NoSuchControl;
     try testing.expect(building.state.disabled);
     try testing.expectEqualStrings("0%", building.value.slice());

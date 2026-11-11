@@ -485,8 +485,9 @@ is a single stacked column, so ≤760 stacking is inherent.
 **The trade dialog.** The Act I HUD opens `trade_dialog` as its own overlay root (drawn last,
 over the shell) when the Passerby strip's Hail is clicked and the `market.Encounter` is
 `present`. Its `TradeState` (mode + per-mode selection +
-an `open` lifecycle flag) rides on the *stable* market-strip node so it survives the frame-arena
-rebuild; the dialog takes that state by pointer rather than owning it on the transient modal box.
+an `open` lifecycle flag) rides on an always-built zero-size node of the page, so it survives the
+frame-arena rebuild and the MARKET focus view, which hides the strip; the dialog takes that state
+by pointer rather than owning it on the transient modal box.
 Offers are built in the page from live `market.Quote`s (buys from the passerby's satchel, sells
 from the diminishing schedule), and a confirmed offer is a `Barter` intent: the handler resolves
 it at the top of the next frame, and the page sets `TradeState.settled` when it reads the
@@ -1006,8 +1007,8 @@ the state to its look, or to a struct of `Style`s when one state styles several 
 
 **What stays explicit.** A choice that mixes a control state with a game fact in one decision,
 picks a fill from a game fact (a verdict is glyph ink only), or follows geometry keeps the
-`if`: the market strip's TRADE label (it lifts while disabled), market_view's stall row fill
-(posted or not), trade_dialog's lot ink (chosen or refused), research_board's small-button
+`if`: the market strip's TRADE label (it lifts while disabled), market_view's inventory row
+fill (posted or not), trade_dialog's lot ink (chosen or refused), research_board's small-button
 label (its rest is a `Color` parameter), the slider thumb's edge while dragging, the scroll
 thumb (it sits beside its viewport, so a rule on it has no control to read on its own and
 reads an enclosing viewport when nested), and colours picked by index or geometry (the reach

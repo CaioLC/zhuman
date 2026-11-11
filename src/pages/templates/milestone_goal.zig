@@ -27,7 +27,7 @@ const DisclosureState = uic.UiState.DisclosureState;
 
 /// Where the milestone stands: `locked` until its standing conditions hold, `unfunded` while an
 /// input is short, `busy` when everything is on hand but the hands are on other work, `ready`
-/// to raise, `building` while the raise is under way, then `done`.
+/// to build, `building` while the build is under way, then `done`.
 pub const Lifecycle = enum { locked, unfunded, busy, ready, building, done };
 pub const Presentation = struct { readiness: []const u8 };
 
@@ -38,7 +38,7 @@ pub fn presentationOf(state: Lifecycle) Presentation {
         .unfunded => .{ .readiness = "inputs short" },
         .busy => .{ .readiness = "hands busy" },
         .ready => .{ .readiness = "ready" },
-        .building => .{ .readiness = "raising" },
+        .building => .{ .readiness = "building" },
         .done => .{ .readiness = "done" },
     };
 }
@@ -119,7 +119,7 @@ pub const Goal = struct {
     requirements: []const Requirement = &.{},
     explanation: []const u8 = "",
     action: []const u8 = "",
-    /// The raise's progress (0..1), the CTA's underbar; drawn only while `building`.
+    /// The build's progress (0..1), the CTA's underbar; drawn only while `building`.
     progress: ?f32 = null,
     /// Open (or close) the details on this frame — a fixture's first frame; null leaves the
     /// disclosure to the player.
@@ -225,7 +225,7 @@ pub fn milestone_goal(parent: El, id: []const u8, goal: Goal) !Milestone {
             .w = .{ .fixed = action_w }, .h = .{ .fixed = action_h },
             .offset = .{ .y = bar_control_offset_y },
         }, .{});
-        // A building CTA's underbar fills with the raise: its spoken value is the same fraction.
+        // A building CTA's underbar fills with the build: its spoken value is the same fraction.
         const progress: ?f32 = if (goal.state == .building) std.math.clamp(goal.progress orelse 0, 0, 1) else null;
         const value: ?[]const u8 = if (progress) |p| try ctx.arena.print("{d:.0}%", .{p * 100}) else null;
         const aq = action.control(.{ .enabled = ready, .name = goal.action, .value = value, .role = .button, .ring = false });
@@ -302,7 +302,7 @@ test "milestone lifecycle readiness words" {
     try std.testing.expectEqualStrings("inputs short", presentationOf(.unfunded).readiness);
     try std.testing.expectEqualStrings("hands busy", presentationOf(.busy).readiness);
     try std.testing.expectEqualStrings("ready", presentationOf(.ready).readiness);
-    try std.testing.expectEqualStrings("raising", presentationOf(.building).readiness);
+    try std.testing.expectEqualStrings("building", presentationOf(.building).readiness);
     try std.testing.expectEqualStrings("done", presentationOf(.done).readiness);
 }
 

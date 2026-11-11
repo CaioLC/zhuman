@@ -106,7 +106,6 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
     return .{
         .count = try a.print("{d} KINDS, {d}", .{ owned.items.len, units }),
         .roster = owned.items,
-        .empty_roster = "nothing established yet",
         .section_title = "FLOWS / DAY",
         .section = flows,
         .body = body.items,

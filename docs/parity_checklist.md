@@ -57,10 +57,14 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `research_household` | the Household opened again beside the board | `act-ii.html#research` with the rail expanded |
 | `research_zoom_75` / `research_zoom_250` | the camera floor and ceiling (the latter panned) | `act-ii.html#research` after zooming |
 | `act_two_exchange`  | the Exchange card opened, locked | `act-ii.html?exchangeopen=1#build` |
-| `act_two_exchange_ready` | the Exchange ready to raise | `act-ii.html` (state of `refreshExchangeMilestone`) |
+| `act_two_exchange_ready` | the Exchange ready to build | `act-ii.html` (state of `refreshExchangeMilestone`) |
 | `act_two_exchange_standing` | Act III identity: `◆ EXCHANGE`, `Act III`, `ACT III OPEN` | `act-ii.html?exchange=standing` |
 | `act_two_market`    | MARKET by good | `act-ii.html#market`, `market.html` |
-| `market_people` / `market_good` / `market_stall` | MARKET deal slip, good slip, YOUR STALL | `market.html`, `market.html?stall=1` |
+| `market_people` / `market_good` | MARKET by person with a person-row deal open (`← BACK` closes it), and a good's detail | `market.html?pick=Mira`, `market.html?by=good` |
+| `market_deal_good` | a deal opened from FOOD's detail: FOOD's row held, `← BACK` returns to it | `market.html?by=good` after picking a name under FOOD |
+| `market_stall` / `market_stall_wants` | INVENTORY on OFFERS (a good's short effect beside its spare) and on WANTS | `act-ii.html?stall=1#market`, `market.html?stall=1&side=buy` |
+| `act_one_market` | Act I MARKET, a focus view with nobody in it: the player's own row (`NOTHING POSTED`), `No neighbours yet.`, `No deal open.`, `A passerby trades from the strip.`; the strips and log aside, the Household collapsed | `act-i.html#market` |
+| `act_one_market_inventory` | Act I INVENTORY: food, materials and the goods held, `{spare} spare of {held} held`, a spare pair of sandals and a spare hatchet; no PRICE column, no coin | `act-i.html?stall=1#market` |
 | `act_one_trade` / `act_two_trade` | the trade dialog over each act | `act-i.html?modal=merchant`, `act-ii.html?modal=merchant` |
 | `act_one_menu` / `menu_save` / `menu_settings` / `menu_quit` | the session menu and its screens | `menu.html`, `menu.html?screen=…` |
 | `act_one_focus` | focus-visible: three Tabs in | any page, keyboard focus |
@@ -73,7 +77,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_one_building` | a build half done: the row's meter, time left and cancel corner; other rows "hands busy" | `act-i.html` `.build-row.is-building` |
 | `act_one_shelter_locked` / `_unfunded` / `_ready` | the Shelter card's details open in each lifecycle state | `act-i.html` milestone card |
 | `act_one_shelter_busy` | the Shelter's inputs on hand, the hands on a Spear: `hands busy` / `HANDS BUSY` | `act-i.html?shelter=busy&shelteropen=1` |
-| `act_one_shelter_building` / `_building_closed` | the Shelter half built, details open and closed: accent rail, `raising · 3.0d left`, `50%`, `■ BUILDING` with its underbar, the order `120 paid` | `act-i.html?shelter=building&shelteropen=1`, `act-i.html?shelter=building` |
+| `act_one_shelter_building` / `_building_closed` | the Shelter half built, details open and closed: accent rail, `building · 3.0d left`, `50%`, `■ BUILDING` with its underbar, the order `120 paid` | `act-i.html?shelter=building&shelteropen=1`, `act-i.html?shelter=building` |
 | `act_one_trade_sell` | the passerby dialog on SELL | `trade.html` SELL |
 | `act_two_actions_filtered` | ACTIONS filtered `out:food` | `act-ii.html` ACTIONS with a query |
 | `act_two_build_none` | BUILD with a query nothing answers (the active build is not filtered out) | `act-ii.html` BUILD, empty result |

@@ -1,8 +1,10 @@
 //! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
-//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD surface. Each
-//! view keys its own rail, so each remembers its collapse; the rail owns its width tween, and
-//! this outer composition synchronizes the inter-column gap with the same 120ms policy (22px
-//! expanded, 12px collapsed) and keeps one surface alive across both.
+//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD/MARKET surface.
+//! Each view keys its own rail, so each remembers its collapse, and MARKET, a focus view,
+//! collapses its rail on each entry without touching the others' memory, as Act II's focus views
+//! do; the player may open it again while there. The rail owns its width tween, and this outer
+//! composition synchronizes the inter-column gap with the same 120ms policy (22px expanded, 12px
+//! collapsed) and keeps one surface alive across both.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -64,10 +66,17 @@ pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const
     }, .{});
     const surface = try surface_mod.act_one_surface(content, world, e, "surface", opts.surface);
 
-    const rail_ids = [_][]const u8{ "rail_actions", "rail_build" };
+    const rail_ids = [_][]const u8{ "rail_actions", "rail_build", "rail_market" };
+    // The view shown last frame, so a focus view collapses its rail on entry only.
+    const vm = workspace.state(uic.UiState.ViewMemory);
+    const entered = vm.last == null or vm.last.? != surface.active;
+    vm.last = surface.active;
     const built_rail = try rail_mod.rail(rail_lane, .{
         .id = rail_ids[@min(surface.active, rail_ids.len - 1)],
         .label = "HOUSEHOLD",
+        // A fixture that opens the rail on its first frame (`initial_collapsed = false`)
+        // overrides the entry collapse.
+        .force_collapsed = surface.focus and entered and opts.initial_collapsed != false,
         .initial_collapsed = opts.initial_collapsed,
     });
     if (built_rail.body) |body| {

@@ -36,7 +36,9 @@ pub const MerchantLot = struct {
     id: u32,
     sell: bool = false,
     lot: []const u8,
-    effect: []const u8,
+    /// A note on the lot itself. A BUY lot of a good shows the good's roster `effect` instead
+    /// (`effectOf`), so it carries none here.
+    effect: []const u8 = "",
     price: []const MerchantTerm,
     receive: []const MerchantTerm,
     stock: u32,
@@ -44,25 +46,25 @@ pub const MerchantLot = struct {
 };
 
 pub const lots = [_]MerchantLot{
-    .{ .id = 1, .lot = "Water \u{00d7}6", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "water", .n = 6 }}, .stock = 3 },
-    .{ .id = 2, .lot = "Minerals \u{00d7}5", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 7 }}, .receive = &.{.{ .item = "minerals", .n = 5 }}, .stock = 2 },
-    .{ .id = 3, .lot = "Fuel \u{00d7}4", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 8 }}, .receive = &.{.{ .item = "fuel", .n = 4 }}, .stock = 2 },
-    .{ .id = 4, .lot = "Metal \u{00d7}3", .effect = "typed resource", .price = &.{.{ .item = "coin", .n = 12 }}, .receive = &.{.{ .item = "metal", .n = 3 }}, .stock = 2 },
+    .{ .id = 1, .lot = "Water \u{00d7}6", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "water", .n = 6 }}, .stock = 3 },
+    .{ .id = 2, .lot = "Minerals \u{00d7}5", .price = &.{.{ .item = "coin", .n = 7 }}, .receive = &.{.{ .item = "minerals", .n = 5 }}, .stock = 2 },
+    .{ .id = 3, .lot = "Fuel \u{00d7}4", .price = &.{.{ .item = "coin", .n = 8 }}, .receive = &.{.{ .item = "fuel", .n = 4 }}, .stock = 2 },
+    .{ .id = 4, .lot = "Metal \u{00d7}3", .price = &.{.{ .item = "coin", .n = 12 }}, .receive = &.{.{ .item = "metal", .n = 3 }}, .stock = 2 },
     .{ .id = 5, .lot = "Food \u{00d7}10", .effect = "preserved, keeps well", .price = &.{.{ .item = "coin", .n = 8 }}, .receive = &.{.{ .item = "food", .n = 10 }}, .stock = 3 },
-    .{ .id = 6, .lot = "Biomass \u{00d7}15", .effect = "baled fibre", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "biomass", .n = 15 }}, .stock = 4 },
-    .{ .id = 7, .lot = "Cut stone \u{00d7}4", .effect = "dressed downriver", .price = &.{.{ .item = "coin", .n = 9 }}, .receive = &.{.{ .item = "worked_stone", .n = 4 }}, .stock = 2 },
-    .{ .id = 8, .lot = "Glass pane \u{00d7}1", .effect = "no kiln here can make it", .price = &.{.{ .item = "coin", .n = 22 }}, .receive = &.{.{ .item = "glass_pane", .n = 1 }}, .stock = 1 },
-    .{ .id = 9, .lot = "Hand tools \u{00d7}1", .effect = "forged beyond the valley", .price = &.{.{ .item = "coin", .n = 26 }}, .receive = &.{.{ .item = "hand_tools", .n = 1 }}, .stock = 2 },
-    .{ .id = 10, .lot = "Fishing net \u{00d7}1", .effect = "better Fish tool", .price = &.{.{ .item = "coin", .n = 18 }}, .receive = &.{.{ .item = "fishing_net", .n = 1 }}, .stock = 1, .consequence = "Replaces Fishing rod: Fish yield rises. The unlock does not stack." },
-    .{ .id = 11, .lot = "Carpenter bench \u{00d7}1", .effect = "finished capital", .price = &.{.{ .item = "coin", .n = 60 }}, .receive = &.{.{ .item = "carpenter_bench", .n = 1 }}, .stock = 1 },
-    .{ .id = 101, .sell = true, .lot = "Biomass \u{00d7}6", .effect = "leaves your stock", .price = &.{.{ .item = "biomass", .n = 6 }}, .receive = &.{.{ .item = "coin", .n = 5 }}, .stock = 4 },
-    .{ .id = 102, .sell = true, .lot = "Food \u{00d7}8", .effect = "leaves your larder", .price = &.{.{ .item = "food", .n = 8 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
-    .{ .id = 103, .sell = true, .lot = "Fuel \u{00d7}4", .effect = "burned down the ridge", .price = &.{.{ .item = "fuel", .n = 4 }}, .receive = &.{.{ .item = "coin", .n = 6 }}, .stock = 4 },
-    .{ .id = 104, .sell = true, .lot = "Minerals \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "minerals", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
-    .{ .id = 105, .sell = true, .lot = "Metal \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "metal", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 9 }}, .stock = 4 },
+    .{ .id = 6, .lot = "Materials \u{00d7}15", .effect = "baled fibre", .price = &.{.{ .item = "coin", .n = 5 }}, .receive = &.{.{ .item = "biomass", .n = 15 }}, .stock = 4 },
+    .{ .id = 7, .lot = "Cut stone \u{00d7}4", .price = &.{.{ .item = "coin", .n = 9 }}, .receive = &.{.{ .item = "worked_stone", .n = 4 }}, .stock = 2 },
+    .{ .id = 8, .lot = "Glass pane \u{00d7}1", .price = &.{.{ .item = "coin", .n = 22 }}, .receive = &.{.{ .item = "glass_pane", .n = 1 }}, .stock = 1 },
+    .{ .id = 9, .lot = "Hand tools \u{00d7}1", .price = &.{.{ .item = "coin", .n = 26 }}, .receive = &.{.{ .item = "hand_tools", .n = 1 }}, .stock = 2 },
+    .{ .id = 10, .lot = "Fishing net \u{00d7}1", .price = &.{.{ .item = "coin", .n = 18 }}, .receive = &.{.{ .item = "fishing_net", .n = 1 }}, .stock = 1, .consequence = "Replaces Fishing rod: Fish yield rises." },
+    .{ .id = 11, .lot = "Carpenter bench \u{00d7}1", .price = &.{.{ .item = "coin", .n = 60 }}, .receive = &.{.{ .item = "carpenter_bench", .n = 1 }}, .stock = 1 },
+    .{ .id = 101, .sell = true, .lot = "Materials \u{00d7}6", .price = &.{.{ .item = "biomass", .n = 6 }}, .receive = &.{.{ .item = "coin", .n = 5 }}, .stock = 4 },
+    .{ .id = 102, .sell = true, .lot = "Food \u{00d7}8", .price = &.{.{ .item = "food", .n = 8 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
+    .{ .id = 103, .sell = true, .lot = "Fuel \u{00d7}4", .price = &.{.{ .item = "fuel", .n = 4 }}, .receive = &.{.{ .item = "coin", .n = 6 }}, .stock = 4 },
+    .{ .id = 104, .sell = true, .lot = "Minerals \u{00d7}3", .price = &.{.{ .item = "minerals", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
+    .{ .id = 105, .sell = true, .lot = "Metal \u{00d7}3", .price = &.{.{ .item = "metal", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 9 }}, .stock = 4 },
     .{ .id = 106, .sell = true, .lot = "Water \u{00d7}5", .effect = "drawn this morning", .price = &.{.{ .item = "water", .n = 5 }}, .receive = &.{.{ .item = "coin", .n = 3 }}, .stock = 4 },
-    .{ .id = 107, .sell = true, .lot = "Forge \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "forge", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 30 }}, .stock = 1, .consequence = "A spare goes first; the forge you use keeps its verb." },
-    .{ .id = 108, .sell = true, .lot = "Lean-to \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "lean_to", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 7 }}, .stock = 2 },
+    .{ .id = 107, .sell = true, .lot = "Forge \u{00d7}1", .price = &.{.{ .item = "forge", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 30 }}, .stock = 1, .consequence = "A spare goes first; the forge you use keeps its verb." },
+    .{ .id = 108, .sell = true, .lot = "Lean-to \u{00d7}1", .price = &.{.{ .item = "lean_to", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 7 }}, .stock = 2 },
 };
 
 comptime {
@@ -99,6 +101,17 @@ pub fn levelOf(visit: *const market.MerchantVisit, i: usize) i8 {
 /// other as authored.
 pub fn amount(visit: *const market.MerchantVisit, i: usize, term: MerchantTerm) f32 {
     return if (std.mem.eql(u8, term.item, "coin")) market.priced(term.n, levelOf(visit, i)) else term.n;
+}
+
+/// The effect text lot `i` shows: a BUY lot of a good reads the good's roster `effect`, any
+/// other lot its own note, which may be empty.
+pub fn effectOf(cat: *const roster.Catalog, i: usize) []const u8 {
+    const lot = &lots[i];
+    if (!lot.sell) if (ledger.item(cat, lot.receive[0].item)) |item| switch (item) {
+        .good => |gi| return cat.goods[gi].copy.effect,
+        .resource => {},
+    };
+    return lot.effect;
 }
 
 /// Lot `i`'s stock left this visit.
@@ -241,6 +254,16 @@ test "every merchant lot names items the catalog knows" {
         for (lot.price) |term| try testing.expect(ledger.item(&cat, term.item) != null);
         for (lot.receive) |term| try testing.expect(ledger.item(&cat, term.item) != null);
     }
+}
+
+test "a BUY lot of a good shows the good's roster effect; a resource lot its own note" {
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const net = lotIndex(10);
+    try testing.expectEqualStrings(cat.goods[cat.goodIndex("fishing_net").?].copy.effect, effectOf(&cat, net));
+    try testing.expectEqualStrings("", effectOf(&cat, lotIndex(1)));
+    try testing.expectEqualStrings("preserved, keeps well", effectOf(&cat, lotIndex(5)));
+    try testing.expectEqualStrings("", effectOf(&cat, lotIndex(107))); // a SELL lot of a good
 }
 
 test "merchant_deal refuses without mutating: short of coin, sold out, the cart away" {

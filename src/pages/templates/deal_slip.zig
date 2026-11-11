@@ -123,7 +123,7 @@ pub fn deal_slip(parent: El, id: []const u8, book: Book, lot: ?*const Lot, lots:
         .gap = 3,
     }, .{});
     try head.label_fit("name", l.lot, .fill, .{Style{ .font = 14, .ink = .fg }});
-    try head.label_fit("effect", l.effect, .fill, .{style.caption});
+    if (l.effect.len > 0) try head.label_fit("effect", l.effect, .fill, .{style.caption});
 
     if (refused) |r| {
         try body.label_fit("refusal", r.long, .fill, .{Style{ .font = 11, .ink = .danger }});

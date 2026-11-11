@@ -15,7 +15,7 @@
         .short = "FORAGE",
         .coord = .{ .q = 1, .r = 0 },
         .initial = .researched,
-        .effect = "Establishes Food gathering at Act II population scale; does not re-unlock the existing personal Forage action.",
+        .effect = "You gather food from the wild.",
     },
     .{
         .id = "spring_well",
@@ -24,7 +24,7 @@
         .coord = .{ .q = 0, .r = 1 },
         .cost = .{ .food = 2.0, .biomass = 3.0 },
         .initial = .available,
-        .effect = "Establishes local fresh-water production.",
+        .effect = "You draw fresh water.",
     },
     .{
         .id = "firepit",
@@ -33,7 +33,7 @@
         .coord = .{ .q = -1, .r = 1 },
         .cost = .{ .food = 2.0, .biomass = 4.0 },
         .initial = .available,
-        .effect = "Establishes local conversion of Biomass into Fuel.",
+        .effect = "You burn materials into fuel.",
     },
     .{
         .id = "surface_ore",
@@ -42,7 +42,7 @@
         .coord = .{ .q = -1, .r = 0 },
         .cost = .{ .food = 3.0, .biomass = 3.0 },
         .initial = .available,
-        .effect = "Establishes local gathering of native copper and bog iron.",
+        .effect = "You gather native copper and bog iron.",
     },
     .{
         .id = "quarry_pit",
@@ -51,7 +51,7 @@
         .coord = .{ .q = 0, .r = -1 },
         .cost = .{ .food = 3.0, .biomass = 2.0 },
         .initial = .available,
-        .effect = "Establishes local gathering of loose stone and clay.",
+        .effect = "You gather loose stone and clay.",
     },
     .{
         .id = "woodcutting",
@@ -59,7 +59,7 @@
         .short = "WOOD",
         .coord = .{ .q = 1, .r = -1 },
         .initial = .researched,
-        .effect = "Establishes Biomass gathering at Act II population scale; does not re-unlock the existing personal Split wood behavior.",
+        .effect = "You cut wood for materials.",
     },
     // ----- Ring 2 — Settlement works -----
     // Pure corners.
@@ -70,7 +70,7 @@
         .coord = .{ .q = 2, .r = 0 },
         .cost = .{ .food = 4.0, .biomass = 3.0 },
         .initial = .available,
-        .effect = "Managed traps and hunting grounds; steadier food from wildlife.",
+        .effect = "You keep traps and hunting grounds for steadier food.",
     },
     .{
         .id = "well_cistern",
@@ -79,7 +79,7 @@
         .coord = .{ .q = 0, .r = 2 },
         .cost = .{ .biomass = 4.0, .minerals = 3.0 },
         .initial = .locked,
-        .effect = "Reliable water extraction and storage; buffers dry periods.",
+        .effect = "You store water against dry spells.",
     },
     .{
         .id = "charcoal_works",
@@ -88,7 +88,7 @@
         .coord = .{ .q = -2, .r = 2 },
         .cost = .{ .biomass = 6.0, .fuel = 2.0 },
         .initial = .locked,
-        .effect = "Controlled conversion of Biomass into Fuel at improved yield.",
+        .effect = "You turn materials into fuel at a better yield.",
     },
     .{
         .id = "smithy",
@@ -97,7 +97,7 @@
         .coord = .{ .q = -2, .r = 0 },
         .cost = .{ .fuel = 2.0, .metal = 4.0 },
         .initial = .locked,
-        .effect = "Shapes and repairs available metal.",
+        .effect = "You shape and repair metal, and make basic metal tools.",
         .enables = "Unlocks basic metal tools.",
     },
     .{
@@ -107,7 +107,7 @@
         .coord = .{ .q = 0, .r = -2 },
         .cost = .{ .biomass = 2.0, .minerals = 5.0 },
         .initial = .locked,
-        .effect = "Dressed stone and aggregate; sturdier foundations and buildings.",
+        .effect = "You dress stone for sturdier foundations and buildings.",
     },
     .{
         .id = "loom_ropewalk",
@@ -116,7 +116,7 @@
         .coord = .{ .q = 2, .r = -2 },
         .cost = .{ .food = 2.0, .biomass = 5.0 },
         .initial = .available,
-        .effect = "Produces rope and cloth.",
+        .effect = "You make rope and cloth, for clothing and rigging.",
         .enables = "Enables clothing and rigging.",
     },
     // Hybrids (k = 1).
@@ -127,7 +127,7 @@
         .coord = .{ .q = 1, .r = 1 },
         .cost = .{ .biomass = 4.0, .water = 3.0 },
         .initial = .available,
-        .effect = "Organized coastal fishing.",
+        .effect = "You fish the coast with nets for reliable food.",
         .enables = "Unlocks Fishing net production.",
     },
     .{
@@ -137,7 +137,7 @@
         .coord = .{ .q = -1, .r = 2 },
         .cost = .{ .water = 3.0, .fuel = 2.0 },
         .initial = .locked,
-        .effect = "Drains, cuts, and dries wetland peat for Fuel.",
+        .effect = "You cut and dry peat for fuel.",
     },
     .{
         .id = "smelting_hearth",
@@ -146,7 +146,7 @@
         .coord = .{ .q = -2, .r = 1 },
         .cost = .{ .fuel = 4.0, .metal = 3.0 },
         .initial = .locked,
-        .effect = "Charcoal-fired ore reduction.",
+        .effect = "You smelt ore into worked metal over charcoal.",
         .enables = "Establishes worked-metal production.",
     },
     .{
@@ -156,7 +156,7 @@
         .coord = .{ .q = -1, .r = -1 },
         .cost = .{ .metal = 3.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Metal tooling for shaping stone; improves Minerals yield.",
+        .effect = "You shape stone with metal tools and get more minerals.",
     },
     .{
         .id = "pottery_works",
@@ -165,7 +165,7 @@
         .coord = .{ .q = 1, .r = -2 },
         .cost = .{ .biomass = 4.0, .minerals = 3.0 },
         .initial = .available,
-        .effect = "Fired vessels for storage; reduces spoilage.",
+        .effect = "You fire vessels that store food with less spoilage.",
     },
     .{
         .id = "field_cultivation",
@@ -174,7 +174,7 @@
         .coord = .{ .q = 2, .r = -1 },
         .cost = .{ .food = 3.0, .biomass = 4.0 },
         .initial = .available,
-        .effect = "Expands garden-scale growing into reliable crop production.",
+        .effect = "You grow crops in fields, beyond a garden.",
     },
     // ----- Ring 3 — Craft -----
     // Pure corners.
@@ -185,7 +185,7 @@
         .coord = .{ .q = 3, .r = 0 },
         .cost = .{ .food = 6.0, .fuel = 4.0, .minerals = 2.0 },
         .initial = .locked,
-        .effect = "Preserve food; much lower spoilage.",
+        .effect = "You preserve food so it spoils far more slowly.",
     },
     .{
         .id = "aqueduct",
@@ -194,7 +194,7 @@
         .coord = .{ .q = 0, .r = 3 },
         .cost = .{ .water = 4.0, .minerals = 6.0 },
         .initial = .locked,
-        .effect = "Move water across distance.",
+        .effect = "You move water across distance.",
     },
     .{
         .id = "coal_mining",
@@ -203,7 +203,7 @@
         .coord = .{ .q = -3, .r = 3 },
         .cost = .{ .fuel = 6.0, .metal = 4.0, .minerals = 3.0 },
         .initial = .locked,
-        .effect = "Extract coal seams; big fuel yield.",
+        .effect = "You mine coal seams for a large fuel yield.",
     },
     .{
         .id = "bronze_casting",
@@ -212,7 +212,7 @@
         .coord = .{ .q = -3, .r = 0 },
         .cost = .{ .fuel = 5.0, .metal = 6.0 },
         .initial = .locked,
-        .effect = "Alloys; better tools and weapons.",
+        .effect = "You cast bronze for better tools.",
     },
     .{
         .id = "brickworks",
@@ -221,7 +221,7 @@
         .coord = .{ .q = 0, .r = -3 },
         .cost = .{ .fuel = 4.0, .minerals = 7.0 },
         .initial = .locked,
-        .effect = "Fired brick; cheap durable construction.",
+        .effect = "You fire brick for cheap, durable building.",
     },
     .{
         .id = "carpentry",
@@ -230,7 +230,7 @@
         .coord = .{ .q = 3, .r = -3 },
         .cost = .{ .biomass = 7.0, .metal = 3.0 },
         .initial = .locked,
-        .effect = "Joinery and planks; larger wooden buildings.",
+        .effect = "You join planks into larger wooden buildings.",
     },
     // Hybrids (k = 1 nearer the first resource, k = 2 nearer the second).
     .{
@@ -240,7 +240,7 @@
         .coord = .{ .q = 2, .r = 1 },
         .cost = .{ .food = 2.0, .biomass = 5.0, .water = 4.0 },
         .initial = .locked,
-        .effect = "Reach deep water; +food.",
+        .effect = "You fish deep water for more food.",
     },
     .{
         .id = "irrigation_canals",
@@ -249,7 +249,7 @@
         .coord = .{ .q = 1, .r = 2 },
         .cost = .{ .food = 4.0, .water = 6.0 },
         .initial = .locked,
-        .effect = "Farms no longer need river adjacency.",
+        .effect = "You farm away from the river.",
     },
     .{
         .id = "water_wheel",
@@ -258,7 +258,7 @@
         .coord = .{ .q = -1, .r = 3 },
         .cost = .{ .biomass = 4.0, .water = 5.0, .metal = 2.0 },
         .initial = .locked,
-        .effect = "Mechanical power from rivers.",
+        .effect = "You take mechanical power from rivers.",
     },
     .{
         .id = "tar_pits",
@@ -267,7 +267,7 @@
         .coord = .{ .q = -2, .r = 3 },
         .cost = .{ .water = 3.0, .fuel = 6.0 },
         .initial = .locked,
-        .effect = "Collect surface oil and bitumen.",
+        .effect = "You collect surface oil and bitumen.",
     },
     .{
         .id = "bellows_forge",
@@ -276,7 +276,7 @@
         .coord = .{ .q = -3, .r = 2 },
         .cost = .{ .fuel = 6.0, .metal = 4.0 },
         .initial = .locked,
-        .effect = "Hotter fires; faster smelting.",
+        .effect = "You smelt faster with hotter fires.",
     },
     .{
         .id = "iron_smelting",
@@ -285,7 +285,7 @@
         .coord = .{ .q = -3, .r = 1 },
         .cost = .{ .fuel = 6.0, .metal = 7.0 },
         .initial = .locked,
-        .effect = "Iron replaces bronze.",
+        .effect = "You make iron tools and structures in place of bronze.",
     },
     .{
         .id = "nails_fittings",
@@ -294,7 +294,7 @@
         .coord = .{ .q = -2, .r = -1 },
         .cost = .{ .metal = 5.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Cheaper construction.",
+        .effect = "You make standard fasteners, so building costs less.",
     },
     .{
         .id = "glassblowing",
@@ -303,7 +303,7 @@
         .coord = .{ .q = -1, .r = -2 },
         .cost = .{ .fuel = 4.0, .metal = 2.0, .minerals = 6.0 },
         .initial = .locked,
-        .effect = "Glass from sand; windows and vessels.",
+        .effect = "You make glass from sand, for windows and vessels.",
     },
     .{
         .id = "lime_kiln",
@@ -312,7 +312,7 @@
         .coord = .{ .q = 1, .r = -3 },
         .cost = .{ .fuel = 4.0, .minerals = 6.0 },
         .initial = .locked,
-        .effect = "Mortar; stone buildings gain height.",
+        .effect = "You burn lime for mortar, so stone buildings rise higher.",
     },
     .{
         .id = "papermaking",
@@ -321,7 +321,7 @@
         .coord = .{ .q = 2, .r = -3 },
         .cost = .{ .biomass = 6.0, .water = 4.0 },
         .initial = .locked,
-        .effect = "Paper; boosts coordination and record-keeping.",
+        .effect = "You make paper and keep records.",
     },
     .{
         .id = "animal_husbandry",
@@ -330,7 +330,7 @@
         .coord = .{ .q = 3, .r = -2 },
         .cost = .{ .food = 4.0, .biomass = 5.0 },
         .initial = .locked,
-        .effect = "Livestock; food plus hide.",
+        .effect = "You keep livestock for food and hide.",
     },
     .{
         .id = "granary",
@@ -339,7 +339,7 @@
         .coord = .{ .q = 3, .r = -1 },
         .cost = .{ .food = 6.0, .biomass = 4.0, .minerals = 2.0 },
         .initial = .locked,
-        .effect = "Bulk food storage.",
+        .effect = "You store food in bulk.",
     },
     // ----- Ring 4 — Early industrial -----
     // Pure corners.
@@ -350,7 +350,7 @@
         .coord = .{ .q = 4, .r = 0 },
         .cost = .{ .food = 10.0, .biomass = 6.0, .water = 4.0 },
         .initial = .locked,
-        .effect = "Higher crop and livestock yields.",
+        .effect = "You breed crops and livestock for higher yields.",
     },
     .{
         .id = "pumping_station",
@@ -359,7 +359,7 @@
         .coord = .{ .q = 0, .r = 4 },
         .cost = .{ .water = 8.0, .fuel = 5.0, .metal = 6.0 },
         .initial = .locked,
-        .effect = "Deep wells; water anywhere.",
+        .effect = "You pump water from deep wells almost anywhere.",
     },
     .{
         .id = "coke_ovens",
@@ -368,7 +368,7 @@
         .coord = .{ .q = -4, .r = 4 },
         .cost = .{ .fuel = 10.0, .metal = 4.0, .minerals = 6.0 },
         .initial = .locked,
-        .effect = "Refine coal to coke; high-grade fuel.",
+        .effect = "You refine coal into high-grade coke.",
     },
     .{
         .id = "precision_machining",
@@ -377,7 +377,7 @@
         .coord = .{ .q = -4, .r = 0 },
         .cost = .{ .fuel = 7.0, .metal = 10.0 },
         .initial = .locked,
-        .effect = "Machine parts; +efficiency for metal buildings.",
+        .effect = "You machine parts that make metal work more efficient.",
     },
     .{
         .id = "portland_cement",
@@ -386,7 +386,7 @@
         .coord = .{ .q = 0, .r = -4 },
         .cost = .{ .fuel = 6.0, .minerals = 10.0 },
         .initial = .locked,
-        .effect = "Modern concrete.",
+        .effect = "You make modern concrete.",
     },
     .{
         .id = "managed_forests",
@@ -395,7 +395,7 @@
         .coord = .{ .q = 4, .r = -4 },
         .cost = .{ .biomass = 10.0, .water = 5.0 },
         .initial = .locked,
-        .effect = "Sustainable, high-yield timber.",
+        .effect = "You manage forests for steady, high-yield timber.",
     },
     // Hybrids (k = 1..3, low k nearer the first resource).
     .{
@@ -405,7 +405,7 @@
         .coord = .{ .q = 3, .r = 1 },
         .cost = .{ .food = 7.0, .biomass = 4.0, .water = 6.0 },
         .initial = .locked,
-        .effect = "Controlled food from water tiles.",
+        .effect = "You raise fish for controlled food from water.",
     },
     .{
         .id = "ice_houses",
@@ -414,7 +414,7 @@
         .coord = .{ .q = 2, .r = 2 },
         .cost = .{ .food = 5.0, .water = 7.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Cold storage; near-zero spoilage.",
+        .effect = "You keep food cold, so almost none spoils.",
     },
     .{
         .id = "sanitation",
@@ -423,7 +423,7 @@
         .coord = .{ .q = 1, .r = 3 },
         .cost = .{ .water = 9.0, .metal = 3.0, .minerals = 5.0 },
         .initial = .locked,
-        .effect = "Clean water; population health and growth.",
+        .effect = "You keep water clean, for better health.",
     },
     .{
         .id = "hydropower",
@@ -432,7 +432,7 @@
         .coord = .{ .q = -1, .r = 4 },
         .cost = .{ .water = 8.0, .metal = 6.0, .minerals = 5.0 },
         .initial = .locked,
-        .effect = "Dams; large mechanical/electric energy.",
+        .effect = "You dam rivers for large mechanical and electric power.",
     },
     .{
         .id = "steam_engine",
@@ -441,7 +441,7 @@
         .coord = .{ .q = -2, .r = 4 },
         .cost = .{ .water = 4.0, .fuel = 9.0, .metal = 7.0 },
         .initial = .locked,
-        .effect = "Fuel to work; powers factories.",
+        .effect = "You turn fuel into work and power factories.",
     },
     .{
         .id = "oil_drilling",
@@ -450,7 +450,7 @@
         .coord = .{ .q = -3, .r = 4 },
         .cost = .{ .water = 4.0, .fuel = 9.0, .metal = 6.0 },
         .initial = .locked,
-        .effect = "Well technology applied to oil.",
+        .effect = "You drill wells for petroleum.",
         .enables = "Unlocks petroleum.",
     },
     .{
@@ -460,7 +460,7 @@
         .coord = .{ .q = -4, .r = 3 },
         .cost = .{ .fuel = 9.0, .metal = 8.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Coke-fired; mass iron.",
+        .effect = "You make iron at scale with coke.",
     },
     .{
         .id = "steelmaking",
@@ -469,7 +469,7 @@
         .coord = .{ .q = -4, .r = 2 },
         .cost = .{ .fuel = 8.0, .metal = 10.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Steel.",
+        .effect = "You make steel, for late structures.",
         .enables = "Unlocks all late structures.",
     },
     .{
@@ -479,7 +479,7 @@
         .coord = .{ .q = -4, .r = 1 },
         .cost = .{ .fuel = 7.0, .metal = 9.0, .minerals = 4.0 },
         .initial = .locked,
-        .effect = "Rail transport; logistics across the map.",
+        .effect = "You move goods by rail at industrial scale.",
     },
     .{
         .id = "deep_mining",
@@ -488,7 +488,7 @@
         .coord = .{ .q = -3, .r = -1 },
         .cost = .{ .fuel = 4.0, .metal = 8.0, .minerals = 7.0 },
         .initial = .locked,
-        .effect = "Shaft mines; both ore and stone yields.",
+        .effect = "You sink shaft mines for more ore and stone.",
     },
     .{
         .id = "reinforced_concrete",
@@ -497,7 +497,7 @@
         .coord = .{ .q = -2, .r = -2 },
         .cost = .{ .fuel = 4.0, .metal = 7.0, .minerals = 9.0 },
         .initial = .locked,
-        .effect = "Steel + concrete; tall buildings.",
+        .effect = "You build tall with steel and concrete.",
     },
     .{
         .id = "plate_glass",
@@ -506,7 +506,7 @@
         .coord = .{ .q = -1, .r = -3 },
         .cost = .{ .fuel = 6.0, .metal = 4.0, .minerals = 8.0 },
         .initial = .locked,
-        .effect = "Large panes; greenhouses and factories.",
+        .effect = "You make large panes, for greenhouses and factories.",
     },
     .{
         .id = "porcelain",
@@ -515,7 +515,7 @@
         .coord = .{ .q = 1, .r = -4 },
         .cost = .{ .biomass = 4.0, .fuel = 6.0, .minerals = 8.0 },
         .initial = .locked,
-        .effect = "Fine ceramics; trade goods and money.",
+        .effect = "You make fine ceramics for trade.",
     },
     .{
         .id = "pulp_mill",
@@ -524,7 +524,7 @@
         .coord = .{ .q = 2, .r = -4 },
         .cost = .{ .biomass = 9.0, .water = 6.0, .minerals = 3.0 },
         .initial = .locked,
-        .effect = "Industrial paper; large coordination boost.",
+        .effect = "You make paper at industrial scale.",
     },
     .{
         .id = "lumber_yard",
@@ -533,7 +533,7 @@
         .coord = .{ .q = 3, .r = -4 },
         .cost = .{ .biomass = 9.0, .metal = 5.0 },
         .initial = .locked,
-        .effect = "Standardized timber; cheap fast building.",
+        .effect = "You cut standard timber, so building is faster and cheaper.",
     },
     .{
         .id = "fertilizer",
@@ -542,7 +542,7 @@
         .coord = .{ .q = 4, .r = -3 },
         .cost = .{ .food = 6.0, .biomass = 8.0, .minerals = 3.0 },
         .initial = .locked,
-        .effect = "Compost and manure; +farm yield.",
+        .effect = "You raise farm yields with compost and manure.",
     },
     .{
         .id = "crop_rotation",
@@ -551,7 +551,7 @@
         .coord = .{ .q = 4, .r = -2 },
         .cost = .{ .food = 8.0, .biomass = 7.0, .water = 4.0 },
         .initial = .locked,
-        .effect = "Sustained soil; no yield decay.",
+        .effect = "You rotate crops to keep the soil yielding.",
     },
     .{
         .id = "food_processing",
@@ -560,6 +560,6 @@
         .coord = .{ .q = 4, .r = -1 },
         .cost = .{ .food = 9.0, .biomass = 6.0, .metal = 4.0 },
         .initial = .locked,
-        .effect = "Mills and presses; food output multiplier.",
+        .effect = "You mill and press food to multiply output.",
     },
 }

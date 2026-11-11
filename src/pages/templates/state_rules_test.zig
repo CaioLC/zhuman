@@ -233,7 +233,7 @@ fn oldGoodName(f: Facts, _: Interaction) Want {
     return .{ .text = if (f.on) .acc else .fg };
 }
 
-// market_view.zig YOUR STALL: `lit = st.stall or sq.hover_focus()`,
+// market_view.zig INVENTORY: `lit = st.stall or sq.hover_focus()`,
 //   outline = if (lit) acc else line2; fill = if (st.stall) panel else bg; ink = if (lit) acc else dim
 fn oldStallBox(f: Facts, q: Interaction) Want {
     const lit = f.on or q.hover_focus();

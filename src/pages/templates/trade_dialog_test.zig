@@ -14,7 +14,7 @@ const testing = std.testing;
 const Term = td.Term;
 const Lot = td.Lot;
 
-const tall_consequence = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5. The unlock does not stack.";
+const tall_consequence = "Replaces Fishing rod: Fish yield 1\u{2013}3 \u{2192} 2\u{2013}5.";
 /// More stocks than a region holds AFTER rows for (a text leaf holds at most 256 bytes, so the
 /// height comes from rows rather than one long line).
 const many = [_]Term{
@@ -27,11 +27,11 @@ const lots = [_]Lot{
     // One term each way, no consequence: the shortest takeable slip.
     .{ .id = 1, .mode = .buy, .lot = "Preserved food \u{00d7}10", .effect = "keeps well", .price = &.{.{ .key = "materials", .n = 8 }}, .receive = &.{.{ .key = "food", .n = 10 }}, .stock = 2 },
     // The tallest authored slip: a two-resource price, three AFTER rows and a consequence.
-    .{ .id = 2, .mode = .buy, .lot = "Fishing net \u{00d7}1", .effect = "better Fish tool", .price = &.{ .{ .key = "food", .n = 5 }, .{ .key = "materials", .n = 20 } }, .receive = &.{.{ .key = "fishing net", .n = 1, .stock = false }}, .stock = 1, .consequence = tall_consequence },
+    .{ .id = 2, .mode = .buy, .lot = "Fishing net \u{00d7}1", .effect = "fishing costs less and catches more", .price = &.{ .{ .key = "food", .n = 5 }, .{ .key = "materials", .n = 20 } }, .receive = &.{.{ .key = "fishing net", .n = 1, .stock = false }}, .stock = 1, .consequence = tall_consequence },
     // Short of materials: the refusal and CANNOT TRADE.
-    .{ .id = 3, .mode = .buy, .lot = "Hand axe \u{00d7}1", .effect = "splitting costs less", .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 80 } }, .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }}, .stock = 1 },
+    .{ .id = 3, .mode = .buy, .lot = "Hand axe \u{00d7}1", .effect = "splitting wood costs less and yields more", .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 80 } }, .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }}, .stock = 1 },
     // Taller than any region: its terms must scroll.
-    .{ .id = 4, .mode = .buy, .lot = "Fishing net \u{00d7}1", .effect = "better Fish tool", .price = &.{ .{ .key = "food", .n = 5 }, .{ .key = "materials", .n = 20 } }, .receive = &many, .stock = 2, .consequence = tall_consequence },
+    .{ .id = 4, .mode = .buy, .lot = "Fishing net \u{00d7}1", .effect = "fishing costs less and catches more", .price = &.{ .{ .key = "food", .n = 5 }, .{ .key = "materials", .n = 20 } }, .receive = &many, .stock = 2, .consequence = tall_consequence },
 };
 const balances = [_]td.Balance{
     .{ .key = "food", .held = 31 }, .{ .key = "materials", .held = 61 }, .{ .key = "fishing net", .held = 0 },
@@ -39,7 +39,7 @@ const balances = [_]td.Balance{
     .{ .key = "metal", .held = 0 }, .{ .key = "salt", .held = 0 },       .{ .key = "oil", .held = 0 },
     .{ .key = "nails", .held = 0 }, .{ .key = "cloth", .held = 0 },
 };
-const book = td.Book{ .lots = &lots, .balances = &balances, .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "f" }, .{ .key = "materials", .letter = "m" } } } };
+const book = td.Book{ .lots = &lots, .balances = &balances, .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "fo" }, .{ .key = "materials", .letter = "ma" } } } };
 
 const TradeFixture = struct {
     st: uic.UiState.TradeState = .{},

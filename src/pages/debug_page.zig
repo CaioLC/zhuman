@@ -376,7 +376,9 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                     .last = .idle,
                 } },
             });
-            if (workspace.surface.market_action.consume(.clicked)) audit_trade.open = true;
+            if (workspace.surface.market_action) |m| if (m.consume(.clicked)) {
+                audit_trade.open = true;
+            };
 
             var feed: ha.sim.log.Log = .{};
             feed.push(.normal, try ctx.arena.print("You return with 4 {s}.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}));
@@ -427,7 +429,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const requirements = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "14/15" },
             .{ .label = "FOOD", .value = "11.6/12" },
-            .{ .label = "RECIPES", .value = "4/5" },
+            .{ .label = "GOODS", .value = "4/5" },
             .{ .label = resource_label, .value = "31/120" },
         };
         _ = try t.milestone_goal(demo, "mg", .{
@@ -436,7 +438,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             .summary = try ctx.arena.print("{s} 31/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .readiness = "locked \u{00B7} 1 condition",
             .kicker = "A PLACE FOR OTHERS",
-            .cost = "120m 8e \u{00B7} 6.0d",
+            .cost = "120ma 8e \u{00B7} 6.0d",
             .copy = "a roof with room for four. you're not alone anymore.",
             .requirements = &requirements,
             .explanation = try ctx.arena.print("Hold 120 {s} with a settled body and five kinds of goods, a rope bag and a leaf bed among them.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
@@ -445,7 +447,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const paid = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "14/15", .met = true },
             .{ .label = "FOOD", .value = "11.6/12", .met = true },
-            .{ .label = "RECIPES", .value = "5/5", .met = true },
+            .{ .label = "GOODS", .value = "5/5", .met = true },
             .{ .label = resource_label, .value = "120 paid", .met = true },
         };
         _ = try t.milestone_goal(demo, "mg_building", .{
@@ -454,7 +456,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             .summary = "42%",
             .readiness = "raising \u{00B7} 3.5d left",
             .kicker = "A PLACE FOR OTHERS",
-            .cost = "120m 8e \u{00B7} 6.0d",
+            .cost = "120ma 8e \u{00B7} 6.0d",
             .requirements = &paid,
             .explanation = blk: {
                 const word = ha.sim.data.roster.Resource.biomass.wordIn(act);
@@ -466,7 +468,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const on_hand = [_]t.MilestoneRequirement{
             .{ .label = "VIGOR", .value = "15/15", .met = true },
             .{ .label = "FOOD", .value = "16.0/12", .met = true },
-            .{ .label = "RECIPES", .value = "5/5", .met = true },
+            .{ .label = "GOODS", .value = "5/5", .met = true },
             .{ .label = resource_label, .value = "120/120", .met = true },
         };
         _ = try t.milestone_goal(demo, "mg_busy", .{
@@ -475,7 +477,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             .summary = try ctx.arena.print("{s} 120/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
             .readiness = "hands busy",
             .kicker = "A PLACE FOR OTHERS",
-            .cost = "120m 8e \u{00B7} 6.0d",
+            .cost = "120ma 8e \u{00B7} 6.0d",
             .requirements = &on_hand,
             .explanation = "Everything is on hand; the Shelter waits for free hands.",
             .action = "HANDS BUSY",
@@ -545,7 +547,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             fixtureMode(ctx, a[0], "garden_bed", .auto);
             fixtureMode(ctx, a[0], "garden_bed_two", .off);
             const demo = try stage.box("a2a_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
-            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "What will the settlement do now?", .density = .compact }, null, null, null);
+            _ = try t.actions_section(demo, world, a[0], "a2_actions", .{ .act = 2, .subtitle = "Work available to you.", .density = .compact }, null, null, null);
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }
@@ -592,7 +594,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         _ = try t.table_cell(r2, "state", "reach 60%", style.ink(.warn), true);
     } else if (eq(name, "browser_heading")) {
         const demo = try stage.box("heading_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
-        _ = try t.browser_heading(demo, "bh", "ACTIONS", "What will the settlement do now?", "20 VERBS");
+        _ = try t.browser_heading(demo, "bh", "ACTIONS", "Work available to you.", "20 VERBS");
     } else if (eq(name, "tile_lanes")) {
         const demo = try stage.box("lanes_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children }, .{});
         const grid = try t.tile_lanes(demo, "grid", false, 10);
@@ -603,7 +605,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const demo = try stage.box("copy_demo", .{ .flow = .{ .dir = .column }, .gap = 6 }, .{});
         _ = try t.headline(demo, "h", "Two others asked to move in.");
         _ = try t.lede(demo, "l", "You are not alone here anymore. Act I ends, and the settlement begins with whoever walked in.", 320);
-        _ = try t.empty_line(demo, "e", "No action matches your search.");
+        _ = try t.empty_line(demo, "e", "Nothing matches that search.");
     } else {
         try stage.label("unknown", "(unknown template)", .{});
     }
@@ -616,12 +618,12 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
     if (!audit_trade.open) return null;
     // The prototype's Act I passerby, as numbers (`trade.html`'s `ACTS.i`).
     const lots = [_]t.TradeLot{
-        .{ .id = 1, .mode = .buy, .lot = "Fishing rod \u{00d7}1", .effect = "unlocks Fish", .price = &.{ .{ .key = "food", .n = 2 }, .{ .key = "materials", .n = 8 } }, .receive = &.{.{ .key = "fishing rod", .n = 1, .stock = false }}, .stock = 1, .consequence = "Fishing becomes available while you own it." },
-        .{ .id = 2, .mode = .buy, .lot = "Hand axe \u{00d7}1", .effect = "splitting costs less", .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 40 } }, .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }}, .stock = 1 },
+        .{ .id = 1, .mode = .buy, .lot = "Fishing rod \u{00d7}1", .effect = "you can fish", .price = &.{ .{ .key = "food", .n = 2 }, .{ .key = "materials", .n = 8 } }, .receive = &.{.{ .key = "fishing rod", .n = 1, .stock = false }}, .stock = 1, .consequence = "Fishing becomes available while you own it." },
+        .{ .id = 2, .mode = .buy, .lot = "Hand axe \u{00d7}1", .effect = "splitting wood costs less and yields more", .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 40 } }, .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }}, .stock = 1 },
         .{ .id = 3, .mode = .buy, .lot = "Preserved food \u{00d7}10", .effect = "keeps well", .price = &.{.{ .key = "materials", .n = 8 }}, .receive = &.{.{ .key = "food", .n = 10 }}, .stock = 2 },
-        .{ .id = 11, .mode = .sell, .lot = "Sandals \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .key = "sandals", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 5 } }, .consequence = "A spare pair goes first; the pair you wear keeps its Forage margin." },
-        .{ .id = 12, .mode = .sell, .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .key = "hatchet", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 9 }, .{ .key = "materials", .n = 8 } } },
-        .{ .id = 13, .mode = .sell, .lot = "Materials \u{00d7}10", .effect = "raw stock", .price = &.{.{ .key = "materials", .n = 10 }}, .receive = &.{.{ .key = "food", .n = 3 }} },
+        .{ .id = 11, .mode = .sell, .lot = "Sandals \u{00d7}1", .effect = "", .price = &.{.{ .key = "sandals", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 5 } }, .consequence = "A spare pair goes first; the pair you wear keeps its Forage margin." },
+        .{ .id = 12, .mode = .sell, .lot = "Hatchet \u{00d7}1", .effect = "", .price = &.{.{ .key = "hatchet", .n = 1, .stock = false }}, .receive = &.{ .{ .key = "food", .n = 9 }, .{ .key = "materials", .n = 8 } } },
+        .{ .id = 13, .mode = .sell, .lot = "Materials \u{00d7}10", .effect = "", .price = &.{.{ .key = "materials", .n = 10 }}, .receive = &.{.{ .key = "food", .n = 3 }} },
     };
     const balances = [_]t.TradeBalance{
         .{ .key = "food", .held = 11.6 },
@@ -631,7 +633,7 @@ fn auditTradeOverlay(ctx: *UiCtx, audit_trade: *uic.UiState.TradeState) !?*Node 
         .{ .key = "sandals", .held = 2 },
         .{ .key = "hatchet", .held = 2 },
     };
-    const book = t.TradeBook{ .lots = &lots, .balances = &balances, .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "f" }, .{ .key = "materials", .letter = "m" } } } };
+    const book = t.TradeBook{ .lots = &lots, .balances = &balances, .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "fo" }, .{ .key = "materials", .letter = "ma" } } } };
 
     const result = try t.trade_dialog(ctx, "trade", .passerby, "1.8 DAYS LEFT", book, &.{}, audit_trade);
     if (result.dismissed) {

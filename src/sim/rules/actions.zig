@@ -208,7 +208,7 @@ pub fn receiptText(buf: []u8, cat: *const Catalog, r: ledger.Receipt, act: u8) [
     return wr.buffered();
 }
 
-/// "You spend 1.7e 1m to begin." — the energy, then every amount paid.
+/// "You spend 1.7e 1ma to begin." — the energy, then every amount paid.
 pub fn paymentText(buf: []u8, cat: *const Catalog, energy: f32, paid: ledger.Receipt, act: u8) []const u8 {
     var wr = std.Io.Writer.fixed(buf);
     wr.print("You spend {d:.1}e", .{energy}) catch {};
@@ -377,7 +377,7 @@ test "a resource amount is paid at begin and named in the payment line" {
     _ = begin(&w, e, &res, traps);
     logged(&w, &res);
     try testing.expectEqual(@as(f32, 2), w.get(e, comp.InventoryBiomass).?.v); // the hunting supply
-    try testing.expectEqualStrings("You spend 4.0e 1m to begin.", res.sim.log.get(0).text());
+    try testing.expectEqualStrings("You spend 4.0e 1ma to begin.", res.sim.log.get(0).text());
 }
 
 test "a verb lost mid-task finishes as nothing" {
@@ -404,7 +404,7 @@ test "the receipt names what landed, in line order" {
     try testing.expectEqualStrings("You gathered 3 food.", receiptText(&buf, &cat, r, 1));
     r.lines[1].qty = 1.5;
     try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r, 1));
-    try testing.expectEqualStrings("You gathered 3 food and 2 biomass.", receiptText(&buf, &cat, r, 2));
+    try testing.expectEqualStrings("You gathered 3 food and 2 materials.", receiptText(&buf, &cat, r, 2));
     r.len = 0;
     try testing.expectEqualStrings(nothing_text, receiptText(&buf, &cat, r, 1));
 }

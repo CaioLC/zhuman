@@ -25,7 +25,7 @@ const stocks = [_]Stock{
     .{ .key = "FU", .value = 4, .drift = 0.04 },
     .{ .key = "ME", .value = 2, .drift = 0.02 },
     .{ .key = "MI", .value = 9, .drift = 0.04 },
-    .{ .key = "BI", .value = 30, .drift = 0.13 },
+    .{ .key = "MA", .value = 30, .drift = 0.13 },
 };
 
 const Work = struct { name: []const u8, at: f32, rate: f32 };
@@ -37,16 +37,16 @@ const work = [_]Work{
 
 /// Lines in the game's own voice; the ground should not read as filler.
 const log_lines = [_][]const u8{
-    "You return with 4 Biomass.",
-    "Mira Halt took 6 Biomass at 4 coin.",
+    "You return with 4 materials.",
+    "Mira Halt took 6 materials at 4 coin.",
     "The garden bed is ready to collect.",
-    "Tomas Dace is short on biomass and has Food to spare.",
+    "Tomas Dace is short on materials and has food to spare.",
     "A merchant is taking orders beside the east path.",
     "Seven people now share the settlement\u{2019}s stores.",
     "You eat. Vigor climbs.",
     "A new recipe is within reach: Fishing net.",
     "Odd Ryne will not take charcoal \u{2014} he has forty spare.",
-    "The carpenter bench still lacks Biomass and Metal.",
+    "The carpenter bench still lacks materials and metal.",
     "Charcoal clears at 3 coin, down from 4.",
     "Split wood finishes. The hatchet holds.",
 };

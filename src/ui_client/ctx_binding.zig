@@ -363,8 +363,10 @@ pub const UiState = struct {
     };
     /// The MARKET view's state, on the view's always-built owner so it survives a tab switch:
     /// the grouping (0 natural, 1 by person, 2 by good), the stall and its side (0 selling,
-    /// 1 buying), the page, the pick (0 none, 1 a neighbour, 2 a good, with its index), and the
-    /// deal being composed on the slip (what the player gives and takes, by item, coin last).
+    /// 1 buying), the page, the pick (0 none, 1 a neighbour, 2 a good, with its index; in Act I a
+    /// good is picked by its holding's key, `neighbours.Holding.key`), the good
+    /// whose detail opened the neighbour's deal (its back button returns there), and the deal
+    /// being composed on the slip (what the player gives and takes, by item, coin last).
     pub const MarketState = struct {
         group: u8 = 0,
         stall: bool = false,
@@ -372,6 +374,7 @@ pub const UiState = struct {
         page: u32 = 0,
         pick_kind: u8 = 0,
         pick: u8 = 0,
+        from: ?u8 = null,
         give: [13]u16 = @splat(0),
         take: [13]u16 = @splat(0),
     };

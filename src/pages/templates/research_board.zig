@@ -1,5 +1,5 @@
 //! `research_board` — Act II's RESEARCH tab (`act-ii.html` `#view-research`): the hex board of
-//! the sixty technologies around the neutral foundation, a camera over it (wheel zoom about the
+//! the sixty skills around the neutral foundation, a camera over it (wheel zoom about the
 //! pointer, drag pan past four pixels, the − / % / + / reset controls), the filter chips and
 //! the search, the hover tooltip, the detail aside for the selected tile and its RESEARCH →,
 //! and the legend and hints beneath.
@@ -12,7 +12,7 @@
 //!
 //! The states come from the agent's `comp.Research`, the costs and copy from the catalog;
 //! the view never recomputes adjacency (`sim.rules.research`). It reports a RESEARCH → press, and the
-//! page pays and establishes the tile.
+//! page pays for the tile and researches it.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -47,7 +47,7 @@ const detail_inner: f32 = detail_w - detail_pad;
 
 /// The six wedges' resources, in the board's clockwise order from 3 o'clock.
 const wedge_res = [6]roster.Resource{ .food, .water, .fuel, .metal, .minerals, .biomass };
-const eras = [_][]const u8{ "", "CRUDE PRODUCTION", "SETTLEMENT WORKS", "CRAFT", "EARLY INDUSTRIAL" };
+const eras = [_][]const u8{ "", "CRUDE PRODUCTION", "WORKS", "CRAFT", "EARLY INDUSTRIAL" };
 
 // The board's own inks, outside the terminal palette (`prototype.css` `.hex-*`).
 const neutral = uic.rgb(0x55, 0x5b, 0x63);
@@ -268,7 +268,7 @@ fn heldOf(b: Board, r: roster.Resource) f32 {
 }
 
 fn costText(a: std.mem.Allocator, t: *const roster.Technology) ![]const u8 {
-    if (t.cost.isEmpty()) return "CARRIED FROM ACT I";
+    if (t.cost.isEmpty()) return "KNOWN FROM ACT I";
     var out: std.ArrayList(u8) = .empty;
     for (std.enums.values(roster.Resource)) |r| {
         const n = t.cost.get(r);
@@ -442,7 +442,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         .flow = .{ .dir = .column, .cross = .start },
     }, .{style.pad_each(4, 0, 0, 0)});
 
-    // --- topbar: RESEARCH and its question | the chips and the search ----------------------
+    // --- topbar: RESEARCH and its subheading | the chips and the search ----------------------
     const topbar_box = try view.div("topbar_box");
     // `.structure-topbar { align-items: end }`: a column packs the row at the box's foot (a
     // row's cross alignment only spans its own line).
@@ -452,7 +452,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         .flow = .{ .dir = .column, .main = .end, .cross = .start }, .margin = .{ .after = 8 },
     }, .{});
     const topbar = try topbar_box.div("topbar");
-    // Below 560 the toolbar drops under the title and the question goes (`.structure-topbar`).
+    // Below 560 the toolbar drops under the title and the subheading goes (`.structure-topbar`).
     const narrow = ctx.res.view.metrics.width_class.atMost(.w560);
     if (narrow) {
         topbar.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 8 }, .{});
@@ -463,7 +463,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }, .{});
     }
     const title = try topbar.div("title");
-    // The title takes what the tools leave and clips its question (`.structure-title p`
+    // The title takes what the tools leave and clips its subheading (`.structure-title p`
     // ellipsizes), so a narrow surface never runs it under the chips.
     title.set(.{
         .w = if (narrow) .fit_children else .grow, .h = .fit_children,
@@ -472,12 +472,12 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     const h = try title.text("h", "RESEARCH");
     h.set(.{}, .{ style.heading, style.ink(.fg) });
     if (!narrow) {
-        // `.structure-title p { text-overflow: ellipsis }`: the question is a cell of what the
+        // `.structure-title p { text-overflow: ellipsis }`: the subheading is a cell of what the
         // heading leaves. It grows into the title row's remainder after the heading and the
         // row's 12px gap, and reserves no width of its own, so it never widens the title.
-        const question = "What exists, and what does it take?";
+        const subheading = "Specialize your skills.";
         const p_style = style.note;
-        (try title.text_fit("p", question, .{ .cell_fill = .ellipsis })).set(.{ .w = .grow, .h = .content }, .{p_style});
+        (try title.text_fit("p", subheading, .{ .cell_fill = .ellipsis })).set(.{ .w = .grow, .h = .content }, .{p_style});
     }
     const tools = try topbar.box("tools", .{
         .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center }, .gap = 9,
@@ -489,7 +489,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
     if (try chip(chips, "researched", "researched", filter == .researched)) st.filter = @intFromEnum(Filter.researched);
     if (try chip(chips, "available", "available", filter == .available)) st.filter = @intFromEnum(Filter.available);
     if (try chip(chips, "all", "all", filter == .all)) st.filter = @intFromEnum(Filter.all);
-    const field = try uic.text_input_look(tools, "search", "find a technology", if (narrow) 110 else 136, query_owner, .{ .font = 10, .placeholder = th.line2, .pad_x = 6, .pad_y = 5 });
+    const field = try uic.text_input_look(tools, "search", "find a skill", if (narrow) 110 else 136, query_owner, .{ .font = 10, .placeholder = th.line2, .pad_x = 6, .pad_y = 5 });
     _ = field;
     const query = std.mem.trim(u8, query_owner.state(uic.UiState.TextInputState).text(), " ");
     try hrule(view, "top_rule", .{ .pct_of_parent = 1.0 });
@@ -727,7 +727,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
                 try (try centreIn(lab)).label("t", t.short, .{Style{ .font = label_font, .tracking = -0.045, .text = label_inks.get(s) }});
             }
 
-            // The material dots, and the research marker on an established tile.
+            // The material dots, and the research marker on a researched tile.
             // The board's own rule (`sim.rules.research.materialMarkers`), as wedge indices.
             var wbuf: [3]hex.Wedge = undefined;
             const wm = ha.sim.rules.research.materialMarkers(t, &wbuf);
@@ -863,7 +863,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         (try detail.text_fit("copy", t.effect, .fill)).set(.{ .margin = .{ .before = 11 } }, .{style.caption});
 
         const costs = try detailSection(detail, "costs", "RESEARCH COST");
-        if (t.cost.isEmpty()) try detailRow(costs, 0, "Act I foundation", "paid");
+        if (t.cost.isEmpty()) try detailRow(costs, 0, "Known from Act I", "paid");
         var li: usize = 0;
         for (std.enums.values(roster.Resource)) |r| {
             const n = t.cost.get(r);
@@ -872,7 +872,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             li += 1;
         }
 
-        const opens = try detailSection(detail, "opens", "ENABLES OUTWARD");
+        const opens = try detailSection(detail, "opens", "OPENS NEXT");
         var row_n: usize = 0;
         for (cat.goods) |g| if (g.requires.tech) |gt| if (std.mem.eql(u8, gt, t.id)) {
             try detailRow(opens, row_n, try a.print("{s} \u{00b7} BUILD", .{g.name}), "enabled");
@@ -890,11 +890,11 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
         }
         if (outs.len == 0) try detailRow(opens, row_n, "Act III frontier", "outside this board");
     } else {
-        (try detail.text("kicker", "NO TECHNOLOGY SELECTED")).set(.{
+        (try detail.text("kicker", "NO SKILL SELECTED")).set(.{
             .margin = .{ .after = 3 },
         }, .{Style{ .font = 9, .tracking = 0.08, .ink = .dim }});
         (try detail.text("name", "Research board")).set(.{ .margin = .{ .after = 8 } }, .{ style.heading, style.ink(.fg) });
-        try detail.label_fit("copy", "Choose an Available or Researched tile. Locked silhouettes reveal neither labels nor details.", .fill, .{style.caption});
+        try detail.label_fit("copy", "Pick a lit tile to see its cost and what it opens.", .fill, .{style.caption});
     }
 
     // --- footer: the legend | the status and the hints ---------------------------------------
@@ -943,7 +943,7 @@ pub fn research_board(parent: El, id: []const u8, b: Board, st: *ResearchState, 
             break :blk try a.print("{s} researched.{s}", .{ name, suffix.items });
         }
         break :blk try a.print("{s} selected \u{00b7} {} researched \u{00b7} {} available", .{ name, counts[2], counts[1] });
-    } else "Select an available or researched technology";
+    } else "Select an available or researched skill";
     try hints.label("status", status, .{Style{ .font = 8.5, .ink = .line2 }});
     try hints.label("pan", "Wheel zoom / drag pan", .{Style{ .font = 8.5, .ink = .line2 }});
     try hints.label("keys", "Arrows move \u{00b7} Esc clears", .{Style{ .font = 8.5, .ink = .line2 }});

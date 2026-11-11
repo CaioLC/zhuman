@@ -247,9 +247,9 @@
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 8.0, .biomass = 8.0 },
         .copy = .{
-            .effect = "converts biomass to fuel",
+            .effect = "converts materials to fuel",
             .short = "makes fuel",
-            .built = "You built a firepit. It converts biomass to fuel.",
+            .built = "You built a firepit. It converts materials to fuel.",
         },
     },
     .{
@@ -296,7 +296,7 @@
         .tier = .crude,
         .requires = .{ .energy = 4.0, .hours = 11.0, .minerals = 12.0, .tech = "stoneworks" },
         .copy = .{
-            .effect = "worked stone stock",
+            .effect = "stone dressed for building",
             .short = "cuts stone",
             .built = "You dressed cut stone. It stacks true.",
         },
@@ -314,7 +314,7 @@
             .tech = "carpentry",
         },
         .copy = .{
-            .effect = "complex wood capital",
+            .effect = "makes wooden tools and parts",
             .short = "wood capital",
             .built = "You built a carpenter bench. Complex joinery is possible.",
         },
@@ -333,7 +333,7 @@
             .tech = "smithy",
         },
         .copy = .{
-            .effect = "metalworking site",
+            .effect = "works metal into tools",
             .short = "works metal",
             .built = "You raised a forge. Metalworking has a home.",
         },
@@ -355,7 +355,7 @@
             .{ .scale = .{ .target = "burn_charcoal", .stat = .{ .output = .fuel }, .by = 1.4 } },
         },
         .copy = .{
-            .effect = "converts Biomass into Fuel",
+            .effect = "converts materials into fuel",
             .short = "better fuel",
             .built = "You built a charcoal kiln. It yields more fuel.",
         },
@@ -395,7 +395,7 @@
             .tech = "well_cistern",
         },
         .copy = .{
-            .effect = "buffers Water supply",
+            .effect = "buffers water supply",
             .short = "stores water",
             .built = "You built a water cistern. It buffers dry spells.",
         },
@@ -453,7 +453,7 @@
         .tier = .crude,
         .requires = .{ .energy = 3.0, .hours = 8.0, .biomass = 14.0, .tech = "loom_ropewalk" },
         .copy = .{
-            .effect = "turns Biomass into rope",
+            .effect = "turns materials into rope",
             .short = "makes rope",
             .built = "You built a ropewalk. It spins rope from fiber.",
         },
@@ -486,7 +486,7 @@
             .{ .spoil_scale = 0.6 },
         },
         .copy = .{
-            .effect = "stores Food at settlement scale",
+            .effect = "stores food in bulk",
             .short = "stores food",
             .built = "You built a granary. Food keeps at scale.",
         },
@@ -504,7 +504,7 @@
             .tech = "pumping_station",
         },
         .copy = .{
-            .effect = "moves Water without river access",
+            .effect = "moves water without river access",
             .short = "pumps water",
             .built = "You built an irrigation pump. Water reaches dry fields.",
         },
@@ -527,7 +527,7 @@
             .{ .scale = .{ .target = "mill_grain", .stat = .{ .output = .food }, .by = 1.5 } },
         },
         .copy = .{
-            .effect = "multiplies prepared Food output",
+            .effect = "multiplies prepared food output",
             .short = "mills grain",
             .built = "You built a grain mill. Prepared food multiplies.",
         },
@@ -546,7 +546,7 @@
             .tech = "steam_engine",
         },
         .copy = .{
-            .effect = "turns Fuel and Water into power",
+            .effect = "turns fuel and water into power",
             .short = "makes power",
             .built = "You raised a steam engine. Fuel becomes work.",
         },
@@ -568,7 +568,7 @@
             .{ .scale = .{ .target = "carry_freight", .stat = .{ .output = .biomass }, .by = 2.0 } },
         },
         .copy = .{
-            .effect = "moves bulk goods by Water",
+            .effect = "moves bulk goods by water",
             .short = "barges bulk",
             .built = "You built a river barge. Bulk moves by water.",
         },
@@ -586,7 +586,7 @@
             .tech = "brickworks",
         },
         .copy = .{
-            .effect = "standardizes structural brick",
+            .effect = "makes brick for building",
             .short = "presses brick",
             .built = "You built a brick press. Brick comes out true.",
         },
@@ -604,7 +604,7 @@
             .tech = "glassblowing",
         },
         .copy = .{
-            .effect = "weatherproofs lit interiors",
+            .effect = "glazes windows",
             .short = "makes glass",
             .built = "You blew glass panes. Interiors keep their light.",
         },
@@ -658,7 +658,7 @@
             .{ .scale = .{ .target = "tend_gardens", .stat = .{ .output = .food }, .by = 1.6 } },
         },
         .copy = .{
-            .effect = "raises field Food yield",
+            .effect = "raises field food yield",
             .short = "ploughs fields",
             .built = "You yoked a plough team. Fields yield more.",
         },
@@ -701,7 +701,7 @@
             .{ .scale = .{ .target = "draw_water", .stat = .{ .output = .water }, .by = 1.3 } },
         },
         .copy = .{
-            .effect = "raises Water drawing yield",
+            .effect = "raises water drawing yield",
             .short = "draws more",
             .built = "You hung a well bucket. Each draw yields more.",
         },
@@ -722,7 +722,7 @@
             .{ .spoil_scale = 0.7 },
         },
         .copy = .{
-            .effect = "stores prepared Food in sealed lots",
+            .effect = "stores prepared food in sealed lots",
             .short = "seals food",
             .built = "You fired a clay crock. Food seals in lots.",
         },
@@ -814,7 +814,7 @@
             .{ .scale = .{ .target = "bake_bread", .stat = .{ .output = .food }, .by = 1.5 } },
         },
         .copy = .{
-            .effect = "bakes Food in settlement batches",
+            .effect = "bakes food in batches",
             .short = "bakes bread",
             .built = "You built a bakery oven. Bread comes in batches.",
         },
@@ -911,7 +911,7 @@
             .tech = "stoneworks",
         },
         .copy = .{
-            .effect = "consolidates settlement trade stock",
+            .effect = "stores goods for trade",
             .short = "stores stock",
             .built = "You built a warehouse. Trade stock consolidates.",
         },
@@ -1034,7 +1034,7 @@
             .{ .scale = .{ .target = "smelt_metal", .stat = .{ .output = .metal }, .by = 1.6 } },
         },
         .copy = .{
-            .effect = "casts repeatable Metal components",
+            .effect = "casts repeatable metal components",
             .short = "casts metal",
             .built = "You raised a foundry. Metal casts repeatably.",
         },
@@ -1111,7 +1111,7 @@
             .tech = "pumping_station",
         },
         .copy = .{
-            .effect = "pressurizes Water for a district",
+            .effect = "pressurizes water for a district",
             .short = "pumps a district",
             .built = "You built a pump house. A district gets pressure.",
         },
@@ -1133,7 +1133,7 @@
             .{ .spoil_scale = 0.3 },
         },
         .copy = .{
-            .effect = "slows Food loss at market scale",
+            .effect = "slows food loss at market scale",
             .short = "chills food",
             .built = "You built a cold store. Food loss slows.",
         },

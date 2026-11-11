@@ -488,9 +488,9 @@ pub fn actions_section(parent: El, world: *const World, e: Entity, id: []const u
         const msg = if (total == 0)
             "No action is open yet. Build or research one."
         else if (st.show_hidden)
-            "No hidden action matches your search."
+            "Nothing hidden matches that search."
         else
-            "No action matches your search.";
+            "Nothing matches that search.";
         _ = try copy.empty_line(grid.grid, "empty", msg);
     }
     const act = ha.sim.data.migration.actOf(world, e);

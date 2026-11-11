@@ -9,7 +9,7 @@ const std = @import("std");
 
 /// One line of a bundle: `n` of the thing named `key` (the player's word for it: `food`,
 /// `materials`, `coin`, `fishing rod`). `stock` marks a resource balance rather than a good,
-/// which changes the notation (`2f` / `Food +6` against `Fishing rod ×1`).
+/// which changes the notation (`2fo` / `Food +6` against `Fishing rod ×1`).
 pub const Term = struct {
     key: []const u8,
     n: f32,
@@ -42,7 +42,7 @@ pub const Balance = struct { key: []const u8, held: f32 };
 /// One signed movement in the visit ledger.
 pub const Delta = struct { key: []const u8, n: f32 };
 
-/// The venue's notation: Act I abbreviates its two stocks (`2f 8m`); Act II writes them out.
+/// The venue's notation: Act I abbreviates its two stocks (`2fo 8ma`); Act II writes them out.
 pub const Notation = struct {
     abbrev: []const Abbrev = &.{},
     pub const Abbrev = struct { key: []const u8, letter: []const u8 };
@@ -106,7 +106,7 @@ pub const Book = struct {
     pub fn refusal(self: Book, arena: std.mem.Allocator, lot: *const Lot) !?Refusal {
         if (lot.mode == .buy and (lot.stock orelse 0) == 0) return .{
             .short = "sold out",
-            .long = "This lot is gone. The counterparty has no more.",
+            .long = "Sold out.",
         };
         if (lot.mode == .sell and (lot.stock orelse 1) == 0) return .{
             .short = "can't pay",
@@ -145,12 +145,15 @@ pub const Book = struct {
     }
 
     /// The thing the lot moves, and how much of it the player already holds — the ledger's
-    /// derived sub-line (`unlocks Fish · you hold 0 fishing rod`).
+    /// derived sub-line (`you can fish · you hold 0 fishing rod`; `you hold 31 materials` for a
+    /// lot with no effect).
     pub fn subLine(self: Book, arena: std.mem.Allocator, lot: *const Lot) ![]const u8 {
         const side = if (lot.mode == .buy) lot.receive else lot.price;
         if (side.len == 0) return lot.effect;
         const subject = side[0].key;
-        return arena.print("{s} \u{00b7} you hold {s} {s}", .{ lot.effect, try fmtNum(arena, self.held(subject)), subject });
+        const have = try fmtNum(arena, self.held(subject));
+        if (lot.effect.len == 0) return arena.print("you hold {s} {s}", .{ have, subject });
+        return arena.print("{s} \u{00b7} you hold {s} {s}", .{ lot.effect, have, subject });
     }
 
     /// The counterpart bundle the ledger's price column carries: what they want for a buy,
@@ -159,7 +162,7 @@ pub const Book = struct {
         return if (lot.mode == .buy) lot.price else lot.receive;
     }
 
-    /// Short notation (`2f 8m`, `5 coin`, `Fishing rod ×1`).
+    /// Short notation (`2fo 8ma`, `5 coin`, `Fishing rod ×1`).
     pub fn fmtShort(self: Book, arena: std.mem.Allocator, terms: []const Term) ![]const u8 {
         var out: std.ArrayList(u8) = .empty;
         for (terms, 0..) |t, i| {
@@ -269,7 +272,7 @@ const rod = Lot{
     .id = 1,
     .mode = .buy,
     .lot = "Fishing rod \u{00d7}1",
-    .effect = "unlocks Fish",
+    .effect = "you can fish",
     .price = &.{ .{ .key = "food", .n = 2 }, .{ .key = "materials", .n = 8 } },
     .receive = &.{.{ .key = "fishing rod", .n = 1, .stock = false }},
     .stock = 1,
@@ -278,7 +281,7 @@ const axe = Lot{
     .id = 2,
     .mode = .buy,
     .lot = "Hand axe \u{00d7}1",
-    .effect = "splitting costs less",
+    .effect = "splitting wood costs less and yields more",
     .price = &.{ .{ .key = "food", .n = 6 }, .{ .key = "materials", .n = 40 } },
     .receive = &.{.{ .key = "hand axe", .n = 1, .stock = false }},
     .stock = 1,
@@ -287,7 +290,7 @@ const sell_mat = Lot{
     .id = 3,
     .mode = .sell,
     .lot = "Materials \u{00d7}10",
-    .effect = "raw stock",
+    .effect = "",
     .price = &.{.{ .key = "materials", .n = 10 }},
     .receive = &.{.{ .key = "food", .n = 3 }},
 };
@@ -295,7 +298,7 @@ const balances = [_]Balance{ .{ .key = "food", .held = 11.6 }, .{ .key = "materi
 const book = Book{
     .lots = &.{ rod, axe, sell_mat },
     .balances = &balances,
-    .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "f" }, .{ .key = "materials", .letter = "m" } } },
+    .notation = .{ .abbrev = &.{ .{ .key = "food", .letter = "fo" }, .{ .key = "materials", .letter = "ma" } } },
 };
 
 test "max lots are bounded by stock on a buy and by holdings on a sell" {
@@ -315,20 +318,22 @@ test "refusals name which of the three reasons applies" {
     var gone = rod;
     gone.stock = 0;
     try testing.expectEqualStrings("sold out", (try book.refusal(a, &gone)).?.short);
+    try testing.expectEqualStrings("Sold out.", (try book.refusal(a, &gone)).?.long);
 }
 
 test "notation and AFTER rows follow the prototype" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try testing.expectEqualStrings("2f 8m", try book.fmtShort(a, Book.counterpart(&rod)));
+    try testing.expectEqualStrings("2fo 8ma", try book.fmtShort(a, Book.counterpart(&rod)));
     try testing.expectEqualStrings("4 food + 16 materials", try Book.fmtLong(a, rod.price, 2, false));
     try testing.expectEqualStrings("Fishing rod \u{00d7}1", try Book.fmtLong(a, rod.receive, 1, true));
     const rows = try book.after(a, &rod, 1);
     try testing.expectEqual(@as(usize, 3), rows.len);
     try testing.expect(rows[0].after < rows[0].before);
     try testing.expect(rows[2].after > rows[2].before);
-    try testing.expectEqualStrings("unlocks Fish \u{00b7} you hold 0 fishing rod", try book.subLine(a, &rod));
+    try testing.expectEqualStrings("you can fish \u{00b7} you hold 0 fishing rod", try book.subLine(a, &rod));
+    try testing.expectEqualStrings("you hold 31 materials", try book.subLine(a, &sell_mat));
 }
 
 test "search ANDs tokens, negates with -, and filters by is:" {

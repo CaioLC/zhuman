@@ -734,7 +734,7 @@ test "the cost cell is the order, then the energy" {
     var cat = try roster.load(std.testing.allocator, roster.shipped, null);
     defer cat.deinit();
     var buf: [40]u8 = undefined;
-    try std.testing.expectEqualStrings("10m", orderText(1, &buf, cat.good("spear").?));
+    try std.testing.expectEqualStrings("10ma", orderText(1, &buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("5e", energyText(&buf, cat.good("spear").?));
     try std.testing.expectEqualStrings("24fu 36me 20mi", orderText(2, &buf, cat.good("cold_store").?));
     try std.testing.expectEqualStrings("Burn charcoal", needsName(&cat, cat.good("charcoal_kiln").?));

@@ -74,11 +74,15 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
                 .buy => if (f.acquired) |gi| (if (gi < cat.goods.len and cat.goods[gi].copy.built.len > 0) cat.goods[gi].copy.built else "You trade with the passerby.") else "You trade with the passerby.",
                 .sell => if (f.paid) |p| std.mem.print(&buf, "You sell to the passerby for {d:.1} {s}.", .{ p.qty, (if (p.item == .food) roster.Resource.food else roster.Resource.biomass).wordIn(f.act) }) catch "You sell." else "You sell to the passerby.",
             }),
-            .merchant => sim.log.push(.good, std.mem.print(&buf, "You trade {d} lot{s} of {s} with the merchant.", .{
-                f.lots,
-                if (f.lots == 1) "" else "s",
-                if (f.lot < merchant.lots.len) merchant.lots[f.lot].lot else "goods",
-            }) catch "You trade with the merchant."),
+            .merchant => {
+                // `You trade for Water ×6.`, `You sell Food ×8, 3 lots.`
+                var wr = std.Io.Writer.fixed(&buf);
+                wr.writeAll(if (f.direction == .sell) "You sell " else "You trade for ") catch {};
+                wr.writeAll(if (f.lot < merchant.lots.len) merchant.lots[f.lot].lot else "goods") catch {};
+                if (f.lots > 1) wr.print(", {d} lots", .{f.lots}) catch {};
+                wr.writeAll(".") catch {};
+                sim.log.push(.good, wr.buffered());
+            },
         }
     }
 
@@ -87,7 +91,7 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
         const tech = &cat.technologies[f.ti];
         var buf: [512]u8 = undefined;
         var wr = std.Io.Writer.fixed(&buf);
-        wr.print("{s} is established. ", .{tech.name}) catch {};
+        wr.print("{s} researched. ", .{tech.name}) catch {};
         costText(&wr, tech);
         wr.writeAll(" paid.") catch {};
         var opened = false;
@@ -188,11 +192,11 @@ pub fn log(sim: *res_mod.Sim, cat: *const roster.Catalog, ev: *ecs.Events) void 
     while (refused.next()) |_| {}
 }
 
-/// A research cost as the log names it (`8 FOOD · 6 BIOMASS`), or that the tile was carried
-/// across the curtain.
+/// A research cost as the log names it, in running text's words (`8 food · 6 materials`), or
+/// that the tile is known from Act I.
 fn costText(wr: *std.Io.Writer, tech: *const roster.Technology) void {
     if (tech.cost.isEmpty()) {
-        wr.writeAll("CARRIED FROM ACT I") catch {};
+        wr.writeAll("known from Act I") catch {};
         return;
     }
     var first = true;
@@ -201,8 +205,7 @@ fn costText(wr: *std.Io.Writer, tech: *const roster.Technology) void {
         if (n <= 0) continue;
         if (!first) wr.writeAll(" \u{00b7} ") catch {};
         first = false;
-        wr.print("{} ", .{@as(u32, @intFromFloat(@round(n)))}) catch {};
-        for (r.labelIn(2)) |c| wr.writeByte(std.ascii.toUpper(c)) catch {};
+        wr.print("{} {s}", .{ @as(u32, @intFromFloat(@round(n))), r.wordIn(2) }) catch {};
     }
 }
 
@@ -251,7 +254,7 @@ test "WorkBegun: the payment line, the weariness warning before it, nothing for 
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
     try testing.expectEqualStrings("You feel weak. Work will yield less.", rig.line(1));
     try testing.expectEqual(@import("../log.zig").Tone.warn, rig.res.sim.log.get(1).tone);
-    try testing.expectEqualStrings("You spend 4.0e 1m to begin.", rig.line(0));
+    try testing.expectEqualStrings("You spend 4.0e 1ma to begin.", rig.line(0));
     try testing.expectEqual(@import("../log.zig").Tone.dim, rig.res.sim.log.get(0).tone);
     try rig.run(); // each fact is worded once
     try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
@@ -358,18 +361,25 @@ test "Traded with the passerby: a buy, and a sell naming the materials paid in t
     try expectLine(&rig, 1, .good, "You sell to the passerby for 5.0 materials.");
 }
 
-test "Traded with the merchant names the lots and the lot's record" {
+test "Traded with the merchant names the lot, its direction and a count past one" {
     var rig = try Rig.init();
     defer rig.deinit();
     rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 0, .lots = 1 });
     rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .buy, .lot = 4, .lots = 3 });
+    const food_sell: u32 = for (merchant.lots, 0..) |l, i| {
+        if (l.id == 102) break @intCast(i);
+    } else unreachable;
+    rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .sell, .lot = food_sell, .lots = 1 });
+    rig.emit(events.Traded{ .agent = 0, .with = .merchant, .direction = .sell, .lot = food_sell, .lots = 2 });
     try rig.run();
-    try testing.expectEqual(@as(usize, 2), rig.res.sim.log.count);
-    try expectLine(&rig, 1, .good, "You trade 1 lot of Water \u{00d7}6 with the merchant.");
-    try expectLine(&rig, 0, .good, "You trade 3 lots of Food \u{00d7}10 with the merchant.");
+    try testing.expectEqual(@as(usize, 4), rig.res.sim.log.count);
+    try expectLine(&rig, 3, .good, "You trade for Water \u{00d7}6.");
+    try expectLine(&rig, 2, .good, "You trade for Food \u{00d7}10, 3 lots.");
+    try expectLine(&rig, 1, .good, "You sell Food \u{00d7}8.");
+    try expectLine(&rig, 0, .good, "You sell Food \u{00d7}8, 2 lots.");
 }
 
-test "Researched: the establishment with its cost and what it opened, then each recipe and verb it enables" {
+test "Researched: the research with its cost and what it opened, then each recipe and verb it enables" {
     var rig = try Rig.init();
     defer rig.deinit();
     const cat = &rig.res.catalog;
@@ -387,7 +397,7 @@ test "Researched: the establishment with its cost and what it opened, then each 
     var cw = std.Io.Writer.fixed(&cost);
     costText(&cw, &tech);
     var want: [512]u8 = undefined;
-    const first = try std.fmt.bufPrint(&want, "{s} is established. {s} paid. {s}, {s} now available.", .{ tech.name, cw.buffered(), cat.technologies[0].name, cat.technologies[1].name });
+    const first = try std.fmt.bufPrint(&want, "{s} researched. {s} paid. {s}, {s} now available.", .{ tech.name, cw.buffered(), cat.technologies[0].name, cat.technologies[1].name });
     var enabled: usize = 0;
     for (cat.goods) |g| if (g.requires.tech) |gt| if (std.mem.eql(u8, gt, tech.id)) {
         enabled += 1;
@@ -405,17 +415,17 @@ test "Researched: the establishment with its cost and what it opened, then each 
     try testing.expectEqual(Tone.normal, rig.res.sim.log.get(0).tone);
 }
 
-test "a research cost reads in whole units and capitals, or as carried across the curtain" {
+test "a research cost reads in whole units and lowercase words, or as known from Act I" {
     var buf: [128]u8 = undefined;
     var wr = std.Io.Writer.fixed(&buf);
     const two = roster.Technology{ .id = "t", .name = "T", .short = "T", .coord = .{ .q = 1, .r = 0 }, .cost = .{ .food = 8, .biomass = 5.6 } };
     costText(&wr, &two);
-    try testing.expectEqualStrings("8 FOOD \u{00b7} 6 BIOMASS", wr.buffered());
+    try testing.expectEqualStrings("8 food \u{00b7} 6 materials", wr.buffered());
     var cbuf: [32]u8 = undefined;
     var cw = std.Io.Writer.fixed(&cbuf);
     const carried = roster.Technology{ .id = "c", .name = "C", .short = "C", .coord = .{ .q = 1, .r = 0 } };
     costText(&cw, &carried);
-    try testing.expectEqualStrings("CARRIED FROM ACT I", cw.buffered());
+    try testing.expectEqualStrings("known from Act I", cw.buffered());
 }
 
 test "ExchangeRaised: the Exchange stands" {

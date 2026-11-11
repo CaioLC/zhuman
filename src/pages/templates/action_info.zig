@@ -9,9 +9,9 @@ const roster = ha.sim.data.roster;
 pub const Dominant = struct {
     band: ha.sim.kernel.dist.Stats,
     kind: ha.sim.kernel.dist.Kind,
-    /// The resource's letter — the header resource bar's one-letter vocabulary.
+    /// The resource's two-letter unit (`fo`, `ma`).
     letter: []const u8,
-    /// "food"/"biomass" — the teaching card's spelled-out form.
+    /// "food"/"materials" — the teaching card's spelled-out form.
     word: []const u8,
 };
 

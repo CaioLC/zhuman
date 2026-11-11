@@ -61,12 +61,12 @@ pub const MilestoneCopy = struct {
     kicker: []const u8,
     copy: []const u8,
     explanation: []const u8,
-    /// The explanation's lead while the raise is under way (`The Shelter is going up.`); the
+    /// The explanation's lead while the build is under way (`The Shelter is going up.`); the
     /// card follows it with the price's resources, paid (`Materials are paid.`).
-    raising: []const u8,
+    building: []const u8,
     /// The explanation while everything is on hand and the hands are on other work.
     waiting: []const u8,
-    /// The CTA once the milestone can be raised (`RAISE SHELTER`).
+    /// The CTA once the milestone can be built (`BUILD SHELTER`).
     action: []const u8,
     /// Open (or close) the card's details this frame; null leaves the player's choice.
     expand: ?bool = null,
@@ -497,7 +497,7 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     nreq += 1;
     requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = settled or food_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "RECIPES", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = settled or recipes_met };
+    requirements[nreq] = .{ .label = "GOODS", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = settled or recipes_met };
     nreq += 1;
     // Each good or verb its gate names, owned or still needed.
     var gates_unmet: u32 = 0;
@@ -540,8 +540,8 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
         .locked => if (gate) |gid| needsPhrase(&ready_buf, &lower_buf, cat, gid) else std.mem.print(&ready_buf, "locked \u{00B7} {d} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }) catch "locked",
         .unfunded => "inputs short",
         .busy => "hands busy",
-        .ready => "ready to raise",
-        .building => std.mem.print(&ready_buf, "raising \u{00B7} {d:.1}d left", .{raising.?.remaining / spd}) catch "raising",
+        .ready => "ready to build",
+        .building => std.mem.print(&ready_buf, "building \u{00B7} {d:.1}d left", .{raising.?.remaining / spd}) catch "building",
         .done => unreachable,
     };
     // The CTA names the state it waits on (the Exchange card's `LOCKED`), then the act's verb;
@@ -557,7 +557,7 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     var explain_buf: [160]u8 = undefined;
     const explanation = switch (state) {
         .busy => words.waiting,
-        .building => paidSentence(&explain_buf, words.raising, price, act),
+        .building => paidSentence(&explain_buf, words.building, price, act),
         else => words.explanation,
     };
 

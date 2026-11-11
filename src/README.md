@@ -25,8 +25,8 @@ The resource model separates survival from accounting:
   of the stock that rots per in-game day (a tenth at spawn, halved by a root cellar), so a
   larder of 10 loses one a day and a larder of 3 loses 0.3.
 - **Biomass** (`comp.InventoryBiomass { v }`) is the fungible durable stockpile in every act:
-  Act I UI and log prose cover its official name as **Materials**, while Act II shows Biomass.
-  The curtain carries the same balance unchanged.
+  the UI and log prose of every act show it as **materials** (label `Materials`, stock-line
+  code `MA`). The curtain carries the same balance unchanged.
 
 **Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
 every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
@@ -248,8 +248,8 @@ over `sim/events.zig`, held on `sim.Resources.events`. Every event is plain fixe
 names agents, records and items by index and amounts by number, never by text.
 
 **Intents** say what an agent means to do: `BeginLabor`, `BeginBuild`, `CancelBuild`,
-`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `MerchantDeal`, `Research`,
-`RaiseExchange`, `NeighbourDeal`, and `NewRun`, which asks for a fresh run. The UI writes them through
+`ToggleGenerator`, `CollectGenerator`, `SetRation`, `Barter`, `PostOffer`, `MerchantDeal`,
+`Research`, `RaiseExchange`, `NeighbourDeal`, and `NewRun`, which asks for a fresh run. The UI writes them through
 `ctx.res.game.events.writer(T).push(…)` and mutates nothing; any decider writes the same
 events. A **handler** system reads one intent family and calls the
 rule it already has; a rule that refuses changes nothing and returns a `Refused.Reason`, and
@@ -296,7 +296,7 @@ is a restart). The transitions, and who requests them:
 | Transition | Requested by | On entering |
 |---|---|---|
 | any → `act_one` | `run.new_run`, reading `NewRun`, in every state's `handle` set | `run.begin_run`: retires any living player, spawns one holding the starting verbs (`spawn_player`), `Sim.reset` (the prng carries over), `RunBegun` |
-| `act_one` → `act_two` | `curtain.detect_shelter`, the tick the player owns the Act I milestone (`capital.ownsMilestone`); it emits `ActEnded{ .act_one }` with the request, once | `curtain.cross_curtain`: `migration.migrate_to_act_two` on the player |
+| `act_one` → `act_two` | `curtain.detect_shelter`, the tick the player owns the Act I milestone (`capital.ownsMilestone`); it emits `ActEnded{ .act_one }` with the request, once | `curtain.cross_curtain`: `migration.migrate_to_act_two` on the player, and the neighbour book emptied, so the Act I offers stay behind and the Act II market starts from its own seed |
 | `act_two` → `act_three` | `curtain.detect_exchange`, once `Sim.exchange` stands | — |
 | an act → `game_over` | `run.detect_death`, after `despawn_dead`, when no player remains | — |
 
@@ -322,7 +322,7 @@ The `handle` sets:
 | State | Handlers, in order |
 |---|---|
 | `title`, `game_over` | `new_run` |
-| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `new_run`, `condition`, `outlook`, `quotes`, `log` |
+| `act_one` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `barter`, `post_offer`, `new_run`, `condition`, `outlook`, `quotes`, `log` |
 | `act_two`, `act_three` | `labor`, `build`, `cancel`, `generators_toggle`, `generators_collect`, `ration`, `merchant_deal`, `research`, `raise_exchange`, `neighbour_deal`, `new_run`, `condition`, `outlook`, `quotes`, `log` |
 
 | Handler | Reads | Does |
@@ -334,6 +334,7 @@ The `handle` sets:
 | `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
+| `neighbours.post_offer` | `PostOffer` | stands the offer on the book's Act I offers (`Market.act_one`) at most at the agent's spare (`neighbours.spareOf`), then holds every standing offer to the player's spare as it is now, so a good sold or lost takes its offer down; never refused |
 | `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings at the visit's coin amounts (`merchant.amount`), moves both sides, takes the stock, `Traded` |
 | `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
 | `exchange.raise_exchange` | `RaiseExchange` | refuses while standing, locked (`exchange.lifecycle`: a ring-4 technology and more than 500 of `Sim.population`) or short; else pays `exchange.cost` from the ledger and stands it, `ExchangeRaised` |
@@ -539,6 +540,17 @@ and returns the `Refused.Reason`, a quote's `market.Refusal` mapped onto it by n
 (`barter.reasonOf`). `market` stays world-free; `barter` is the only place a `Quote` meets an
 entity.
 
+**Act I's offers.** Act I's MARKET is the neighbours view before anyone else exists, and what
+the lone actor posts there stands on the same book, `Sim.neighbours`, as `Market.act_one`: a
+quantity per `neighbours.Holding` (food, materials, or a good by catalog index), with no price,
+since there is no coin in Act I. The book's Act II posts are keyed by its fixed twelve `items`,
+which hold no Act I good, so the offers are keyed by what is offered instead. What may be
+offered is the spare (`neighbours.spareOf`): the larder and the stockpile stay whole, and a good
+keeps the one unit whose effect is in use, which is the Act I holdings' spare units too. The
+page writes a `PostOffer`; `post_offer` caps it at the spare and holds every standing offer to
+the spare each tick. An offer counts in the market's standing total (`Market.standing`). No one
+reads the offers in Act I, and the curtain drops them (`cross_curtain` empties the book).
+
 ## The authored roster (`sim/data/roster.zig`, `assets/roster/`)
 
 The labor verbs, the capital goods and the technologies are data: `assets/roster/actions.zon`,
@@ -692,7 +704,7 @@ in the console. While the game runs, `reload.Watch` looks at the files' modifica
 twice a second from the main loop, and a change re-parses them between frames. A load that
 fails keeps the catalog and logs why, in full to the console and in one line to the event
 log. A load that succeeds is swapped in: each agent's own verbs, goods, generator state and
-research, the work in progress and the reach seen-set move to the new catalog indices by id, a record the files
+research, the work in progress, the reach seen-set and the Act I offers move to the new catalog indices by id, a record the files
 no longer hold takes its flag, its count and any work on it with it, and every agent resettles its body and
 larder. Rows that repeat are keyed by the record's id, so focus survives a reload that reorders
 a file.
@@ -714,7 +726,9 @@ says only that an agent carries it; the `quotes` writer refills it on the load f
 before the build. `Label` is not saved. A component the module does not name, a tag that carries
 data, or a field of `Sim` it does not name is a compile error. `Sim` is saved field by field: the
 prng's state is kept, so the run's luck carries over as it does across `Sim.reset`; the reach
-seen-set as good ids; the log as its lines, oldest first, pushed back in order with each line's
+seen-set as good ids; the Act I offers as their holdings' ids (`food`, `biomass` or a good's id)
+with the quantity, a file without them loading with none and one naming a good the roster lacks
+dropped and counted; the log as its lines, oldest first, pushed back in order with each line's
 own time, and its count of lines ever pushed.
 
 `version` guards the shape: `read` parses the version alone first and refuses one outside
@@ -802,7 +816,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `merchant.zig` | the Coin Merchant's lots (a stand-in; see `../docs/roadmap.md`), its visit system and the `MerchantDeal` handler |
 | `research.zig` | the `Research` handler: the board and the ledger's one writer for a research |
 | `exchange.zig` | the Exchange's price, its `lifecycle` and `ringFour` reads (the card reads them too), and the `RaiseExchange` handler |
-| `neighbours.zig` | the reserve table (a stand-in), `heldItem`, and the `NeighbourDeal` handler that settles both sides of a deal |
+| `neighbours.zig` | the reserve table (a stand-in), `heldItem`, `heldOf` and `spareOf` (an Act I holding), the `NeighbourDeal` handler that settles both sides of a deal, and the `PostOffer` handler |
 | `passerby.zig` | the passerby's update system |
 | `run.zig` | the run's lifecycle: `spawn_player`, `new_run`, `begin_run`, `detect_death`, the starting verbs and the opening line |
 | `curtain.zig` | the act boundaries: `detect_shelter`, `cross_curtain`, `detect_exchange` |
@@ -820,7 +834,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `barter.zig` | atomic resolution of a quote against the world |
 | `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, the board's prices and a trader's memory (price levels, `reprice`); the merchant's visit clock, the lots taken in a visit and its price levels |
-| `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view shows and `systems/neighbours.zig` settles with |
+| `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view shows and `systems/neighbours.zig` settles with, and the lone actor's Act I offers on it (`Holding`, `spareOf`, `Offers`) |
 | `research.zig` | the research board's progression: the adjacency rule and atomic research resolution over the catalog and `comp.Research` |
 
 `sim/kernel/` holds pure math over values; a kernel imports only `std`.

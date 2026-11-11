@@ -2,13 +2,18 @@
 //! and its primitive is a person, not a good. With few neighbours the list reads as people in
 //! sentences; with many it collapses to goods in notation, each with a price range drawn only
 //! from trades that happened. A deal composes both sides on the deal slip and is judged in the
-//! counterparty's own valuation. YOUR STALL posts sells and buys at the player's own prices,
-//! and each post says how many would take it.
+//! counterparty's own valuation. INVENTORY posts the player's offers and wants at its own
+//! prices, and each post says how many would take it.
 //!
 //! The neighbours are `ha.sim.rules.neighbours` (a stand-in, `docs/roadmap.md`);
 //! the player's holdings arrive as numbers. The view edits the player's posts on the neighbour
 //! book and reports a proposed deal the neighbour accepts, which the page writes as a
 //! `NeighbourDeal` intent; the handler settles both sides.
+//!
+//! Act I's MARKET is the same view with nobody in it (`Player.own`): no neighbours and no coin,
+//! so no PRICE column and no coin wording. Its INVENTORY lists what the lone actor holds, keyed
+//! by holding; a stepped offer is reported (`Result.offer`) and the surface writes it as a
+//! `PostOffer` intent, which the handler caps at the spare.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -35,12 +40,20 @@ const per_page: usize = 8;
 /// Up to this many neighbours, the list reads as people; beyond it, as goods.
 const natural_people: usize = 12;
 
+/// One thing the lone actor holds in Act I: what it is, how much is held and how much of it
+/// is spare (`nb.spareOf`).
+pub const Own = struct { item: nb.Holding, held: f32, spare: f32 };
+
 /// The player's side, as numbers by item (`nb.items`), plus coin.
 pub const Player = struct {
     trade: []const u8,
     held: [nb.item_count]f32,
     reserved: [nb.item_count]f32,
     coin: f32,
+    /// Act I's inventory, in its order: food, materials, then each good owned. Set, the view is
+    /// Act I's: the INVENTORY lists these with no price, the offers are the book's `act_one`
+    /// and change through `Result.offer`, and no line speaks of coin.
+    own: ?[]const Own = null,
 
     pub fn spare(self: Player, i: usize) f32 {
         return @max(0, self.held[i] - self.reserved[i]);
@@ -58,9 +71,14 @@ pub const Settled = struct {
     take: [nb.bundle_len]u16,
 };
 
+/// An Act I offer stepped this frame: the quantity `item` should stand at.
+pub const Offered = struct { item: nb.Holding, qty: u16 };
+
 pub const Result = struct {
     /// A deal proposed this frame that the neighbour accepts; the page writes it as an intent.
     settled: ?Settled = null,
+    /// An Act I offer stepped this frame; the caller writes it as a `PostOffer` intent.
+    offer: ?Offered = null,
 };
 
 const Group = enum { person, good };
@@ -79,6 +97,36 @@ fn word(ctx: *uic.UiCtx, i: usize) ![]const u8 {
     if (ha.sim.data.roster.Catalog.resource(nb.items[i])) |r| return r.wordIn(2);
     if (cat.good(nb.items[i])) |g| return std.ascii.allocLowerString(ctx.arena, g.name);
     return nb.items[i];
+}
+
+/// The catalog's short effect for item `i` (`nets fish`), or empty for a resource or a good
+/// without one.
+fn shortEffect(ctx: *uic.UiCtx, i: usize) []const u8 {
+    const g = ctx.res.game.catalog.good(nb.items[i]) orelse return "";
+    return g.copy.short;
+}
+
+/// The player's word for an Act I holding (`food`, `materials`, `wire snares`).
+fn ownWord(ctx: *uic.UiCtx, h: nb.Holding) ![]const u8 {
+    return switch (h) {
+        .food => ha.sim.data.roster.Resource.food.wordIn(1),
+        .biomass => ha.sim.data.roster.Resource.biomass.wordIn(1),
+        .good => |gi| std.ascii.allocLowerString(ctx.arena, ctx.res.game.catalog.goods[gi].name),
+    };
+}
+
+/// The catalog's short effect for an Act I holding, or empty for a stock.
+fn ownShort(ctx: *uic.UiCtx, h: nb.Holding) []const u8 {
+    return switch (h) {
+        .food, .biomass => "",
+        .good => |gi| ctx.res.game.catalog.goods[gi].copy.short,
+    };
+}
+
+/// `{n} offer(s) · {m} want(s)`: the market's standing total (`nb.Market.standing`).
+pub fn standingLine(a: std.mem.Allocator, m: *const nb.Market) ![]const u8 {
+    const s = m.standing();
+    return a.print("{d} offer{s} \u{00b7} {d} want{s}", .{ s.offers, if (s.offers == 1) "" else "s", s.wants, if (s.wants == 1) "" else "s" });
 }
 
 fn hrule(parent: El, id: []const u8) !void {
@@ -179,9 +227,11 @@ fn agentMatches(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8, spares:
     return true;
 }
 
-fn stallMatches(ctx: *uic.UiCtx, i: usize, words: []const []const u8, post: nb.Post, query: []const u8) !bool {
+/// Whether an INVENTORY row matches the query: its kind (`resource` or `crafted`), whether it
+/// is posted, or its word.
+fn stallMatches(ctx: *uic.UiCtx, crafted: bool, name: []const u8, qty: u16, query: []const u8) !bool {
     if (std.mem.trim(u8, query, " ").len == 0) return true;
-    const kind = if (i < nb.first_crafted) "resource" else "crafted";
+    const kind = if (crafted) "crafted" else "resource";
     var it = std.mem.tokenizeScalar(u8, query, ' ');
     while (it.next()) |raw| {
         const token = try std.ascii.allocLowerString(ctx.arena, raw);
@@ -193,9 +243,9 @@ fn stallMatches(ctx: *uic.UiCtx, i: usize, words: []const []const u8, post: nb.P
         const hit = if (std.mem.eql(u8, key, "type") or std.mem.eql(u8, key, "kind"))
             std.mem.startsWith(u8, kind, value)
         else if (std.mem.eql(u8, key, "is"))
-            (if (std.mem.eql(u8, value, "posted")) post.qty > 0 else if (std.mem.eql(u8, value, "idle")) post.qty == 0 else std.mem.startsWith(u8, kind, value))
+            (if (std.mem.eql(u8, value, "posted")) qty > 0 else if (std.mem.eql(u8, value, "idle")) qty == 0 else std.mem.startsWith(u8, kind, value))
         else
-            std.mem.find(u8, words[i], value) != null;
+            std.mem.find(u8, name, value) != null;
         if (hit == neg) return false;
     }
     return true;
@@ -212,10 +262,10 @@ fn sellSummary(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8) ![]const
     return out.items;
 }
 
-fn buyWords(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8, with_qty: bool) ![]const u8 {
+fn buyWords(ctx: *uic.UiCtx, a: nb.Agent, words: []const []const u8, with_qty: bool, sep: []const u8) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     for (0..nb.item_count) |i| if (a.buys[i] > 0) {
-        if (out.items.len > 0) try out.appendSlice(ctx.arena, ", ");
+        if (out.items.len > 0) try out.appendSlice(ctx.arena, sep);
         try out.appendSlice(ctx.arena, if (with_qty) try ctx.arena.print("{s} {d}", .{ words[i], a.buys[i] }) else words[i]);
     };
     return out.items;
@@ -228,18 +278,27 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
     const lr = try listRow(parent, "you", null, 8);
     const row = lr.inner;
     lr.outer.set(.{}, .{Style{ .fill_ink = .panel, .outline_ink = .line2 }});
-    const q = lr.outer.control(.{ .name = "Your stall", .role = .button, .ring = false });
-    var live: u32 = 0;
+    const q = lr.outer.control(.{ .name = "Your inventory", .role = .button, .ring = false });
+    var offered: u32 = 0;
+    var wanted: u32 = 0;
     var sells: std.ArrayList(u8) = .empty;
     var buys: std.ArrayList(u8) = .empty;
+    // Act I's offers carry no price.
+    if (p.own) |own| for (own) |o| {
+        const qty = m.act_one.of(o.item);
+        if (qty == 0) continue;
+        offered += 1;
+        if (sells.items.len > 0) try sells.appendSlice(ctx.arena, ", ");
+        try sells.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d}", .{ try book_mod.title(ctx.arena, try ownWord(ctx, o.item)), qty }));
+    };
     for (0..nb.item_count) |i| {
         if (m.sell_posts[i].qty > 0) {
-            live += 1;
+            offered += 1;
             if (sells.items.len > 0) try sells.appendSlice(ctx.arena, ", ");
             try sells.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d} at {d}", .{ try book_mod.title(ctx.arena, words[i]), m.sell_posts[i].qty, m.sell_posts[i].price }));
         }
         if (m.buy_posts[i].qty > 0) {
-            live += 1;
+            wanted += 1;
             if (buys.items.len > 0) try buys.appendSlice(ctx.arena, ", ");
             try buys.appendSlice(ctx.arena, try ctx.arena.print("{s} \u{00d7}{d} at {d}", .{ words[i], m.buy_posts[i].qty, m.buy_posts[i].price }));
         }
@@ -248,21 +307,23 @@ fn youRow(parent: El, m: *const nb.Market, p: Player, words: []const []const u8)
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .center },
         .gap = 8,
     }, .{});
+    const live = offered + wanted;
     try top.label("name", "You", .{Style{ .font = 13, .ink = .acc }});
-    try top.label("trade", try std.ascii.allocUpperString(ctx.arena, p.trade), .{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
+    if (p.trade.len > 0) try top.label("trade", try std.ascii.allocUpperString(ctx.arena, p.trade), .{Style{ .font = 10, .tracking = 0.06, .ink = .dim }});
     const right = try top.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
-    const posts = if (live > 0) try ctx.arena.print("{d} POSTS LIVE", .{live}) else "NOTHING POSTED";
+    const posts = if (live > 0) try ctx.arena.print("{d} OFFERED \u{00b7} {d} WANTED", .{ offered, wanted }) else "NOTHING POSTED";
     try right.label("posts", posts, .{Style{ .font = 10, .tracking = 0.06, .ink = .dim, .verdict = vd.when(live == 0, .attention) }});
     if (live > 0) {
         try run(row, "line", 11, &.{
-            .{ "Sells ", th.dim },
+            .{ "Offers ", th.dim },
             .{ if (sells.items.len > 0) sells.items else "nothing", th.fg },
-            .{ ". Buys ", th.dim },
+            .{ ". Wants ", th.dim },
             .{ if (buys.items.len > 0) buys.items else "nothing", th.dim },
             .{ ".", th.dim },
         });
     } else {
-        try run(row, "line", 11, &.{.{ "Nothing posted. Neighbours cannot trade with you.", th.dim }});
+        const text = if (m.n > 0) "Nothing posted. Neighbours cannot trade with you." else "Nothing posted.";
+        try run(row, "line", 11, &.{.{ text, th.dim }});
     }
     return q.clicked;
 }
@@ -278,13 +339,16 @@ pub const good_name = Style{ .ink = .fg, .on = &.{.{ .when = .selected, .ink = .
 /// PROPOSE: fg at rest, accent while hot, `line`/`line2` while the offer cannot be proposed.
 pub const propose_outline = Style{ .outline_ink = .fg, .on = &.{ .{ .when = .hot, .outline_ink = .acc }, .{ .when = .disabled, .outline_ink = .line } } };
 pub const propose_label = Style{ .ink = .fg, .on = &.{ .{ .when = .hot, .ink = .acc }, .{ .when = .disabled, .ink = .line2 } } };
-/// YOUR STALL: accent edge and label on hover or visible focus and while the stall is open
+/// INVENTORY: accent edge and label on hover or visible focus and while the inventory is open
 /// (published as `selected`), which also fills it with the panel; else a line2 edge, dim label.
 pub const stall_outline = Style{ .outline_ink = .line2, .fill_ink = .bg, .on = &.{
     .{ .when = .hover_focus, .outline_ink = .acc },
     .{ .when = .selected, .outline_ink = .acc, .fill_ink = .panel },
 } };
 pub const stall_label = Style{ .ink = .dim, .on = &.{ .{ .when = .hover_focus, .ink = .acc }, .{ .when = .selected, .ink = .acc } } };
+/// THE DEAL's `← BACK`: a line2 edge and dim label, both accent on hover or visible focus.
+pub const back_outline = Style{ .outline_ink = .line2, .on = &.{.{ .when = .hover_focus, .outline_ink = .acc }} };
+pub const back_label = Style{ .ink = .dim, .on = &.{.{ .when = .hover_focus, .ink = .acc }} };
 
 fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_count]f32, words: []const []const u8) !bool {
     const ctx = parent.ctx;
@@ -305,9 +369,9 @@ fn personRow(parent: El, i: usize, a: nb.Agent, chosen: bool, spares: [nb.item_c
     const right = try top.box("right", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
     try right.label("match", if (match) "WANTS WHAT YOU HOLD" else "nothing you hold", .{Style{ .font = 10, .tracking = 0.06, .verdict = vd.of(match, .met, .absent) }});
     try run(row, "line", 11, &.{
-        .{ "Sells ", th.dim },
+        .{ "Offers ", th.dim },
         .{ try sellSummary(ctx, a, words), th.fg },
-        .{ try ctx.arena.print(". Buys {s}.", .{try buyWords(ctx, a, words, false)}), th.dim },
+        .{ try ctx.arena.print(". Wants {s}.", .{try buyWords(ctx, a, words, false, ", ")}), th.dim },
     });
     return q.clicked;
 }
@@ -358,6 +422,36 @@ fn goodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, i: usize, cho
     return q.clicked;
 }
 
+/// An Act I good row: what the lone actor offers of it, with nobody else to offer or want it,
+/// keyed by its holding. Returns its click.
+fn ownGoodRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, o: Own, chosen: bool) !bool {
+    const ctx = parent.ctx;
+    const th = ctx.res.view.theme;
+    const a = ctx.arena;
+    const name = try ownWord(ctx, o.item);
+    const lr = try listRow(parent, "own_good", o.item.key(), 7);
+    const row = lr.inner;
+    row.set(.{ .flow = .{ .dir = .row, .cross = .start }, .in_tracks = tracks }, .{});
+    const q = lr.outer.control(.{ .name = name, .role = .button, .selected = chosen, .ring = false });
+    lr.outer.set(.{}, .{row_look});
+    try row.label_fit("name", try std.ascii.allocUpperString(a, name), .{ .cell_fill = .clip }, .{ Style{ .font = 13, .tracking = 0.04 }, good_name });
+    const col = try row.box("col", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
+    const mine = m.act_one.of(o.item);
+    try run(col, "stats", 11, &.{
+        .{ try a.print("{}", .{mine}), th.fg },
+        .{ try a.print(" offered \u{00b7} {d} selling", .{@intFromBool(mine > 0)}), th.dim },
+        .{ "  \u{00b7}  ", th.line2 },
+        .{ "0", th.fg },
+        .{ " wanted \u{00b7} 0 buying", th.dim },
+    });
+    if (o.spare >= 1) {
+        try run(col, "meta", 11, &.{ .{ "not yet traded", th.line2 }, .{ "  \u{00b7}  ", th.line2 }, .{ try a.print("you spare {d:.0}", .{o.spare}), th.good } });
+    } else {
+        try run(col, "meta", 11, &.{.{ "not yet traded", th.line2 }});
+    }
+    return q.clicked;
+}
+
 /// The stall table's columns (`.stall-head`/`.stall-row`): `minmax(0, 1fr) 86px 86px 143px`,
 /// gap 10. The head and every row lay out by one set, declared on the list.
 const stall_tracks = [_]uic.Track{
@@ -366,10 +460,16 @@ const stall_tracks = [_]uic.Track{
     .{ .basis = .{ .px = 86 } },
     .{ .basis = .{ .px = 143 } },
 };
+/// Act I's stall has no PRICE column (`.is-moneyless`): `minmax(0, 1fr) 86px 143px`.
+const own_tracks = [_]uic.Track{
+    .{ .basis = .{ .fr = 1 } },
+    .{ .basis = .{ .px = 86 } },
+    .{ .basis = .{ .px = 143 } },
+};
 const stall_gap: f32 = 10;
 
-/// The stall's table head (`.stall-head`).
-fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
+/// The stall's table head (`.stall-head`), with its PRICE column when `priced`.
+fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool, priced: bool) !void {
     const lr = try listRow(parent, "stall_head", null, 0);
     lr.outer.set(.{}, .{style.pad_each(9, pad_x, 7, pad_x)});
     const row = lr.inner;
@@ -377,9 +477,11 @@ fn stallHead(parent: El, tracks: *uic.TrackSet, selling: bool) !void {
     const s = style.eyebrow_dim;
     const item = try row.div("item");
     try item.label("t", "ITEM", .{s});
-    inline for (.{ .{ "qty", if (selling) "POSTED" else "WANTED" }, .{ "price", "PRICE" } }) |c| {
-        const cell = try row.box(c[0], .{ .flow = .{ .dir = .row, .main = .center } }, .{});
-        try cell.label("t", c[1], .{s});
+    const qty = try row.box("qty", .{ .flow = .{ .dir = .row, .main = .center } }, .{});
+    try qty.label("t", if (selling) "OFFERED" else "WANTED", .{s});
+    if (priced) {
+        const price = try row.box("price", .{ .flow = .{ .dir = .row, .main = .center } }, .{});
+        try price.label("t", "PRICE", .{s});
     }
     const who = try row.box("who", .{ .flow = .{ .dir = .row, .main = .end } }, .{});
     try who.label("t", if (selling) "WHO WOULD BUY" else "WHO WOULD SELL", .{s});
@@ -396,13 +498,16 @@ fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling:
     row.set(.{ .flow = .{ .dir = .row, .cross = .center }, .in_tracks = tracks }, .{});
     const item = try row.box("item", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 1 }, .{});
     try item.label("name", try book_mod.title(a, words[i]), .{Style{ .font = 13, .ink = .acc, .verdict = vd.when(post.qty == 0, .inactive) }});
-    const sub = if (selling)
-        try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] })
-    else blk: {
+    const sub = if (selling) blk: {
+        const short = shortEffect(ctx, i);
+        const held = try a.print("{d:.0} spare of {d:.0} held", .{ p.spare(i), p.held[i] });
+        break :blk if (short.len > 0) try a.print("{s} \u{00b7} {s}", .{ held, short }) else held;
+    } else blk: {
         const off = m.offered(i);
         break :blk try a.print("{d} offered by {d}", .{ off.units, off.by });
     };
-    try item.label("sub", sub, .{style.caption_faint});
+    // `.stall-sub` ellipsizes: the line takes the item cell's width and never widens it.
+    (try item.text_fit("sub", sub, .{ .cell_fill = .ellipsis })).set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .content }, .{style.caption_faint});
     const cap: u32 = if (selling) @intFromFloat(@floor(p.spare(i))) else 99;
     const qty_cell = try row.box("qty", .{ .flow = .{ .dir = .row, .main = .center } }, .{});
     post.qty = @intCast(try stepper_mod.quantity_stepper(qty_cell, "stepper", post.qty, 0, cap, .{ .less = "Fewer", .more = "More" }));
@@ -414,10 +519,52 @@ fn stallRow(parent: El, tracks: *uic.TrackSet, m: *nb.Market, i: usize, selling:
     try who.label("t", text, .{Style{ .font = 10, .verdict = vd.of(post.qty > 0 and takers > 0, .met, .absent) }});
 }
 
+/// An Act I INVENTORY row, keyed by its holding: what is held and spare, and the quantity
+/// offered, which steps up to the spare. Returns the quantity a step asks for, if one did.
+fn ownStallRow(parent: El, tracks: *uic.TrackSet, m: *const nb.Market, o: Own) !?u16 {
+    const ctx = parent.ctx;
+    const a = ctx.arena;
+    const posted = m.act_one.of(o.item);
+    const name = try ownWord(ctx, o.item);
+    const lr = try listRow(parent, "own", o.item.key(), 6);
+    lr.outer.set(.{}, .{Style{ .fill_ink = if (posted > 0) .panel else .bg }});
+    const row = lr.inner;
+    row.set(.{ .flow = .{ .dir = .row, .cross = .center }, .in_tracks = tracks }, .{});
+    const item = try row.box("item", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 1 }, .{});
+    try item.label("name", try book_mod.title(a, name), .{Style{ .font = 13, .ink = .acc, .verdict = vd.when(posted == 0, .inactive) }});
+    const short = ownShort(ctx, o.item);
+    const held = try a.print("{s} spare of {s} held", .{ try book_mod.fmtNum(a, o.spare), try book_mod.fmtNum(a, o.held) });
+    const sub = if (short.len > 0) try a.print("{s} \u{00b7} {s}", .{ held, short }) else held;
+    (try item.text_fit("sub", sub, .{ .cell_fill = .ellipsis })).set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .content }, .{style.caption_faint});
+    const cap: u32 = @intFromFloat(@floor(@max(0, o.spare)));
+    const qty_cell = try row.box("qty", .{ .flow = .{ .dir = .row, .main = .center } }, .{});
+    const names = stepper_mod.Names{ .less = try a.print("Fewer {s}", .{name}), .more = try a.print("More {s}", .{name}) };
+    const stepped: u16 = @intCast(try stepper_mod.quantity_stepper(qty_cell, "stepper", posted, 0, cap, names));
+    // Nobody else exists to buy.
+    const who = try row.box("who", .{ .flow = .{ .dir = .row, .main = .end } }, .{});
+    try who.label("t", if (posted == 0) "not posted" else "0 would buy", .{Style{ .font = 10, .verdict = .absent }});
+    return if (stepped != posted) stepped else null;
+}
+
 // ---- the slip -----------------------------------------------------------------------------
 
 fn slipHeading(parent: El, text: []const u8) !void {
     try parent.label("heading", text, .{ style.eyebrow, style.muted });
+}
+
+/// THE DEAL's heading line (`.slip-head`): the heading, and `← BACK` on its right. `name` is
+/// the button's accessible name. Returns the button's click.
+fn dealHeading(parent: El, name: []const u8) !bool {
+    const row = try parent.box("head", .{
+        .w = .{ .fixed = slip_inner }, .h = .fit_children,
+        .flow = .{ .dir = .row, .main = .space_between, .cross = .center }, .gap = 8,
+    }, .{});
+    try row.label("heading", "THE DEAL", .{ style.eyebrow, style.muted });
+    const b = try row.box("back", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
+    const q = b.control(.{ .name = name, .role = .button, .ring = false });
+    b.set(.{}, .{back_outline});
+    try b.label("t", "\u{2190} BACK", .{ Style{ .font = 10, .tracking = 0.07 }, back_label, style.pad_sym(6, 1) });
+    return q.clicked;
 }
 
 fn placeholder(parent: El, id: []const u8, text: []const u8) !void {
@@ -451,16 +598,16 @@ fn line(parent: El, i: usize, name: []const u8, value: []const u8, clickable: bo
     return clicked;
 }
 
-fn goodSlip(slip: El, m: *const nb.Market, i: usize, st: *MarketState, words: []const []const u8) !void {
+fn goodSlip(slip: El, m: *const nb.Market, i: usize, st: *MarketState, p: Player, words: []const []const u8) !void {
     const ctx = slip.ctx;
     const a = ctx.arena;
     try slipHeading(slip, try std.ascii.allocUpperString(a, words[i]));
     // The four cheapest selling and the four paying most; a name opens a deal with them.
     var sellers: std.ArrayList(usize) = .empty;
     var buyers: std.ArrayList(usize) = .empty;
-    for (m.people(), 0..) |p, k| {
-        if (p.sells[i] > 0) try sellers.append(a, k);
-        if (p.buys[i] > 0) try buyers.append(a, k);
+    for (m.people(), 0..) |n, k| {
+        if (n.sells[i] > 0) try sellers.append(a, k);
+        if (n.buys[i] > 0) try buyers.append(a, k);
     }
     const people = m.people();
     sortBy(sellers.items, people, i, true);
@@ -474,14 +621,29 @@ fn goodSlip(slip: El, m: *const nb.Market, i: usize, st: *MarketState, words: []
         try sideHead(box, side[1], try a.print("{}", .{list.len}));
         if (list.len == 0) try placeholder(box, "none", if (side[2]) "Nobody is selling." else "Nobody is buying.");
         for (list[0..@min(4, list.len)], 0..) |k, j| {
-            const p = people[k];
+            const n = people[k];
             const name = if (side[2])
-                try a.print("{s} {s} \u{00d7}{d}", .{ p.firstName(), p.lastName(), p.sells[i] })
+                try a.print("{s} {s} \u{00d7}{d}", .{ n.firstName(), n.lastName(), n.sells[i] })
             else
-                try a.print("{s} {s} wants {d}", .{ p.firstName(), p.lastName(), p.buys[i] });
-            const price = try a.print("{d} coin", .{if (side[2]) p.ask[i] else p.bid[i]});
-            if (try line(box, j, name, price, true)) pickAgent(st, m, k, null);
+                try a.print("{s} {s} wants {d}", .{ n.firstName(), n.lastName(), n.buys[i] });
+            const price = try a.print("{d} coin", .{if (side[2]) n.ask[i] else n.bid[i]});
+            if (try line(box, j, name, price, true)) pickAgent(st, m, k, p, @intCast(i));
         }
+    }
+    try placeholder(slip, "hint", "Pick a name to open a deal.");
+}
+
+/// An Act I good's detail: nobody sells it or buys it yet.
+fn ownGoodSlip(slip: El, h: nb.Holding) !void {
+    const ctx = slip.ctx;
+    try slipHeading(slip, try std.ascii.allocUpperString(ctx.arena, try ownWord(ctx, h)));
+    inline for (.{ .{ "sell", "CHEAPEST SELLING", "Nobody is selling." }, .{ "buy", "PAYING MOST", "Nobody is buying." } }) |side| {
+        const box = try slip.box(side[0], .{
+            .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
+            .gap = 4,
+        }, .{});
+        try sideHead(box, side[1], "0");
+        try placeholder(box, "none", side[2]);
     }
     try placeholder(slip, "hint", "Pick a name to open a deal.");
 }
@@ -495,24 +657,35 @@ fn sortBy(list: []usize, people: []const nb.Agent, item: usize, ascending_ask: b
     }.lt);
 }
 
-/// Open a deal with neighbour `k`: what it wants that the player has spare (when `seed` is
-/// given), against its first good, the way the prototype seeds the slip.
-fn pickAgent(st: *MarketState, m: *const nb.Market, k: usize, seed: ?Player) void {
+/// Open a deal with neighbour `k`: what it wants that the player has spare, against its first
+/// good, the way the prototype seeds the slip. `from` is the good whose detail named it, where
+/// the deal's back button returns.
+fn pickAgent(st: *MarketState, m: *const nb.Market, k: usize, p: Player, from: ?u8) void {
     st.pick_kind = 1;
     st.pick = @intCast(k);
+    st.from = from;
     st.give = @splat(0);
     st.take = @splat(0);
     const a = m.agents[k];
-    if (seed) |p| {
-        for (0..nb.item_count) |i| if (a.buys[i] > 0 and p.spare(i) >= 1) {
-            st.give[i] = @intCast(@min(@as(u32, @intFromFloat(@floor(p.spare(i)))), a.buys[i]));
-            break;
-        };
-    }
+    for (0..nb.item_count) |i| if (a.buys[i] > 0 and p.spare(i) >= 1) {
+        st.give[i] = @intCast(@min(@as(u32, @intFromFloat(@floor(p.spare(i)))), a.buys[i]));
+        break;
+    };
     for (0..nb.item_count) |i| if (a.sells[i] > 0) {
         st.take[i] = @min(a.sells[i], 4);
         break;
     };
+}
+
+/// Back out of the deal: to the good's detail it was opened from, or to nothing picked.
+fn closeDeal(st: *MarketState) void {
+    if (st.from) |g| {
+        st.pick_kind = 2;
+        st.pick = g;
+    } else st.pick_kind = 0;
+    st.from = null;
+    st.give = @splat(0);
+    st.take = @splat(0);
 }
 
 fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Player, words: []const []const u8) !?Settled {
@@ -520,12 +693,13 @@ fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Playe
     const th = ctx.res.view.theme;
     const a = ctx.arena;
     const agent = m.agents[k];
-    try slipHeading(slip, "THE DEAL");
+    const back_name = if (st.from) |g| try a.print("Back to {s}", .{words[g]}) else "Close the deal";
+    if (try dealHeading(slip, back_name)) closeDeal(st);
     const who = try slip.div("who");
     // Full slip width, so the wrapped line below fills it (a fitted column would not wrap it).
     who.set(.{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 3 }, .{});
     try who.label("name", try a.print("{s} {s}", .{ agent.firstName(), agent.lastName() }), .{Style{ .font = 14, .ink = .fg }});
-    try who.label_fit("small", try a.print("{s} \u{00b7} buys {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true) }), .fill, .{style.caption});
+    try who.label_fit("small", try a.print("{s} \u{00b7} wants {s}", .{ @tagName(agent.trade), try buyWords(ctx, agent, words, true, ", ") }), .fill, .{style.caption});
 
     // YOU GIVE (spare only): what it buys that the player has spare, and coin.
     inline for (.{ .{ "give", "YOU GIVE", "spare only" }, .{ "take", "YOU RECEIVE", "theirs" } }) |side| {
@@ -553,7 +727,7 @@ fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Playe
             try row.label("n", name, .{Style{ .font = 12, .ink = .fg, .verdict = vd.when(bundle[i] == 0, .absent) }});
             bundle[i] = @intCast(try stepper_mod.quantity_stepper(row, "stepper", bundle[i], 0, cap, .{ .less = "Less", .more = "More" }));
         }
-        if (!any) try placeholder(box, "none", if (giving) "Nothing spare they buy." else "Nothing to receive.");
+        if (!any) try placeholder(box, "none", if (giving) "Nothing spare they want." else "Nothing to receive.");
     }
 
     // The verdict, in the neighbour's own valuation.
@@ -561,7 +735,7 @@ fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Playe
     const first = agent.firstName();
     const text: []const u8, const color: uic.Color, const line_color: uic.Color = switch (v) {
         .idle => .{ "Put something on both sides.", th.dim, th.line },
-        .refuse => .{ try a.print("{s} buys {s} \u{2014} nothing you have spare. Coin would still work.", .{ first, try buyWords(ctx, agent, words, false) }), th.danger, th.danger },
+        .refuse => .{ try a.print("{s} wants {s} \u{2014} nothing you have spare. Coin would still work.", .{ first, try buyWords(ctx, agent, words, false, " or ") }), th.danger, th.danger },
         .accept => .{ try a.print("{s} would take this.", .{first}), th.good, th.good },
         .counter => |c| .{ try a.print("{s} would want about {d} more {s}.", .{ first, c.more, words[c.item] }), th.warn, th.warn },
     };
@@ -616,8 +790,7 @@ fn agentSlip(slip: El, m: *const nb.Market, k: usize, st: *MarketState, p: Playe
 fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8) !void {
     const ctx = slip.ctx;
     const a = ctx.arena;
-    try slipHeading(slip, "YOUR STALL");
-    var live: u32 = 0;
+    try slipHeading(slip, "INVENTORY");
     var sell_items: u32 = 0;
     var sell_units: u32 = 0;
     var buy_items: u32 = 0;
@@ -632,38 +805,53 @@ fn stallSlip(slip: El, m: *const nb.Market, p: Player, words: []const []const u8
             committed += @as(u32, m.buy_posts[i].qty) * m.buy_posts[i].price;
         }
     }
-    live = sell_items + buy_items;
-    const over = @as(f32, @floatFromInt(committed)) > p.coin;
+    // Act I's offers: no price, so no coin.
+    const moneyless = p.own != null;
+    if (moneyless) {
+        sell_items += m.act_one.count();
+        sell_units += m.act_one.units();
+    }
+    const over = !moneyless and @as(f32, @floatFromInt(committed)) > p.coin;
     const who = try slip.box("who", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 3 }, .{});
-    try who.label("n", try a.print("{d} post{s} live", .{ live, if (live == 1) "" else "s" }), .{Style{ .font = 14, .ink = .fg }});
-    try who.label("s", "neighbours trade against these prices", .{style.caption});
+    try who.label("n", try a.print("{d} offered \u{00b7} {d} wanted", .{ sell_items, buy_items }), .{Style{ .font = 14, .ink = .fg }});
+    try who.label("s", if (m.n > 0) "neighbours trade against these prices" else "no neighbours yet", .{style.caption});
     const tally = try slip.box("tally", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 3 }, .{});
-    inline for (.{ .{ "sell", "SELLING", false }, .{ "buy", "BUYING", true } }) |r| {
+    inline for (.{ .{ "sell", "OFFERED", false }, .{ "buy", "WANTED", true } }) |r| {
         const row = try tally.box(r[0], .{
             .w = .{ .fixed = slip_inner }, .h = .fit_children,
             .flow = .{ .dir = .row, .main = .space_between },
         }, .{});
         try row.label("l", r[1], .{style.note});
-        const value = if (r[2]) try a.print("{d} items \u{00b7} {d} of {d:.0} coin", .{ buy_items, committed, p.coin }) else try a.print("{d} items \u{00b7} {d} units", .{ sell_items, sell_units });
+        const value = if (r[2] and moneyless)
+            try a.print("{d} items", .{buy_items})
+        else if (r[2])
+            try a.print("{d} items \u{00b7} {d} of {d:.0} coin", .{ buy_items, committed, p.coin })
+        else
+            try a.print("{d} items \u{00b7} {d} units", .{ sell_items, sell_units });
         try row.label("v", value, .{Style{ .font = 11, .ink = .fg, .verdict = vd.when(r[2] and over, .over) }});
     }
     if (over) {
-        try slip.label_fit("warn", try a.print("Your buy orders commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .fill, .{Style{ .font = 10, .ink = .danger }});
+        try slip.label_fit("warn", try a.print("Your wants commit {d} coin and you hold {d:.0}. The shortfall will not fill.", .{ committed, p.coin }), .fill, .{Style{ .font = 10, .ink = .danger }});
     }
-    inline for (.{ .{ "posted_sell", "POSTED TO SELL", true }, .{ "posted_buy", "POSTED TO BUY", false } }) |side| {
+    inline for (.{ .{ "posted_sell", "OFFERED", true }, .{ "posted_buy", "WANTED", false } }) |side| {
         const posts = if (side[2]) &m.sell_posts else &m.buy_posts;
         const box = try slip.box(side[0], .{
             .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
             .gap = 4,
         }, .{});
-        var count: u32 = 0;
-        for (posts) |post| count += @intFromBool(post.qty > 0);
+        const count: u32 = if (side[2]) sell_items else buy_items;
         try sideHead(box, side[1], try a.print("{}", .{count}));
-        if (count == 0) try placeholder(box, "none", if (side[2]) "Nothing posted to sell." else "Nothing posted to buy.");
+        if (count == 0) try placeholder(box, "none", if (side[2]) "Nothing offered." else "Nothing wanted.");
         for (posts, 0..) |post, i| {
             if (post.qty == 0) continue;
             _ = try line(box, i, try a.print("{s} \u{00d7}{d}", .{ try book_mod.title(a, words[i]), post.qty }), try a.print("{d} coin", .{post.price}), false);
         }
+        // Act I's offered lines, keyed by holding, with no price.
+        if (side[2]) if (p.own) |own| for (own) |o| {
+            const qty = m.act_one.of(o.item);
+            if (qty == 0) continue;
+            _ = try line(box, o.item.key(), try a.print("{s} \u{00d7}{d}", .{ try book_mod.title(a, try ownWord(ctx, o.item)), qty }), "", false);
+        };
     }
 }
 
@@ -686,28 +874,45 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
         .flow = .{ .dir = .column, .cross = .start },
     }, .{});
 
-    // --- head --------------------------------------------------------------------------------
+    // --- head: the tab's own, whichever view is open ----------------------------------------
     const head = try band(view, "head", 11, 9);
-    head.set(.{ .flow = .{ .dir = .row, .main = .space_between, .cross = .center } }, .{});
-    try head.label("title", if (st.stall) "What will you post?" else "Who will trade with you?", .{ style.heading, style.ink(.fg) });
-    const sub_slot = try head.div("sub");
+    head.set(.{ .flow = .{ .dir = .row, .main = .space_between, .cross = .start }, .gap = 12 }, .{});
+    const title = try head.box("title", .{ .w = .grow, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
+    try title.label("h", "MARKET", .{ style.heading, style.ink(.fg) });
+    try title.label("line", "Neighbours, what they offer and what they want.", .{Style{ .font = 11, .ink = .dim }});
+    // `.market-sub` shares the heading's baseline: a 10px line set down to the 21px one.
+    try head.label("sub", try standingLine(a, m), .{ Style{ .font = 10, .tracking = 0.07, .ink = .dim }, style.pad_each(8, 0, 0, 0) });
     try hrule(view, "head_rule");
 
-    // --- controls ----------------------------------------------------------------------------
+    // --- controls: INVENTORY, apart; then search and the segment, a group ------------------
     const controls = try band(view, "controls", 9, 9);
+    // `.stall-open { margin-right: 14px }`: 24px to the search field against the row's 10.
+    const stall_slot = try controls.box("stall_slot", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{style.pad_each(0, 14, 0, 0)});
+    const stall_button = try stall_slot.box("stall", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
+    const sq = stall_button.control(.{ .name = "Inventory", .role = .button, .selected = st.stall, .ring = false });
+    stall_button.set(.{}, .{stall_outline});
+    try stall_button.label("t", "INVENTORY", .{ Style{ .font = 10, .tracking = 0.07 }, stall_label, style.pad_sym(8, 3) });
+    var toggle_stall = sq.clicked;
     const owner = if (st.stall) stall_owner else query_owner;
-    const field = try uic.text_input_look(controls, if (st.stall) "stall_search" else "search", if (st.stall) "search items  \u{00b7}  type:crafted  is:posted" else "search  \u{00b7}  needs:biomass  has:food  trade:fisher", 80, owner, .{ .font = 11, .placeholder = th.line2 });
+    // Act I names no trades, so its search offers none.
+    const hint = if (st.stall)
+        "search items  \u{00b7}  type:crafted  is:posted"
+    else if (p.own != null)
+        "search  \u{00b7}  needs:materials  has:food"
+    else
+        "search  \u{00b7}  needs:materials  has:food  trade:fisher";
+    const field = try uic.text_input_look(controls, if (st.stall) "stall_search" else "search", hint, 80, owner, .{ .font = 11, .placeholder = th.line2 });
     field.set(.{ .w = .grow, .h = .fit_children }, .{});
     const query = owner.state(uic.UiState.TextInputState).text();
     const seg = try controls.box("seg", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 2 }, .{});
     const mode = activeGroup(st, m.n);
     if (st.stall) {
         try seg.label("label", "SIDE", .{ style.eyebrow_dim, style.pad_each(0, 4, 0, 0) });
-        if (try segButton(seg, "selling", "SELLING", st.side == 0)) {
+        if (try segButton(seg, "selling", "OFFERS", st.side == 0)) {
             st.side = 0;
             st.page = 0;
         }
-        if (try segButton(seg, "buying", "BUYING", st.side == 1)) {
+        if (try segButton(seg, "buying", "WANTS", st.side == 1)) {
             st.side = 1;
             st.page = 0;
         }
@@ -722,11 +927,6 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
             st.page = 0;
         }
     }
-    const stall_button = try controls.box("stall", .{ .w = .fit_children, .h = .fit_children, .flow = .{ .dir = .row } }, .{});
-    const sq = stall_button.control(.{ .name = "Your stall", .role = .button, .selected = st.stall, .ring = false });
-    stall_button.set(.{}, .{stall_outline});
-    try stall_button.label("t", "YOUR STALL", .{ Style{ .font = 10, .tracking = 0.07 }, stall_label, style.pad_sym(8, 3) });
-    var toggle_stall = sq.clicked;
     try hrule(view, "controls_rule");
 
     // --- body: the list | the slip -----------------------------------------------------------
@@ -752,13 +952,24 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     var total: usize = 0;
     var visible_people: usize = 0;
     var idle_people: usize = 0;
+    // The rows the active list holds: in Act I's INVENTORY and goods, positions in `p.own`.
     var rows: std.ArrayList(usize) = .empty;
-    if (st.stall) {
+    if (p.own) |own| {
+        // What the lone actor holds or offers; nobody offers anything for it to want.
+        for (own, 0..) |o, k| {
+            const posted = m.act_one.of(o.item);
+            const in_pool = if (st.stall)
+                st.side == 0 and (o.held > 0 or posted > 0) and try stallMatches(ctx, o.item == .good, try ownWord(ctx, o.item), posted, query)
+            else
+                mode == .good and posted > 0;
+            if (in_pool) try rows.append(a, k);
+        }
+    } else if (st.stall) {
         const selling = st.side == 0;
         for (0..nb.item_count) |i| {
             const post = if (selling) m.sell_posts[i] else m.buy_posts[i];
             const in_pool = if (selling) p.held[i] >= 1 or post.qty > 0 else m.offered(i).by > 0 or post.qty > 0;
-            if (in_pool and try stallMatches(ctx, i, &words, post, query)) try rows.append(a, i);
+            if (in_pool and try stallMatches(ctx, i >= nb.first_crafted, words[i], post.qty, query)) try rows.append(a, i);
         }
     } else {
         for (m.people(), 0..) |agent, k| {
@@ -781,20 +992,51 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
     const start = @as(usize, st.page) * per_page;
     const slice = rows.items[start..@min(total, start + per_page)];
 
+    // A deal with a neighbour the book no longer has closes.
+    if (st.pick_kind == 1 and st.pick >= m.n) closeDeal(st);
     if (st.stall) {
-        // One column set for the head and every row (`grid-template-columns` on both).
-        const tracks = try uic.tracks(ctx, &stall_tracks, stall_gap);
-        list.set(.{ .tracks = tracks }, .{});
-        try stallHead(list, tracks, st.side == 0);
-        if (slice.len == 0) try placeholder(list, "empty", "No item matches that query.");
-        for (slice) |i| try stallRow(list, tracks, m, i, st.side == 0, p, &words);
+        if (slice.len == 0) {
+            const empty = if (m.n == 0 and st.side == 1 and std.mem.trim(u8, query, " ").len == 0) "Nobody is offering anything yet." else "Nothing matches that search.";
+            try list.label("empty", empty, .{ style.note, style.pad_sym(pad_x, 16) });
+        } else if (p.own) |own| {
+            const tracks = try uic.tracks(ctx, &own_tracks, stall_gap);
+            list.set(.{ .tracks = tracks }, .{});
+            try stallHead(list, tracks, true, false);
+            for (slice) |k| if (try ownStallRow(list, tracks, m, own[k])) |qty| {
+                result.offer = .{ .item = own[k].item, .qty = qty };
+            };
+        } else {
+            // One column set for the head and every row (`grid-template-columns` on both).
+            const tracks = try uic.tracks(ctx, &stall_tracks, stall_gap);
+            list.set(.{ .tracks = tracks }, .{});
+            try stallHead(list, tracks, st.side == 0, true);
+            for (slice) |i| try stallRow(list, tracks, m, i, st.side == 0, p, &words);
+        }
         try stallSlip(slip, m, p, &words);
     } else {
-        if (mode == .person) {
+        if (total == 0) {
+            // Nobody to list: your own row and why; a search that matched nobody, only that.
+            if (m.n == 0) {
+                if (mode == .person and try youRow(list, m, p, &words)) toggle_stall = true;
+                try list.label("empty", "No neighbours yet.", .{ style.note, style.pad_sym(pad_x, 16) });
+            } else try list.label("empty", "Nothing matches that search.", .{ style.note, style.pad_sym(pad_x, 16) });
+        } else if (mode == .person) {
             if (try youRow(list, m, p, &words)) toggle_stall = true;
             for (slice) |k| {
                 if (try personRow(list, k, m.agents[k], st.pick_kind == 1 and st.pick == k, spares, &words)) {
-                    if (st.pick_kind == 1 and st.pick == k) st.pick_kind = 0 else pickAgent(st, m, k, p);
+                    if (st.pick_kind == 1 and st.pick == k) closeDeal(st) else pickAgent(st, m, k, p, null);
+                }
+            }
+        } else if (p.own) |own| {
+            // Act I's goods: what the lone actor offers, picked by holding.
+            const tracks = try uic.tracks(ctx, &good_tracks, good_gap);
+            list.set(.{ .tracks = tracks }, .{});
+            for (slice) |k| {
+                const key: u8 = @intCast(own[k].item.key());
+                const chosen = st.pick_kind == 2 and st.pick == key;
+                if (try ownGoodRow(list, tracks, m, own[k], chosen)) {
+                    st.pick_kind = if (chosen) 0 else 2;
+                    st.pick = key;
                 }
             }
         } else {
@@ -802,44 +1044,47 @@ pub fn market_view(parent: El, id: []const u8, m: *nb.Market, st: *MarketState, 
             const tracks = try uic.tracks(ctx, &good_tracks, good_gap);
             list.set(.{ .tracks = tracks }, .{});
             for (slice) |i| {
-                if (try goodRow(list, tracks, m, i, st.pick_kind == 2 and st.pick == i, p, &words)) {
-                    if (st.pick_kind == 2 and st.pick == i) st.pick_kind = 0 else {
-                        st.pick_kind = 2;
-                        st.pick = @intCast(i);
-                        st.give = @splat(0);
-                        st.take = @splat(0);
-                    }
+                // A good stays chosen while the deal its detail opened is on the slip.
+                const chosen = (st.pick_kind == 2 and st.pick == i) or (st.pick_kind == 1 and st.from == @as(u8, @intCast(i)));
+                if (try goodRow(list, tracks, m, i, chosen, p, &words)) {
+                    st.pick_kind = if (chosen) 0 else 2;
+                    st.pick = @intCast(i);
+                    st.from = null;
+                    st.give = @splat(0);
+                    st.take = @splat(0);
                 }
             }
         }
-        if (slice.len == 0) {
-            try list.label("empty", "Nothing matches that query.", .{ style.note, style.pad_sym(pad_x, 16) });
-        }
         switch (st.pick_kind) {
             1 => result.settled = try agentSlip(slip, m, st.pick, st, p, &words),
-            2 => try goodSlip(slip, m, st.pick, st, &words),
+            2 => if (p.own != null) try ownGoodSlip(slip, nb.Holding.ofKey(st.pick)) else try goodSlip(slip, m, st.pick, st, p, &words),
             else => {
                 try slipHeading(slip, "THE DEAL");
-                try placeholder(slip, "placeholder", "Pick a neighbour, or a good, on the left.");
+                try placeholder(slip, "placeholder", if (m.n > 0) "Pick a neighbour, or a good, on the left." else "No deal open.");
             },
         }
     }
-
-    // The head's count line, set once the rows are known.
-    const sub = if (st.stall)
-        try a.print("{d} item{s} \u{00b7} {s}", .{ total, if (total == 1) "" else "s", if (st.side == 0) "your inventory" else "offered by neighbours" })
-    else
-        try a.print("{d} of {d} neighbours \u{00b7} by {s}{s}", .{ visible_people, m.n, @tagName(mode), if (st.group == 0) " (natural)" else "" });
-    try sub_slot.label("t", sub, .{style.eyebrow_dim});
 
     // --- foot: friction and pages ------------------------------------------------------------
     try hrule(view, "foot_rule");
     const foot = try band(view, "foot", 8, 8);
     foot.set(.{ .flow = .{ .dir = .row, .main = .space_between, .cross = .center } }, .{});
     if (st.stall) {
-        var live: u32 = 0;
-        for (0..nb.item_count) |i| live += @intFromBool(m.sell_posts[i].qty > 0) + @intFromBool(m.buy_posts[i].qty > 0);
-        try runFit(foot, "friction", 11, false, &.{ .{ try a.print("{}", .{live}), th.warn }, .{ " posts live \u{00b7} neighbours trade against them while you work.", th.dim } });
+        var offered: u32 = 0;
+        var wanted: u32 = 0;
+        for (m.sell_posts, m.buy_posts) |s, b| {
+            offered += @intFromBool(s.qty > 0);
+            wanted += @intFromBool(b.qty > 0);
+        }
+        if (p.own != null) offered += m.act_one.count();
+        try runFit(foot, "friction", 11, false, &.{
+            .{ try a.print("{}", .{offered}), th.warn },
+            .{ " offered \u{00b7} ", th.dim },
+            .{ try a.print("{}", .{wanted}), th.warn },
+            .{ if (m.n > 0) " wanted \u{00b7} neighbours trade against them while you work." else " wanted \u{00b7} no neighbours yet.", th.dim },
+        });
+    } else if (m.n == 0) {
+        try runFit(foot, "friction", 11, false, &.{.{ "A passerby trades from the strip.", th.dim }});
     } else {
         const severe = visible_people > 0 and idle_people * 10 >= visible_people * 6;
         try runFit(foot, "friction", 11, false, &.{ .{ try a.print("{d} of {d}", .{ idle_people, visible_people }), if (severe) th.danger else th.warn }, .{ " neighbours want nothing you hold spare.", th.dim } });

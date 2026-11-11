@@ -42,7 +42,7 @@ const fx = @import("./fixtures.zig");
 /// generators of both acts it owns (the settlement keeps what the household planted).
 const actions_shelf = t.ActionsShelf{
     .act = 2,
-    .subtitle = "What will the settlement do now?",
+    .subtitle = "Work available to you.",
     // Twenty-odd verbs: the compact tile keeps the catalog scannable above the fold.
     .density = .compact,
 };
@@ -52,7 +52,7 @@ const actions_shelf = t.ActionsShelf{
 /// materials (`36me 24fu 20mi`), so its COST lane is wide and WHAT CHANGES gives the width up.
 const build_shelf = t.BuildShelf{
     .act = 2,
-    .subtitle = "Find the next useful recipe across a growing settlement catalog.",
+    .subtitle = "Recipes available to you.",
     .widths = .{ .cost = 112, .effect = 140 - t.build_scroll_gutter },
     // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
     .carry_owned = true,
@@ -247,8 +247,8 @@ fn population(ctx: *UiCtx) f32 {
     return ctx.res.game.sim.population;
 }
 
-/// The Exchange card: locked until a ring-4 technology stands and the settlement passes 500
-/// people, unfunded until the biomass, minerals and metal are held, ready, then standing.
+/// The Exchange card: locked until a ring-4 skill is researched and the population passes 500,
+/// unfunded until the biomass, minerals and metal are held, ready, then standing.
 fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
     const a = ctx.arena;
     const standing = ctx.res.game.sim.exchange.standing;
@@ -260,7 +260,7 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
     var short: std.ArrayList(u8) = .empty;
     var reqs: std.ArrayList(t.MilestoneRequirement) = .empty;
     try reqs.append(a, .{ .label = "RING 4", .value = if (research_met or standing) "1/1" else "0/1", .met = research_met or standing });
-    try reqs.append(a, .{ .label = "PEOPLE", .value = try a.print("{}/501", .{@as(u32, @intFromFloat(people))}), .met = people_met or standing });
+    try reqs.append(a, .{ .label = "POPULATION", .value = try a.print("{}/501", .{@as(u32, @intFromFloat(people))}), .met = people_met or standing });
     for (exchange.cost) |c| {
         const have = ledger.balance(world, e, c[0]);
         const word = c[0].wordIn(2);
@@ -289,35 +289,44 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
         .readiness = switch (ex) {
             .locked => try a.print("locked \u{00b7} {} condition{s}", .{ unmet, if (unmet == 1) "" else "s" }),
             .unfunded => "inputs short",
-            .ready => "ready to raise",
+            .ready => "ready to build",
             .done => "standing \u{00b7} ACT III",
         },
         .summary = switch (ex) {
-            .locked => try a.print("ring 4 {}/1 \u{00b7} people {}/501", .{ @intFromBool(research_met), people_n }),
+            .locked => try a.print("ring 4 {}/1 \u{00b7} population {}/501", .{ @intFromBool(research_met), people_n }),
             .unfunded => try a.print("inputs short \u{00b7} {} kind{s}", .{ short_kinds, if (short_kinds == 1) "" else "s" }),
-            .ready => try a.print("{s} \u{00b7} {} people \u{00b7} inputs ready", .{ four.?, people_n }),
+            .ready => try a.print("{s} \u{00b7} population {} \u{00b7} inputs ready", .{ four.?, people_n }),
             .done => "permanent market \u{00b7} Act III",
         },
-        .kicker = "ACT II CURTAIN \u{00b7} A MARKET WITH A PLACE",
-        .cost = "80 biomass \u{00b7} 40 minerals \u{00b7} 24 metal \u{00b7} 18d",
+        .kicker = "ENDS ACT II \u{00b7} A PERMANENT MARKET",
+        .cost = try costLine(a),
         .copy = if (standing)
             "The Exchange gives trade a permanent place. Passing lots become posted offers and the settlement enters Act III."
         else
-            "Raise a standing trading floor. Once it opens, passing lots give way to a permanent market and Act III begins.",
+            "Build a standing trading floor. Once it opens, passing lots give way to a permanent market and Act III begins.",
         .requirements = reqs.items,
         .explanation = switch (ex) {
-            .locked => if (!research_met and !people_met) "Research any ring-4 technology and grow beyond 500 people." else if (!research_met) "Research any ring-4 technology." else try a.print("Grow beyond 500 people \u{00b7} {}/501.", .{people_n}),
+            .locked => if (!research_met and !people_met) "Research any ring-4 skill and grow the population beyond 500." else if (!research_met) "Research any ring-4 skill." else try a.print("Grow the population beyond 500 \u{00b7} {}/501.", .{people_n}),
             .unfunded => try a.print("needs {s}", .{short.items}),
-            .ready => try a.print("{s} established \u{00b7} {} people \u{00b7} all inputs held", .{ four.?, people_n }),
-            .done => try a.print("opened after {s} \u{00b7} permanent market established", .{four orelse "ring-4 research"}),
+            .ready => try a.print("{s} researched \u{00b7} population {} \u{00b7} all inputs held", .{ four.?, people_n }),
+            .done => try a.print("opened after {s} \u{00b7} permanent market", .{four orelse "ring-4 research"}),
         },
         .action = switch (ex) {
             .locked => "LOCKED",
             .unfunded => "NEEDS INPUTS",
-            .ready => "RAISE EXCHANGE \u{2192}",
+            .ready => "BUILD EXCHANGE \u{2192}",
             .done => "ACT III OPEN",
         },
     };
+}
+
+/// The Exchange's cost line, `80ma 40mi 24me · 18d`: the order in the act's two-letter codes,
+/// as the Shelter card prints its own, then the days.
+fn costLine(a: std.mem.Allocator) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (exchange.cost) |c| try out.appendSlice(a, try a.print("{}{s} ", .{ @as(u32, @intFromFloat(c[1])), c[0].letterIn(2) }));
+    try out.appendSlice(a, "\u{00b7} 18d");
+    return out.items;
 }
 
 /// RESEARCH: the hex board over the agent's `comp.Research`. RESEARCH → a `Research` intent;

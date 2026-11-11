@@ -1,5 +1,7 @@
 /// The live Act-I page while the actor is alive: header and run context, the complete
-/// HOLDINGS/ACTIONS/BUILD workspace, the event log, and an optional trade overlay.
+/// HOLDINGS/ACTIONS/BUILD/MARKET workspace, the event log (MARKET, a focus view, drops it), and
+/// an optional trade overlay. The passerby's trade dialog keeps its state on an always-built
+/// node, so a focus view that hides the strip loses nothing.
 const std = @import("std");
 // general lib ECS
 const ha = @import("ha");
@@ -29,6 +31,8 @@ pub const Options = struct {
     initial_sort: ?uic.UiState.CatalogState = null,
     milestone_open: bool = false,
     trade_mode: ?usize = null,
+    /// Seed the MARKET view's state (a fixture's first frame).
+    market: ?uic.UiState.MarketState = null,
 };
 
 /// Build the page. Returns its roots in draw order: the shell, then the trade dialog's root
@@ -42,7 +46,8 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
     // Header stock data is passed raw, then assembled with the run context by `header`.
     // An empty stock slice keeps only the right-pinned runline when no live actor remains.
     var overlay: ?*Node = null; // the trade dialog's own overlay root, when open
-    var trade_ts: ?*uic.UiState.TradeState = null; // the market strip's open/mode/sel state
+    var trade_ts: ?*uic.UiState.TradeState = null; // the trade dialog's open/mode/sel state
+    var focus = false; // a focus view (MARKET) drops the log
     var header_stocks: [3]t.Stock = undefined;
     var header_stock_count: usize = 0;
     const q = ecs.ConstMaybeSingle(.{
@@ -62,6 +67,9 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
         };
         header_stock_count = header_stocks.len;
 
+        // The trade dialog's state persists on an always-built node, surviving view switches (a
+        // focus view hides the strip, never the dialog's state).
+        const trade_owner = try body.box("trade_state", .{ .w = .{ .fixed = 0 }, .h = .{ .fixed = 0 } }, .{});
         const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
             .holdings = try act_one_holdings.content(ctx, world, e),
             .initial_collapsed = opts.initial_collapsed,
@@ -71,14 +79,18 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
                 .initial_query = opts.initial_query,
                 .initial_sort = opts.initial_sort,
                 .milestone_open = opts.milestone_open,
+                .market_state = opts.market,
                 .activity = try t.activityOf(ctx, world.get(e, comp.Busy)),
             },
         });
 
-        // The nested surface returns the phase-aware Passerby strip control; encounter eligibility
-        // and modal state remain page responsibilities rather than presentation concerns.
-        trade_ts = workspace.surface.market_action.state(uic.UiState.TradeState);
-        if ((workspace.surface.market_action.consume(.clicked) or opts.open_trade) and ctx.res.game.sim.encounter.dealable()) {
+        // The nested surface returns the phase-aware Passerby strip control (none on a focus
+        // view); encounter eligibility and modal state remain page responsibilities rather than
+        // presentation concerns.
+        focus = workspace.surface.focus;
+        trade_ts = trade_owner.state(uic.UiState.TradeState);
+        const strip_clicked = if (workspace.surface.market_action) |m| m.consume(.clicked) else false;
+        if ((strip_clicked or opts.open_trade) and ctx.res.game.sim.encounter.dealable()) {
             trade_ts.?.open = true;
         }
         if (opts.trade_mode) |mode| trade_ts.?.mode = mode;
@@ -95,6 +107,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
     return page.finish(.{
         .stocks = header_stocks[0..header_stock_count],
         .act_label = "Act I",
+        .log = !focus,
         .overlay = overlay,
     });
 }
@@ -134,29 +147,40 @@ fn termsOf(arena: std.mem.Allocator, act: u8, b: *const market.Bundle) ![]t.Trad
 /// One lot the dialog shows and the quote that backs it.
 const Backed = struct { lot: t.TradeLot, quote: market.Quote };
 
-fn buyCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
+const Copy = struct { lot: []const u8, effect: []const u8 = "", consequence: []const u8 = "" };
+
+/// A BUY lot's copy. A good's effect is its roster `effect` (`buyEffect`), so only a stock
+/// carries one here.
+fn buyCopy(ware: Ware) Copy {
     return switch (ware) {
-        .food => .{ .lot = "Preserved food \u{00d7}1", .effect = "keeps well", .consequence = "" },
-        .biomass => .{ .lot = "Materials \u{00d7}2", .effect = "useful stock", .consequence = "" },
-        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "unlocks Fish", .consequence = "Fishing becomes available while you own it." },
-        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "unlocks Split wood", .consequence = "Split wood becomes available while you own it." },
-        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "fish better", .consequence = "Fishing costs less and catches more; it outranks the rod." },
-        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "split wood better", .consequence = "Splitting wood costs less and yields more; it outranks the hatchet." },
-        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .effect = "split wood costs less", .consequence = "Splitting wood costs less while you own them." },
-        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .effect = "food feeds further", .consequence = "Cooked food feeds you further while you own it." },
+        .food => .{ .lot = "Preserved food \u{00d7}1", .effect = "keeps well" },
+        .biomass => .{ .lot = "Materials \u{00d7}2" },
+        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .consequence = "Fishing becomes available while you own it." },
+        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .consequence = "Split wood becomes available while you own it." },
+        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .consequence = "Fishing costs less and catches more; it outranks the rod." },
+        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .consequence = "Splitting wood costs less and yields more; it outranks the hatchet." },
+        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .consequence = "Splitting wood costs less while you own them." },
+        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .consequence = "Cooked food feeds you further while you own it." },
     };
 }
 
-fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
+/// A BUY lot's effect: a good's roster `effect`, a stock's own note.
+fn buyEffect(cat: *const ha.sim.data.roster.Catalog, ware: Ware) []const u8 {
+    if (barter.goodOf(ware)) |id| if (cat.goodIndex(id)) |gi| return cat.goods[gi].copy.effect;
+    return buyCopy(ware).effect;
+}
+
+/// A SELL lot's copy: no effect, and for a good what selling a spare leaves you.
+fn sellCopy(ware: Ware) Copy {
     return switch (ware) {
-        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "" },
-        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "raw stock", .consequence = "" },
-        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the rod you use keeps Fish open." },
-        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
-        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the net you use keeps fishing better." },
-        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the axe you use keeps splitting better." },
-        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the pair you wear keeps splitting cheaper." },
-        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the pot you cook in keeps food feeding further." },
+        .food => .{ .lot = "Food \u{00d7}1" },
+        .biomass => .{ .lot = "Materials \u{00d7}3" },
+        .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .consequence = "A spare goes first; the rod you use keeps Fish open." },
+        .whetstone => .{ .lot = "Hatchet \u{00d7}1", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
+        .fish_net => .{ .lot = "Fishing net \u{00d7}1", .consequence = "A spare goes first; the net you use keeps fishing better." },
+        .hand_axe => .{ .lot = "Hand axe \u{00d7}1", .consequence = "A spare goes first; the axe you use keeps splitting better." },
+        .work_gloves => .{ .lot = "Work gloves \u{00d7}1", .consequence = "A spare goes first; the pair you wear keeps splitting cheaper." },
+        .cookpot => .{ .lot = "Cookpot \u{00d7}1", .consequence = "A spare goes first; the pot you cook in keeps food feeding further." },
     };
 }
 
@@ -198,7 +222,7 @@ fn trade_overlay(ctx: *uic.UiCtx, world: *const World, e: Entity, ts_opt: ?*uic.
             .id = q.id,
             .mode = .buy,
             .lot = c.lot,
-            .effect = c.effect,
+            .effect = buyEffect(cat, ware),
             .price = try termsOf(a, act, &q.give),
             .receive = try termsOf(a, act, &q.receive),
             .stock = q.stock,

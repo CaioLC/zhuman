@@ -85,8 +85,8 @@ pub const Spec = struct {
     /// A one-line description for the dev index / an unknown-name listing.
     about: []const u8,
     screen: Screen = .act_one,
-    /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD; Act II: 0 ACTIONS, 1 BUILD,
-    /// 2 RESEARCH, 3 MARKET.
+    /// The view the fixture opens on. Act I: 0 ACTIONS, 1 BUILD, 2 MARKET; Act II: 0 ACTIONS,
+    /// 1 BUILD, 2 RESEARCH, 3 MARKET.
     view: usize = 0,
     /// The deterministic logical window size. Feeds `view.compute`, so it fixes the responsive
     /// width class (`full`/`w760`/`w560`/`w440`) and the centered-terminal geometry. Defaults to
@@ -127,7 +127,7 @@ pub const Spec = struct {
     /// The title screen's screen and the attract loop's pinned time (`screen = .title`).
     title_screen: ha.res.TitleScreen = .menu,
     attract_s: f32 = 6,
-    /// The MARKET view's state on the first frame (`screen = .act_two`, `view = 3`).
+    /// The MARKET view's state on the first frame (Act I's `view = 2`, Act II's `view = 3`).
     market: ?uic.UiState.MarketState = null,
     /// The Exchange on the first frame (standing or not), the settlement's population
     /// (`Sim.population`; null keeps the stand-in), and whether the Exchange card opens with
@@ -178,7 +178,7 @@ pub const Settlement = struct {
 };
 
 /// The settlement the Act II fixtures show: the ring-1 tiles and enough of rings 2 to 4
-/// established that every Act II verb is open, thin stocks, and a granary going up.
+/// researched that every Act II verb is open, thin stocks, and a granary going up.
 const settlement = Settlement{
     .researched = &.{
         "spring_well",   "firepit",         "surface_ore",   "quarry_pit",
@@ -239,13 +239,29 @@ const poor_settlement = Settlement{
 };
 
 /// Act I goods of five buildable kinds, the rope bag and leaf bed among them: the Shelter's
-/// gate and its RECIPES condition met.
+/// gate and its GOODS condition met.
 const shelter_goods = [_]Owned{
     .{ .id = "sandals", .n = 1 },
     .{ .id = "rope_bag", .n = 1 },
     .{ .id = "root_cellar", .n = 1 },
     .{ .id = "leaf_bed", .n = 1 },
     .{ .id = "wire_snares", .n = 1 },
+};
+
+/// The lone actor the Act I MARKET shows (`market.html?act=i`): a stocked larder and stockpile,
+/// and six kinds of goods, a second pair of sandals and a second hatchet the only spares.
+const act_one_market_balances = Balances{
+    .vigor = .{ .v = 14, .max = 15 },
+    .food = 11.6,
+    .biomass = 31,
+    .goods = &.{
+        .{ .id = "sandals", .n = 2 },
+        .{ .id = "hatchet", .n = 2 },
+        .{ .id = "wire_snares", .n = 1 },
+        .{ .id = "garden_bed", .n = 1 },
+        .{ .id = "root_cellar", .n = 1 },
+        .{ .id = "leaf_bed", .n = 1 },
+    },
 };
 
 /// Act I's two generators: the snares on, the garden bed on auto.
@@ -263,6 +279,21 @@ const settlement_balances = Balances{
         .{ .id = "spring_well", .n = 1 },
         .{ .id = "forge", .n = 1 },
         .{ .id = "lean_to", .n = 1 },
+    },
+};
+
+/// The settlement's balances plus two made goods a neighbour trades in, so the INVENTORY rows
+/// show a good's short effect beside its spare.
+const market_stall_balances = Balances{
+    .vigor = settlement_balances.vigor,
+    .food = settlement_balances.food,
+    .goods = &.{
+        .{ .id = "firepit", .n = 1 },
+        .{ .id = "spring_well", .n = 1 },
+        .{ .id = "forge", .n = 1 },
+        .{ .id = "lean_to", .n = 1 },
+        .{ .id = "fishing_net", .n = 2 },
+        .{ .id = "work_clothes", .n = 3 },
     },
 };
 
@@ -336,7 +367,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_end",
-        .about = "The Act I curtain's first beat, after the Shelter is raised.",
+        .about = "The Act I curtain's first beat, after the Shelter is built.",
         .screen = .act_one_end,
     },
     .{
@@ -730,7 +761,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_exchange_ready",
-        .about = "Act II BUILD: the Exchange ready to raise (ring 4 established, 520 people, inputs held).",
+        .about = "Act II BUILD: the Exchange ready to build (ring 4 researched, population 520, inputs held).",
         .screen = .act_two,
         .view = 1,
         .day = 140,
@@ -799,6 +830,35 @@ pub const catalog = [_]Spec{
         .settlement = settlement,
         .market = .{ .group = 2, .pick_kind = 2, .pick = 0 },
     },
+    .{
+        .name = "market_deal_good",
+        .about = "MARKET by good: a deal opened from FOOD's detail, its BACK returning there and FOOD's row held.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = settlement_balances,
+        .settlement = settlement,
+        .market = .{ .group = 2, .pick_kind = 1, .pick = 1, .from = 0, .take = blk: {
+            var take: [13]u16 = @splat(0);
+            take[0] = 4;
+            break :blk take;
+        } },
+    },
+    .{
+        .name = "act_one_market",
+        .about = "Act I MARKET: the focus view with nobody in it, the player's own row and nothing posted.",
+        .view = 2,
+        .day = 19,
+        .balances = act_one_market_balances,
+    },
+    .{
+        .name = "act_one_market_inventory",
+        .about = "Act I MARKET's INVENTORY: what the lone actor holds, a spare pair of sandals and a spare hatchet, no price.",
+        .view = 2,
+        .day = 19,
+        .balances = act_one_market_balances,
+        .market = .{ .stall = true },
+    },
     // --- Act I: query, building, Shelter, trade and working states ----------------------
     .{
         .name = "act_one_build_query",
@@ -827,7 +887,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_shelter_unfunded",
-        .about = "Act I BUILD, the Shelter card open: every condition met, the biomass short.",
+        .about = "Act I BUILD, the Shelter card open: every condition met, the materials short.",
         .day = 40,
         .view = 1,
         .milestone_open = true,
@@ -835,7 +895,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_shelter_ready",
-        .about = "Act I BUILD, the Shelter card open and ready to raise.",
+        .about = "Act I BUILD, the Shelter card open and ready to build.",
         .day = 44,
         .view = 1,
         .milestone_open = true,
@@ -963,13 +1023,23 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "market_stall",
-        .about = "MARKET's stall: the player's posts and who would take them.",
+        .about = "MARKET's INVENTORY on OFFERS: what the player holds, what it offers and who would buy.",
+        .screen = .act_two,
+        .view = 3,
+        .day = 112,
+        .balances = market_stall_balances,
+        .settlement = settlement,
+        .market = .{ .stall = true },
+    },
+    .{
+        .name = "market_stall_wants",
+        .about = "MARKET's INVENTORY on WANTS: what neighbours offer, what the player wants and who would sell.",
         .screen = .act_two,
         .view = 3,
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
-        .market = .{ .stall = true },
+        .market = .{ .stall = true, .side = 1 },
     },
     .{
         .name = "act_two_collapsed",
@@ -1236,6 +1306,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
             .initial_sort = if (first) catalogOf(spec, &ctx.res.game.catalog) else null,
             .milestone_open = first and spec.milestone_open,
             .trade_mode = if (ctx.frame == 2) spec.trade_mode else null,
+            .market = if (first) spec.market else null,
         }),
         .act_two => try p_act_two(ctx, world, .{
             .initial_view = opening,

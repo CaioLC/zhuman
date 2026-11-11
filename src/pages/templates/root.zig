@@ -207,6 +207,8 @@ test {
     _ = @import("./menu_dialog_test.zig");
     _ = @import("./trade_dialog_test.zig");
     _ = @import("./milestone_goal_test.zig");
+    _ = @import("./market_view_test.zig");
+    _ = @import("./act_one_market_test.zig");
     _ = button_mod;
     _ = panel_mod;
     _ = scroll_view_mod;
