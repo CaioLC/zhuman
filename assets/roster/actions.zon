@@ -34,13 +34,14 @@
         .requires = .{ .energy = 4.0, .hours = 5.0, .any = .{ "hatchet", "hand_axe" } },
         .output = .{ .biomass = .{ .uniform = 8.0 } },
     },
-    // Fish: held with a fishing rod or a net. More food per energy than Forage, poisson-lumpy:
-    // it wants a larder buffer under the metabolism.
+    // Fish: held with a fishing rod or a net. The best food per hour and per energy a lone
+    // actor has, the yield of a bought tool; poisson-lumpy, so it wants a larder buffer under
+    // the metabolism.
     .{
         .id = "fish",
         .name = "Fish",
         .requires = .{ .energy = 2.0, .hours = 6.0, .any = .{ "fish_rod", "fish_net" } },
-        .output = .{ .food = .{ .poisson = 3.0 } },
+        .output = .{ .food = .{ .poisson = 4.5 } },
     },
     // Check traps: the wire snares' daily round, a generator. Passive and baited: collecting
     // pays the energy and the bait and draws a lumpy catch.
@@ -51,13 +52,14 @@
         .requires = .{ .energy = 2.0, .hours = 24.0, .biomass = 2.0, .all = .{"wire_snares"} },
         .output = .{ .food = .{ .exponential = 1.5 } },
     },
-    // Hunt: held with the crude spear. The big risky lump: costly in energy, so it wants a vigor
-    // reserve above it. The bait is paid at begin.
+    // Hunt: held with the crude spear. The biggest single lump, but less food per hour and per
+    // energy than Fish: a home-made tool against a bought one. Costly in energy, so it wants a
+    // vigor reserve above it. The bait is paid at begin.
     .{
         .id = "hunt",
         .name = "Hunt",
         .requires = .{ .energy = 4.0, .hours = 8.0, .biomass = 1.0, .all = .{"spear"} },
-        .output = .{ .food = .{ .poisson = 7.0 } },
+        .output = .{ .food = .{ .poisson = 5.5 } },
     },
     // Tend garden: the garden bed's two-day crop, a generator. Slow, steady and cheap.
     .{

@@ -1,11 +1,12 @@
 //! A scripted Act I: the whole schedule ticked from a new run to the shelter, driven only by the
-//! intents a page writes (`BeginLabor`, `BeginBuild`, `CollectGenerator`, `SetRation`,
-//! `Barter`), under a simple greedy policy: eat lavishly, buy the hatchet from the first
-//! passerby who can be paid, split wood for materials and forage when the larder is thin,
-//! collect the generators, build the wire snares, leaf bed, rope bag, garden bed and root
-//! cellar in that order, then gather the shelter's larder and rest to its vigor. It holds the
-//! act completable: on every seed tried the shelter stands before day 70 and the body never
-//! dies. Deterministic — the run's prng is seeded.
+//! intents a page writes (`BeginLabor`, `BeginBuild`, `SetRation`, `Barter`), under a simple
+//! greedy policy: eat lavishly, buy the hatchet and then the fishing rod from the first passerby
+//! who can be paid, split wood for materials, forage (fish, once the rod is held) when the
+//! larder is thin, build the wire snares, leaf bed, rope bag, garden bed and root cellar in that
+//! order, then gather the shelter's larder and rest to its vigor. It leaves the generators
+//! uncollected: a round of the snares or the garden returns less food per energy than fishing.
+//! It holds the act completable: on every seed tried the shelter stands before day 70 and the
+//! body never dies. Deterministic — the run's prng is seeded.
 
 const std = @import("std");
 const ecs = @import("./ecs.zig");
@@ -57,16 +58,17 @@ fn decide(w: *const World, res: *Resources, e: Entity) void {
     const rate: f32 = if (food >= 1) 2.0 else 1.0;
     if (w.get(e, comp.Metabolism).?.rate != rate) push(res, events.SetRation{ .agent = e, .rate = rate });
 
-    // Collect every ready generator the body can pay for with a margin.
-    for (cat.actions, 0..) |a, ai| {
-        const g = quotes.generators[ai] orelse continue;
-        if (g.ready() and vigor.v > a.requires.energy + 1) push(res, events.CollectGenerator{ .agent = e, .ai = @intCast(ai) });
-    }
+    const has_rod = goods.count[cat.goodIndex("fish_rod").?] > 0;
 
     // The hatchet, from the passerby, as soon as it can be paid for.
     const enc = &res.sim.encounter;
     if (enc.dealable() and goods.count[cat.goodIndex("hatchet").?] == 0) {
         const q = market.buy_quote(enc, .whetstone);
+        if (q.takeable(enc, food, biomass)) push(res, events.Barter{ .agent = e, .quote = q, .lots = 1 });
+    }
+    // Then the fishing rod, the same way.
+    if (enc.dealable() and goods.count[cat.goodIndex("hatchet").?] > 0 and !has_rod) {
+        const q = market.buy_quote(enc, .fish_hook);
         if (q.takeable(enc, food, biomass)) push(res, events.Barter{ .agent = e, .quote = q, .lots = 1 });
     }
 
@@ -93,7 +95,7 @@ fn decide(w: *const World, res: *Resources, e: Entity) void {
         else => {},
     };
 
-    const forage = cat.actionIndex("forage").?;
+    const forage = cat.actionIndex(if (has_rod) "fish" else "forage").?;
     const work = cat.actionIndex(if (has_hatchet) "chop_wood" else "scavenge").?;
     const for_shelter = t == shelter and biomass >= cat.goods[shelter].requires.biomass;
 
