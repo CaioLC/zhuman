@@ -224,7 +224,7 @@ The compact `<< {speed} >>` stepper sits on the HUD's right, after the run conte
 `MENU`. Its one linear scale is PAUSE, 1×, 2×, 3×: the chevrons step it and dim at their bound, and
 the value cell is fixed-width so stepping never moves them. It is one accessible slider ("Simulation
 speed"): arrows step, Home pauses, End jumps to 3×; the chevrons are pointer targets, not extra Tab
-stops. Stepping up out of PAUSE lands on 1×. State persists across tabs and fresh runs.
+stops. Stepping up out of PAUSE lands on 1×, and so does clicking the `PAUSE` readout itself. State persists across tabs and fresh runs.
 The multiplier applies only to simulation time: clock, spoilage, metabolism, work, passerby phases,
 and generator accumulation advance together. Pause skips that complete simulation stage without
 cancelling `Busy`, discarding generator progress, or changing the selected speed. Input, rendering,

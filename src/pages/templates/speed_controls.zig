@@ -47,7 +47,8 @@ pub const readout_looks = std.EnumArray(Pace, Style).init(.{
 
 /// The header's `<< {speed} >>` stepper over pause, 1×, 2×, 3×. One focus stop, published as a
 /// slider: arrows step, Home pauses, End jumps to 3×. The chevrons are pointer targets only
-/// (not extra Tab stops) and dim out at their bound.
+/// (not extra Tab stops) and dim out at their bound; so is the `PAUSE` readout, which resumes
+/// at 1× when clicked.
 pub fn speed_stepper(parent: El, id: []const u8) !El {
     const ctx = parent.ctx;
     const pb = &ctx.res.playback;
@@ -68,6 +69,9 @@ pub fn speed_stepper(parent: El, id: []const u8) !El {
     const faster = try box.div("faster");
     if (try chevron(slower, "<<", "Slower", pb.level() > 0)) pb.step(-1);
     if (try chevron(faster, ">>", "Faster", pb.level() < Playback.max_level)) pb.step(1);
+    // The `PAUSE` readout is itself a pointer target: clicking it resumes at 1×.
+    const resumed = value_cell.control(.{ .name = "Resume at 1× speed", .role = .button, .enabled = pb.level() == 0, .focusable = false });
+    if (resumed.clicked) pb.setLevel(1);
 
     const lvl = pb.level();
     _ = box.control(.{
