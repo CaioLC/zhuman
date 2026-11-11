@@ -31,7 +31,7 @@
     .{
         .id = "chop_wood",
         .name = "Split wood",
-        .requires = .{ .energy = 3.0, .hours = 5.0, .any = .{ "hatchet", "hand_axe" } },
+        .requires = .{ .energy = 4.0, .hours = 5.0, .any = .{ "hatchet", "hand_axe" } },
         .output = .{ .biomass = .{ .uniform = 8.0 } },
     },
     // Fish: held with a fishing rod or a net. More food per energy than Forage, poisson-lumpy:
@@ -48,8 +48,8 @@
         .id = "check_traps",
         .name = "Check traps",
         .generator = true,
-        .requires = .{ .energy = 1.0, .hours = 24.0, .biomass = 2.0, .all = .{"wire_snares"} },
-        .output = .{ .food = .{ .poisson = 2.5 } },
+        .requires = .{ .energy = 2.0, .hours = 24.0, .biomass = 2.0, .all = .{"wire_snares"} },
+        .output = .{ .food = .{ .exponential = 1.5 } },
     },
     // Hunt: held with the crude spear. The big risky lump: costly in energy, so it wants a vigor
     // reserve above it. The bait is paid at begin.
@@ -64,7 +64,7 @@
         .id = "tend_garden",
         .name = "Tend garden",
         .generator = true,
-        .requires = .{ .energy = 0.5, .hours = 48.0, .biomass = 0.2, .all = .{"garden_bed"} },
+        .requires = .{ .energy = 2.0, .hours = 72.0, .biomass = 0.2, .all = .{"garden_bed"} },
         .output = .{ .food = .{ .uniform = 1.5 } },
     },
     // Gather remedy: the medicinal herb bed's remedy, a generator. Vigor restored directly.
