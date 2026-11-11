@@ -358,13 +358,13 @@ test "goods on one verb stack; a spare carries no second effect" {
     own(&w, e, &cat, "hand_axe");
     own(&w, e, &cat, "work_gloves");
     const both = verbOf(&w, e, &cat, "chop_wood").?.requires.energy;
-    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7 * 0.75), both, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7 * 0.75), both, 1e-5);
     own(&w, e, &cat, "work_gloves"); // a second pair is stock
     try testing.expectEqual(both, verbOf(&w, e, &cat, "chop_wood").?.requires.energy);
     lose(&w, e, &cat, "work_gloves"); // the spare goes first, the discount stays
     try testing.expectEqual(both, verbOf(&w, e, &cat, "chop_wood").?.requires.energy);
     lose(&w, e, &cat, "work_gloves");
-    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7), verbOf(&w, e, &cat, "chop_wood").?.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7), verbOf(&w, e, &cat, "chop_wood").?.requires.energy, 1e-5);
     lose(&w, e, &cat, "hand_axe");
     try testing.expect(verbOf(&w, e, &cat, "chop_wood") == null);
 }
@@ -378,10 +378,10 @@ test "the chopping stack: hatchet, gloves, then the hand axe supersedes the hatc
     own(&w, e, &cat, "hatchet");
     own(&w, e, &cat, "work_gloves");
     const with_hatchet = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.75), with_hatchet.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.75), with_hatchet.requires.energy, 1e-5);
     own(&w, e, &cat, "hand_axe");
     const chop = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 3.0 * 0.7 * 0.75), chop.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7 * 0.75), chop.requires.energy, 1e-5);
     try testing.expectApproxEqAbs(@as(f32, 8.0 * 1.4), chop.output.biomass.?.scale(), 1e-4);
     lose(&w, e, &cat, "hand_axe"); // back to the hatchet's rank, modifiers kept
     const again = verbOf(&w, e, &cat, "chop_wood").?;

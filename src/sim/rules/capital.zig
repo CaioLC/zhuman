@@ -665,19 +665,19 @@ test "a generator accumulates without moving resources and settles only when col
     defer w.deinit();
     var res = try test_res();
     defer res.catalog.deinit();
-    res.time = .{ .dt = res.config.secs_per_day }; // one full day per tick
+    const garden = res.catalog.actionIndex("tend_garden").?;
+    res.time = .{ .dt = res.config.secs_per_day * res.catalog.actions[garden].requires.hours / 48 }; // half a cycle per tick
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.InventoryBiomass{ .v = 0.2 }, // exactly one two-day cycle of upkeep
+        comp.InventoryBiomass{ .v = 0.2 }, // exactly one cycle of upkeep
         comp.Goods{},
         comp.Generators{},
         comp.Granted{},
     });
-    const garden = res.catalog.actionIndex("tend_garden").?;
     w.get(e, comp.Goods).?.count[res.catalog.goodIndex("garden_bed").?] = 1;
 
-    run_generators(&w, &res); // halfway through a 48h cycle
+    run_generators(&w, &res); // halfway through the cycle
     try testing.expectApproxEqAbs(@as(f32, 0.2), w.get(e, comp.InventoryBiomass).?.v, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0), w.get(e, comp.InventoryFood).?.v, 1e-6);
     try testing.expectEqual(GeneratorStanding.charging, generator_quote(&w, e, &res.catalog, res.config, garden).?.standing);
@@ -782,12 +782,12 @@ test "an auto generator collects itself in the run that completes its cycle" {
     const cat = &res.catalog;
     const garden = cat.actionIndex("tend_garden").?;
     const spec = cat.actions[garden].requires;
-    const e = spawn_gardener(&w, cat, 0.2); // exactly one two-day cycle of upkeep
+    const e = spawn_gardener(&w, cat, 0.2); // exactly one cycle of upkeep
     w.get(e, comp.Generators).?.mode[garden] = .auto;
-    res.time = .{ .dt = res.config.secs_per_day }; // one full day per tick
+    res.time = .{ .dt = res.config.secs_per_day * spec.hours / 48 }; // half a cycle per tick
     res.events.update();
 
-    run_generators(&w, &res); // halfway through a 48h cycle
+    run_generators(&w, &res); // halfway through the cycle
     try testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v);
     try testing.expectEqual(@as(usize, 0), res.events.len(events.Collected));
 
