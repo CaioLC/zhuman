@@ -334,7 +334,7 @@ The `handle` sets:
 | `generators.generators_collect` | `CollectGenerator` | `capital.collect_generator`: the cycle's yield, `Collected` |
 | `ration.ration` | `SetRation` | `Metabolism.rate`, clamped by `Config.clampMetabolism` |
 | `barter.barter` | `Barter` | `barter.resolve`: both bundles move against the passerby, `Traded` |
-| `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings, moves both sides, takes the stock, `Traded` |
+| `merchant.merchant_deal` | `MerchantDeal` | revalidates the lot against `Sim.merchant` (present, in stock) and the agent's holdings at the visit's coin amounts (`merchant.amount`), moves both sides, takes the stock, `Traded` |
 | `research.research` | `Research` | `rules/research.research` on the agent's board, then pays the tile's cost from the ledger in the same function, `Researched` with the tiles it opened |
 | `exchange.raise_exchange` | `RaiseExchange` | refuses while standing, locked (`exchange.lifecycle`: a ring-4 technology and more than 500 of `Sim.population`) or short; else pays `exchange.cost` from the ledger and stands it, `ExchangeRaised` |
 | `neighbours.neighbour_deal` | `NeighbourDeal` | seeds the stub book if unseeded; refuses an unknown neighbour, a deal the neighbour's `verdict` does not accept on the agent's spare (held less `neighbours.reserve`), or one the agent cannot pay; else settles both sides (the book's `settle`, the agent's ledger, goods and coin), `NeighbourSettled` |
@@ -349,9 +349,9 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 | `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once when an Act I recipe is first both listed (`capital.listed`: buildable, not the milestone, every gate passing) and affordable; the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce, falling short again does not re-arm it, and leaving the shelf (a gate's tool lost) does |
-| `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed` |
+| `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed`; a departure rolls its price levels (`Encounter.remember`) |
 | `generators.generators` | ✓ | ✓ | ✓ | matures every held generator verb not switched off by `dt`, and collects each `auto` one whose collection is ready (`capital.run_generators`) |
-| `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |
+| `merchant.merchant` | | ✓ | | the merchant's visit clock (`market.tickMerchant`), `Arrived` / `Departed`; a departure rolls its price levels (`merchant.remember`), a return clears the lots taken (`Sim.merchant.taken`). In Act III the standing Exchange replaces the cart |
 | `tick.mark_dead` | ✓ | ✓ | ✓ | tags `Dead` at `vigor ≤ 0`, `Died` |
 | `tick.despawn_dead` | ✓ | ✓ | ✓ | reaps them |
 | `run.detect_death` | ✓ | ✓ | ✓ | no player left: requests `game_over` |
@@ -495,16 +495,14 @@ reads, so hiding the strip cannot change whether a passerby is here.
 
 **One transfer grammar.** A `Line{item, qty}` and a fixed-cap `Bundle` express both sides of
 any deal; a `Quote` carries the offer's stable `id`, the encounter `rev` it was captured
-under, its `Direction`, give/receive bundles, remaining `stock` in lots, for a sell the `nth`
-lot of its ware this visit it was priced at, and `next_unit` — what the *following* lot of a
-sell would fetch, shown before confirmation. `Quote.refusal` is the single revalidation
-everyone shares, in precedence order: `departed`, then `stale` (the passerby changed, or a sell
-of that ware settled since), then `sold_out` (no stock, or the satchel cannot hand over the
-receive side), then `unaffordable`; every refusal has player-readable copy.
+under, its `Direction`, give/receive bundles and remaining `stock` in lots. `Quote.refusal` is
+the single revalidation everyone shares, in precedence order: `departed`, then `stale` (the
+passerby changed), then `sold_out` (no stock, or the satchel cannot hand over the receive
+side), then `unaffordable`; every refusal has player-readable copy.
 
 **The board has a spread.** `market.buy_quote` and `market.sell_quote` are the passerby's
 offers, which the page lists and a scripted test takes alike. The passerby values a food at 2
-materials when the player gives food and at 3 when the player takes it: buying food costs 3
+materials when an agent gives food and at 3 when an agent takes it: buying food costs 3
 materials a unit and buying materials 2 for a food, a sell of food fetches 2 materials and a
 sell of 3 materials a food, so a round trip loses a third. The goods cost the fishing rod
 `3f + 10m`, the hatchet `4f + 12m`, the fishing net `7f + 28m`, the hand axe `6f + 24m`, the
@@ -512,21 +510,30 @@ work gloves `5f + 18m` and the cookpot `10f + 40m`; a rank-2 tool is offered onl
 holder of the rank-1 tool of its family, and the work gloves only to the holder of the hatchet
 (`market.prerequisite`, `barter.offered`), each absent otherwise.
 
-**Sell prices diminish.** `sell_value(ware, n)` is what the passerby pays for the `n`-th lot
-sold this visit (`Encounter.sold`), a geometric decline `base·ratio^n` clamped to a positive
-floor, authored per ware: Food `2 / 0.75 / 0.5` materials, Materials (a lot of 3)
-`1 / 0.6 / 0.25` food, a good the materials of its price `/ 0.3 / 1.0` (the fishing rod 10,
-the cookpot 40). A sell is quoted one lot at a
-time, so the price the player confirms is the price paid. The floor is the anti-domination
-guarantee — selling always beats discarding — while the satchel and the visit window cap how
-much can be sold at all.
+**Fixed in a visit, remembered between visits.** Within a visit every price is fixed and every
+lot finite both ways: the satchel bounds what the passerby hands over, and `market.wanted`
+bounds the lots of a ware it takes (6 of food, 4 of materials by the lot of 3, one of each
+tool; `Encounter.sold` counts them). A sell pays the board's rate: a food 2 materials, 3
+materials materials the food they would cost, a good the materials of its price.
+Each ware carries a price level on `Encounter.level`, −4 to +4, a tenth of the board's price a
+step (`market.modifier`: 0.6 to 1.4). Food's level is the one rate food and materials change
+hands at from either tab, and a tool's level scales its price and its sell-back alike, so the
+spread holds at every level. When the passerby leaves, the `passerby` system calls
+`Encounter.remember`, which rolls each level against the visit's tallies (`bought`, `sold`)
+through `market.reprice`: lots taken of a ware raise its level with chance `1 − 0.7^lots`, a
+ware no one took lowers it with chance 0.3; lots brought to the passerby lower it and a ware
+no one brought raises it, by the same chances. The tallies count lots whoever the agent was.
+The Coin Merchant keeps the same memory: `MerchantVisit.level`, one level for the lots of an
+item (`merchant.group_of`), scaling a lot's coin side (`merchant.amount`), rolled by
+`merchant.remember` when the cart leaves; its SELL lots carry a per-visit `stock` as its BUY
+lots do.
 
 **`barter.resolve` is all-or-nothing.** The `barter` handler calls it for each `Barter`
 intent. It revalidates the quote plus give-side ownership before touching anything, then moves
 both bundles: Food/Materials on the inventory components, a sold good through
 `capital.release` (its effect leaves with the last unit), a bought good through
 `capital.acquire` (its effect lands once; a repeat is stock), the satchel paid out and topped
-up, a sell's lots counted, and one `Traded{ .with = .passerby }` emitted with the materials
+up, the lots counted on the passerby's tallies, and one `Traded{ .with = .passerby }` emitted with the materials
 moved, the good a buy `acquired` (the log reads its `copy.built`) and what a sell was `paid`. A failed check mutates nothing
 and returns the `Refused.Reason`, a quote's `market.Refusal` mapped onto it by name
 (`barter.reasonOf`). `market` stays world-free; `barter` is the only place a `Quote` meets an
@@ -812,7 +819,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `effects.zig` | the interpreter: a verb's effective terms from the catalog and the owned goods; the body/larder delta |
 | `ledger.zig` | where a line meets holdings: the `Resource` → inventory-component switch, good counts, `short`/`pay`/`draw` |
 | `barter.zig` | atomic resolution of a quote against the world |
-| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, and the sell-value schedule; the merchant's visit clock and the lots taken in a visit |
+| `market.zig` | the passerby encounter, wares, bundles, quotes, refusals, the board's prices and a trader's memory (price levels, `reprice`); the merchant's visit clock, the lots taken in a visit and its price levels |
 | `neighbours.zig` | the neighbours' stub book: the deterministic stand-in market Act II's MARKET view shows and `systems/neighbours.zig` settles with |
 | `research.zig` | the research board's progression: the adjacency rule and atomic research resolution over the catalog and `comp.Research` |
 

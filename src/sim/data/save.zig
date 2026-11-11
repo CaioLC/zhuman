@@ -177,6 +177,8 @@ pub const EncounterSave = struct {
     stock: []const f32 = &.{},
     visit: []const f32 = &.{},
     sold: []const u16 = &.{},
+    bought: []const u16 = &.{},
+    level: []const i8 = &.{},
 };
 
 pub const SimSave = struct {
@@ -298,6 +300,8 @@ fn captureSim(arena: Allocator, res: *const Resources) !SimSave {
             .stock = try arena.dupe(f32, &s.encounter.stock),
             .visit = try arena.dupe(f32, &s.encounter.visit),
             .sold = try arena.dupe(u16, &s.encounter.sold),
+            .bought = try arena.dupe(u16, &s.encounter.bought),
+            .level = try arena.dupe(i8, &s.encounter.level),
         },
         .merchant = s.merchant,
         .exchange = s.exchange,
@@ -470,6 +474,8 @@ fn applySim(sim: *Sim, cat: *const roster.Catalog, s: *const SimSave, report: *R
     for (s.encounter.stock[0..@min(s.encounter.stock.len, market.ware_count)], 0..) |v, i| sim.encounter.stock[i] = v;
     for (s.encounter.visit[0..@min(s.encounter.visit.len, market.ware_count)], 0..) |v, i| sim.encounter.visit[i] = v;
     for (s.encounter.sold[0..@min(s.encounter.sold.len, market.ware_count)], 0..) |v, i| sim.encounter.sold[i] = v;
+    for (s.encounter.bought[0..@min(s.encounter.bought.len, market.ware_count)], 0..) |v, i| sim.encounter.bought[i] = v;
+    for (s.encounter.level[0..@min(s.encounter.level.len, market.ware_count)], 0..) |v, i| sim.encounter.level[i] = v;
     sim.merchant = s.merchant;
     sim.exchange = s.exchange;
     sim.population = s.population;
@@ -570,7 +576,7 @@ fn settle(res: *Resources, w: *World) Entity {
     sim.tutorial_done = true;
     _ = res.random().int(u64);
     sim.reach_seen[cat.goodIndex("hatchet").?] = true;
-    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2.5, 3, 4, 1, 0, 1, 1 }, .visit = .{ -1, 2.5, 0, 1, 0, 0, 0, -1 }, .sold = .{ 2, 0, 0, 0, 0, 1, 0, 1 } };
+    sim.encounter = .{ .phase = .present, .id = 3, .remaining = 17.5, .stock = .{ 1, 2.5, 3, 4, 1, 0, 1, 1 }, .visit = .{ -1, 2.5, 0, 1, 0, 0, 0, -1 }, .sold = .{ 2, 0, 0, 0, 0, 1, 0, 1 }, .bought = .{ 0, 3, 1, 0, 0, 0, 0, 0 }, .level = .{ -2, 0, 4, 1, 0, 0, -4, 0 } };
     sim.merchant = .{ .present = false, .id = 4, .remaining = 9.25 };
     sim.neighbours.seed(10);
     sim.population = 61;

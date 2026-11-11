@@ -3,6 +3,10 @@
 //! it, live on `Sim.merchant`; a deal revalidates against them and moves both sides here, in one
 //! function. A refused deal changes nothing and is answered by `Refused`; one that settles emits
 //! `Traded{ .with = .merchant }`.
+//!
+//! Within a visit every lot is finite and its coin price fixed. The merchant remembers the visit
+//! when the cart leaves (`remember`): the lots of one item share a price level, rolled against
+//! the lots dealt of it, whoever the agent was (`market.reprice`).
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
@@ -22,8 +26,9 @@ const Reason = events.Refused.Reason;
 // —— The merchant's lots (a stand-in) ————————————————————————————————————————————————
 // The merchant's finite lots, priced in the stub Coin and authored here in place of a stock and
 // a valuation of the merchant's own (`docs/roadmap.md`). A term names a `Resource` or
-// a good by catalog id; a lot is one unit of trade, scaled linearly by the lots taken. BUY lots
-// carry the merchant's stock per visit; SELL lots are bounded by what the settlement holds.
+// a good by catalog id; a lot is one unit of trade, scaled linearly by the lots taken. `stock`
+// is the lots dealt per visit: what the merchant carries of a BUY lot, what it takes of a SELL
+// lot. The coin side is the board's price, scaled by the lot's price level (`amount`).
 
 pub const MerchantTerm = struct { item: []const u8, n: f32 };
 
@@ -34,7 +39,7 @@ pub const MerchantLot = struct {
     effect: []const u8,
     price: []const MerchantTerm,
     receive: []const MerchantTerm,
-    stock: ?u32 = null,
+    stock: u32,
     consequence: []const u8 = "",
 };
 
@@ -50,14 +55,14 @@ pub const lots = [_]MerchantLot{
     .{ .id = 9, .lot = "Hand tools \u{00d7}1", .effect = "forged beyond the valley", .price = &.{.{ .item = "coin", .n = 26 }}, .receive = &.{.{ .item = "hand_tools", .n = 1 }}, .stock = 2 },
     .{ .id = 10, .lot = "Fishing net \u{00d7}1", .effect = "better Fish tool", .price = &.{.{ .item = "coin", .n = 18 }}, .receive = &.{.{ .item = "fishing_net", .n = 1 }}, .stock = 1, .consequence = "Replaces Fishing rod: Fish yield rises. The unlock does not stack." },
     .{ .id = 11, .lot = "Carpenter bench \u{00d7}1", .effect = "finished capital", .price = &.{.{ .item = "coin", .n = 60 }}, .receive = &.{.{ .item = "carpenter_bench", .n = 1 }}, .stock = 1 },
-    .{ .id = 101, .sell = true, .lot = "Biomass \u{00d7}6", .effect = "leaves your stock", .price = &.{.{ .item = "biomass", .n = 6 }}, .receive = &.{.{ .item = "coin", .n = 5 }} },
-    .{ .id = 102, .sell = true, .lot = "Food \u{00d7}8", .effect = "leaves your larder", .price = &.{.{ .item = "food", .n = 8 }}, .receive = &.{.{ .item = "coin", .n = 4 }} },
-    .{ .id = 103, .sell = true, .lot = "Fuel \u{00d7}4", .effect = "burned down the ridge", .price = &.{.{ .item = "fuel", .n = 4 }}, .receive = &.{.{ .item = "coin", .n = 6 }} },
-    .{ .id = 104, .sell = true, .lot = "Minerals \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "minerals", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 4 }} },
-    .{ .id = 105, .sell = true, .lot = "Metal \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "metal", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 9 }} },
-    .{ .id = 106, .sell = true, .lot = "Water \u{00d7}5", .effect = "drawn this morning", .price = &.{.{ .item = "water", .n = 5 }}, .receive = &.{.{ .item = "coin", .n = 3 }} },
-    .{ .id = 107, .sell = true, .lot = "Forge \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "forge", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 30 }}, .consequence = "A spare goes first; the forge you use keeps its verb." },
-    .{ .id = 108, .sell = true, .lot = "Lean-to \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "lean_to", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 7 }} },
+    .{ .id = 101, .sell = true, .lot = "Biomass \u{00d7}6", .effect = "leaves your stock", .price = &.{.{ .item = "biomass", .n = 6 }}, .receive = &.{.{ .item = "coin", .n = 5 }}, .stock = 4 },
+    .{ .id = 102, .sell = true, .lot = "Food \u{00d7}8", .effect = "leaves your larder", .price = &.{.{ .item = "food", .n = 8 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
+    .{ .id = 103, .sell = true, .lot = "Fuel \u{00d7}4", .effect = "burned down the ridge", .price = &.{.{ .item = "fuel", .n = 4 }}, .receive = &.{.{ .item = "coin", .n = 6 }}, .stock = 4 },
+    .{ .id = 104, .sell = true, .lot = "Minerals \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "minerals", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 4 }}, .stock = 4 },
+    .{ .id = 105, .sell = true, .lot = "Metal \u{00d7}3", .effect = "they would take it", .price = &.{.{ .item = "metal", .n = 3 }}, .receive = &.{.{ .item = "coin", .n = 9 }}, .stock = 4 },
+    .{ .id = 106, .sell = true, .lot = "Water \u{00d7}5", .effect = "drawn this morning", .price = &.{.{ .item = "water", .n = 5 }}, .receive = &.{.{ .item = "coin", .n = 3 }}, .stock = 4 },
+    .{ .id = 107, .sell = true, .lot = "Forge \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "forge", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 30 }}, .stock = 1, .consequence = "A spare goes first; the forge you use keeps its verb." },
+    .{ .id = 108, .sell = true, .lot = "Lean-to \u{00d7}1", .effect = "your spare stock", .price = &.{.{ .item = "lean_to", .n = 1 }}, .receive = &.{.{ .item = "coin", .n = 7 }}, .stock = 2 },
 };
 
 comptime {
@@ -65,16 +70,67 @@ comptime {
     std.debug.assert(lots.len == market.merchant_lot_count);
 }
 
-/// Lot `i`'s stock left this visit, or null for a SELL lot (bounded by the agent's holdings).
+/// The item lot `i` deals in: what a BUY lot hands over, what a SELL lot takes.
+fn itemOf(comptime i: usize) []const u8 {
+    return if (lots[i].sell) lots[i].price[0].item else lots[i].receive[0].item;
+}
+
+/// For each lot, the first lot of its item: where the item's price level is kept, so a BUY lot
+/// and the SELL lot of the same item move together and the spread between them holds.
+pub const group_of: [lots.len]u8 = blk: {
+    @setEvalBranchQuota(20_000);
+    var g: [lots.len]u8 = undefined;
+    for (0..lots.len) |i| {
+        g[i] = i;
+        for (0..i) |j| if (std.mem.eql(u8, itemOf(i), itemOf(j))) {
+            g[i] = g[j];
+            break;
+        };
+    }
+    break :blk g;
+};
+
+/// Lot `i`'s price level this visit.
+pub fn levelOf(visit: *const market.MerchantVisit, i: usize) i8 {
+    return visit.level[group_of[i]];
+}
+
+/// What one of lot `i`'s terms moves this visit: a coin term at the lot's price level, any
+/// other as authored.
+pub fn amount(visit: *const market.MerchantVisit, i: usize, term: MerchantTerm) f32 {
+    return if (std.mem.eql(u8, term.item, "coin")) market.priced(term.n, levelOf(visit, i)) else term.n;
+}
+
+/// Lot `i`'s stock left this visit.
 pub fn stockLeft(visit: *const market.MerchantVisit, i: usize) ?u32 {
-    const s = lots[i].stock orelse return null;
-    return s -| visit.taken[i];
+    return lots[i].stock -| visit.taken[i];
+}
+
+/// The visit is over: roll each item's price level against the lots dealt of it. What agents
+/// took of its BUY lots is the flow out, what they brought to its SELL lots the flow in.
+pub fn remember(visit: *market.MerchantVisit, rng: std.Random) void {
+    for (0..lots.len) |g| {
+        if (group_of[g] != g) continue;
+        var flow = market.Flow{ .sells = false, .buys = false };
+        for (lots, 0..) |lot, i| {
+            if (group_of[i] != g) continue;
+            if (lot.sell) {
+                flow.buys = true;
+                flow.in += visit.taken[i];
+            } else {
+                flow.sells = true;
+                flow.out += visit.taken[i];
+            }
+        }
+        visit.level[g] = market.reprice(visit.level[g], flow, rng);
+    }
 }
 
 // —— The visits ————————————————————————————————————————————————————————————————————————
 
-/// Advance the merchant's visit by `dt`; a departure and a return are facts, and a return is a
-/// new visit with its lots restocked.
+/// Advance the merchant's visit by `dt`; a departure and a return are facts. A departure is when
+/// the merchant takes stock of the visit (`remember`); a return is a new visit with its lots
+/// restocked.
 pub fn merchant(
     sim: *res_mod.Sim,
     time: *const res_mod.Time,
@@ -88,7 +144,10 @@ pub fn merchant(
             sim.merchant.taken = @splat(0);
             _ = arrived.push(.{ .who = .merchant });
         },
-        .departed => _ = departed.push(.{ .who = .merchant }),
+        .departed => {
+            remember(&sim.merchant, sim.prng.random());
+            _ = departed.push(.{ .who = .merchant });
+        },
     }
 }
 
@@ -129,22 +188,22 @@ fn deal(w: *World, res: *Resources, it: events.MerchantDeal) ?Reason {
     const scale: f32 = @floatFromInt(it.lots);
     for (rec.price) |term| {
         const item = ledger.item(&res.catalog, term.item) orelse continue;
-        if (ledger.heldItem(w, it.agent, item) < term.n * scale) {
+        if (ledger.heldItem(w, it.agent, item) < amount(&res.sim.merchant, it.lot, term) * scale) {
             return if (item == .good) .not_owned else .unaffordable;
         }
     }
-    moveSide(w, it.agent, res, rec.price, scale, -1);
-    moveSide(w, it.agent, res, rec.receive, scale, 1);
-    if (rec.stock != null) res.sim.merchant.taken[it.lot] +|= @intCast(@min(it.lots, std.math.maxInt(u16)));
+    moveSide(w, it.agent, res, it.lot, rec.price, scale, -1);
+    moveSide(w, it.agent, res, it.lot, rec.receive, scale, 1);
+    res.sim.merchant.taken[it.lot] +|= @intCast(@min(it.lots, std.math.maxInt(u16)));
     return null;
 }
 
-/// Move one side of a deal at `scale` lots: `sign` −1 pays out, +1 receives. Resources move on
-/// the ledger; goods through `capital`, so an effect lands or leaves once.
-fn moveSide(w: *World, e: Entity, res: *Resources, terms: []const MerchantTerm, scale: f32, sign: f32) void {
+/// Move one side of a deal of lot `li` at `scale` lots: `sign` −1 pays out, +1 receives.
+/// Resources move on the ledger; goods through `capital`, so an effect lands or leaves once.
+fn moveSide(w: *World, e: Entity, res: *Resources, li: usize, terms: []const MerchantTerm, scale: f32, sign: f32) void {
     for (terms) |term| {
         const item = ledger.item(&res.catalog, term.item) orelse continue;
-        const n = term.n * scale;
+        const n = amount(&res.sim.merchant, li, term) * scale;
         switch (item) {
             .resource => |r| _ = ledger.move(w, e, r, sign * n),
             .good => |gi| {
@@ -262,4 +321,95 @@ test "a SELL lot of a good the agent does not own is refused" {
     ecs.run(&w, &res, merchant_deal);
     try testing.expectEqual(Reason.not_owned, refusal(&res).?.reason);
     try testing.expectEqual(@as(f32, 0), ledger.balance(&w, e, .coin));
+}
+
+fn lotIndex(id: u32) u32 {
+    return for (lots, 0..) |l, i| {
+        if (l.id == id) break @intCast(i);
+    } else unreachable;
+}
+
+test "a SELL lot is finite too: the merchant takes only so many lots a visit" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try rig();
+    defer res.catalog.deinit();
+    const e = settler(&w, 0);
+    w.get(e, comp.InventoryWater).?.v = 100;
+    const water = lotIndex(106); // 5 water for 3 coin, four lots a visit
+    _ = res.events.writer(events.MerchantDeal).push(.{ .agent = e, .lot = water, .lots = 4 });
+    ecs.run(&w, &res, merchant_deal);
+    try testing.expectEqual(@as(f32, 12), ledger.balance(&w, e, .coin));
+    try testing.expectEqual(@as(?u32, 0), stockLeft(&res.sim.merchant, water));
+    res.events.update();
+    res.events.update();
+    _ = res.events.writer(events.MerchantDeal).push(.{ .agent = e, .lot = water, .lots = 1 });
+    ecs.run(&w, &res, merchant_deal);
+    try testing.expectEqual(Reason.sold_out, refusal(&res).?.reason);
+    try testing.expectEqual(@as(f32, 80), ledger.balance(&w, e, .water));
+}
+
+test "the lots of one item share a price level, and a deal moves coin at it" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try rig();
+    defer res.catalog.deinit();
+    const buy_water = lotIndex(1);
+    const sell_water = lotIndex(106);
+    try testing.expectEqual(group_of[buy_water], group_of[sell_water]);
+    try testing.expect(group_of[lotIndex(8)] == lotIndex(8)); // the glass pane stands alone
+    const visit = &res.sim.merchant;
+    visit.level[group_of[buy_water]] = 2; // water is dear this visit: 1.2 of the board
+    try testing.expectApproxEqAbs(@as(f32, 6), amount(visit, buy_water, lots[buy_water].price[0]), 1e-4);
+    try testing.expectApproxEqAbs(@as(f32, 6), amount(visit, buy_water, lots[buy_water].receive[0]), 1e-4); // the water itself is as authored
+    try testing.expectApproxEqAbs(@as(f32, 3.6), amount(visit, sell_water, lots[sell_water].receive[0]), 1e-4);
+
+    const e = settler(&w, 10);
+    _ = res.events.writer(events.MerchantDeal).push(.{ .agent = e, .lot = buy_water, .lots = 1 });
+    ecs.run(&w, &res, merchant_deal);
+    try testing.expectApproxEqAbs(@as(f32, 4), ledger.balance(&w, e, .coin), 1e-4);
+    try testing.expectApproxEqAbs(@as(f32, 6), ledger.balance(&w, e, .water), 1e-4);
+    _ = res.events.writer(events.MerchantDeal).push(.{ .agent = e, .lot = sell_water, .lots = 1 });
+    ecs.run(&w, &res, merchant_deal);
+    try testing.expectApproxEqAbs(@as(f32, 7.6), ledger.balance(&w, e, .coin), 1e-4);
+    // At every level a round trip through the board's own lots loses coin, item by item.
+    for (lots, 0..) |lot, i| {
+        if (lot.sell or std.mem.eql(u8, lot.receive[0].item, "biomass")) continue;
+        for (lots, 0..) |back, j| {
+            if (!back.sell or group_of[j] != group_of[i]) continue;
+            var level: i8 = -market.max_level;
+            while (level <= market.max_level) : (level += 1) {
+                visit.level[group_of[i]] = level;
+                const cost = amount(visit, i, lot.price[0]) / lot.receive[0].n;
+                const fetch = amount(visit, j, back.receive[0]) / back.price[0].n;
+                try testing.expect(fetch < cost);
+            }
+        }
+    }
+}
+
+test "the merchant remembers when the cart leaves: levels carry into the next visit" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try rig();
+    defer res.catalog.deinit();
+    res.sim.prng = std.Random.DefaultPrng.init(9);
+    const spd = res.config.secs_per_day;
+    const sched = market.MerchantSchedule{};
+    const pane = lotIndex(8); // sold only: bought out every visit, it can only get dearer
+    const forge = lotIndex(107); // bought only: never brought, the merchant can only pay more
+    var visits: u32 = 0;
+    while (visits < 12) : (visits += 1) {
+        res.sim.merchant.taken[pane] = 1;
+        res.time.dt = sched.stay_days * spd + 1;
+        ecs.run(&w, &res, merchant); // the cart leaves and takes stock
+        try testing.expect(!res.sim.merchant.dealable());
+        res.time.dt = sched.away_days * spd;
+        ecs.run(&w, &res, merchant); // and returns restocked
+        try testing.expectEqual(@as(u16, 0), res.sim.merchant.taken[pane]);
+    }
+    try testing.expect(levelOf(&res.sim.merchant, pane) > 0);
+    try testing.expect(levelOf(&res.sim.merchant, forge) > 0);
+    try testing.expect(amount(&res.sim.merchant, pane, lots[pane].price[0]) > 22);
+    for (res.sim.merchant.level) |l| try testing.expect(l >= -market.max_level and l <= market.max_level);
 }

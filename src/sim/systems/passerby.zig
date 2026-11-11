@@ -1,5 +1,6 @@
 //! The passerby: the update system that advances the Act I encounter on the sim clock
-//! (`market.tick`) and states each arrival and departure as a fact.
+//! (`market.tick`) and states each arrival and departure as a fact. A departure is when the
+//! passerby takes stock of the visit (`Encounter.remember`), on the run's own chance.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
@@ -17,7 +18,10 @@ pub fn passerby(
     switch (market.tick(&sim.encounter, time.dt, .{}, cfg.secs_per_day)) {
         .none => {},
         .arrived => _ = arrived.push(.{ .who = .passerby }),
-        .departed => _ = departed.push(.{ .who = .passerby }),
+        .departed => {
+            sim.encounter.remember(sim.prng.random());
+            _ = departed.push(.{ .who = .passerby });
+        },
     }
 }
 

@@ -149,8 +149,8 @@ fn buyCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence
 
 fn sellCopy(ware: Ware) struct { lot: []const u8, effect: []const u8, consequence: []const u8 } {
     return switch (ware) {
-        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "Each lot sold this visit fetches less." },
-        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "raw stock", .consequence = "Each lot sold this visit fetches less." },
+        .food => .{ .lot = "Food \u{00d7}1", .effect = "leaves your larder", .consequence = "" },
+        .biomass => .{ .lot = "Materials \u{00d7}3", .effect = "raw stock", .consequence = "" },
         .fish_hook => .{ .lot = "Fishing rod \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the rod you use keeps Fish open." },
         .whetstone => .{ .lot = "Hatchet \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the hatchet you use keeps granting Split wood." },
         .fish_net => .{ .lot = "Fishing net \u{00d7}1", .effect = "your spare stock", .consequence = "A spare goes first; the net you use keeps fishing better." },

@@ -1,7 +1,7 @@
 //! `act_two/coin_merchant` — the Act II **Coin Merchant** on the shared trade dialog.
 //!
-//! The lots are the merchant's records (`sim.systems.merchant.lots`) priced in the stand-in Coin,
-//! with the stock left this visit from `Sim.merchant`; the balances are the settlement's live
+//! The lots are the merchant's records (`sim.systems.merchant.lots`) priced in the stand-in Coin
+//! at this visit's price levels, with the stock left this visit from `Sim.merchant`; the balances are the settlement's live
 //! ledger and goods. A settlement is a `MerchantDeal` intent: the handler revalidates it and
 //! moves both sides, and the dialog reads the `Traded` fact back to flash the slip and keep the
 //! visit's tally, which is display state on the page's `TradeState`.
@@ -44,11 +44,12 @@ fn heldOf(world: *const World, e: Entity, item: ledger.Item) f32 {
     };
 }
 
-fn termsOf(arena: std.mem.Allocator, cat: *const roster.Catalog, terms: []const merchant.MerchantTerm) ![]t.TradeTerm {
+/// Lot `li`'s terms as the dialog's, at this visit's amounts (`merchant.amount`).
+fn termsOf(arena: std.mem.Allocator, cat: *const roster.Catalog, visit: *const ha.sim.rules.market.MerchantVisit, li: usize, terms: []const merchant.MerchantTerm) ![]t.TradeTerm {
     var out: std.ArrayList(t.TradeTerm) = .empty;
     for (terms) |term| {
         const r = (try resolve(arena, cat, term.item)) orelse continue;
-        try out.append(arena, .{ .key = r.key, .n = term.n, .stock = r.item == .resource });
+        try out.append(arena, .{ .key = r.key, .n = merchant.amount(visit, li, term), .stock = r.item == .resource });
     }
     return out.items;
 }
@@ -70,7 +71,7 @@ fn balanceKeys(arena: std.mem.Allocator, cat: *const roster.Catalog) ![]const Re
 }
 
 /// Add a settled trade of `lots` of lot `li` to the visit's tally, by balance.
-fn tally(arena: std.mem.Allocator, cat: *const roster.Catalog, keys: []const Resolved, ts: *TradeState, li: usize, lots: u32) !void {
+fn tally(arena: std.mem.Allocator, cat: *const roster.Catalog, visit: *const ha.sim.rules.market.MerchantVisit, keys: []const Resolved, ts: *TradeState, li: usize, lots: u32) !void {
     if (li >= merchant.lots.len) return;
     const rec = merchant.lots[li];
     const scale: f32 = @floatFromInt(lots);
@@ -78,7 +79,7 @@ fn tally(arena: std.mem.Allocator, cat: *const roster.Catalog, keys: []const Res
         const r = (try resolve(arena, cat, term.item)) orelse continue;
         for (keys, 0..) |k, bi| {
             if (bi >= ts.visit.len) break;
-            if (std.mem.eql(u8, k.key, r.key)) ts.visit[bi] += sign * term.n * scale;
+            if (std.mem.eql(u8, k.key, r.key)) ts.visit[bi] += sign * merchant.amount(visit, li, term) * scale;
         }
     };
 }
@@ -96,7 +97,7 @@ pub fn coin_merchant(ctx: *UiCtx, world: *const World, e: Entity, id: []const u8
     while (heard.next()) |f| {
         if (f.with != .merchant or f.agent != e) continue;
         ts.settled = true;
-        try tally(a, cat, try balanceKeys(a, cat), ts, f.lot, f.lots);
+        try tally(a, cat, visit_now, try balanceKeys(a, cat), ts, f.lot, f.lots);
     }
     // The cart leaving closes the dialog and ends the visit's tally; a standing Exchange never
     // leaves.
@@ -118,8 +119,8 @@ pub fn coin_merchant(ctx: *UiCtx, world: *const World, e: Entity, id: []const u8
             .mode = if (src.sell) .sell else .buy,
             .lot = src.lot,
             .effect = src.effect,
-            .price = try termsOf(a, cat, src.price),
-            .receive = try termsOf(a, cat, src.receive),
+            .price = try termsOf(a, cat, visit_now, i, src.price),
+            .receive = try termsOf(a, cat, visit_now, i, src.receive),
             .stock = merchant.stockLeft(visit_now, i),
             .consequence = src.consequence,
         };
