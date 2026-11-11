@@ -10,6 +10,7 @@
 
 .market-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; padding: 11px 15px 9px; border-bottom: 1px solid var(--line); }
 .market-title { margin: 0; color: var(--fg); font-size: var(--h3); font-weight: 400; letter-spacing: -0.04em; }
+.market-line { margin: 2px 0 0; color: var(--dim); font-size: 11px; }
 .market-sub { color: var(--dim); font-size: 10px; letter-spacing: 0.07em; }
 
 .market-controls { display: flex; gap: 10px; align-items: center; padding: 9px 15px; border-bottom: 1px solid var(--line); }
@@ -20,7 +21,7 @@
 .seg button { padding: 3px 7px; cursor: pointer; border: 1px solid transparent; color: var(--dim); background: transparent; font-size: 11px; }
 .seg button[aria-pressed="true"] { border-color: var(--line-2); color: var(--fg); }
 .seg button:hover { color: var(--fg); }
-.stall-open { flex: none; padding: 3px 8px; cursor: pointer; border: 1px solid var(--line-2); color: var(--dim); background: transparent; font-size: 10px; letter-spacing: 0.07em; }
+.stall-open { flex: none; margin-right: 14px; padding: 3px 8px; cursor: pointer; border: 1px solid var(--line-2); color: var(--dim); background: transparent; font-size: 10px; letter-spacing: 0.07em; }
 .stall-open:hover { border-color: var(--acc); color: var(--acc); }
 .stall-open[aria-pressed="true"] { border-color: var(--acc); color: var(--acc); background: var(--panel); }
 
@@ -75,9 +76,15 @@
 .stall-takers[data-any="true"] { color: var(--good); }
 .stall-takers[data-any="false"] { color: var(--line-2); }
 .stall-takers[data-any="idle"] { color: var(--line-2); }
+/* Act I has no coin: the stall drops its price column. */
+.market.is-moneyless .stall-head, .market.is-moneyless .stall-row { grid-template-columns: minmax(0, 1fr) 86px 143px; }
 
 
 /* the slip */
+.slip-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+.slip-head .column-heading { margin: 0; }
+.slip-back { flex: none; padding: 1px 6px; cursor: pointer; border: 1px solid var(--line-2); color: var(--dim); background: transparent; font-size: 10px; letter-spacing: 0.07em; }
+.slip-back:hover { border-color: var(--acc); color: var(--acc); }
 .slip-who { color: var(--fg); font-size: 14px; }
 .slip-who small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; }
 .side { display: grid; gap: 4px; }
@@ -112,7 +119,7 @@
 .paginator button:disabled { cursor: default; border-color: var(--line); color: var(--line-2); }
 .page-now { min-width: 6ch; color: var(--fg); font-size: 11px; text-align: center; }
 
-/* Embedded as Act II's MARKET view (`?embed=1`): the surface frames it, so it fills the frame. */
+/* Embedded as an act's MARKET view (`?embed=1`): the surface frames it, so it fills the frame. */
 html.is-embedded, html.is-embedded body { min-width: 0; background: var(--bg); }
 html.is-embedded body { display: block; min-height: 0; }
 html.is-embedded .market { width: 100%; height: 100vh; border: 0; }
@@ -122,14 +129,14 @@ html.is-embedded .market { width: 100%; height: 100vh; border: 0; }
 
 <main class="market">
   <div class="market-head">
-    <h1 class="market-title" id="market-title">Who will trade with you?</h1>
+    <div><h1 class="market-title" id="market-title">MARKET</h1><p class="market-line" id="market-line">Neighbours, what they offer and what they want.</p></div>
     <span class="market-sub" id="market-sub"></span>
   </div>
 
   <div class="market-controls">
+    <button class="stall-open" type="button" id="open-stall" aria-pressed="false">INVENTORY</button>
     <input class="market-search" id="search" type="search" aria-label="Search">
     <div class="seg" role="group" id="seg" aria-label="View"></div>
-    <button class="stall-open" type="button" id="open-stall" aria-pressed="false">YOUR STALL</button>
   </div>
 
   <div class="market-body">
@@ -145,6 +152,10 @@ html.is-embedded .market { width: 100%; height: 100vh; border: 0; }
 
 <script>
 if (new URLSearchParams(location.search).get('embed') === '1') document.documentElement.classList.add('is-embedded');
+/* `?act=i` is the same view before anyone else exists: no neighbours, no coin, and the stall
+   lists what the lone actor holds. */
+const ACT_ONE = new URLSearchParams(location.search).get('act') === 'i';
+document.querySelector('.market').classList.toggle('is-moneyless', ACT_ONE);
 
 /* ---------- deterministic world ---------- */
 let seed = 20261019;
@@ -154,32 +165,46 @@ const reseed = () => { seed = 20261019; };
 const FIRST = ['Mira','Tomas','Odd','Hesper','Juno','Caspar','Rhea','Bram','Linnea','Soren','Vesna','Edda','Mikal','Thora','Ansel','Petra','Dagny','Oren','Sable','Lior','Nessa','Garrick','Ilva','Roth','Maren','Kess','Dorn','Ayla','Bel','Harl','Sigrid','Vale','Noor','Tam','Ebba','Crane','Lusk','Ivo','Rowan','Astrid','Fen','Halla','Jory','Mette','Nils','Orla','Pell','Quill','Runa','Sten','Tove','Ulf','Vigg','Wren','Yara','Zev','Alder','Brisa','Cato','Dagmar','Eir','Frey','Gull','Hale','Inga','Joss','Kirn','Lark','Mads','Nura','Osk','Pia','Rask','Siv','Toril','Urd','Vanya','Welk','Yrsa','Zan'];
 const LAST = ['Halt','Vane','Orrick','Bray','Sund','Ferrow','Kell','Dace','Mord','Lahn','Virek','Ost','Crale','Benn','Ryne','Thall','Grimm','Woad','Esk','Varden','Holt','Marsh','Quill','Reed','Stave','Tarn','Ulver','Wick','Yarrow','Ashby','Blake','Corr','Dunn','Ember','Falk','Gale','Hollis','Idris','Joren','Kyne'];
 
-const RESOURCES = ['food', 'water', 'fuel', 'metal', 'minerals', 'biomass'];
-const CRAFTED = ['planks', 'charcoal', 'rope', 'pottery', 'bricks', 'nails', 'cloth', 'leather', 'baskets', 'salt', 'oil', 'glass', 'tools', 'thread'];
+const RESOURCES = ACT_ONE ? ['food', 'materials'] : ['food', 'water', 'fuel', 'metal', 'minerals', 'materials'];
+const CRAFTED = ACT_ONE
+  ? ['hatchet', 'wire snares', 'sandals', 'root cellar', 'leaf bed', 'garden bed']
+  : ['planks', 'charcoal', 'rope', 'pottery', 'bricks', 'nails', 'cloth', 'leather', 'baskets', 'salt', 'oil', 'glass', 'tools', 'thread'];
 const ITEMS = [...RESOURCES, ...CRAFTED];
 const BASE = {
-  food: 4, water: 3, fuel: 5, metal: 11, minerals: 7, biomass: 4,
+  food: 4, water: 3, fuel: 5, metal: 11, minerals: 7, materials: 4,
   planks: 6, charcoal: 3, rope: 5, pottery: 7, bricks: 4, nails: 9,
   cloth: 8, leather: 12, baskets: 5, salt: 6, oil: 10, glass: 14, tools: 16, thread: 4,
 };
+/* What a held good does, read beside its count on the Act I stall. */
+const EFFECT = {
+  sandals: 'forage costs less', hatchet: 'can split wood', 'wire snares': 'traps game',
+  'garden bed': 'grows food', 'root cellar': 'food keeps 2×', 'leaf bed': 'vigor ceiling +1',
+};
 
 const TRADES = [
-  { trade: 'forager',    makes: 'biomass',  buys: ['food', 'water'] },
-  { trade: 'fisher',     makes: 'food',     buys: ['biomass', 'fuel'] },
-  { trade: 'carrier',    makes: 'water',    buys: ['food', 'biomass'] },
-  { trade: 'woodcutter', makes: 'fuel',     buys: ['food', 'biomass', 'metal'] },
+  { trade: 'forager',    makes: 'materials',  buys: ['food', 'water'] },
+  { trade: 'fisher',     makes: 'food',     buys: ['materials', 'fuel'] },
+  { trade: 'carrier',    makes: 'water',    buys: ['food', 'materials'] },
+  { trade: 'woodcutter', makes: 'fuel',     buys: ['food', 'materials', 'metal'] },
   { trade: 'miner',      makes: 'minerals', buys: ['food', 'water', 'fuel'] },
   { trade: 'smith',      makes: 'metal',    buys: ['minerals', 'fuel', 'food'] },
 ];
 
-/* The player is a forager: biomass in surplus, short on food and water, plus odds and ends. */
-const player = {
+/* The player is a forager: materials in surplus, short on food and water, plus odds and ends. */
+const player = ACT_ONE ? {
+  /* The body's stocks and the goods its hands made. Only the second pair of sandals and the
+     second hatchet are spare; nothing is posted, there is no coin, and no trade names the actor. */
+  trade: '',
+  holds: { coin: 0, food: 11.6, materials: 31, sandals: 2, hatchet: 2, 'wire snares': 1, 'garden bed': 1, 'root cellar': 1, 'leaf bed': 1 },
+  reserved: { food: 11.6, materials: 31, sandals: 1, hatchet: 1, 'wire snares': 1, 'garden bed': 1, 'root cellar': 1, 'leaf bed': 1 },
+  posts: { sell: {}, buy: {} },
+} : {
   trade: 'forager',
-  holds: { coin: 42, biomass: 48, food: 6, water: 2, fuel: 0, metal: 0, minerals: 0,
+  holds: { coin: 42, materials: 48, food: 6, water: 2, fuel: 0, metal: 0, minerals: 0,
            planks: 9, charcoal: 14, rope: 4, baskets: 6, cloth: 3, pottery: 2, salt: 5, thread: 7 },
   /* The reserve lives on HOLDINGS; here we only read the spare it leaves. */
-  reserved: { biomass: 24, food: 6, water: 2, planks: 4, charcoal: 6, rope: 4, baskets: 2, cloth: 3, pottery: 0, salt: 2, thread: 3 },
-  posts: { sell: { biomass: { qty: 12, price: 4 }, charcoal: { qty: 5, price: 3 } },
+  reserved: { materials: 24, food: 6, water: 2, planks: 4, charcoal: 6, rope: 4, baskets: 2, cloth: 3, pottery: 0, salt: 2, thread: 3 },
+  posts: { sell: { materials: { qty: 12, price: 4 }, charcoal: { qty: 5, price: 3 } },
            buy: { food: { qty: 5, price: 5 }, water: { qty: 4, price: 3 } } },
 };
 const spare = g => Math.max(0, (player.holds[g] ?? 0) - (player.reserved[g] ?? 0));
@@ -238,6 +263,7 @@ let stallSide = params.get('side') === 'buy' ? 'buy' : 'sell';
 let stallQuery = '';
 let page = 0;
 let selectedId = null;
+let dealFrom = null; // the good whose detail opened the deal on the slip, for its back button
 let give = {};
 let take = {};
 
@@ -245,6 +271,7 @@ const listEl = document.querySelector('#list');
 const slipEl = document.querySelector('#slip');
 const subEl = document.querySelector('#market-sub');
 const titleEl = document.querySelector('#market-title');
+const lineEl = document.querySelector('#market-line');
 const frictionEl = document.querySelector('#friction');
 const pagerEl = document.querySelector('#paginator');
 const searchEl = document.querySelector('#search');
@@ -306,18 +333,20 @@ function stallItems() {
 }
 
 function renderStallList(slice) {
+  const priceHead = ACT_ONE ? '' : '<span style="text-align:center">PRICE</span>';
   const head = stallSide === 'sell'
-    ? '<span>ITEM</span><span style="text-align:center">POSTED</span><span style="text-align:center">PRICE</span><span style="text-align:right">WHO WOULD BUY</span>'
-    : '<span>ITEM</span><span style="text-align:center">WANTED</span><span style="text-align:center">PRICE</span><span style="text-align:right">WHO WOULD SELL</span>';
+    ? `<span>ITEM</span><span style="text-align:center">OFFERED</span>${priceHead}<span style="text-align:right">WHO WOULD BUY</span>`
+    : `<span>ITEM</span><span style="text-align:center">WANTED</span>${priceHead}<span style="text-align:right">WHO WOULD SELL</span>`;
 
   listEl.innerHTML = `<div class="stall-head">${head}</div>` + slice.map(good => {
     const post = player.posts[stallSide][good] ?? { qty: 0, price: BASE[good] };
     const cap = stallSide === 'sell' ? spare(good) : 99;
     const takers = stallSide === 'sell' ? buyersFor(good, post.price) : sellersFor(good, post.price);
     const sub = stallSide === 'sell'
-      ? `${spare(good)} spare of ${fmt(player.holds[good] ?? 0)} held`
+      ? `${spare(good)} spare of ${fmt(player.holds[good] ?? 0)} held${EFFECT[good] ? ` · ${EFFECT[good]}` : ''}`
       : `${offeredIn(good).reduce((t, a) => t + a.sells[good], 0)} offered by ${offeredIn(good).length}`;
     const verb = stallSide === 'sell' ? 'would buy' : 'would sell';
+    const takersCopy = post.qty ? `${takers} ${verb}` : 'not posted';
     return `<div class="stall-row" data-posted="${post.qty > 0}">
       <span class="stall-item"><span class="stall-name">${title(good)}</span><span class="stall-sub">${sub}</span></span>
       <span class="stepper">
@@ -325,12 +354,12 @@ function renderStallList(slice) {
         <strong>${post.qty}</strong>
         <button type="button" data-good="${good}" data-field="qty" data-step="1" ${post.qty >= cap ? 'disabled' : ''} aria-label="more ${good}">+</button>
       </span>
-      <span class="stepper">
+      ${ACT_ONE ? '' : `<span class="stepper">
         <button type="button" data-good="${good}" data-field="price" data-step="-1" ${post.price <= 1 ? 'disabled' : ''} aria-label="lower ${good} price">−</button>
         <strong>${post.price}</strong>
         <button type="button" data-good="${good}" data-field="price" data-step="1" aria-label="raise ${good} price">+</button>
-      </span>
-      <span class="stall-takers" data-any="${post.qty ? takers > 0 : 'idle'}">${post.qty ? `${takers} ${verb}` : 'not posted'}</span>
+      </span>`}
+      <span class="stall-takers" data-any="${post.qty ? takers > 0 : 'idle'}">${takersCopy}</span>
     </div>`;
   }).join('');
 
@@ -347,41 +376,44 @@ function renderStallList(slice) {
   }));
 }
 
+const priceCopy = post => (ACT_ONE ? '' : `${post.price} coin`);
+const atPrice = post => (ACT_ONE ? '' : ` at ${post.price}`);
+
 function renderStallSummary() {
   const committed = coinCommitted();
   const over = committed > player.holds.coin;
   const sellUnits = postedSell().reduce((t, [, p]) => t + p.qty, 0);
   const live = postedSell().length + postedBuy().length;
   slipEl.innerHTML = `
-    <h3 class="column-heading">YOUR STALL</h3>
-    <div class="slip-who">${live} post${live === 1 ? '' : 's'} live<small>neighbours trade against these prices</small></div>
+    <h3 class="column-heading">INVENTORY</h3>
+    <div class="slip-who">${postedSell().length} offered · ${postedBuy().length} wanted<small>${agents.length ? 'neighbours trade against these prices' : 'no neighbours yet'}</small></div>
     <div class="stall-tally">
-      <div class="tally-row"><span>SELLING</span><b>${postedSell().length} items · ${sellUnits} units</b></div>
-      <div class="tally-row"><span>BUYING</span><b class="${over ? 'over' : ''}">${postedBuy().length} items · ${committed} of ${player.holds.coin} coin</b></div>
+      <div class="tally-row"><span>OFFERED</span><b>${postedSell().length} items · ${sellUnits} units</b></div>
+      <div class="tally-row"><span>WANTED</span><b class="${over ? 'over' : ''}">${postedBuy().length} items${ACT_ONE ? '' : ` · ${committed} of ${player.holds.coin} coin`}</b></div>
     </div>
-    ${over ? `<p class="stall-warn">Your buy orders commit ${committed} coin and you hold ${player.holds.coin}. The shortfall will not fill.</p>` : ''}
+    ${over ? `<p class="stall-warn">Your wants commit ${committed} coin and you hold ${player.holds.coin}. The shortfall will not fill.</p>` : ''}
     <div class="side">
-      <div class="side-head"><span>POSTED TO SELL</span><span>${postedSell().length}</span></div>
-      ${postedSell().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${p.price} coin</span></div>`).join('') || '<p class="slip-placeholder">Nothing posted to sell.</p>'}
+      <div class="side-head"><span>OFFERED</span><span>${postedSell().length}</span></div>
+      ${postedSell().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${priceCopy(p)}</span></div>`).join('') || '<p class="slip-placeholder">Nothing offered.</p>'}
     </div>
     <div class="side">
-      <div class="side-head"><span>POSTED TO BUY</span><span>${postedBuy().length}</span></div>
-      ${postedBuy().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${p.price} coin</span></div>`).join('') || '<p class="slip-placeholder">Nothing posted to buy.</p>'}
+      <div class="side-head"><span>WANTED</span><span>${postedBuy().length}</span></div>
+      ${postedBuy().map(([g, p]) => `<div class="line"><span class="line-name">${title(g)} ×${p.qty}</span><span>${priceCopy(p)}</span></div>`).join('') || '<p class="slip-placeholder">Nothing wanted.</p>'}
     </div>`;
 }
 
 /* ---------- the market list ---------- */
 function youRow() {
-  const sells = postedSell().map(([g, p]) => `${title(g)} ×${p.qty} at ${p.price}`).join(', ');
-  const buys = postedBuy().map(([g, p]) => `${g} ×${p.qty} at ${p.price}`).join(', ');
+  const sells = postedSell().map(([g, p]) => `${title(g)} ×${p.qty}${atPrice(p)}`).join(', ');
+  const buys = postedBuy().map(([g, p]) => `${g} ×${p.qty}${atPrice(p)}`).join(', ');
   const live = postedSell().length + postedBuy().length;
-  const line = live ? `Sells <em>${sells || 'nothing'}</em>. Buys ${buys || 'nothing'}.`
-                    : 'Nothing posted. Neighbours cannot trade with you.';
+  const line = live ? `Offers <em>${sells || 'nothing'}</em>. Wants ${buys || 'nothing'}.`
+                    : agents.length ? 'Nothing posted. Neighbours cannot trade with you.' : 'Nothing posted.';
   return `<button class="person is-you" type="button" data-you="1">
     <span class="person-top">
       <span class="person-name">You</span>
-      <span class="person-trade">${player.trade.toUpperCase()}</span>
-      <span class="person-posts" data-live="${live > 0}">${live ? `${live} POSTS LIVE` : 'NOTHING POSTED'}</span>
+      ${player.trade ? `<span class="person-trade">${player.trade.toUpperCase()}</span>` : ''}
+      <span class="person-posts" data-live="${live > 0}">${live ? `${postedSell().length} OFFERED · ${postedBuy().length} WANTED` : 'NOTHING POSTED'}</span>
     </span>
     <span class="person-line">${line}</span>
   </button>`;
@@ -396,7 +428,7 @@ function renderPeople(slice) {
         <span class="person-trade">${a.trade.toUpperCase()}</span>
         <span class="person-match" data-match="${match}">${match ? 'WANTS WHAT YOU HOLD' : 'nothing you hold'}</span>
       </span>
-      <span class="person-line">Sells <em>${sellList(a)}</em>. Buys ${a.buys.map(b => b.good).join(', ')}.</span>
+      <span class="person-line">Offers <em>${sellList(a)}</em>. Wants ${a.buys.map(b => b.good).join(', ')}.</span>
     </button>`;
   }).join('');
 }
@@ -421,7 +453,7 @@ function renderGoods(slice) {
   listEl.innerHTML = slice.map(r => {
     const ev = evidence(r.good);
     const mine = spare(r.good);
-    return `<button class="good-row" type="button" data-good="${r.good}" aria-pressed="${r.good === selectedId}">
+    return `<button class="good-row" type="button" data-good="${r.good}" aria-pressed="${r.good === selectedId || r.good === dealFrom}">
       <span class="good-name">${r.good.toUpperCase()}</span>
       <span class="good-stats">
         <span><b>${r.offered}</b> offered · ${r.sellers} selling</span><span class="sep">·</span>
@@ -439,19 +471,17 @@ function renderGoods(slice) {
 function renderControls() {
   stallButton.setAttribute('aria-pressed', String(stallOpen));
   if (stallOpen) {
-    titleEl.textContent = 'What will you post?';
     searchEl.placeholder = 'search items  ·  type:crafted  is:posted';
     searchEl.value = stallQuery;
     segEl.innerHTML = `<span class="seg-label">SIDE</span>
-      <button type="button" data-side="sell" aria-selected="false">SELLING</button>
-      <button type="button" data-side="buy" aria-selected="false">BUYING</button>`;
+      <button type="button" data-side="sell" aria-selected="false">OFFERS</button>
+      <button type="button" data-side="buy" aria-selected="false">WANTS</button>`;
     segEl.querySelectorAll('[data-side]').forEach(b => {
       b.setAttribute('aria-pressed', String(b.dataset.side === stallSide));
       b.addEventListener('click', () => { stallSide = b.dataset.side; page = 0; render(); });
     });
   } else {
-    titleEl.textContent = 'Who will trade with you?';
-    searchEl.placeholder = 'search  ·  needs:biomass  has:food  trade:fisher';
+    searchEl.placeholder = ACT_ONE ? 'search  ·  needs:materials  has:food' : 'search  ·  needs:materials  has:food  trade:fisher';
     searchEl.value = query;
     segEl.innerHTML = `<span class="seg-label">BY</span>
       <button type="button" data-group="person">PERSON</button>
@@ -466,6 +496,11 @@ function renderControls() {
 
 function render() {
   renderControls();
+  /* The header is the tab's and does not change with the view; its counter is the whole market:
+     every offer and every want standing, the neighbours' and your own. */
+  const offers = agents.reduce((t, a) => t + Object.keys(a.sells).length, 0) + postedSell().length;
+  const wants = agents.reduce((t, a) => t + a.buys.filter(w => w.qty > 0).length, 0) + postedBuy().length;
+  subEl.textContent = `${offers} offer${offers === 1 ? '' : 's'} · ${wants} want${wants === 1 ? '' : 's'}`;
 
   const items = stallOpen ? stallItems()
     : activeGroup() === 'person' ? agents.filter(matchesQuery) : goodRows(agents.filter(matchesQuery));
@@ -475,29 +510,30 @@ function render() {
   const slice = items.slice(start, start + PER_PAGE);
 
   if (stallOpen) {
-    subEl.textContent = `${items.length} item${items.length === 1 ? '' : 's'} · ${stallSide === 'sell' ? 'your inventory' : 'offered by neighbours'}`;
-    if (!items.length) listEl.innerHTML = '<p class="list-empty">No item matches that query.</p>';
+    if (!items.length) listEl.innerHTML = `<p class="list-empty">${!agents.length && stallSide === 'buy' && !stallQuery.trim() ? 'Nobody is offering anything yet.' : 'Nothing matches that search.'}</p>`;
     else renderStallList(slice);
     renderStallSummary();
-    frictionEl.innerHTML = `<strong>${postedSell().length + postedBuy().length}</strong> posts live · neighbours trade against them while you work.`;
+    frictionEl.innerHTML = `<strong>${postedSell().length}</strong> offered · <strong>${postedBuy().length}</strong> wanted · ${agents.length ? 'neighbours trade against them while you work.' : 'no neighbours yet.'}`;
     frictionEl.dataset.severe = 'false';
   } else {
     const visible = agents.filter(matchesQuery);
     const mode = activeGroup();
-    subEl.textContent = `${visible.length} of ${agents.length} neighbours · by ${mode}${group ? '' : ' (natural)'}`;
-    if (!items.length) listEl.innerHTML = '<p class="list-empty">Nothing matches that query.</p>';
+    /* The empty shelf: nobody to list, so the list is your own row and one line saying why. */
+    if (!agents.length && !items.length) listEl.innerHTML = (mode === 'person' ? youRow() : '') + '<p class="list-empty">No neighbours yet.</p>';
+    else if (!items.length) listEl.innerHTML = '<p class="list-empty">Nothing matches that search.</p>';
     else if (mode === 'person') renderPeople(slice);
     else renderGoods(slice);
     listEl.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => selectAgent(el.dataset.id)));
     listEl.querySelectorAll('[data-good]').forEach(el => el.addEventListener('click', () => {
-      selectedId = selectedId === el.dataset.good ? null : el.dataset.good;
-      give = {}; take = {}; render();
+      selectedId = selectedId === el.dataset.good || dealFrom === el.dataset.good ? null : el.dataset.good;
+      dealFrom = null; give = {}; take = {}; render();
     }));
     listEl.querySelectorAll('[data-you]').forEach(el => el.addEventListener('click', toggleStall));
     renderSlip();
     const idle = visible.filter(a => !isMatch(a)).length;
-    frictionEl.dataset.severe = String(visible.length && idle / visible.length >= 0.6);
-    frictionEl.innerHTML = `<strong>${idle} of ${visible.length}</strong> neighbours want nothing you hold spare.`;
+    frictionEl.dataset.severe = String(Boolean(visible.length) && idle / visible.length >= 0.6);
+    frictionEl.innerHTML = agents.length ? `<strong>${idle} of ${visible.length}</strong> neighbours want nothing you hold spare.`
+      : 'A passerby trades from the strip.';
   }
 
   renderPager(items.length, pages, start, slice.length);
@@ -513,8 +549,10 @@ function renderPager(total, pages, start, shown) {
 }
 
 /* ---------- the deal ---------- */
-function selectAgent(id) {
-  if (selectedId === id) { selectedId = null; give = {}; take = {}; render(); return; }
+/* `from` is the good whose detail named this neighbour; the deal's back button returns there. */
+function selectAgent(id, from = null) {
+  if (selectedId === id) { closeDeal(); return; }
+  dealFrom = from;
   selectedId = id;
   const a = agents.find(x => x.id === id);
   give = {}; take = {};
@@ -522,6 +560,14 @@ function selectAgent(id) {
   if (m) give[m.good] = Math.min(spare(m.good), m.qty);
   const theirs = Object.keys(a.sells)[0];
   take[theirs] = Math.min(a.sells[theirs], 4);
+  render();
+}
+
+/* Back out of the deal: to the good it was opened from, or to nothing picked. */
+function closeDeal() {
+  selectedId = dealFrom;
+  dealFrom = null;
+  give = {}; take = {};
   render();
 }
 
@@ -534,7 +580,7 @@ function renderSlip() {
 
   if (!agent) {
     const good = ITEMS.includes(selectedId) ? selectedId : null;
-    if (!good) { slipEl.innerHTML = '<h3 class="column-heading">THE DEAL</h3><p class="slip-placeholder">Pick a neighbour, or a good, on the left.</p>'; return; }
+    if (!good) { slipEl.innerHTML = `<h3 class="column-heading">THE DEAL</h3><p class="slip-placeholder">${agents.length ? 'Pick a neighbour, or a good, on the left.' : 'No deal open.'}</p>`; return; }
     const sellers = agents.filter(a => a.sells[good]).sort((a, b) => a.ask[good] - b.ask[good]).slice(0, 4);
     const buyers = agents.filter(a => a.buys.some(b => b.good === good)).sort((a, b) => b.bid[good] - a.bid[good]).slice(0, 4);
     slipEl.innerHTML = `
@@ -548,7 +594,7 @@ function renderSlip() {
         ${buyers.map(a => `<div class="line"><span class="line-name" data-jump="${a.id}">${a.name} wants ${a.buys.find(b => b.good === good).qty}</span><span>${a.bid[good]} coin</span></div>`).join('') || '<p class="slip-placeholder">Nobody is buying.</p>'}
       </div>
       <p class="slip-placeholder">Pick a name to open a deal.</p>`;
-    slipEl.querySelectorAll('[data-jump]').forEach(el => { el.style.cursor = 'pointer'; el.addEventListener('click', () => selectAgent(el.dataset.jump)); });
+    slipEl.querySelectorAll('[data-jump]').forEach(el => { el.style.cursor = 'pointer'; el.addEventListener('click', () => selectAgent(el.dataset.jump, good)); });
     return;
   }
 
@@ -577,7 +623,7 @@ function renderSlip() {
   const first = agent.name.split(' ')[0];
   let verdict;
   if (empty) verdict = { kind: 'idle', text: 'Put something on both sides.' };
-  else if (!matchFor(agent).length && !give.coin) verdict = { kind: 'refuse', text: `${first} buys ${agent.buys.map(b => b.good).join(' or ')} — nothing you have spare. Coin would still work.` };
+  else if (!matchFor(agent).length && !give.coin) verdict = { kind: 'refuse', text: `${first} wants ${agent.buys.map(b => b.good).join(' or ')} — nothing you have spare. Coin would still work.` };
   else if (theirGain >= theirCost) verdict = { kind: 'accept', text: `${first} would take this.` };
   else {
     const g = Object.keys(give)[0] || agent.buys[0].good;
@@ -592,11 +638,11 @@ function renderSlip() {
   }).join('');
 
   slipEl.innerHTML = `
-    <h3 class="column-heading">THE DEAL</h3>
-    <div class="slip-who">${agent.name}<small>${agent.trade} · buys ${agent.buys.map(b => `${b.good} ${b.qty}`).join(', ')}</small></div>
+    <div class="slip-head"><h3 class="column-heading">THE DEAL</h3><button class="slip-back" type="button" id="deal-back" aria-label="${dealFrom ? `Back to ${dealFrom}` : 'Close the deal'}">← BACK</button></div>
+    <div class="slip-who">${agent.name}<small>${agent.trade} · wants ${agent.buys.map(b => `${b.good} ${b.qty}`).join(', ')}</small></div>
     <div class="side">
       <div class="side-head"><span>YOU GIVE</span><span>spare only</span></div>
-      ${giveable.map(g => row(g, give, 'give')).join('') || '<p class="slip-placeholder">Nothing spare they buy.</p>'}
+      ${giveable.map(g => row(g, give, 'give')).join('') || '<p class="slip-placeholder">Nothing spare they want.</p>'}
     </div>
     <div class="side">
       <div class="side-head"><span>YOU RECEIVE</span><span>theirs</span></div>
@@ -611,6 +657,7 @@ function renderSlip() {
     bundle[b.dataset.good] = Math.max(0, Math.min(capOf(b.dataset.good, b.dataset.side), (bundle[b.dataset.good] ?? 0) + Number(b.dataset.step)));
     renderSlip();
   }));
+  slipEl.querySelector('#deal-back').addEventListener('click', closeDeal);
   const propose = slipEl.querySelector('#propose');
   if (propose && verdict.kind === 'accept') propose.addEventListener('click', () => settle(agent));
 }
@@ -639,7 +686,7 @@ searchEl.addEventListener('input', () => {
   page = 0; render();
 });
 
-buildAgents(Number(params.get('n') || 24));
+buildAgents(Number(params.get('n') ?? (ACT_ONE ? 0 : 24)));
 seedHistory();
 const pick = params.get('pick');
 if (pick) { const a = agents.find(x => x.name.toLowerCase().startsWith(pick.toLowerCase())); if (a) selectAgent(a.id); else render(); }

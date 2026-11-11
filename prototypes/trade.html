@@ -122,7 +122,7 @@ html.is-embedded .proto-switch { display: none; }
     <header class="dialog-header">
       <div>
         <div class="dialog-kicker" id="trade-kicker"></div>
-        <h2 class="dialog-title" id="trade-title">What will you trade?</h2>
+        <h2 class="dialog-title" id="trade-title">Goods on offer, and what they cost.</h2>
       </div>
       <button class="dialog-close" type="submit" value="cancel" aria-label="Close">&times;</button>
     </header>
@@ -164,18 +164,18 @@ const ACTS = {
     give: { buy: 'YOU GIVE', sell: 'YOU GIVE' },
     cta:  { buy: 'TRADE →',  sell: 'TRADE →' },
     stocks: ['food', 'materials'],
-    abbrev: { food: 'f', materials: 'm' },
+    abbrev: { food: 'fo', materials: 'ma' },
     order: ['food', 'materials', 'fishing rod', 'fishing net', 'hand axe', 'sandals', 'hatchet'],
     balances: { food: 11.6, materials: 31, 'fishing rod': 0, 'hand axe': 0, sandals: 2, hatchet: 2, 'fishing net': 0 },
     offers: [
-      { id: 'rod',       mode: 'buy',  lot: 'Fishing rod ×1',    effect: 'unlocks Fish',        price: { food: 2, materials: 8 },  receive: { 'fishing rod': 1 }, stock: 1, consequence: 'Fishing becomes available while you own it.' },
-      { id: 'net',       mode: 'buy',  lot: 'Fishing net ×1',    effect: 'better Fish tool',    price: { food: 5, materials: 20 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.' },
-      { id: 'axe',       mode: 'buy',  lot: 'Hand axe ×1',       effect: 'splitting costs less', price: { food: 6, materials: 40 }, receive: { 'hand axe': 1 },    stock: 1, consequence: 'Replaces Hatchet margins: Split wood takes 20% less energy.' },
+      { id: 'rod',       mode: 'buy',  lot: 'Fishing rod ×1',    effect: 'you can fish',        price: { food: 2, materials: 8 },  receive: { 'fishing rod': 1 }, stock: 1, consequence: 'Fishing becomes available while you own it.' },
+      { id: 'net',       mode: 'buy',  lot: 'Fishing net ×1',    effect: 'fishing costs less and catches more',    price: { food: 5, materials: 20 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5.' },
+      { id: 'axe',       mode: 'buy',  lot: 'Hand axe ×1',       effect: 'splitting wood costs less and yields more', price: { food: 6, materials: 40 }, receive: { 'hand axe': 1 },    stock: 1, consequence: 'Replaces the Hatchet: Split wood takes 20% less energy.' },
       { id: 'preserved', mode: 'buy',  lot: 'Preserved food ×10', effect: 'keeps well',          price: { materials: 8 },           receive: { food: 10 },         stock: 2 },
-      { id: 'sandals-s', mode: 'sell', lot: 'Sandals ×1',        effect: 'your spare stock',    price: { sandals: 1 },             receive: { food: 6, materials: 5 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
-      { id: 'hatchet-s', mode: 'sell', lot: 'Hatchet ×1',        effect: 'your spare stock',    price: { hatchet: 1 },             receive: { food: 9, materials: 8 } },
-      { id: 'mat-s',     mode: 'sell', lot: 'Materials ×10',     effect: 'raw stock',           price: { materials: 10 },          receive: { food: 3 } },
-      { id: 'rod-s',     mode: 'sell', lot: 'Fishing rod ×1',    effect: 'they would take one', price: { 'fishing rod': 1 },       receive: { food: 7, materials: 6 } },
+      { id: 'sandals-s', mode: 'sell', lot: 'Sandals ×1',        effect: '', price: { sandals: 1 },             receive: { food: 6, materials: 5 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
+      { id: 'hatchet-s', mode: 'sell', lot: 'Hatchet ×1',        effect: '', price: { hatchet: 1 },             receive: { food: 9, materials: 8 } },
+      { id: 'mat-s',     mode: 'sell', lot: 'Materials ×10',     effect: '', price: { materials: 10 },          receive: { food: 3 } },
+      { id: 'rod-s',     mode: 'sell', lot: 'Fishing rod ×1',    effect: '', price: { 'fishing rod': 1 },       receive: { food: 7, materials: 6 } },
     ],
   },
   ii: {
@@ -186,18 +186,18 @@ const ACTS = {
     },
     give: { buy: 'YOU PAY', sell: 'YOU GIVE' },
     cta:  { buy: 'BUY →',   sell: 'SELL →' },
-    stocks: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'biomass'],
+    stocks: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'materials'],
     abbrev: {},
-    order: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'biomass', 'salt', 'oil', 'glass', 'tools', 'leather', 'nails', 'cloth', 'seed grain', 'planks', 'charcoal', 'pottery', 'baskets', 'rope', 'sandals', 'fishing net', 'carpenter bench'],
-    balances: { coin: 42, food: 23, water: 0, fuel: 0, metal: 0, minerals: 0, biomass: 30,
+    order: ['coin', 'food', 'water', 'fuel', 'metal', 'minerals', 'materials', 'salt', 'oil', 'glass', 'tools', 'leather', 'nails', 'cloth', 'seed grain', 'planks', 'charcoal', 'pottery', 'baskets', 'rope', 'sandals', 'fishing net', 'carpenter bench'],
+    balances: { coin: 42, food: 23, water: 0, fuel: 0, metal: 0, minerals: 0, materials: 30,
                 salt: 0, oil: 0, glass: 0, tools: 0, leather: 0, nails: 0, cloth: 0, 'seed grain': 0,
                 planks: 8, charcoal: 14, pottery: 2, baskets: 6, rope: 4, sandals: 2,
                 'fishing net': 0, 'carpenter bench': 0 },
     offers: [
-      { id: 'water',   mode: 'buy', lot: 'Water ×6',           effect: 'typed resource',          price: { coin: 5 },  receive: { water: 6 },    stock: 3 },
-      { id: 'mineral', mode: 'buy', lot: 'Minerals ×5',        effect: 'typed resource',          price: { coin: 7 },  receive: { minerals: 5 }, stock: 2 },
-      { id: 'fuel',    mode: 'buy', lot: 'Fuel ×4',            effect: 'typed resource',          price: { coin: 8 },  receive: { fuel: 4 },     stock: 2 },
-      { id: 'metal',   mode: 'buy', lot: 'Metal ×3',           effect: 'typed resource',          price: { coin: 12 }, receive: { metal: 3 },    stock: 2 },
+      { id: 'water',   mode: 'buy', lot: 'Water ×6',           effect: '', price: { coin: 5 },  receive: { water: 6 },    stock: 3 },
+      { id: 'mineral', mode: 'buy', lot: 'Minerals ×5',        effect: '', price: { coin: 7 },  receive: { minerals: 5 }, stock: 2 },
+      { id: 'fuel',    mode: 'buy', lot: 'Fuel ×4',            effect: '', price: { coin: 8 },  receive: { fuel: 4 },     stock: 2 },
+      { id: 'metal',   mode: 'buy', lot: 'Metal ×3',           effect: '', price: { coin: 12 }, receive: { metal: 3 },    stock: 2 },
       { id: 'salt',    mode: 'buy', lot: 'Salt ×4',            effect: 'keeps food from spoiling', price: { coin: 9 },  receive: { salt: 4 },     stock: 3 },
       { id: 'oil',     mode: 'buy', lot: 'Oil ×3',             effect: 'burns clean and long',    price: { coin: 14 }, receive: { oil: 3 },      stock: 2 },
       { id: 'nails',   mode: 'buy', lot: 'Nails ×12',          effect: 'drawn iron, by the dozen', price: { coin: 11 }, receive: { nails: 12 },   stock: 3 },
@@ -206,17 +206,17 @@ const ACTS = {
       { id: 'seed',    mode: 'buy', lot: 'Seed grain ×8',      effect: 'stock from a warmer valley', price: { coin: 10 }, receive: { 'seed grain': 8 }, stock: 2 },
       { id: 'glass',   mode: 'buy', lot: 'Glass ×2',           effect: 'no kiln here can make it', price: { coin: 22 }, receive: { glass: 2 },    stock: 1 },
       { id: 'tools',   mode: 'buy', lot: 'Tools ×1',           effect: 'forged beyond the valley', price: { coin: 26 }, receive: { tools: 1 },    stock: 2 },
-      { id: 'net',     mode: 'buy', lot: 'Fishing net ×1',     effect: 'better Fish tool',        price: { coin: 18 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5. The unlock does not stack.' },
-      { id: 'bench',   mode: 'buy', lot: 'Carpenter bench ×1', effect: 'finished capital',        price: { coin: 60 }, receive: { 'carpenter bench': 1 }, stock: 1 },
-      { id: 'bio-s',   mode: 'sell', lot: 'Biomass ×6',   effect: 'leaves your stock',  price: { biomass: 6 },  receive: { coin: 5 } },
-      { id: 'food-s',  mode: 'sell', lot: 'Food ×8',      effect: 'leaves your larder', price: { food: 8 },     receive: { coin: 4 } },
-      { id: 'char-s',  mode: 'sell', lot: 'Charcoal ×10', effect: 'burned down the ridge', price: { charcoal: 10 }, receive: { coin: 7 } },
-      { id: 'plank-s', mode: 'sell', lot: 'Planks ×4',    effect: 'finished stock',     price: { planks: 4 },   receive: { coin: 6 } },
+      { id: 'net',     mode: 'buy', lot: 'Fishing net ×1',     effect: 'fishing costs less and catches more',        price: { coin: 18 }, receive: { 'fishing net': 1 }, stock: 1, consequence: 'Replaces Fishing rod: Fish yield 1–3 → 2–5.' },
+      { id: 'bench',   mode: 'buy', lot: 'Carpenter bench ×1', effect: 'makes wooden tools and parts',        price: { coin: 60 }, receive: { 'carpenter bench': 1 }, stock: 1 },
+      { id: 'bio-s',   mode: 'sell', lot: 'Materials ×6',   effect: '', price: { materials: 6 },  receive: { coin: 5 } },
+      { id: 'food-s',  mode: 'sell', lot: 'Food ×8',      effect: '', price: { food: 8 },     receive: { coin: 4 } },
+      { id: 'char-s',  mode: 'sell', lot: 'Charcoal ×10', effect: '', price: { charcoal: 10 }, receive: { coin: 7 } },
+      { id: 'plank-s', mode: 'sell', lot: 'Planks ×4',    effect: '', price: { planks: 4 },   receive: { coin: 6 } },
       { id: 'pot-s',   mode: 'sell', lot: 'Pottery ×2',   effect: 'fired in the village', price: { pottery: 2 }, receive: { coin: 9 } },
       { id: 'bask-s',  mode: 'sell', lot: 'Baskets ×4',   effect: 'woven from reed',    price: { baskets: 4 },  receive: { coin: 6 } },
       { id: 'rope-s',  mode: 'sell', lot: 'Rope ×3',      effect: 'twisted fibre',      price: { rope: 3 },     receive: { coin: 8 } },
-      { id: 'sand-s',  mode: 'sell', lot: 'Sandals ×1',   effect: 'your spare stock',   price: { sandals: 1 },  receive: { coin: 7 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
-      { id: 'metal-s', mode: 'sell', lot: 'Metal ×3',     effect: 'they would take it', price: { metal: 3 },    receive: { coin: 9 } },
+      { id: 'sand-s',  mode: 'sell', lot: 'Sandals ×1',   effect: '', price: { sandals: 1 },  receive: { coin: 7 }, consequence: 'A spare pair goes first; the pair you wear keeps its Forage margin.' },
+      { id: 'metal-s', mode: 'sell', lot: 'Metal ×3',     effect: '', price: { metal: 3 },    receive: { coin: 9 } },
     ],
   },
 };
@@ -290,7 +290,7 @@ function shortfall(offer) {
 
 /* A quote that cannot be taken says which of the three reasons it is. */
 function refusal(offer) {
-  if (offer.mode === 'buy' && (offer.stock ?? 0) <= 0) return { short: 'sold out', long: 'This lot is gone. The counterparty has no more.' };
+  if (offer.mode === 'buy' && (offer.stock ?? 0) <= 0) return { short: 'sold out', long: 'Sold out.' };
   const missing = shortfall(offer);
   if (!missing.length) return null;
   if (offer.mode === 'sell') {
@@ -337,7 +337,7 @@ function renderLedger() {
   renderPager(list.length, pages, start, slice.length, busy);
 
   if (!list.length) {
-    rowsEl.innerHTML = `<p class="ledger-empty">${query ? 'No lot matches that search.' : 'Nothing to offer in this direction.'}</p>`;
+    rowsEl.innerHTML = `<p class="ledger-empty">${query ? 'Nothing matches that search.' : mode === 'sell' ? 'Nothing they want.' : 'Nothing for sale.'}</p>`;
     return;
   }
 
@@ -355,7 +355,7 @@ function renderLedger() {
         aria-pressed="${offer.id === selectedId}" data-refused="${Boolean(refused)}">
         <span class="row-item">
           <span class="row-lot">${offer.lot}</span>
-          <span class="row-sub">${offer.effect} · you hold ${fmt(held)} ${subject}</span>
+          <span class="row-sub">${offer.effect ? `${offer.effect} · ` : ''}you hold ${fmt(held)} ${subject}</span>
         </span>
         <span class="row-price">${fmtShort(counterpart)}</span>
         ${corner}
@@ -486,7 +486,7 @@ function settle() {
   Object.entries(give).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) - n; visit[k] = (visit[k] ?? 0) - n; });
   Object.entries(get).forEach(([k, n]) => { act.balances[k] = (act.balances[k] ?? 0) + n; visit[k] = (visit[k] ?? 0) + n; });
   if (offer.mode === 'buy') offer.stock -= qty;
-  tellHost({ type: 'trade-settled', message: `You settle ${qty} lot${qty === 1 ? '' : 's'} of ${offer.lot}. The exchange is final.` });
+  tellHost({ type: 'trade-settled', message: `You ${offer.mode === 'sell' ? 'sell' : 'trade for'} ${offer.lot}${qty === 1 ? '' : `, ${qty} lots`}.` });
 
   qty = Math.max(1, Math.min(qty, maxLots(offer)));
   justSettled = true;

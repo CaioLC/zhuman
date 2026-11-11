@@ -65,6 +65,7 @@
         <nav class="surface-nav" aria-label="Act I surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
+          <button class="tab" id="tab-market" type="button" role="tab" aria-selected="false" aria-controls="view-market" data-view="market">MARKET</button>
         </nav>
 
         <div class="merchant-strip" role="status">
@@ -83,7 +84,7 @@
           <div class="surface-heading">
             <div>
               <h1>ACTIONS</h1>
-              <p>What will this body do now?</p>
+              <p>Work available to you.</p>
             </div>
             <span class="eyebrow kind-filter" id="action-catalog-count" role="group" aria-label="Show one kind"><button class="text-button kind-toggle" type="button" data-kind="verb" aria-pressed="false">4 verbs</button><span aria-hidden="true"> · </span><button class="text-button kind-toggle" type="button" data-kind="generator" aria-pressed="false">2 generators</button></span>
           </div>
@@ -103,7 +104,7 @@
                 <span class="action-metrics">
                   <span>−1.7e · 4h</span>
                   <img class="dist-icon" src="../assets/svg/dist_normal.svg" alt="normal distribution">
-                  <span class="yield">+1–3f</span>
+                  <span class="yield">+1–2fo</span>
                 </span>
               </button>
               <button class="tile-hide" type="button" aria-label="Hide Forage">hide</button>
@@ -115,19 +116,19 @@
                 <span class="action-metrics">
                   <span>−2e · 5h</span>
                   <img class="dist-icon" src="../assets/svg/dist_exponential.svg" alt="exponential distribution">
-                  <span class="yield">+0–7m</span>
+                  <span class="yield">+0–6ma</span>
                 </span>
               </button>
               <button class="tile-hide" type="button" aria-label="Hide Scavenge">hide</button>
             </div>
 
-            <div class="action-cell" data-action="Split wood" data-type="verb" data-state="ready" data-in="" data-out="materials" data-energy="2.5" data-time="5" data-order="2">
+            <div class="action-cell" data-action="Split wood" data-type="verb" data-state="ready" data-in="" data-out="materials" data-energy="4" data-time="5" data-order="2">
               <button class="action-tile" type="button">
                 <span class="action-name">Split wood</span>
                 <span class="action-metrics">
-                  <span>−2.5e · 5h</span>
+                  <span>−4e · 5h</span>
                   <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
-                  <span class="yield">+3–5m</span>
+                  <span class="yield">+3–12ma</span>
                 </span>
               </button>
               <button class="tile-hide" type="button" aria-label="Hide Split wood">hide</button>
@@ -139,20 +140,20 @@
                 <span class="action-metrics">
                   <span>−2e · 6h</span>
                   <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
-                  <span class="yield">+2–5f</span>
+                  <span class="yield">+2–7fo</span>
                 </span>
               </button>
               <button class="tile-hide" type="button" aria-label="Hide Fish">hide</button>
             </div>
 
-            <div class="action-cell" data-action="Check traps" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="1" data-time="24" data-order="4">
+            <div class="action-cell" data-action="Check traps" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="2" data-time="24" data-order="4">
               <button class="action-tile generator-tile" type="button" aria-disabled="true">
                 <span class="action-name">Check traps</span>
                 <span class="action-state">accumulating</span>
                 <span class="action-metrics">
-                  <span>−1e −1m · 24h</span>
-                  <img class="dist-icon" src="../assets/svg/dist_poisson.svg" alt="Poisson distribution">
-                  <span class="yield">+1–5f</span>
+                  <span>−2e −2ma · 24h</span>
+                  <img class="dist-icon" src="../assets/svg/dist_exponential.svg" alt="exponential distribution">
+                  <span class="yield">+0–3fo</span>
                 </span>
                 <span class="generator-progress" style="width: 46%" aria-hidden="true"></span>
               </button>
@@ -160,14 +161,14 @@
               <button class="tile-hide" type="button" aria-label="Hide Check traps">hide</button>
             </div>
 
-            <div class="action-cell" data-action="Garden bed" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="0.5" data-time="48" data-order="5">
+            <div class="action-cell" data-action="Garden bed" data-type="generator" data-state="accumulating" data-in="materials" data-out="food" data-energy="2" data-time="72" data-order="5">
               <button class="action-tile generator-tile" type="button" aria-disabled="true">
                 <span class="action-name">Garden bed</span>
                 <span class="action-state">accumulating</span>
                 <span class="action-metrics">
-                  <span>−0.5e −0.2m · 48h</span>
+                  <span>−2e −0.2ma · 72h</span>
                   <img class="dist-icon" src="../assets/svg/dist_uniform.svg" alt="uniform distribution">
-                  <span class="yield">+0–1f</span>
+                  <span class="yield">+1–2fo</span>
                 </span>
                 <span class="generator-progress" style="width: 18%" aria-hidden="true"></span>
               </button>
@@ -175,14 +176,14 @@
               <button class="tile-hide" type="button" aria-label="Hide Garden bed">hide</button>
             </div>
 
-            <p class="empty-copy" id="action-empty" hidden>No action matches your search.</p>
+            <p class="empty-copy" id="action-empty" hidden>Nothing matches that search.</p>
           </div>
 
         </section>
 
         <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
           <div class="surface-heading build-heading">
-            <div><h1>BUILD</h1><p>Find the next useful recipe your own hands can raise.</p></div>
+            <div><h1>BUILD</h1><p>Recipes available to you.</p></div>
             <span class="eyebrow" id="build-catalog-count">6 recipes</span>
           </div>
 
@@ -198,23 +199,27 @@
 
           <section class="milestone-goal shelter-goal" id="shelter-goal" aria-labelledby="shelter-title" data-state="locked" data-open="false">
             <div class="milestone-bar">
-              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">locked · 2 conditions</span><span class="milestone-compact" id="shelter-compact">materials 31/60</span><span class="milestone-more">details ↓</span></button>
+              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">locked · 2 conditions</span><span class="milestone-compact" id="shelter-compact">materials 31/120</span><span class="milestone-more">details ↓</span></button>
               <button class="primary-action" id="raise-shelter" type="button" disabled>LOCKED</button>
             </div>
             <div class="milestone-details" id="shelter-details" hidden>
-              <div class="milestone-detail-head"><span class="milestone-kicker">A PLACE FOR OTHERS</span><span class="milestone-cost">60m 6e · 6.0d</span></div>
+              <div class="milestone-detail-head"><span class="milestone-kicker">A PLACE FOR OTHERS</span><span class="milestone-cost">120ma 8e · 6.0d</span></div>
               <p id="shelter-copy">a roof with room for four. you're not alone anymore.</p>
-              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/15</strong></span><span>FOOD <strong id="shelter-food">11.6/12</strong></span><span>RECIPES <strong id="shelter-recipes">6/5</strong></span><span>MATERIALS <strong id="shelter-materials">31/60</strong></span></div>
-              <div class="milestone-action-row"><span id="shelter-detail">Hold 60 materials with a settled body and four kinds of goods.</span></div>
+              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/12</strong></span><span>FOOD <strong id="shelter-food">11.6/15</strong></span><span>GOODS <strong id="shelter-recipes">6/5</strong></span><span>ROPE BAG <strong id="shelter-ropebag">needed</strong></span><span>LEAF BED <strong id="shelter-leafbed">owned</strong></span><span>MATERIALS <strong id="shelter-materials">31/120</strong></span></div>
+              <div class="milestone-action-row"><span id="shelter-detail">Hold 120 materials with a settled body and five kinds of goods, a rope bag and a leaf bed among them.</span></div>
             </div>
           </section>
+        </section>
+
+        <section id="view-market" role="tabpanel" aria-labelledby="tab-market" hidden>
+          <iframe class="market-frame" id="market-frame" title="Neighbours" data-src="market.html?act=i&amp;embed=1"></iframe>
         </section>
       </section>
     </div>
 
     <footer class="screen-footer" id="event-log" aria-label="Event log" aria-live="polite">
       <div class="log-line"><span class="time">D19 19:08</span><span>Someone is walking the shoreline. Their pack carries made goods.</span></div>
-      <div class="log-line"><span class="time">D19 18:22</span><span>You finish a second Hatchet. One is effect; one is stock.</span></div>
+      <div class="log-line"><span class="time">D19 18:22</span><span>You finish a second hatchet. The spare can be traded.</span></div>
       <div class="log-line"><span class="time">D19 17:04</span><span>The Root cellar slows what the larder loses.</span></div>
       <div class="log-line"><span class="time">D19 16:11</span><span>You return with 4 materials.</span></div>
     </footer>
@@ -227,8 +232,14 @@
       const tabs = [...document.querySelectorAll('[data-view]')];
       const views = {
         actions: document.querySelector('#view-actions'),
-        build: document.querySelector('#view-build')
+        build: document.querySelector('#view-build'),
+        market: document.querySelector('#view-market')
       };
+      // MARKET owns the whole surface, as in Act II: the strips and the log step aside, and the
+      // Household collapses on every entry without overwriting the other views' memory. It is
+      // market.html with nobody in it yet.
+      const focusViews = ['market'];
+      const eventLog = document.querySelector('#event-log');
       const prototypeParams = new URLSearchParams(location.search);
       let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
 
@@ -238,7 +249,8 @@
       const requestedHoldingsState = prototypeParams.get('holdings');
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
-        build: requestedHoldingsState === 'collapsed'
+        build: requestedHoldingsState === 'collapsed',
+        market: requestedHoldingsState !== 'expanded'
       };
       let activeView = null;
       let holdingsCollapsed = false;
@@ -256,13 +268,21 @@
         if (!views[name]) name = 'actions';
         if (activeView) holdingsCollapsedByView[activeView] = holdingsCollapsed;
         activeView = name;
+        const focus = focusViews.includes(name);
+        document.querySelector('.act-one').classList.toggle('is-focus-view', focus);
+        eventLog.hidden = focus;
+        if (name === 'market') {
+          const frame = document.querySelector('#market-frame');
+          // `?stall=1` opens the framed market on its inventory, for review.
+          if (!frame.src) frame.src = frame.dataset.src + (prototypeParams.get('stall') === '1' ? '&stall=1' : '');
+        }
         Object.entries(views).forEach(([key, view]) => {
           view.hidden = key !== name;
           const tab = document.querySelector(`[data-view="${key}"]`);
           tab.setAttribute('aria-selected', String(key === name));
           tab.tabIndex = key === name ? 0 : -1;
         });
-        setHoldingsCollapsed(holdingsCollapsedByView[name], false);
+        setHoldingsCollapsed(focus ? true : holdingsCollapsedByView[name], false);
         if (updateHash && location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
       }
 
@@ -386,7 +406,7 @@
         });
         actionHost.append(actionEmpty);
         actionEmpty.hidden = visible > 0;
-        actionEmpty.textContent = hiddenView ? 'No hidden action matches your search.' : 'No action matches your search.';
+        actionEmpty.textContent = hiddenView ? 'Nothing hidden matches that search.' : 'Nothing matches that search.';
         // The summary is the hidden view's toggle; with nothing hidden it is inert and only counts.
         // The hidden view adds `unhide all`, which empties the set and so returns to the full grid.
         actionSummary.innerHTML = `<button class="text-button hidden-toggle" type="button" aria-pressed="${hiddenView}"${hiddenCount ? '' : ' disabled'}>${hiddenView ? '← ' : ''}${hiddenCount} hidden out of ${actionCells.length}${hiddenCount && !hiddenView ? ' →' : ''}</button>`
@@ -506,25 +526,30 @@
         onActivityChange();
       }
 
-      document.querySelectorAll('[data-action]').forEach(button => {
-        button.addEventListener('click', () => {
-          setActivity('working', button.dataset.action, `${button.dataset.duration} left`);
-          addLog(`You begin ${button.dataset.action.toLowerCase()}. The stated price is paid now.`);
+      // A tile's click begins its work: the log reads the debit as the game's does
+      // (`You spend 1.7e to begin.`) and the strip counts down the tile's own duration.
+      document.querySelectorAll('[data-action]').forEach(cell => {
+        cell.addEventListener('click', event => {
+          const tile = event.target.closest('.action-tile');
+          if (!tile || tile.getAttribute('aria-disabled') === 'true') return;
+          const [cost, time] = tile.querySelector('.action-metrics span').textContent.split(' · ');
+          setActivity('working', cell.dataset.action, `${time} left`);
+          addLog(`You spend ${cost.replaceAll('−', '')} to begin.`);
         });
       });
 
       const materialsOnHand = 31;
       const buildRecipes = [
-        { name: 'Garden bed', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '12m 4e', inputCost: 12, time: 0.7, effect: 'grows food on its own', state: 'owned', reach: 1, owned: 1 },
-        { name: 'Wire snares', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '10m 3e', inputCost: 10, time: 0.5, effect: 'readies game to collect', state: 'owned', reach: 1, owned: 1 },
-        { name: 'Spear', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '10m 5e', inputCost: 10, time: 0.3, effect: 'you can hunt', state: 'ready', reach: 1 },
-        { name: 'Rope bag', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '15m 3e', inputCost: 15, time: 0.3, effect: '+1 vigor ceiling', state: 'ready', reach: 1 },
-        { name: 'Fishing rod', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '48m 2e', inputCost: 48, time: 4.2, effect: 'you can fish', state: 'reach', reach: 0.65, stateCopy: '31/48m' },
-        { name: 'Cookpot', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '40m 2e', inputCost: 40, time: 2.1, effect: 'food restores more vigor', state: 'reach', reach: 0.78, stateCopy: '31/40m' },
-        { name: 'Work gloves', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '48m 1e', inputCost: 48, time: 2.1, effect: 'splitting wood costs less', state: 'blocked', reach: 0.64, tech: 'Split wood', stateCopy: '31/48m' },
-        { name: 'Chainsaw', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '96m 3e', inputCost: 96, time: 5.0, effect: 'wood costs fuel, not muscle', state: 'blocked', reach: 0.32, tech: 'Split wood', stateCopy: '31/96m' },
-        { name: 'Leaf bed', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '8m 2e', inputCost: 8, time: 0.4, effect: 'vigor ceiling rises', state: 'owned', reach: 1, owned: 1 },
-        { name: 'Root cellar', type: 'storage', inputs: ['materials'], outputs: ['food'], cost: '10m 4e', inputCost: 10, time: 0.5, effect: 'food keeps twice as long', state: 'owned', reach: 1, owned: 1 }
+        { name: 'Garden bed', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '8ma 8e', inputCost: 8, time: 0.7, effect: 'grows food on its own', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Wire snares', type: 'generator', inputs: ['materials'], outputs: ['food'], cost: '14ma 6e', inputCost: 14, time: 0.7, effect: 'readies game to collect', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Spear', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '10ma 5e', inputCost: 10, time: 0.3, effect: 'you can hunt', state: 'ready', reach: 1 },
+        { name: 'Rope bag', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '15ma 3e', inputCost: 15, time: 0.3, effect: '+1 vigor ceiling', state: 'ready', reach: 1 },
+        { name: 'Fishing rod', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '48ma 2e', inputCost: 48, time: 4.2, effect: 'you can fish', state: 'reach', reach: 0.65, stateCopy: '31/48ma' },
+        { name: 'Cookpot', type: 'tool', inputs: ['materials'], outputs: ['food'], cost: '40ma 2e', inputCost: 40, time: 2.1, effect: 'food feeds you further', state: 'reach', reach: 0.78, stateCopy: '31/40ma' },
+        { name: 'Work gloves', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '48ma 1e', inputCost: 48, time: 2.1, effect: 'splitting wood costs less', state: 'blocked', reach: 0.64, tech: 'Split wood', stateCopy: '31/48ma' },
+        { name: 'Chainsaw', type: 'tool', inputs: ['materials'], outputs: ['materials'], cost: '96ma 3e', inputCost: 96, time: 5.0, effect: 'wood costs fuel, not muscle', state: 'blocked', reach: 0.32, tech: 'Split wood', stateCopy: '31/96ma' },
+        { name: 'Leaf bed', type: 'comfort', inputs: ['materials'], outputs: ['comfort'], cost: '8ma 4e', inputCost: 8, time: 0.4, effect: '+1 vigor ceiling', state: 'owned', reach: 1, owned: 1 },
+        { name: 'Root cellar', type: 'storage', inputs: ['materials'], outputs: ['food'], cost: '10ma 4e', inputCost: 10, time: 0.5, effect: 'food keeps twice as long', state: 'owned', reach: 1, owned: 1 }
       ];
       // Column-header sorting (the game's `nextSort`): a new column opens in its natural
       // direction — STATE nearest-first, the rest cheapest/quickest/A–Z — and clicking the
@@ -803,15 +828,21 @@
       syncShelterDisclosure();
 
       // The Shelter recomputes from the body's stocks, as the game's card does every frame:
-      // locked until the standing conditions hold (vigor, larder, kinds of goods owned), then
-      // inputs short until the order is on hand, then ready to raise. With everything met but
+      // locked until the standing conditions hold (vigor, larder, kinds of goods owned, and the
+      // rope bag and leaf bed its order names), then
+      // inputs short until the order is on hand, then ready to build. With everything met but
       // the hands on other work it reads `hands busy`; raised, it is building until it stands.
       // `?shelter=ready|busy|building|done` seeds a state for review: ready and busy fill the
       // stocks to the order (an explicit `vigor`/`food`/`materials` still wins), busy also
       // starts the Spear unless `activity` names other work, building stands at 42%.
       const seededShelter = prototypeParams.get('shelter');
       const shelterSeedsStock = ['ready', 'busy'].includes(seededShelter);
-      const shelterNeeds = { vigor: 15, food: 12, kinds: 5, materials: 60 };
+      const shelterNeeds = { vigor: 12, food: 15, kinds: 5, materials: 120 };
+      // Kinds of goods owned: sandals, hatchet, wire snares, garden bed, root cellar, leaf bed
+      // (the goods in the MARKET inventory). The rope bag is a seventh once it is built, which the
+      // ready and busy seeds assume.
+      const ropeBagOwned = () => shelterSeedsStock || buildRecipes.find(recipe => recipe.name === 'Rope bag').state === 'owned';
+      const kindsOwned = () => 6 + Number(ropeBagOwned());
       const shelterStock = window.prototypeStock = {
         vigor: Number(prototypeParams.get('vigor') ?? (shelterSeedsStock ? shelterNeeds.vigor : 14)),
         food: Number(prototypeParams.get('food') ?? (shelterSeedsStock ? shelterNeeds.food : 11.6)),
@@ -824,14 +855,16 @@
       let shelterDone = false;
       const shelterLeft = () => `${(shelterDays * (1 - shelterBuild)).toFixed(1)}d left`;
       function refreshShelter() {
-        const kinds = document.querySelectorAll('.holdings-list .holding-row').length;
+        const kinds = kindsOwned();
         const met = {
           vigor: shelterStock.vigor >= shelterNeeds.vigor,
           food: shelterStock.food >= shelterNeeds.food,
           kinds: kinds >= shelterNeeds.kinds,
+          ropebag: ropeBagOwned(),
+          leafbed: true,
           materials: shelterStock.materials >= shelterNeeds.materials
         };
-        const unmet = Number(!met.vigor) + Number(!met.food) + Number(!met.kinds);
+        const unmet = Number(!met.vigor) + Number(!met.food) + Number(!met.kinds) + Number(!met.ropebag) + Number(!met.leafbed);
         const handsBusy = activityNow !== 'idle';
         const state = shelterDone ? 'done'
           : shelterBuild !== null ? 'building'
@@ -848,6 +881,8 @@
           vigor: `${shelterStock.vigor}/${shelterNeeds.vigor}`,
           food: `${shelterStock.food}/${shelterNeeds.food}`,
           recipes: `${kinds}/${shelterNeeds.kinds}`,
+          ropebag: met.ropebag || settled ? 'owned' : 'needed',
+          leafbed: 'owned',
           materials: settled ? `${shelterNeeds.materials} paid` : `${shelterStock.materials}/${shelterNeeds.materials}`
         };
         Object.entries(values).forEach(([key, text]) => {
@@ -864,11 +899,11 @@
           locked: `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`,
           unfunded: 'inputs short',
           busy: 'hands busy',
-          ready: 'ready to raise',
-          building: `raising · ${shelterBuild !== null ? shelterLeft() : ''}`,
+          ready: 'ready to build',
+          building: `building · ${shelterBuild !== null ? shelterLeft() : ''}`,
           done: 'standing'
         }[state];
-        shelterAction.textContent = { locked: 'LOCKED', unfunded: 'NEEDS INPUTS', busy: 'HANDS BUSY', ready: 'RAISE SHELTER →', building: '■ BUILDING', done: 'STANDING' }[state];
+        shelterAction.textContent = { locked: 'LOCKED', unfunded: 'NEEDS INPUTS', busy: 'HANDS BUSY', ready: 'BUILD SHELTER →', building: '■ BUILDING', done: 'STANDING' }[state];
         shelterAction.disabled = state !== 'ready';
         shelterDetail.textContent = state === 'busy' ? 'Everything is on hand; the Shelter waits for free hands.'
           : state === 'building' ? 'The Shelter is going up. Materials are paid.'

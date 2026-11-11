@@ -1,7 +1,7 @@
 # Human Action — Unified UI Spec (Act I & Act II)
 
 Reconciles the vetted prototypes into one shared component and vocabulary contract: the act
-shells (`act-i.html`, `act-ii.html`), the trade dialog (`trade.html`), the neighbours view
+shells (`act-i.html`, `act-ii.html`), the trade dialog (`trade.html`), the market
 (`market.html`), the session menu (`menu.html`) and the title screen (`title.html`). The
 last four are the most recent decisions and win over anything older that contradicts them.
 Act II is a deliberate evolution of Act I, not a different product: the city grows, the
@@ -18,16 +18,16 @@ drift/question and is open to revision.
 
 ## 1. Economy & resource model
 
-- **[decided]** Act I uses a single generic stock, **Materials (MA)**. Act II replaces it
-  with six typed resources: **Food, Water, Fuel, Metal, Minerals, Biomass**.
-- **[decided]** Entering Act II, **Materials convert 1:1 into Biomass**. Recipe/action
-  costs expressed in Materials (Act I) and Biomass (Act II) **must be numerically
-  identical** for the same recipe. Example: Garden bed = `8` in both (`8m` / `8 biomass`).
-  Any same-named recipe whose Act I "m" cost differs from its Act II "biomass" cost is a
-  bug to fix, not a design choice.
+- **[decided]** Act I has two stocks, **Food** and **Materials**. Act II keeps both and adds
+  four typed resources: **Water, Fuel, Metal, Minerals**.
+- **[decided]** Materials is one stock in both acts, under one name and one code (`MA`,
+  `ma`). A recipe or action that exists in both acts costs and yields the same materials in
+  both. Example: Garden bed = `8ma` in both.
+- **[decided]** Resource names are lowercase in running text (`converts materials into
+  fuel`); headings, labels and lot names (`Fuel ×4`) keep their case.
 - **[decided]** Act II introduces **Coin** as currency. Act I has no coin. The merchant in
   Act II trades for coin; the passerby in Act I trades by barter.
-- **[decided]** Population and typed resources exist only from Act II onward.
+- **[decided]** Population and the typed resources exist only from Act II onward.
 - **[decided]** Energy is a **flow**, not a stockpile. It is never in the stockline.
 
 ---
@@ -45,20 +45,21 @@ separator. Tokens present depend on the act.
 | Population | `PO` | no  | yes |
 | Coin       | `CO` | no  | yes |
 | Food       | `FO` | yes | yes |
-| Materials  | `MA` | yes | no  |
+| Materials  | `MA` | yes | yes |
 | Water      | `WA` | no  | yes |
 | Fuel       | `FU` | no  | yes |
 | Metal      | `ME` | no  | yes |
 | Minerals   | `MI` | no  | yes |
-| Biomass    | `BI` | no  | yes |
 
-- **[proposal]** Promote Act I's `V:`/`F:`/`M:` to the two-letter scheme `VI FO MA`.
-- **[decided]** Act II uses two-letter labels (`FO WA FU ME MI BI`); one letter no longer
-  disambiguates.
-- **[proposal]** Two-letter labels for the meta stats too: `VI`, `PO`, `CO`.
-- Low/zero stocks keep the `low` value class (existing Act II behavior).
-- **[decided]** Order: Act I `VI FO MA`; Act II `PO VI FO BI WA FU ME MI CO`. Biomass sits
-  directly after food, so materials (Act I) and biomass (Act II) share a slot.
+- **[decided]** Every token uses a two-letter label, the meta stats included (`VI`, `PO`,
+  `CO`); one letter no longer disambiguates.
+- **[decided]** Costs and yields in running notation use the same two letters in lowercase:
+  food `fo`, materials `ma`, water `wa`, fuel `fu`, metal `me`, minerals `mi`, coin `co`.
+  Energy stays `e`, hours `h`, days `d`: a cost reads `12ma 4e`, a yield `+1–3fo`, a log line
+  `You spend 1.7e 1ma to begin.`
+- Low/zero stocks keep the `low` value class.
+- **[decided]** Order: Act I `VI FO MA`; Act II `PO VI FO MA WA FU ME MI CO`. Materials sits
+  directly after food in both acts.
 - **[decided]** A token rests as `AB: value` and its footprint never changes. Under the pointer
   or focus, the read form `FULL LABEL: value` (label in fg; 17px, 15px stacked at ≤760, 13px
   over Act II's line at ≤560) opens as an overlay on the token's baseline, starting at its left
@@ -72,11 +73,10 @@ separator. Tokens present depend on the act.
 
 ### 2.2 Runline (right side): Act/Day + Energy
 
-- Act/Day unchanged: `Act II · Day 43`.
+- Act/Day: `Act II · Day 43`.
 - **[proposal]** **Energy lives in the runline**, shown as a rate (generated/consumed), not
-  a stock. Suggested format: `⚡ +12 / −9 /d` or net `⚡ +3/d`. Distinct from the
-  `LABEL: value` stockline pairs so it never reads as a stockpile.
-- Applies to both acts (Act I may show a simpler `⚡ −Ne/d` if it surfaces energy at all).
+  a stock: Act II reads `⚡ +12 / −9`. Distinct from the `LABEL: value` stockline pairs so it
+  never reads as a stockpile. Act I shows no energy rate.
 
 ---
 
@@ -92,13 +92,19 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 (left) | **deal slip** (250px, right) · footer (visit ledger · paginator when busy · LEAVE).
 
 - **Ledger.** A sticky three-column head and one row per lot: lot name over a derived
-  sub-line (`{effect} · you hold {n} {subject}`), the counterpart bundle, and a corner that is
-  `×{max lots}` or the refusal in danger. Refused rows stay selectable and dim.
-- **Refusals** derive in order: `sold out` (buy, stock 0), `you hold {n}` (sell short),
-  `needs {n} more {stock}` (buy short), each with a long form shown in the slip.
+  sub-line (`{effect} · you hold {n} {subject}`; a lot with no effect reads only
+  `you hold {n} {subject}`), the counterpart bundle, and a corner that is `×{max lots}` or the
+  refusal in danger. Refused rows stay selectable and dim. A good's effect is its roster
+  effect (`you can fish`, `fishing costs less and catches more`), the same sentence BUILD
+  shows.
+- **Refusals** derive in order: `sold out` (buy, stock 0; long form `Sold out.`), `you hold
+  {n}` (sell short), `needs {n} more {stock}` (buy short), each with a long form shown in the
+  slip.
+- **Empty direction.** `Nothing for sale.` (buy) / `Nothing they want.` (sell); a search
+  that matches nothing reads `Nothing matches that search.`
 - **Search and pagination** appear only when a direction holds more than 7 lots. Tokens AND,
   `-` negates, `is:available` / `is:refused` filter by state.
-- **Deal slip** (shared with the neighbours view): `THE DEAL`, the lot, a `LOTS − n +` stepper
+- **Deal slip** (shared with the market): `THE DEAL`, the lot, a `LOTS − n +` stepper
   `of {max}` (1..max), `YOU GIVE|PAY` / `YOU RECEIVE` scaled **linearly** by lots, `AFTER`
   before → after on only the stocks the deal touches (down warn, up good, below zero flagged),
   the consequence copy, and the CTA. A refused lot shows the long refusal and `CANNOT TRADE`.
@@ -119,7 +125,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | Slot | Act I (barter) | Act II (coin) |
 |------|----------------|---------------|
 | Kicker | `PASSERBY · {N} DAYS LEFT` | `MERCHANT · MARKET OPEN {N} DAYS` |
-| Title | `What will you trade?` | `What will you trade?` |
+| Title | `Goods on offer, and what they cost.` | `Goods on offer, and what they cost.` |
 | Tabs | `BUY` / `SELL` | `BUY` / `SELL` |
 | Ledger head (buy) | `THEY OFFER · YOU GIVE · STOCK` | `THEY OFFER · PRICE · STOCK` |
 | Ledger head (sell) | `YOU OFFER · THEY GIVE · YOU HOLD` | `YOU OFFER · THEY PAY · YOU HOLD` |
@@ -127,7 +133,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | Give label (sell) | `YOU GIVE` | `YOU GIVE` |
 | Receive label | `YOU RECEIVE` | `YOU RECEIVE` |
 | CTA | `TRADE →` | `BUY →` / `SELL →` |
-| Short bundle | `2f 8m`, goods `Title ×n` | `5 coin`, goods `Title ×n` |
+| Short bundle | `2fo 8ma`, goods `Title ×n` | `5 coin`, goods `Title ×n` |
 
 - **[decided]** The strip is the shared `merchant-strip`; its signal reads `● PASSERBY`
   (Act I) / `● MERCHANT` (Act II), set from the identity map.
@@ -136,12 +142,14 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 4. Actions surface
 
-- **[decided]** Both acts use the same ACTIONS catalog: heading, a search field
-  (`Search actions · out:food state:ready`; fields `in`, `out`, `state`, `type`, `is`; `/`
-  focuses it, Escape clears it), a toolbar, and one grid holding the verbs and the owned
-  generators. Act I's grid is regular density (82px tiles); Act II's is **compact** (52px
-  tiles, 6px gaps). In both acts the eating policy rides the **rail under BODY**, out of the
-  catalog.
+- **[decided]** Both acts use the same ACTIONS catalog: heading `ACTIONS` over the statement
+  `Work available to you.`, a search field (`Search actions · out:food state:ready`; fields
+  `in`, `out`, `state`, `type`, `is`; `/` focuses it, Escape clears it), a toolbar, and one
+  grid holding the verbs and the owned generators. Act I's grid is regular density (82px
+  tiles); Act II's is **compact** (52px tiles, 6px gaps). In both acts the eating policy rides
+  the **rail under BODY**, out of the catalog.
+- **[decided]** A search that matches nothing reads `Nothing matches that search.`; in the
+  hidden view, `Nothing hidden matches that search.`
 - **[decided]** Every tile in an ACTIONS row is as tall as the row's tallest, with its edges,
   underbar and corners on the row's real edges. Every tile's content is pinned to its top, so
   a verb's name and a generator's stand on one line (12px from the tile's top, 7px compact),
@@ -167,13 +175,16 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   slim: the state word rides the name row, so it stands 52px tall like a verb.
 - **[decided]** URL parameters seed the pane: `actionq`, `sort`, `dir`, `hidden` (a comma
   list of names), `showhidden=1`, `kind=verb|generator`.
-- **[proposal, item 8]** Normalize the **action tile** to Act II's format in both acts:
-  - Metrics string: `−{energy}e · {duration}` (middot separator).
-  - One left-aligned metrics run: `−{energy}e {inputs} · {duration} {curve} +{lo}–{hi}{unit}`
-    (true minus sign, en dash ranges). No READY/state badge on action tiles: an unaffordable
-    tile is dimmed instead. Generators keep their state line (`accumulating`, `off`…).
-- **[decided, item 9]** Yields reference the act's resource model: Act I materials
-  (`+3–5m`), Act II biomass (`+3–5b`). Same numbers where the recipe is the same.
+- **[proposal, item 8]** One action tile format in both acts:
+  - One left-aligned metrics run: `−{energy}e {inputs} · {duration} {curve} +{lo}–{hi}{code}`
+    (true minus sign, en dash ranges): `−2e −2ma · 24h ⌒ +0–3fo`. No READY/state badge on
+    action tiles: an unaffordable tile is dimmed instead. Generators keep their state line
+    (`accumulating`, `off`…).
+  - The numbers are the roster's: the energy, every input the verb spends, the hours, the
+    curve of the dominant yield and its p10–p90 band rounded to whole units (a band that
+    rounds to one value reads `+1me`).
+- **[decided, item 9]** Yields and inputs use the two-letter codes (§2.1) in both acts;
+  materials is `ma` in both (`+3–12ma`). Same numbers where the verb is the same.
 - Distribution icons: shared `distributionLabels` map for `alt` text in both acts (keep
   "Poisson distribution" capitalization consistent).
 
@@ -181,30 +192,35 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 5. Build surface
 
-- **[decided, item 11]** Adopt **Act II's BUILD** everywhere: a full-width search box
+- **[decided, item 11]** Both acts use the same BUILD: heading `BUILD` over the statement
+  `Recipes available to you.`, a full-width search box
   (`Search recipes · type:tool out:food state:ready`) and **sortable column headers**
   (RECIPE, COST, TIME, STATE; a new column opens in its natural direction — STATE nearest
   first, the rest ascending — and a second click flips it). No sort panel, no chip filters.
-  The COST cell is one line (`12m 4e`).
-- **[decided, item 14 — revised]** The blank BUILD shelf lists **every recipe of the act**,
+  The COST cell is one line (`12ma 4e`); TIME is in days (`0.7d`). A search that matches
+  nothing reads `Nothing matches that search.`
+- **[decided, item 14]** The blank BUILD shelf lists **every recipe of the act**,
   so the player sees the whole catalog; a query only narrows it.
-  - Recipe states: `ready`, `reach` (short on inputs; meter + `31/48m`), `owned`
+  - Recipe states: `ready`, `reach` (short on inputs; meter + `31/48ma`), `owned`
     (`Build +1`: another unit is stock to sell, its effect does not compound), and
-    `blocked` (`needs {tech or tool}` in danger, no corner action).
+    `blocked` (`needs {skill or tool}` in danger, no corner action).
   - STATE sorts ready → reach → owned → blocked; a build in progress pins on top.
   - When a prerequisite is satisfied, the row turns buildable and the **event log**
     announces it, e.g. `A new recipe is within reach: Fishing net.`
+  - An Act II recipe waits on the skill its roster entry names; researching that skill on
+    the board unlocks the row.
   - Act II's shelf also carries the Act I goods the settlement owns, unless Act II
     authors a recipe of the same name.
-- **[decided, item 14]** Rename **"good" → "recipe"** throughout (headings, counts, summary).
-- **[proposal, item 13]** Normalize row schema to Act II's data-generated model:
+- **[decided]** A row's effect is the good's roster effect, the one sentence every surface
+  shows for it.
+- **[decided, item 14]** BUILD calls its rows **recipes** throughout (headings, counts, summary).
+- **[proposal, item 13]** One row schema, data-generated in both acts:
   - Rows generated from a recipe object (no hand-written HTML).
-  - Name cell = `<strong>{name}</strong><small>{type}</small>` in both acts.
+  - Name cell = `<strong>{name}</strong><small>{type}</small>`.
   - `type` enum: generator / tool / material / storage / comfort / transport.
-  - Drop Act I's `data-tier` (crude/made) and `data-effect` category enum.
-  - Column order (both): name · cost · time · effect · state · action.
-- **[proposal, item 12]** Summary wording (both): `{visible} of {total} recipes shown`.
-  Drop the "· N materials on hand" suffix (duplicates the stockline).
+  - Column order: name · cost · time · effect · state · action.
+- **[proposal, item 12]** Summary wording (both): `{visible} of {total} recipes shown`, with
+  no stock suffix (the stockline carries it).
 
 ---
 
@@ -212,7 +228,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 - **[decided, item 15]** Different buildings by design: **Shelter** (Act I) vs **Exchange**
   (Act II). But both use **one shared card component**.
-- **[decided]** Adopt the **collapsible disclosure** for both (bar → details).
+- **[decided]** Both are a **collapsible disclosure** (bar → details).
 - **[proposal]** Shared anatomy:
   - **Bar**: `<strong>{title}</strong>` + readiness pill + compact summary +
     `details ↓ / close ↑` toggle + primary action button.
@@ -220,10 +236,10 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
     ready.
     - Act I Shelter: locked → unfunded (inputs short) → ready → building → standing.
     - Act II Exchange: locked → unfunded → ready → building → standing (opens Act III).
-  - **[decided]** `building` is the sibling of a building row. Raising the card is a build
-    like any recipe's: the inputs are paid, it holds the hands and the activity strip
+  - **[decided]** `building` is the sibling of a building row. A milestone is built like any
+    recipe: the inputs are paid, it holds the hands and the activity strip
     (`■ BUILDING Shelter · 6.0d left`), and every other build waits on it. The rail and wash
-    take the accent, the readiness reads `raising · {d.d}d left` in accent, the compact
+    take the accent, the readiness reads `building · {d.d}d left` in accent, the compact
     summary reads the progress (`42%`), and every requirement reads met (`60 paid`). The CTA
     keeps its 132×28 lane as a disabled `■ BUILDING` with an accent outline and label, no
     hover lift, and a 3px accent underbar along its bottom edge filling left to right with
@@ -231,49 +247,94 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   - **[decided]** `busy`: conditions and inputs are all met but the hands are on other work.
     The card stays danger-toned and reads `hands busy` / `HANDS BUSY`, never `inputs short`.
   - **Requirements row**: same markup; act-specific tokens.
-    - Act I: `VIGOR · FOOD · RECIPES · MATERIALS`.
-    - Act II: `RING4 · PEOPLE · BIOMASS · MINERALS · METAL`.
+    - Act I: `VIGOR · FOOD · GOODS · ROPE BAG · LEAF BED · MATERIALS`.
+    - Act II: `RING 4 · POPULATION · MATERIALS · MINERALS · METAL`.
   - **[decided]** Both cards are **live**: readiness recomputes from the stocks.
   - Copy (both): locked → `locked · {n} condition(s)` / CTA `LOCKED`; unfunded →
-    `inputs short` / `NEEDS INPUTS`; ready → `ready to raise` / `RAISE {NAME} →`.
+    `inputs short` / `NEEDS INPUTS`; ready → `ready to build` / `BUILD {NAME} →`.
+  - **[decided]** The Exchange's details: kicker `ENDS ACT II · A PERMANENT MARKET`, copy
+    `Build a standing trading floor. Once it opens, passing lots give way to a permanent
+    market and Act III begins.`, locked line `Research any ring-4 skill and grow the
+    population beyond 500.`, compact `ring 4 0/1 · population 7/501`, ready
+    `{skill} researched · population {n} · all inputs held`, standing
+    `opened after {skill} · permanent market`.
 
 ---
 
 ## 7. Tabs, RESEARCH and MARKET
 
-- **[decided]** Act I tabs: `ACTIONS · BUILD`. Act II tabs:
+- **[decided]** Act I tabs: `ACTIONS · BUILD · MARKET`. Act II tabs:
   `ACTIONS · BUILD · RESEARCH · MARKET`.
 - **[decided]** RESEARCH (formerly STRUCTURE) and its hex board exist only in Act II.
   Population is an Act II concept.
-- **[decided]** MARKET is the neighbours view (`market.html`, framed by `act-ii.html`). It
-  lives beside the visiting merchant: the merchant comes and goes behind the strip's
-  `TRADE →`; the neighbours are always there.
-- **[decided]** RESEARCH and MARKET are **focus views**: the merchant and activity strips and
-  the event log step aside, and the Household collapses on every entry (§8).
+- **[decided]** MARKET is `market.html`, framed by both acts: Act II frames
+  `market.html?embed=1`, Act I frames `market.html?act=i&embed=1` (§7.1, Act I mode). It
+  lives beside the visiting trader: the passerby or the merchant comes and goes behind the
+  strip's `TRADE →`; the market is always there.
+- **[decided]** The focus views are Act I's MARKET and Act II's RESEARCH and MARKET: the
+  merchant and activity strips and the event log step aside, and the rail collapses on every
+  entry (§8).
 
-### 7.1 MARKET — the neighbours view
+### 7.1 MARKET
 
-- Head `Who will trade with you?` (stall: `What will you post?`) with a count line; controls:
-  search, a `BY PERSON | GOOD` segment (stall: `SIDE SELLING | BUYING`), `YOUR STALL` toggle;
-  body: list | 262px deal slip; foot: friction line and paginator (8 per page).
+- **[decided]** Header: `MARKET` over the statement `Neighbours, what they offer and what they
+  want.` The header does not change with the view: the list and the inventory share it. Its
+  right-hand counter is the whole market, `{n} offers · {m} wants`: every standing offer and
+  want, the neighbours' and the player's (`1 offer`, `1 want` singular).
+- **[decided]** Controls, left to right: the `INVENTORY` button first (accent while open),
+  24px from the search field; the search and the `BY PERSON | GOOD` segment stay a group (in
+  the inventory, `SIDE OFFERS | WANTS`). Body: list | 262px slip; foot: friction line and
+  paginator (8 per page).
+- **[decided]** Offer and want: what anyone posts is an **offer** (to sell) or a **want** (to
+  buy); "post" stays the verb (`not posted`, `NOTHING POSTED`).
 - Natural grouping is by person up to 12 neighbours, by good beyond. A person row reads as a
-  sentence with a match badge; a good row is notation with offered/wanted counts and an
-  evidence range (`lo–hi coin · last n` or `not yet traded`) and `you spare n`.
-- Search grammar: `needs:` `has:` `trade:` `is:match`, `-` negates. The stall's own grammar:
-  `type:`/`kind:` and `is:posted|idle`.
-- Deal slip with a neighbour: YOU GIVE (spare only) and YOU RECEIVE lines each with a stepper,
-  a verdict (`idle`, `refuse`, `accept`, `counter`) in the neighbour's own valuation, AFTER
-  rows, and `PROPOSE →` enabled only on accept. With a good selected: the cheapest sellers and
-  the best-paying buyers, each name opening a deal.
-- Stall: ITEM · POSTED/WANTED stepper · PRICE stepper · WHO WOULD BUY/SELL; the slip becomes a
-  summary with a warning when buy posts commit more coin than held.
+  sentence, `Offers {goods}. Wants {goods}.`, with a match badge (`WANTS WHAT YOU HOLD` /
+  `nothing you hold`). The player's own row leads the person list: `You`, the trade, the
+  badge `{n} OFFERED · {m} WANTED` (or `NOTHING POSTED`), the line `Offers … . Wants … .` (or
+  `Nothing posted. Neighbours cannot trade with you.`); clicking it opens the inventory. A
+  good row is notation with offered/wanted counts, an evidence range (`lo–hi coin · last n`
+  or `not yet traded`) and `you spare n`.
+- Search grammar: `needs:` `has:` `trade:` `is:match`, `-` negates. The inventory's own
+  grammar: `type:`/`kind:` and `is:posted|idle`. A search that matches nothing reads
+  `Nothing matches that search.`
+- With a good selected, the slip names it and lists `CHEAPEST SELLING` and `PAYING MOST`;
+  each name opens a deal, and the good's row stays highlighted while that deal is open.
+- **[decided]** `THE DEAL` with a neighbour carries `← BACK` on the heading's line: back
+  returns to the good's detail the deal was opened from, or closes the deal when it was
+  opened from a person row. Under it, the neighbour and `{trade} · wants {good n, …}`; YOU
+  GIVE (spare only; `Nothing spare they want.` when none) and YOU RECEIVE lines each with a
+  stepper; a verdict (`idle`, `refuse`, `accept`, `counter`) in the neighbour's own valuation
+  (refuse: `{Name} wants … — nothing you have spare.`); AFTER rows; and `PROPOSE →`, enabled
+  only on accept.
+- **[decided]** The inventory takes the list pane: ITEM · OFFERED stepper (WANTED on the wants
+  side) · PRICE stepper · WHO WOULD BUY (WHO WOULD SELL). The offers side lists what the
+  player holds, each row `{spare} spare of {held} held · {the good's short effect}`; the wants
+  side lists what the market offers. An unposted row reads `not posted`. The slip summarises
+  only what is posted: heading `INVENTORY`, `{n} offered · {m} wanted`, the tallies `OFFERED`
+  and `WANTED`, a warning when wants commit more coin than held (`Your wants commit {c} coin
+  and you hold {h}. The shortfall will not fill.`), and the lists `OFFERED` / `WANTED`
+  (`Nothing offered.` / `Nothing wanted.`). Foot: `{n} offered · {m} wanted · neighbours
+  trade against them while you work.`
+- **[decided]** Act I mode (`?act=i`): the same view before anyone else exists. No
+  neighbours: the person list is the player's row and `No neighbours yet.`, the deal slip
+  reads `No deal open.`, the foot reads `A passerby trades from the strip.`, and the wants
+  side of the inventory reads `Nobody is offering anything yet.`; the inventory's slip and
+  foot say `no neighbours yet`. No coin: the inventory drops
+  its PRICE column and the wants tally its coin, and the search placeholder drops `trade:`.
+  The inventory lists food, materials and the goods the actor holds, with their short
+  effects; each quantity can be posted up to its spare.
+- URL parameters (review): `act=i`, `embed=1`, `stall=1` (opens the inventory), `side=buy`,
+  `by=person|good`, `q`, `n` (neighbours), `per` (rows per page), `pick` (opens a deal with
+  the first neighbour whose name starts with it). The act pages pass their own `stall=1` on
+  to the framed market.
 
 ### 7.1a RESEARCH — the hex board
 
-- **[decided]** Topbar `RESEARCH` · `What exists, and what does it take?` with the filter chips
-  (`researched` · `available` · `all`) and a `find a technology` search; body: the board pane |
-  238px detail aside; foot: the six-resource legend, the status line and the hints
-  (`Wheel zoom / drag pan`, `Arrows move · Esc clears`).
+- **[decided]** A research tile is a **skill** wherever the player reads it. Topbar `RESEARCH`
+  over the statement `Specialize your skills.`, with the filter chips (`researched` ·
+  `available` · `all`) and a `find a skill` search; body: the board pane | 238px detail aside;
+  foot: the six-resource legend, the status line (`Select an available or researched skill`)
+  and the hints (`Wheel zoom / drag pan`, `Arrows move · Esc clears`).
 - The board is the 620-unit viewBox fitted to the pane: a neutral hub, sixty tiles over rings
   1–4, sector labels at the rim. Locked tiles are silhouettes with no label; available and
   researched tiles carry a short label, resource rails, material dots, and (researched) a
@@ -282,29 +343,33 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   lifts an available tile to 0.84, selection to 0.9.
 - Camera: wheel zoom about the pointer (×1.12), drag pan past 4px, `−` / `%` / `+` / `reset`,
   zoom 0.75–2.5 in 0.2 steps. Filters and search dim (opacity 0.11), never remove.
-- Detail: `RING n · ERA`, name, `PURE|HYBRID` · resources · state tags, `RESEARCH →` (or
-  `NEEDS …` / `RESEARCHED`) with the cost line, the effect, RESEARCH COST (`n Resource` /
-  `n held`), ENABLES OUTWARD (what it opens in BUILD/ACTIONS, then outward tiles and their
-  state, or `Act III frontier`).
-- **[decided]** RESEARCH is real: `RESEARCH →` pays the cost from the stocks, establishes the
-  tile, opens its outward neighbours, and logs `{name} is established. {cost} paid.`
-- **[decided]** The Exchange card (BUILD) unlocks on any ring-4 technology and more than 500
-  people; raising it pays 80 biomass · 40 minerals · 24 metal and begins an 18-day build, and
+- Detail: `RING n · ERA` (ring 2's era is `WORKS`), name, `PURE|HYBRID` · resources · state
+  tags, `RESEARCH →` (or `NEEDS …` / `RESEARCHED`) with the cost line (`KNOWN FROM ACT I` for
+  a ring-1 skill), the effect as a second-person sentence, RESEARCH COST (`n Resource` /
+  `n held`, `Known from Act I` at zero cost), OPENS NEXT (what it opens in BUILD/ACTIONS, then
+  outward tiles and their state, or `Act III frontier`). With nothing selected: kicker
+  `NO SKILL SELECTED`, copy `Pick a lit tile to see its cost and what it opens.`
+- **[decided]** RESEARCH is real: `RESEARCH →` pays the cost from the stocks, researches the
+  skill, opens its outward neighbours, unlocks the BUILD rows that wait on it, and logs
+  `{Name} researched. {cost} paid.` with the cost in lowercase words.
+- **[decided]** The Exchange card (BUILD) unlocks on any ring-4 skill and a population beyond
+  500; building it pays 80 materials · 40 minerals · 24 metal and begins an 18-day build, and
   when it stands the page reads as Act III (`◆ EXCHANGE`, `ENTER →`, the act label).
 
 ## 7.2 Session menu and title screen
 
 - **[decided]** `menu.html` is the session menu, on the trade dialog's shell (620px): kicker
   `PAUSED · ACT {n} · DAY {d}`, title per screen, × resumes. Screens: menu (Continue, Save,
-  Load, Settings, Quit to menu), save/load (three slots, one list flipping its verbs), settings,
-  quit confirmation (`QUIT TO MENU` · `SAVE FIRST` · `CANCEL`). Escape on a sub-screen returns
-  to the menu; on the menu it resumes. The HUD behind is frozen.
+  Load, Settings, Quit to menu), save/load (three slots, one list flipping its verbs; a slot
+  reads `Act II · Day 43 · population 7`), settings, quit confirmation (`QUIT TO MENU` ·
+  `SAVE FIRST` · `CANCEL`). Escape on a sub-screen returns to the menu; on the menu it
+  resumes. The HUD behind is frozen.
 - **[decided]** `title.html` is the title screen: a canned attract loop behind a wordmark and
   the shared menu list (Continue disabled with its reason while no settlement exists, New
   game, Settings, Credits, Quit).
 - **[decided]** Settings are one shared panel in both: DIFFICULTY, TUTORIAL, MUSIC, EFFECTS,
   UI SCALE, BRIGHTNESS, CONTRAST, WINDOW — gameplay first, then sound, then display. A setting
-  with no backend yet is stubbed (held, no effect), not omitted.
+  with no backend is stubbed (held, no effect), not omitted.
 - **[decided]** TUTORIAL is an ON/OFF pair, on by default: the first-run guidance in the log.
 - **[decided]** BRIGHTNESS is a slider from 80% to 140% in steps of 5, default 100%: one linear
   multiply of every painted colour (text, lines, fills and the ground), 100% being the palette
@@ -315,7 +380,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ### 7.3 Narrow widths and the keyboard
 
-- **[decided]** At 760px and below the page stacks: one page scroll, the Household above the
+- **[decided]** At 760px and below the page stacks: one page scroll, the rail above the
   surface (HOLDINGS | BODY side by side at 760, stacked at 560 and below), every view at its
   natural height, the stockline wrapping beside the run context. RESEARCH puts a 560px board
   above its detail.
@@ -325,10 +390,10 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 8. Household side rail
 
-- **[decided]** The rail is the **HOUSEHOLD**: the economic unit's holdings, its flows, the
-  body that lives on them and how it consumes. The collapsed restore label reads `HOUSEHOLD`
-  in both acts (one person in Act I, the settlement in Act II); the inner panel keeps its
-  `HOLDINGS` heading.
+- **[decided]** The rail is the same in both acts: HOLDINGS, BODY and the EATING POLICY. It
+  holds the economic unit's holdings, its flows, the body that lives on them and how it
+  consumes. The collapsed restore label reads `HOUSEHOLD` in both acts (one person in Act I,
+  the settlement in Act II); the inner panel keeps its `HOLDINGS` heading.
 - **[decided]** Act I: HOLDINGS + MARGINS, BODY (food lasts, full vigor). Act II: HOLDINGS +
   `FLOWS / DAY` and the settlement's BODY (population, larder, water, hall vigor). In both
   acts the **eating policy sits at the foot of the rail**, aligned to the panels and
@@ -336,10 +401,10 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 - **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
   acts: ACTIONS and BUILD each remember their own collapse.
-- **[decided, item 17]** **Entering a focus view (RESEARCH, MARKET) always collapses
-  holdings** on each entry, without overwriting the other views' memory.
-- **[decided, item 18]** Holdings "MARGINS" contents are act-specific by design (resource
-  renaming intentional); the *set* of margin rows is not fixed across acts.
+- **[decided, item 17]** **Entering a focus view (Act I MARKET; Act II RESEARCH, MARKET)
+  always collapses the rail** on each entry, without overwriting the other views' memory.
+- **[decided, item 18]** Holdings "MARGINS" contents are act-specific by design; the *set* of
+  margin rows is not fixed across acts.
 
 ---
 
@@ -347,15 +412,15 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 - **[proposal, item 19]** Both acts: `<footer class="screen-footer" id="event-log" ...>`
   with the same `addLog(message)` contract.
-- Act II additionally hides the log on the focus views (RESEARCH, MARKET); Act I has none.
+- Both acts hide the log on their focus views (Act I MARKET; Act II RESEARCH, MARKET).
 - **[decided, item 14]** The log is the channel for "recipe/action unlocked" announcements.
 
 ---
 
 ## 10. Body panel (eating policy)
 
-- **[proposal, item 20]** Extract the act-specific constants into a labeled config; make
-  `updateEatingPolicy()` identical across acts:
+- **[proposal, item 20]** The act-specific constants live in a labeled config, and
+  `updateEatingPolicy()` is identical across acts:
   ```js
   // Act I
   const bodyConfig = { baseCoverage: 5.2, baseRecovery: 0.224 };
@@ -365,7 +430,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   const coverage = bodyConfig.baseCoverage / rate;
   const recovery = bodyConfig.baseRecovery / rate;
   ```
-- Eating-policy words, slider math, and ARIA text remain shared/identical.
+- Eating-policy words, slider math, and ARIA text are shared and identical.
 
 ---
 
@@ -376,20 +441,23 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 1 | passerby→merchant | decided | keep; shared modal skeleton |
 | 2 | modal innards | proposal | one skeleton + vocabulary map (§3) |
 | 3 | preview give-label | proposal | shared swap fn; Act I static GIVE (§3.2) |
-| 4 | barter vs coin | decided | Coin = Act II only |
-| 5 | materials vs typed | decided | 1:1 Materials→Biomass; equal costs |
-| 6 | header glyphs | proposal | two-letter tokens; energy in runline (§2) |
+| 4 | barter vs coin | decided | Coin = Act II only; Act I market has no price column |
+| 5 | materials vs typed | decided | materials in both acts (`MA`, `ma`); Act II adds water, fuel, metal, minerals |
+| 6 | header glyphs | decided / proposal | two-letter tokens and resource codes (decided); energy in runline (proposal) (§2) |
 | 7 | actions grid vs catalog | decided | one ACTIONS catalog both acts: verbs + generators, kind toggles, hide, sort chips |
-| 8 | tile metric format | proposal | Act II format `−Xe · Yh`, optional state line |
-| 9 | yields resource | decided | act-specific units, equal numbers |
+| 8 | tile metric format | proposal | `−Xe {inputs} · Yh` + curve + roster band, optional state line |
+| 9 | yields resource | decided | two-letter codes, equal numbers |
 | 10 | dist alt text | proposal | shared `distributionLabels` map |
-| 11 | build filters | decided | adopt Act II BUILD |
+| 11 | build filters | decided | one BUILD in both acts |
 | 12 | summary wording | proposal | `{n} of {m} recipes shown` |
-| 13 | row schema | proposal | Act II data-generated schema both acts |
-| 14 | blocked state | decided (revised) | show every recipe; `needs {tech}` rows; log unlocks; "recipe" |
-| 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible |
-| 16 | RESEARCH only in Act II | decided | Act II tabs ACTIONS · BUILD · RESEARCH · MARKET |
-| 17 | holdings collapse | decided | per-view memory; focus views force collapse |
+| 13 | row schema | proposal | data-generated schema both acts |
+| 14 | blocked state | decided | show every recipe; `needs {skill}` rows; log unlocks; "recipe" |
+| 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible; built, not raised |
+| 16 | RESEARCH only in Act II | decided | Act I tabs ACTIONS · BUILD · MARKET; Act II ACTIONS · BUILD · RESEARCH · MARKET |
+| 17 | holdings collapse | decided | per-view memory; focus views (both acts) force collapse |
 | 18 | margins contents | decided | act-specific |
 | 19 | footer id | proposal | shared `id="event-log"` + `addLog()` |
 | 20 | body constants | proposal | extract to `bodyConfig` |
+| 21 | headings | decided | statements under headings, never questions |
+| 22 | empty search | decided | `Nothing matches that search.` everywhere (hidden ACTIONS: `Nothing hidden matches that search.`) |
+| 23 | market vocabulary | decided | offer / want; `INVENTORY`; market-total counter; `← BACK` on THE DEAL |

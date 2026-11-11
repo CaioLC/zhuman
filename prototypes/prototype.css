@@ -27,7 +27,7 @@
   --resource-fuel: #d5a64e;
   --resource-metal: #8497a3;
   --resource-minerals: #9a7cb4;
-  --resource-biomass: #78a276;
+  --resource-materials: #78a276;
   --font: "JetBrains Mono HA", "Cascadia Mono", Consolas, monospace;
   --body: 14px;
   --small: 11px;
@@ -2734,11 +2734,14 @@ button:disabled {
   margin-bottom: 8px;
 }
 
+.act-one.is-focus-view .merchant-strip,
+.act-one.is-focus-view .activity-strip,
 .act-two.is-focus-view .merchant-strip,
 .act-two.is-focus-view .activity-strip {
   display: none;
 }
 
+.act-one.is-focus-view .surface,
 .act-two.is-focus-view .surface {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -2756,6 +2759,7 @@ button:disabled {
   overflow: hidden;
 }
 
+.act-one.is-focus-view #view-market:not([hidden]),
 .act-two.is-focus-view #view-market:not([hidden]) {
   display: grid;
   min-height: 0;
@@ -2773,7 +2777,7 @@ button:disabled {
   background: transparent;
 }
 
-/* The neighbours view is authored once, in market.html; Act II frames it. */
+/* The neighbours view is authored once, in market.html; each act page frames it. */
 .market-frame {
   display: block;
   width: 100%;

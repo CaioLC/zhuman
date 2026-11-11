@@ -3,7 +3,8 @@
 # Screenshots the HTML prototypes in headless Microsoft Edge, one PNG per named state, so each
 # can be set beside the matching fixture capture from `capture_screenshots.ps1` (same names
 # where a fixture exists). The states use the prototypes' review controls: the hash picks a
-# view, query parameters seed the rest (`?holdings=collapsed`, `?modal=merchant`, `?screen=`).
+# view, query parameters seed the rest (`?holdings=collapsed`, `?modal=merchant`, `?screen=`,
+# `?stall=1` for the market's inventory, which an act page passes on to its framed market).
 #
 # Usage (from the repo root):
 #   powershell -ExecutionPolicy Bypass -File tools/capture_prototypes.ps1
@@ -48,6 +49,9 @@ $matrix = [ordered]@{
     "act_one_shelter_building_closed" = "act-i.html?shelter=building#build"
     "act_two_exchange"   = "act-ii.html?exchangeopen=1#build"
     "act_two_market"     = "act-ii.html#market"
+    "act_two_market_inventory" = "act-ii.html?stall=1#market"
+    "act_one_market"     = "act-i.html#market"
+    "act_one_market_inventory" = "act-i.html?stall=1#market"
     "act_two_trade"      = "act-ii.html?modal=merchant#actions"
     "act_one_menu"       = "menu.html"
     "menu_save"          = "menu.html?screen=save"
@@ -57,6 +61,7 @@ $matrix = [ordered]@{
     "title_settings"     = "title.html?screen=settings"
     "title_credits"      = "title.html?screen=credits"
     "market_stall"       = "market.html?stall=1"
+    "market_deal"        = "market.html?pick=Mira"
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

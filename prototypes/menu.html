@@ -61,7 +61,7 @@ html[data-lit] body, html[data-lit] dialog, html[data-lit] dialog::backdrop { fi
 
 <div class="frozen" aria-hidden="true">
   <div class="frozen-top">
-    <span>VI: 13/15  PO: 7  CO: 42  FO: 23  WA: 6  FU: 4  ME: 2  MI: 9  BI: 30</span>
+    <span>VI: 13/15  PO: 7  CO: 42  FO: 23  WA: 6  FU: 4  ME: 2  MI: 9  MA: 30</span>
     <span>Act II · Day 43</span>
   </div>
   <div class="frozen-strip">
@@ -70,7 +70,7 @@ html[data-lit] body, html[data-lit] dialog, html[data-lit] dialog::backdrop { fi
   </div>
   <div class="frozen-main">
     <div class="frozen-tiles">
-      <div class="frozen-tile"><b>Forage</b><span>−2e · 4h · +3–5 biomass</span></div>
+      <div class="frozen-tile"><b>Forage</b><span>−2e · 4h · +3–5 materials</span></div>
       <div class="frozen-tile"><b>Split wood</b><span>−3e · 6h · +2–4 fuel</span></div>
       <div class="frozen-tile"><b>Fish</b><span>−2e · 5h · +2–5 food</span></div>
       <div class="frozen-tile"><b>Draw water</b><span>−1e · 3h · +4–6 water</span></div>
@@ -86,7 +86,7 @@ html[data-lit] body, html[data-lit] dialog, html[data-lit] dialog::backdrop { fi
   </div>
   <div class="frozen-foot">
     <span>20:09  The garden bed is ready to collect.</span>
-    <span>19:38  Mira Halt took 6 Biomass at 4 coin.</span>
+    <span>19:38  Mira Halt took 6 materials at 4 coin.</span>
   </div>
 </div>
 
@@ -135,7 +135,7 @@ const bodyEl = document.querySelector('#menu-body');
 const titleEl = document.querySelector('#menu-title');
 const noteEl = document.querySelector('#menu-note');
 
-const describe = s => s.empty ? 'empty' : `${s.act} · Day ${s.day} · ${s.people} ${s.people === 1 ? 'person' : 'people'}`;
+const describe = s => s.empty ? 'empty' : `${s.act} · Day ${s.day} · population ${s.people}`;
 
 function renderMenu() {
   titleEl.textContent = 'Paused';
