@@ -128,7 +128,8 @@ pub const Sim = struct {
     merchant: marketmod.MerchantVisit = .{},
 
     /// The neighbours, a stand-in: Act II's MARKET view reads and trades with this
-    /// deterministic stand-in for the population and market model (`docs/roadmap.md`).
+    /// deterministic stand-in for the population and market model (`docs/roadmap.md`), and in
+    /// Act I it holds the lone actor's offers (`Market.act_one`), which the curtain drops.
     /// Seeded on first use; cleared by `reset`.
     neighbours: @import("./rules/neighbours.zig").Market = .{},
 

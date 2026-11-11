@@ -36,12 +36,15 @@ pub fn detect_shelter(
 }
 
 /// Carry every player across the Act I curtain. The migration is versioned and idempotent, so
-/// a player already carried is untouched.
+/// a player already carried is untouched. The lone actor's Act I offers stay behind: the book
+/// is emptied here, and the Act II market starts from its own seed on first use.
 pub fn cross_curtain(
     w: *World,
+    sim: *res_mod.Sim,
     cat: *const roster.Catalog,
     players: ecs.Query(.{ Entity, comp.Vigor, ecs.With(tag.Player) }),
 ) void {
+    sim.neighbours = .{};
     var ids: [ecs.MAX_ENTITIES]Entity = undefined;
     var n: usize = 0;
     var it = players.iter();
@@ -109,6 +112,24 @@ test "cross_curtain migrates the player once" {
     try testing.expectEqual(@as(u8, 2), migration.actOf(&w, e));
     ecs.run(&w, &res, cross_curtain);
     try testing.expect(migration.is_migrated(&w, e));
+}
+
+test "cross_curtain drops the Act I offers: the Act II market starts unseeded" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try rig();
+    defer res.catalog.deinit();
+    const e = spawn_player(&w, &res.catalog);
+    const hatchet = res.catalog.goodIndex("hatchet").?;
+    w.get(e, comp.Goods).?.count[hatchet] = 2;
+    _ = res.sim.neighbours.act_one.post(.{ .good = hatchet }, 1, 1);
+    try testing.expectEqual(@as(u32, 1), res.sim.neighbours.standing().offers);
+    ecs.run(&w, &res, cross_curtain);
+    try testing.expectEqual(@as(u32, 0), res.sim.neighbours.act_one.count());
+    try testing.expectEqual(@as(u32, 0), res.sim.neighbours.standing().offers);
+    try testing.expect(!res.sim.neighbours.seeded);
+    // The goods themselves cross: only the offer is dropped.
+    try testing.expectEqual(@as(u32, 2), w.get(e, comp.Goods).?.count[hatchet]);
 }
 
 test "detect_exchange requests Act III from Act II once the Exchange stands" {

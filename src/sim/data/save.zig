@@ -15,12 +15,12 @@
 //! saved by name through `Tag`.
 //!
 //! `Sim` is saved field by field: the prng's state is kept, so a load carries the run's luck as
-//! `Sim.reset` does; the reach seen-set as good ids; the log as its lines, oldest first, which
-//! a load pushes back in order and then stamps with each line's own time. The merchant's visit
-//! is saved as it is: its array indexes a static table in code, not the roster, so a change to
-//! that table is a change of `version`. The encounter's per-ware arrays are saved as lists in
-//! `market.Ware` order, so a ware appended to the end reads as zero from a file written before
-//! it.
+//! `Sim.reset` does; the reach seen-set as good ids; the Act I offers by their holdings' ids;
+//! the log as its lines, oldest first, which a load pushes back in order and then stamps with
+//! each line's own time. The merchant's visit is saved as it is: its array indexes a static
+//! table in code, not the roster, so a change to that table is a change of `version`. The
+//! encounter's per-ware arrays are saved as lists in `market.Ware` order, so a ware appended to
+//! the end reads as zero from a file written before it.
 //!
 //! `version` guards the shape: `read` refuses a file whose version is not between `oldest` and
 //! `version` (`error.UnknownVersion`) before it parses the rest. A write goes to a temporary
@@ -159,11 +159,17 @@ pub const LogSave = struct {
     lines: []const LineSave = &.{},
 };
 
+/// One of the lone actor's Act I offers: its holding's id (`food`, `biomass` or a good's id) and
+/// the quantity offered.
+pub const OfferSave = struct { id: []const u8, qty: u16 };
+
 pub const NeighboursSave = struct {
     /// The first `Market.n` neighbours.
     agents: []const neighbours.Agent = &.{},
     sell_posts: [neighbours.item_count]neighbours.Post = @splat(.{}),
     buy_posts: [neighbours.item_count]neighbours.Post = @splat(.{}),
+    /// The Act I offers standing (`Market.act_one`); a file without them loads with none.
+    act_one: []const OfferSave = &.{},
     /// `Market.history[0..history_len]`.
     history: []const neighbours.Evidence = &.{},
     seeded: bool = false,
@@ -310,6 +316,7 @@ fn captureSim(arena: Allocator, res: *const Resources) !SimSave {
             .agents = try arena.dupe(neighbours.Agent, s.neighbours.people()),
             .sell_posts = s.neighbours.sell_posts,
             .buy_posts = s.neighbours.buy_posts,
+            .act_one = try captureOffers(arena, &res.catalog, &s.neighbours.act_one),
             .history = try arena.dupe(neighbours.Evidence, s.neighbours.history[0..s.neighbours.history_len]),
             .seeded = s.neighbours.seeded,
         },
@@ -317,10 +324,34 @@ fn captureSim(arena: Allocator, res: *const Resources) !SimSave {
     };
 }
 
-/// `s` as ZON text.
+/// The Act I offers standing, each keyed by its holding's id.
+fn captureOffers(arena: Allocator, cat: *const roster.Catalog, offers: *const neighbours.Offers) ![]const OfferSave {
+    var list: std.ArrayList(OfferSave) = .empty;
+    for (offers.qty[0..@min(offers.qty.len, 2 + cat.goods.len)], 0..) |q, k| {
+        if (q == 0) continue;
+        const id = switch (neighbours.Holding.ofKey(@intCast(k))) {
+            .food => "food",
+            .biomass => "biomass",
+            .good => |gi| cat.goods[gi].id,
+        };
+        try list.append(arena, .{ .id = try arena.dupe(u8, id), .qty = q });
+    }
+    return list.items;
+}
+
+/// The holding an offer record names, or null when the roster has no such good.
+fn holdingOf(cat: *const roster.Catalog, id: []const u8) ?neighbours.Holding {
+    if (std.mem.eql(u8, id, "food")) return .food;
+    if (std.mem.eql(u8, id, "biomass")) return .biomass;
+    return .{ .good = cat.goodIndex(id) orelse return null };
+}
+
+/// `s` as ZON text. Through `serializeArbitraryDepth`, because `serialize`'s comptime check that
+/// the type is not recursive outgrows its branch quota on the `Save` shape; a `Save` is a tree
+/// `capture` builds, with no cycles.
 fn encode(arena: Allocator, s: *const Save) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(arena);
-    try std.zon.stringify.serialize(s.*, .{ .emit_default_optional_fields = false }, &out.writer);
+    try std.zon.stringify.serializeArbitraryDepth(s.*, .{ .emit_default_optional_fields = false }, &out.writer);
     try out.writer.writeByte('\n');
     return out.written();
 }
@@ -485,6 +516,11 @@ fn applySim(sim: *Sim, cat: *const roster.Catalog, s: *const SimSave, report: *R
     sim.neighbours.n = @intCast(n);
     sim.neighbours.sell_posts = s.neighbours.sell_posts;
     sim.neighbours.buy_posts = s.neighbours.buy_posts;
+    for (s.neighbours.act_one) |o| {
+        if (holdingOf(cat, o.id)) |h| {
+            sim.neighbours.act_one.qty[h.key()] = o.qty;
+        } else report.dropped += 1;
+    }
     const h = @min(s.neighbours.history.len, sim.neighbours.history.len);
     @memcpy(sim.neighbours.history[0..h], s.neighbours.history[0..h]);
     sim.neighbours.history_len = @intCast(h);
@@ -627,6 +663,7 @@ fn expectSimsEqual(a: *Sim, b: *Sim) !void {
     for (na.people(), nb.people()) |x, y| try testing.expect(std.meta.eql(x, y));
     try testing.expect(std.meta.eql(na.sell_posts, nb.sell_posts));
     try testing.expect(std.meta.eql(na.buy_posts, nb.buy_posts));
+    try testing.expectEqual(na.act_one.qty, nb.act_one.qty);
     try testing.expectEqual(na.history_len, nb.history_len);
     for (na.history[0..na.history_len], nb.history[0..nb.history_len]) |x, y| try testing.expectEqual(x, y);
     try testing.expectEqual(na.seeded, nb.seeded);
@@ -674,6 +711,40 @@ test "a run survives capture, ZON and apply exactly" {
     try expectSimsEqual(&res.sim, &res2.sim);
     try testing.expectEqual(GameState.act_two, res2.states.current);
     try testing.expectEqual(@as(?GameState, null), res2.states.next);
+}
+
+test "an Act I run's offers survive a save by their holdings' ids; one naming a good the roster lacks is dropped" {
+    var res = Resources{ .catalog = try shipped(), .states = .{ .current = .act_one } };
+    defer res.catalog.deinit();
+    const cat = &res.catalog;
+    var w = try World.init(testing.allocator);
+    defer w.deinit();
+    _ = run.spawn_player(&w, cat);
+    _ = res.sim.neighbours.act_one.post(.{ .good = cat.goodIndex("hatchet").? }, 1, 1);
+    _ = res.sim.neighbours.act_one.post(.{ .good = cat.goodIndex("sandals").? }, 2, 2);
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const text = try encode(a, &(try capture(a, &res, &w)));
+    try testing.expect(std.mem.indexOf(u8, text, "\"hatchet\"") != null);
+    const back = try decode(a, try a.dupeSentinel(u8, text, 0));
+
+    var res2 = Resources{ .catalog = try shipped() };
+    defer res2.catalog.deinit();
+    var w2 = try World.init(testing.allocator);
+    defer w2.deinit();
+    try testing.expectEqual(@as(u32, 0), apply(&res2, &w2, &back).dropped);
+    try expectSimsEqual(&res.sim, &res2.sim);
+    try testing.expectEqual(@as(u32, 2), res2.sim.neighbours.standing().offers);
+
+    var gone = back;
+    gone.sim.neighbours.act_one = &.{ .{ .id = "sandals", .qty = 1 }, .{ .id = "no_such_good", .qty = 1 } };
+    var w3 = try World.init(testing.allocator);
+    defer w3.deinit();
+    try testing.expectEqual(@as(u32, 1), apply(&res2, &w3, &gone).dropped);
+    try testing.expectEqual(@as(u16, 1), res2.sim.neighbours.act_one.of(.{ .good = cat.goodIndex("sandals").? }));
+    try testing.expectEqual(@as(u32, 1), res2.sim.neighbours.act_one.count());
 }
 
 test "a record naming an id the roster no longer has is dropped and counted" {

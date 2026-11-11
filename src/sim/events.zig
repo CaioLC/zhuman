@@ -60,6 +60,9 @@ pub const NeighbourDeal = struct {
     give: [neighbours.bundle_len]u16,
     take: [neighbours.bundle_len]u16,
 };
+/// Offer `qty` of `item` in Act I's MARKET (`neighbours.Offers`); the handler caps it at the
+/// agent's spare. Never refused.
+pub const PostOffer = struct { agent: Entity, item: neighbours.Holding, qty: u16 };
 /// Begin a fresh run: the current one, if any, is retired. Never refused.
 pub const NewRun = struct {};
 /// The template audit harness's door: a debug-only poke of one component, applied by `systems/debug.zig`.

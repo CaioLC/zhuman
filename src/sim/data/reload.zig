@@ -10,7 +10,7 @@
 //!
 //! A load that succeeds is swapped in. Everything kept by catalog index is carried to the new
 //! indices by id: each agent's own verbs, goods, generator progress/modes and research, the
-//! work in progress, and the reach seen-set.
+//! work in progress, the reach seen-set and the Act I offers.
 //! A record the new files no longer hold takes its count, its research state, its place among
 //! an agent's verbs and any work on it with it. Then every agent resettles its body and larder against the new records. The
 //! swap runs between frames, before the systems and the page build, so nothing still reads the
@@ -21,6 +21,7 @@ const std = @import("std");
 const comp = @import("../components.zig");
 const roster = @import("./roster.zig");
 const capital = @import("../rules/capital.zig");
+const nb = @import("../rules/neighbours.zig");
 const ecs = @import("../ecs.zig");
 const world = @import("../ecs.zig");
 const res_mod = @import("../res.zig");
@@ -199,6 +200,20 @@ pub fn swap(res: *Resources, w: *World, next: Catalog) void {
         res.sim.reach_seen = seen;
     }
 
+    // The Act I offers follow their good's id; an offer of a good the files drop is gone.
+    {
+        const offers = &res.sim.neighbours.act_one;
+        var moved: @TypeOf(offers.qty) = @splat(0);
+        moved[0] = offers.qty[0];
+        moved[1] = offers.qty[1];
+        for (old.goods, 0..) |g, gi| {
+            const q = offers.qty[(@as(nb.Holding, .{ .good = @intCast(gi) })).key()];
+            if (q == 0) continue;
+            if (cat.goodIndex(g.id)) |ni| moved[(@as(nb.Holding, .{ .good = ni })).key()] = q;
+        }
+        offers.qty = moved;
+    }
+
     // Every agent's body and larder against the new records.
     {
         var q: ecs.Query(.{ Entity, comp.Goods }) = .{ .world = w };
@@ -269,7 +284,7 @@ fn agent(w: *World) Entity {
     return w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, comp.InventoryFood{}, comp.Goods{}, comp.Granted{} });
 }
 
-test "a swap carries verbs, goods, generator state, research, work and the reach seen-set to the new indices by id" {
+test "a swap carries verbs, goods, generator state, research, work, the reach seen-set and the Act I offers to the new indices by id" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = try rig(.{ .actions = actions_a, .goods = goods_a, .technologies = techs_a });
@@ -290,6 +305,7 @@ test "a swap carries verbs, goods, generator state, research, work and the reach
     gens.mode[a.actionIndex("forage").?] = .auto;
     w.add(e, gens);
     res.sim.reach_seen[a.goodIndex("hut").?] = true;
+    _ = res.sim.neighbours.act_one.post(.{ .good = a.goodIndex("rod").? }, 1, 1);
 
     swap(&res, &w, try roster.load(testing.allocator, .{ .actions = actions_b, .goods = goods_b, .technologies = techs_b }, null));
     const b = &res.catalog;
@@ -313,6 +329,8 @@ test "a swap carries verbs, goods, generator state, research, work and the reach
     try testing.expectEqual(comp.Generators.Mode.on, carried.mode[0]);
     try testing.expect(res.sim.reach_seen[b.goodIndex("hut").?]);
     try testing.expect(!res.sim.reach_seen[b.goodIndex("net").?]);
+    try testing.expectEqual(@as(u16, 1), res.sim.neighbours.act_one.of(.{ .good = b.goodIndex("rod").? })); // index 0 there, 3 here
+    try testing.expectEqual(@as(u32, 1), res.sim.neighbours.act_one.count());
 }
 
 test "a record the new files drop takes its count and its work with it" {

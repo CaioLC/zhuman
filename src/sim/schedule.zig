@@ -53,7 +53,7 @@ pub const schedule = engine.Schedule(GameState, .{
     .title = .{ .handle = .{run.new_run} },
     .act_one = .{
         .on_enter = .{run.begin_run},
-        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, run.new_run, debug.poke, condition.condition, outlook.outlook, quotes.quotes, log.log },
+        .handle = .{ labor.labor, build.build, build.cancel, generators.generators_toggle, generators.generators_collect, ration.ration, barter.barter, neighbours.post_offer, run.new_run, debug.poke, condition.condition, outlook.outlook, quotes.quotes, log.log },
         .update = .{ tick_sys.advance_clock, tick_sys.update_food, tick_sys.metabolize, tick_sys.resolve_busy, tick_sys.track_reach, passerby.passerby, generators.generators, tick_sys.mark_dead, tick_sys.despawn_dead, run.detect_death, curtain.detect_shelter, condition.condition, outlook.outlook, quotes.quotes, log.log },
     },
     .act_two = .{

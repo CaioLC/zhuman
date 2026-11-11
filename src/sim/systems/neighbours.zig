@@ -2,15 +2,20 @@
 //! stand-in neighbours (`rules/neighbours.zig`) on both sides in one function: the neighbour's
 //! books and the agent's ledger and goods. It seeds the book on first use. A refused deal changes
 //! nothing and is answered by `Refused`; one that settles emits `NeighbourSettled`.
+//!
+//! In Act I, `post_offer` stands the lone actor's offers on the same book (`Market.act_one`),
+//! each at most what the actor holds spare.
 
 const std = @import("std");
 const ecs = @import("../ecs.zig");
 const events = @import("../events.zig");
 const comp = @import("../components.zig");
+const tag = @import("../tags.zig");
 const nb = @import("../rules/neighbours.zig");
 const ledger = @import("../rules/ledger.zig");
 const capital = @import("../rules/capital.zig");
 const res_mod = @import("../res.zig");
+const roster = @import("../data/roster.zig");
 
 const World = ecs.World;
 const Entity = ecs.Entity;
@@ -38,6 +43,44 @@ pub fn heldItem(w: *const World, e: Entity, cat: *const @import("../data/roster.
         .resource => |r| ledger.balance(w, e, r),
         .good => |gi| if (w.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
     };
+}
+
+/// How much of holding `h` (`nb.Holding`) the agent holds: a stock on the ledger, a good as its
+/// count.
+pub fn heldOf(w: *const World, e: Entity, h: nb.Holding) f32 {
+    return switch (h) {
+        .food => ledger.balance(w, e, .food),
+        .biomass => ledger.balance(w, e, .biomass),
+        .good => |gi| if (w.get(e, comp.Goods)) |g| @floatFromInt(g.count[gi]) else 0,
+    };
+}
+
+/// The units of `h` the agent may offer (`nb.spareOf` over what it holds).
+pub fn spareOf(w: *const World, e: Entity, h: nb.Holding) f32 {
+    return nb.spareOf(h, heldOf(w, e, h));
+}
+
+/// Stand each `PostOffer` on the book's Act I offers at most at the agent's spare, then hold
+/// every standing offer to the player's spare as it is now, so a good sold to the passerby or
+/// lost takes its offer down with it.
+pub fn post_offer(
+    w: *World,
+    sim: *res_mod.Sim,
+    cat: *const roster.Catalog,
+    intents: ecs.EventReader(events.PostOffer, .neighbours),
+    player: ecs.MaybeSingle(.{ Entity, comp.Goods, ecs.With(tag.Player) }),
+) void {
+    const offers = &sim.neighbours.act_one;
+    while (intents.next()) |it| {
+        if (it.item == .good and it.item.good >= cat.goods.len) continue;
+        _ = offers.post(it.item, it.qty, spareOf(w, it.agent, it.item));
+    }
+    const p = player.get() orelse return;
+    for (offers.qty[0..@min(offers.qty.len, 2 + cat.goods.len)], 0..) |q, k| {
+        if (q == 0) continue;
+        const h = nb.Holding.ofKey(@intCast(k));
+        _ = offers.post(h, q, spareOf(w, p[0], h));
+    }
 }
 
 pub fn neighbour_deal(
@@ -97,7 +140,6 @@ fn moveItem(w: *World, e: Entity, res: *Resources, i: usize, n: f32) void {
 // ============================ Tests ==========================================
 
 const testing = std.testing;
-const roster = @import("../data/roster.zig");
 
 fn rig() !Resources {
     var res = Resources{ .catalog = try roster.load(testing.allocator, roster.shipped, null) };
@@ -176,4 +218,38 @@ test "neighbour_deal settles both sides and emits NeighbourSettled" {
     var cursor: u64 = 0;
     try testing.expectEqual(events.NeighbourSettled{ .agent = e, .neighbour = 0 }, res.events.readerAt(events.NeighbourSettled, &cursor).next().?);
     try testing.expectEqual(@as(usize, 1), res.events.len(events.NeighbourSettled));
+}
+
+test "post_offer stands an Act I offer at most at the spare, and takes it down when the spare goes" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = try rig();
+    defer res.catalog.deinit();
+    const cat = &res.catalog;
+    const e = @import("./run.zig").spawn_player(&w, cat);
+    const hatchet = cat.goodIndex("hatchet").?;
+    const sandals = cat.goodIndex("sandals").?;
+    w.get(e, comp.Goods).?.count[hatchet] = 2;
+    w.get(e, comp.Goods).?.count[sandals] = 1;
+    w.get(e, comp.InventoryFood).?.v = 12;
+
+    // Three hatchets asked, one spare: one stands. The only pair of sandals and the larder are
+    // not spare: nothing stands.
+    _ = res.events.writer(events.PostOffer).push(.{ .agent = e, .item = .{ .good = hatchet }, .qty = 3 });
+    _ = res.events.writer(events.PostOffer).push(.{ .agent = e, .item = .{ .good = sandals }, .qty = 1 });
+    _ = res.events.writer(events.PostOffer).push(.{ .agent = e, .item = .food, .qty = 4 });
+    ecs.run(&w, &res, post_offer);
+    const offers = &res.sim.neighbours.act_one;
+    try testing.expectEqual(@as(u16, 1), offers.of(.{ .good = hatchet }));
+    try testing.expectEqual(@as(u16, 0), offers.of(.{ .good = sandals }));
+    try testing.expectEqual(@as(u16, 0), offers.of(.food));
+    try testing.expectEqual(@as(u32, 1), res.sim.neighbours.standing().offers);
+
+    // The spare hatchet sold: the offer goes with it, with no intent.
+    w.get(e, comp.Goods).?.count[hatchet] = 1;
+    res.events.update();
+    res.events.update();
+    ecs.run(&w, &res, post_offer);
+    try testing.expectEqual(@as(u16, 0), offers.of(.{ .good = hatchet }));
+    try testing.expectEqual(@as(u32, 0), res.sim.neighbours.standing().offers);
 }

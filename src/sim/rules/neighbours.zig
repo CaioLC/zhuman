@@ -11,8 +11,13 @@
 //! of a settlement is the caller's: it moves the real ledger and goods.
 //!
 //! Items are the six resources and six Act II goods, by catalog id.
+//!
+//! Before anyone else exists, the book holds the lone actor's Act I offers (`Offers`): no
+//! neighbour reads them and there is no coin, so an offer is a quantity alone, keyed by what is
+//! offered (`Holding`), since `items` holds no Act I good.
 
 const std = @import("std");
+const roster = @import("../data/roster.zig");
 
 pub const items = [_][]const u8{
     "food",         "water",      "fuel",         "metal",      "minerals",   "biomass",
@@ -94,11 +99,83 @@ pub const Agent = struct {
 pub const Post = struct { qty: u16 = 0, price: u16 = 0 };
 pub const Evidence = struct { item: u8, coin: u16 };
 
+/// One thing the lone actor holds in Act I and may offer: one of its two stocks, or a good by
+/// its catalog index.
+pub const Holding = union(enum) {
+    food,
+    biomass,
+    good: u16,
+
+    /// The holding as one number, what `Offers` and a repeated row are keyed by: food 0,
+    /// materials 1, a good its catalog index plus 2.
+    pub fn key(self: Holding) u16 {
+        return switch (self) {
+            .food => 0,
+            .biomass => 1,
+            .good => |gi| 2 + gi,
+        };
+    }
+
+    pub fn ofKey(k: u16) Holding {
+        return switch (k) {
+            0 => .food,
+            1 => .biomass,
+            else => .{ .good = k - 2 },
+        };
+    }
+};
+
+/// What of `held` units of `h` the lone actor may offer: the larder and the stockpile are the
+/// body's and stay whole, and a good keeps the one unit whose effect is in use, so only a second
+/// pair of sandals or a second hatchet is spare (the Act I holdings' spare units read the same).
+pub fn spareOf(h: Holding, held: f32) f32 {
+    return switch (h) {
+        .food, .biomass => 0,
+        .good => @max(0, held - 1),
+    };
+}
+
+/// The lone actor's offers in Act I, a quantity per holding (`Holding.key`). No price: there is
+/// no coin in Act I. They do not carry into Act II: the curtain empties the book, and the Act II
+/// market starts from its own seed.
+pub const Offers = struct {
+    pub const len = 2 + roster.max_goods;
+    qty: [len]u16 = @splat(0),
+
+    pub fn of(self: *const Offers, h: Holding) u16 {
+        return self.qty[h.key()];
+    }
+
+    /// Offer `qty` of `h`, at most its whole spare units (`spareOf`). Returns what stands.
+    pub fn post(self: *Offers, h: Holding, qty: u32, spare: f32) u16 {
+        const cap: u32 = @intFromFloat(@floor(@max(0, spare)));
+        const q: u16 = @intCast(@min(qty, cap, std.math.maxInt(u16)));
+        self.qty[h.key()] = q;
+        return q;
+    }
+
+    /// How many holdings are offered.
+    pub fn count(self: *const Offers) u32 {
+        var n: u32 = 0;
+        for (self.qty) |q| n += @intFromBool(q > 0);
+        return n;
+    }
+
+    /// How many units are offered, over every holding.
+    pub fn units(self: *const Offers) u32 {
+        var n: u32 = 0;
+        for (self.qty) |q| n += q;
+        return n;
+    }
+};
+
 pub const Market = struct {
     agents: [max_agents]Agent = @splat(.{}),
     n: u8 = 0,
     sell_posts: [item_count]Post = @splat(.{}),
     buy_posts: [item_count]Post = @splat(.{}),
+    /// The lone actor's Act I offers.
+    act_one: Offers = .{},
     history: [64]Evidence = undefined,
     history_len: u8 = 0,
     seeded: bool = false,
@@ -165,6 +242,23 @@ pub const Market = struct {
             by += 1;
         };
         return .{ .units = units, .by = by };
+    }
+
+    /// Every offer and want standing on the market: an offer is one neighbour selling one item,
+    /// one item the player posts to sell or one holding the lone actor offers in Act I, a want
+    /// one neighbour still wanting one item or one item the player posts to buy.
+    pub fn standing(self: *const Market) struct { offers: u32, wants: u32 } {
+        var offers: u32 = self.act_one.count();
+        var wants: u32 = 0;
+        for (self.people()) |a| for (0..item_count) |i| {
+            offers += @intFromBool(a.sells[i] > 0);
+            wants += @intFromBool(a.buys[i] > 0);
+        };
+        for (self.sell_posts, self.buy_posts) |s, b| {
+            offers += @intFromBool(s.qty > 0);
+            wants += @intFromBool(b.qty > 0);
+        }
+        return .{ .offers = offers, .wants = wants };
     }
 
     /// Settle an accepted deal on the neighbour's books: it takes `give` (the player's side),
@@ -305,6 +399,62 @@ test "a fair deal is accepted and settles both sides of the neighbour's books" {
     give[3] = 1; // metal, which a forager does not buy
     spare[3] = 5;
     try testing.expectEqual(Verdict.refuse, verdict(a, give, take, spare));
+}
+
+test "the market's standing offers and wants count the neighbours' and the player's" {
+    var m: Market = .{};
+    m.seed(0);
+    try testing.expectEqual(@as(u32, 0), m.standing().offers);
+    try testing.expectEqual(@as(u32, 0), m.standing().wants);
+    m.sell_posts[5] = .{ .qty = 3, .price = 4 };
+    m.buy_posts[0] = .{ .qty = 0, .price = 4 }; // priced but not posted: no want
+    try testing.expectEqual(@as(u32, 1), m.standing().offers);
+    try testing.expectEqual(@as(u32, 0), m.standing().wants);
+
+    m.seed(6);
+    var offers: u32 = 0;
+    var wants: u32 = 0;
+    for (m.people()) |a| for (0..item_count) |i| {
+        offers += @intFromBool(a.sells[i] > 0);
+        wants += @intFromBool(a.buys[i] > 0);
+    };
+    m.buy_posts[1] = .{ .qty = 2, .price = 3 };
+    try testing.expectEqual(offers, m.standing().offers);
+    try testing.expectEqual(wants + 1, m.standing().wants);
+    // A neighbour sold out of a want no longer counts it.
+    const a = &m.agents[0];
+    const first = for (0..item_count) |i| {
+        if (a.buys[i] > 0) break i;
+    } else unreachable;
+    a.buys[first] = 0;
+    try testing.expectEqual(wants, m.standing().wants);
+}
+
+test "an Act I offer is keyed by its holding, capped at the spare and counted in the market's standing" {
+    var m: Market = .{};
+    const sandals: Holding = .{ .good = 7 };
+    try testing.expectEqual(sandals, Holding.ofKey(sandals.key()));
+    try testing.expectEqual(Holding.biomass, Holding.ofKey((@as(Holding, .biomass)).key()));
+
+    // The stocks are the body's: nothing of them is spare. A good keeps one unit.
+    try testing.expectEqual(@as(f32, 0), spareOf(.food, 11.6));
+    try testing.expectEqual(@as(f32, 0), spareOf(.biomass, 31));
+    try testing.expectEqual(@as(f32, 1), spareOf(sandals, 2));
+    try testing.expectEqual(@as(f32, 0), spareOf(sandals, 1));
+    try testing.expectEqual(@as(f32, 0), spareOf(sandals, 0));
+
+    // An offer stands at most at the spare.
+    try testing.expectEqual(@as(u16, 1), m.act_one.post(sandals, 3, spareOf(sandals, 2)));
+    try testing.expectEqual(@as(u16, 0), m.act_one.post(.food, 2, spareOf(.food, 11.6)));
+    try testing.expectEqual(@as(u16, 1), m.act_one.of(sandals));
+    try testing.expectEqual(@as(u32, 1), m.act_one.count());
+    try testing.expectEqual(@as(u32, 1), m.act_one.units());
+    try testing.expectEqual(@as(u32, 1), m.standing().offers);
+    try testing.expectEqual(@as(u32, 0), m.standing().wants);
+
+    // Taken down, it stands no more.
+    _ = m.act_one.post(sandals, 0, 1);
+    try testing.expectEqual(@as(u32, 0), m.standing().offers);
 }
 
 test "posts read who would take them" {
