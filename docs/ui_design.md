@@ -97,8 +97,8 @@ that opens a generator stops its cycle where it stands; a second unit runs no se
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
 so it lives on the Household rail under BODY in both acts, collapsing with it. It is a `0..100` slider, not a set of named
-rations: the rate is `0.5 × 4^(value/100)`, so the ends are half and double the normal
-appetite and `50` is normal, and the slider's word (`meager`, `lean`, `modest`, `normal`,
+rations: the rate climbs exponentially from the meagerest ration to normal at `50` and from
+normal to the most lavish above it (the ends are the sim `Config`'s), and the slider's word (`meager`, `lean`, `modest`, `normal`,
 `hearty`, `generous`, `lavish`) steps every sixteen points. The panel reads
 `{word} · {rate}×` and projects coverage (how long the larder lasts) and recovery (days to
 full vigor) from the same arithmetic the metabolism loop runs; the simulation stores only

@@ -58,7 +58,7 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
         .enabled = enabled,
     });
     const new_value = range.value;
-    const rate = eating.rate(new_value);
+    const rate = eating.rate(new_value, eating.Band.of(ctx.res.game.config));
     const word = eating.word(new_value);
 
     try head.label("title", "EATING POLICY", .{ Style{ .font = 10, .tracking = 0.06, .ink = .dim } });

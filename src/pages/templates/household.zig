@@ -22,8 +22,9 @@ pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, con
     const ctx = parent.ctx;
     const column = try holdings_mod.holdings(parent, id, content);
     if (world.get(e, comp.Metabolism)) |met| {
-        const value = try eating_policy_mod.eating_policy(column, "eating_policy", eating_mod.valueFromRate(met.rate), true);
-        const rate = eating_mod.rate(value);
+        const band = eating_mod.Band.of(ctx.res.game.config);
+        const value = try eating_policy_mod.eating_policy(column, "eating_policy", eating_mod.valueFromRate(met.rate, band), true);
+        const rate = eating_mod.rate(value, band);
         if (rate != met.rate) _ = ctx.res.game.events.writer(ha.sim.events.SetRation).push(.{ .agent = e, .rate = rate });
     } else {
         _ = try eating_policy_mod.eating_policy(column, "eating_policy", 50, false);
