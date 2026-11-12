@@ -64,12 +64,13 @@ pub const Config = struct {
     regen_at_normal: f32 = 0.8,
     /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar multiplier
     /// the player sets continuously; the range and default are config (not UI words), and
-    /// `clampMetabolism` is the one place a rate is made legal. Normal is the default (`1.0`);
-    /// ration and feast are points inside `[min, max]`. The top is a feast far beyond what a
-    /// lone actor's labor can feed.
+    /// `clampMetabolism` is the one place a rate is made legal. Normal is `1.0`; ration and
+    /// feast are points inside `[min, max]`. The top is a feast far beyond what a lone actor's
+    /// labor can feed. The default, the ration a body begins at, is the meagerest: a run begins
+    /// poor, and the normal ration is something to work up to.
     metabolism_rate_min: f32 = 0.5,
     metabolism_rate_max: f32 = 5.0,
-    metabolism_rate_default: f32 = 1.0,
+    metabolism_rate_default: f32 = 0.5,
 
     // —— capital ——
     /// Share of a cancelled build's materials that comes back. Flat, not prorated by
@@ -204,6 +205,7 @@ test "Config.clampMetabolism bounds the rate into [min, max]" {
     try std.testing.expectApproxEqAbs(cfg.metabolism_rate_max, cfg.clampMetabolism(cfg.metabolism_rate_max * 5), 1e-6); // clamps high
     try std.testing.expectApproxEqAbs(@as(f32, 1.3), cfg.clampMetabolism(1.3), 1e-6); // in-band untouched
     try std.testing.expectEqual(cfg.metabolism_rate_default, (comp.Metabolism{}).rate); // default matches component
+    try std.testing.expectEqual(cfg.metabolism_rate_min, cfg.metabolism_rate_default); // a body begins at the meagerest
 }
 
 test "Config.regen saturates: the normal ration regains its share of full speed and each further ration less" {

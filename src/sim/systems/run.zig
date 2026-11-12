@@ -28,13 +28,13 @@ pub const starting_verbs = [_][]const u8{ "forage", "scavenge" };
 fn spawn_agent(world: *World, cat: *const roster.Catalog) Entity {
     // Spawn from the components' authoritative default baselines (see `baselines.zig`)
     // rather than repeating literals — `Vigor{}` is rested at the ceiling, `InventoryFood{}` is
-    // the thin perishable larder, `Metabolism{}` eats continuously at the normal rate — so the
+    // the thin perishable larder, `Metabolism{}` eats continuously at the meagerest ration — so the
     // starting state has exactly one source.
     return world.spawn(.{
         comp.Vigor{}, // rested at the ceiling (10/10)
         comp.InventoryFood{}, // a thin, perishable larder (4 units, quality 1, a tenth rots a day)
         comp.InventoryBiomass{ .v = 0 }, // nothing stockpiled yet
-        comp.Metabolism{}, // eats continuously from the first breath (normal rate)
+        comp.Metabolism{}, // eats continuously from the first breath (the meagerest ration)
         comp.Verbs.of(cat, &starting_verbs), // the starting verbs; an id the catalog lacks is skipped
         comp.Goods{}, // owns nothing yet; what else it can do is derived from this and the roster
         comp.Generators{}, // collectable capital accumulates independently of the body's work

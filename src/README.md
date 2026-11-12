@@ -31,7 +31,7 @@ The resource model separates survival from accounting:
 **Eating is a standing policy, not an action.** `systems.metabolize` eats the larder every
 tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
 multiplier, `1.0` at normal, that the Eating Policy slider sets through a `SetRation` intent;
-`Config` owns the range and default (`sim/res.zig`, where every number of the metabolism
+`Config` owns the range and the default, the meagerest ration, which a body begins at (`sim/res.zig`, where every number of the metabolism
 lives), and `Config.clampMetabolism` is the one place a rate is made legal.
 While the larder feeds it the body regains vigor at `Config.regen(rate, quality)` a day, a
 saturating curve toward a full speed it never reaches, so each further unit of food restores

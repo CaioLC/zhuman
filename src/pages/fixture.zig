@@ -68,7 +68,7 @@ pub const Balances = struct {
     food: ?f32 = null,
     /// Stockpiled Biomass (displayed as Materials in Act I). Null keeps the empty stockpile.
     biomass: ?f32 = null,
-    /// Metabolism rate multiplier (eating policy). Null keeps the normal rate.
+    /// Metabolism rate multiplier (eating policy). Null keeps the spawn's rate.
     metabolism: ?f32 = null,
     /// Owned goods by record id. What they open and modify follows from the catalog through
     /// `capital.settle`, so a verb arrives by owning its tool. Empty leaves the actor

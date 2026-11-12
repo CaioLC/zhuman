@@ -185,9 +185,10 @@ pub const Busy = struct {
 /// scalar multiplier bounded by the `Config`'s band, `1.0` at normal: it scales `base_rate`
 /// continuously (ration = stretch the larder and stay weak, feast = restore fast and burn the
 /// stock). `base_rate` is food/day at `rate = 1.0`. The `Config` owns the range/default and the
-/// clamp (`Config.clampMetabolism`); this stores the persisted agent-local choice.
+/// clamp (`Config.clampMetabolism`); this stores the persisted agent-local choice, which
+/// begins at the meagerest ration.
 pub const Metabolism = struct {
-    rate: f32 = 1.0,
+    rate: f32 = 0.5,
     base_rate: f32 = 6.0,
 };
 
