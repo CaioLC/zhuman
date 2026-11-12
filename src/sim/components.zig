@@ -182,13 +182,13 @@ pub const Busy = struct {
 
 /// The continuous eating policy: an agent consumes its own larder every tick, regardless of
 /// action (see `systems.metabolize`); what the player controls is the rate. `rate` is a
-/// bounded scalar multiplier in `[0.5, 2.0]`, `1.0` at normal: it scales `base_rate`
+/// scalar multiplier bounded by the `Config`'s band, `1.0` at normal: it scales `base_rate`
 /// continuously (ration = stretch the larder and stay weak, feast = restore fast and burn the
 /// stock). `base_rate` is food/day at `rate = 1.0`. The `Config` owns the range/default and the
 /// clamp (`Config.clampMetabolism`); this stores the persisted agent-local choice.
 pub const Metabolism = struct {
     rate: f32 = 1.0,
-    base_rate: f32 = 1.5,
+    base_rate: f32 = 6.0,
 };
 
 /// The agent's condition band, derived from the vigor fraction by the `condition` system

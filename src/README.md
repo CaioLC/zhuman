@@ -28,12 +28,17 @@ The resource model separates survival from accounting:
   the UI and log prose of every act show it as **materials** (label `Materials`, stock-line
   code `MA`). The curtain carries the same balance unchanged.
 
-**Eating is a standing policy, not an action.** `systems.metabolize` converts larder to vigor
-every tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
-multiplier in `[0.5, 2.0]` (`1.0` at normal) that the Eating Policy slider sets through a
-`SetRation` intent; `Config` owns
-the range and default, and `Config.clampMetabolism` is the one place a rate is made legal. An
-empty larder drains vigor instead. Because labor's energy gate is strict — an action can never
+**Eating is a standing policy, not an action.** `systems.metabolize` eats the larder every
+tick at `base_rate × rate`, where `comp.Metabolism.rate` is a persisted agent-local
+multiplier, `1.0` at normal, that the Eating Policy slider sets through a `SetRation` intent;
+`Config` owns the range and default (`sim/res.zig`, where every number of the metabolism
+lives), and `Config.clampMetabolism` is the one place a rate is made legal.
+While the larder feeds it the body regains vigor at `Config.regen(rate, quality)` a day, a
+saturating curve toward a full speed it never reaches, so each further unit of food restores
+less than the one before and the ration worth eating depends on what food costs the actor to
+get. The larder's quality multiplies how far the food goes. An
+empty larder drains vigor instead, at `Config.starve_per_day × rate`: hunger is the ration
+missed, so the appetite the policy sets is also how fast the body starves. Because labor's energy gate is strict — an action can never
 take vigor to zero — **starvation is the only path to death**.
 
 **Starting values live on the components.** `Vigor`, `InventoryFood`, and `Metabolism` carry
@@ -59,7 +64,7 @@ values and emits nothing new, and a test says so.
 - `comp.Outlook` is the BODY projection: the days the larder lasts at the current rate
   (`food_days`) and a tagged `Recovery`, `at_ceiling`, `no_food`, `no_quality`,
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
-  the same products `metabolize` applies (`base_rate × rate`, `× vigor_per_food × quality`), so
+  the same terms `metabolize` applies (`base_rate × rate`, `Config.regen`), so
   the projection and the loop agree by construction, and both BODY lines of the Act I holdings
   read it.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
@@ -78,9 +83,10 @@ which runs after the tick, brings all three current after it sets a world by han
 (`fixture.derive`); a seeded band is set, not reached, so it is written without a
 `BandCrossed`. The debug page's pokes are intents, applied before the writers run.
 
-`eating.zig` is the slider's side of the BODY: `rate(value) = 0.5 × 4^(value/100)` over a
-`0..100` slider, its inverse `valueFromRate`, the policy word ladder (meager … lavish), and the
-per-act coverage/recovery constants; it imports nothing and serves the template.
+`eating.zig` is the slider's side of the BODY: `rate(value, band)` over a `0..100` slider, two
+exponential halves meeting at normal whose ends are the config's band (`Band.of`), its inverse
+`valueFromRate`, the policy word ladder (meager … lavish), and the per-act coverage/recovery
+constants; it imports nothing and serves the template.
 
 That yields the two praxeological margins the game is about: *labor vs. leisure* (working
 spends vigor, which refills only through eating, whose rate is a standing choice) and *now vs.
@@ -347,7 +353,7 @@ The `update` sets, one column per act; the rows are in the order each set runs t
 |---|---|---|---|---|
 | `tick.advance_clock` | ✓ | ✓ | ✓ | bumps `sim.elapsed`, only while a player exists |
 | `tick.update_food` | ✓ | ✓ | ✓ | rots each larder by its `spoils` fraction per day, in proportion to what it holds |
-| `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate (food → vigor, clamped at `max`), or starves vigor down on an empty larder; `FoodRanOut` once, on the frame the larder empties |
+| `tick.metabolize` | ✓ | ✓ | ✓ | eats at the ration rate and regains vigor at `Config.regen` (clamped at `max`), or starves vigor down on an empty larder at `starve_per_day × rate`; `FoodRanOut` once, on the frame the larder empties |
 | `tick.resolve_busy` | ✓ | ✓ | ✓ | ticks work in progress and dispatches its finish half at completion (`WorkDone`, `WorkLost`), then drops the `Busy` |
 | `tick.track_reach` | ✓ | | | `RecipeInReach` once when an Act I recipe is first both listed (`capital.listed`: buildable, not the milestone, every gate passing) and affordable; the seen-set is `Sim.reach_seen`, by catalog index, so tab/filter/sort rebuilds never re-announce, falling short again does not re-arm it, and leaving the shelf (a gate's tool lost) does |
 | `passerby.passerby` | ✓ | | | advances the passerby's clock (`market.tick`), `Arrived` / `Departed`; a departure rolls its price levels (`Encounter.remember`) |

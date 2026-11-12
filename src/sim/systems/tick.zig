@@ -47,10 +47,13 @@ pub fn update_food(
 
 /// The metabolism loop: every agent with a `Metabolism` eats continuously from its own
 /// larder — no eat action, eating happens regardless; the *rate* is the agent's standing
-/// choice (`Metabolism.rate`, a bounded scalar). Food converts to vigor as it's consumed (scaled
-/// by the larder's `quality`, clamped at `max`); an **empty larder starves vigor down** instead —
-/// this is the drain that makes `mark_dead` fire, and the clock pressure that
-/// makes every action intentional: ration and stay weak, feast and burn the stock.
+/// choice (`Metabolism.rate`, a bounded scalar). While the larder feeds it the body regains
+/// vigor at `Config.regen(rate, quality)` a day, clamped at `max`: a saturating curve, so
+/// eating more restores more by ever less; an **empty larder starves vigor down** instead,
+/// at `starve_per_day × rate`: the drain is proportional to the ration missed, so a body kept
+/// on a feast starves faster than one kept on scraps. This is the drain that makes `mark_dead`
+/// fire, and the clock pressure that makes every action intentional: ration and stay weak,
+/// feast and burn the stock.
 /// The larder emptying is a fact once, on the frame it happens: `FoodRanOut`. The band the
 /// vigor now falls in is the `condition` system's, which runs right after this one and reports
 /// the crossing. Runs after `update_food` (spoilage claims its share first) and before
@@ -71,9 +74,13 @@ pub fn metabolize(
             const want = met.base_rate * cfg.clampMetabolism(met.rate) * dt_days;
             const eaten = @min(food.v, want);
             food.v -= eaten;
-            vigor.v = @min(vigor.v + eaten * cfg.vigor_per_food * @as(f32, @floatFromInt(food.quality)), vigor.max);
+            // The ration sets the pace of recovery (`Config.regen`); a larder that runs out
+            // mid-tick restores the share of the tick it fed.
+            const fed = if (want > 0) eaten / want else 0;
+            vigor.v = @min(vigor.v + cfg.regen(met.rate, food.quality) * dt_days * fed, vigor.max);
         } else {
-            vigor.v = @max(0, vigor.v - cfg.starve_per_day * dt_days);
+            // Hunger is the ration missed: the appetite the policy sets is what the body lacks.
+            vigor.v = @max(0, vigor.v - cfg.starve_per_day * cfg.clampMetabolism(met.rate) * dt_days);
         }
 
         // Edge-triggered — once, on the frame the larder empties.
@@ -247,18 +254,56 @@ test "metabolize eats continuously, converting food to vigor (clamped at max)" {
     var w = try World.init(std.testing.allocator);
     defer w.deinit();
     var res = test_res(0);
-    res.time.dt = res.config.secs_per_day; // one full day per tick
+    res.time.dt = res.config.secs_per_day / 10; // a tenth of a day
+    const met = comp.Metabolism{ .rate = 1.0 }; // the normal ration
+    const eats = met.base_rate * met.rate / 10; // what a tick eats
     const e = w.spawn(.{
-        comp.Vigor{ .v = 5, .max = 10 },
-        comp.InventoryFood{ .v = 2, .quality = 1, .spoils = 0 },
-        comp.Metabolism{}, // normal: 1.5 food/day
+        comp.Vigor{ .v = 5, .max = 5 + res.config.regen(met.rate, 1) * 0.15 }, // room for a tick and a half
+        comp.InventoryFood{ .v = eats * 1.5, .quality = 1, .spoils = 0 },
+        met,
     });
 
     ecs.run(&w, &res, metabolize);
     logged(&w, &res);
-    try std.testing.expectEqual(@as(f32, 0.5), w.get(e, comp.InventoryFood).?.v); // 2 − 1.5
-    try std.testing.expectEqual(@as(f32, 8), w.get(e, comp.Vigor).?.v); // 5 + 1.5·2·q1
+    try std.testing.expectApproxEqAbs(eats * 0.5, w.get(e, comp.InventoryFood).?.v, 1e-5);
+    try std.testing.expectApproxEqAbs(5 + res.config.regen(met.rate, 1) / 10, w.get(e, comp.Vigor).?.v, 1e-4);
     try std.testing.expectEqual(@as(usize, 0), res.sim.log.count); // nothing crossed
+
+    // The larder covers half of the next tick: half its recovery, which reaches the ceiling.
+    ecs.run(&w, &res, metabolize);
+    try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.InventoryFood).?.v);
+    try std.testing.expectApproxEqAbs(w.get(e, comp.Vigor).?.max, w.get(e, comp.Vigor).?.v, 1e-4);
+
+    // And a fed body at the ceiling stays there.
+    w.get(e, comp.InventoryFood).?.v = eats;
+    ecs.run(&w, &res, metabolize);
+    try std.testing.expectEqual(w.get(e, comp.Vigor).?.max, w.get(e, comp.Vigor).?.v);
+}
+
+test "metabolize restores the share of a tick the larder fed, and more food by ever less" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day / 4; // a quarter day
+    const starved = comp.Vigor{ .v = 1, .max = 100 };
+    // The normal ration finds a third of what it wants this tick: a third of the tick's recovery.
+    const wants = (comp.Metabolism{}).base_rate / 4;
+    const short = w.spawn(.{ starved, comp.InventoryFood{ .v = wants / 3, .spoils = 0 }, comp.Metabolism{ .rate = 1.0 } });
+    const meager = w.spawn(.{ starved, comp.InventoryFood{ .v = 20, .spoils = 0 }, comp.Metabolism{ .rate = 0.5 } });
+    const normal = w.spawn(.{ starved, comp.InventoryFood{ .v = 20, .spoils = 0 }, comp.Metabolism{ .rate = 1.0 } });
+    const feast = w.spawn(.{ starved, comp.InventoryFood{ .v = 20, .spoils = 0 }, comp.Metabolism{ .rate = 2.0 } });
+
+    ecs.run(&w, &res, metabolize);
+    const gain = struct {
+        fn of(wld: *World, e: Entity) f32 {
+            return wld.get(e, comp.Vigor).?.v - 1;
+        }
+    }.of;
+    try std.testing.expectApproxEqAbs(res.config.regen(1.0, 1) / 4 / 3, gain(&w, short), 1e-4);
+    try std.testing.expectApproxEqAbs(res.config.regen(1.0, 1) / 4, gain(&w, normal), 1e-4);
+    // Twice the food each step, less added each time.
+    try std.testing.expect(gain(&w, meager) < gain(&w, normal) and gain(&w, normal) < gain(&w, feast));
+    try std.testing.expect(gain(&w, feast) - gain(&w, normal) < gain(&w, normal) - gain(&w, meager));
 }
 
 test "metabolize at feast burns the larder dry and logs the crossing" {
@@ -268,8 +313,8 @@ test "metabolize at feast burns the larder dry and logs the crossing" {
     res.time.dt = res.config.secs_per_day;
     const e = w.spawn(.{
         comp.Vigor{ .v = 10, .max = 10 },
-        comp.InventoryFood{ .v = 2, .quality = 1, .spoils = 0 },
-        comp.Metabolism{ .rate = 2.0 }, // wants 3/day, finds only 2
+        comp.InventoryFood{ .v = (comp.Metabolism{}).base_rate, .quality = 1, .spoils = 0 },
+        comp.Metabolism{ .rate = 2.0 }, // wants twice the normal day, finds one
     });
 
     ecs.run(&w, &res, metabolize);
@@ -287,11 +332,11 @@ test "metabolize starves vigor down on an empty larder; the condition writer log
     const e = w.spawn(.{
         comp.Vigor{ .v = 5, .max = 10 },
         comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 },
-        comp.Metabolism{ .rate = 0.5 }, // rate is irrelevant when starving
+        comp.Metabolism{ .rate = 1.0 },
         comp.Condition{},
     });
 
-    ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day): crosses weak (3.5) and starving (1.2)
+    ecs.run(&w, &res, metabolize); // 5 → 1 (starve 4/day at the normal ration): crosses weak (3.5) and starving (1.2)
     ecs.run(&w, &res, condition);
     logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 1), w.get(e, comp.Vigor).?.v);
@@ -302,6 +347,23 @@ test "metabolize starves vigor down on an empty larder; the condition writer log
     logged(&w, &res);
     try std.testing.expectEqual(@as(f32, 0), w.get(e, comp.Vigor).?.v);
     try std.testing.expectEqual(@as(usize, 2), res.sim.log.count);
+}
+
+test "an empty larder drains vigor in proportion to the ration: a feast starves faster than scraps" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = test_res(0);
+    res.time.dt = res.config.secs_per_day; // one day
+    const larder = comp.InventoryFood{ .v = 0, .quality = 1, .spoils = 0 };
+    const meager = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, larder, comp.Metabolism{ .rate = 0.5 } });
+    const normal = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, larder, comp.Metabolism{ .rate = 1.0 } });
+    const lavish = w.spawn(.{ comp.Vigor{ .v = 10, .max = 10 }, larder, comp.Metabolism{ .rate = 2.0 } });
+
+    ecs.run(&w, &res, metabolize);
+    const per_day = res.config.starve_per_day;
+    try std.testing.expectApproxEqAbs(10 - 0.5 * per_day, w.get(meager, comp.Vigor).?.v, 1e-5);
+    try std.testing.expectApproxEqAbs(10 - 1.0 * per_day, w.get(normal, comp.Vigor).?.v, 1e-5);
+    try std.testing.expectApproxEqAbs(10 - 2.0 * per_day, w.get(lavish, comp.Vigor).?.v, 1e-5);
 }
 
 test "track_reach logs a recipe once it is listed and affordable, not on repeats, and re-arms when it leaves the shelf" {

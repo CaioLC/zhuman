@@ -51,7 +51,7 @@ test "ration sets the rate, clamped into the band, once per intent" {
     _ = res.events.writer(events.SetRation).push(.{ .agent = e, .rate = 1.5 });
     ecs.run(&w, &res, ration);
     try testing.expectEqual(@as(f32, 1.5), w.get(e, comp.Metabolism).?.rate);
-    _ = res.events.writer(events.SetRation).push(.{ .agent = e, .rate = 9 });
+    _ = res.events.writer(events.SetRation).push(.{ .agent = e, .rate = res.config.metabolism_rate_max * 2 });
     ecs.run(&w, &res, ration);
     try testing.expectEqual(res.config.metabolism_rate_max, w.get(e, comp.Metabolism).?.rate);
     w.get(e, comp.Metabolism).?.rate = 1;

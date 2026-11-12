@@ -1,6 +1,6 @@
 //! A scripted Act I: the whole schedule ticked from a new run to the shelter, driven only by the
 //! intents a page writes (`BeginLabor`, `BeginBuild`, `SetRation`, `Barter`), under a simple
-//! greedy policy: eat lavishly, buy the hatchet and then the fishing rod from the first passerby
+//! greedy policy: eat a lean ration as a forager and about the normal one once it fishes, buy the hatchet and then the fishing rod from the first passerby
 //! who can be paid, split wood for materials, forage (fish, once the rod is held) when the
 //! larder is thin, build the wire snares, leaf bed, rope bag, garden bed and root cellar in that
 //! order, then gather the shelter's larder and rest to its vigor. It leaves the generators
@@ -28,6 +28,10 @@ const build_order = [_][]const u8{ "wire_snares", "leaf_bed", "rope_bag", "garde
 
 /// The larder the policy keeps before it works for materials: thin enough that it forages.
 const food_floor: f32 = 8;
+/// The ration the policy eats at before the rod and with it: about where one more unit of food
+/// stops paying for the energy it takes to get.
+const forager_ration: f32 = 0.65;
+const fisher_ration: f32 = 1.1;
 /// What the policy keeps above the shelter's larder and what a rest to its vigor eats, against
 /// spoilage while it rests.
 const shelter_margin: f32 = 1.5;
@@ -54,11 +58,13 @@ fn decide(w: *const World, res: *Resources, e: Entity) void {
     const goods = w.get(e, comp.Goods).?;
     const band = w.get(e, comp.Condition).?.band;
 
-    // Eat lavishly while there is anything to eat: the eating rate caps the body's income.
-    const rate: f32 = if (food >= 1) 2.0 else 1.0;
-    if (w.get(e, comp.Metabolism).?.rate != rate) push(res, events.SetRation{ .agent = e, .rate = rate });
-
     const has_rod = goods.count[cat.goodIndex("fish_rod").?] > 0;
+
+    // Eat what the food's price supports: recovery saturates, so a forager's dear food is
+    // worth a lean ration and a fisher's cheap food the normal one. With next to nothing in the
+    // larder, the meagerest ration starves slowest.
+    const rate: f32 = if (food < 0.5) res.config.metabolism_rate_min else if (has_rod) fisher_ration else forager_ration;
+    if (w.get(e, comp.Metabolism).?.rate != rate) push(res, events.SetRation{ .agent = e, .rate = rate });
 
     // The hatchet, from the passerby, as soon as it can be paid for.
     const enc = &res.sim.encounter;
@@ -104,7 +110,10 @@ fn decide(w: *const World, res: *Resources, e: Entity) void {
     if (for_shelter) {
         // Materials in hand: gather the larder, then rest to the vigor the roof asks.
         const unlock = cat.goods[shelter].unlock.?;
-        const rest_eats = (unlock.vigor_abs - vigor.v) / 2; // two vigor a food, while resting
+        // What a rest to the roof's vigor eats: the days it takes at this ration's recovery.
+        const met = w.get(e, comp.Metabolism).?;
+        const rest_days = @max(0, unlock.vigor_abs - vigor.v) / res.config.regen(met.rate, w.get(e, comp.InventoryFood).?.quality);
+        const rest_eats = rest_days * met.base_rate * res.config.clampMetabolism(met.rate);
         if (food < unlock.food + rest_eats + shelter_margin) return begin(w, res, e, quotes, forage);
         return; // resting
     }

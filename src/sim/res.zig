@@ -52,17 +52,23 @@ pub const Config = struct {
     weary_yield: f32 = 0.7,
 
     // —— metabolism ——
-    /// Vigor drained per day once the larder is empty: about 2.5 days from a full tank to
-    /// death, the countdown that makes rationing a real decision.
+    /// Vigor drained per day once the larder is empty, at the normal ration: about 2.5 days
+    /// from a full tank to death. The drain scales with `Metabolism.rate` (`tick.metabolize`),
+    /// so a meager ration starves slower than this and a lavish one faster.
     starve_per_day: f32 = 4.0,
-    /// Vigor gained per unit of food eaten, before the larder's `quality` scales it.
-    vigor_per_food: f32 = 2.0,
+    /// Vigor regained per day at full speed, the limit the body approaches however much it
+    /// eats (`regen`).
+    regen_full_per_day: f32 = 10.0,
+    /// The share of full speed the normal ration regains. It sets the curve: every further
+    /// normal ration closes the same share of what is left, so returns to eating diminish.
+    regen_at_normal: f32 = 0.8,
     /// The bounded metabolism-rate range and default. `Metabolism.rate` is a scalar multiplier
     /// the player sets continuously; the range and default are config (not UI words), and
     /// `clampMetabolism` is the one place a rate is made legal. Normal is the default (`1.0`);
-    /// ration and feast are points inside `[min, max]`.
+    /// ration and feast are points inside `[min, max]`. The top is a feast far beyond what a
+    /// lone actor's labor can feed.
     metabolism_rate_min: f32 = 0.5,
-    metabolism_rate_max: f32 = 2.0,
+    metabolism_rate_max: f32 = 5.0,
     metabolism_rate_default: f32 = 1.0,
 
     // —— capital ——
@@ -85,6 +91,17 @@ pub const Config = struct {
     /// Labor's yield multiplier for an agent in this condition.
     pub fn yield_of(self: Config, c: Band) f32 {
         return if (c == .alive) 1.0 else self.weary_yield;
+    }
+
+    /// Vigor regained per day while the larder feeds an agent eating at `rate` food of
+    /// `quality`: `full × (1 − (1 − at_normal)^(rate × quality))`. Saturating, so each further
+    /// unit of food restores less than the one before: at the shipped 0.8, half the normal
+    /// ration regains 55% of full speed and twice it 96%. Quality multiplies how far the food
+    /// goes; food of no quality restores nothing. `metabolize` applies it and `outlook`
+    /// projects with it.
+    pub fn regen(self: Config, rate: f32, quality: u8) f32 {
+        const fed = self.clampMetabolism(rate) * @as(f32, @floatFromInt(quality));
+        return self.regen_full_per_day * (1.0 - std.math.pow(f32, 1.0 - self.regen_at_normal, fed));
     }
 
     /// Clamp a metabolism rate into the authoritative `[min, max]` band: the one place a rate
@@ -180,10 +197,28 @@ pub const Resources = struct {
 };
 
 test "Config.clampMetabolism bounds the rate into [min, max]" {
-    const cfg = Config{}; // min 0.5, max 2.0, default 1.0
+    const cfg = Config{};
+    try std.testing.expect(cfg.metabolism_rate_min < 1.0 and 1.0 < cfg.metabolism_rate_max); // normal is inside
     try std.testing.expectApproxEqAbs(@as(f32, 1.0), cfg.clampMetabolism(1.0), 1e-6);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.5), cfg.clampMetabolism(0.1), 1e-6); // clamps low
-    try std.testing.expectApproxEqAbs(@as(f32, 2.0), cfg.clampMetabolism(9.0), 1e-6); // clamps high
+    try std.testing.expectApproxEqAbs(cfg.metabolism_rate_min, cfg.clampMetabolism(cfg.metabolism_rate_min / 5), 1e-6); // clamps low
+    try std.testing.expectApproxEqAbs(cfg.metabolism_rate_max, cfg.clampMetabolism(cfg.metabolism_rate_max * 5), 1e-6); // clamps high
     try std.testing.expectApproxEqAbs(@as(f32, 1.3), cfg.clampMetabolism(1.3), 1e-6); // in-band untouched
     try std.testing.expectEqual(cfg.metabolism_rate_default, (comp.Metabolism{}).rate); // default matches component
+}
+
+test "Config.regen saturates: the normal ration regains its share of full speed and each further ration less" {
+    const cfg = Config{};
+    const full = cfg.regen_full_per_day;
+    const left = 1.0 - cfg.regen_at_normal; // the share of full speed the normal ration leaves
+    try std.testing.expectApproxEqAbs(cfg.regen_at_normal * full, cfg.regen(1.0, 1), 1e-4);
+    try std.testing.expectApproxEqAbs((1.0 - @sqrt(left)) * full, cfg.regen(0.5, 1), 1e-4);
+    try std.testing.expectApproxEqAbs((1.0 - left * left) * full, cfg.regen(2.0, 1), 1e-4);
+    // Decreasing marginal returns: the second half-ration adds less than the first, and the
+    // top of the band is short of full speed by a hair.
+    try std.testing.expect(cfg.regen(1.0, 1) - cfg.regen(0.5, 1) < cfg.regen(0.5, 1));
+    try std.testing.expect(cfg.regen(cfg.metabolism_rate_max, 1) < full);
+    try std.testing.expect(cfg.regen(cfg.metabolism_rate_max, 1) > 0.99 * full);
+    // Quality multiplies how far the food goes; none restores nothing.
+    try std.testing.expectApproxEqAbs(cfg.regen(1.0, 1), cfg.regen(0.5, 2), 1e-4);
+    try std.testing.expectEqual(@as(f32, 0), cfg.regen(1.0, 0));
 }
