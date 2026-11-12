@@ -1,9 +1,10 @@
 //! A scripted Act I: the whole schedule ticked from a new run to the shelter, driven only by the
 //! intents a page writes (`BeginLabor`, `BeginBuild`, `SetRation`, `Barter`), under a simple
 //! greedy policy: eat a lean ration as a forager and about the normal one once it fishes, buy the hatchet and then the fishing rod from the first passerby
-//! who can be paid, split wood for materials, forage (fish, once the rod is held) when the
-//! larder is thin, build the wire snares, leaf bed, rope bag, garden bed and root cellar in that
-//! order, then gather the shelter's larder and rest to its vigor. It leaves the generators
+//! who can be paid (none comes before the snares and the leaf bed make a camp), split wood for
+//! materials, forage (fish, once the rod is held) when the larder is thin, build the wire
+//! snares, leaf bed, rope bag, garden bed and root cellar in that order, then gather the
+//! shelter's larder and rest to its vigor. It leaves the generators
 //! uncollected: a round of the snares or the garden returns less food per energy than fishing.
 //! It holds the act completable: on every seed tried the shelter stands before day 70 and the
 //! body never dies. Deterministic — the run's prng is seeded.

@@ -491,7 +491,12 @@ second unit of the good runs no second cycle.
 **The passerby is sim state, not UI.** `market.Encounter` lives on `Sim` as a clock-driven
 machine `absent → approaching → present → departed → absent`, ticked by `market.tick` from
 the `passerby` system off the
-sim clock (never a calendar day). Each arrival bumps a monotonic `id` and refills a finite
+sim clock (never a calendar day). Nobody comes to an actor with nothing: the system reads the
+buildable good kinds the player owns (`capital.goodsOwned`) and passes them to `market.tick`,
+and an absent encounter stands still — its gap does not count down — while they are fewer than
+`Schedule.camp_kinds`. A run starts with no gap left, so the passerby is seen approaching the
+tick the camp stands; a visit already under way runs its course whatever the player loses, and
+after it the next gap runs in full once the camp is back. Each arrival bumps a monotonic `id` and refills a finite
 satchel of `Ware`s: 8 food, 20 materials, and one each of the fishing rod (`fish_hook`), the
 hatchet (`whetstone`), the fishing net, the hand axe, the work gloves and the cookpot — goods
 no one builds in Act I (`buildable = false`). The satchel is finite both ways:

@@ -1,7 +1,9 @@
 //! `market` — the Act I Passerby, as authoritative **simulation** state.
 //!
 //! Act I's only counterparty is a passerby who wanders in, lingers a while with a finite
-//! satchel, and leaves. This module owns that encounter as a clock-driven **state machine** —
+//! satchel, and leaves, and who comes only to an actor with a camp (`Schedule.camp_kinds`: the
+//! caller passes the kinds the player owns, so this module stays blind to the world). This module
+//! owns that encounter as a clock-driven **state machine** —
 //! `absent → approaching → present → departed → absent` — living on `Sim` beside the run's other
 //! non-component state (the log, the reach-set). The UI **reads** the encounter; it never infers
 //! it from a hardcoded day, so hiding the strip (STRUCTURE, a tab switch) cannot change whether a
@@ -89,7 +91,8 @@ pub fn reprice(level: i8, flow: Flow, rng: std.Random) i8 {
     return std.math.clamp(l, -max_level, max_level);
 }
 
-/// Where the passerby is in a visit. `absent` — no one here (the long gap between visits);
+/// Where the passerby is in a visit. `absent` — no one here (the gap between visits, which
+/// counts down only while the player has a camp: `Schedule.camp_kinds`);
 /// `approaching` — seen coming, not yet dealable (the strip can foreshadow); `present` — here
 /// with wares, the only phase a deal opens in; `departed` — just left (a beat before `absent`,
 /// so the departure reads as an event rather than a silent disappearance).
@@ -194,7 +197,10 @@ pub const Encounter = struct {
 /// *day*): the encounter clock is its own thing, so a design tweak to visit cadence never touches
 /// the day counter or any screen. Durations are in **in-game seconds** via `secs_per_day`.
 pub const Schedule = struct {
-    /// The quiet gap between visits (absent → approaching).
+    /// The camp a visit waits on: the buildable good kinds the player owns before the passerby
+    /// sets out (absent → approaching). Nobody comes to trade with someone who has nothing.
+    camp_kinds: u32 = 2,
+    /// The quiet gap between visits (absent → approaching), counted only while the camp stands.
     gap_days: f32 = 2.0,
     /// The heads-up before wares are dealable (approaching → present).
     approach_days: f32 = 0.25,
@@ -221,12 +227,18 @@ pub const Schedule = struct {
 /// What a tick did. The passerby system turns it into an `Arrived` or `Departed` fact.
 pub const Event = enum { none, arrived, departed };
 
-/// Advance the encounter by `dt` seconds against `sched`. Deterministic and clock-driven: the
-/// same elapsed time always produces the same transitions, and nothing here reads the calendar
-/// day. Returns the transition that fired this tick (`none` if still within a phase). A phase can
-/// only advance one step per tick; `dt` is a frame delta, far smaller than any phase, so that is
-/// never a real limit.
-pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32) Event {
+/// Advance the encounter by `dt` seconds against `sched`, the player owning `kinds` buildable
+/// good kinds. Deterministic and clock-driven: the same elapsed time always produces the same
+/// transitions, and nothing here reads the calendar day. Returns the transition that fired this
+/// tick (`none` if still within a phase). A phase can only advance one step per tick; `dt` is a
+/// frame delta, far smaller than any phase, so that is never a real limit.
+///
+/// While `kinds` is below `sched.camp_kinds` an absent encounter stands still: its gap does not
+/// count down, so no visit begins and none is banked. A run starts with no gap left, so the
+/// first camp is seen approaching the tick it stands; a gap interrupted by the camp's loss
+/// resumes where it stopped. A visit already under way runs its course whatever `kinds` is.
+pub fn tick(enc: *Encounter, dt: f32, sched: Schedule, spd: f32, kinds: u32) Event {
+    if (enc.phase == .absent and kinds < sched.camp_kinds) return .none;
     enc.remaining -= dt;
     if (enc.remaining > 0) return .none;
 
@@ -556,24 +568,24 @@ test "encounter walks absent → approaching → present → departed → absent
     const sched = Schedule{};
 
     // First tick from a zeroed absent state: remaining hits 0 immediately → approaching.
-    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day));
+    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day, sched.camp_kinds));
     try testing.expectEqual(Phase.approaching, enc.phase);
     try testing.expectEqual(@as(u32, 0), enc.id); // not a visit yet
 
     // Burn the approach window → present (an arrival: id bumps, satchel fills).
-    try testing.expectEqual(Event.arrived, tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day));
+    try testing.expectEqual(Event.arrived, tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, sched.camp_kinds));
     try testing.expectEqual(Phase.present, enc.phase);
     try testing.expectEqual(@as(u32, 1), enc.id);
     try testing.expect(enc.dealable());
     try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass));
 
     // Burn the linger window → departed.
-    try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day));
+    try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, sched.camp_kinds));
     try testing.expectEqual(Phase.departed, enc.phase);
     try testing.expect(!enc.dealable());
 
     // Burn the depart beat → absent (satchel cleared, no event).
-    try testing.expectEqual(Event.none, tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day));
+    try testing.expectEqual(Event.none, tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, sched.camp_kinds));
     try testing.expectEqual(Phase.absent, enc.phase);
     try testing.expectEqual(@as(f32, 0), enc.stockOf(.biomass));
 }
@@ -583,20 +595,57 @@ test "each visit bumps a stable identity and refills the satchel" {
     const sched = Schedule{};
 
     // Run a full cycle to the first arrival.
-    _ = tick(&enc, 0.001, sched, secs_per_day); // → approaching
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present (id 1)
+    _ = tick(&enc, 0.001, sched, secs_per_day, sched.camp_kinds); // → approaching
+    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → present (id 1)
     try testing.expectEqual(@as(u32, 1), enc.id);
 
     // Spend some stock this visit, then complete the cycle back to a second arrival.
     enc.take(.biomass, 5);
     try testing.expectEqual(@as(f32, 15), enc.stockOf(.biomass));
-    _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day); // → departed
-    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day); // → absent
-    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day); // → approaching
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present (id 2)
+    _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → departed
+    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → absent
+    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → approaching
+    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → present (id 2)
 
     try testing.expectEqual(@as(u32, 2), enc.id); // a *different* passerby
     try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass)); // the satchel refilled
+}
+
+test "no one sets out for an actor without a camp; the first camp is seen approaching at once" {
+    var enc = Encounter{};
+    const sched = Schedule{};
+    // Below the camp, however long it waits, the encounter stays absent and banks nothing.
+    try testing.expectEqual(Event.none, tick(&enc, 30 * secs_per_day, sched, secs_per_day, sched.camp_kinds - 1));
+    try testing.expectEqual(Phase.absent, enc.phase);
+    try testing.expectEqual(@as(f32, 0), enc.remaining);
+    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day, 0));
+    try testing.expectEqual(Phase.absent, enc.phase);
+    // The camp stands: the next tick is an approach.
+    try testing.expectEqual(Event.none, tick(&enc, 0.001, sched, secs_per_day, sched.camp_kinds));
+    try testing.expectEqual(Phase.approaching, enc.phase);
+}
+
+test "a visit under way runs its course when the camp is lost; the next waits for it" {
+    var enc = Encounter{};
+    const sched = Schedule{};
+    const camp = sched.camp_kinds;
+    _ = tick(&enc, 0.001, sched, secs_per_day, camp); // → approaching
+    // The camp goes while the passerby is on the way: it still arrives, lingers and leaves.
+    try testing.expectEqual(Event.arrived, tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, 0));
+    try testing.expect(enc.dealable());
+    try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, 0));
+    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, 0); // → absent
+    try testing.expectEqual(Phase.absent, enc.phase);
+    // No camp: the gap does not count down, and no new visit begins.
+    _ = tick(&enc, 10 * sched.gap_days * secs_per_day, sched, secs_per_day, camp - 1);
+    try testing.expectEqual(Phase.absent, enc.phase);
+    try testing.expectApproxEqAbs(sched.gap_days * secs_per_day, enc.remaining, 1e-3);
+    // The camp is back: the gap runs in full before the next approach.
+    _ = tick(&enc, sched.gap_days * secs_per_day * 0.5, sched, secs_per_day, camp);
+    try testing.expectEqual(Phase.absent, enc.phase);
+    _ = tick(&enc, sched.gap_days * secs_per_day * 0.5, sched, secs_per_day, camp);
+    try testing.expectEqual(Phase.approaching, enc.phase);
+    try testing.expectEqual(@as(u32, 1), enc.id);
 }
 
 test "dealability is present-only and independent of any day/tab" {
@@ -776,10 +825,10 @@ test "the passerby remembers across visits: levels survive an arrival, the talli
     enc.phase = .present;
     enc.remaining = 0;
     const kept = enc.level;
-    _ = tick(&enc, 1, sched, secs_per_day); // → departed
-    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day); // → absent
-    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day); // → approaching
-    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day); // → present
+    _ = tick(&enc, 1, sched, secs_per_day, sched.camp_kinds); // → departed
+    _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → absent
+    _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → approaching
+    _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → present
     try testing.expectEqual(@as(u32, 2), enc.id);
     try testing.expectEqual(@as(u16, 0), enc.bought[w]);
     try testing.expectEqual(kept, enc.level);
