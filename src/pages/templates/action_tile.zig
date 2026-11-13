@@ -339,7 +339,9 @@ pub fn action_tile(
     }
     const cost_txt = cw.buffered();
     var dbuf: [12]u8 = undefined;
-    const duration_txt = std.mem.print(&dbuf, "{d:.0}h", .{verb.requires.hours}) catch "?";
+    // The hours it takes now: the authored hours at the pace the body's ration keeps.
+    const pace: f32 = (if (world.get(e, comp.Outlook)) |o| o.pace else 1);
+    const duration_txt = std.mem.print(&dbuf, "{d:.0}h", .{verb.requires.hours / pace}) catch "?";
 
     // The tile keeps one two-line anatomy: name, then metrics. Running state shows in the
     // ActivityStrip and the progress underbar, affordability in the disabled chrome; a

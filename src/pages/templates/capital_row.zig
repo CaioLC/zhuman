@@ -421,7 +421,7 @@ pub fn capital_row(
 
     if (col(.time).visible(ctx)) {
         var dbuf: [16]u8 = undefined;
-        const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.hours / 24.0}) catch "?";
+        const days_txt = std.mem.print(&dbuf, "{d:.1}d", .{rec.requires.hours / 24.0 / (if (world.get(e, comp.Outlook)) |o| o.pace else 1)}) catch "?";
         place(try cell(row, "dy", days_txt, look.ink, false), .time, 1);
     }
 
@@ -459,7 +459,7 @@ pub fn capital_row(
         .building => {
             const busy = world.get(e, comp.Busy).?;
             var bbuf: [20]u8 = undefined;
-            const left = busy.remaining / ctx.res.game.config.secs_per_day;
+            const left = busy.remaining / ctx.res.game.config.secs_per_day / (if (world.get(e, comp.Outlook)) |o| o.pace else 1);
             const txt = std.mem.print(&bbuf, "{d:.1}d left", .{left}) catch "?";
             try meter(state_in, "meter", 1.0 - busy.remaining / busy.total, th.acc);
             try state_in.label("time", txt, .{ row_type, style.ink(.fg) });

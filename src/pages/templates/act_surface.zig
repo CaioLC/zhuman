@@ -40,11 +40,12 @@ pub const Activity = struct {
 };
 
 /// Project an actor's work in progress into the activity strip — the one reading every act
-/// uses. A build reports days left, any other work hours left; no work reads `ready`.
-pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy) !Activity {
+/// uses. A build reports days left, any other work hours left, both at `pace`, the pace the
+/// body works at (`comp.Outlook.pace`); no work reads `ready`.
+pub fn activity(ctx: *UiCtx, busy: ?*const comp.Busy, pace: f32) !Activity {
     const b = busy orelse return .{ .state = .idle, .subject = "no work in progress", .metadata = "ready", .last = .idle };
     const build = actions.is_build(b.doing);
-    const spd = ctx.res.game.config.secs_per_day;
+    const spd = ctx.res.game.config.secs_per_day * pace;
     const state: market_strip_mod.ActivityState = if (build) .building else .working;
     return .{
         .state = state,

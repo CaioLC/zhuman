@@ -153,7 +153,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
         .market = if (ctx.res.game.sim.exchange.standing) .exchange else .merchant,
         .market_available = ctx.res.game.sim.exchange.standing or ctx.res.game.sim.merchant.dealable(),
         .activity = blk: {
-            var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null);
+            const pace: f32 = if (agent) |e| (if (world.get(e, comp.Outlook)) |o| o.pace else 1) else 1;
+            var act = try t.activityOf(ctx, if (agent) |e| world.get(e, comp.Busy) else null, pace);
             // In Act III the idle settlement reports its standing Exchange (`setActivity('idle',
             // 'Exchange standing', 'Act III open')`).
             if (act.state == .idle and ctx.res.game.states.in(.act_three)) {

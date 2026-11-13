@@ -465,6 +465,8 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     // read its conditions at begin and paid its order then.
     const settled = state == .building;
 
+    // The pace the body works at: the days a build takes and has left are its hours at it.
+    const pace: f32 = (if (world.get(e, comp.Outlook)) |o| o.pace else 1);
     // Cost/copy: `60m 6e · 6.0d` — the order, energy, days.
     var cbuf: [48]u8 = undefined;
     const cost_txt = blk: {
@@ -473,7 +475,7 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
             const n = price.get(r);
             if (n > 0) cw.print("{d:.0}{s} ", .{ n, @import("./action_info.zig").letterOf(act, r) }) catch {};
         }
-        cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 }) catch {};
+        cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 / pace }) catch {};
         break :blk cw.buffered();
     };
 
@@ -541,7 +543,7 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
         .unfunded => "inputs short",
         .busy => "hands busy",
         .ready => "ready to build",
-        .building => std.mem.print(&ready_buf, "building \u{00B7} {d:.1}d left", .{raising.?.remaining / spd}) catch "building",
+        .building => std.mem.print(&ready_buf, "building \u{00B7} {d:.1}d left", .{raising.?.remaining / spd / pace}) catch "building",
         .done => unreachable,
     };
     // The CTA names the state it waits on (the Exchange card's `LOCKED`), then the act's verb;

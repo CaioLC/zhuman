@@ -80,7 +80,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
                 .initial_sort = opts.initial_sort,
                 .milestone_open = opts.milestone_open,
                 .market_state = opts.market,
-                .activity = try t.activityOf(ctx, world.get(e, comp.Busy)),
+                .activity = try t.activityOf(ctx, world.get(e, comp.Busy), if (world.get(e, comp.Outlook)) |o| o.pace else 1),
             },
         });
 
