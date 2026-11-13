@@ -349,6 +349,11 @@ fn checkReversible(w: *World, cat: *const Catalog, id: []const u8) !void {
     try expectSnapshot(before, Snapshot.take(w, e, cat));
 }
 
+/// What the roster's work gloves make of Split wood's energy.
+const gloves_energy: f32 = 0.85;
+/// What the roster's hand axe makes of Split wood's yield.
+const axe_yield: f32 = 2.0;
+
 test "goods on one verb stack; a spare carries no second effect" {
     var cat = try fixture();
     defer cat.deinit();
@@ -358,7 +363,7 @@ test "goods on one verb stack; a spare carries no second effect" {
     own(&w, e, &cat, "hand_axe");
     own(&w, e, &cat, "work_gloves");
     const both = verbOf(&w, e, &cat, "chop_wood").?.requires.energy;
-    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7 * 0.75), both, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7) * gloves_energy, both, 1e-5);
     own(&w, e, &cat, "work_gloves"); // a second pair is stock
     try testing.expectEqual(both, verbOf(&w, e, &cat, "chop_wood").?.requires.energy);
     lose(&w, e, &cat, "work_gloves"); // the spare goes first, the discount stays
@@ -378,11 +383,11 @@ test "the chopping stack: hatchet, gloves, then the hand axe supersedes the hatc
     own(&w, e, &cat, "hatchet");
     own(&w, e, &cat, "work_gloves");
     const with_hatchet = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.75), with_hatchet.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 4.0) * gloves_energy, with_hatchet.requires.energy, 1e-5);
     own(&w, e, &cat, "hand_axe");
     const chop = verbOf(&w, e, &cat, "chop_wood").?;
-    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7 * 0.75), chop.requires.energy, 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 8.0 * 1.4), chop.output.biomass.?.scale(), 1e-4);
+    try testing.expectApproxEqAbs(@as(f32, 4.0 * 0.7) * gloves_energy, chop.requires.energy, 1e-5);
+    try testing.expectApproxEqAbs(@as(f32, 8.0) * axe_yield, chop.output.biomass.?.scale(), 1e-4);
     lose(&w, e, &cat, "hand_axe"); // back to the hatchet's rank, modifiers kept
     const again = verbOf(&w, e, &cat, "chop_wood").?;
     try expectTerms(&with_hatchet, &again);

@@ -19,15 +19,14 @@
 //! overdraw it is refused, and it does not regenerate until the *next* arrival — scarcity is
 //! per-encounter, not per-frame.
 //!
-//! **The spread.** The passerby values a food at 2 materials when an agent gives food and at 3
-//! when an agent takes it, so a round trip loses a third: buying food is 3 materials a unit,
-//! buying materials 2 for a food. A rank-2 tool is offered only to a holder of the rank-1 tool of
+//! **The spread.** The passerby values a food at `food_bid` materials when an agent gives food
+//! and at `food_ask` when an agent takes it, so a round trip loses a third. A rank-2 tool is offered only to a holder of the rank-1 tool of
 //! its family, and the work gloves only to a holder of the hatchet (`prerequisite`).
 //!
 //! **Memory.** Within a visit every price is fixed and every lot finite, in both directions: the
 //! satchel bounds what the passerby hands over and `wanted` bounds the lots of a ware it takes.
-//! Between visits it remembers what moved. Each ware carries a price `level` (`modifier`: 0.6
-//! to 1.4 of the board's price); when the passerby leaves, `Encounter.remember` rolls each level
+//! Between visits it remembers what moved. Each ware carries a price `level` (`modifier`, a
+//! tenth of the board's price a step, within `passerby_swing` steps); when the passerby leaves, `Encounter.remember` rolls each level
 //! against the lots traded that visit (`reprice`), so a ware that sold well is likely dearer on
 //! the next visit and one that sat unsold likely cheaper, never certainly. The tallies count
 //! lots whoever traded them; nothing here names the player. The Coin Merchant keeps the same
@@ -47,6 +46,10 @@ const std = @import("std");
 
 /// The bound of a price level either side of the board's price: four steps of a tenth.
 pub const max_level: i8 = 4;
+/// The bound of the passerby's levels, narrower than a trader's: two steps either side, so an
+/// actor who lives by selling it one thing, visit after visit, still trades at four fifths of
+/// the board's rate at worst.
+pub const passerby_swing: i8 = 2;
 /// The chance one traded lot is noticed; `noticed` compounds it over a visit's lots.
 pub const notice_per_lot: f32 = 0.3;
 /// The chance a ware that did not move at all is repriced.
@@ -148,9 +151,10 @@ pub const Encounter = struct {
         return self.sold[@backingInt(w)];
     }
 
-    /// The price level of `w`: food's for food and materials, a tool's own.
+    /// The price level of `w`: food's for food and materials, a tool's own, within
+    /// `passerby_swing`.
     pub fn levelOf(self: *const Encounter, w: Ware) i8 {
-        return self.level[@backingInt(if (w == .biomass) Ware.food else w)];
+        return std.math.clamp(self.level[@backingInt(if (w == .biomass) Ware.food else w)], -passerby_swing, passerby_swing);
     }
 
     /// The lots of `w` the passerby still takes this visit.
@@ -170,7 +174,7 @@ pub const Encounter = struct {
                 .{ .out = @as(u32, self.bought[f]) + self.sold[b], .in = @as(u32, self.bought[b]) + self.sold[f] }
             else
                 .{ .out = self.bought[i], .in = self.sold[i] };
-            l.* = reprice(l.*, flow, rng);
+            l.* = std.math.clamp(reprice(l.*, flow, rng), -passerby_swing, passerby_swing);
         }
     }
 
@@ -209,11 +213,12 @@ pub const Schedule = struct {
     /// The brief beat after leaving before the gap resets (departed → absent).
     depart_days: f32 = 0.15,
     /// A fresh satchel, per `Ware` (indexed by `@backingInt`): food, materials and one of each
-    /// tool. Finite and modest — the passerby is a trickle, not a shop.
+    /// tool. Finite, and sized to carry what an actor who makes only food or only materials
+    /// needs of the other between two visits.
     satchel: [ware_count]f32 = blk: {
         var s: [ware_count]f32 = @splat(0);
-        s[@backingInt(Ware.food)] = 8;
-        s[@backingInt(Ware.biomass)] = 20;
+        s[@backingInt(Ware.food)] = 30;
+        s[@backingInt(Ware.biomass)] = 60;
         s[@backingInt(Ware.fish_hook)] = 1;
         s[@backingInt(Ware.whetstone)] = 1;
         s[@backingInt(Ware.fish_net)] = 1;
@@ -401,8 +406,8 @@ pub const Quote = struct {
 
 // ============================ The passerby's board ==========================
 //
-// The posted prices. Food and materials change hands at one rate: a food costs 3 materials to
-// take and fetches 2 to give, both scaled by food's price level, so the two tabs quote the same
+// The posted prices. Food and materials change hands at one rate: a food costs `food_ask`
+// materials to take and fetches `food_bid` to give, both scaled by food's price level, so the two tabs quote the same
 // exchange and a round trip loses a third at every level. A tool costs its food and materials
 // scaled by its own level, and sells back for its materials alone at the same level.
 
@@ -417,30 +422,32 @@ pub fn prerequisite(w: Ware) ?Ware {
     };
 }
 
-/// Materials a food costs to take, at level 0.
-pub const food_ask: f32 = 3;
+/// Materials a food costs to take, at level 0. The two rates sit either side of what bare hands
+/// make of an hour (about a material for a food), so an actor good at one of the two gains by
+/// trading for the other.
+pub const food_ask: f32 = 1.2;
 /// Materials a food fetches when given, at level 0.
-pub const food_bid: f32 = 2;
+pub const food_bid: f32 = 0.8;
 
 /// A tool's board price: the food and the materials a buy gives. Zero for food and materials.
 pub fn tool_price(ware: Ware) struct { food: f32, biomass: f32 } {
     return switch (ware) {
         .food, .biomass => .{ .food = 0, .biomass = 0 },
-        .fish_hook => .{ .food = 3, .biomass = 10 },
-        .whetstone => .{ .food = 4, .biomass = 12 },
-        .fish_net => .{ .food = 7, .biomass = 28 },
-        .hand_axe => .{ .food = 6, .biomass = 24 },
-        .work_gloves => .{ .food = 5, .biomass = 18 },
-        .cookpot => .{ .food = 10, .biomass = 40 },
+        .fish_hook => .{ .food = 6, .biomass = 20 },
+        .whetstone => .{ .food = 8, .biomass = 24 },
+        .fish_net => .{ .food = 14, .biomass = 56 },
+        .hand_axe => .{ .food = 12, .biomass = 48 },
+        .work_gloves => .{ .food = 10, .biomass = 36 },
+        .cookpot => .{ .food = 20, .biomass = 80 },
     };
 }
 
-/// The lots of `ware` the passerby takes in one visit: a trickle of food and materials, one of
-/// each tool.
+/// The lots of `ware` the passerby takes in one visit: as much food and materials as an actor
+/// who lives by selling one of them brings, and one of each tool.
 pub fn wanted(ware: Ware) u16 {
     return switch (ware) {
-        .food => 6,
-        .biomass => 4,
+        .food => 60,
+        .biomass => 12,
         else => 1,
     };
 }
@@ -577,7 +584,7 @@ test "encounter walks absent → approaching → present → departed → absent
     try testing.expectEqual(Phase.present, enc.phase);
     try testing.expectEqual(@as(u32, 1), enc.id);
     try testing.expect(enc.dealable());
-    try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass));
+    try testing.expectEqual(sched.satchel[@backingInt(Ware.biomass)], enc.stockOf(.biomass));
 
     // Burn the linger window → departed.
     try testing.expectEqual(Event.departed, tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, sched.camp_kinds));
@@ -601,14 +608,14 @@ test "each visit bumps a stable identity and refills the satchel" {
 
     // Spend some stock this visit, then complete the cycle back to a second arrival.
     enc.take(.biomass, 5);
-    try testing.expectEqual(@as(f32, 15), enc.stockOf(.biomass));
+    try testing.expectEqual(sched.satchel[@backingInt(Ware.biomass)] - 5, enc.stockOf(.biomass));
     _ = tick(&enc, sched.linger_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → departed
     _ = tick(&enc, sched.depart_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → absent
     _ = tick(&enc, sched.gap_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → approaching
     _ = tick(&enc, sched.approach_days * secs_per_day, sched, secs_per_day, sched.camp_kinds); // → present (id 2)
 
     try testing.expectEqual(@as(u32, 2), enc.id); // a *different* passerby
-    try testing.expectEqual(@as(f32, 20), enc.stockOf(.biomass)); // the satchel refilled
+    try testing.expectEqual(sched.satchel[@backingInt(Ware.biomass)], enc.stockOf(.biomass)); // the satchel refilled
 }
 
 test "no one sets out for an actor without a camp; the first camp is seen approaching at once" {
@@ -731,13 +738,13 @@ test "a sell is fixed for the visit and bounded by what the passerby wants" {
     const q = sell_quote(&enc, .food);
     try testing.expectEqual(Direction.sell, q.direction);
     try testing.expectEqual(@as(u32, 3), q.rev);
-    try testing.expectApproxEqAbs(@as(f32, 2), q.receive.qtyOf(.biomass), 1e-5);
+    try testing.expectApproxEqAbs(food_bid, q.receive.qtyOf(.biomass), 1e-5);
     try testing.expectEqual(wanted(.food), q.stock);
     try testing.expect(q.takeable(&enc, 1, 0));
     // Lots sold this visit leave the price alone and take from what is wanted.
     enc.sold[@backingInt(Ware.food)] = 2;
     const again = sell_quote(&enc, .food);
-    try testing.expectApproxEqAbs(@as(f32, 2), again.receive.qtyOf(.biomass), 1e-5);
+    try testing.expectApproxEqAbs(food_bid, again.receive.qtyOf(.biomass), 1e-5);
     try testing.expectEqual(wanted(.food) - 2, again.stock);
     try testing.expect(q.takeable(&enc, 1, 0)); // the earlier quote still stands
     enc.sold[@backingInt(Ware.food)] = wanted(.food);
@@ -746,13 +753,19 @@ test "a sell is fixed for the visit and bounded by what the passerby wants" {
     try testing.expectEqual(@as(u16, 1), sell_quote(&enc, .whetstone).stock);
 }
 
-test "a price level scales the board, keeps the spread, and bounds at 0.6 and 1.4" {
+test "a price level scales the board and keeps the spread; a trader's bounds at 0.6 and 1.4, the passerby's inside them" {
     try testing.expectApproxEqAbs(@as(f32, 0.6), modifier(-max_level), 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 1.4), modifier(max_level), 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 1.4), modifier(100), 1e-6);
+    try testing.expect(passerby_swing < max_level);
     var enc = Encounter{ .phase = .present, .id = 1, .stock = (Schedule{}).satchel };
-    var level: i8 = -max_level;
-    while (level <= max_level) : (level += 1) {
+    // A level beyond the passerby's swing prices as the swing's edge.
+    enc.level[@backingInt(Ware.food)] = max_level;
+    try testing.expectEqual(passerby_swing, enc.levelOf(.food));
+    try testing.expectApproxEqAbs(priced(food_ask, passerby_swing), buy_quote(&enc, .food).give.qtyOf(.biomass), 1e-6);
+    const board = tool_price(.whetstone);
+    var level: i8 = -passerby_swing;
+    while (level <= passerby_swing) : (level += 1) {
         enc.level[@backingInt(Ware.food)] = level;
         enc.level[@backingInt(Ware.whetstone)] = level;
         // Food for materials is one rate from either tab, and a round trip loses a third.
@@ -765,8 +778,8 @@ test "a price level scales the board, keeps the spread, and bounds at 0.6 and 1.
         try testing.expectApproxEqAbs(take, food.give.qtyOf(.biomass) / food.receive.qtyOf(.food), 5e-2);
         // A tool sells back for less than it costs.
         const hatchet = buy_quote(&enc, .whetstone);
-        try testing.expectApproxEqAbs(12 * modifier(level), hatchet.give.qtyOf(.biomass), 1e-2);
-        try testing.expectApproxEqAbs(4 * modifier(level), hatchet.give.qtyOf(.food), 1e-2);
+        try testing.expectApproxEqAbs(board.biomass * modifier(level), hatchet.give.qtyOf(.biomass), 1e-2);
+        try testing.expectApproxEqAbs(board.food * modifier(level), hatchet.give.qtyOf(.food), 1e-2);
         try testing.expectApproxEqAbs(hatchet.give.qtyOf(.biomass), sell_value(&enc, .whetstone), 1e-4);
     }
 }
@@ -812,14 +825,21 @@ test "the passerby remembers across visits: levels survive an arrival, the talli
     // A visit where the hatchet is bought over and over ends dearer, in time.
     const w = @backingInt(Ware.whetstone);
     var visits: u32 = 0;
-    while (enc.level[w] < max_level and visits < 200) : (visits += 1) {
+    while (enc.level[w] < passerby_swing and visits < 200) : (visits += 1) {
         enc.bought[w] = 1;
         enc.remember(prng.random());
     }
     try testing.expect(visits < 200);
     try testing.expect(enc.level[@backingInt(Ware.biomass)] == 0); // materials ride food's level
     const dear = buy_quote(&enc, .whetstone).give.qtyOf(.biomass);
-    try testing.expect(dear > 12);
+    try testing.expect(dear > tool_price(.whetstone).biomass);
+    // It never climbs past the passerby's swing, however often the hatchet sells.
+    for (0..50) |_| {
+        enc.bought[w] = 1;
+        enc.remember(prng.random());
+    }
+    try testing.expectEqual(passerby_swing, enc.level[w]);
+    try testing.expectApproxEqAbs(dear, buy_quote(&enc, .whetstone).give.qtyOf(.biomass), 1e-6);
 
     // Leave and come back: the tallies clear, the level stays.
     enc.phase = .present;
@@ -835,39 +855,44 @@ test "the passerby remembers across visits: levels survive an arrival, the talli
     try testing.expectApproxEqAbs(dear, buy_quote(&enc, .whetstone).give.qtyOf(.biomass), 1e-6);
 }
 
-test "the board's spread: food buys at 3 materials and sells for 2, so a round trip loses a third" {
-    const enc = Encounter{ .phase = .present, .id = 1, .stock = (Schedule{}).satchel };
+test "the board's spread: a food costs food_ask materials and fetches food_bid, so a round trip loses a third" {
+    const satchel = (Schedule{}).satchel;
+    const enc = Encounter{ .phase = .present, .id = 1, .stock = satchel };
     const buy_food = buy_quote(&enc, .food);
-    try testing.expectApproxEqAbs(@as(f32, 3), buy_food.give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(food_ask, buy_food.give.qtyOf(.biomass), 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 1), buy_food.receive.qtyOf(.food), 1e-6);
-    try testing.expectEqual(@as(u16, 8), buy_food.stock); // eight food in the satchel
+    try testing.expectEqual(@as(u16, @intFromFloat(satchel[@backingInt(Ware.food)])), buy_food.stock); // the satchel's food, a unit a lot
     const buy_mat = buy_quote(&enc, .biomass);
-    try testing.expectApproxEqAbs(@as(f32, 1), buy_mat.give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(2 / food_bid, buy_mat.give.qtyOf(.food), 1e-2);
     try testing.expectApproxEqAbs(@as(f32, 2), buy_mat.receive.qtyOf(.biomass), 1e-6);
-    try testing.expectEqual(@as(u16, 10), buy_mat.stock); // twenty materials, two a lot
+    try testing.expectEqual(@as(u16, @intFromFloat(satchel[@backingInt(Ware.biomass)] / 2)), buy_mat.stock); // the satchel's materials, two a lot
     const sell_mat = sell_quote(&enc, .biomass);
     try testing.expectApproxEqAbs(@as(f32, 3), sell_mat.give.qtyOf(.biomass), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 1), sell_mat.receive.qtyOf(.food), 1e-6);
-    // 3 materials buy a food, which buys back 2 materials.
-    try testing.expectApproxEqAbs(@as(f32, 2.0 / 3.0), buy_mat.receive.qtyOf(.biomass) / buy_food.give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(3 / food_ask, sell_mat.receive.qtyOf(.food), 1e-2);
+    // What a food fetches when given, against what it costs to take.
+    try testing.expectApproxEqAbs(@as(f32, 2.0 / 3.0), food_bid / food_ask, 1e-6);
+    try testing.expectApproxEqAbs(food_bid, sell_quote(&enc, .food).receive.qtyOf(.biomass), 1e-6);
     // The tools' prices.
-    try testing.expectApproxEqAbs(@as(f32, 28), buy_quote(&enc, .fish_net).give.qtyOf(.biomass), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 6), buy_quote(&enc, .hand_axe).give.qtyOf(.food), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 4), buy_quote(&enc, .whetstone).give.qtyOf(.food), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 18), buy_quote(&enc, .work_gloves).give.qtyOf(.biomass), 1e-6);
-    try testing.expectApproxEqAbs(@as(f32, 40), buy_quote(&enc, .cookpot).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.fish_net).biomass, buy_quote(&enc, .fish_net).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.hand_axe).food, buy_quote(&enc, .hand_axe).give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.whetstone).food, buy_quote(&enc, .whetstone).give.qtyOf(.food), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.work_gloves).biomass, buy_quote(&enc, .work_gloves).give.qtyOf(.biomass), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.cookpot).biomass, buy_quote(&enc, .cookpot).give.qtyOf(.biomass), 1e-6);
+    // A rank-2 tool costs more than the rank-1 tool it follows.
+    try testing.expect(tool_price(.fish_net).biomass > tool_price(.fish_hook).biomass);
+    try testing.expect(tool_price(.hand_axe).biomass > tool_price(.whetstone).biomass);
     try testing.expectEqual(@as(u16, 1), buy_quote(&enc, .cookpot).stock);
     try testing.expectEqual(@as(?Ware, .whetstone), prerequisite(.hand_axe));
     try testing.expectEqual(@as(?Ware, .whetstone), prerequisite(.work_gloves));
     try testing.expectEqual(@as(?Ware, null), prerequisite(.whetstone));
     try testing.expectEqual(@as(?Ware, null), prerequisite(.cookpot));
     // A good sells for the materials half of its price.
-    try testing.expectApproxEqAbs(@as(f32, 40), sell_value(&enc, .cookpot), 1e-6);
+    try testing.expectApproxEqAbs(tool_price(.cookpot).biomass, sell_value(&enc, .cookpot), 1e-6);
 }
 
 test "a sell the satchel cannot pay for is out of stock" {
     var enc = Encounter{ .phase = .present, .id = 1 };
-    enc.stock[@backingInt(Ware.biomass)] = 1.5; // less than a food's 2 materials
+    enc.stock[@backingInt(Ware.biomass)] = food_bid / 2; // less than a food fetches
     const q = sell_quote(&enc, .food);
     try testing.expectEqual(@as(u16, 0), q.stock);
     try testing.expectEqual(Refusal.sold_out, q.refusal(&enc, 5, 0));

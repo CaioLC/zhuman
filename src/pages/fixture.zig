@@ -899,7 +899,7 @@ pub const catalog = [_]Spec{
         .day = 44,
         .view = 1,
         .milestone_open = true,
-        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 130, .goods = &shelter_goods },
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 250, .goods = &shelter_goods },
     },
     .{
         .name = "act_one_shelter_busy",
@@ -908,7 +908,7 @@ pub const catalog = [_]Spec{
         .view = 1,
         .milestone_open = true,
         .building = "spear",
-        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 130, .goods = &shelter_goods },
+        .balances = .{ .vigor = .{ .v = 15, .max = 15 }, .food = 16, .biomass = 250, .goods = &shelter_goods },
     },
     .{
         .name = "act_one_shelter_building",

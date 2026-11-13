@@ -497,9 +497,10 @@ and an absent encounter stands still — its gap does not count down — while t
 `Schedule.camp_kinds`. A run starts with no gap left, so the passerby is seen approaching the
 tick the camp stands; a visit already under way runs its course whatever the player loses, and
 after it the next gap runs in full once the camp is back. Each arrival bumps a monotonic `id` and refills a finite
-satchel of `Ware`s: 8 food, 20 materials, and one each of the fishing rod (`fish_hook`), the
-hatchet (`whetstone`), the fishing net, the hand axe, the work gloves and the cookpot — goods
-no one builds in Act I (`buildable = false`). The satchel is finite both ways:
+satchel of `Ware`s (`Schedule.satchel`): food and materials, enough to carry what an actor who
+makes only one of the two needs of the other between visits, and one each of the fishing rod
+(`fish_hook`), the hatchet (`whetstone`), the fishing net, the hand axe, the work gloves and
+the cookpot — goods no one builds in Act I (`buildable = false`). The satchel is finite both ways:
 whatever the passerby hands over — the food, materials or tool a buy receives, and the payment
 for a sell — comes out of it, whatever the player hands over goes into it, and it does not
 regenerate until the next visit. `dealable()` is `phase == .present`, the only gate the UI
@@ -513,22 +514,26 @@ passerby changed), then `sold_out` (no stock, or the satchel cannot hand over th
 side), then `unaffordable`; every refusal has player-readable copy.
 
 **The board has a spread.** `market.buy_quote` and `market.sell_quote` are the passerby's
-offers, which the page lists and a scripted test takes alike. The passerby values a food at 2
-materials when an agent gives food and at 3 when an agent takes it: buying food costs 3
-materials a unit and buying materials 2 for a food, a sell of food fetches 2 materials and a
-sell of 3 materials a food, so a round trip loses a third. The goods cost the fishing rod
-`3f + 10m`, the hatchet `4f + 12m`, the fishing net `7f + 28m`, the hand axe `6f + 24m`, the
-work gloves `5f + 18m` and the cookpot `10f + 40m`; a rank-2 tool is offered only to the
+offers, which the page lists and a scripted test takes alike. The passerby values a food at
+`market.food_bid` materials when an agent gives food and at `food_ask` when an agent takes it,
+from either tab, so a round trip loses a third. The two rates sit either side of what bare
+hands make of an hour, about a material for a food, so an actor good at making one of the two
+gains by trading for the other: that is what makes living by the rod or by the axe a way
+through the act beside making both (`sim/playthrough.zig` plays all three and holds each
+specialist ahead of the generalist). A good costs food and materials (`market.tool_price`);
+a rank-2 tool is offered only to the
 holder of the rank-1 tool of its family, and the work gloves only to the holder of the hatchet
 (`market.prerequisite`, `barter.offered`), each absent otherwise.
 
 **Fixed in a visit, remembered between visits.** Within a visit every price is fixed and every
 lot finite both ways: the satchel bounds what the passerby hands over, and `market.wanted`
-bounds the lots of a ware it takes (6 of food, 4 of materials by the lot of 3, one of each
-tool; `Encounter.sold` counts them). A sell pays the board's rate: a food 2 materials, 3
-materials materials the food they would cost, a good the materials of its price.
-Each ware carries a price level on `Encounter.level`, −4 to +4, a tenth of the board's price a
-step (`market.modifier`: 0.6 to 1.4). Food's level is the one rate food and materials change
+bounds the lots of a ware it takes (food by the unit, materials by the lot of 3, one of each
+tool; `Encounter.sold` counts them). A sell pays the board's rate: a food `food_bid` materials,
+3 materials the food they would cost, a good the materials of its price.
+Each ware carries a price level on `Encounter.level`, a tenth of the board's price a step
+(`market.modifier`), within `market.passerby_swing` steps either side: narrower than the Coin
+Merchant's `max_level`, so an actor who lives by selling the passerby one thing, visit after
+visit, is not priced out of doing it. Food's level is the one rate food and materials change
 hands at from either tab, and a tool's level scales its price and its sell-back alike, so the
 spread holds at every level. When the passerby leaves, the `passerby` system calls
 `Encounter.remember`, which rolls each level against the visit's tallies (`bought`, `sold`)
@@ -809,7 +814,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 | `schedule.zig` | `schedule`, the systems per state in the order they run, and `tick`, the host's one call per frame |
 | `log.zig` | `Log`, a 64-entry ring buffer of toned event lines; refuses an over-long line whole. Leaf module |
 | `baselines.zig` | the fresh-agent baseline, read from the component defaults |
-| `playthrough.zig` | a test, no API: Act I played from a new run to the shelter through the schedule and the pages' intents under a greedy policy, on several seeds, each before day 70 without dying |
+| `playthrough.zig` | a test, no API: Act I played from a new run to the shelter through the schedule and the pages' intents under three policies (a generalist, a fisher who sells food, a woodcutter who buys it), on several seeds: each before the limit without dying, and each specialist sooner than the generalist |
 
 `sim/systems/` holds the systems the schedule runs.
 

@@ -76,7 +76,7 @@ test "the Shelter card: busy hands wait, a ready click writes BeginBuild, and bu
     const e = ha.sim.systems.run.spawn_player(&w, cat);
     w.get(e, comp.Vigor).?.* = .{ .v = 15, .max = 15 };
     w.get(e, comp.InventoryFood).?.v = 16;
-    w.get(e, comp.InventoryBiomass).?.v = 130;
+    w.get(e, comp.InventoryBiomass).?.v = cat.goods[cat.goodIndex("shelter").?].requires.biomass + 10;
     for ([_][]const u8{ "sandals", "rope_bag", "root_cellar", "leaf_bed", "wire_snares" }) |id| w.get(e, comp.Goods).?.count[cat.goodIndex(id).?] = 1;
     capital.settle(&w, e, cat);
     const shelter = cat.goodIndex("shelter").?;

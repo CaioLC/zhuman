@@ -839,7 +839,7 @@ fn spawn_settler(w: *World, cat: *const Catalog) Entity {
     const e = w.spawn(.{
         comp.Vigor{ .v = 13, .max = 20 }, // 13 >= the absolute 12, max is irrelevant
         comp.InventoryFood{ .v = 25, .quality = 1, .spoils = 0 }, // >= the unlock's 15
-        comp.InventoryBiomass{ .v = 200 }, // >= the 120 price
+        comp.InventoryBiomass{ .v = cat.good("shelter").?.requires.biomass + 80 }, // the price and 80 over
         comp.Goods{},
         comp.Granted{},
     });
@@ -866,7 +866,7 @@ test "the shelter is offered only once its standing conditions are met" {
     _ = begin(&w, e, &res, shelter);
     try testing.expect(w.get(e, comp.Busy).?.isBuild(shelter));
     try testing.expectEqual(@as(f32, 5), w.get(e, comp.Vigor).?.v); // 13 - 8 energy
-    try testing.expectEqual(@as(f32, 80), w.get(e, comp.InventoryBiomass).?.v); // 200 - 120
+    try testing.expectEqual(@as(f32, 80), w.get(e, comp.InventoryBiomass).?.v); // what was over the price
 
     // Vigor fell below the absolute 12 mid-build — the work is already paid for, so it stands.
     try testing.expect(!unlockMet(&w, e, cat, shelter));

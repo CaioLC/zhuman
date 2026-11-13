@@ -360,11 +360,12 @@ test "a bulk buy takes its units from the satchel and the payment goes into it; 
     const e = spawn_trader(&w); // 6 food, 12 materials
     const enc = &res.sim.encounter;
 
-    // Two food at 3 materials each: the satchel's food falls by two, its materials rise by six.
+    // Two food at the asking rate: the satchel's food falls by two, its materials rise by the payment.
+    const full = (market.Schedule{}).satchel;
     const food = market.buy_quote(enc, .food);
     try testing.expect(resolve(&w, e, &res, &food, 2) == null);
-    try testing.expectApproxEqAbs(@as(f32, 6), enc.stockOf(.food), 1e-5);
-    try testing.expectApproxEqAbs(@as(f32, 26), enc.stockOf(.biomass), 1e-5);
+    try testing.expectApproxEqAbs(full[@backingInt(Ware.food)] - 2, enc.stockOf(.food), 1e-5);
+    try testing.expectApproxEqAbs(full[@backingInt(Ware.biomass)] + 2 * market.food_ask, enc.stockOf(.biomass), 1e-4);
     try testing.expectApproxEqAbs(@as(f32, 8), w.get(e, comp.InventoryFood).?.v, 1e-5);
 
     // A satchel with one food left refuses a quote for two, whole.
@@ -381,30 +382,33 @@ test "a sell is paid out of the satchel at the visit's price, up to what the pas
     const e = spawn_trader(&w); // 6 food, 12 materials
     const enc = &res.sim.encounter;
 
+    const full = (market.Schedule{}).satchel;
+    const bid = market.food_bid;
     const first = market.sell_quote(enc, .food);
     try testing.expect(resolve(&w, e, &res, &first, 1) == null);
-    try testing.expectApproxEqAbs(@as(f32, 14), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // +2
-    try testing.expectApproxEqAbs(@as(f32, 18), enc.stockOf(.biomass), 1e-5); // paid out of 20
-    try testing.expectApproxEqAbs(@as(f32, 9), enc.stockOf(.food), 1e-5); // it carries the food
+    try testing.expectApproxEqAbs(12 + bid, w.get(e, comp.InventoryBiomass).?.v, 1e-5); // one food's worth
+    try testing.expectApproxEqAbs(full[@backingInt(Ware.biomass)] - bid, enc.stockOf(.biomass), 1e-4); // paid out of the satchel
+    try testing.expectApproxEqAbs(full[@backingInt(Ware.food)] + 1, enc.stockOf(.food), 1e-5); // it carries the food
     try testing.expectEqual(@as(u16, 1), enc.soldOf(.food));
     // The same quote again: the price has not moved, two lots at once settle.
     try testing.expect(resolve(&w, e, &res, &first, 2) == null);
-    try testing.expectApproxEqAbs(@as(f32, 18), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // +4
+    try testing.expectApproxEqAbs(12 + 3 * bid, w.get(e, comp.InventoryBiomass).?.v, 1e-5);
     try testing.expectEqual(@as(u16, 3), enc.soldOf(.food));
     // More than it still wants is refused whole, though the quote's own stock allowed it.
     w.get(e, comp.InventoryFood).?.v = 10;
+    enc.sold[@backingInt(Ware.food)] = market.wanted(.food) - 3;
     try testing.expectEqual(Reason.sold_out, resolve(&w, e, &res, &first, 4).?);
     try testing.expectApproxEqAbs(@as(f32, 10), w.get(e, comp.InventoryFood).?.v, 1e-5);
 
     // A satchel that cannot pay refuses the sell.
     const second = market.sell_quote(enc, .food);
-    enc.stock[@backingInt(Ware.biomass)] = 1;
+    enc.stock[@backingInt(Ware.biomass)] = bid / 2;
     try testing.expectEqual(Reason.sold_out, resolve(&w, e, &res, &second, 1).?);
 
     // A sell lot of materials is paid in food.
     const mats = market.sell_quote(enc, .biomass);
     try testing.expect(resolve(&w, e, &res, &mats, 1) == null);
-    try testing.expectApproxEqAbs(@as(f32, 11), w.get(e, comp.InventoryFood).?.v, 1e-5); // 10 + 1
+    try testing.expectApproxEqAbs(10 + mats.receive.qtyOf(.food), w.get(e, comp.InventoryFood).?.v, 1e-5);
     var cursor: u64 = 0;
     const r = res.events.readerAt(events.Traded, &cursor);
     _ = r.next().?;
@@ -413,7 +417,8 @@ test "a sell is paid out of the satchel at the visit's price, up to what the pas
     try testing.expectEqual(Ware.food, paid.item);
     // A buy counts on the passerby's tally too.
     const rod = market.buy_quote(enc, .fish_hook);
-    w.get(e, comp.InventoryFood).?.v = 10;
+    w.get(e, comp.InventoryFood).?.v = rod.give.qtyOf(.food);
+    w.get(e, comp.InventoryBiomass).?.v = rod.give.qtyOf(.biomass);
     try testing.expect(resolve(&w, e, &res, &rod, 1) == null);
     try testing.expectEqual(@as(u16, 1), enc.bought[@backingInt(Ware.fish_hook)]);
 }
@@ -424,9 +429,10 @@ test "a rank-2 tool is the rank-1 holder's: the net is refused to a player witho
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
-    w.get(e, comp.InventoryFood).?.v = 10;
-    w.get(e, comp.InventoryBiomass).?.v = 40;
     const net = market.buy_quote(&res.sim.encounter, .fish_net);
+    // What the net costs, and a little over.
+    w.get(e, comp.InventoryFood).?.v = net.give.qtyOf(.food) + 3;
+    w.get(e, comp.InventoryBiomass).?.v = net.give.qtyOf(.biomass) + 12;
     try testing.expect(!offered(&w, e, &res.catalog, .fish_net));
     try testing.expectEqual(Reason.not_owned, resolve(&w, e, &res, &net, 1).?);
     try testing.expect(!capital.owns(&w, e, &res.catalog, "fish_net"));
@@ -435,8 +441,8 @@ test "a rank-2 tool is the rank-1 holder's: the net is refused to a player witho
     try testing.expect(offered(&w, e, &res.catalog, .fish_net));
     try testing.expect(resolve(&w, e, &res, &net, 1) == null);
     try testing.expect(capital.owns(&w, e, &res.catalog, "fish_net"));
-    try testing.expectApproxEqAbs(@as(f32, 3), w.get(e, comp.InventoryFood).?.v, 1e-5); // 10 - 7
-    try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 40 - 28
+    try testing.expectApproxEqAbs(@as(f32, 3), w.get(e, comp.InventoryFood).?.v, 1e-5); // the little over
+    try testing.expectApproxEqAbs(@as(f32, 12), w.get(e, comp.InventoryBiomass).?.v, 1e-5);
 }
 
 test "the cookpot is anyone's to buy; the work gloves are the hatchet holder's" {
@@ -445,18 +451,19 @@ test "the cookpot is anyone's to buy; the work gloves are the hatchet holder's" 
     var res = try test_res();
     defer res.catalog.deinit();
     const e = spawn_trader(&w);
-    w.get(e, comp.InventoryFood).?.v = 20;
-    w.get(e, comp.InventoryBiomass).?.v = 80;
-
     const pot = market.buy_quote(&res.sim.encounter, .cookpot);
+    const gloves = market.buy_quote(&res.sim.encounter, .work_gloves);
+    // What the two cost together.
+    w.get(e, comp.InventoryFood).?.v = pot.give.qtyOf(.food) + gloves.give.qtyOf(.food);
+    w.get(e, comp.InventoryBiomass).?.v = pot.give.qtyOf(.biomass) + gloves.give.qtyOf(.biomass);
+
     try testing.expect(offered(&w, e, &res.catalog, .cookpot));
     try testing.expect(resolve(&w, e, &res, &pot, 1) == null);
     try testing.expect(capital.owns(&w, e, &res.catalog, "cookpot"));
     try testing.expectEqual(@as(u8, 2), w.get(e, comp.InventoryFood).?.quality); // its effect landed
-    try testing.expectApproxEqAbs(@as(f32, 10), w.get(e, comp.InventoryFood).?.v, 1e-5); // 20 - 10
-    try testing.expectApproxEqAbs(@as(f32, 40), w.get(e, comp.InventoryBiomass).?.v, 1e-5); // 80 - 40
+    try testing.expectApproxEqAbs(gloves.give.qtyOf(.food), w.get(e, comp.InventoryFood).?.v, 1e-5); // the gloves' price is left
+    try testing.expectApproxEqAbs(gloves.give.qtyOf(.biomass), w.get(e, comp.InventoryBiomass).?.v, 1e-5);
 
-    const gloves = market.buy_quote(&res.sim.encounter, .work_gloves);
     try testing.expect(!offered(&w, e, &res.catalog, .work_gloves));
     try testing.expectEqual(Reason.not_owned, resolve(&w, e, &res, &gloves, 1).?);
     capital.acquire(&w, e, &res, res.catalog.goodIndex("hatchet").?, 1);

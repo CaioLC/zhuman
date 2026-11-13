@@ -158,7 +158,7 @@
         .id = "shelter",
         .name = "Shelter",
         .tier = .crude,
-        .requires = .{ .energy = 8.0, .hours = 144.0, .biomass = 120.0, .all = .{ "rope_bag", "leaf_bed" } },
+        .requires = .{ .energy = 8.0, .hours = 144.0, .biomass = 240.0, .all = .{ "rope_bag", "leaf_bed" } },
         .unlock = .{ .vigor_abs = 12.0, .food = 15.0, .goods = 5 },
         .capacity = 4,
         .milestone = .act_one,
@@ -180,11 +180,12 @@
         .effects = .{
             .{ .scale = .{ .target = "fish", .stat = .energy, .by = 0.7 } },
             .{ .scale = .{ .target = "fish", .stat = .{ .output = .food }, .by = 1.5 } },
+            .{ .scale = .{ .target = "fish", .stat = .hours, .by = 0.67 } },
         },
         .copy = .{
-            .effect = "fishing costs less and catches more",
+            .effect = "fishing is quicker, costs less and catches more",
             .short = "fish better",
-            .built = "The passerby's fishing net is yours. Fishing costs less and catches more.",
+            .built = "The passerby's fishing net is yours. Fishing is quicker, costs less and catches more.",
         },
     },
     .{
@@ -194,7 +195,7 @@
         .family = .{ .name = "chopping", .rank = 2 },
         .effects = .{
             .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.7 } },
-            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = .biomass }, .by = 1.4 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .{ .output = .biomass }, .by = 2.0 } },
         },
         .copy = .{
             .effect = "splitting wood costs less and yields more",
@@ -207,7 +208,7 @@
         .name = "Work gloves",
         .buildable = false,
         .effects = .{
-            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.75 } },
+            .{ .scale = .{ .target = "chop_wood", .stat = .energy, .by = 0.85 } },
         },
         .copy = .{
             .effect = "splitting wood costs less",
