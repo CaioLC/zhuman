@@ -5,7 +5,8 @@
 //! either a time to full vigor in days, or an explicit no-recovery state (empty larder,
 //! zero-quality food, already at the ceiling, or a larder that cannot reach full). It reads the
 //! same terms the metabolism loop applies (`base_rate × rate` consumption, `Config.regen` a day
-//! of recovery while fed), so the projection cannot disagree with what happens. It runs before `log` in each act's `handle` and `update` sets, so the BODY lines read
+//! of recovery while fed), so the projection cannot disagree with what happens. It also publishes the pace
+//! the body works at on that ration (`Config.pace`), which the pages divide a job's hours by. It runs before `log` in each act's `handle` and `update` sets, so the BODY lines read
 //! the frame's state; running it again on an unchanged world changes nothing.
 
 const std = @import("std");
@@ -33,6 +34,7 @@ pub fn outlook(
             .rate = cfg.clampMetabolism(met.rate),
             .regen_per_day = cfg.regen(met.rate, food.quality),
         });
+        out.pace = cfg.pace(met.rate, food.quality, food.v > 0);
     }
 }
 

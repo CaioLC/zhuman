@@ -105,6 +105,18 @@ pub const Config = struct {
         return self.regen_full_per_day * (1.0 - std.math.pow(f32, 1.0 - self.regen_at_normal, fed));
     }
 
+    /// How fast a body works at `rate` food of `quality`, as a share of the pace the normal
+    /// ration keeps: the recovery curve again (`regen`), so the ration that restores a body
+    /// faster also moves its hands faster, by ever less. `1.0` at normal; a body eating the
+    /// meagerest ration, an unfed one and one eating food of no quality all work at the slowest
+    /// pace, the meagerest ration's. `resolve_busy` advances labor and builds by it and
+    /// `outlook` publishes it; a generator's cycle is not the body's work and keeps its clock.
+    pub fn pace(self: Config, rate: f32, quality: u8, fed: bool) f32 {
+        const slowest = self.regen(self.metabolism_rate_min, 1);
+        const now = if (fed) @max(self.regen(rate, quality), slowest) else slowest;
+        return now / (self.regen_full_per_day * self.regen_at_normal);
+    }
+
     /// Clamp a metabolism rate into the authoritative `[min, max]` band: the one place a rate
     /// is made legal, used on migration/reset and by any UI that sets the rate.
     pub fn clampMetabolism(self: Config, rate: f32) f32 {
@@ -223,4 +235,20 @@ test "Config.regen saturates: the normal ration regains its share of full speed 
     // Quality multiplies how far the food goes; none restores nothing.
     try std.testing.expectApproxEqAbs(cfg.regen(1.0, 1), cfg.regen(0.5, 2), 1e-4);
     try std.testing.expectEqual(@as(f32, 0), cfg.regen(1.0, 0));
+}
+
+test "Config.pace: the normal ration keeps the pace, a meager or unfed body the slowest, a feast a little more" {
+    const cfg = Config{};
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0), cfg.pace(1.0, 1, true), 1e-5);
+    const slowest = cfg.pace(cfg.metabolism_rate_min, 1, true);
+    try std.testing.expect(slowest < 1.0 and slowest > 0);
+    try std.testing.expectEqual(slowest, cfg.pace(1.0, 1, false)); // unfed
+    try std.testing.expectEqual(slowest, cfg.pace(1.0, 0, true)); // food of no quality
+    try std.testing.expectEqual(slowest, cfg.pace(0.01, 1, true)); // below the band
+    // More food, more pace, by ever less, and never past what full speed is of normal.
+    const feast = cfg.pace(2.0, 1, true);
+    const top = cfg.pace(cfg.metabolism_rate_max, 1, true);
+    try std.testing.expect(feast > 1.0 and top > feast);
+    try std.testing.expect(feast - 1.0 < 1.0 - slowest);
+    try std.testing.expect(top < 1.0 / cfg.regen_at_normal);
 }

@@ -159,7 +159,8 @@ pub const Busy = struct {
         build: u16,
     };
     doing: Doing,
-    /// Total work time and what's left of it, in game-seconds (see `res.hours_to_secs`).
+    /// Total work and what's left of it, in game-seconds at the normal ration's pace (see
+    /// `res.hours_to_secs`); `resolve_busy` works it off at the body's pace.
     total: f32,
     remaining: f32,
     /// Labor quality locked at begin (see `actions.yield_factor`).
@@ -224,6 +225,9 @@ pub const Outlook = struct {
     /// Days of food at the current rate; `0` when the larder is empty.
     food_days: f32 = 0,
     recovery: Recovery = .no_food,
+    /// The pace the body works at on its current ration (`Config.pace`), `1.0` at normal: a
+    /// job's authored hours divided by it are the hours the job takes now.
+    pace: f32 = 1,
 };
 
 /// What each of the agent's verbs, recipes and generators would answer right now, written by

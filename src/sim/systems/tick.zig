@@ -88,7 +88,9 @@ pub fn metabolize(
     }
 }
 
-/// Tick every act in progress and resolve the ones whose time is up: dispatch `doing`
+/// Tick every act in progress, at the pace the body's eating keeps (`Config.pace`: the hours a
+/// job is authored at are its hours at the normal ration, and a body with no metabolism works
+/// at that pace), and resolve the ones whose time is up: dispatch `doing`
 /// back to its completion half (deposit + receipt for labor, the good for a build) and
 /// drop the `Busy`. Collect-then-apply, like `despawn_dead`: finishing removes from the
 /// storage this query iterates. Runs after `metabolize` (the body pays its keep while
@@ -104,7 +106,7 @@ pub fn resolve_busy(
     var it = q.iter();
     while (it.next()) |entry| {
         const e: Entity, const b: *comp.Busy = entry;
-        b.remaining -= res.time.dt;
+        b.remaining -= res.time.dt * paceOf(w, &res.config, e);
         if (b.remaining <= 0) {
             done[n] = e;
             n += 1;
@@ -120,6 +122,13 @@ pub fn resolve_busy(
             .build => |gi| capital.finish(w, e, res, gi),
         }
     }
+}
+
+/// The pace agent `e` works at: its ration's, read off its metabolism and larder.
+fn paceOf(w: *const World, cfg: *const res_mod.Config, e: Entity) f32 {
+    const met = w.get(e, comp.Metabolism) orelse return 1;
+    const food = w.get(e, comp.InventoryFood) orelse return 1;
+    return cfg.pace(met.rate, food.quality, food.v > 0);
 }
 
 /// Tag any actor whose `Vigor` has drained to zero as `Dead` — vigor `0` is death — and emit
@@ -364,6 +373,34 @@ test "an empty larder drains vigor in proportion to the ration: a feast starves 
     try std.testing.expectApproxEqAbs(10 - 0.5 * per_day, w.get(meager, comp.Vigor).?.v, 1e-5);
     try std.testing.expectApproxEqAbs(10 - 1.0 * per_day, w.get(normal, comp.Vigor).?.v, 1e-5);
     try std.testing.expectApproxEqAbs(10 - 2.0 * per_day, w.get(lavish, comp.Vigor).?.v, 1e-5);
+}
+
+test "resolve_busy works a job off at the pace the body's ration keeps" {
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    var res = test_res(0);
+    const total: f32 = 100;
+    res.time.dt = total / 2; // half the job at the normal pace
+    const job = comp.Busy{ .doing = .{ .labor = 0 }, .total = total, .remaining = total, .quality = 1 };
+    const fed = comp.InventoryFood{ .v = 50, .spoils = 0 };
+    const normal = w.spawn(.{ job, fed, comp.Metabolism{ .rate = 1.0 } });
+    const meager = w.spawn(.{ job, fed, comp.Metabolism{ .rate = res.config.metabolism_rate_min } });
+    const feast = w.spawn(.{ job, fed, comp.Metabolism{ .rate = 2.0 } });
+    const unfed = w.spawn(.{ job, comp.InventoryFood{ .v = 0, .spoils = 0 }, comp.Metabolism{ .rate = 2.0 } });
+    const bodiless = w.spawn(.{job}); // no metabolism: the normal pace
+
+    ecs.run(&w, &res, resolve_busy);
+    const left = struct {
+        fn of(wld: *World, e: Entity) f32 {
+            return wld.get(e, comp.Busy).?.remaining;
+        }
+    }.of;
+    try std.testing.expectApproxEqAbs(total / 2, left(&w, normal), 1e-3);
+    try std.testing.expectApproxEqAbs(total / 2, left(&w, bodiless), 1e-3);
+    const slowest = res.config.pace(res.config.metabolism_rate_min, 1, true);
+    try std.testing.expectApproxEqAbs(total - total / 2 * slowest, left(&w, meager), 1e-3);
+    try std.testing.expectEqual(left(&w, meager), left(&w, unfed)); // a feast with nothing to eat is the slowest pace
+    try std.testing.expect(left(&w, feast) < left(&w, normal) and left(&w, normal) < left(&w, meager));
 }
 
 test "track_reach logs a recipe once it is listed and affordable, not on repeats, and re-arms when it leaves the shelf" {
