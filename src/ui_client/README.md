@@ -519,7 +519,7 @@ A *feature* is one kind of thing a node can be, as a module co-locating its whol
 | `attach` | no | the build-time mixin: measure, size, set payload/state |
 
 ```zig
-pub const list = .{ fill, image, svg, geometry, line, text, outline };  // back → front
+pub const list = .{ fill, image, svg, geometry, glyph_grid, text, outline };  // back → front
 ```
 
 **The list's order is the z-order** — outline last, so a hover ring shows over an opaque
@@ -555,6 +555,27 @@ milestone/state fade), the transparent end compositing over what is under it via
 `.blend` baseline. Stops carry a full `Color`, so alpha rides along. The `slider` template
 draws its split track with it and `milestone_goal` its wash; the tessellation is tested
 SDL-free.
+
+**`glyph_grid` — a grid of monospace cells.** The surface for an ASCII scene: `cols` × `rows`
+cells, each one glyph and one ink, composed cell by cell and different every frame. A text
+leaf is the wrong tool for that, because it caches one texture for its whole string and
+re-rasterizes it when the string changes, so a row that changes every tick is rasterized every
+tick. Here the thing cached is the **glyph**: each distinct codepoint is rasterized white once,
+at the grid's size, into a texture the node's pooled `GlyphGridState` owns, and a frame is one
+tinted blit a filled cell (tint-on-blit, the text cache's strategy). Changing a cell never
+rasterizes anything.
+
+The cells are `features/glyph_cells.zig`'s `Cells`, **pure and SDL-free**: `put` writes one
+cell, `stamp` writes a block of art standing on a row (a space in the art leaves the cell under
+it alone, an optional clip keeps it inside a rectangle), later writes cover earlier ones, and a
+write outside the grid is dropped, so a sprite walks in from off the edge. An ink is an index
+into a palette given at attach, so whoever composes the grid names roles and the colors arrive
+with the theme; ink 0 is the empty cell. A grid past `Cells.cap` (4096) cells is refused whole,
+and a grid shows at most `glyph_cap` (128) distinct glyphs. `El.glyph_grid(id, cells, palette,
+px)` copies the cells into the state and sizes the node to the grid, a cell being the font's
+advance wide and its line skip tall. The glyph textures belong to one device size and one
+renderer generation: `draw` frees them on a new size and abandons them after a renderer reset,
+and the pool's eviction hook frees them when the node disappears.
 
 Clipping is *not* a feature. It is `Layout.overflow` in the engine, because it is geometry
 two consumers read (the render walk and hit-testing), not a paint the backend

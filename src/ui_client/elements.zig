@@ -46,6 +46,10 @@ const Sprite = cb.Sprite;
 pub const GradientStop = feat.geometry.GradientStop;
 pub const GradientDir = feat.geometry.Dir;
 
+/// Re-exports so screens name the glyph grid's cells through `elements`.
+pub const GlyphCells = feat.glyph_grid.Cells;
+pub const GlyphClip = feat.glyph_grid.Clip;
+
 /// A text leaf's measurement constraint, chosen when the leaf is created (`El.text_fit`) —
 /// exactly one of the six, by construction. `.free` is what a plain `text` leaf gets.
 pub const TextFit = union(enum) {
@@ -650,6 +654,15 @@ pub const El = struct {
     pub fn gradient(self: El, id: []const u8, dir: feat.geometry.Dir, stops: []const feat.geometry.GradientStop, opacity: f32) !El {
         const node = try child(self, id);
         feat.data_gradient(self.ctx, node, dir, stops, opacity);
+        return .{ .ctx = self.ctx, .node = node };
+    }
+
+    /// A **grid of monospace cells**, one glyph and one ink each, drawn by the `glyph_grid`
+    /// feature at `logical_px`: `palette[ink]` is an ink's color. The surface for an ASCII
+    /// scene, where the cells change every frame. Sizes the node to the grid.
+    pub fn glyph_grid(self: El, id: []const u8, cells: *const feat.glyph_grid.Cells, palette: []const cb.Color, logical_px: f32) !El {
+        const node = try child(self, id);
+        feat.data_glyph_grid(self.ctx, node, cells, palette, logical_px);
         return .{ .ctx = self.ctx, .node = node };
     }
 };

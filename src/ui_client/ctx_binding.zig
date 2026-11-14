@@ -550,7 +550,59 @@ pub const UiState = struct {
             return self.idx[0..self.ilen];
         }
     };
+
+    /// The `glyph_grid` feature's state: the grid of cells a scene composed this frame, the
+    /// palette its inks index, and one white texture a distinct glyph, tinted at blit. The
+    /// cells and palette are inline POD, copied in at attach. The textures are **GPU
+    /// resources**, so this declares `deinit` and the pool's eviction hook frees them when
+    /// the node disappears, as it does `SvgState`'s raster. They belong to one device size
+    /// and one renderer generation (`tex_px`, `tex_generation`); the feature's `draw`
+    /// frees them on a new size and abandons them after a renderer reset.
+    pub const GlyphGridState = struct {
+        pub const Cells = @import("./features/glyph_cells.zig").Cells;
+        /// Inks a palette holds, ink 0 included (it is the empty cell and is never drawn).
+        pub const palette_cap = 16;
+        /// Distinct glyphs one grid may show. A glyph past this draws nothing.
+        pub const glyph_cap = 128;
+
+        pub const Glyph = struct {
+            cp: u16 = 0,
+            /// Null when the glyph would not rasterize; the slot is kept so it is not retried.
+            tex: ?sdl.render.Texture = null,
+            w: f32 = 0,
+            h: f32 = 0,
+        };
+
+        cells: Cells = .{},
+        palette: [palette_cap]Color = undefined,
+        palette_len: u8 = 0,
+        /// The device font size, and the cell it gives: the advance and the line skip.
+        px: f32 = 0,
+        cell_w: f32 = 0,
+        cell_h: f32 = 0,
+
+        glyphs: [glyph_cap]Glyph = undefined,
+        glyph_len: usize = 0,
+        tex_px: f32 = 0,
+        tex_generation: u32 = 0,
+
+        /// Free every glyph texture (renderer alive): the eviction hook, and a size change.
+        pub fn deinit(self: *GlyphGridState) void {
+            for (self.glyphs[0..self.glyph_len]) |g| if (g.tex) |t| t.deinit();
+            self.glyph_len = 0;
+        }
+
+        /// Drop the glyph textures **without** freeing them: a renderer reset has already
+        /// destroyed them, so a free would be a double free (`TextState.abandonTexture`).
+        pub fn abandonGlyphs(self: *GlyphGridState) void {
+            self.glyph_len = 0;
+        }
+    };
 };
+
+/// The `glyph_grid` feature's payload. The cells, the palette and the glyph textures are
+/// all in `GlyphGridState`; present ⟹ draw the node's pooled grid.
+pub const GlyphGrid = struct {};
 
 /// One mesh vertex for the `geometry` feature: a node-local unit-square position plus its
 /// own `Color`. Per-vertex color is what lets one mesh carry a flat fill (all equal), a
@@ -730,6 +782,7 @@ pub const RenderData = struct {
     img: ?Sprite = null, // textured draw (texture + optional sheet cell), blit over the node's box
     svg: ?Color = null, // cached SVG raster (in node.state(SvgState)), tinted this color
     geometry: ?Geometry = null, // indexed triangle mesh in node.state(GeometryState), per-vertex color
+    glyph_grid: ?GlyphGrid = null, // a grid of monospace cells in node.state(GlyphGridState), one glyph and ink each
 
     /// **Per-node visual opacity**, 0..1, default fully opaque. *Not* a paint
     /// feature — it is a render-walk modulation: `draw_tree` multiplies a node's opacity into
