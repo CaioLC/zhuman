@@ -581,6 +581,30 @@ button:disabled {
   color: var(--danger);
 }
 
+/* A SETTLEMENT stock line: the label, produced against demanded, then the stockpile in its
+   own right-aligned column, so the pairs end on one edge and the stockpiles on another. */
+.margin-row.stock-row {
+  grid-template-columns: minmax(0, 1fr) auto 30px;
+  gap: 10px;
+}
+
+.margin-row.stock-row span:nth-child(2) {
+  font-size: 11px;
+  text-align: right;
+}
+
+.margin-row.stock-row span:nth-child(2):not([class]) {
+  color: var(--dim);
+}
+
+.margin-row.stock-row span.stock-cell {
+  color: var(--fg);
+}
+
+.margin-row.stock-row span.stock-cell.low {
+  color: var(--danger);
+}
+
 /* SETTLEMENT's aggregates carry the game's semantic tones (`household` Line.tone). */
 .margin-row span.value {
   color: var(--fg);

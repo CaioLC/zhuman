@@ -396,7 +396,8 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
   then energy and every stock in the same list, each as produced against demanded a day
-  (`Food +14 / −8`), colored by the net. SETTLEMENT and BODY are the rail's only headings. It appears at the Act I curtain.
+  (`Food +14 / −8`), colored by the net, each stock followed by its stockpile in a column of
+  its own (`22`; energy holds none). SETTLEMENT and BODY are the rail's only headings. It appears at the Act I curtain.
 - **[decided]** BODY (the same in both acts) is the player's own condition: the sentences
   (`Food lasts`, recovery, `Work pace`), then under a hairline the food's
   spoilage and the vigor ceiling against their baselines. In Act I BODY leads the rail and
