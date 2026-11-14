@@ -164,7 +164,7 @@ at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
 so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
 hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
-scroll, the Household rail sits above the surface (SETTLEMENT and BODY side by side at 760, stacked below 560),
+scroll, the Household rail sits above the surface (SETTLEMENT and BODY side by side at 760, Act I's BODY beside the eating policy there, stacked below 560),
 ACTIONS and BUILD take their natural height, narrow BUILD drops lower-priority columns, and the log
 remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
 

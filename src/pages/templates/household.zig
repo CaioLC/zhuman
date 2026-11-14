@@ -125,7 +125,7 @@ const stacked_gap: f32 = 22;
 /// Build the SETTLEMENT and BODY panels from one act's `Content`. Framed, they are the rail's
 /// 240px column. Stacked (≤760) they span the page: side by side at the 760 class, one above
 /// the other below 560. Returns the box the column's foot (the eating policy) goes into, at
-/// one panel's width.
+/// one panel's width: under the panels, or beside BODY at the 760 class when BODY is alone.
 fn panels(parent: El, id: []const u8, c: Content) !El {
     const ctx = parent.ctx;
     const terminal = @import("./terminal.zig");
@@ -142,7 +142,9 @@ fn panels(parent: El, id: []const u8, c: Content) !El {
         }, .{});
         if (c.settlement) |s| try settlementPanel(row, s, sc.col_w);
         try bodyPanel(row, c.body, sc.col_w);
-        return column.box("foot", .{ .w = .{ .fixed = sc.col_w }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
+        // With no SETTLEMENT the second column is free, so the foot sits beside BODY there.
+        const beside = sc.two_up and c.settlement == null;
+        return (if (beside) row else column).box("foot", .{ .w = .{ .fixed = sc.col_w }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
     }
     const column = try parent.box(id, .{
         .w = .{ .fixed = column_width }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
