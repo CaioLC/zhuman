@@ -103,7 +103,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
         overlay = try trade_overlay(ctx, world, e, trade_ts);
     }
 
-    // The header (stocks left, run context right; Act I has no energy rate) and the log.
+    // The header (stocks left, run context right) and the log.
     return page.finish(.{
         .stocks = header_stocks[0..header_stock_count],
         .act_label = "Act I",

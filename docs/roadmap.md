@@ -33,9 +33,9 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 
 ### Non-negotiable product invariants
 
-- Act I has Vigor, Food, and Materials; Act II has Vigor, Population, Coin, Food, Water, Fuel, Metal, Minerals, and Materials. Materials is one stock in both acts (the sim's `biomass`), shown as "materials" throughout.
+- The header's stockline: Act I has Vigor, Food, and Materials; Act II has Vigor, Food, Materials, Water, Fuel, Metal, Minerals, and Coin. Population is not a header stock: it is the first line of the rail's SETTLEMENT panel. Materials is one stock in both acts (the sim's `biomass`), shown as "materials" throughout.
 - At the Act I curtain, Food and Materials carry unchanged. Built goods remain built. Same-named Act I and Act II materials costs remain numerically equal.
-- Energy is a flow/rate in the runline, never a stockline balance.
+- Energy is a flow/rate on the rail's SETTLEMENT panel, never a stockline balance. The runline carries the act and the day.
 - Act I has ACTIONS, BUILD, and MARKET. Act II has ACTIONS, BUILD, MARKET (the neighbours view), and RESEARCH (the board, formerly STRUCTURE). ACTIONS lists the held generator verbs after the labor verbs; Act II's lists the union of the Act I and Act II generators held.
 - ACTIONS is one pane in both acts: it searches, sorts and hides its tiles. Act I's tiles are at the regular density, Act II's compact.
 - BUILD uses one data-generated six-column recipe catalog in both acts. Act I lists the recipes whose gates pass, so a gated recipe (the chicken coop) appears once the good before it is owned, and dims the ones short; Act II lists its complete shelf, research-gated rows dimmed. Newly eligible recipes appear with an event-log announcement.

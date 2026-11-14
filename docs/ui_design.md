@@ -211,6 +211,10 @@ The rail is not an inventory: what the actor owns, spare against held, with each
 effect, is MARKET's INVENTORY view. The rail holds two kinds of information, each in its own
 panel, with the eating policy at their foot.
 
+The header carries only what the player spends and the day: neither the population nor the
+energy rate is a header item, so a collapsed rail (and a focus view, which collapses it) shows
+neither.
+
 **SETTLEMENT** is the aggregates, what the population is and does as a whole: how many people
 against the housing (`48/640`), the energy generated and consumed (`+7 / −5`, colored by the
 net), how long the larder feeds everyone at the eating policy's rate, when water runs short at

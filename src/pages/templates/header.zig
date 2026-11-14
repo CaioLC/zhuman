@@ -14,7 +14,7 @@ const speed_mod = @import("./speed_controls.zig");
 
 pub const Options = struct {
     stocks: []const stock_mod.Stock,
-    /// The long-line stockline form: Act II's nine stocks rest at the compact size.
+    /// The long-line stockline form: Act II's eight stocks rest at the compact size.
     compact_stocks: bool = false,
     /// Speed is normal game chrome; audits can suppress it when isolating stock layout.
     show_speed: bool = true,

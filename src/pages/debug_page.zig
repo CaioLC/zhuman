@@ -182,10 +182,10 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         };
         _ = try t.stockline(stage, "sl", &stocks, false);
     } else if (eq(name, "runline")) {
-        // Act I (no energy flow) above Act II (the `⚡ +gen/−consumed` rate).
+        // Both acts' run context: the act label and the day.
         const col = try stage.box("runs", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 10 }, .{});
         _ = try t.runline(col, "run", .{ .act_label = "Act I", .day = 3 });
-        _ = try t.runline(col, "run2", .{ .gen = 12, .consumed = 9, .act_label = "Act II", .day = 43 });
+        _ = try t.runline(col, "run2", .{ .act_label = "Act II", .day = 43 });
     } else if (eq(name, "header")) {
         const demo = try stage.box("header_demo", .{ .w = .{ .fixed = 620 }, .h = .fit_children }, .{});
         const stocks = [_]t.Stock{

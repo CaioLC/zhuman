@@ -10,7 +10,7 @@
 //! While hovered or focused the token is **read**: its **read form** — the full label in capitals,
 //! in `fg`, and the held amount floored to a tenth and always printed with one decimal, so it never
 //! shows more than is held (`FOOD: 11.6`, `MATERIALS: 31.0`, `VIGOR: 14.2/15`; a ceiling after the
-//! slash prints whole unless fractional, and a count of people stays whole, `POPULATION: 520/640`)
+//! slash prints whole unless fractional)
 //! — is drawn as an **overlay** out of the flow, at the read size (`readType`:
 //! 17px, 15px stacked, 13px on a compact line at ≤560). Its box is opaque `bg`, its text's width
 //! plus 4px on each side, and runs from the token's top to its bottom, reaching 4px higher over
@@ -29,7 +29,7 @@
 //! `tokens.dur_stock_token_s` (120ms) eased out: its alpha and a left-to-right reveal of its
 //! width, with the covered parts fading out over the same time; reduced motion snaps it.
 //!
-//! A **compact** stockline — Act II's nine stocks — rests every token at 10px with 4px gaps, so
+//! A **compact** stockline — Act II's eight stocks — rests every token at 10px with 4px gaps, so
 //! the long line fits beside the runline (the prototype's `.stockline.compact`). A full line — Act I's three — rests at the line size, so its overlay
 //! differs from rest only by the longer label and the detailed value.
 //!
@@ -89,9 +89,6 @@ pub const Stock = struct {
     full: []const u8,
     value: f32,
     max: ?f32 = null,
-    /// A count of whole things (population): its read form prints the amount whole, not to a
-    /// tenth.
-    count: bool = false,
     tone: Tone = .normal,
     /// What the value means (`low` for a stock at zero); when set it paints the value instead
     /// of `tone`.
@@ -104,8 +101,8 @@ pub fn stock_token(parent: El, id: []const u8, s: Stock) !void {
     _ = try stockline(parent, id, &.{s}, false);
 }
 
-/// Absorbs float drift before truncating a resting or whole amount (an accumulated `2.9999998`
-/// reads `3`) or a ceiling.
+/// Absorbs float drift before truncating a resting amount (an accumulated `2.9999998` reads
+/// `3`) or a ceiling.
 const drift_eps: f32 = 1e-3;
 /// Absorbs the f32 representation of a tenth before flooring to it, relative to the amount:
 /// f32 holds 2.3 as 2.2999999523, which floors to 2.2 without it. An f32 is off its decimal by
@@ -116,9 +113,9 @@ const max_magnitude: f32 = 1e15;
 
 /// How an amount prints: `compact` (the resting token) a whole number with `k`/`M` suffixes
 /// (`11`, `1.9k`, `12k`, `1.2M`); `tenth` (the read form) floored to a tenth and always one
-/// decimal (`3.6`, `126.0`); `whole` floored with no suffix (`520`); `trimmed` (a ceiling) one
-/// decimal only when fractional (`15`, `15.5`).
-const Form = enum { compact, tenth, whole, trimmed };
+/// decimal (`3.6`, `126.0`); `trimmed` (a ceiling) one decimal only when fractional (`15`,
+/// `15.5`).
+const Form = enum { compact, tenth, trimmed };
 
 /// The amount `mag` (non-negative) floored to tenths, with the representation guard.
 fn floorTenths(mag: f32) u64 {
@@ -150,13 +147,6 @@ fn formatAmount(buf: []u8, v: f32, form: Form) []const u8 {
             if (tenths % 10 != 0) w.print(".{d}", .{tenths % 10}) catch return "?";
             return w.buffered();
         },
-        .whole => {
-            const n: u64 = @intFromFloat(@floor(mag + drift_eps));
-            if (n == 0) return "0";
-            if (v < 0) w.writeAll("-") catch return "?";
-            w.print("{d}", .{n}) catch return "?";
-            return w.buffered();
-        },
         .compact => {},
     }
 
@@ -177,10 +167,10 @@ fn formatAmount(buf: []u8, v: f32, form: Form) []const u8 {
 }
 
 /// A stock's readout: its amount, plus `/max` when it has a ceiling. At rest (`detailed`
-/// false) both are compact (`14/15`); read, the amount is to a tenth, or whole for a count, and
-/// the ceiling one decimal only when fractional (`14.2/15`, `520/640`).
+/// false) both are compact (`14/15`); read, the amount is to a tenth and the ceiling one decimal
+/// only when fractional (`14.2/15`).
 fn formatStock(buf: []u8, s: Stock, detailed: bool) []const u8 {
-    const form: Form = if (!detailed) .compact else if (s.count) .whole else .tenth;
+    const form: Form = if (!detailed) .compact else .tenth;
     const m = s.max orelse return formatAmount(buf, s.value, form);
     var vbuf: [32]u8 = undefined;
     var mbuf: [32]u8 = undefined;
@@ -467,7 +457,6 @@ test "stock amounts truncate compactly and, read, to a tenth always printed" {
         const v: f32 = @as(f32, @floatFromInt(k)) / 10;
         try x(try std.fmt.bufPrint(&want, "{d}.{d}", .{ k / 10, k % 10 }), formatAmount(&buf, v, .tenth));
     }
-    try x("520", formatAmount(&buf, 520.7, .whole));
     try x("15", formatAmount(&buf, 15, .trimmed));
     try x("15.5", formatAmount(&buf, 15.5, .trimmed));
 }
@@ -509,9 +498,6 @@ test "stock readout appends max when set" {
     const food = Stock{ .abbrev = ha.sim.data.roster.Resource.food.abbrevIn(1), .full = ha.sim.data.roster.Resource.food.labelIn(1), .value = 4 };
     try x("4", formatStock(&buf, food, false));
     try x("4.0", formatStock(&buf, food, true));
-    const people = Stock{ .abbrev = "PO", .full = "Population", .value = 520, .max = 640, .count = true };
-    try x("520/640", formatStock(&buf, people, false));
-    try x("520/640", formatStock(&buf, people, true));
     const full = Stock{ .abbrev = "VI", .full = "Vigor", .value = 15, .max = 15 };
     try x("15.0/15", formatStock(&buf, full, true));
 }

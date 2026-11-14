@@ -7,7 +7,7 @@
 //!   // ... build into page.regions.body / page.regions.rail, collect stocks ...
 //!   return page.finish(.{ .stocks = &stocks, .act_label = "Act I", .overlay = dialog });
 //!
-//! The act's content — which stocks, the act label, an energy rate, the body — stays the page's.
+//! The act's content — which stocks, the act label, the body — stays the page's.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -31,12 +31,9 @@ pub const Options = struct {
 
 pub const Finish = struct {
     stocks: []const stock_mod.Stock,
-    /// The long-line stockline form (Act II's nine stocks).
+    /// The long-line stockline form (Act II's eight stocks).
     compact_stocks: bool = false,
     act_label: []const u8,
-    /// Per-unit energy generated and consumed; zero hides the runline's energy segment.
-    gen: f32 = 0,
-    consumed: f32 = 0,
     /// The framed event log under the page grid. A focus view drops it, and the grid takes
     /// its height.
     log: bool = true,
@@ -58,8 +55,6 @@ pub const ActPage = struct {
             .stocks = f.stocks,
             .compact_stocks = f.compact_stocks,
             .run = .{
-                .gen = f.gen,
-                .consumed = f.consumed,
                 .act_label = f.act_label,
                 .day = day(ctx),
                 // The prototype keeps the act label at every width (it has no `.optional` run

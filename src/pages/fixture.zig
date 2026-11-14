@@ -455,7 +455,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_actions",
-        .about = "Act II shared shell on ACTIONS: PO..CO stockline, 20 verbs then both acts' generators, merchant strip.",
+        .about = "Act II shared shell on ACTIONS: VI..CO stockline, 20 verbs then both acts' generators, merchant strip.",
         .screen = .act_two,
         .day = 112,
         .balances = settlement_generator_balances,

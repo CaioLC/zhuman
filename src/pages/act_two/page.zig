@@ -1,8 +1,8 @@
 //! `act_two/page` — the Act II **shared-shell instantiation** and the composition
 //! root for the Act II catalogs.
 //!
-//! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, BI, WA,
-//! FU, ME, MI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
+//! It fills the one shared `shell` with Act II's descriptors: the stockline VI, FO, MA, WA, FU,
+//! ME, MI, CO in its compact form, a runline carrying `Act II` and the day,
 //! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
@@ -112,12 +112,11 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     // The shared act page with a shell rail (SETTLEMENT/BODY) and the log footer.
     const page = try t.act_page(ctx, .{ .id = "act2", .act = .act_two, .rail = true });
     const regions = page.regions;
-    // --- header: PO..CO, then the runline (energy rate, Act II, day) -------------------------
-    // Vigor and the six stocks are the player's; population and coin are stand-ins.
-    var stocks: [2 + 1 + ledger_stocks.len]t.Stock = undefined;
+    // --- header: VI..CO, then the runline (Act II, day) --------------------------------------
+    // Vigor and the stocks are the player's. The population and the energy rate are the
+    // rail's SETTLEMENT lines, not header items.
+    var stocks: [2 + ledger_stocks.len]t.Stock = undefined;
     var n: usize = 0;
-    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx), .max = fx.capacityOf(population(ctx)), .count = true };
-    n += 1;
     if (agent) |e| {
         const vigor = world.get(e, comp.Vigor).?;
         stocks[n] = t.vigorStock("VI", vigor, world.get(e, comp.Condition));
@@ -225,8 +224,6 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
         .stocks = stocks[0..n],
         .compact_stocks = true,
         .act_label = if (ctx.res.game.states.in(.act_three)) "Act III" else "Act II",
-        .gen = fx.energy_gen,
-        .consumed = fx.energy_consumed,
         .log = !s.focus,
         .overlay = merchant_root,
     });
