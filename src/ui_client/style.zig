@@ -807,13 +807,13 @@ test "role fragments set exactly the literal's fields" {
 
 test "toneRole: every template tone maps to the same-named role, normal=fg, accent=acc" {
     const eq = std.testing.expectEqual;
-    const Holdings = enum { fg, dim, good, warn, danger };
+    const Readout = enum { fg, dim, good, warn, danger };
     const Log = enum { dim, normal, good, warn, danger };
     const Strip = enum { dim, accent, good, warn, danger };
     const Milestone = enum { danger, good };
     const Stock = enum { normal, warn, danger, accent };
-    try eq(ThemeRole.fg, toneRole(Holdings.fg));
-    try eq(ThemeRole.dim, toneRole(Holdings.dim));
+    try eq(ThemeRole.fg, toneRole(Readout.fg));
+    try eq(ThemeRole.dim, toneRole(Readout.dim));
     try eq(ThemeRole.fg, toneRole(Log.normal));
     try eq(ThemeRole.good, toneRole(Log.good));
     try eq(ThemeRole.acc, toneRole(Strip.accent));

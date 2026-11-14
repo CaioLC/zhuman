@@ -1,9 +1,9 @@
-//! `readout` — the primitives of a **readout panel** (`docs/ui_design.md`, HOLDINGS): the
-//! bordered, solid-outlined, padded column that HOLDINGS and BODY are made of; its eyebrow
+//! `readout` — the primitives of a **readout panel** (`docs/ui_design.md`, *The Household rail*): the
+//! bordered, solid-outlined, padded column that SETTLEMENT and BODY are made of; its eyebrow
 //! section label and the heading row that pairs one with a count; the two-ended
 //! `label … value` line; the dim-prose sentence around one live value; and the hairline
-//! divider between blocks. Act I's `holdings` template and Act II's rail content compose
-//! these, so neither styles a node of its own.
+//! divider between blocks. The `household` template composes these, so an act's rail content
+//! styles no node of its own.
 
 const ha = @import("ha");
 

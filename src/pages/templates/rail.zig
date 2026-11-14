@@ -1,4 +1,4 @@
-//! `rail` — the **collapsible HOUSEHOLD side rail** (holdings, BODY and the eating policy, in
+//! `rail` — the **collapsible HOUSEHOLD side rail** (SETTLEMENT, BODY and the eating policy, in
 //! every act; its restore label reads `HOUSEHOLD`). Fills the shell's
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
 //! the `household` column, or a narrow collapsed strip (width
@@ -45,7 +45,7 @@ pub const RailOptions = struct {
 
 /// The built rail: `collapsed` is this frame's resolved state (a caller may skip building
 /// content when collapsed), and `body` is the fill target — non-null only while expanded, so
-/// the caller does `if (r.body) |b| try holdings(b, …)`.
+/// the caller does `if (r.body) |b| try household(b, …)`.
 pub const Rail = struct {
     collapsed: bool,
     body: ?El,
@@ -139,7 +139,7 @@ pub fn rail(parent: El, opts: RailOptions) !Rail {
     // Its chevron is independently centered in both axes against the box's definite height.
     toggle.set(.{
         .anchor = .top_right,
-        .offset = .{ .x = if (stack) -(@import("./holdings.zig").stackedColumn(ctx).total - @import("./holdings.zig").stackedColumn(ctx).col_w) - 2 else -2 },
+        .offset = .{ .x = if (stack) -(@import("./household.zig").stackedColumn(ctx).total - @import("./household.zig").stackedColumn(ctx).col_w) - 2 else -2 },
         .w = .{ .fixed = collapse_width }, .h = .{ .fixed = collapse_height },
     }, .{toggle_chrome});
     (try toggle.text("chevron", "\u{2039}")).set(.{ .anchor = .center }, .{ toggle_ink, Style{ .font = 16 } });

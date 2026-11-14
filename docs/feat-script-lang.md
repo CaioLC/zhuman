@@ -476,7 +476,7 @@ page act_one {
 
     let page = act_page play act=.act_one
     let ws = act_one_workspace page.regions.body e=e
-        holdings=ha.act_one.holdings(e)
+        household=ha.act_one.household(e)
         market_available=res.sim.encounter.dealable()
 
     let ts = ws.market_action.TradeState
@@ -496,7 +496,7 @@ page act_one {
 }
 ```
 
-The `ha.act_one.holdings`, `ha.market.passerby_book`, `vigor_stock` and `stock` calls are the
+The `ha.act_one.household`, `ha.market.passerby_book`, `vigor_stock` and `stock` calls are the
 page's current inline builders as they would read once exported or shelved; they illustrate the
 shape, not an existing API.
 

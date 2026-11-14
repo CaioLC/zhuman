@@ -255,3 +255,13 @@ test "market: Act I's INVENTORY steps a spare good's offer up, holds the rest, a
     try testing.expectEqual(@as(u8, 2), fx.st.pick_kind);
     try testing.expectEqual(@as(u8, @intCast(hatchet.key())), fx.st.pick);
 }
+
+test "every buildable good carries the compact copy the market lists beside it" {
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    for (cat.goods) |g| {
+        if (g.buildable) try testing.expect(g.copy.short.len > 0);
+    }
+    try testing.expectEqualStrings("forage costs less", cat.good("sandals").?.copy.short);
+    try testing.expectEqualStrings("food keeps 2\u{00d7}", cat.good("root_cellar").?.copy.short);
+}

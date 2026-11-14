@@ -15,7 +15,7 @@ Everything UI in this repo sits on one ladder, and each rung may only reach down
 |---|---|---|---|
 | Engine | `src/ui/` | nothing | `Node`, the key-cache, the layout solve, interaction slots |
 | Foundation | `src/ui_client/` | the engine + SDL | the concrete bindings, paint features, the render walk, content elements, the style fold, the `Theme` roles |
-| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `build_list`, `holdings`, … |
+| Templates | `src/pages/templates/` | the foundation + the live palette | pre-styled compositions: `button`, `panel`, `action_tile`, `build_list`, `household`, … |
 | Screens | `src/pages/` | templates + the world | `build_ui`, `play_game`, `gameover` |
 
 **Screens lay out; templates paint.** A screen places nodes — `div`, `spacer`, `item`, the
@@ -393,8 +393,8 @@ the caller's interpolated `value` otherwise. `src/ui` stays motion-unaware.
 ## Transition/tween state (`tween.zig`)
 
 `tween.zig` is a small **host-layer tween registry** for the prototype's few *functional*
-transitions — the Holdings column/gap collapse (`120ms`), a stock token's read overlay (`120ms`),
-and the board's opacity/stroke changes (`100–110ms`, named `holdings_s`/`stock_token_s`/`board_s`
+transitions — the rail column/gap collapse (`120ms`), a stock token's read overlay (`120ms`),
+and the board's opacity/stroke changes (`100–110ms`, named `rail_s`/`stock_token_s`/`board_s`
 as seconds). It is a deliberately tiny **value provider**, not a general timeline engine and not
 a node feature: a consumer keys a scalar `Tween` by a **stable node/domain id** (a `u64`, the
 same stable-key discipline the interaction/focus/semantic registries use, so a tween survives
@@ -409,7 +409,7 @@ reached). Fixed-capacity and non-allocating (a full table drops a new id, so its
 the fallback target — snap, never crash); `Resources.tween` holds it inline and `main` projects
 the motion policy onto it each frame. Pure and SDL-free (the caller supplies `dt`), so
 interpolation, interrupt/reverse, reduced-motion snap, and stable-key independence are unit-tested
-without a renderer or a clock. Its consumers are the **Holdings/BODY rail**
+without a renderer or a clock. Its consumers are the **Household rail**
 (`pages/templates/rail.zig`) and the Act I workspace's inter-column gap, which follows the
 same policy: the rail keys a tween by its own node id and rides the width
 between `tokens.rail.collapsed` (36) and `tokens.rail.expanded` (252) over `tokens.dur_rail_s`
@@ -467,7 +467,7 @@ of `El` handles to fill: always `header` (thin top strip) and `body` (the growin
 surface), plus optional `rail`, `market`, `activity`, and a bottom-anchored `footer` —
 each `null` unless requested. The interior is laid out in the prototype's arrangement (header ·
 optional strips · a grid row of `rail | body` · footer), so a screen never hand-builds that
-graph — Act I turns on `footer` and composes HOLDINGS, its strips and its tabs inside its
+graph — Act I turns on `footer` and composes its rail, its strips and its tabs inside its
 own workspace; Act II turns on `rail` and `footer`. A tab strip is never a shell region: in
 both acts it is the first row of the surface it switches. **Overlay roots (tooltip/modal) stay the screen's own top-layer
 roots**, deliberately *not* children of the terminal box, so they float above the clip and can
@@ -909,7 +909,7 @@ sets exactly the fields of its literal, with no added tracking or transform:
 (a hairline's `line` fill). `roleColor(ctx, role)` gives the `Color` for a site that needs a
 value (a gradient stop, a helper that takes a color).
 
-**One tone mapping.** Templates keep their own `Tone` enums (`holdings`, `log`, `market_strip`,
+**One tone mapping.** Templates keep their own `Tone` enums (`household`, `log`, `market_strip`,
 `stock_token`), and they all map a tag to the role of the same name, with
 `normal` → `fg` and `accent` → `acc`. `style.toneRole(tone)` is that mapping for any of them
 (resolved at comptime; a tag with no role is a compile error), `style.toneColor(ctx, tone)` its
@@ -947,7 +947,7 @@ the colour for a site that needs a value (a tween's endpoint). The helpers are p
 flat), `margin(live, base, .higher | .lower)` (better / worse / flat), and their delta forms
 `tradeDelta(d)` and `marginDelta(d, dir)`. Every comparison of two amounts uses one tolerance,
 `verdict.delta_eps = 0.001`: values that far apart or closer are `flat`. A page sets a
-readout's `verdict` field (`HoldingsLine`, `HoldingsSentence`, `Stock`) and the template paints
+readout's `verdict` field (`HouseholdLine`, `HouseholdSentence`, `Stock`) and the template paints
 it.
 
 **The hot predicate.** `Interaction.hot()` is `held or hovering or focus_visible`: the
@@ -1127,7 +1127,7 @@ fast/wrapped path. Used at sites such as `capital_row`'s name column
 
 ### Rotated collapsed-rail copy
 
-The collapsed Holdings rail carries its `HOLDINGS` label set vertically, reading
+The collapsed Household rail carries its `HOUSEHOLD` label set vertically, reading
 bottom-to-top — a 90° counter-clockwise turn. `TextState.orientation` names the only two
 axis-aligned orientations the product uses: `.horizontal` (every ordinary label) and
 `.counter_clockwise_90`. The `.vertical` text fit selects it — a fit is one of wrap, cell or
@@ -1149,7 +1149,7 @@ never rotated independently. At blit, the upright `w×h` texture is centered on 
 `h×w` content box and drawn with SDL's `renderTextureRotated` at 270° clockwise (= 90°
 counter-clockwise) about its own center, landing the final pixels exactly on the oriented box.
 The placement is pure geometry (`blitPlacement`), tested SDL-free. The collapsed rail's
-`HOLDINGS` label reads bottom-to-top at the prototype's 9px / 0.09em collapsed-rail density.
+`HOUSEHOLD` label reads bottom-to-top at the prototype's 9px / 0.09em collapsed-rail density.
 
 ## Frame assembly (`tree.zig`)
 

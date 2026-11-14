@@ -6,10 +6,10 @@
 //! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
-//! the page, not the strips. The Household column (holdings, BODY, the eating policy) rides the
+//! the page, not the strips. The Household column (SETTLEMENT, BODY, the eating policy) rides the
 //! shell rail; the event log rides the shell footer.
 //!
-//! The page reads the player. Its stocks fill the stockline, its goods the holdings, its work
+//! The page reads the player. Its stocks fill the stockline, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
 //! catalog, and write the labor and build intents as Act I does. What no system models
 //! (population, coin, the energy rate, flows and body projections) comes from `fixtures.zig`.
@@ -57,7 +57,7 @@ const build_shelf = t.BuildShelf{
     // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
     .carry_owned = true,
 };
-const a2_holdings = @import("./holdings.zig");
+const a2_household = @import("./household.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 
 /// The surface's views, in tab order.
@@ -109,7 +109,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     const player = ecs.ConstMaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const agent: ?Entity = if (player.get()) |a| a[0] else null;
 
-    // The shared act page with a shell rail (Holdings/BODY) and the log footer.
+    // The shared act page with a shell rail (SETTLEMENT/BODY) and the log footer.
     const page = try t.act_page(ctx, .{ .id = "act2", .act = .act_two, .rail = true });
     const regions = page.regions;
     // --- header: PO..CO, then the runline (energy rate, Act II, day) -------------------------
@@ -191,7 +191,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
             .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {
-            _ = try t.household(body, world, e, "a2_holdings", try a2_holdings.content(ctx, world, e));
+            _ = try t.household(body, world, e, "a2_household", try a2_household.content(ctx, world, e));
         };
     }
 
@@ -235,7 +235,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
 test {
     _ = @import("./fixtures.zig");
     _ = @import("./coin_merchant.zig");
-    _ = @import("./holdings.zig");
+    _ = @import("./household.zig");
 }
 
 const nb = ha.sim.rules.neighbours;

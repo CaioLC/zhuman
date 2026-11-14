@@ -32,7 +32,7 @@ Set-Location $repoRoot
 # step with the catalog in `src/pages/fixture.zig` (the single source of fixture names).
 $matrix = [ordered]@{
     "act_one_default"   = "QA-10 Act I ACTIONS, reference 900x820"
-    "act_one_working"   = "QA-10 Act I BUILD/holdings mid-run"
+    "act_one_working"   = "QA-10 Act I BUILD/rail mid-run"
     "act_one_build"     = "QA-10 Act I BUILD recipe table, scroll on overflow"
     "gameover"          = "Game-over curtain"
     "act_one_end"       = "Act I curtain, first beat"

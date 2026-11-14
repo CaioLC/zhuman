@@ -402,7 +402,7 @@ pub const Resources = struct {
     /// motion-allowed until `init` resolves the real preference.
     motion: @import("./ui_client/motion.zig").Policy = .{},
     /// Host-side transition/tween registry: scalar transitions keyed by stable
-    /// node/domain id for the functional animations (Holdings collapse, stock-token font
+    /// node/domain id for the functional animations (the rail's collapse, stock-token font
     /// swap, board state changes). `main` advances it by the frame `dt` and projects the
     /// reduced-motion policy onto it each frame; a consumer reads `value(id, fallback)` to
     /// drive a size/gap/opacity. Presentation only; no simulation system reads it. Bounded and

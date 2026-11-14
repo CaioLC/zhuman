@@ -1,6 +1,6 @@
 //! `act_two/fixtures` — the authored stand-ins for what the Act II simulation does not model:
-//! the coin readout, the energy rate, the merchant's days left, the settlement's per-day flows
-//! and its body projections; the population stand-in is `Sim.population`. Everything the
+//! the coin readout, the energy rate, the merchant's days left, the settlement's housing, its
+//! per-day flows and its ration; the population stand-in is `Sim.population`. Everything the
 //! catalog and the world can say (the verbs, the recipes, the stocks, the goods owned) comes
 //! from them, not from here. The stand-ins are listed in `docs/roadmap.md`.
 const std = @import("std");
@@ -21,9 +21,8 @@ pub fn merchantDaysLeft(res: *const ha.res.Resources) f32 {
 /// The kicker's tail once the Exchange stands: the floor no longer leaves.
 pub const exchange_meta = "STANDING FLOOR";
 
-// —— Holdings / BODY ——————————————————————————————————————————————————————————————————
-// The per-day flow margins and the population-relevant Body projection; the holdings
-// themselves are the agent's goods.
+// —— SETTLEMENT ——————————————————————————————————————————————————————————————————
+// What the rail's SETTLEMENT panel reads beside the live stocks.
 
 /// Act-specific per-day flow margins (generated vs consumed), authored stand-ins for a
 /// production model. A positive flow reads `good`, a deficit `danger`.
@@ -51,6 +50,6 @@ pub fn capacityOf(people: f32) f32 {
 /// stand-in for a per-person metabolism.
 pub const ration_per_person: f32 = 0.32;
 
-/// The runline energy flow the Act II HUD shows (generated / consumed per unit).
+/// The energy the settlement generates and consumes (per unit), SETTLEMENT's `Energy` line.
 pub const energy_gen: f32 = 7.2;
 pub const energy_consumed: f32 = 5.4;

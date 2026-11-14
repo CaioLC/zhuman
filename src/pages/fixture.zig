@@ -111,9 +111,9 @@ pub const Spec = struct {
     /// Event-log history, oldest first. Empty keeps the run's own log.
     log: []const LogLine = &.{},
     /// Open on the first frame with the Household rail collapsed.
-    holdings_collapsed: bool = false,
+    rail_collapsed: bool = false,
     /// Open on the first frame with the Household rail expanded, even on a focus view.
-    holdings_open: bool = false,
+    rail_open: bool = false,
     /// Press Tab this many times once the first frame has published the focus order, so the
     /// capture shows a focus-visible control.
     tab_presses: u8 = 0,
@@ -520,7 +520,7 @@ pub const catalog = [_]Spec{
         .name = "act_one_collapsed",
         .about = "Act I ACTIONS with the Household rail collapsed to its restore control.",
         .day = 19,
-        .holdings_collapsed = true,
+        .rail_collapsed = true,
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
     },
     .{
@@ -688,7 +688,7 @@ pub const catalog = [_]Spec{
         .about = "Act I under reduced motion with the Household collapsed: the rail snaps, nothing eases.",
         .day = 19,
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
-        .holdings_collapsed = true,
+        .rail_collapsed = true,
         .reduced_motion = true,
     },
     .{
@@ -727,7 +727,7 @@ pub const catalog = [_]Spec{
         .day = 112,
         .balances = settlement_balances,
         .settlement = settlement,
-        .holdings_open = true,
+        .rail_open = true,
         .research = .{ .select = "gamekeeping" },
     },
     .{
@@ -1047,7 +1047,7 @@ pub const catalog = [_]Spec{
         .about = "Act II ACTIONS with the Household rail collapsed.",
         .screen = .act_two,
         .day = 112,
-        .holdings_collapsed = true,
+        .rail_collapsed = true,
         .balances = settlement_balances,
         .settlement = settlement,
     },
@@ -1292,7 +1292,7 @@ pub fn build_fixture(ctx: *uic.UiCtx, world: *const World, name: []const u8) !ui
         _ = ctx.moveFocus(.next, true);
     };
     const opening: ?usize = if (first) spec.view else null;
-    const collapsed: ?bool = if (first and spec.holdings_collapsed) true else if (first and spec.holdings_open) false else null;
+    const collapsed: ?bool = if (first and spec.rail_collapsed) true else if (first and spec.rail_open) false else null;
     const open_trade = first and spec.trade_open;
     if (first and spec.menu_open) {
         ctx.res.menu.show(&ctx.res.playback);

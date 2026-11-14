@@ -25,7 +25,7 @@ const log_view_mod = @import("./log_view.zig");
 pub const Options = struct {
     id: []const u8,
     act: terminal_mod.Act,
-    /// A shell rail region (Act II's Holdings/BODY); Act I's workspace carries its own rail.
+    /// A shell rail region (Act II's Household rail); Act I's workspace carries its own rail.
     rail: bool = false,
 };
 

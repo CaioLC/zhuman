@@ -29,8 +29,8 @@ const Node = uic.Node;
 const UiCtx = uic.UiCtx;
 
 const t = @import("./templates/root.zig");
-const act_one_holdings = @import("./act_one/holdings.zig");
-const act_two_holdings = @import("./act_two/holdings.zig");
+const act_one_household = @import("./act_one/household.zig");
+const act_two_household = @import("./act_two/household.zig");
 const coin_merchant = @import("./act_two/coin_merchant.zig").coin_merchant;
 
 /// The auditable templates, in a stable order. The index lists these; the selected one renders in
@@ -47,13 +47,13 @@ const entries = [_][]const u8{
     "tabs",
     "slider",
     "rail",
-    "holdings",
+    "household",
     "action_tile",
     "generator_tile",
     "actions_section",
     "build_section",
     "act_one_surface",
-    "act_two_holdings",
+    "act_two_household",
     "act_two_actions",
     "act_one_workspace",
     "act_one_page",
@@ -217,18 +217,18 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         const demo = try stage.box("rail_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 300 } }, .{});
         const r = try t.rail(demo, .{ .id = "rail", .label = "HOUSEHOLD" });
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
-    } else if (eq(name, "holdings")) {
+    } else if (eq(name, "household")) {
         if (player.get()) |a| {
-            // A coherent debug-only four-kind/six-unit fixture matching the reference anatomy.
-            // Values remain ordinary live ECS data; the component performs all projections.
-            fixtureGoods(ctx, a[0], &.{ .{ "sandals", 2 }, .{ "root_cellar", 1 }, .{ "leaf_bed", 1 }, .{ "hatchet", 2 } });
+            // Act I's column, BODY and the eating policy. The cellar and the bed move the
+            // food's spoilage and the vigor ceiling; the values are ordinary live ECS data.
+            fixtureGoods(ctx, a[0], &.{ .{ "root_cellar", 1 }, .{ "leaf_bed", 1 } });
             poke(ctx, a[0], .{ .food = 7.8 });
             poke(ctx, a[0], .{ .vigor = .{ .v = 14.4, .max = 15 } });
             poke(ctx, a[0], .{ .rate = 0.5 });
 
-            const demo = try stage.box("holdings_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
-            const r = try t.rail(demo, .{ .id = "holdings_rail", .label = "HOUSEHOLD" });
-            if (r.body) |body| _ = try t.holdings(body, "content", try act_one_holdings.content(ctx, world, a[0]));
+            const demo = try stage.box("household_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
+            const r = try t.rail(demo, .{ .id = "household_rail", .label = "HOUSEHOLD" });
+            if (r.body) |body| _ = try t.household(body, world, a[0], "content", try act_one_household.content(ctx, world, a[0]));
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }
@@ -327,7 +327,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
 
             const demo = try stage.box("workspace_demo", .{ .w = .{ .fixed = 926 }, .h = .{ .fixed = 700 } }, .{});
             _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
-                .holdings = try act_one_holdings.content(ctx, world, a[0]),
+                .household = try act_one_household.content(ctx, world, a[0]),
                 .surface = .{ .activity = .{
                     .state = .working,
                     .subject = "Forage",
@@ -368,7 +368,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 .run = .{ .act_label = "Act I", .day = 19 },
             });
             const workspace = try t.act_one_workspace(regions.body, world, a[0], "workspace", .{
-                .holdings = try act_one_holdings.content(ctx, world, a[0]),
+                .household = try act_one_household.content(ctx, world, a[0]),
                 .surface = .{ .activity = .{
                     .state = .idle,
                     .subject = "no work in progress",
@@ -552,11 +552,11 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 st.dir = next.dir;
             }
         }
-    } else if (eq(name, "act_two_holdings")) {
+    } else if (eq(name, "act_two_household")) {
         if (player.get()) |a| {
             const demo = try stage.box("a2h_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
             // As the Act II rail composes it: the Household column with the eating policy.
-            _ = try t.household(demo, world, a[0], "content", try act_two_holdings.content(ctx, world, a[0]));
+            _ = try t.household(demo, world, a[0], "content", try act_two_household.content(ctx, world, a[0]));
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }
@@ -591,14 +591,14 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
     } else if (eq(name, "empty_state")) {
         _ = try t.empty_state(stage, "es", "Nothing here yet.", "Try widening the filter.");
     } else if (eq(name, "readout")) {
-        // The readout panel with every primitive inside it, as HOLDINGS composes them.
-        const p = try t.readout_panel(stage, "rp", 214, .{ .up = 10, .right = 16, .down = 9, .left = 10 });
-        (try t.readout_heading(p, "heading", "HOLDINGS", "2 KINDS, 3")).set(.{ .margin = .{ .after = 8 } }, .{});
-        try t.kv_line(p, "sandals", "Sandals \u{00d7}2", "forage costs less", th.dim);
-        try t.kv_line(p, "hatchet", "Hatchet", "unlocks Split wood", th.dim);
+        // The readout panel with every primitive inside it, as SETTLEMENT and BODY compose them.
+        const p = try t.readout_panel(stage, "rp", 220, .{ .up = 9, .right = 10, .down = 9, .left = 10 });
+        (try t.readout_heading(p, "heading", "SETTLEMENT", "DAY 41")).set(.{ .margin = .{ .after = 8 } }, .{});
+        try t.kv_line(p, "population", "Population", "48/640", th.fg);
+        try t.kv_line(p, "larder", "Larder feeds all", "10.3d", th.good);
         try t.divider(p, "divider", 9, 7);
-        (try t.section_label(p, "margins_title", "MARGINS")).set(.{ .margin = .{ .after = 8 } }, .{});
-        try t.kv_line(p, "forage", "Forage", "1.7e \u{2192} 1.4e", th.good);
+        (try t.section_label(p, "flows_title", "FLOWS / DAY")).set(.{ .margin = .{ .after = 8 } }, .{});
+        try t.kv_line(p, "food", "Food", "+6/day", th.good);
         try t.sentence(p, "coverage", "Food lasts ", "3.2d", ".", th.fg);
     } else if (eq(name, "table")) {
         // The pieces BUILD's table composes: a header row of labels, and body rows of cells.

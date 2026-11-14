@@ -1,5 +1,5 @@
 /// The live Act-I page while the actor is alive: header and run context, the complete
-/// HOLDINGS/ACTIONS/BUILD/MARKET workspace, the event log (MARKET, a focus view, drops it), and
+/// Household rail and ACTIONS/BUILD/MARKET workspace, the event log (MARKET, a focus view, drops it), and
 /// an optional trade overlay. The passerby's trade dialog keeps its state on an always-built
 /// node, so a focus view that hides the strip loses nothing.
 const std = @import("std");
@@ -16,7 +16,7 @@ const uic = ha.ui_client;
 const Node = uic.Node;
 // Game templates + helpers
 const t = @import("./templates/root.zig");
-const act_one_holdings = @import("./act_one/holdings.zig");
+const act_one_household = @import("./act_one/household.zig");
 
 pub const Options = struct {
     /// Open the work surface on this view (a fixture's first frame); null keeps the selection.
@@ -40,7 +40,7 @@ pub const Options = struct {
 pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Trees {
     // `shell` supplies the same responsive terminal geometry used by the debug fixture's
     // `shell_content`;
-    // the workspace owns HOLDINGS plus the market/activity and ACTIONS/BUILD surface.
+    // the workspace owns the Household rail plus the market/activity and ACTIONS/BUILD surface.
     const page = try t.act_page(ctx, .{ .id = "play", .act = .act_one });
     const body = page.regions.body;
     // Header stock data is passed raw, then assembled with the run context by `header`.
@@ -71,7 +71,7 @@ pub fn ui_playgame(ctx: *uic.UiCtx, world: *const World, opts: Options) !uic.Tre
         // focus view hides the strip, never the dialog's state).
         const trade_owner = try body.box("trade_state", .{ .w = .{ .fixed = 0 }, .h = .{ .fixed = 0 } }, .{});
         const workspace = try t.act_one_workspace(body, world, e, "act_one_workspace", .{
-            .holdings = try act_one_holdings.content(ctx, world, e),
+            .household = try act_one_household.content(ctx, world, e),
             .initial_collapsed = opts.initial_collapsed,
             .surface = .{
                 .market_available = ctx.res.game.sim.encounter.dealable(),

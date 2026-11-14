@@ -33,7 +33,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | Fixture name | What it shows | Prototype reference |
 |---|---|---|
 | `act_one_default`   | Act I ACTIONS, reference 900×820 | `prototypes/act-i.html`, `legacy/act-i-final-actions.png` |
-| `act_one_working`   | Act I BUILD + holdings mid-run | `legacy/act-i-final-build.png`, `legacy/act-i-final-building.png` |
+| `act_one_working`   | Act I BUILD + the rail mid-run | `legacy/act-i-final-build.png`, `legacy/act-i-final-building.png` |
 | `act_one_low_stock` | low-stock / disabled states (danger tones) | `legacy/act-i-final-actions.png` |
 | `act_one_passerby`  | Passerby present; trade dialog openable | `legacy/trade-screen.png` |
 | `act_one_w760`      | narrow layout, 760 width class | `act-i.html` ≤760 media query |
@@ -117,7 +117,7 @@ passerby trade dialog (`act_one_passerby`) for clip/wrap. Scroll clip/hit behavi
 covered by `drag.zig`'s scroll-thumb tests and the replay driver's topmost-hit / wheel-target tests.
 
 ### Motion
-Holdings, stock-label sizing, board state, and opacity transitions use short functional timing,
+Rail collapse, stock-label sizing, board state, and opacity transitions use short functional timing,
 interrupt cleanly, and snap under reduced motion; completion comes from simulation state, never a
 decorative timer. The reduced-motion policy and the tween registry's interrupt/snap behavior are
 unit-tested in `motion.zig`/`tween.zig`. The reduced-motion terminal-state capture is the

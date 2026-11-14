@@ -5,7 +5,7 @@
 //! belongs: the foundation roles in `ui_client/theme.zig` (`Theme`, incl. the `good` role)
 //! and the game's values + resource/sector hues + terminal ground in `palette.zig`. So a
 //! call site cites `tokens.pad_page` / `tokens.gap.group` / `tokens.control.h_std` /
-//! `type.heading` / `tween.holdings_s` instead of a bare literal, and every number has
+//! `type.heading` / `tween.rail_s` instead of a bare literal, and every number has
 //! exactly one definition.
 //!
 //! **All scalars here are *logical* px / seconds** — the pre-scale authoring units. The one
@@ -43,7 +43,7 @@ pub const pad_page_compact: f32 = 10;
 /// via `El.with_gap` / `style.gap`. A small fixed ladder rather than free numbers so the
 /// rhythm stays consistent; a site picks the nearest step by intent.
 pub const gap = struct {
-    /// Hairline-tight rows inside a dense list (Holdings rows).
+    /// Hairline-tight rows inside a dense list (readout lines).
     pub const tight: f32 = 3;
     /// Between a label and its value, icon and text — the default inline gap.
     pub const inline_: f32 = 6;
@@ -74,7 +74,7 @@ pub const control = struct {
 };
 
 // —— Rail widths ——————————————————————————————————————————————————————————————
-/// The collapsible Holdings/BODY rail widths: `expanded` `252`, `collapsed` `36`.
+/// The collapsible Household rail widths: `expanded` `252`, `collapsed` `36`.
 /// Encoded here so the rail template and any layout that reserves space for it read one value.
 pub const rail = struct {
     pub const expanded: f32 = 252;
@@ -85,8 +85,8 @@ pub const rail = struct {
 // The functional-transition durations live in `tween.zig`, in seconds; they are re-exported
 // here beside the layout tokens.
 
-/// Holdings/BODY rail collapse transition (`120ms`).
-pub const dur_rail_s: f32 = tween.holdings_s;
+/// Household rail collapse transition (`120ms`).
+pub const dur_rail_s: f32 = tween.rail_s;
 /// A stock token's read overlay opening and closing (`120ms`, eased out).
 pub const dur_stock_token_s: f32 = tween.stock_token_s;
 /// Board state-change transition (`~105ms`).
@@ -103,7 +103,7 @@ test "token sizes mirror the type roles (single source, no drift)" {
 }
 
 test "token durations mirror the tween durations (single source, no drift)" {
-    try std.testing.expectEqual(tween.holdings_s, dur_rail_s);
+    try std.testing.expectEqual(tween.rail_s, dur_rail_s);
     try std.testing.expectEqual(@as(f32, 0.120), dur_rail_s);
 }
 

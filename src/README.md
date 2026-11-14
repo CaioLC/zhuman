@@ -48,7 +48,7 @@ take vigor to zero — **starvation is the only path to death**.
 
 **Starting values live on the components.** `Vigor`, `InventoryFood`, and `Metabolism` carry
 field defaults, `spawn_agent` spawns them default-valued, and `baselines.zig` *reads* those
-defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, so Holdings can show
+defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, so the rail's BODY can show
 current-vs-base margins against a value that cannot drift from the spawn.
 
 **Three components are derived, each by one writer system.** The UI reads them and recomputes
@@ -71,8 +71,8 @@ values and emits nothing new, and a test says so.
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
   the same terms `metabolize` applies (`base_rate × rate`, `Config.regen`), and publishes the
   pace the body works at (`pace`), which the tiles and rows divide a job's hours and time left by, so
-  the projection and the loop agree by construction; the Act I holdings' BODY lines read it, and
-  Act II's BODY its pace.
+  the projection and the loop agree by construction; Act I's BODY sentences read it, and
+  Act II's BODY its recovery and pace.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
   reach, per generator the standing and its progress, and in each the first resource it cannot
@@ -568,7 +568,7 @@ quantity per `neighbours.Holding` (food, materials, or a good by catalog index),
 since there is no coin in Act I. The book's Act II posts are keyed by its fixed twelve `items`,
 which hold no Act I good, so the offers are keyed by what is offered instead. What may be
 offered is the spare (`neighbours.spareOf`): the larder and the stockpile stay whole, and a good
-keeps the one unit whose effect is in use, which is the Act I holdings' spare units too. The
+keeps the one unit whose effect is in use. The
 page writes a `PostOffer`; `post_offer` caps it at the spare and holds every standing offer to
 the spare each tick. An offer counts in the market's standing total (`Market.standing`). No one
 reads the offers in Act I, and the curtain drops them (`cross_curtain` empties the book).

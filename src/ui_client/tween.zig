@@ -1,5 +1,5 @@
 //! `tween` — a small **host-layer transition/tween state** for the prototype's
-//! few *functional* transitions: the Holdings column/gap collapse (`120ms`), a stock token's
+//! few *functional* transitions: the rail column/gap collapse (`120ms`), a stock token's
 //! read overlay (`120ms`), and the board's opacity/stroke changes (`100–110ms`). It is a
 //! deliberately tiny **value provider**, not a general timeline engine and not a node feature:
 //! a consumer keys a scalar tween by a **stable node/domain id** (a `u64`, the same stable-key
@@ -9,7 +9,7 @@
 //!
 //! **Interrupt / reverse cleanly:** `retarget(id, to, duration)` redirects an existing tween
 //! toward a new target **from its current value**, not from its original start — so reversing
-//! a half-open Holdings rail glides back from where it is instead of snapping to the far end
+//! a half-open rail glides back from where it is instead of snapping to the far end
 //! and re-animating. A brand-new id starts at its `to` (nothing to animate from yet) or from
 //! an explicit `start` via `from`.
 //!
@@ -26,8 +26,8 @@ const motion = @import("./motion.zig");
 
 /// Prototype functional-transition durations, in **seconds** (the CSS ms ÷ 1000), named so a
 /// consumer cites the prototype token rather than a bare number. Not decorative — these are
-/// the Holdings collapse, the stock token's read overlay, and the board state changes.
-pub const holdings_s: f32 = 0.120;
+/// the rail collapse, the stock token's read overlay, and the board state changes.
+pub const rail_s: f32 = 0.120;
 pub const stock_token_s: f32 = 0.120;
 pub const board_s: f32 = 0.105; // the 100–110ms band, mid value
 
@@ -242,7 +242,7 @@ test "Registry: a full table drops new ids (the transition snaps via fallback)" 
 }
 
 test "Registry: prototype durations are the CSS ms in seconds" {
-    try testing.expectApproxEqAbs(@as(f32, 0.120), holdings_s, 1e-6);
+    try testing.expectApproxEqAbs(@as(f32, 0.120), rail_s, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0.120), stock_token_s, 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0.105), board_s, 1e-6);
 }

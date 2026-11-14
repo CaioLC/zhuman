@@ -1,5 +1,5 @@
 //! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
-//! rail (HOLDINGS, BODY and the eating policy) beside the tabbed ACTIONS/BUILD/MARKET surface.
+//! rail (BODY and the eating policy) beside the tabbed ACTIONS/BUILD/MARKET surface.
 //! Each view keys its own rail, so each remembers its collapse, and MARKET, a focus view,
 //! collapses its rail on each entry without touching the others' memory, as Act II's focus views
 //! do; the player may open it again while there. The rail owns its width tween, and this outer
@@ -17,7 +17,6 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 const rail_mod = @import("./rail.zig");
-const holdings_mod = @import("./holdings.zig");
 const household_mod = @import("./household.zig");
 const surface_mod = @import("./act_one_surface.zig");
 
@@ -27,7 +26,7 @@ const collapsed_gap: f32 = 12;
 /// The work surface's options, plus the rail's content (each act projects its own).
 pub const Options = struct {
     surface: surface_mod.Options,
-    holdings: holdings_mod.Content,
+    household: household_mod.Content,
     /// Collapse (or expand) the rail on this frame only — a fixture's first frame.
     initial_collapsed: ?bool = null,
 };
@@ -42,7 +41,7 @@ fn targetGap(collapsed: bool) f32 {
     return if (collapsed) collapsed_gap else expanded_gap;
 }
 
-/// Compose the left HOLDINGS rail and right tabbed content as one responsive workspace.
+/// Compose the left Household rail and right tabbed content as one responsive workspace.
 pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const u8, opts: Options) !Result {
     const ctx = parent.ctx;
     // Stacked (≤760) the rail sits above the content and both take their natural heights.
@@ -80,10 +79,10 @@ pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const
         .initial_collapsed = opts.initial_collapsed,
     });
     if (built_rail.body) |body| {
-        _ = try household_mod.household(body, world, e, "holdings", opts.holdings);
+        _ = try household_mod.household(body, world, e, "household", opts.household);
     }
 
-    // The width and gap move together, matching `.page-grid.is-holdings-collapsed` rather than
+    // The width and gap move together, matching the page grid's collapsed state rather than
     // letting the content jump after the rail's 120ms width transition.
     const gap_target = targetGap(built_rail.collapsed);
     ctx.res.tween.retarget(workspace.get().key, gap_target, ha.tokens.dur_rail_s);

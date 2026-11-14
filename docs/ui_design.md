@@ -23,7 +23,7 @@ surface's subheading states its answer as a statement, not a question.
 |---|---|---|
 | **ACTIONS** | Work available to you. | a searchable, bounded grid of compact verbs |
 | **BUILD** | Recipes available to you. | a sorted, filtered list of rows |
-| **HOLDINGS** | none: it shows what you own and what it is doing for you | a persistent panel |
+| **HOUSEHOLD** | none: it shows the settlement in aggregate and your own condition | a persistent rail |
 | **MARKET** | Neighbours, what they offer and what they want. | a list of people (or goods) and a deal slip |
 | **RESEARCH** | Specialize your skills. | a board |
 
@@ -48,7 +48,7 @@ rendering them as one grey is the single largest failure the interface can make.
 that hides a thing entirely is worse than a grey one — grey at least says the thing exists.
 
 **Derive, never restate.** A number shown beside a number the sim owns will drift from it.
-HOLDINGS computes each margin by comparing a live component against its own catalog default
+BODY computes each margin by comparing a live component against its own default
 rather than repeating the factor `capital.zig` applies. Where a baseline isn't reachable,
 show the current value and say so, rather than copying a constant.
 
@@ -164,7 +164,7 @@ at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
 so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
 hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
-scroll, the Household rail sits above the surface (HOLDINGS and BODY side by side at 760, stacked below 560),
+scroll, the Household rail sits above the surface (SETTLEMENT and BODY side by side at 760, stacked below 560),
 ACTIONS and BUILD take their natural height, narrow BUILD drops lower-priority columns, and the log
 remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
 
@@ -200,28 +200,35 @@ with a permanent Exchange, and opens Act III. A compact Exchange bar remains fix
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
 
-## HOLDINGS — the readout
+## The Household rail — the readout
 
-A panel, never opened, because its value peaks while you are looking at something else. It
-lives in the left rail, which collapses to a 36 px strip carrying a chevron and the label set
-vertically; ACTIONS and BUILD each remember their own collapse, and entering RESEARCH or
-MARKET forces the rail closed without touching those memories.
+A column, never opened, because its value peaks while you are looking at something else. It
+lives in the left rail, which collapses to a 36 px strip carrying a chevron and the label
+`HOUSEHOLD` set vertically; ACTIONS and BUILD each remember their own collapse, and entering
+RESEARCH or MARKET forces the rail closed without touching those memories.
 
-Three blocks. The **roster** names each owned kind with its count, since a good is not
-one-per-agent: a second pair of sandals is stock, made to trade. Kinds and units are
-different numbers and shown as both — four pairs of sandals are never four goods built.
+The rail is not an inventory: what the actor owns, spare against held, with each good's
+effect, is MARKET's INVENTORY view. The rail holds two kinds of information, each in its own
+panel, with the eating policy at their foot.
 
-The **margins** block is the reason the panel exists. Three modifiers land on Forage and
-nothing else on screen explains why it costs 1.7 energy instead of 2. Every row here is
-derived from a live component against its catalog default, and colored by direction: a cost
-below its default is a gain, above it a penalty.
+**SETTLEMENT** is the aggregates, what the population is and does as a whole: how many people
+against the housing (`48/640`), the energy generated and consumed (`+7 / −5`, colored by the
+net), how long the larder feeds everyone at the eating policy's rate, when water runs short at
+its flow, and the hall's vigor; then a **FLOWS / DAY** section, one line per stock, an inflow
+a gain and a deficit a penalty. One person is no settlement, so Act I builds no SETTLEMENT
+panel and BODY leads the column; the panel appears at the curtain.
 
-The **BODY** block projects the larder forward: how many days of food remain at the current
-appetite, and whether vigor is recovering, already full, starving, or stalled on food that
-feeds but does not restore. Its last line, in both acts, is the work pace, `Work pace {N}%.`: the
+**BODY** is the player's own condition, the numbers that inform the next decision. Its
+sentences project forward: how many days of food remain at the current appetite (Act I; in
+Act II the larder is the settlement's and SETTLEMENT's line says it), and whether vigor is
+recovering, already full, starving, or stalled on food that feeds but does not restore. Its
+last sentence, in both acts, is the work pace, `Work pace {N}%.`: the
 share of the normal ration's pace the body works at on its current ration, as a whole percentage
 (`100%` at normal, lower on a meager ration or an empty larder, a little higher on a feast), in
-the neutral value ink, since a job's hours on the tiles and rows are already divided by it. Every
+the neutral value ink, since a job's hours on the tiles and rows are already divided by it.
+Under a hairline are what the body is working with: the food's quality where a good has moved
+it, the food's spoilage, and the vigor ceiling, each derived from a live component against its
+default and colored by direction. Every
 number comes from the simulation's own arithmetic, never a copied constant.
 
 ## Playback controls
@@ -277,7 +284,7 @@ take or, in danger, why you cannot — sold out, you hold too little, or how muc
 A refused row can still be selected; the slip explains it. The slip takes a lot count (linear
 in the lot), shows what you give and receive and the before → after of every stock the deal
 touches, and settles. Settling is atomic, and it does not close the dialog: a visit is one
-sitting, the footer keeps a running tally of what the visit has moved, and the header, HOLDINGS
+sitting, the footer keeps a running tally of what the visit has moved, and the header, the rail
 and the log reflect each settlement in the same frame. Search and pages appear only when a
 direction holds more lots than fit. Switching direction selects the first lot that can be
 taken; closing the dialog returns focus to the control that opened it.
@@ -367,7 +374,7 @@ cost against what is held, the deficit, and what it enables. It never offers BUI
 can open a recipe, and BUILD stays the construction surface. The camera has zoom-out, zoom-in,
 percentage and reset controls; the scale is 100% by default and clamped to 75%–250%. A drag
 pans once it passes a small movement threshold and suppresses the click that ends it, while a
-press that did not move selects. Expanding or collapsing HOLDINGS never rebuilds or resets the
+press that did not move selects. Expanding or collapsing the rail never rebuilds or resets the
 board.
 
 A tile's ring is its stage and its sextant its specialization: a ring at distance *n* holds

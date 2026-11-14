@@ -203,7 +203,7 @@ pub const Regions = struct {
     header: El,
     /// The main view surface — the screen's primary content, grows to fill. Always present.
     body: El,
-    /// The side rail (Holdings/BODY), present iff `opts.rail`.
+    /// The side rail (the Household column), present iff `opts.rail`.
     rail: ?El = null,
     /// The optional market strip, present iff `opts.market`.
     market: ?El = null,
