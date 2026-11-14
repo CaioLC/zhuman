@@ -23,7 +23,7 @@ surface's subheading states its answer as a statement, not a question.
 |---|---|---|
 | **ACTIONS** | Work available to you. | a searchable, bounded grid of compact verbs |
 | **BUILD** | Recipes available to you. | a sorted, filtered list of rows |
-| **HOUSEHOLD** | none: it shows the settlement in aggregate and your own condition | a persistent rail |
+| **STATUS** | none: it shows the settlement in aggregate and your own condition | a persistent rail |
 | **MARKET** | Neighbours, what they offer and what they want. | a list of people (or goods) and a deal slip |
 | **RESEARCH** | Specialize your skills. | a board |
 
@@ -96,7 +96,7 @@ without raising its ceiling. No generator transfers resources every frame. Selli
 that opens a generator stops its cycle where it stands; a second unit runs no second cycle.
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
-so it lives inside the Household rail's PLAYER panel in both acts, collapsing with it. It is a `0..100` slider, not a set of named
+so it lives inside the Status rail's PLAYER panel in both acts, collapsing with it. It is a `0..100` slider, not a set of named
 rations: the rate climbs exponentially from the meagerest ration to normal at `50` and from
 normal to the most lavish above it (the ends are the sim `Config`'s), and the slider's word (`meager`, `lean`, `modest`, `normal`,
 `hearty`, `generous`, `lavish`) steps every sixteen points. Its line reads
@@ -164,7 +164,7 @@ at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
 so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
 hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
-scroll, the Household rail sits above the surface (SETTLEMENT and PLAYER side by side at 760, stacked below 560),
+scroll, the Status rail sits above the surface (SETTLEMENT and PLAYER side by side at 760, stacked below 560),
 ACTIONS and BUILD take their natural height, narrow BUILD drops lower-priority columns, and the log
 remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
 
@@ -200,11 +200,11 @@ with a permanent Exchange, and opens Act III. A compact Exchange bar remains fix
 recipe scroller and outside filtering; its Details disclosure shrinks the list rather than growing
 the pane. Locked, unfunded, ready and standing facts remain available in the disclosed body.
 
-## The Household rail — the readout
+## The Status rail — the readout
 
 A column, never opened, because its value peaks while you are looking at something else. It
 lives in the left rail, which collapses to a 36 px strip carrying a chevron and the label
-`HOUSEHOLD` set vertically; ACTIONS and BUILD each remember their own collapse, and entering
+`STATUS` set vertically; ACTIONS and BUILD each remember their own collapse, and entering
 RESEARCH or MARKET forces the rail closed without touching those memories.
 
 The rail is not an inventory: what the actor owns, spare against held, with each good's
@@ -327,7 +327,7 @@ and what you want at your own prices — what the neighbours read while you work
 says how many would take it at that price. The header is the tab's and stays the same in
 either view: `MARKET`, its subheading, and the whole market's standing total
 (`58 offers · 86 wants`, yours among them). Like RESEARCH it owns the whole surface: the
-strips and the log step aside and the Household collapses.
+strips and the log step aside and the Status rail collapses.
 
 Act I has the same tab, beside ACTIONS and BUILD, and the same view with nobody in it: your own
 row (no trade named, `NOTHING POSTED`), `No neighbours yet.`, `No deal open.`, and a footer that

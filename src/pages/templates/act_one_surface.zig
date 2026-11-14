@@ -29,10 +29,10 @@ const nb_sys = ha.sim.systems.neighbours;
 /// The surface's views, in tab order.
 pub const View = enum(usize) { actions, build, market };
 const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "MARKET" };
-/// MARKET owns the whole surface: no strips, no log, the Household collapsed on entry.
+/// MARKET owns the whole surface: no strips, no log, the Status rail collapsed on entry.
 pub const focus_views = [_]usize{@intFromEnum(View.market)};
 
-/// Act I's ACTIONS content: one body's verbs. Its eating policy rides the Household rail.
+/// Act I's ACTIONS content: one body's verbs. Its eating policy rides the Status rail.
 pub const actions_shelf = actions_section_mod.Shelf{
     .act = 1,
     .subtitle = "Work available to you.",

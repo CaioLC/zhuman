@@ -1,4 +1,4 @@
-//! `act_one/household` — Act I's content for the shared `household` rail template. One person
+//! `act_one/status` — Act I's content for the shared `status` rail template. One person
 //! is no settlement, so the column is PLAYER alone (`pages/player.zig`).
 //! Pure projection over live state into the frame arena; it builds no nodes.
 
@@ -14,7 +14,7 @@ const t = @import("../templates/root.zig");
 const player = @import("../player.zig");
 
 /// Project agent `e` into the rail's content for this frame.
-pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdContent {
+pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.StatusContent {
     return .{ .player = try player.project(ctx.arena, world, e) };
 }
 

@@ -1,4 +1,4 @@
-//! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
+//! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Status
 //! rail (PLAYER, with the eating policy in it) beside the tabbed ACTIONS/BUILD/MARKET surface.
 //! Each view keys its own rail, so each remembers its collapse, and MARKET, a focus view,
 //! collapses its rail on each entry without touching the others' memory, as Act II's focus views
@@ -17,7 +17,7 @@ const UiCtx = uic.UiCtx;
 const El = el.El;
 
 const rail_mod = @import("./rail.zig");
-const household_mod = @import("./household.zig");
+const status_mod = @import("./status.zig");
 const surface_mod = @import("./act_one_surface.zig");
 
 const expanded_gap: f32 = 22;
@@ -26,7 +26,7 @@ const collapsed_gap: f32 = 12;
 /// The work surface's options, plus the rail's content (each act projects its own).
 pub const Options = struct {
     surface: surface_mod.Options,
-    household: household_mod.Content,
+    status: status_mod.Content,
     /// Collapse (or expand) the rail on this frame only — a fixture's first frame.
     initial_collapsed: ?bool = null,
 };
@@ -41,7 +41,7 @@ fn targetGap(collapsed: bool) f32 {
     return if (collapsed) collapsed_gap else expanded_gap;
 }
 
-/// Compose the left Household rail and right tabbed content as one responsive workspace.
+/// Compose the left Status rail and right tabbed content as one responsive workspace.
 pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const u8, opts: Options) !Result {
     const ctx = parent.ctx;
     // Stacked (≤760) the rail sits above the content and both take their natural heights.
@@ -72,14 +72,14 @@ pub fn act_one_workspace(parent: El, world: *const World, e: Entity, id: []const
     vm.last = surface.active;
     const built_rail = try rail_mod.rail(rail_lane, .{
         .id = rail_ids[@min(surface.active, rail_ids.len - 1)],
-        .label = "HOUSEHOLD",
+        .label = "STATUS",
         // A fixture that opens the rail on its first frame (`initial_collapsed = false`)
         // overrides the entry collapse.
         .force_collapsed = surface.focus and entered and opts.initial_collapsed != false,
         .initial_collapsed = opts.initial_collapsed,
     });
     if (built_rail.body) |body| {
-        _ = try household_mod.household(body, world, e, "household", opts.household);
+        _ = try status_mod.status(body, world, e, "status", opts.status);
     }
 
     // The width and gap move together, matching the page grid's collapsed state rather than

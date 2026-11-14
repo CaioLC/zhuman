@@ -46,7 +46,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `act_two_build_w560` | Act II BUILD stacked: the page scrolls, the table takes its height | `act-ii.html` ≤560 media query |
 | `act_one_actions_generators` | Act I ACTIONS with the GENERATORS kind toggle pressed: the owned generators alone | `act-i.html?kind=generator#actions` |
 | `act_two_actions_hidden` | Act II ACTIONS on the hidden view: Draw water and the auto Garden bed hidden, dashed and dim | `act-ii.html?hidden=Draw%20water,Garden%20bed&showhidden=1#actions` |
-| `act_two_collapsed` | Act II Household rail collapsed | `act-ii.html?holdings=collapsed` |
+| `act_two_collapsed` | Act II Status rail collapsed | `act-ii.html?holdings=collapsed` |
 | `act_two_research`  | RESEARCH opening: Gamekeeping selected, `all` filter, 100% camera | `act-ii.html#research` |
 | `act_two_research_w560` | RESEARCH stacked: 560px board, detail beneath | `act-ii.html#research` ≤560 media query |
 | `research_available` / `research_researched` | the cumulative filters | `act-ii.html?filter=available#research`, `?filter=researched` |
@@ -54,7 +54,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `research_deficit` | an available tile the stocks cannot pay for: `NEEDS …` | `act-ii.html?tech=…#research` |
 | `research_outward` | a researched tile's available outward neighbours, warn and dashed | `act-ii.html?tech=Granary#research` |
 | `research_tooltip` / `research_focus` | the tooltip (pinned by the fixture) and the board holding keyboard focus | `act-ii.html#research` hovered / focused |
-| `research_household` | the Household opened again beside the board | `act-ii.html#research` with the rail expanded |
+| `research_status` | the Status rail opened again beside the board | `act-ii.html#research` with the rail expanded |
 | `research_zoom_75` / `research_zoom_250` | the camera floor and ceiling (the latter panned) | `act-ii.html#research` after zooming |
 | `act_two_exchange`  | the Exchange card opened, locked | `act-ii.html?exchangeopen=1#build` |
 | `act_two_exchange_ready` | the Exchange ready to build | `act-ii.html` (state of `refreshExchangeMilestone`) |
@@ -63,7 +63,7 @@ HTML/screenshots in [`prototypes/`](../prototypes/).
 | `market_people` / `market_good` | MARKET by person with a person-row deal open (`← BACK` closes it), and a good's detail | `market.html?pick=Mira`, `market.html?by=good` |
 | `market_deal_good` | a deal opened from FOOD's detail: FOOD's row held, `← BACK` returns to it | `market.html?by=good` after picking a name under FOOD |
 | `market_stall` / `market_stall_wants` | INVENTORY on OFFERS (a good's short effect beside its spare) and on WANTS | `act-ii.html?stall=1#market`, `market.html?stall=1&side=buy` |
-| `act_one_market` | Act I MARKET, a focus view with nobody in it: the player's own row (`NOTHING POSTED`), `No neighbours yet.`, `No deal open.`, `A passerby trades from the strip.`; the strips and log aside, the Household collapsed | `act-i.html#market` |
+| `act_one_market` | Act I MARKET, a focus view with nobody in it: the player's own row (`NOTHING POSTED`), `No neighbours yet.`, `No deal open.`, `A passerby trades from the strip.`; the strips and log aside, the Status rail collapsed | `act-i.html#market` |
 | `act_one_market_inventory` | Act I INVENTORY: food, materials and the goods held, `{spare} spare of {held} held`, a spare pair of sandals and a spare hatchet; no PRICE column, no coin | `act-i.html?stall=1#market` |
 | `act_one_trade` / `act_two_trade` | the trade dialog over each act | `act-i.html?modal=merchant`, `act-ii.html?modal=merchant` |
 | `act_one_menu` / `menu_save` / `menu_settings` / `menu_quit` | the session menu and its screens | `menu.html`, `menu.html?screen=…` |

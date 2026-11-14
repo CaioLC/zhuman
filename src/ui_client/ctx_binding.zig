@@ -378,7 +378,7 @@ pub const UiState = struct {
         give: [13]u16 = @splat(0),
         take: [13]u16 = @splat(0),
     };
-    /// Which view a page showed last frame, so a focus view collapses the Household on entry
+    /// Which view a page showed last frame, so a focus view collapses the Status rail on entry
     /// only and the player may open it again while there; and the page's cursor into the
     /// milestone facts (the Act II page opens the Exchange card once it is raised).
     pub const ViewMemory = struct {

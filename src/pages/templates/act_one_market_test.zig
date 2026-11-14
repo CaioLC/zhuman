@@ -86,27 +86,27 @@ test "Act I MARKET is a focus view, and its INVENTORY posts a spare good's offer
     try step(&r, &w, &res, &.{.{ .resize = .{ .logical_w = 900, .logical_h = 820 } }});
     try step(&r, &w, &res, &.{});
 
-    // BUILD: the strips, the log and the expanded Household.
+    // BUILD: the strips, the log and the expanded Status rail.
     try testing.expect(control(&res, "TRADE \u{2192}") != null);
     try testing.expect(control(&res, "Event log") != null);
-    try testing.expect((control(&res, "HOUSEHOLD") orelse return error.NoSuchControl).state.expanded);
+    try testing.expect((control(&res, "STATUS") orelse return error.NoSuchControl).state.expanded);
 
-    // MARKET: the strips and the log step aside and the Household collapses.
+    // MARKET: the strips and the log step aside and the Status rail collapses.
     try clickNamed(&r, &ui, &w, &res, "MARKET");
     try testing.expect(control(&res, "TRADE \u{2192}") == null);
     try testing.expect(control(&res, "Event log") == null);
-    try testing.expect(!(control(&res, "HOUSEHOLD") orelse return error.NoSuchControl).state.expanded);
+    try testing.expect(!(control(&res, "STATUS") orelse return error.NoSuchControl).state.expanded);
     try testing.expectEqualStrings("0 offers \u{00b7} 0 wants", try mv.standingLine(arena.allocator(), &res.game.sim.neighbours));
 
     // Opened again there, it stays open; BUILD kept its own memory; MARKET collapses on the
     // next entry.
-    try clickNamed(&r, &ui, &w, &res, "HOUSEHOLD");
-    try testing.expect((control(&res, "HOUSEHOLD") orelse return error.NoSuchControl).state.expanded);
+    try clickNamed(&r, &ui, &w, &res, "STATUS");
+    try testing.expect((control(&res, "STATUS") orelse return error.NoSuchControl).state.expanded);
     try clickNamed(&r, &ui, &w, &res, "BUILD");
-    try testing.expect((control(&res, "HOUSEHOLD") orelse return error.NoSuchControl).state.expanded);
+    try testing.expect((control(&res, "STATUS") orelse return error.NoSuchControl).state.expanded);
     try testing.expect(control(&res, "Event log") != null);
     try clickNamed(&r, &ui, &w, &res, "MARKET");
-    try testing.expect(!(control(&res, "HOUSEHOLD") orelse return error.NoSuchControl).state.expanded);
+    try testing.expect(!(control(&res, "STATUS") orelse return error.NoSuchControl).state.expanded);
 
     // INVENTORY: the spare hatchet steps up; the only pair of sandals and the larder do not.
     try clickNamed(&r, &ui, &w, &res, "Inventory");

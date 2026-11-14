@@ -110,9 +110,9 @@ pub const Spec = struct {
     settlement: ?Settlement = null,
     /// Event-log history, oldest first. Empty keeps the run's own log.
     log: []const LogLine = &.{},
-    /// Open on the first frame with the Household rail collapsed.
+    /// Open on the first frame with the Status rail collapsed.
     rail_collapsed: bool = false,
-    /// Open on the first frame with the Household rail expanded, even on a focus view.
+    /// Open on the first frame with the Status rail expanded, even on a focus view.
     rail_open: bool = false,
     /// Press Tab this many times once the first frame has published the focus order, so the
     /// capture shows a focus-visible control.
@@ -518,7 +518,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_collapsed",
-        .about = "Act I ACTIONS with the Household rail collapsed to its restore control.",
+        .about = "Act I ACTIONS with the Status rail collapsed to its restore control.",
         .day = 19,
         .rail_collapsed = true,
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
@@ -591,7 +591,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_research",
-        .about = "Act II RESEARCH: the focus view, Household forced collapsed, strips and log hidden.",
+        .about = "Act II RESEARCH: the focus view, Status rail forced collapsed, strips and log hidden.",
         .screen = .act_two,
         .view = @intFromEnum(A2View.research),
         .day = 112,
@@ -685,7 +685,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_reduced_motion",
-        .about = "Act I under reduced motion with the Household collapsed: the rail snaps, nothing eases.",
+        .about = "Act I under reduced motion with the Status rail collapsed: the rail snaps, nothing eases.",
         .day = 19,
         .balances = .{ .food = 11.6, .biomass = 31, .goods = &five_verbs },
         .rail_collapsed = true,
@@ -720,8 +720,8 @@ pub const catalog = [_]Spec{
         .trade_open = true,
     },
     .{
-        .name = "research_household",
-        .about = "RESEARCH with the Household opened again beside the board.",
+        .name = "research_status",
+        .about = "RESEARCH with the Status rail opened again beside the board.",
         .screen = .act_two,
         .view = @intFromEnum(A2View.research),
         .day = 112,
@@ -1044,7 +1044,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_two_collapsed",
-        .about = "Act II ACTIONS with the Household rail collapsed.",
+        .about = "Act II ACTIONS with the Status rail collapsed.",
         .screen = .act_two,
         .day = 112,
         .rail_collapsed = true,

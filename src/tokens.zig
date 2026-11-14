@@ -74,7 +74,7 @@ pub const control = struct {
 };
 
 // —— Rail widths ——————————————————————————————————————————————————————————————
-/// The collapsible Household rail widths: `expanded` `252`, `collapsed` `36`.
+/// The collapsible Status rail widths: `expanded` `252`, `collapsed` `36`.
 /// Encoded here so the rail template and any layout that reserves space for it read one value.
 pub const rail = struct {
     pub const expanded: f32 = 252;
@@ -85,7 +85,7 @@ pub const rail = struct {
 // The functional-transition durations live in `tween.zig`, in seconds; they are re-exported
 // here beside the layout tokens.
 
-/// Household rail collapse transition (`120ms`).
+/// Status rail collapse transition (`120ms`).
 pub const dur_rail_s: f32 = tween.rail_s;
 /// A stock token's read overlay opening and closing (`120ms`, eased out).
 pub const dur_stock_token_s: f32 = tween.stock_token_s;

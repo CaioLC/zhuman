@@ -29,8 +29,8 @@ const Node = uic.Node;
 const UiCtx = uic.UiCtx;
 
 const t = @import("./templates/root.zig");
-const act_one_household = @import("./act_one/household.zig");
-const act_two_household = @import("./act_two/household.zig");
+const act_one_status = @import("./act_one/status.zig");
+const act_two_status = @import("./act_two/status.zig");
 const coin_merchant = @import("./act_two/coin_merchant.zig").coin_merchant;
 
 /// The auditable templates, in a stable order. The index lists these; the selected one renders in
@@ -47,13 +47,13 @@ const entries = [_][]const u8{
     "tabs",
     "slider",
     "rail",
-    "household",
+    "status",
     "action_tile",
     "generator_tile",
     "actions_section",
     "build_section",
     "act_one_surface",
-    "act_two_household",
+    "act_two_status",
     "act_two_actions",
     "act_one_workspace",
     "act_one_page",
@@ -215,9 +215,9 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         // Production supplies a definite page-grid rail region. Mirror it here so one
         // interactive instance can be inspected in both states via its own toggle.
         const demo = try stage.box("rail_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 300 } }, .{});
-        const r = try t.rail(demo, .{ .id = "rail", .label = "HOUSEHOLD" });
+        const r = try t.rail(demo, .{ .id = "rail", .label = "STATUS" });
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
-    } else if (eq(name, "household")) {
+    } else if (eq(name, "status")) {
         if (player.get()) |a| {
             // Act I's column: PLAYER, ending on the eating policy, on a lean ration below the
             // ceiling. The values are ordinary live ECS data.
@@ -225,9 +225,9 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
             poke(ctx, a[0], .{ .vigor = .{ .v = 14.4, .max = 15 } });
             poke(ctx, a[0], .{ .rate = 0.5 });
 
-            const demo = try stage.box("household_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
-            const r = try t.rail(demo, .{ .id = "household_rail", .label = "HOUSEHOLD" });
-            if (r.body) |body| _ = try t.household(body, world, a[0], "content", try act_one_household.content(ctx, world, a[0]));
+            const demo = try stage.box("status_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
+            const r = try t.rail(demo, .{ .id = "status_rail", .label = "STATUS" });
+            if (r.body) |body| _ = try t.status(body, world, a[0], "content", try act_one_status.content(ctx, world, a[0]));
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }
@@ -326,7 +326,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
 
             const demo = try stage.box("workspace_demo", .{ .w = .{ .fixed = 926 }, .h = .{ .fixed = 700 } }, .{});
             _ = try t.act_one_workspace(demo, world, a[0], "workspace", .{
-                .household = try act_one_household.content(ctx, world, a[0]),
+                .status = try act_one_status.content(ctx, world, a[0]),
                 .surface = .{ .activity = .{
                     .state = .working,
                     .subject = "Forage",
@@ -367,7 +367,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 .run = .{ .act_label = "Act I", .day = 19 },
             });
             const workspace = try t.act_one_workspace(regions.body, world, a[0], "workspace", .{
-                .household = try act_one_household.content(ctx, world, a[0]),
+                .status = try act_one_status.content(ctx, world, a[0]),
                 .surface = .{ .activity = .{
                     .state = .idle,
                     .subject = "no work in progress",
@@ -551,11 +551,11 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
                 st.dir = next.dir;
             }
         }
-    } else if (eq(name, "act_two_household")) {
+    } else if (eq(name, "act_two_status")) {
         if (player.get()) |a| {
             const demo = try stage.box("a2h_demo", .{ .w = .{ .fixed = ha.tokens.rail.expanded }, .h = .{ .fixed = 400 } }, .{});
-            // As the Act II rail composes it: the Household column with the eating policy.
-            _ = try t.household(demo, world, a[0], "content", try act_two_household.content(ctx, world, a[0]));
+            // As the Act II rail composes it: the Status column with the eating policy.
+            _ = try t.status(demo, world, a[0], "content", try act_two_status.content(ctx, world, a[0]));
         } else {
             try stage.label("na", "(needs a live player)", .{});
         }

@@ -12,12 +12,12 @@ const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
 const t = @import("./templates/root.zig");
-const Line = t.HouseholdLine;
+const Line = t.StatusLine;
 
 /// Agent `e`'s PLAYER panel. The lines are the `outlook` system's projection at the eating
 /// policy's rate; the policy reads its own word on the line under them, so these name only
 /// what it moves. An agent with no `Outlook` shows a note in their place.
-pub fn project(a: std.mem.Allocator, world: *const World, e: Entity) !t.HouseholdPlayer {
+pub fn project(a: std.mem.Allocator, world: *const World, e: Entity) !t.StatusPlayer {
     const outlook = world.get(e, comp.Outlook) orelse return .{ .note = "no projection" };
     const lines = try a.alloc(Line, 3);
     lines[0] = .{

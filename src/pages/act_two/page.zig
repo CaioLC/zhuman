@@ -5,8 +5,8 @@
 //! ME, MI, CO in its compact form, a runline carrying `Act II` and the day,
 //! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
-//! there and the Household collapses, yet the strips' state is never lost because it lives in
-//! the page, not the strips. The Household column (SETTLEMENT and PLAYER, the eating policy in it) rides the
+//! there and the Status rail collapses, yet the strips' state is never lost because it lives in
+//! the page, not the strips. The Status column (SETTLEMENT and PLAYER, the eating policy in it) rides the
 //! shell rail; the event log rides the shell footer.
 //!
 //! The page reads the player. Its stocks fill the stockline, its work
@@ -57,13 +57,13 @@ const build_shelf = t.BuildShelf{
     // The Act I goods the settlement owns stay buildable: another unit is stock to sell.
     .carry_owned = true,
 };
-const a2_household = @import("./household.zig");
+const a2_status = @import("./status.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 
 /// The surface's views, in tab order.
 pub const View = enum(usize) { actions, build, market, research };
 const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "MARKET", "RESEARCH" };
-/// MARKET and RESEARCH own the whole surface: no strips, no log, the Household collapsed.
+/// MARKET and RESEARCH own the whole surface: no strips, no log, the Status rail collapsed.
 const focus_views = [_]usize{ @intFromEnum(View.market), @intFromEnum(View.research) };
 /// Each view keys its own rail, so each remembers its collapse.
 const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_market", "a2_rail_research" };
@@ -84,7 +84,7 @@ pub const Options = struct {
     /// The view to open on (a `View`'s index), applied on the frame it is set; the tabs own
     /// the selection on every other frame.
     initial_view: ?usize = null,
-    /// Collapse the Household rail on this frame (a fixture's first frame); null leaves it.
+    /// Collapse the Status rail on this frame (a fixture's first frame); null leaves it.
     initial_collapsed: ?bool = null,
     /// Open the merchant dialog on this frame (a fixture's first frame).
     open_trade: bool = false,
@@ -173,7 +173,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     }
     if (opts.trade_mode) |mode| trade_owner.state(uic.UiState.TradeState).mode = mode;
 
-    // --- the rail: the Household column, collapsing with it ---------------------------------
+    // --- the rail: the Status column, collapsing with it ---------------------------------
     // Each view keys its own rail, so ACTIONS and BUILD remember their collapse separately; a
     // focus view collapses its rail on entry without touching those memories, and the player
     // may open it again while there.
@@ -183,14 +183,14 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     if (regions.rail) |rail_region| {
         const r = try t.rail(rail_region, .{
             .id = rail_ids[@min(s.active, rail_ids.len - 1)],
-            .label = "HOUSEHOLD",
+            .label = "STATUS",
             // A fixture that opens the rail on its first frame (`initial_collapsed = false`)
             // overrides the entry collapse.
             .force_collapsed = s.focus and entered and opts.initial_collapsed != false,
             .initial_collapsed = opts.initial_collapsed,
         });
         if (r.body) |body| if (agent) |e| {
-            _ = try t.household(body, world, e, "a2_household", try a2_household.content(ctx, world, e));
+            _ = try t.status(body, world, e, "a2_status", try a2_status.content(ctx, world, e));
         };
     }
 
@@ -232,7 +232,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
 test {
     _ = @import("./fixtures.zig");
     _ = @import("./coin_merchant.zig");
-    _ = @import("./household.zig");
+    _ = @import("./status.zig");
 }
 
 const nb = ha.sim.rules.neighbours;

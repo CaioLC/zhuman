@@ -1,4 +1,4 @@
-//! `household` — the rail's whole column, the same template in every act: a SETTLEMENT panel of
+//! `status` — the rail's whole column, the same template in every act: a SETTLEMENT panel of
 //! aggregates (the people, then what the settlement makes, uses and holds) and, 12px below it,
 //! a PLAYER panel of the player's own condition, which ends on the eating policy. The two are
 //! one grammar: the same padding, a title, then `label … value` lines on one rhythm, the label
@@ -9,7 +9,7 @@
 //! expanded. Rail collapse chrome remains the rail template's responsibility.
 //!
 //! The panels own presentation only. Each act projects its own domain state into a `Content`
-//! (`pages/act_one/household.zig`, `pages/act_two/household.zig`); the strings are the act's and
+//! (`pages/act_one/status.zig`, `pages/act_two/status.zig`); the strings are the act's and
 //! the tones and verdicts are semantic. The one world read is PLAYER's eating policy, which
 //! reads the agent's metabolism and writes the ration intent.
 
@@ -145,7 +145,7 @@ const stacked_gap: f32 = 22;
 /// Build the column for agent `e` from one act's `Content`. Framed, it is the rail's 240px
 /// column. Stacked (≤760) it spans the page: the panels side by side at the 760 class, each
 /// half the page wide, one above the other below 560.
-pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, c: Content) !El {
+pub fn status(parent: El, world: *const World, e: Entity, id: []const u8, c: Content) !El {
     const ctx = parent.ctx;
     const terminal = @import("./terminal.zig");
     if (terminal.stacked(ctx)) {
@@ -168,7 +168,7 @@ pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, c: 
     return column;
 }
 
-test "household column geometry mirrors the standalone reference" {
+test "status column geometry mirrors the standalone reference" {
     try std.testing.expectEqual(@as(f32, 240), column_width);
     try std.testing.expectEqual(@as(f32, 12), panel_gap);
     try std.testing.expectEqual(@as(f32, 240), panel_content_width + panel_pad.left + panel_pad.right);

@@ -1,8 +1,8 @@
-//! `readout` — the primitives of a **readout panel** (`docs/ui_design.md`, *The Household rail*): the
+//! `readout` — the primitives of a **readout panel** (`docs/ui_design.md`, *The Status rail*): the
 //! bordered, solid-outlined, padded column that SETTLEMENT and PLAYER are made of; its eyebrow
 //! section label and the heading row that pairs one with a count; the two-ended
 //! `label … value` line and its form with a stock column; and the hairline
-//! divider between blocks. The `household` template composes these, so an act's rail content
+//! divider between blocks. The `status` template composes these, so an act's rail content
 //! styles no node of its own.
 
 const ha = @import("ha");

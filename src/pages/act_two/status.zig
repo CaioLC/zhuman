@@ -1,4 +1,4 @@
-//! `act_two/household` — Act II's content for the shared `household` rail template.
+//! `act_two/status` — Act II's content for the shared `status` rail template.
 //! SETTLEMENT holds the aggregates in one list: how many people against the housing, then what
 //! the settlement produces and demands a day of energy and of every stock (`+14 / −8`; more
 //! produced than demanded reads `better`, less `worse`, even `flat`), each stock followed by
@@ -23,7 +23,7 @@ const Entity = ha.sim.ecs.Entity;
 
 const t = @import("../templates/root.zig");
 const player = @import("../player.zig");
-const Line = t.HouseholdLine;
+const Line = t.StatusLine;
 
 /// Production against demand as the rail prints it: `+14 / −8`.
 fn flowText(a: std.mem.Allocator, f: fx.FlowRecord) ![]const u8 {
@@ -31,7 +31,7 @@ fn flowText(a: std.mem.Allocator, f: fx.FlowRecord) ![]const u8 {
 }
 
 /// The settlement's aggregates, its stockpile read from agent `e`'s ledger.
-fn settlement(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdSettlement {
+fn settlement(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.StatusSettlement {
     const a = ctx.arena;
     const people = ctx.res.game.sim.population;
     const lines = try a.alloc(Line, 1 + fx.flows.len);
@@ -61,7 +61,7 @@ fn settlement(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdSettl
 }
 
 /// Project agent `e` and its settlement into the rail's content for this frame.
-pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdContent {
+pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.StatusContent {
     return .{ .settlement = try settlement(ctx, world, e), .player = try player.project(ctx.arena, world, e) };
 }
 
