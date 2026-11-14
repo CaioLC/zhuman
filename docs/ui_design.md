@@ -266,7 +266,9 @@ behind it is frozen. The kicker reads `PAUSED · ACT {n} · DAY {d}` and the tit
 screen. The menu lists Continue, Save, Load, Settings and Quit to menu. Save and Load share one
 list of three slots that flips its verbs (`SAVE HERE`/`OVERWRITE`, `LOAD`), each slot describing
 the settlement it holds. Settings is the panel the title screen shares: difficulty, tutorial,
-music, effects, UI scale, brightness, contrast and window — gameplay, then sound, then display.
+music, effects, UI scale, brightness, contrast, text and window — gameplay, then sound, then display.
+Text is `SHARP` or `SMOOTH`: one-bit letters, every pixel ink or not, or anti-aliased ones;
+sharp is the default, and a click redraws every label without moving the layout.
 Brightness (80–140% in fives) multiplies every colour on screen, live while the slider moves,
 the screen behind the panel as well as the panel. Quitting and saving over a filled slot are the
 destructive choices, so they are the two that confirm. Quit names the day it would lose and

@@ -220,14 +220,14 @@ test "menu: with no saves folder a slot click asks for nothing" {
     try testing.expectEqual(Screen.save, rig.res.menu.screen);
 }
 
-test "settings: the rows run DIFFICULTY, TUTORIAL, MUSIC, EFFECTS, UI SCALE, BRIGHTNESS, CONTRAST, WINDOW down the panel" {
+test "settings: the rows run DIFFICULTY, TUTORIAL, MUSIC, EFFECTS, UI SCALE, BRIGHTNESS, CONTRAST, TEXT, WINDOW down the panel" {
     var rig: MenuRig = undefined;
     try rig.setUp();
     defer rig.tearDown();
     var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
     try rig.openSettings(&r);
     // The first control of each row, in the prototype's order.
-    const firsts = [_][]const u8{ "ABUNDANT", "ON", "Music volume", "Effects volume", "90%", "Brightness", "NORMAL", "1280\u{00d7}720" };
+    const firsts = [_][]const u8{ "ABUNDANT", "ON", "Music volume", "Effects volume", "90%", "Brightness", "NORMAL", "SHARP", "1280\u{00d7}720" };
     var prev_y: f32 = -std.math.inf(f32);
     for (firsts) |name| {
         const box = try rig.rect(name);
@@ -251,6 +251,21 @@ test "settings: TUTORIAL is on and BRIGHTNESS 100% by default; a click on OFF ho
     try r.idle(1);
     try testing.expectEqual(res_mod.Settings.Tutorial.off, rig.res.settings.tutorial);
     try testing.expect((try rig.node("OFF")).state.checked);
+}
+
+test "settings: TEXT is sharp by default; a click on SMOOTH holds smooth" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try rig.openSettings(&r);
+    try testing.expectEqual(res_mod.Settings.Text.sharp, rig.res.settings.text);
+    try testing.expect((try rig.node("SHARP")).state.checked);
+    try rig.click(&r, "SMOOTH");
+    try r.idle(1);
+    try testing.expectEqual(res_mod.Settings.Text.smooth, rig.res.settings.text);
+    try testing.expect((try rig.node("SMOOTH")).state.checked);
+    try testing.expect(!(try rig.node("SHARP")).state.checked);
 }
 
 test "settings: a press along BRIGHTNESS lands on the 80..140 grid of fives, from its min at the left to its max at the right" {

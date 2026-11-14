@@ -1,12 +1,13 @@
 //! `settings_panel` — the one settings panel the title screen and the session menu share
 //! (`.panel-body`, `.setting`): one row per setting, a 13ch label lane beside its field, in the
-//! order DIFFICULTY, TUTORIAL, MUSIC, EFFECTS, UI SCALE, BRIGHTNESS, CONTRAST, WINDOW. A field
+//! order DIFFICULTY, TUTORIAL, MUSIC, EFFECTS, UI SCALE, BRIGHTNESS, CONTRAST, TEXT, WINDOW. A field
 //! is a `choices` group (`.choices`, one pressed button), a `level` (a slider over its own
 //! range with its percentage), and an optional note under it (`.setting-note`).
 //!
 //! The panel edits `Settings` in place and reports what changed; the caller applies a change
-//! the host owns (the window). The host reads UI scale and brightness from `Settings` each
-//! frame, so a drag of BRIGHTNESS lifts the screen live. Difficulty, the tutorial flag, the
+//! the host owns (the window). The host reads UI scale, brightness and text from `Settings` each
+//! frame, so a drag of BRIGHTNESS lifts the screen live and a click on TEXT redraws every
+//! label. Difficulty, the tutorial flag, the
 //! volumes and contrast are held only (`docs/roadmap.md`): the panel shows them exactly as the
 //! prototype does.
 
@@ -30,7 +31,7 @@ const level_out_w: f32 = 5 * 6.6;
 pub const Options = struct {
     /// The panel's width.
     width: f32,
-    /// The title screen's notes under TUTORIAL, UI SCALE, BRIGHTNESS, CONTRAST and WINDOW; the
+    /// The title screen's notes under TUTORIAL, UI SCALE, BRIGHTNESS, CONTRAST, TEXT and WINDOW; the
     /// menu shows only DIFFICULTY's.
     all_notes: bool = false,
 };
@@ -163,6 +164,11 @@ pub fn settings_panel(parent: El, id: []const u8, s: *Settings, opts: Options) !
         const f = try settingRow(panel, "contrast", "CONTRAST", opts.width);
         if (try choices(f, "choices", &.{ "NORMAL", "HIGH" }, @intFromEnum(s.contrast))) |i| s.contrast = @enumFromInt(i);
         if (opts.all_notes) try note(f, "note", "Raises the palette and separates the resource colours for red-green vision.");
+    }
+    {
+        const f = try settingRow(panel, "text", "TEXT", opts.width);
+        if (try choices(f, "choices", &.{ "SHARP", "SMOOTH" }, @intFromEnum(s.text))) |i| s.text = @enumFromInt(i);
+        if (opts.all_notes) try note(f, "note", "Sharp letters are whole pixels; smooth letters have softened edges.");
     }
     {
         const f = try settingRow(panel, "window", "WINDOW", opts.width);
