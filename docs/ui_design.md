@@ -285,6 +285,17 @@ strip, work filling and an event log behind a wordmark and the menu list (Contin
 Settings, Credits, Quit). Continue stays visible but disabled, saying there is no settlement to
 resume, because a hidden control teaches nothing.
 
+## The arrival
+
+New game does not open on the HUD. It opens on a scene: a wide, empty valley under a sky of
+twinkling stars, a far range, low hills, a few trees, all drawn in ASCII in the theme's faintest
+inks. One small figure, the only thing in the foreground ink, walks in from the left edge,
+stops once to catch breath, and sits down just past the middle, its footprints fading behind
+it. Then two lines fade in under the scene (`Day 1.`, `Alone, cold and starving.`) over the
+one button, `Begin`, which starts the run. The button is there from the first frame, so the
+scene never has to be waited out. The emptiness is the point: the player should feel how
+little there is before the first number appears.
+
 ## The market strip and the trade dialog
 
 One strip and one dialog serve every counterparty the game will have; an identity map supplies

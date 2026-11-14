@@ -168,8 +168,15 @@ pub const CurtainState = struct {
 /// The session menu's screens (`menu.html`). `overwrite` confirms a save over a filled slot.
 pub const MenuScreen = enum { menu, save, load, settings, quit, overwrite };
 
-/// Which top-level screen the host shows: the title screen before a run, or the game.
-pub const Route = enum { title, game };
+/// Which top-level screen the host shows: the title screen before a run, the arrival scene
+/// between New game and the run, or the game.
+pub const Route = enum { title, arrival, game };
+
+/// A scene's clock: the real time it has been showing. The scene is a pure function of it,
+/// so a pinned time reproduces the frame.
+pub const SceneState = struct {
+    seconds: f32 = 0,
+};
 
 /// The title screen's own screens (`title.html`): the menu, the settings panel, the credits.
 pub const TitleScreen = enum { menu, settings, credits };
@@ -419,9 +426,11 @@ pub const Resources = struct {
     menu: MenuState = .{},
     /// The act curtain over the live world, opened by the page build on `ActEnded`.
     curtain: CurtainState = .{},
-    /// The top-level screen. A launch opens on the title; New game routes to the game.
+    /// The top-level screen. A launch opens on the title; New game routes to the arrival
+    /// scene, and its Begin to the game.
     route: Route = .title,
     title: TitleState = .{},
+    scene: SceneState = .{},
     settings: Settings = .{},
     saves: SaveSlots = .{},
     view: View = .{},

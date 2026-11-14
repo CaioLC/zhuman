@@ -1,5 +1,6 @@
 //! The title screen (`title.html`): the route before a run. The menu offers Continue (the latest
-//! save; disabled while there is none), New game, Settings, Credits and Quit. Behind it the
+//! save; disabled while there is none), New game (the arrival scene, then the run), Settings,
+//! Credits and Quit. Behind it the
 //! attract loop shows the game receded: a ticking stockline, the merchant strip, work filling,
 //! holdings and an event log. The loop is canned (the prototype's own copy, its tick every
 //! 160ms, a log line every 3.4s) and a pure function of how long the title has been showing,
@@ -137,19 +138,25 @@ pub fn ui_title(ctx: *uic.UiCtx, world: *const World) !uic.Trees {
         .continue_game => if (latest) |i| {
             ctx.res.saves.request = .{ .load = @intCast(i) };
         },
+        // The arrival scene plays first; its Begin starts the run (`beginRun`).
         .new_game => {
-            // The schedule begins the run from the intent; the route, the pause and the
-            // curtain are the host's, reset here. The curtain keeps its cursor, so a fact
-            // already heard is not heard again.
-            _ = ctx.res.game.events.writer(ha.sim.events.NewRun).push(.{});
-            ctx.res.route = .game;
-            ctx.res.title = .{};
-            ctx.res.playback.paused = false;
-            ctx.res.curtain = .{ .heard = ctx.res.curtain.heard };
+            ctx.res.route = .arrival;
+            ctx.res.scene = .{};
         },
         .quit => ctx.res.menu.quit_requested = true,
     }
     return try uic.oneRoot(ctx.arena, r.root);
+}
+
+/// Begin a new run. The schedule begins it from the intent; the route, the pause and the
+/// curtain are the host's, reset here. The curtain keeps its cursor, so a fact already heard
+/// is not heard again.
+pub fn beginRun(ctx: *uic.UiCtx) void {
+    _ = ctx.res.game.events.writer(ha.sim.events.NewRun).push(.{});
+    ctx.res.route = .game;
+    ctx.res.title = .{};
+    ctx.res.playback.paused = false;
+    ctx.res.curtain = .{ .heard = ctx.res.curtain.heard };
 }
 
 /// Apply the window setting a settings panel changed: a windowed size, or fullscreen.
