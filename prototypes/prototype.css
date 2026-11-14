@@ -576,8 +576,8 @@ button:disabled {
   color: var(--acc);
 }
 
-/* A deficit flow (Act II's `Water −3/day`) reads in danger, as the game's FLOWS do. */
-.margin-row .danger {
+/* A flow demanded faster than produced (Act II's `Water +9 / −12`) reads in danger. */
+.margin-row span.danger {
   color: var(--danger);
 }
 
