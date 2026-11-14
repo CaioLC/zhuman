@@ -395,11 +395,11 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   SETTLEMENT and BODY, over the EATING POLICY. The collapsed restore label reads `HOUSEHOLD`
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
-  `Larder feeds all`, the water runway, the hall's vigor, then `PRODUCTION / DEMAND · DAY`:
+  then `PRODUCTION / DEMAND · DAY`:
   energy and every stock, each as produced against demanded (`Food +14 / −8`), colored by
   the net. It appears at the Act I curtain.
-- **[decided]** BODY (both acts) is the player's own condition: the sentences (Act I `Food
-  lasts`, then recovery and `Work pace` in both acts), then under a hairline the food's
+- **[decided]** BODY (the same in both acts) is the player's own condition: the sentences
+  (`Food lasts`, recovery, `Work pace`), then under a hairline the food's
   spoilage and the vigor ceiling against their baselines. In Act I BODY leads the rail and
   carries the collapse control.
 - **[decided]** In both acts the **eating policy sits at the foot of the rail**, aligned to
