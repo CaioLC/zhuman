@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Human Action — shelter scene prototype</title>
+<link rel="stylesheet" href="prototype.css">
+<link rel="stylesheet" href="scene.css">
+</head>
+<body>
+
+<main class="scene-screen" aria-label="Human Action shelter scene prototype">
+  <div class="scene-stage" id="stage">
+    <pre class="scene" id="scene" role="img" aria-label="Inside the shelter, one face at the fire. Figures come in from the snow through the doorway, and one by one their faces join the circle."></pre>
+  </div>
+  <footer class="scene-foot">
+    <p class="scene-caption" aria-live="polite"><span id="cap-1"></span><span id="cap-2"></span></p>
+    <div class="scene-controls">
+      <button type="button" id="replay">REPLAY</button>
+      <a href="act-ii.html">CONTINUE →</a>
+    </div>
+  </footer>
+</main>
+
+<script src="scene.js"></script>
+<script>
+/* The shelter scene, at the crossing into Act II: inside, at the fire. One face is there
+   from the start; the others walk up out of the snow in the doorway and their faces come
+   into the firelight one by one. The engine and the keys are in scene.js. */
+
+const { INK, seeded, art, makeGrid, put, stamp } = Scene;
+
+const W = 100, H = 32;
+const DOOR = { x0: 81, y0: 5, x1: 93, y1: 16 };   // the opening, inside its frame
+const APPROACH = 3.2;    // seconds from the horizon to the threshold
+const FIRE_X = 44, FIRE_FOOT = 28;
+const CAPTION_AT = 19.5;
+
+/* ---- the faces ---- */
+
+// Fifteen cells by ten, the eyes five and nine cells in; the child is eleven by eight.
+const YOU = art(String.raw`
+    ,~~-~~-~.
+ ,'~ ' ~~ ' '.
+ |  --   --  |
+(|   •   •   |)
+ |     ,     |
+ |    ---    |
+  \ .     . /
+   '-.___.-'
+  ___|   |___
+ /   '. .'   \
+`);
+const YOU_SMILE = String.raw` |    \_/    |`;
+
+const ELDER = art(String.raw`
+    .-----.
+  ,'       '.
+ |  ~~   ~~  |
+(|   •   •   |)
+ |    (_)    |
+ | ,~~\_/~~. |
+ \~~~~~~~~~~~/
+  \~~~~~~~~~/
+   '~~~~~~~'
+ ,--'~~~~~'--.
+`);
+
+const WOMAN = art(String.raw`
+    ,-~~~-.
+  ,~'     '~.
+ (~ --   -- ~)
+ (~  •   •  ~)
+ (~    .    ~)
+ (~\  \_/  /~)
+ (~ '-._.-' ~)
+ (~~  | |  ~~)
+  (~.-' '-.~)
+ ,'   \_/   '.
+`);
+
+const CHILD = art(String.raw`
+    ,v.
+  .-~~~-.
+ /       \
+(  •   •  )
+(    .    )
+ \  \_/  /
+  '-._.-'
+ ,-'   '-.
+`);
+
+const HAT = art(String.raw`
+    _______
+   |_______|
+ .-'-------'-.
+  | --   -- |
+ (|  •   •  |)
+  |    L    |
+  | '~~v~~' |
+   \  \_/  /
+    '-----'
+  .--'   '--.
+`);
+
+// Where each face sits around the fire, the row of its art the eyes are on, and when its
+// owner first shows on the horizon. The first is there from the start.
+const PEOPLE = [
+  { art: YOU, x: 22, top: 10, eyes: 3 },
+  { art: ELDER, x: 42, top: 7, eyes: 3, arrive: 2.5 },
+  { art: WOMAN, x: 62, top: 10, eyes: 3, arrive: 8 },
+  { art: CHILD, x: 82, top: 19, eyes: 3, arrive: 8.8, small: true },
+  { art: HAT, x: 4, top: 15, eyes: 4, arrive: 14.5 },
+];
+
+// A figure in the doorway, far to near: its art, the row its feet are on, its ink.
+const WALKER = [
+  { art: ['.'], foot: 13, ink: INK.far },
+  { art: ['i'], foot: 14, ink: INK.near },
+  { art: ['o', 'A'], foot: 15, ink: INK.near },
+  { art: [' o ', '/|\\', '/ \\'], foot: 16, ink: INK.bright },
+];
+const SMALL_WALKER = [
+  { art: ['.'], foot: 13, ink: INK.far },
+  { art: ['.'], foot: 14, ink: INK.far },
+  { art: ['i'], foot: 15, ink: INK.near },
+  { art: ['o', 'A'], foot: 16, ink: INK.bright },
+];
+
+const FLAMES = [
+  ['     )     ', '    ( )    ', '   ) ( (   ', '  ( ) ) )  '],
+  ['    (      ', '   ) ) (   ', '  ( ( ) )  ', '  ) ) ( (  '],
+  ['      (    ', '    ) )    ', '   ( ( ) ) ', '  ( ) ( )  '],
+];
+const LOGS = ' ==#===#== ';
+
+/* ---- the backdrop ---- */
+
+function buildBackdrop() {
+  const g = makeGrid(W, H);
+  const rand = seeded(1949);
+  const line = (y, x0, x1, ch, ink) => { for (let x = x0; x <= x1; x++) put(g, x, y, ch, ink); };
+
+  // The roof and the frame it rests on.
+  for (let x = 0; x < W; x++) put(g, x, 0, '/\\|/\\'[Math.floor(rand() * 5)], rand() < 0.5 ? INK.faint : INK.far);
+  line(1, 0, W - 1, '=', INK.far);
+  for (let y = 2; y < H; y++) {
+    for (const x of [1, 2, 97, 98]) put(g, x, y, '|', INK.far);
+  }
+
+  // What hangs from the beam: a rope bag, a bundle of herbs.
+  stamp(g, [' | ', '(#)', '(#)', ' v '], 12, 5, INK.far);
+  stamp(g, [' | ', '\\|/', '/|\\'], 67, 4, INK.far);
+
+  // The doorway, and the valley outside it.
+  line(DOOR.y0 - 1, DOOR.x0, DOOR.x1, '_', INK.near);
+  for (let y = DOOR.y0; y <= DOOR.y1; y++) {
+    put(g, DOOR.x0 - 1, y, '|', INK.near);
+    put(g, DOOR.x1 + 1, y, '|', INK.near);
+  }
+  line(13, DOOR.x0, DOOR.x1, '_', INK.far);
+  put(g, 83, 13, '/', INK.far); put(g, 86, 13, '\\', INK.far);
+  put(g, 84, 13, ' ', 0); put(g, 85, 13, ' ', 0);
+  put(g, 84, 12, '/', INK.far); put(g, 85, 12, '\\', INK.far);
+  line(DOOR.y1, DOOR.x0, DOOR.x1, '_', INK.near);
+
+  // The floor.
+  for (let y = 29; y < H; y++) {
+    for (let x = 4; x < 96; x++) {
+      if (rand() < 0.04) put(g, x, y, '.,\''[Math.floor(rand() * 3)], INK.far);
+    }
+  }
+  return g;
+}
+
+/* ---- the run ---- */
+
+function reset() {
+  const rand = seeded(11);
+  const flakes = [];
+  for (let i = 0; i < 12; i++) {
+    flakes.push({ x: rand() * 13, y: rand() * 11, fall: 2.5 + rand() * 2 });
+  }
+  const people = PEOPLE.map((p) => ({
+    ...p,
+    appear: p.arrive === undefined ? -10 : p.arrive + APPROACH,
+    blink: 1 + rand() * 4,
+  }));
+  return { t: 0, rand, flakes, people, sparks: [], fire: 0, fireTick: 0, glance: 0, glanceUntil: 0 };
+}
+
+function step(s, dt) {
+  const before = s.t;
+  s.t += dt;
+
+  for (const f of s.flakes) {
+    f.x = ((f.x - 3 * dt) % 13 + 13) % 13;
+    f.y += f.fall * dt;
+    if (f.y >= 11) { f.y -= 11; f.x = s.rand() * 13; }
+  }
+
+  // The fire: a new flame shape several times a second, and sparks that rise and die.
+  const tick = Math.floor(s.t * 7);
+  if (tick !== s.fireTick) { s.fireTick = tick; s.fire = (s.fire + 1 + Math.floor(s.rand() * 2)) % 3; }
+  if (s.rand() < 0.3) {
+    s.sparks.push({ x: FIRE_X + 3 + s.rand() * 5, y: FIRE_FOOT - 3.5, rise: 2.5 + s.rand() * 2.5, sway: (s.rand() - 0.5) * 1.6, born: s.t, life: 0.8 + s.rand() * 1.2 });
+  }
+  for (const k of s.sparks) { k.y -= k.rise * dt; k.x += k.sway * dt; }
+  s.sparks = s.sparks.filter((k) => s.t - k.born < k.life && k.y >= 17.5);
+
+  const you = s.people[0];
+  for (const p of s.people) {
+    if (s.t >= p.blink + 0.16) p.blink = s.t + 2 + s.rand() * 4;
+    // The one at the fire looks up at whoever comes in.
+    if (p !== you && before < p.appear && s.t >= p.appear) {
+      s.glance = Math.sign(p.x - you.x);
+      s.glanceUntil = s.t + 1.6;
+    }
+  }
+}
+
+// The eyes of a row, moved one cell to a side.
+function shiftEyes(row, dir) {
+  const first = row.indexOf('•'), last = row.lastIndexOf('•');
+  const eyes = row.slice(first, last + 1);
+  return dir < 0
+    ? row.slice(0, first - 1) + eyes + ' ' + row.slice(last + 1)
+    : row.slice(0, first) + ' ' + eyes + row.slice(last + 2);
+}
+
+function compose(s, g) {
+  // Outside, through the doorway.
+  for (const f of s.flakes) put(g, DOOR.x0 + Math.floor(f.x), DOOR.y0 + Math.floor(f.y), '.', INK.far);
+  for (const p of s.people) {
+    const age = s.t - p.arrive;
+    if (!(age >= 0 && age < APPROACH)) continue;
+    const stage = Math.floor(age / (APPROACH / 4));
+    const pose = (p.small ? SMALL_WALKER : WALKER)[stage];
+    let lines = pose.art;
+    if (lines.length === 3 && Math.floor(age * 5) % 2) lines = [lines[0], lines[1], ' | '];
+    const centre = (p.small ? 91 : 88) - stage;
+    stamp(g, lines, centre - (lines[0].length >> 1), pose.foot, pose.ink, DOOR);
+  }
+
+  // The fire.
+  stamp(g, FLAMES[s.fire], FIRE_X, FIRE_FOOT, (r) => (r === 3 ? INK.ember : INK.flame));
+  for (let c = 0; c < LOGS.length; c++) put(g, FIRE_X + c, FIRE_FOOT + 1, LOGS[c], LOGS[c] === '#' ? INK.ember : INK.near);
+  for (const k of s.sparks) {
+    const spent = (s.t - k.born) / k.life;
+    put(g, Math.floor(k.x), Math.floor(k.y), spent < 0.5 ? "'" : '.', spent < 0.4 ? INK.flame : spent < 0.75 ? INK.warm : INK.near);
+  }
+
+  // The faces: each comes out of the dark into the firelight.
+  const smiling = s.t >= s.people[1].appear + 1.6;
+  s.people.forEach((p, n) => {
+    const lit = s.t - p.appear;
+    if (lit < 0) return;
+    const lines = p.art.slice();
+    if (s.t >= p.blink) lines[p.eyes] = lines[p.eyes].replace(/•/g, '-');
+    else if (n === 0 && s.t < s.glanceUntil) lines[p.eyes] = shiftEyes(lines[p.eyes], s.glance);
+    if (n === 0 && smiling) lines[5] = YOU_SMILE;
+    const ink = lit < 0.5 ? INK.faint : lit < 1.0 ? INK.far : lit < 1.6 ? INK.near : INK.warm;
+    stamp(g, lines, p.x, p.top + lines.length - 1, ink);
+  });
+}
+
+Scene.run({
+  width: W,
+  height: H,
+  backdrop: buildBackdrop(),
+  reset,
+  step,
+  compose,
+  done: (s) => s.t > CAPTION_AT + 5,
+  caption: ['The shelter stands.', 'You are no longer alone.'],
+  captionClock: (s) => s.t - CAPTION_AT,
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Human Action — arrival scene prototype</title>
+<link rel="stylesheet" href="prototype.css">
+<link rel="stylesheet" href="scene.css">
+</head>
+<body>
+
+<main class="scene-screen" aria-label="Human Action arrival scene prototype">
+  <div class="scene-stage" id="stage">
+    <pre class="scene" id="scene" role="img" aria-label="Under a sky of stars, a lone figure walks in from the left across an empty valley and sits down."></pre>
+  </div>
+  <footer class="scene-foot">
+    <p class="scene-caption" aria-live="polite"><span id="cap-1"></span><span id="cap-2"></span></p>
+    <div class="scene-controls">
+      <button type="button" id="replay">REPLAY</button>
+      <a href="act-i.html">BEGIN →</a>
+    </div>
+  </footer>
+</main>
+
+<script src="scene.js"></script>
+<script>
+/* The arrival scene, before Act I: a fixed backdrop under a sky of twinkling stars, a
+   handful of props, one walking figure. The engine and the keys are in scene.js. */
+
+const { INK, seeded, art, makeGrid, put, stamp } = Scene;
+
+const W = 100, H = 32;
+const HORIZON = 21;      // the row the ground line sits on; the ground is every row below
+const ACTOR_ROW = 27;    // the row the figure's feet are on
+const REST_X = 24;       // where the figure stops to catch breath
+const END_X = 56;        // where the figure gives up walking
+
+const BARE_TREE = art(String.raw`
+ \   |   /
+  \ \|  / _/
+ __\ | /_/
+    \|/
+     |/
+     |
+     |
+    /|\
+`);
+
+const FIR = art(String.raw`
+   ^
+  /|\
+ /_|_\
+  /|\
+ / | \
+/__|__\
+   |
+`);
+
+const FAR_FIR = art(String.raw`
+ ^
+/|\
+/|\
+ |
+`);
+
+// Each prop stands on a ground row; a lower row is nearer, and is drawn over a higher one.
+const PROPS = [
+  { art: FAR_FIR, x: 6, foot: 23, ink: INK.far },
+  { art: FIR, x: 12, foot: 25, ink: INK.near },
+  { art: FAR_FIR, x: 36, foot: 22, ink: INK.far },
+  { art: FAR_FIR, x: 40, foot: 23, ink: INK.far },
+  { art: FAR_FIR, x: 92, foot: 22, ink: INK.far },
+  { art: BARE_TREE, x: 76, foot: 29, ink: INK.near },
+];
+
+const LEGS = ['/ \\', ' |\\', ' | ', '/| '];
+const POSE = {
+  rest: [' o ', '(|\\', ' | '],
+  stand: [' o ', '/|\\', '/ \\'],
+  sit: [' o ', '(|_'],
+};
+
+/* ---- the backdrop ---- */
+
+// A ridge is a height at every cell edge, each within one of its neighbour. A cell climbs,
+// falls or runs flat between its two edges, and hides whatever stood behind it.
+function ridge(g, edge, ink) {
+  for (let x = 0; x < W; x++) {
+    const a = edge[x], b = edge[x + 1];
+    const row = HORIZON - Math.min(a, b);
+    for (let y = row; y <= HORIZON; y++) put(g, x, y, ' ', 0);
+    put(g, x, row, b > a ? '/' : b < a ? '\\' : '_', ink);
+  }
+}
+
+function buildBackdrop() {
+  const g = makeGrid(W, H);
+  const rand = seeded(1848);
+
+  // The far range: straight-sided peaks, each an apex column and a height.
+  const peaks = [[9, 5], [21, 9], [31, 6], [45, 4], [62, 11], [73, 6], [87, 8], [98, 4]];
+  const far = [];
+  for (let j = 0; j <= W; j++) {
+    far.push(Math.max(0, ...peaks.map(([c, h]) => h - Math.abs(j - c))));
+  }
+  ridge(g, far, INK.far);
+
+  // The near hills: low and rolling.
+  const near = [];
+  for (let j = 0; j <= W; j++) {
+    const want = Math.max(0, Math.round(1.1 + 1.4 * Math.sin(j * 0.045 + 2.1) + 0.8 * Math.sin(j * 0.11 + 5)));
+    const prev = j ? near[j - 1] : want;
+    near.push(Math.max(prev - 1, Math.min(prev + 1, want)));
+  }
+  ridge(g, near, INK.near);
+
+  // The ground: drifts, and what little grows on it.
+  for (let n = 0; n < 9; n++) {
+    const y = HORIZON + 2 + Math.floor(rand() * (H - HORIZON - 3));
+    const x = Math.floor(rand() * W);
+    const len = 4 + Math.floor(rand() * 9);
+    for (let i = 0; i < len; i++) if (rand() < 0.7) put(g, x + i, y, '_', INK.faint);
+  }
+  const tufts = ['.', '.', '.', ',', "'", '"'];
+  for (let y = HORIZON + 1; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (rand() < 0.035) put(g, x, y, tufts[Math.floor(rand() * tufts.length)], INK.far);
+    }
+  }
+
+  // The stars: thicker toward the top, none below the skyline or behind a tree. Most are
+  // faint, a few are bright, and each twinkles to its own period.
+  const stars = [];
+  for (let x = 0; x < W; x++) {
+    const skyline = HORIZON - Math.max(far[x], far[x + 1], near[x], near[x + 1]);
+    for (let y = 0; y < skyline; y++) {
+      if (rand() >= 0.04 * (1 - 0.6 * y / HORIZON)) continue;
+      const pick = rand(), period = 1.5 + rand() * 3.5, phase = rand() * Math.PI * 2;
+      const hidden = PROPS.some((p) => x >= p.x && x < p.x + p.art[0].length + 4 && y > p.foot - p.art.length && y <= p.foot);
+      if (!hidden) stars.push({ x, y, size: pick < 0.7 ? 0 : pick < 0.94 ? 1 : 2, period, phase });
+    }
+  }
+  return { grid: g, stars };
+}
+
+/* ---- the run ---- */
+
+const { grid: BACKDROP, stars: STARS } = buildBackdrop();
+
+function reset() {
+  return { t: 0, prints: [], x: -2, phase: 'away', until: 1.5, stride: 0, rested: false, satAt: 0 };
+}
+
+const PACE = 0.21;   // seconds a step
+
+function step(s, dt) {
+  s.t += dt;
+
+  if (s.phase === 'away' && s.t >= s.until) s.phase = 'walk';
+  if (s.phase === 'rest' && s.t >= s.until) s.phase = 'walk';
+  if (s.phase === 'stand' && s.t >= s.until) { s.phase = 'sit'; s.satAt = s.t; }
+  if (s.phase === 'walk') {
+    s.stride += dt;
+    while (s.stride >= PACE && s.phase === 'walk') {
+      s.stride -= PACE;
+      if (s.x >= 0 && s.x % 2 === 0) s.prints.push({ x: s.x, born: s.t });
+      s.x += 1;
+      if (s.x === REST_X && !s.rested) { s.phase = 'rest'; s.rested = true; s.until = s.t + 1.8; }
+      if (s.x === END_X) { s.phase = 'stand'; s.until = s.t + 1.6; }
+    }
+  }
+  // The wind fills a footprint in.
+  s.prints = s.prints.filter((p) => s.t - p.born < 22);
+}
+
+function compose(s, g) {
+  for (const p of s.prints) {
+    if (p.x >= s.x - 1) continue;
+    const age = s.t - p.born;
+    put(g, p.x, ACTOR_ROW, '.', age < 7 ? INK.near : age < 14 ? INK.far : INK.faint);
+  }
+
+  for (const star of STARS) {
+    const glow = Math.sin(s.t * 2 * Math.PI / star.period + star.phase);
+    if (star.size === 0) put(g, star.x, star.y, '.', glow > 0.2 ? INK.far : INK.faint);
+    else if (star.size === 1) put(g, star.x, star.y, '·', glow > 0.2 ? INK.near : INK.far);
+    else put(g, star.x, star.y, glow > 0.5 ? '*' : glow > -0.3 ? '+' : '·', glow > -0.3 ? INK.near : INK.far);
+  }
+
+  const things = PROPS.map((p) => ({ foot: p.foot, draw: () => stamp(g, p.art, p.x, p.foot, p.ink) }));
+  if (s.phase !== 'away') {
+    const pose = s.phase === 'walk' ? [' o ', '(|\\', LEGS[s.x & 3]] : POSE[s.phase];
+    things.push({ foot: ACTOR_ROW, draw: () => stamp(g, pose, s.x - 1, ACTOR_ROW, INK.bright) });
+  }
+  things.sort((a, b) => a.foot - b.foot).forEach((thing) => thing.draw());
+}
+
+Scene.run({
+  width: W,
+  height: H,
+  backdrop: BACKDROP,
+  reset,
+  step,
+  compose,
+  done: (s) => s.phase === 'sit' && s.t - s.satAt > 5,
+  caption: ['Day 1.', 'Alone, cold and starving.'],
+  captionClock: (s) => (s.phase === 'sit' ? s.t - s.satAt - 1 : -1),
+});
+</script>
+</body>
+</html>

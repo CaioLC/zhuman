@@ -1,0 +1,23 @@
+/* The ambience scenes (arrival.html, shelter.html): one screen, a grid of cells and a caption. */
+
+.scene-screen { display: grid; grid-template-rows: minmax(0, 1fr) auto; width: min(900px, 100vw); height: min(700px, 100vh); overflow: hidden; border: 1px solid var(--line); background: var(--bg); }
+.scene-stage { display: grid; place-items: center; min-height: 0; overflow: hidden; cursor: default; }
+
+/* The scene is a 100 × 32 grid of cells, one glyph and one ink each. The cell is the body
+   font at its natural advance (0.6em), shrunk to fit a narrow window. */
+.scene { --cell: min(14px, calc((100vw - 34px) / 60)); margin: 0; font: 400 var(--cell)/1.25 var(--font); letter-spacing: 0; white-space: pre; user-select: none; }
+.k1 { color: var(--line); }
+.k2 { color: var(--line-2); }
+.k3 { color: var(--dim); }
+.k4 { color: var(--fg); }
+.k5 { color: var(--acc); }
+.k6 { color: var(--warn); }
+.k7 { color: var(--danger); }
+
+.scene-foot { display: flex; gap: 18px; align-items: end; justify-content: space-between; padding: 11px 15px 12px; border-top: 1px solid var(--line); }
+.scene-caption { display: grid; gap: 2px; min-height: 2.7em; margin: 0; }
+.scene-caption span { min-height: 1.35em; white-space: pre; }
+.scene-caption span:first-child { color: var(--dim); }
+.scene-controls { display: flex; flex: none; gap: 16px; font-size: 11px; letter-spacing: 0.06em; }
+.scene-controls button, .scene-controls a { padding: 0; color: var(--dim); background: transparent; text-decoration: none; cursor: pointer; }
+.scene-controls button:hover, .scene-controls a:hover { color: var(--acc); }
