@@ -100,8 +100,8 @@ so it lives on the Household rail under BODY in both acts, collapsing with it. I
 rations: the rate climbs exponentially from the meagerest ration to normal at `50` and from
 normal to the most lavish above it (the ends are the sim `Config`'s), and the slider's word (`meager`, `lean`, `modest`, `normal`,
 `hearty`, `generous`, `lavish`) steps every sixteen points. The panel reads
-`{word} · {rate}×` and projects coverage (how long the larder lasts) and recovery (days to
-full vigor) from the same arithmetic the metabolism loop runs; the simulation stores only
+`{word} · {rate}×`; BODY above it projects coverage (how long the larder lasts), recovery (days to
+full vigor) and the work pace (see the BODY block below) from the same arithmetic the metabolism loop runs; the simulation stores only
 the resulting bounded multiplier. A count-only summary reports `<visible> of 20 actions
 shown`.
 
@@ -218,8 +218,11 @@ below its default is a gain, above it a penalty.
 
 The **BODY** block projects the larder forward: how many days of food remain at the current
 appetite, and whether vigor is recovering, already full, starving, or stalled on food that
-feeds but does not restore. Both numbers come from the simulation's own arithmetic, never a
-copied constant.
+feeds but does not restore. Its last line, in both acts, is the work pace, `Work pace {N}%.`: the
+share of the normal ration's pace the body works at on its current ration, as a whole percentage
+(`100%` at normal, lower on a meager ration or an empty larder, a little higher on a feast), in
+the neutral value ink, since a job's hours on the tiles and rows are already divided by it. Every
+number comes from the simulation's own arithmetic, never a copied constant.
 
 ## Playback controls
 

@@ -3,9 +3,9 @@
 //! copy, the per-day FLOWS (an inflow reads `better`, a deficit `worse`, no flow `flat`), and
 //! the **population-relevant** BODY projections: how many live under one roof, how long the
 //! larder feeds them at the eating policy's rate, when water runs short at its flow, and the
-//! hall's vigor.
+//! hall's vigor, then the player's work pace on the current ration.
 //!
-//! The roster, the stocks, the vigor and the eating rate are live; the population is
+//! The roster, the stocks, the vigor, the eating rate and the pace are live; the population is
 //! `Sim.population`'s stand-in, and the flows and the per-person ration are stand-ins from
 //! `fixtures.zig`. Pure projection into the frame arena; no nodes.
 
@@ -102,6 +102,10 @@ pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HoldingsConte
             .spent => .danger,
         } });
     }
+    // The pace the player works at on this ration, as a whole percentage of the normal ration's.
+    const pace = if (world.get(e, comp.Outlook)) |o| o.pace else 1;
+    const pace_pct: i32 = @intFromFloat(@round(pace * 100));
+    try body.append(a, .{ .key = "pace", .prefix = "Work pace ", .value = try a.print("{d}%", .{pace_pct}), .suffix = "." });
 
     return .{
         .count = try a.print("{d} KINDS, {d}", .{ owned.items.len, units }),
@@ -128,4 +132,30 @@ test "water runs short only on a deficit, and the runway tones by length" {
     try std.testing.expectEqual(Tone.danger, runwayTone(1.5));
     try std.testing.expectEqual(Tone.warn, runwayTone(3));
     try std.testing.expectEqual(Tone.good, runwayTone(10.3));
+}
+
+test "BODY ends on the player's work pace: 100% at the normal ration or with no projection, the slowest pace's share unfed" {
+    var res = uic.replay.headlessResources();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx = uic.UiCtx.init(&res, std.testing.allocator, arena.allocator());
+    defer ctx.deinit();
+    var w = try World.init(std.testing.allocator);
+    defer w.deinit();
+    const e = w.spawn(.{comp.Condition{}});
+
+    var c = try content(&ctx, &w, e);
+    var last = c.body[c.body.len - 1];
+    try std.testing.expectEqualStrings("pace", last.key);
+    try std.testing.expectEqualStrings("Work pace ", last.prefix);
+    try std.testing.expectEqualStrings("100%", last.value);
+    try std.testing.expectEqualStrings(".", last.suffix);
+    try std.testing.expectEqualStrings("vigor", c.body[c.body.len - 2].key);
+
+    const cfg = res.game.config;
+    w.add(e, comp.Outlook{ .pace = cfg.pace(1.0, 1, false) });
+    c = try content(&ctx, &w, e);
+    last = c.body[c.body.len - 1];
+    try std.testing.expectEqualStrings("pace", last.key);
+    try std.testing.expectEqualStrings("69%", last.value);
 }

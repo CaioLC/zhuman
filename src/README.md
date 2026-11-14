@@ -71,8 +71,8 @@ values and emits nothing new, and a test says so.
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
   the same terms `metabolize` applies (`base_rate × rate`, `Config.regen`), and publishes the
   pace the body works at (`pace`), which the tiles and rows divide a job's hours and time left by, so
-  the projection and the loop agree by construction, and both BODY lines of the Act I holdings
-  read it.
+  the projection and the loop agree by construction; the Act I holdings' BODY lines read it, and
+  Act II's BODY its pace.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
   reach, per generator the standing and its progress, and in each the first resource it cannot
