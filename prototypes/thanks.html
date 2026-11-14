@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Human Action — thank-you scene prototype</title>
+<link rel="stylesheet" href="prototype.css">
+<link rel="stylesheet" href="scene.css">
+</head>
+<body>
+
+<main class="scene-screen" aria-label="Human Action thank-you scene prototype">
+  <div class="scene-stage" id="stage">
+    <pre class="scene" id="scene" role="img" aria-label="The valley of the arrival, now with a shelter standing in it, smoke from its roof, lit windows, and people around a fire outside. Thank you for playing, and the credits, appear in the sky."></pre>
+  </div>
+  <footer class="scene-foot">
+    <p class="scene-caption" aria-live="polite"><span id="cap-1"></span><span id="cap-2"></span></p>
+    <div class="scene-controls">
+      <button type="button" id="replay">REPLAY</button>
+      <a href="title.html">TITLE →</a>
+    </div>
+  </footer>
+</main>
+
+<script src="scene.js"></script>
+<script src="valley.js"></script>
+<script>
+/* The thank-you scene, where the Act I demo ends: the valley of the arrival, seen from the
+   same place, with the shelter standing where the figure sat down. Smoke rises from the
+   roof, the windows are lit, and the people are outside at a fire. The thanks and the
+   credits come up in the sky, a line at a time.
+
+   The scene is a function of its clock alone: nothing is carried from one frame to the next.
+   The valley is valley.js; the engine and the keys are in scene.js. */
+
+const { INK, seeded, put, stamp } = Scene;
+const { W } = Valley;
+
+const HUT_X = 48, HUT_FOOT = 27;
+const FIRE_X = 36, FIRE_FOOT = 29;
+const CAPTION_AT = 16;
+
+// The shelter in three layers: its outline, the thatch, and what is lit from inside.
+const HUT = [
+  '       /\\       ',
+  '      /  \\      ',
+  '    _/    \\_    ',
+  '   /        \\   ',
+  '  /          \\  ',
+  ' /            \\ ',
+  '/______________\\',
+  ' |     __     | ',
+  ' |    |  |    | ',
+  ' |____|  |____| ',
+];
+const THATCH = [
+  '       ::       ',
+  '      ::::      ',
+  '    ::::::::    ',
+  '   ::::::::::   ',
+  '  ::::::::::::  ',
+  '                ',
+  '                ',
+  '                ',
+  '                ',
+];
+const LIT = [
+  '   []  ::  []   ',
+  '       ::       ',
+];
+
+const FLAMES = [
+  [' ) ', '(()'],
+  [' ( ', '())'],
+  ['  )', ')(('],
+];
+
+// What comes up in the sky, and when. A credit is a role and a name either side of a dot.
+const SKY = [
+  { row: 2, at: 2, text: 'T H A N K   Y O U   F O R   P L A Y I N G', ink: INK.bright },
+  { row: 4, at: 5, text: 'A game about what people do when they cannot have everything.', ink: INK.near },
+  { row: 6, at: 8, role: 'Design and code', name: 'Caio Lacerda de Castro' },
+  { row: 7, at: 9, role: 'Built with', name: 'Zig and SDL3, no engine' },
+  { row: 8, at: 10, role: 'Typeface', name: 'JetBrains Mono' },
+  { row: 10, at: 13, text: "Named after a long book by Ludwig von Mises. You don't have to read it.", ink: INK.far },
+];
+
+// Empty the cells a block of art covers, each row from its first mark to its last, so what
+// stands behind it does not show through.
+function solid(g, lines, x, foot) {
+  const top = foot - lines.length + 1;
+  lines.forEach((line, r) => {
+    const first = line.search(/\S/), last = line.search(/\S\s*$/);
+    for (let c = first; first >= 0 && c <= last; c++) put(g, x + c, top + r, ' ', 0);
+  });
+}
+
+// A line of the sky, coming up out of the dark: `lit` is how long it has been showing.
+function write(g, x, row, text, ink, lit) {
+  if (lit < 0) return;
+  const now = Math.min(ink, lit < 0.4 ? INK.faint : lit < 0.8 ? INK.far : lit < 1.2 ? INK.near : INK.bright);
+  for (let i = -1; i <= text.length; i++) put(g, x + i, row, text[i] || ' ', now);
+}
+
+function compose(s, g) {
+  const t = s.t;
+  Valley.drawStars(g, t);
+
+  for (const line of SKY) {
+    const lit = t - line.at;
+    if (line.role) {
+      // Roles end and names begin either side of the middle column.
+      write(g, 48 - line.role.length, line.row, line.role, INK.far, lit);
+      write(g, 49, line.row, '·', INK.far, lit);
+      write(g, 51, line.row, line.name, INK.near, lit);
+    } else {
+      write(g, Math.floor((W - line.text.length) / 2), line.row, line.text, line.ink, lit);
+    }
+  }
+
+  // Smoke from the roof: a puff every so often, rising, drifting and thinning.
+  const newest = Math.floor(t / 0.45);
+  for (let k = newest; k > newest - 11 && k >= 0; k--) {
+    const age = t - k * 0.45;
+    const sway = seeded(k * 7919 + 13)() * 6;
+    const x = HUT_X + 7.5 + age * 0.9 + Math.sin(age * 1.3 + sway) * 0.8;
+    const y = HUT_FOOT - 10 - age * 1.1;
+    put(g, Math.floor(x), Math.floor(y), age < 1.5 ? (k % 2 ? '(' : ')') : age < 3.5 ? '~' : '.', age < 2 ? INK.near : age < 4 ? INK.far : INK.faint);
+  }
+
+  const things = Valley.props(g);
+
+  things.push({ foot: HUT_FOOT, draw: () => {
+    solid(g, HUT, HUT_X, HUT_FOOT);
+    stamp(g, THATCH, HUT_X, HUT_FOOT, INK.far);
+    stamp(g, HUT, HUT_X, HUT_FOOT, INK.near);
+    // The firelight inside wavers.
+    stamp(g, LIT, HUT_X, HUT_FOOT, seeded(Math.floor(t * 5))() < 0.2 ? INK.warm : INK.flame);
+  } });
+
+  things.push({ foot: FIRE_FOOT, draw: () => {
+    const flames = FLAMES[Math.floor(seeded(Math.floor(t * 7))() * 3)];
+    stamp(g, flames, FIRE_X, FIRE_FOOT, (r) => (r ? INK.ember : INK.flame));
+  } });
+
+  // The one who came alone, on the left of the fire, waves now and then.
+  const waving = t % 8 >= 3 && t % 8 < 5.5;
+  const arm = waving && Math.floor(t / 0.35) % 2 ? ' o/' : waving ? ' o|' : ' o ';
+  things.push({ foot: 29, draw: () => stamp(g, [arm, waving ? '/| ' : '/|\\', '/ \\'], 31, 29, INK.bright) });
+  // The elder sits at the fire; the others stand.
+  things.push({ foot: 29, draw: () => stamp(g, [' o ', '_|)'], 40, 29, INK.warm) });
+  things.push({ foot: 30, draw: () => stamp(g, ['_o_', '/|\\', '/ \\'], 26, 30, INK.warm) });
+  things.push({ foot: 30, draw: () => stamp(g, [' o ', '/|\\', '/_\\'], 44, 30, INK.warm) });
+  // The child runs back and forth in front of the shelter.
+  const lap = (t % 9) / 9, along = lap < 0.5 ? lap * 2 : 2 - lap * 2;
+  const childX = Math.round(48 + along * 12);
+  things.push({ foot: 30, draw: () => stamp(g, [' o ', childX % 2 ? ' A ' : ' | '], childX, 30, INK.warm) });
+
+  things.sort((a, b) => a.foot - b.foot).forEach((thing) => thing.draw());
+}
+
+Scene.run({
+  width: Valley.W,
+  height: Valley.H,
+  backdrop: Valley.BACKDROP,
+  reset: () => ({ t: 0 }),
+  step: (s, dt) => { s.t += dt; },
+  compose,
+  done: (s) => s.t > CAPTION_AT + 5,
+  caption: ['Human Action · the Act I demo ends here.', 'Thank you for testing it.'],
+  captionClock: (s) => s.t - CAPTION_AT,
+});
+</script>
+</body>
+</html>
