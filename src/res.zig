@@ -403,12 +403,10 @@ pub const Resources = struct {
     /// All platform policy stays host-side; no simulation system touches it.
     a11y: @import("./ui_client/a11y.zig").Bridge =
         @import("./ui_client/a11y.zig").Bridge.init(@import("./ui_client/a11y.zig").NoopProvider.instance()),
-    /// Host-side reduced-motion policy: a one-bit preference resolved **once** at
-    /// init — an explicit `HA_REDUCED_MOTION` override, else the Windows
-    /// `SPI_GETCLIENTAREAANIMATION` probe, else a deterministic `false` fallback — and then
-    /// projected onto `view.reduced_motion` every frame in `build_ui`. Avoids per-frame OS
-    /// calls. Presentation policy only; no simulation system reads or writes it. Defaults to
-    /// motion-allowed until `init` resolves the real preference.
+    /// Host-side reduced-motion policy: a one-bit preference, off unless
+    /// `HA_REDUCED_MOTION` asks for it, resolved **once** at init and then projected onto
+    /// `view.reduced_motion` every frame in `build_ui`. Presentation policy only; no
+    /// simulation system reads or writes it.
     motion: @import("./ui_client/motion.zig").Policy = .{},
     /// Host-side transition/tween registry: scalar transitions keyed by stable
     /// node/domain id for the functional animations (the rail's collapse, stock-token font

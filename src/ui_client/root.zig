@@ -148,18 +148,13 @@ pub const AccessibilityCapabilities = a11y.Capabilities;
 pub const AccessibilityProvider = a11y.Provider;
 pub const NoopAccessibilityProvider = a11y.NoopProvider;
 
-// Host-side reduced-motion policy: a one-bit `Policy` resolved once at init (an
-// explicit `HA_REDUCED_MOTION` override, else a Windows `SPI_GETCLIENTAREAANIMATION` probe,
-// else a deterministic `false` fallback) and projected onto `view.reduced_motion` each frame.
+// Host-side reduced-motion policy: a one-bit `Policy`, off unless `HA_REDUCED_MOTION` asks
+// for it, resolved once at init and projected onto `view.reduced_motion` each frame.
 // Optional/decorative transitions snap under it via `Policy.snap`/`Policy.phase`; functional
 // progress/state/focus and the simulation are never gated. All platform policy stays here in
 // `ui_client`; `src/ui` never sees it. See `motion.zig`.
 pub const motion_policy = motion;
 pub const MotionPolicy = motion.Policy;
-pub const MotionProbe = motion.Probe;
-pub const PlatformMotionProbe = motion.PlatformProbe;
-pub const FixedMotionProbe = motion.FixedProbe;
-pub const nullMotionProbe = motion.nullProbe;
 pub const resolveMotionFromEnv = motion.resolveFromEnv;
 pub const resolveMotion = motion.resolve;
 pub const parseMotionOverride = motion.parseOverride;

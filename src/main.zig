@@ -199,12 +199,9 @@ const App = struct {
         const allocator = self.gpa;
         self.font = try ha.font.Fonts.init(allocator, font_path, ui_client.style.default_font);
         self.resources = try Resources.init(allocator, self.io, self.environ, &self.font, &self.renderer, self.window);
-        // Resolve the reduced-motion policy ONCE here: an explicit
-        // `HA_REDUCED_MOTION` override wins, else the platform probe (Windows
-        // `SPI_GETCLIENTAREAANIMATION`; deterministic `false` elsewhere), else a `false`
-        // fallback. No per-frame OS call — `build_ui` only projects this onto
-        // `view.reduced_motion` each frame.
-        self.resources.motion = ui_client.resolveMotionFromEnv(self.environ, ui_client.PlatformMotionProbe.instance());
+        // Resolve the reduced-motion policy once here: on only when `HA_REDUCED_MOTION`
+        // asks for it. `build_ui` projects it onto `view.reduced_motion` each frame.
+        self.resources.motion = ui_client.resolveMotionFromEnv(self.environ);
         // The world is empty until a `NewRun` (the title's New game) or a load begins a run.
         self.world = try ha.sim.ecs.World.init(allocator);
         self.openSaves();

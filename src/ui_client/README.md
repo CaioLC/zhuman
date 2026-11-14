@@ -362,24 +362,14 @@ stays here in `ui_client`; `src/ui` remains accessibility-unaware.
 transitions animate or **snap** — while functional progress, state changes, pointer/focus
 cues, and the simulation always stay visible. `Policy { reduced_motion }` is resolved
 **once at init** (`App.setup`, right after `Resources.init`), stored on `Resources.motion`,
-and only *projected* onto `View.reduced_motion` in `build_ui`'s prologue each frame — so
-there is no per-frame OS call.
+and only *projected* onto `View.reduced_motion` in `build_ui`'s prologue each frame.
 
-Resolution precedence is total and non-panicking: an **explicit override** (env
-`HA_REDUCED_MOTION`, or an injected bool) wins; else the **platform probe**; else a
-deterministic **`false`** (motion allowed). `parseOverride` is case-insensitive and total —
-`1/true/yes/on`→true, `0/false/no/off`→false, and **anything else (empty/whitespace/garbage)
-is ignored** (`null`, falling through to the probe) so bad input never panics. The probe is
-a narrow injectable `Probe` vtable (mirroring `a11y.Provider`): `PlatformProbe` does the
-real query, `FixedProbe`/`nullProbe` keep every test SDL/OS-free.
-
-On Windows the platform query calls `SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, …)`
-**once** — the documented live-state "client area animation" flag (Settings → Accessibility
-→ Visual effects → Animation effects), with `reduced_motion = !animations_enabled`. It links
-against `user32` (linked by the vendored SDL C build), so it needs no `build.zig` entry and
-no registry read. SDL exposes no cross-platform reduced-motion abstraction, so on every
-non-Windows target the probe deterministically reports `null`→`false` rather than pretending
-a preference was read.
+Motion is **on unless asked otherwise**: the policy is reduced only when the env var
+`HA_REDUCED_MOTION` says so (or a fixture sets the bit). `parseOverride` is case-insensitive
+and total — `1/true/yes/on`→true, `0/false/no/off`→false, and **anything else
+(empty/whitespace/garbage) is ignored**, leaving motion on, so bad input never panics. The
+operating system's animation setting is not consulted, because turning window animations off
+in the OS is not a request for a game to hold still.
 
 **Inventory and the functional/decorative split:** the action-tile underbar and the
 eating-policy slider position are *functional determinate progress/simulation readouts* — they remain
