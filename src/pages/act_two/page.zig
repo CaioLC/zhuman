@@ -116,7 +116,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     // Vigor and the six stocks are the player's; population and coin are stand-ins.
     var stocks: [2 + 1 + ledger_stocks.len]t.Stock = undefined;
     var n: usize = 0;
-    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx), .max = fx.capacityOf(population(ctx)) };
+    stocks[n] = .{ .abbrev = "PO", .full = "Population", .value = population(ctx), .max = fx.capacityOf(population(ctx)), .count = true };
     n += 1;
     if (agent) |e| {
         const vigor = world.get(e, comp.Vigor).?;
