@@ -30,6 +30,4 @@ test "Act I has no settlement: the column is BODY alone" {
     const c = try content(&ctx, &w, e);
     try std.testing.expect(c.settlement == null);
     try std.testing.expectEqual(@as(usize, 3), c.body.sentences.len);
-    // The food's spoilage and the vigor ceiling; the quality has not moved.
-    try std.testing.expectEqual(@as(usize, 2), c.body.lines.len);
 }

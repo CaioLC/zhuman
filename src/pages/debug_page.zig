@@ -219,9 +219,8 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
     } else if (eq(name, "household")) {
         if (player.get()) |a| {
-            // Act I's column, BODY and the eating policy. The cellar and the bed move the
-            // food's spoilage and the vigor ceiling; the values are ordinary live ECS data.
-            fixtureGoods(ctx, a[0], &.{ .{ "root_cellar", 1 }, .{ "leaf_bed", 1 } });
+            // Act I's column: BODY, ending on the eating policy, on a lean ration below the
+            // ceiling. The values are ordinary live ECS data.
             poke(ctx, a[0], .{ .food = 7.8 });
             poke(ctx, a[0], .{ .vigor = .{ .v = 14.4, .max = 15 } });
             poke(ctx, a[0], .{ .rate = 0.5 });

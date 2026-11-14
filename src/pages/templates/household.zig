@@ -1,14 +1,14 @@
 //! `household` — the rail's whole column, the same template in every act: a SETTLEMENT panel of
-//! aggregates (the people, then what the settlement makes and uses), a BODY panel of the
-//! player's own condition 12px below it, then the eating policy at their foot, aligned to the
-//! panels. An act with no settlement (Act I, one person) builds no SETTLEMENT panel and BODY
-//! leads the column. The policy is not a verb, so it lives with the body whose projections it
-//! moves rather than in the action catalog; it collapses with the rail because the rail only
-//! builds this while expanded. Rail collapse chrome remains the rail template's responsibility.
+//! aggregates (the people, then what the settlement makes, uses and holds) and, 12px below it,
+//! a BODY panel of the player's own condition, which ends on the eating policy. An act with no
+//! settlement (Act I, one person) builds no SETTLEMENT panel and BODY leads the column. The
+//! policy is not a verb, so it lives in the body whose projections it moves rather than in
+//! the action catalog; it collapses with the rail because the rail only builds this while
+//! expanded. Rail collapse chrome remains the rail template's responsibility.
 //!
 //! The panels own presentation only. Each act projects its own domain state into a `Content`
 //! (`pages/act_one/household.zig`, `pages/act_two/household.zig`); the strings are the act's and
-//! the tones and verdicts are semantic, so the panels read no world state. The eating policy
+//! the tones and verdicts are semantic. The one world read is BODY's eating policy, which
 //! reads the agent's metabolism and writes the ration intent.
 
 const std = @import("std");
@@ -68,13 +68,11 @@ pub const Settlement = struct {
     lines: []const Line,
 };
 
-/// The BODY panel: the player's own condition. `sentences` project it forward, `lines` are
-/// what the body is working with (the food it eats, its ceiling); `note` replaces the
-/// sentences when the act has no projection.
+/// The BODY panel's projection: the player's own condition as sentences; `note` replaces them
+/// when the agent has no projection. The panel adds the eating policy under them.
 pub const Body = struct {
     sentences: []const Sentence = &.{},
     note: ?[]const u8 = null,
-    lines: []const Line = &.{},
 };
 
 /// What one act shows in the column. A null `settlement` builds no SETTLEMENT panel.
@@ -111,7 +109,12 @@ fn settlementPanel(parent: El, s: Settlement, col_w: f32) !void {
     try lines(p, "lines", s.lines);
 }
 
-fn bodyPanel(parent: El, b: Body, col_w: f32) !void {
+/// BODY: the sentences, a hairline, then the eating policy. When the slider's rate differs
+/// from agent `e`'s metabolism rate it writes `SetRation`, which the ration handler applies
+/// before the next build; only a change is written, so a still slider writes nothing. An agent
+/// with no metabolism shows the policy disabled at normal.
+fn bodyPanel(parent: El, world: *const World, e: Entity, b: Body, col_w: f32) !void {
+    const ctx = parent.ctx;
     const p = try panel(parent, "body", "BODY", body_title_gap, col_w);
     if (b.note) |note| {
         try p.label("note", note, .{style.note});
@@ -120,9 +123,15 @@ fn bodyPanel(parent: El, b: Body, col_w: f32) !void {
         const list = try p.box("list", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 0 }, .{});
         for (b.sentences) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, valueColor(parent.ctx, s.tone, s.verdict));
     }
-    if (b.lines.len == 0) return;
     try readout.divider(p, "divider", 9, 7);
-    try lines(p, "lines", b.lines);
+    if (world.get(e, comp.Metabolism)) |met| {
+        const band = eating_mod.Band.of(ctx.res.game.config);
+        const value = try eating_policy_mod.eating_policy(p, "eating_policy", eating_mod.valueFromRate(met.rate, band), true);
+        const rate = eating_mod.rate(value, band);
+        if (rate != met.rate) _ = ctx.res.game.events.writer(ha.sim.events.SetRation).push(.{ .agent = e, .rate = rate });
+    } else {
+        _ = try eating_policy_mod.eating_policy(p, "eating_policy", 50, false);
+    }
 }
 
 /// The stacked column: one panel's width and whether two panels sit side by side.
@@ -135,54 +144,29 @@ pub fn stackedColumn(ctx: *uic.UiCtx) struct { total: f32, col_w: f32, two_up: b
 /// The stacked rail's column gap (`.side-rail` as a two-column grid).
 const stacked_gap: f32 = 22;
 
-/// Build the SETTLEMENT and BODY panels from one act's `Content`. Framed, they are the rail's
-/// 240px column. Stacked (≤760) they span the page: side by side at the 760 class, one above
-/// the other below 560. Returns the box the column's foot (the eating policy) goes into, at
-/// one panel's width: under the panels, or beside BODY at the 760 class when BODY is alone.
-fn panels(parent: El, id: []const u8, c: Content) !El {
+/// Build the column for agent `e` from one act's `Content`. Framed, it is the rail's 240px
+/// column. Stacked (≤760) it spans the page: the panels side by side at the 760 class, each
+/// half the page wide, one above the other below 560.
+pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, c: Content) !El {
     const ctx = parent.ctx;
     const terminal = @import("./terminal.zig");
     if (terminal.stacked(ctx)) {
         const sc = stackedColumn(ctx);
-        const column = try parent.box(id, .{
-            .w = .{ .fixed = sc.total }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
-            .gap = panel_gap,
-        }, .{});
-        const row = try column.box("panels", .{
+        const row = try parent.box(id, .{
             .w = .{ .fixed = sc.total }, .h = .fit_children,
             .flow = .{ .dir = if (sc.two_up) .row else .column, .cross = .start },
             .gap = if (sc.two_up) stacked_gap else panel_gap,
         }, .{});
         if (c.settlement) |s| try settlementPanel(row, s, sc.col_w);
-        try bodyPanel(row, c.body, sc.col_w);
-        // With no SETTLEMENT the second column is free, so the foot sits beside BODY there.
-        const beside = sc.two_up and c.settlement == null;
-        return (if (beside) row else column).box("foot", .{ .w = .{ .fixed = sc.col_w }, .h = .fit_children, .flow = .{ .dir = .column } }, .{});
+        try bodyPanel(row, world, e, c.body, sc.col_w);
+        return row;
     }
     const column = try parent.box(id, .{
         .w = .{ .fixed = column_width }, .h = .fit_children, .flow = .{ .dir = .column, .cross = .start },
         .gap = panel_gap,
     }, .{});
     if (c.settlement) |s| try settlementPanel(column, s, column_width);
-    try bodyPanel(column, c.body, column_width);
-    return column;
-}
-
-/// Build the column for agent `e`; when the slider's rate differs from its metabolism rate,
-/// write `SetRation`, which the ration handler applies before the next build. Only a change is
-/// written, so a still slider writes nothing. An agent with no metabolism shows the policy
-/// disabled at normal.
-pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, content: Content) !El {
-    const ctx = parent.ctx;
-    const column = try panels(parent, id, content);
-    if (world.get(e, comp.Metabolism)) |met| {
-        const band = eating_mod.Band.of(ctx.res.game.config);
-        const value = try eating_policy_mod.eating_policy(column, "eating_policy", eating_mod.valueFromRate(met.rate, band), true);
-        const rate = eating_mod.rate(value, band);
-        if (rate != met.rate) _ = ctx.res.game.events.writer(ha.sim.events.SetRation).push(.{ .agent = e, .rate = rate });
-    } else {
-        _ = try eating_policy_mod.eating_policy(column, "eating_policy", 50, false);
-    }
+    try bodyPanel(column, world, e, c.body, column_width);
     return column;
 }
 

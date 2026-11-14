@@ -13,7 +13,7 @@ pub const Label = struct { v: []const u8 };
 
 /// Vigor: the human energy source. The field defaults are the authoritative starting baseline:
 /// a rested agent spawns at the ceiling. `spawn_agent` spawns from these defaults (the
-/// `baselines` module names them) rather than repeating literals, so the BODY readout derives a
+/// `baselines` module names them) rather than repeating literals, so a reader derives a
 /// current-vs-base margin against the same numbers.
 pub const Vigor = struct {
     v: f32 = 10,

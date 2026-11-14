@@ -1,6 +1,8 @@
-//! `eating_policy` — the prototype's complete policy tile: heading/readout, range input, and
-//! endpoint scale. Domain math remains in `pages/eating.zig`; the nested `slider` owns only range
-//! interaction/chrome. The caller supplies and receives the `0..100` policy value.
+//! `eating_policy` — the eating policy as a block of BODY: a `label … value` line (`Eating
+//! policy`, `{word} · {rate}×`), the range input, and the endpoint scale. It has no frame of
+//! its own; the panel it sits in is its frame. Domain math remains in `pages/eating.zig`; the
+//! nested `slider` owns only range interaction/chrome. The caller supplies and receives the
+//! `0..100` policy value.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -15,29 +17,20 @@ const eating = @import("../eating.zig");
 
 const slider_mod = @import("./slider.zig");
 
-const tile_h: f32 = 82;
-const pad_x: f32 = 10;
-const pad_top: f32 = 9;
-const pad_bottom: f32 = 8;
-
-/// Build the policy tile at the full width of its parent (the Household rail's column, under
-/// BODY). The returned policy value is live; callers map it to their persisted metabolism rate.
+/// Build the policy block at the full width of its parent (the rail's BODY panel, under its
+/// sentences). The returned policy value is live; callers map it to their persisted metabolism
+/// rate.
 pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
     const ctx = parent.ctx;
 
-    // The percentage width is a border box, so the horizontal padding comes out of it and the
-    // outlined panel remains exactly 100% of its fluid grid column.
-    const panel = try parent.box(id, .{
-        .w = .{ .pct_of_parent = 1.0 }, .h = .{ .fixed = tile_h }, .flow = .{ .dir = .row, .cross = .start },
-    }, .{ Style{ .outline_ink = .line2, .outline_style = .dashed }, style.pad_sym(pad_x, 0) });
-    const content = try panel.box("content", .{
-        .w = .grow, .h = .{ .fixed = tile_h - pad_top - pad_bottom }, .flow = .{ .dir = .column }, .gap = 5,
-    }, .{style.pad_each(pad_top, 0, pad_bottom, 0)});
+    const content = try parent.box(id, .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 5,
+    }, .{});
 
-    // Create the three prototype rows in visual order first. Their contents can be attached
+    // Create the three rows in visual order first. Their contents can be attached
     // after the slider resolves this frame's live value without changing sibling order.
     const head = try content.box("head", .{
-        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between },
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between, .cross = .baseline },
         .gap = 8,
     }, .{});
 
@@ -61,11 +54,12 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     const rate = eating.rate(new_value, eating.Band.of(ctx.res.game.config));
     const word = eating.word(new_value);
 
-    try head.label("title", "EATING POLICY", .{ Style{ .font = 10, .tracking = 0.06, .ink = .dim } });
+    // The line reads as the panel's other lines do: the name in the body ink, the value small.
+    try head.label("title", "Eating policy", .{ style.body, style.ink(.fg) });
 
     var output_buf: [48]u8 = undefined;
     const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
-    try head.label("value", output, .{ Style{ .font = 10, .ink = .acc, .verdict = style.verdict.when(!enabled, .inactive) } });
+    try head.label("value", output, .{ Style{ .font = 11, .ink = .acc, .verdict = style.verdict.when(!enabled, .inactive) } });
 
     try scale_row.label("min", "meager", .{ Style{ .font = 9, .ink = .line2 } });
     try scale_row.label("max", "lavish", .{ Style{ .font = 9, .ink = .line2 } });

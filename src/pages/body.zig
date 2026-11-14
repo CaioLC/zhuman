@@ -1,7 +1,6 @@
 //! `body` — the BODY panel's projection, the same in both acts: the sentences from an agent's
-//! `Outlook` (food days, recovery, work pace), and the lines for what the body is working with
-//! (the quality and spoilage of the food it eats, its vigor ceiling), each read from a live
-//! component against its baseline. Pure projection into the frame arena; it builds no nodes.
+//! `Outlook` (food days, recovery, work pace). Pure projection into the frame arena; it builds
+//! no nodes.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -13,15 +12,13 @@ const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
 const t = @import("./templates/root.zig");
-const Line = t.HouseholdLine;
 const Sentence = t.HouseholdSentence;
 
 /// Agent `e`'s BODY panel. The sentences are the `outlook` system's projection at the eating
 /// policy's rate; the policy reads its own word under BODY, so the body names only what it
 /// moves. An agent with no `Outlook` shows a note in their place.
 pub fn project(a: std.mem.Allocator, world: *const World, e: Entity) !t.HouseholdBody {
-    const ls = try lines(a, world, e);
-    const outlook = world.get(e, comp.Outlook) orelse return .{ .note = "no body projection", .lines = ls };
+    const outlook = world.get(e, comp.Outlook) orelse return .{ .note = "no body projection" };
     const sentences = try a.alloc(Sentence, 3);
     sentences[0] = .{
         .key = "coverage",
@@ -32,7 +29,7 @@ pub fn project(a: std.mem.Allocator, world: *const World, e: Entity) !t.Househol
     };
     sentences[1] = try recovery(a, outlook.recovery);
     sentences[2] = try pace(a, outlook.pace);
-    return .{ .sentences = sentences, .lines = ls };
+    return .{ .sentences = sentences };
 }
 
 /// Whether vigor is recovering, full, starving, or stalled on food that does not restore.
@@ -50,35 +47,6 @@ fn recovery(a: std.mem.Allocator, r: comp.Outlook.Recovery) !Sentence {
 fn pace(a: std.mem.Allocator, p: f32) !Sentence {
     const pct: i32 = @intFromFloat(@round(p * 100));
     return .{ .key = "pace", .prefix = "Work pace ", .value = try a.print("{d}%", .{pct}), .suffix = "." };
-}
-
-/// What agent `e`'s body is working with: the food's quality where it has moved from the
-/// baseline, its spoilage against the baseline, and the vigor ceiling. A component the agent
-/// lacks adds no line.
-fn lines(a: std.mem.Allocator, world: *const World, e: Entity) ![]const Line {
-    var out: std.ArrayList(Line) = .empty;
-    if (world.get(e, comp.InventoryFood)) |food| {
-        const q0 = ha.sim.baselines.food_quality;
-        if (food.quality != q0) try out.append(a, .{
-            .key = "quality",
-            .label = "Food quality",
-            .value = try a.print("{d} \u{2192} {d}", .{ q0, food.quality }),
-            .verdict = vd.margin(@floatFromInt(food.quality), @floatFromInt(q0), .higher),
-        });
-        const s0 = ha.sim.baselines.food_spoils;
-        try out.append(a, .{
-            .key = "spoilage",
-            .label = "Food spoilage",
-            .value = try a.print("{d:.0}% \u{2192} {d:.0}%/day", .{ s0 * 100, food.spoils * 100 }),
-            .verdict = vd.margin(food.spoils, s0, .lower),
-        });
-    }
-    if (world.get(e, comp.Vigor)) |vigor| try out.append(a, .{
-        .key = "vigor",
-        .label = "Vigor ceiling",
-        .value = try a.print("{d:.0}", .{vigor.max}),
-    });
-    return out.items;
 }
 
 test "BODY ends on the work pace: 100% at the normal ration, the slowest pace's share unfed" {
@@ -118,31 +86,4 @@ test "BODY with no projection carries no sentences, the pace among them" {
     const b = try project(arena.allocator(), &w, e);
     try std.testing.expectEqual(@as(usize, 0), b.sentences.len);
     try std.testing.expectEqualStrings("no body projection", b.note.?);
-}
-
-test "the body's lines read the food and the ceiling against their baselines" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    var w = try World.init(std.testing.allocator);
-    defer w.deinit();
-    const base = ha.sim.baselines;
-
-    // A fresh body: the quality has not moved, so it shows no line.
-    const fresh = w.spawn(.{ comp.InventoryFood{}, comp.Vigor{} });
-    var ls = try lines(arena.allocator(), &w, fresh);
-    try std.testing.expectEqual(@as(usize, 2), ls.len);
-    try std.testing.expectEqualStrings("spoilage", ls[0].key);
-    try std.testing.expectEqualStrings("vigor", ls[1].key);
-
-    // Better food that keeps longer reads as two gains.
-    const fed = w.spawn(.{ comp.InventoryFood{ .quality = base.food_quality + 1, .spoils = base.food_spoils / 2 }, comp.Vigor{} });
-    ls = try lines(arena.allocator(), &w, fed);
-    try std.testing.expectEqual(@as(usize, 3), ls.len);
-    try std.testing.expectEqualStrings("quality", ls[0].key);
-    try std.testing.expect(ls[0].verdict.? == vd.margin(2, 1, .higher));
-    try std.testing.expect(ls[1].verdict.? == vd.margin(1, 2, .lower));
-
-    // Nothing to read, no lines.
-    const bare = w.spawn(.{comp.Goods{}});
-    try std.testing.expectEqual(@as(usize, 0), (try lines(arena.allocator(), &w, bare)).len);
 }

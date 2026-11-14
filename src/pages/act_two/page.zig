@@ -6,7 +6,7 @@
 //! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
-//! the page, not the strips. The Household column (SETTLEMENT, BODY, the eating policy) rides the
+//! the page, not the strips. The Household column (SETTLEMENT and BODY, the eating policy in it) rides the
 //! shell rail; the event log rides the shell footer.
 //!
 //! The page reads the player. Its stocks fill the stockline, its work

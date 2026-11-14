@@ -1,5 +1,5 @@
 //! `act_one_workspace` — the complete Act I page-grid composition: the collapsible Household
-//! rail (BODY and the eating policy) beside the tabbed ACTIONS/BUILD/MARKET surface.
+//! rail (BODY, with the eating policy in it) beside the tabbed ACTIONS/BUILD/MARKET surface.
 //! Each view keys its own rail, so each remembers its collapse, and MARKET, a focus view,
 //! collapses its rail on each entry without touching the others' memory, as Act II's focus views
 //! do; the player may open it again while there. The rail owns its width tween, and this outer

@@ -48,8 +48,7 @@ take vigor to zero — **starvation is the only path to death**.
 
 **Starting values live on the components.** `Vigor`, `InventoryFood`, and `Metabolism` carry
 field defaults, `spawn_agent` spawns them default-valued, and `baselines.zig` *reads* those
-defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, so the rail's BODY can show
-current-vs-base margins against a value that cannot drift from the spawn.
+defaults (`(comp.Vigor{}).max`) as the canonical ceiling/larder baseline, a value that cannot drift from the spawn.
 
 **Three components are derived, each by one writer system.** The UI reads them and recomputes
 none of them, and each writer is idempotent: run twice on an unchanged world it writes the same

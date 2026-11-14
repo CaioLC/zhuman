@@ -1,4 +1,4 @@
-//! `rail` — the **collapsible HOUSEHOLD side rail** (SETTLEMENT, BODY and the eating policy, in
+//! `rail` — the **collapsible HOUSEHOLD side rail** (SETTLEMENT and BODY, which holds the eating policy, in
 //! every act; its restore label reads `HOUSEHOLD`). Fills the shell's
 //! `regions.rail`: an expanded panel (width `tokens.rail.expanded`, 252) the caller fills with
 //! the `household` column, or a narrow collapsed strip (width
