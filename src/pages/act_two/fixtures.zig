@@ -1,6 +1,6 @@
 //! `act_two/fixtures` — the authored stand-ins for what the Act II simulation does not model:
-//! the coin readout, the merchant's days left, the settlement's housing, what it produces and
-//! demands a day and its ration; the population stand-in is `Sim.population`. Everything the
+//! the coin readout, the merchant's days left, the settlement's housing and what it produces
+//! and demands a day; the population stand-in is `Sim.population`. Everything the
 //! catalog and the world can say (the verbs, the recipes, the stocks, the goods owned) comes
 //! from them, not from here. The stand-ins are listed in `docs/roadmap.md`.
 const std = @import("std");
@@ -54,18 +54,8 @@ pub const flows = [_]FlowRecord{
     stock(.coin, 10, 6),
 };
 
-/// The authored net flow of `r` a day, or 0 when none is authored.
-pub fn flowOf(r: Resource) f32 {
-    for (flows) |f| if (std.mem.eql(u8, f.key, @tagName(r))) return f.net();
-    return 0;
-}
-
 /// The settlement's housing, a stand-in for the population model: twelve places for a hamlet,
 /// and room for 640 once it has outgrown that.
 pub fn capacityOf(people: f32) f32 {
     return if (people > 12) @max(640, people) else 12;
 }
-
-/// Food one person eats a day at the normal ration (`23` food feeding `7` people `10.3d`), a
-/// stand-in for a per-person metabolism.
-pub const ration_per_person: f32 = 0.32;

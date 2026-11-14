@@ -58,7 +58,7 @@ values and emits nothing new, and a test says so.
 - `comp.Condition` is the agent's band, `alive`, `weary` or `spent` (`Condition.Band`, `sim.Band`).
   `rules/condition.refresh` is the one place the two thresholds (`Config.condition`) are
   applied, and the `condition` system calls it on every agent and emits `BandCrossed` for each
-  band that moved. The vigor chip's tone, the hall's vigor line and labor's yield step
+  band that moved. The vigor chip's tone and labor's yield step
   (`actions.yield_factor`) read the band. `actions.begin` and `capital.begin` also refresh the
   agent they charge, and carry the crossing on `WorkBegun.weary`, because the log words labor's
   toll ("You feel weak. Work will yield less.") apart from hunger ("You feel weak with
@@ -71,8 +71,8 @@ values and emits nothing new, and a test says so.
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
   the same terms `metabolize` applies (`base_rate × rate`, `Config.regen`), and publishes the
   pace the body works at (`pace`), which the tiles and rows divide a job's hours and time left by, so
-  the projection and the loop agree by construction; Act I's BODY sentences read it, and
-  Act II's BODY its recovery and pace.
+  the projection and the loop agree by construction; the rail's BODY sentences read it in
+  both acts.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
   reach, per generator the standing and its progress, and in each the first resource it cannot
