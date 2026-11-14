@@ -108,6 +108,107 @@ test "menu: a click on slot 1 of the save screen asks the host to save to slot 1
     try testing.expect(rig.res.menu.open);
 }
 
+/// The save screen with slot 2 filled, then a click on it: the overwrite screen, stamped.
+fn openOverwrite(rig: *MenuRig, r: *uic.Replay) !void {
+    rig.res.saves.dir = std.Io.Dir.cwd();
+    rig.res.saves.slots[1] = .{ .filled = true, .act = 1, .day = 12, .people = 1 };
+    try rig.openSave(r);
+    try rig.click(r, "Slot 2");
+    try r.idle(2);
+}
+
+test "menu: a click on a filled slot of the save screen asks for nothing and opens the overwrite screen" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try openOverwrite(&rig, &r);
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, null), rig.res.saves.request);
+    try testing.expectEqual(Screen.overwrite, rig.res.menu.screen);
+    try testing.expectEqual(@as(?u8, 1), rig.res.menu.overwrite_slot);
+    _ = try rig.node("OVERWRITE");
+    _ = try rig.node("CANCEL");
+}
+
+test "menu: OVERWRITE asks the host to save to the filled slot and returns to the menu" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try openOverwrite(&rig, &r);
+    try rig.click(&r, "OVERWRITE");
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, .{ .save = 1 }), rig.res.saves.request);
+    try testing.expectEqual(Screen.menu, rig.res.menu.screen);
+    try testing.expect(rig.res.menu.open);
+}
+
+test "menu: CANCEL on the overwrite screen returns to the save screen and asks for nothing" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try openOverwrite(&rig, &r);
+    try rig.click(&r, "CANCEL");
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, null), rig.res.saves.request);
+    try testing.expectEqual(Screen.save, rig.res.menu.screen);
+}
+
+test "menu: Escape on the overwrite screen steps back to the save screen, not the menu" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try openOverwrite(&rig, &r);
+    try rig.key(&r, .escape);
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, null), rig.res.saves.request);
+    try testing.expectEqual(Screen.save, rig.res.menu.screen);
+    try testing.expect(rig.res.menu.open);
+    // A second Escape steps back from the save screen to the menu.
+    try rig.key(&r, .escape);
+    try testing.expectEqual(Screen.menu, rig.res.menu.screen);
+    try testing.expect(rig.res.menu.open);
+}
+
+test "menu: an overwrite screen whose slot is no longer filled shows the save list" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try openOverwrite(&rig, &r);
+    rig.res.saves.slots[1] = .{};
+    try r.idle(1);
+    try testing.expectEqual(Screen.save, rig.res.menu.screen);
+    try testing.expectError(error.NoSuchControl, rig.node("OVERWRITE"));
+}
+
+test "menu: beside a filled slot an empty slot still saves in one click" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    rig.res.saves.dir = std.Io.Dir.cwd();
+    rig.res.saves.slots[1] = .{ .filled = true, .act = 1, .day = 12, .people = 1 };
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    try rig.openSave(&r);
+    try rig.click(&r, "Slot 3");
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, .{ .save = 2 }), rig.res.saves.request);
+    try testing.expectEqual(Screen.menu, rig.res.menu.screen);
+}
+
+test "menu: a click on a filled slot of the load screen loads it in one click" {
+    var rig: MenuRig = undefined;
+    try rig.setUp();
+    defer rig.tearDown();
+    rig.res.saves.dir = std.Io.Dir.cwd();
+    rig.res.saves.slots[1] = .{ .filled = true, .act = 1, .day = 12, .people = 1 };
+    var r = uic.Replay.init(&rig.driver, uic.replay.hostOf(MenuFixture, &rig.fx));
+    rig.res.menu.show(&rig.res.playback);
+    rig.res.menu.screen = .load;
+    try r.idle(2);
+    try rig.click(&r, "Slot 2");
+    try testing.expectEqual(@as(?res_mod.SaveSlots.Request, .{ .load = 1 }), rig.res.saves.request);
+    try testing.expectEqual(Screen.menu, rig.res.menu.screen);
+}
+
 test "menu: with no saves folder a slot click asks for nothing" {
     var rig: MenuRig = undefined;
     try rig.setUp();

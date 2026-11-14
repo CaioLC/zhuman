@@ -50,8 +50,8 @@ pub const Close = struct {
     /// Where focus goes on the frame the dialog opens; null (or a key that cannot take focus)
     /// falls back to the first control in the trap.
     initial_focus: ?u64 = null,
-    /// A sub-screen is showing: Escape steps back to the dialog's first screen instead of
-    /// closing it (the session menu's save/load/settings/quit screens).
+    /// A sub-screen is showing: Escape steps back, to the screen the caller picks on
+    /// `Outcome.back`, instead of closing it (the session menu's sub-screens).
     escape_steps_back: bool = false,
 };
 

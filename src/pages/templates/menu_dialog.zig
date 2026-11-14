@@ -1,12 +1,15 @@
 //! `menu_dialog` — the session menu (`menu.html`) on the shared `dialog_frame`: the menu list
 //! (Continue, Save, Load, Settings, Quit to menu), the save and load slot list, the shared
-//! settings panel, and the quit confirmation. Opening pauses the simulation (`MenuState.show`);
-//! Continue, × and Escape on the menu screen resume it. Escape on a sub-screen steps back to
-//! the menu. Quit is the one destructive choice, so it is the one that confirms.
+//! settings panel, and the quit and overwrite confirmations. Opening pauses the simulation
+//! (`MenuState.show`); Continue, × and Escape on the menu screen resume it. Escape on a
+//! sub-screen steps back: to the save list from the overwrite confirmation, to the menu from the
+//! rest. Quitting and saving over a filled slot are the destructive choices, so they are the two
+//! that confirm.
 //!
-//! A slot click asks the host for a save or a load (`SaveSlots.request`); the host applies it
-//! between frames and leaves the flash the menu screen shows. With no saves folder every slot is
-//! disabled and the footer says why.
+//! A click on an empty save slot or a filled load slot asks the host for the save or the load
+//! (`SaveSlots.request`); a click on a filled save slot opens the overwrite confirmation, whose
+//! OVERWRITE asks for the save. The host applies a request between frames and leaves the flash
+//! the menu screen shows. With no saves folder every slot is disabled and the footer says why.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -74,6 +77,7 @@ fn title(screen: Screen) []const u8 {
         .load => "Load",
         .settings => "Settings",
         .quit => "Quit to menu",
+        .overwrite => "Overwrite save",
     };
 }
 
@@ -84,7 +88,7 @@ fn footerNote(menu: *const res_mod.MenuState, saves: *const res_mod.SaveSlots) [
         .save => if (saves.dir == null) unavailable else "Saving writes the settlement as it stands at this moment.",
         .load => if (saves.dir == null) unavailable else "Loading discards the settlement in progress.",
         .settings => "Difficulty applies from the next day onward.",
-        .quit => "",
+        .quit, .overwrite => "",
     };
 }
 
@@ -131,7 +135,8 @@ pub const slot_what = Style{ .ink = .fg, .on = &.{.{ .when = .disabled, .ink = .
 pub const slot_verb = Style{ .ink = .acc, .on = &.{.{ .when = .disabled, .ink = .line2 }} };
 
 /// The slot list. A click asks the host for the save or the load and returns to the menu
-/// screen, where the host's flash reports the outcome.
+/// screen, where the host's flash reports the outcome; a click on a filled slot while saving
+/// opens the overwrite confirmation instead.
 fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, saving: bool) !void {
     if (try backHead(parent)) {
         menu.screen = .menu;
@@ -141,10 +146,51 @@ fn slotsScreen(parent: El, menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, 
     for (saves.slots, 0..) |slot, i| {
         if (!try slotRow(list, i, slot, saving, saves.dir != null)) continue;
         const at: u8 = @intCast(i);
-        saves.request = if (saving) .{ .save = at } else .{ .load = at };
-        menu.flash_len = 0;
-        menu.screen = .menu;
+        if (saving and slot.filled) {
+            menu.overwrite_slot = at;
+            menu.screen = .overwrite;
+            continue;
+        }
+        requestSave(menu, saves, if (saving) .{ .save = at } else .{ .load = at });
     }
+}
+
+/// Ask the host for a save or a load and return to the menu screen.
+fn requestSave(menu: *res_mod.MenuState, saves: *res_mod.SaveSlots, request: res_mod.SaveSlots.Request) void {
+    saves.request = request;
+    menu.flash_len = 0;
+    menu.overwrite_slot = null;
+    menu.screen = .menu;
+}
+
+/// The slot the overwrite screen asks about: `overwrite_slot` while it names a filled slot that
+/// can still be saved to, else null (the state has gone stale and the save list shows instead).
+fn overwriteSlot(menu: *const res_mod.MenuState, saves: *const res_mod.SaveSlots) ?u8 {
+    const at = menu.overwrite_slot orelse return null;
+    if (saves.dir == null or at >= saves.slots.len or !saves.slots[at].filled) return null;
+    return at;
+}
+
+const OverwriteChoice = enum { none, overwrite, cancel };
+
+/// `Slot n holds <what it holds>.` over OVERWRITE and CANCEL.
+fn overwriteScreen(parent: El, saves: *const res_mod.SaveSlots, at: u8) !OverwriteChoice {
+    const ctx = parent.ctx;
+    const copy_style = Style{ .font = 12, .ink = .fg };
+    const s = saves.slots[at];
+
+    const copy = try parent.box("holds", .{ .flow = .{ .dir = .row, .cross = .center }, .margin = .{ .after = 14 } }, .{});
+    try copy.label("a", try ctx.arena.print("Slot {d} holds ", .{@as(usize, at) + 1}), .{copy_style});
+    var dbuf: [64]u8 = undefined;
+    try copy.label("what", describe(&dbuf, s.act, s.day, s.people), .{Style{ .font = 12, .ink = .warn }});
+    try copy.label("b", ".", .{copy_style});
+
+    const row = try parent.box("confirm", .{ .flow = .{ .dir = .row, .cross = .center }, .gap = 9 }, .{});
+    const overwrite = try button_mod.button_variant(row, "overwrite", "OVERWRITE", true, .danger);
+    const cancel = try button_mod.button_variant(row, "cancel", "CANCEL", true, .secondary);
+    if (overwrite.consume(.clicked)) return .overwrite;
+    if (cancel.consume(.clicked)) return .cancel;
+    return .none;
 }
 
 const QuitChoice = enum { none, quit, save_first, cancel };
@@ -177,6 +223,8 @@ fn quitScreen(parent: El, saves: *const res_mod.SaveSlots, session: Session) !Qu
 
 pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
     const menu = &ctx.res.menu;
+    const pending = overwriteSlot(menu, &ctx.res.saves);
+    if (menu.screen == .overwrite and pending == null) menu.screen = .save;
     const shown = menu.screen;
     const frame = try frame_mod.dialog_frame(ctx, .{
         .id = id,
@@ -232,6 +280,11 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
             .cancel => menu.screen = .menu,
             .none => {},
         },
+        .overwrite => switch (try overwriteScreen(screen_box, &ctx.res.saves, pending.?)) {
+            .overwrite => requestSave(menu, &ctx.res.saves, .{ .save = pending.? }),
+            .cancel => menu.screen = .save,
+            .none => {},
+        },
     }
 
     const note = footerNote(menu, &ctx.res.saves);
@@ -242,7 +295,8 @@ pub fn menu_dialog(ctx: *uic.UiCtx, id: []const u8, session: Session) !Result {
         .initial_focus = initial_focus,
         .escape_steps_back = shown != .menu,
     });
-    if (outcome.back) menu.screen = .menu;
+    // Escape steps back one screen: the overwrite confirmation to the save list it came from.
+    if (outcome.back) menu.screen = if (shown == .overwrite) .save else .menu;
     // Escape on the menu screen closes the dialog: that is a resume, as the footer says.
     if (outcome.closed and !quit) resumed = true;
 

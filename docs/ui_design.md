@@ -245,9 +245,13 @@ list of three slots that flips its verbs (`SAVE HERE`/`OVERWRITE`, `LOAD`), each
 the settlement it holds. Settings is the panel the title screen shares: difficulty, tutorial,
 music, effects, UI scale, brightness, contrast and window — gameplay, then sound, then display.
 Brightness (80–140% in fives) multiplies every colour on screen, live while the slider moves,
-the screen behind the panel as well as the panel. Quit is the one destructive choice, so it is the one that
-confirms, naming the day it would lose and offering to save first. Escape on a sub-screen returns
-to the menu; on the menu, Escape or × resumes. Speed is the header stepper's alone.
+the screen behind the panel as well as the panel. Quitting and saving over a filled slot are the
+destructive choices, so they are the two that confirm. Quit names the day it would lose and
+offers to save first. A click on an `OVERWRITE` slot opens `Overwrite save`, one line —
+`Slot {n} holds Act I · Day 12 · population 1.`, the slot's description in the warn ink — over
+`OVERWRITE` and `CANCEL`; an empty slot saves in one click, and so does a load. Escape on the
+overwrite screen returns to the slot list, on any other sub-screen to the menu; on the menu,
+Escape or × resumes. Speed is the header stepper's alone.
 
 ## Title screen
 

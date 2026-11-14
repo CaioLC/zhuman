@@ -90,13 +90,15 @@ pub const Playback = struct {
 
 /// Session-local menu lifecycle and host quit request. Opening the menu pauses simulation and
 /// remembers whether it was already paused; dismissing restores that prior state, while RESUME
-/// explicitly unpauses. `screen` is the menu's sub-screen and `flash` the one-shot note a
-/// save or load leaves on the menu screen; both reset on every open.
+/// explicitly unpauses. `screen` is the menu's sub-screen, `overwrite_slot` the filled slot the
+/// overwrite screen asks about, and `flash` the one-shot note a save or load leaves on the menu
+/// screen; all three reset on every open.
 pub const MenuState = struct {
     open: bool = false,
     restore_paused: bool = false,
     quit_requested: bool = false,
     screen: MenuScreen = .menu,
+    overwrite_slot: ?u8 = null,
     flash_buf: [40]u8 = @splat(0),
     flash_len: u8 = 0,
 
@@ -105,6 +107,7 @@ pub const MenuState = struct {
         self.restore_paused = playback.paused;
         self.open = true;
         self.screen = .menu;
+        self.overwrite_slot = null;
         self.flash_len = 0;
         playback.paused = true;
     }
@@ -162,8 +165,8 @@ pub const CurtainState = struct {
     }
 };
 
-/// The session menu's screens (`menu.html`).
-pub const MenuScreen = enum { menu, save, load, settings, quit };
+/// The session menu's screens (`menu.html`). `overwrite` confirms a save over a filled slot.
+pub const MenuScreen = enum { menu, save, load, settings, quit, overwrite };
 
 /// Which top-level screen the host shows: the title screen before a run, or the game.
 pub const Route = enum { title, game };
