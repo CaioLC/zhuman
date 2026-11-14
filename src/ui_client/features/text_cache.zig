@@ -49,6 +49,8 @@ const std = @import("std");
 ///     so the cell width must be in the key for the ellipsis path.
 ///   - `wrap_width` — constraint. Break spans are a *pure function* of already-keyed
 ///     inputs (content, width, px, tracking), so keying the width is sufficient.
+///   - `smooth` — the rasterizer: anti-aliased coverage or one-bit glyphs
+///     (`View.text_smooth`), so a flip of the player's TEXT setting re-rasterizes every label.
 ///   - `generation` — the renderer generation. A reset bumps it so a texture from
 ///     a dead renderer can never match and be blitted.
 /// Color is **absent by design** (tint-on-blit, see the module doc-comment).
@@ -60,6 +62,7 @@ pub const Key = struct {
     overflow: u8,
     overflow_width_bits: u32,
     wrap_width_bits: u32,
+    smooth: bool,
     generation: u32,
 
     /// Two keys are equal iff every render-affecting field matches — a cache hit.
@@ -71,6 +74,7 @@ pub const Key = struct {
             a.overflow == b.overflow and
             a.overflow_width_bits == b.overflow_width_bits and
             a.wrap_width_bits == b.wrap_width_bits and
+            a.smooth == b.smooth and
             a.generation == b.generation;
     }
 };
@@ -91,6 +95,8 @@ pub const Inputs = struct {
     overflow: u8 = 0,
     overflow_width: f32 = 0,
     wrap_width: f32 = 0,
+    /// Anti-aliased glyphs (true) or one-bit glyphs (false).
+    smooth: bool = false,
     generation: u32,
 };
 
@@ -109,6 +115,7 @@ pub fn keyOf(in: Inputs) ?Key {
         .overflow = in.overflow,
         .overflow_width_bits = @bitCast(in.overflow_width),
         .wrap_width_bits = @bitCast(in.wrap_width),
+        .smooth = in.smooth,
         .generation = in.generation,
     };
 }
@@ -288,6 +295,8 @@ test "text_cache: key folds every render-affecting dimension and ignores color" 
     try testing.expect(!k0.eql(keyOf(.{ .content = "Iron Ingot", .px = 14, .overflow = 2, .overflow_width = 40, .generation = 0 }).?));
     // wrap width change → miss.
     try testing.expect(!k0.eql(keyOf(.{ .content = "Iron Ingot", .px = 14, .wrap_width = 120, .generation = 0 }).?));
+    // rasterizer change (one-bit ↔ anti-aliased) → miss.
+    try testing.expect(!k0.eql(keyOf(.{ .content = "Iron Ingot", .px = 14, .smooth = true, .generation = 0 }).?));
     // generation change → miss.
     try testing.expect(!k0.eql(keyOf(.{ .content = "Iron Ingot", .px = 14, .generation = 1 }).?));
 }

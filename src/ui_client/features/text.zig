@@ -374,7 +374,7 @@ pub fn attach(ctx: *UiCtx, node: *Node, text: []const u8) !void {
 /// Blit the node's cached text in `c` over its content box. **Every** variant is cached as
 /// one composite white texture in `State.tex`: a cache miss generates the composite
 /// once (see `renderComposite`), a hit blits it tinted — no variant re-rasterizes per frame,
-/// unlike a naive `renderTextSolid`-every-frame path.
+/// unlike a naive rasterize-every-frame path.
 ///
 /// The variant a node draws is decided by its state and reproduced *inside* the composite by
 /// `planVariant` (the one place each variant's glyph placement lives), so the cached pixels
@@ -430,6 +430,7 @@ fn cacheInputs(u: *UiCtx, st: *const State, fmt: []const u8) text_cache.Inputs {
         .overflow = @backingInt(st.fit.overflow()),
         .overflow_width = st.fit.cellWidth(),
         .wrap_width = st.fit.wrapWidth(),
+        .smooth = u.res.view.text_smooth,
         .generation = u.res.platform.generation,
     };
 }
@@ -443,7 +444,7 @@ pub const ellipsis_token = "\u{2026}";
 //
 // **Every** accepted variant — normal, tracked, wrapped, clip, ellipsis, and the tracked
 // combinations of wrap/clip/ellipsis — rasterizes into **one composite white texture** on a
-// cache miss and blits (tinted) thereafter. There is no per-frame `renderTextSolid` on a
+// cache miss and blits (tinted) thereafter. There is no per-frame glyph raster on a
 // hit for any variant. The composite is generated **atomically**: on a miss the renderer's
 // target/clip/draw-color/blend state is snapshotted, a fresh `.target` texture is made and
 // cleared transparent, the variant's white sub-spans are drawn into it at the exact relative
@@ -611,8 +612,10 @@ fn planVariant(st: *const State, font: sdl.ttf.Font, text: []const u8, sink: *Pl
 }
 
 /// The real compositor sink: stamps one white sub-span into whatever target is currently
-/// bound on the renderer. Each span's own surface is rasterized white and rendered at its
-/// composite-relative offset; a failed glyph frame is skipped silently and marks the plan
+/// bound on the renderer. Each span's own surface is rasterized white — anti-aliased
+/// (`renderTextBlended`, 8-bit coverage in alpha, lifted by `liftCoverage`) when
+/// `View.text_smooth` is set, one-bit (`renderTextSolid`) otherwise; both report the same `getStringSize`, so the measure pass
+/// does not depend on the choice — and rendered at its composite-relative offset; a failed glyph frame is skipped silently and marks the plan
 /// incomplete so the caller can decide whether the composite is usable (it still is — a
 /// missing glyph is cosmetic, matching every text path's `catch return`).
 const Compositor = struct {
@@ -621,13 +624,19 @@ const Compositor = struct {
     fn emit(ctx: *anyopaque, b: SubBlit) void {
         const self: *Compositor = @ptrCast(@alignCast(ctx));
         if (b.bytes.len == 0) return;
-        var surface = self.font.renderTextSolid(b.bytes, .{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return;
+        const white: sdl.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
+        var surface = (if (self.u.res.view.text_smooth)
+            self.font.renderTextBlended(b.bytes, white)
+        else
+            self.font.renderTextSolid(b.bytes, white)) catch return;
         defer surface.deinit();
+        if (self.u.res.view.text_smooth) liftCoverage(surface);
         const texture = self.u.res.platform.renderer.createTextureFromSurface(surface) catch return;
         defer texture.deinit();
-        // Composite the glyph's own alpha onto the transparent target (Solid renders a
-        // paletted surface; `.blend` keeps its transparent margins transparent so only the
-        // glyph pixels carry alpha into the composite).
+        // Composite the glyph's own alpha onto the transparent target: `.blend` keeps the
+        // span's transparent margins transparent, and over the cleared target it leaves each
+        // pixel as coverage × white with coverage in alpha — a premultiplied composite, which
+        // `blitCached` blends as such.
         texture.setBlendMode(.blend) catch {};
         const w, const h = self.font.getStringSize(b.bytes) catch return;
         const dst: ui.Rect = .{ .x = b.x, .y = b.y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
@@ -642,9 +651,10 @@ const Compositor = struct {
 /// the variant's full pixel bounds. Returns the texture, or `null` on any failure — always
 /// leaving **no** partial owned state (the target texture is freed on any error) and never
 /// mutating persistent renderer state (target/clip/draw-color/blend are snapshotted and
-/// restored on every path). The composite is a `.target`-access texture with `.blend` blend
-/// mode so its transparent margins don't paint black at blit and its white glyphs tint
-/// cleanly. A zero-area variant (empty fit / blank) yields `null` (nothing to cache/draw).
+/// restored on every path). The composite is a `.target`-access texture holding
+/// **premultiplied** white (each pixel is coverage × white, coverage in alpha), which is what
+/// stamping a span with `.blend` onto a transparent clear produces; `blitCached` blends it
+/// as premultiplied, so a partly covered edge pixel is weighted by its coverage once. A zero-area variant (empty fit / blank) yields `null` (nothing to cache/draw).
 fn renderComposite(u: *UiCtx, st: *const State, font: sdl.ttf.Font, text: []const u8) ?sdl.render.Texture {
     const renderer = u.res.platform.renderer;
 
@@ -660,7 +670,7 @@ fn renderComposite(u: *UiCtx, st: *const State, font: sdl.ttf.Font, text: []cons
     // On any failure past this point the target must be freed (no partial owned state).
     var ok = false;
     defer if (!ok) target.deinit();
-    target.setBlendMode(.blend) catch return null;
+    target.setBlendMode(.blend_premultiplied) catch return null;
 
     // Snapshot every renderer state the composite pass mutates, and restore it on every path
     // (success or error) so no sibling draw inherits our target/clip/color/blend.
@@ -787,10 +797,14 @@ fn blitPlacement(orientation: State.Orientation, box: ui.Rect, texture_w: f32, t
 /// rotation, matching `orientMetrics`' swapped layout/focus/hit box.
 fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, box: ui.Rect, orientation: State.Orientation) void {
     const w, const h = tex.getSize() catch return;
-    // Honor the tint alpha explicitly (the composite is already generated with
-    // `.blend`, but set it here too so a translucent/dimmed label composites consistently).
-    tex.setBlendMode(.blend) catch {};
-    tex.setColorMod(c.r, c.g, c.b) catch {};
+    // The composite is premultiplied white, so the tint is premultiplied too: the colour
+    // mod carries `rgb × alpha` and the alpha mod carries `alpha`, and
+    // `dst = src + dst × (1 − srcA)` then weights an edge pixel by its coverage exactly once.
+    // (`.blend` would multiply the already-premultiplied colour by coverage a second time and
+    // thin every anti-aliased edge.)
+    tex.setBlendMode(.blend_premultiplied) catch {};
+    const pm = premultiplied(c);
+    tex.setColorMod(pm.r, pm.g, pm.b) catch {};
     tex.setAlphaMod(c.a) catch {};
     const placement = blitPlacement(orientation, box, w, h);
     if (placement.clockwise_degrees) |angle| {
@@ -798,6 +812,92 @@ fn blitCached(u: *UiCtx, tex: sdl.render.Texture, c: cb.Color, box: ui.Rect, ori
     } else {
         u.res.platform.renderer.renderTexture(tex, null, paint.frect(placement.dst)) catch return;
     }
+}
+
+/// The display gamma the coverage lift undoes.
+const coverage_gamma: f64 = 2.2;
+
+/// Coverage `a` as the alpha that makes an sRGB-space blend emit `a` of the ink's light over
+/// a black ground: `a^(1/gamma)`. The renderer blends encoded values, so an edge pixel at
+/// half coverage would otherwise emit about a fifth of the ink's light and anti-aliased text
+/// would read darker than the same text one-bit. The curve is exact over black and close
+/// over the terminal's near-black ground, which is what every label sits on; it holds 0 and
+/// 255 where they are, so a glyph's interior and its margins are untouched.
+const coverage_lift: [256]u8 = blk: {
+    @setEvalBranchQuota(100_000);
+    var t: [256]u8 = undefined;
+    for (&t, 0..) |*out, a| {
+        const cov = @as(f64, @floatFromInt(a)) / 255.0;
+        out.* = @intFromFloat(@round(255.0 * std.math.pow(f64, cov, 1.0 / coverage_gamma)));
+    }
+    break :blk t;
+};
+
+/// Run every pixel's alpha of an anti-aliased glyph surface through `coverage_lift`, in
+/// place. The surface is SDL_ttf's blended output, ARGB8888 with coverage in alpha; any other
+/// format is left as it came.
+fn liftCoverage(surface: sdl.surface.Surface) void {
+    const format = surface.getFormat() orelse return;
+    if (format != .packed_argb_8_8_8_8) return;
+    const locked = surface.mustLock();
+    if (locked) surface.lock() catch return;
+    defer if (locked) surface.unlock();
+    const bytes = surface.getPixels() orelse return;
+    liftAlpha(bytes, surface.getWidth(), surface.getHeight(), surface.getPitch());
+}
+
+/// The alpha byte of a native-endian ARGB8888 pixel.
+const argb_alpha_byte: usize = if (@import("builtin").cpu.arch.endian() == .little) 3 else 0;
+
+/// `liftCoverage` over raw ARGB8888 rows: `h` rows of `w` pixels, `pitch` bytes apart.
+fn liftAlpha(bytes: []u8, w: usize, h: usize, pitch: usize) void {
+    for (0..h) |y| {
+        const row = bytes[y * pitch ..][0 .. w * 4];
+        var i: usize = argb_alpha_byte;
+        while (i < row.len) : (i += 4) row[i] = coverage_lift[row[i]];
+    }
+}
+
+test "coverage lift: empty and full coverage hold, partial coverage rises, and the curve never falls" {
+    try std.testing.expectEqual(@as(u8, 0), coverage_lift[0]);
+    try std.testing.expectEqual(@as(u8, 255), coverage_lift[255]);
+    // Half coverage → the alpha whose encoded blend over black emits half the light.
+    try std.testing.expectEqual(@as(u8, 186), coverage_lift[128]);
+    for (1..256) |a| {
+        try std.testing.expect(coverage_lift[a] >= a);
+        try std.testing.expect(coverage_lift[a] >= coverage_lift[a - 1]);
+    }
+}
+
+test "liftAlpha: only the alpha byte of each pixel changes, and row padding is left alone" {
+    // Two rows of one pixel, pitch 8: four bytes of pixel, four of padding.
+    var bytes: [16]u8 = @splat(128);
+    liftAlpha(&bytes, 1, 2, 8);
+    for (0..2) |y| {
+        for (0..8) |i| {
+            const want: u8 = if (i == argb_alpha_byte) 186 else 128;
+            try std.testing.expectEqual(want, bytes[y * 8 + i]);
+        }
+    }
+}
+
+/// `c` with its alpha folded into its colour channels, rounded to the nearest step.
+fn premultiplied(c: cb.Color) cb.Color {
+    const a: u32 = c.a;
+    return .{
+        .r = @intCast((@as(u32, c.r) * a + 127) / 255),
+        .g = @intCast((@as(u32, c.g) * a + 127) / 255),
+        .b = @intCast((@as(u32, c.b) * a + 127) / 255),
+        .a = c.a,
+    };
+}
+
+test "premultiplied: an opaque tint is unchanged, a half tint halves its colour and keeps its alpha" {
+    const opaque_tint: cb.Color = .{ .r = 200, .g = 100, .b = 0, .a = 255 };
+    try std.testing.expectEqual(opaque_tint, premultiplied(opaque_tint));
+    const half = premultiplied(.{ .r = 200, .g = 100, .b = 0, .a = 128 });
+    try std.testing.expectEqual(cb.Color{ .r = 100, .g = 50, .b = 0, .a = 128 }, half);
+    try std.testing.expectEqual(cb.Color{ .r = 0, .g = 0, .b = 0, .a = 0 }, premultiplied(.{ .r = 255, .g = 255, .b = 255, .a = 0 }));
 }
 
 /// Normalize SDL's clip query into the state `setClipRect` must restore. The binding returns
@@ -954,7 +1054,7 @@ test "text feature: integer clip-rect intersection is the overlap, empties to ze
 
 test "text feature: tracking is POD state that round-trips; default is the untracked fast path" {
     // `tracking` defaults to 0 (the untracked fast path — one getStringSize measure and one
-    // renderTextSolid span). A resolved device-px delta round-trips like
+    // rasterized span). A resolved device-px delta round-trips like
     // `fit`, with no allocator (POD).
     var st = State.init();
     try std.testing.expectEqual(@as(f32, 0), st.tracking); // default: untracked

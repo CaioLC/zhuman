@@ -41,6 +41,7 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     // Project the init-resolved reduced-motion policy onto this frame's view.
     // Probed once at init; here we only copy the bit so optional transitions can gate on it.
     ui_ctx.res.view.reduced_motion = ui_ctx.res.motion.reduced_motion;
+    ui_ctx.res.view.text_smooth = ui_ctx.res.settings.text == .smooth;
     // Compute this frame's view metrics from the window's logical (coordinate) size
     // and its pixel density against the 900×820 reference, and set the one logical→device
     // scale from the DPI factor. The layout is solved in logical px; `scale` only makes text

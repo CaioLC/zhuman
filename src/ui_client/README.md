@@ -1056,9 +1056,21 @@ palette blend and a pulsing readout both need.
 glyph cache on every call and rescaling a loaded pixel font is lossy. A text leaf measures
 at `font.default_px`; a resolved `font` fragment re-measures at its size.
 
+Glyphs rasterize in one of two ways, chosen by `View.text_smooth` (the host projects the
+player's TEXT setting onto it each frame): one-bit (`renderTextSolid`, every pixel ink or
+not) or anti-aliased (`renderTextBlended`, 8-bit coverage). An anti-aliased span's coverage
+is raised to `1/2.2` before it is stamped (`liftCoverage`): the renderer blends encoded
+sRGB values, in which half coverage emits about a fifth of the ink's light, and the lift
+makes light text on the dark ground emit what its coverage says. Both report the same
+`getStringSize`, so layout does not move when the choice flips; the flag is a dimension of
+the text cache key, so every label re-rasterizes once. A cached composite holds
+premultiplied white and is blitted with `.blend_premultiplied` under a premultiplied tint,
+because stamping spans with `.blend` onto a transparent target leaves coverage × white, and a
+second `.blend` would weight a partly covered edge pixel by its coverage twice.
+
 ### Constrained multiline text
 
-A text node is single-line by default (`TextState.wrap_width == 0`) — one `renderTextSolid`
+A text node is single-line by default (`TextState.wrap_width == 0`) — one rasterized span
 over the content box, the fast path dense rows pay nothing for. `text_fit(id, str, .{ .wrap = max_w })` opts a node into **constrained multiline**: it stores an explicit
 maximum content width and re-measures, so the node reports the wrapped `width`×`height` and
 renders exactly those lines.

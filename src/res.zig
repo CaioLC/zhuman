@@ -183,7 +183,7 @@ pub const TitleState = struct {
 };
 
 /// The player's settings, shared by the title screen and the session menu. Held for the
-/// session. Window size, fullscreen, UI scale and brightness act on the host; difficulty, the
+/// session. Window size, fullscreen, UI scale, brightness and text act on the host; difficulty, the
 /// tutorial flag, the two volumes and contrast are held but have no effect (stand-ins;
 /// `docs/roadmap.md`).
 pub const Settings = struct {
@@ -234,6 +234,9 @@ pub const Settings = struct {
         pub const step: f32 = 5;
     };
     pub const Contrast = enum { normal, high };
+    /// How glyphs are rasterized: `sharp` is one-bit, every pixel ink or not; `smooth` is
+    /// anti-aliased.
+    pub const Text = enum { sharp, smooth };
     pub const Window = enum {
         w1280,
         w1600,
@@ -259,6 +262,8 @@ pub const Settings = struct {
     /// Percent; the host multiplies every painted colour by `brightnessFactor` before present.
     brightness: f32 = 100,
     contrast: Contrast = .normal,
+    /// `build_ui` projects it onto `View.text_smooth` each frame.
+    text: Text = .sharp,
     /// The window choice; null until the player picks one (the launch window is its own size).
     window: ?Window = null,
 
@@ -354,6 +359,10 @@ pub const View = struct {
     /// indicators, state changes, pointer/focus cues, and the simulation stay visible and
     /// are never gated by it.
     reduced_motion: bool = false,
+    /// Whether text rasterizes anti-aliased (true) or one-bit (false), projected from
+    /// `Settings.text` in `build_ui`'s prologue. The text feature reads it at rasterize time
+    /// and keys its cached textures on it, so a flip re-rasterizes every label once.
+    text_smooth: bool = false,
     /// This frame's **logical→device scale factor**, set from `metrics.dpi_scale`. Every font
     /// size the host resolves is multiplied by this exactly once, in
     /// `ui_client.type.toDevice`, before it reaches the font backend — so a heading at 21

@@ -73,7 +73,7 @@ pub const UiState = struct {
         fit: Fit = .free,
         /// **Device-px letter-spacing** added between glyph clusters when rendering and
         /// measuring this text. `0` (the default) is the **untracked fast path**:
-        /// measure uses one `getStringSize` and draw uses one `renderTextSolid` span, so
+        /// measure uses one `getStringSize` and draw uses one rasterized span, so
         /// untracked text (and dense rows) pay nothing. A non-zero value (set by
         /// `style.apply` from a role's `tracking_em` resolved through the frame `scale` at
         /// `st.px`, via `type.deviceTracking`) makes both `remeasure` and `draw` run the *same*
