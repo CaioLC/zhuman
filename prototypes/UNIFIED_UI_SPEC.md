@@ -147,7 +147,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   `in`, `out`, `state`, `type`, `is`; `/` focuses it, Escape clears it), a toolbar, and one
   grid holding the verbs and the owned generators. Act I's grid is regular density (82px
   tiles); Act II's is **compact** (52px tiles, 6px gaps). In both acts the eating policy rides
-  the **rail under BODY**, out of the catalog.
+  the **rail, inside PLAYER**, out of the catalog.
 - **[decided]** A search that matches nothing reads `Nothing matches that search.`; in the
   hidden view, `Nothing hidden matches that search.`
 - **[decided]** Every tile in an ACTIONS row is as tall as the row's tallest, with its edges,
@@ -381,7 +381,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 ### 7.3 Narrow widths and the keyboard
 
 - **[decided]** At 760px and below the page stacks: one page scroll, the rail above the
-  surface (SETTLEMENT | BODY side by side at 760; stacked at 560 and below), every view at its
+  surface (SETTLEMENT | PLAYER side by side at 760; stacked at 560 and below), every view at its
   natural height, the stockline wrapping beside the run context. RESEARCH puts a 560px board
   above its detail.
 - **[decided]** A scroll region that overflows is a Tab stop; Up/Down, Page Up/Down and
@@ -392,24 +392,25 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 - **[decided]** The rail is not an inventory: what the actor owns is MARKET's INVENTORY. It
   holds two kinds of information, **aggregates** and **personal condition**, in two panels,
-  SETTLEMENT and BODY, and nothing else. The collapsed restore label reads `HOUSEHOLD`
+  SETTLEMENT and PLAYER, and nothing else. The collapsed restore label reads `HOUSEHOLD`
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
   then energy and every stock in the same list, each as produced against demanded a day
   (`Food +14 / −8`), colored by the net, each stock followed by its stockpile in a column of
-  its own (`22`; energy holds none). SETTLEMENT and BODY are the rail's only headings. It appears at the Act I curtain.
-- **[decided]** BODY (the same in both acts) is the player's own condition: the sentences
-  (`Food lasts`, recovery, `Work pace`), then under a hairline the eating policy. In Act I BODY leads the rail and
+  its own (`22`; energy holds none). SETTLEMENT and PLAYER are the rail's only headings. It appears at the Act I curtain.
+- **[decided]** PLAYER (the same in both acts) is the player's own condition, as
+  `label … value` lines in SETTLEMENT's grammar (`Food lasts`, recovery, `Work pace`), ending
+  on the eating policy. In Act I PLAYER leads the rail and
   carries the collapse control.
-- **[decided]** In both acts the **eating policy is part of BODY**, not a tile of its own:
+- **[decided]** In both acts the **eating policy is part of PLAYER**, not a tile of its own:
   an `Eating policy` line with `{word} · {rate}×`, the slider, and the `meager` / `lavish`
-  scale, in the panel whose sentences it moves.
+  scale, in the panel whose lines it moves; its value is in the value ink, as the others are.
 
 - **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
   acts: ACTIONS and BUILD each remember their own collapse.
 - **[decided, item 17]** **Entering a focus view (Act I MARKET; Act II RESEARCH, MARKET)
   always collapses the rail** on each entry, without overwriting the other views' memory.
-- **[decided, item 18]** SETTLEMENT's and BODY's lines are derived from live state, so the
+- **[decided, item 18]** SETTLEMENT's and PLAYER's lines are derived from live state, so the
   *set* of rows is not fixed: a line whose component the actor lacks is absent.
 
 ---
@@ -461,7 +462,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible; built, not raised |
 | 16 | RESEARCH only in Act II | decided | Act I tabs ACTIONS · BUILD · MARKET; Act II ACTIONS · BUILD · RESEARCH · MARKET |
 | 17 | rail collapse | decided | per-view memory; focus views (both acts) force collapse |
-| 18 | rail contents | decided | SETTLEMENT (aggregates, Act II) and BODY (personal condition); rows derived from live state |
+| 18 | rail contents | decided | SETTLEMENT (aggregates, Act II) and PLAYER (personal condition); rows derived from live state |
 | 19 | footer id | proposal | shared `id="event-log"` + `addLog()` |
 | 20 | body constants | proposal | extract to `bodyConfig` |
 | 21 | headings | decided | statements under headings, never questions |

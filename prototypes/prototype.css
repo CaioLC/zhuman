@@ -395,7 +395,7 @@ button:disabled {
 }
 
 .page-grid.is-holdings-collapsed .holdings-panel,
-.page-grid.is-holdings-collapsed .side-note {
+.page-grid.is-holdings-collapsed .player-panel {
   display: none;
 }
 
@@ -444,21 +444,15 @@ button:disabled {
   background: transparent;
 }
 
-/* The rail's leading panel (SETTLEMENT; BODY in Act I, `.rail-lead`) carries the collapse
-   control at its upper-right corner. */
+/* The rail's two panels, SETTLEMENT and PLAYER, are one grammar: the same padding, a title,
+   then `label … value` lines. The leading one (PLAYER in Act I) carries the collapse control
+   at its upper-right corner. */
 .holdings-panel,
-.side-note.rail-lead {
+.player-panel {
   position: relative;
-  overflow: visible;
-}
-
-.holdings-panel {
   margin-right: 10px;
   padding: 9px 10px;
-}
-
-.side-note {
-  margin-right: 10px;
+  overflow: visible;
 }
 
 .panel-heading,
@@ -626,17 +620,6 @@ button:disabled {
 
 .margin-list {
   gap: 4px;
-}
-
-.side-note {
-  padding: 9px 10px;
-  color: var(--dim);
-  font-size: 11px;
-}
-
-.side-note strong {
-  color: var(--fg);
-  font-weight: 400;
 }
 
 .surface {
@@ -843,35 +826,20 @@ button:disabled {
   text-align: right;
 }
 
-/* The eating policy, a block of BODY: its panel is its frame. */
+/* The eating policy's slider and scale, under its line in PLAYER's list. */
 .policy-tile {
   display: grid;
-  grid-template-rows: auto 18px auto;
+  grid-template-rows: 18px auto;
   gap: 5px;
   min-width: 0;
+  margin-top: 5px;
 }
 
-.policy-head,
 .policy-scale {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-}
-
-.policy-kicker {
-  margin: 0;
-  color: var(--fg);
-  font-size: var(--body);
-  font-weight: 400;
-}
-
-.policy-value {
-  overflow: hidden;
-  color: var(--acc);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .eating-slider {
@@ -921,15 +889,6 @@ button:disabled {
 .policy-scale {
   color: var(--line-2);
   font-size: 9px;
-}
-
-/* BODY values carry the game's semantic tones (`household` Sentence.tone). */
-.side-note strong.positive {
-  color: var(--good);
-}
-
-.side-note strong.warn {
-  color: var(--warn);
 }
 
 /* ACTIONS cells: a tile with its `hide` corner at the top right; a generator's cell also

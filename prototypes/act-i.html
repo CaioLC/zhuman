@@ -28,17 +28,18 @@
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
         <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
 
-        <section class="panel side-note rail-lead" id="holdings-panel" aria-label="Your own condition">
+        <section class="panel player-panel rail-lead" id="holdings-panel" aria-label="Your own condition">
           <button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button>
-          <span class="eyebrow">BODY</span><br>
-          Food lasts <strong id="food-coverage">5.2d</strong>.<br>
-          Full vigor in <strong id="vigor-recovery">0.2d</strong>.<br>
-          Work pace <strong id="work-pace">100%</strong>.
-          <hr class="holdings-divider">
+          <h2 class="panel-heading"><span>PLAYER</span></h2>
+          <ul class="margin-list">
+            <li class="margin-row"><span>Food lasts</span><span class="value" id="food-coverage">5.2d</span></li>
+            <li class="margin-row"><span>Full vigor in</span><span class="value" id="vigor-recovery">0.2d</span></li>
+            <li class="margin-row"><span>Work pace</span><span class="value" id="work-pace">100%</span></li>
+            <li class="margin-row"><span id="eating-policy-title">Eating policy</span><span class="value" id="eating-policy-value">normal · 1.00×</span></li>
+          </ul>
           <div class="policy-tile" role="group" aria-labelledby="eating-policy-title">
-          <div class="policy-head"><span class="policy-kicker" id="eating-policy-title">Eating policy</span><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
-          <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
-          <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
+            <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
+            <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
           </div>
         </section>
       </aside>
