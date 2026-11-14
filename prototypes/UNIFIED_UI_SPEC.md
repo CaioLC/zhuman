@@ -388,11 +388,11 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   Home/End scroll the innermost region around focus, and a newly focused control scrolls into
   view. The wheel goes to the innermost region under the pointer.
 
-## 8. Household side rail
+## 8. Status side rail
 
 - **[decided]** The rail is not an inventory: what the actor owns is MARKET's INVENTORY. It
   holds two kinds of information, **aggregates** and **personal condition**, in two panels,
-  SETTLEMENT and PLAYER, and nothing else. The collapsed restore label reads `HOUSEHOLD`
+  SETTLEMENT and PLAYER, and nothing else. The collapsed restore label reads `STATUS`
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
   then energy and every stock in the same list, each as produced against demanded a day

@@ -599,7 +599,7 @@ button:disabled {
   color: var(--danger);
 }
 
-/* SETTLEMENT's aggregates carry the game's semantic tones (`household` Line.tone). */
+/* SETTLEMENT's aggregates carry the game's semantic tones (`status` Line.tone). */
 .margin-row span.value {
   color: var(--fg);
 }

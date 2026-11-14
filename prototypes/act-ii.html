@@ -24,10 +24,10 @@
 
     <div class="page-grid" id="page-grid">
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
-        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Status" hidden><span aria-hidden="true">›</span><span class="restore-label">STATUS</span></button>
 
         <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
-          <h2 class="panel-heading" id="holdings-title"><span>SETTLEMENT</span><span class="panel-heading-tail"><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
+          <h2 class="panel-heading" id="holdings-title"><span>SETTLEMENT</span><span class="panel-heading-tail"><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Status">‹</button></span></h2>
           <ul class="margin-list">
             <li class="margin-row"><span>Population</span><span class="value" data-population-value>7/12</span></li>
             <li class="margin-row stock-row"><span>Energy</span><span class="good">+7 / −5</span><span class="stock-cell"></span></li>
@@ -180,7 +180,7 @@
         research: document.querySelector('#view-research')
       };
       // MARKET and RESEARCH own the whole surface: the strips and the log step aside, and the
-      // Household collapses on every entry without overwriting the other views' memory.
+      // Status rail collapses on every entry without overwriting the other views' memory.
       const focusViews = ['market', 'research'];
       const eventLog = document.querySelector('#event-log');
       const prototypeParams = new URLSearchParams(location.search);

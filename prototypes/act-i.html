@@ -26,10 +26,10 @@
 
     <div class="page-grid" id="page-grid">
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
-        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
+        <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Status" hidden><span aria-hidden="true">›</span><span class="restore-label">STATUS</span></button>
 
         <section class="panel player-panel rail-lead" id="holdings-panel" aria-label="Your own condition">
-          <button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button>
+          <button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Status">‹</button>
           <h2 class="panel-heading"><span>PLAYER</span></h2>
           <ul class="margin-list">
             <li class="margin-row"><span>Food lasts</span><span class="value" id="food-coverage">5.2d</span></li>
@@ -219,7 +219,7 @@
         market: document.querySelector('#view-market')
       };
       // MARKET owns the whole surface, as in Act II: the strips and the log step aside, and the
-      // Household collapses on every entry without overwriting the other views' memory. It is
+      // Status rail collapses on every entry without overwriting the other views' memory. It is
       // market.html with nobody in it yet.
       const focusViews = ['market'];
       const eventLog = document.querySelector('#event-log');
