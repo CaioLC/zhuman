@@ -347,27 +347,6 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.energy-rate {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
-  margin-right: 12px;
-  color: var(--dim);
-  white-space: nowrap;
-}
-
-.energy-rate > span[aria-hidden="true"]:first-child {
-  margin-right: 3px;
-}
-
-.energy-rate .energy-gen {
-  color: var(--acc);
-}
-
-.energy-rate .energy-use {
-  color: var(--warn);
-}
-
 .text-button,
 .tab,
 .chip,
@@ -465,11 +444,17 @@ button:disabled {
   background: transparent;
 }
 
-.holdings-panel {
+/* The rail's leading panel (SETTLEMENT; BODY in Act I, `.rail-lead`) carries the collapse
+   control at its upper-right corner. */
+.holdings-panel,
+.side-note.rail-lead {
   position: relative;
-  margin-right: 10px;
-  padding: 10px 16px 9px 10px;
   overflow: visible;
+}
+
+.holdings-panel {
+  margin-right: 10px;
+  padding: 9px 10px;
 }
 
 .side-note {
@@ -596,6 +581,19 @@ button:disabled {
   color: var(--danger);
 }
 
+/* SETTLEMENT's aggregates carry the game's semantic tones (`household` Line.tone). */
+.margin-row span.value {
+  color: var(--fg);
+}
+
+.margin-row span.good {
+  color: var(--good);
+}
+
+.margin-row span.warn {
+  color: var(--warn);
+}
+
 .holdings-divider {
   margin: 9px 0 7px;
   border: 0;
@@ -615,6 +613,12 @@ button:disabled {
 .side-note strong {
   color: var(--fg);
   font-weight: 400;
+}
+
+/* BODY's lines under its sentences: what the body is working with, at the readout's size. */
+.side-note .margin-row span:first-child {
+  color: var(--fg);
+  font-size: var(--body);
 }
 
 .surface {
@@ -904,7 +908,7 @@ button:disabled {
   font-size: 9px;
 }
 
-/* BODY values carry the game's semantic tones (`holdings` Sentence.tone). */
+/* BODY values carry the game's semantic tones (`household` Sentence.tone). */
 .side-note strong.positive {
   color: var(--good);
 }
@@ -2864,6 +2868,11 @@ button:disabled {
     display: grid;
     grid-template-columns: 1fr 1fr;
     overflow: visible;
+  }
+
+  /* The policy keeps its own height beside Act I's BODY rather than stretching to it. */
+  .side-rail .policy-tile {
+    align-self: start;
   }
 
   .surface {

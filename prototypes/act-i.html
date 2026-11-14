@@ -28,31 +28,17 @@
       <aside class="side-rail" id="holdings-rail" aria-label="Persistent actor readout">
         <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
 
-        <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
-          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>6 kinds, 8</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
-          <ul class="holdings-list">
-            <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
-            <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
-            <li class="holding-row"><span>Leaf bed</span><span>vigor ceiling +1</span></li>
-            <li class="holding-row"><span>Hatchet ×2</span><span>can split wood</span></li>
-            <li class="holding-row"><span>Wire snares</span><span>traps game</span></li>
-            <li class="holding-row"><span>Garden bed</span><span>grows food</span></li>
-          </ul>
-          <hr class="holdings-divider">
-          <h3 class="block-heading">MARGINS</h3>
-          <ul class="margin-list">
-            <li class="margin-row"><span>Forage</span><span class="positive">2.0e → 1.7e</span></li>
-            <li class="margin-row"><span>Food spoilage</span><span class="positive">0.05 → 0.03/day</span></li>
-            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
-            <li class="margin-row"><span>Trade stock</span><span>2 spare units</span></li>
-          </ul>
-        </section>
-
-        <section class="panel side-note" aria-label="Current body policy and recovery">
+        <section class="panel side-note rail-lead" id="holdings-panel" aria-label="Your own condition">
+          <button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button>
           <span class="eyebrow">BODY</span><br>
           Food lasts <strong id="food-coverage">5.2d</strong>.<br>
           Full vigor in <strong id="vigor-recovery">0.2d</strong>.<br>
           Work pace <strong id="work-pace">100%</strong>.
+          <hr class="holdings-divider">
+          <ul class="margin-list">
+            <li class="margin-row"><span>Food spoilage</span><span class="positive">10% → 5%/day</span></li>
+            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
+          </ul>
         </section>
 
         <section class="policy-tile" aria-labelledby="eating-policy-title">

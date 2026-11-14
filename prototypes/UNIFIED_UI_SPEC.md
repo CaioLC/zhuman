@@ -29,6 +29,8 @@ drift/question and is open to revision.
   Act II trades for coin; the passerby in Act I trades by barter.
 - **[decided]** Population and the typed resources exist only from Act II onward.
 - **[decided]** Energy is a **flow**, not a stockpile. It is never in the stockline.
+- **[decided]** The header carries what the player spends and the day. The population and
+  the energy rate are aggregates and read on the rail's SETTLEMENT panel (§8).
 
 ---
 
@@ -42,7 +44,6 @@ separator. Tokens present depend on the act.
 | Token | Label | Act I | Act II |
 |-------|-------|:----:|:-----:|
 | Vigor      | `VI` | yes | yes |
-| Population | `PO` | no  | yes |
 | Coin       | `CO` | no  | yes |
 | Food       | `FO` | yes | yes |
 | Materials  | `MA` | yes | yes |
@@ -51,14 +52,14 @@ separator. Tokens present depend on the act.
 | Metal      | `ME` | no  | yes |
 | Minerals   | `MI` | no  | yes |
 
-- **[decided]** Every token uses a two-letter label, the meta stats included (`VI`, `PO`,
-  `CO`); one letter no longer disambiguates.
+- **[decided]** Every token uses a two-letter label, the meta stats included (`VI`, `CO`);
+  one letter no longer disambiguates.
 - **[decided]** Costs and yields in running notation use the same two letters in lowercase:
   food `fo`, materials `ma`, water `wa`, fuel `fu`, metal `me`, minerals `mi`, coin `co`.
   Energy stays `e`, hours `h`, days `d`: a cost reads `12ma 4e`, a yield `+1–3fo`, a log line
   `You spend 1.7e 1ma to begin.`
 - Low/zero stocks keep the `low` value class.
-- **[decided]** Order: Act I `VI FO MA`; Act II `PO VI FO MA WA FU ME MI CO`. Materials sits
+- **[decided]** Order: Act I `VI FO MA`; Act II `VI FO MA WA FU ME MI CO`. Materials sits
   directly after food in both acts.
 - **[decided]** A token rests as `AB: value` and its footprint never changes. Under the pointer
   or focus, the read form `FULL LABEL: value` (label in fg; 17px, 15px stacked at ≤760, 13px
@@ -71,12 +72,11 @@ separator. Tokens present depend on the act.
   stays as it rests. The overlay takes no pointer: hit-testing stays on the resting boxes, and
   a covered token can still be hovered at its resting box, which hands the read to it.
 
-### 2.2 Runline (right side): Act/Day + Energy
+### 2.2 Runline (right side): Act/Day
 
-- Act/Day: `Act II · Day 43`.
-- **[proposal]** **Energy lives in the runline**, shown as a rate (generated/consumed), not
-  a stock: Act II reads `⚡ +12 / −9`. Distinct from the `LABEL: value` stockline pairs so it
-  never reads as a stockpile. Act I shows no energy rate.
+- Act/Day: `Act II · Day 43`, the same two items in both acts.
+- **[decided]** The runline carries no energy rate: Act II's rate is SETTLEMENT's `Energy`
+  line (§8), `+12 / −9`. Act I shows no energy rate.
 
 ---
 
@@ -381,7 +381,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 ### 7.3 Narrow widths and the keyboard
 
 - **[decided]** At 760px and below the page stacks: one page scroll, the rail above the
-  surface (HOLDINGS | BODY side by side at 760, stacked at 560 and below), every view at its
+  surface (SETTLEMENT | BODY side by side at 760, Act I's BODY | EATING POLICY there; stacked at 560 and below), every view at its
   natural height, the stockline wrapping beside the run context. RESEARCH puts a 560px board
   above its detail.
 - **[decided]** A scroll region that overflows is a Tab stop; Up/Down, Page Up/Down and
@@ -390,21 +390,26 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 ## 8. Household side rail
 
-- **[decided]** The rail is the same in both acts: HOLDINGS, BODY and the EATING POLICY. It
-  holds the economic unit's holdings, its flows, the body that lives on them and how it
-  consumes. The collapsed restore label reads `HOUSEHOLD` in both acts (one person in Act I,
-  the settlement in Act II); the inner panel keeps its `HOLDINGS` heading.
-- **[decided]** Act I: HOLDINGS + MARGINS, BODY (food lasts, full vigor). Act II: HOLDINGS +
-  `FLOWS / DAY` and the settlement's BODY (population, larder, water, hall vigor). In both
-  acts the **eating policy sits at the foot of the rail**, aligned to the panels and
-  collapsing with them.
+- **[decided]** The rail is not an inventory: what the actor owns is MARKET's INVENTORY. It
+  holds two kinds of information, **aggregates** and **personal condition**, in two panels,
+  SETTLEMENT and BODY, over the EATING POLICY. The collapsed restore label reads `HOUSEHOLD`
+  in both acts (one person in Act I, the settlement in Act II).
+- **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
+  `Energy +12 / −9`, `Larder feeds all`, the water runway, the hall's vigor, then
+  `FLOWS / DAY`. It appears at the Act I curtain.
+- **[decided]** BODY (both acts) is the player's own condition: the sentences (Act I `Food
+  lasts`, then recovery and `Work pace` in both acts), then under a hairline the food's
+  spoilage and the vigor ceiling against their baselines. In Act I BODY leads the rail and
+  carries the collapse control.
+- **[decided]** In both acts the **eating policy sits at the foot of the rail**, aligned to
+  the panels and collapsing with them.
 
 - **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
   acts: ACTIONS and BUILD each remember their own collapse.
 - **[decided, item 17]** **Entering a focus view (Act I MARKET; Act II RESEARCH, MARKET)
   always collapses the rail** on each entry, without overwriting the other views' memory.
-- **[decided, item 18]** Holdings "MARGINS" contents are act-specific by design; the *set* of
-  margin rows is not fixed across acts.
+- **[decided, item 18]** SETTLEMENT's and BODY's lines are derived from live state, so the
+  *set* of rows is not fixed: a line whose component the actor lacks is absent.
 
 ---
 
@@ -443,7 +448,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 3 | preview give-label | proposal | shared swap fn; Act I static GIVE (§3.2) |
 | 4 | barter vs coin | decided | Coin = Act II only; Act I market has no price column |
 | 5 | materials vs typed | decided | materials in both acts (`MA`, `ma`); Act II adds water, fuel, metal, minerals |
-| 6 | header glyphs | decided / proposal | two-letter tokens and resource codes (decided); energy in runline (proposal) (§2) |
+| 6 | header glyphs | decided / proposal | two-letter tokens and resource codes (decided); population and energy on the rail's SETTLEMENT, not the header (decided) (§2, §8) |
 | 7 | actions grid vs catalog | decided | one ACTIONS catalog both acts: verbs + generators, kind toggles, hide, sort chips |
 | 8 | tile metric format | proposal | `−Xe {inputs} · Yh` + curve + roster band, optional state line |
 | 9 | yields resource | decided | two-letter codes, equal numbers |
@@ -454,8 +459,8 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 | 14 | blocked state | decided | show every recipe; `needs {skill}` rows; log unlocks; "recipe" |
 | 15 | goal cards | decided/proposal | shared `milestone-goal`; both collapsible; built, not raised |
 | 16 | RESEARCH only in Act II | decided | Act I tabs ACTIONS · BUILD · MARKET; Act II ACTIONS · BUILD · RESEARCH · MARKET |
-| 17 | holdings collapse | decided | per-view memory; focus views (both acts) force collapse |
-| 18 | margins contents | decided | act-specific |
+| 17 | rail collapse | decided | per-view memory; focus views (both acts) force collapse |
+| 18 | rail contents | decided | SETTLEMENT (aggregates, Act II) and BODY (personal condition); rows derived from live state |
 | 19 | footer id | proposal | shared `id="event-log"` + `addLog()` |
 | 20 | body constants | proposal | extract to `bodyConfig` |
 | 21 | headings | decided | statements under headings, never questions |

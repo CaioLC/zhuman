@@ -10,8 +10,7 @@
 <body>
   <main class="terminal act-two" aria-label="Human Action Act II interface prototype">
     <header class="hud-header">
-      <div class="stockline compact" aria-label="Population and current stocks">
-        <span class="stock-token"><span class="stock-label">PO:</span> <span class="stock-value" id="population-value" data-population-value>7/12</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">POPULATION: <span class="stock-value" data-population-value>7/12</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+      <div class="stockline compact" aria-label="Current stocks">
         <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">13/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">13.0/15</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value" data-resource-balance="food">23</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value" data-resource-balance="food">23</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">MA:</span> <span class="stock-value" data-resource-balance="materials">30</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MATERIALS: <span class="stock-value" data-resource-balance="materials">30</span></span></span></span><span class="sep" aria-hidden="true">|</span>
@@ -20,7 +19,7 @@
         <span class="stock-token"><span class="stock-label">ME:</span> <span class="stock-value low" data-resource-balance="metal">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">METAL: <span class="stock-value low" data-resource-balance="metal">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">MI:</span> <span class="stock-value low" data-resource-balance="minerals">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MINERALS: <span class="stock-value low" data-resource-balance="minerals">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">CO:</span> <span class="stock-value accent" data-coin-balance>42</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">COIN: <span class="stock-value accent" data-coin-balance>42.0</span></span></span></span>
-      </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span><span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span><button class="menu-button" type="button" aria-label="Open menu">MENU</button></div>
+      </div>      <div class="runline"><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span><span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span><button class="menu-button" type="button" aria-label="Open menu">MENU</button></div>
     </header>
 
     <div class="page-grid" id="page-grid">
@@ -28,16 +27,13 @@
         <button class="holdings-restore" id="holdings-restore" type="button" aria-expanded="false" aria-controls="holdings-panel" aria-label="Expand Household" hidden><span aria-hidden="true">›</span><span class="restore-label">HOUSEHOLD</span></button>
 
         <section class="panel holdings-panel" id="holdings-panel" aria-labelledby="holdings-title">
-          <h2 class="panel-heading" id="holdings-title"><span>HOLDINGS</span><span class="panel-heading-tail"><strong>8 kinds, 22</strong><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
-          <ul class="holdings-list">
-            <li class="holding-row"><span>Sandals ×2</span><span>forage costs less</span></li>
-            <li class="holding-row"><span>Root cellar</span><span>food keeps 2×</span></li>
-            <li class="holding-row"><span>Leaf bed</span><span>vigor ceiling +1</span></li>
-            <li class="holding-row"><span>Hatchet ×2</span><span>can split wood</span></li>
-            <li class="holding-row"><span>Planks ×8</span><span>worked materials</span></li>
-            <li class="holding-row"><span>Charcoal ×5</span><span>fuel</span></li>
-            <li class="holding-row"><span>Timber frame ×2</span><span>capital stock</span></li>
-            <li class="holding-row"><span>Metal stock</span><span>scarce</span></li>
+          <h2 class="panel-heading" id="holdings-title"><span>SETTLEMENT</span><span class="panel-heading-tail"><button class="holdings-toggle" id="holdings-collapse" type="button" aria-expanded="true" aria-controls="holdings-panel" aria-label="Collapse Household">‹</button></span></h2>
+          <ul class="margin-list">
+            <li class="margin-row"><span>Population</span><span class="value" data-population-value>7/12</span></li>
+            <li class="margin-row"><span>Energy</span><span class="good" aria-label="Energy generated and consumed per day">+12 / −9</span></li>
+            <li class="margin-row"><span>Larder feeds all</span><span class="good" id="food-coverage">10.3d</span></li>
+            <li class="margin-row"><span>Water runs short in</span><span class="warn" id="water-runway">3.0d</span></li>
+            <li class="margin-row"><span>Vigor across the hall</span><span class="warn" id="hall-vigor">weary</span></li>
           </ul>
           <hr class="holdings-divider">
           <h3 class="block-heading">FLOWS / DAY</h3>
@@ -49,13 +45,15 @@
           </ul>
         </section>
 
-        <section class="panel side-note" aria-label="Current body policy and recovery">
+        <section class="panel side-note" aria-label="Your own condition">
           <span class="eyebrow">BODY</span><br>
-          Population <strong class="positive" id="body-population">7</strong> under one roof.<br>
-          Larder feeds all for <strong class="positive" id="food-coverage">10.3d</strong>.<br>
-          Water runs short in <strong class="warn" id="water-runway">3.0d</strong>.<br>
-          Vigor across the hall: <strong class="warn" id="hall-vigor">weary</strong>.<br>
+          Full vigor in <strong id="vigor-recovery">0.4d</strong>.<br>
           Work pace <strong id="work-pace">100%</strong>.
+          <hr class="holdings-divider">
+          <ul class="margin-list">
+            <li class="margin-row"><span>Food spoilage</span><span>10% → 10%/day</span></li>
+            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
+          </ul>
         </section>
 
         <section class="policy-tile" aria-labelledby="eating-policy-title">
@@ -566,7 +564,7 @@
       const eatingSlider = document.querySelector('#eating-policy-range');
       const eatingValue = document.querySelector('#eating-policy-value');
       const foodCoverage = document.querySelector('#food-coverage');
-      document.querySelector('#body-population').textContent = String(population);
+      const vigorRecovery = document.querySelector('#vigor-recovery');
       const eatingWords = [
         { max: 12, word: 'meager' },
         { max: 28, word: 'lean' },
@@ -599,11 +597,13 @@
         const word = eatingWords.find(entry => value <= entry.max).word;
         const rate = 0.5 * Math.pow(4, value / 100);
         const coverage = bodyConfig.baseCoverage / rate;
+        const recovery = bodyConfig.baseRecovery / rate;
         const pace = Math.round(workPace(rate, 1, resourceBalances.food > 0) * 100);
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
         foodCoverage.textContent = `${coverage.toFixed(1)}d`;
+        vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
         workPaceOutput.textContent = `${pace}%`;
       }
 
