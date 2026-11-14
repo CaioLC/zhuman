@@ -75,8 +75,8 @@ separator. Tokens present depend on the act.
 ### 2.2 Runline (right side): Act/Day
 
 - Act/Day: `Act II · Day 43`, the same two items in both acts.
-- **[decided]** The runline carries no energy rate: Act II's rate is the `Energy` line of
-  SETTLEMENT's PRODUCTION / DEMAND (§8), `+7 / −5`. Act I shows no energy rate.
+- **[decided]** The runline carries no energy rate: Act II's rate is SETTLEMENT's `Energy`
+  line (§8), `+7 / −5`. Act I shows no energy rate.
 
 ---
 
@@ -395,9 +395,8 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   SETTLEMENT and BODY, over the EATING POLICY. The collapsed restore label reads `HOUSEHOLD`
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
-  then `PRODUCTION / DEMAND · DAY`:
-  energy and every stock, each as produced against demanded (`Food +14 / −8`), colored by
-  the net. It appears at the Act I curtain.
+  then energy and every stock in the same list, each as produced against demanded a day
+  (`Food +14 / −8`), colored by the net. SETTLEMENT and BODY are the rail's only headings. It appears at the Act I curtain.
 - **[decided]** BODY (the same in both acts) is the player's own condition: the sentences
   (`Food lasts`, recovery, `Work pace`), then under a hairline the food's
   spoilage and the vigor ceiling against their baselines. In Act I BODY leads the rail and
