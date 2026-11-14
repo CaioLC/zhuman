@@ -9,8 +9,10 @@
 //! `text_cache` and `svg` strategy). Changing a cell never rasterizes anything.
 //!
 //! The cells themselves are the pure, SDL-free `glyph_cells.Cells`; this module is the
-//! part that touches the font and the renderer. A cell is the font's advance wide and its
-//! line skip tall, so the node is `cols` × `rows` of those.
+//! part that touches the font and the renderer. A cell is the font's advance wide and
+//! `line_em` of its size tall (a CSS `line-height`), with the glyph centred on the line, so
+//! the node is `cols` × `rows` of those. The glyphs are rasterized the way text is, one-bit
+//! or anti-aliased by the player's TEXT setting.
 
 const std = @import("std");
 const sdl = @import("sdl3");
@@ -18,6 +20,7 @@ const ui = @import("ui");
 const cb = @import("../ctx_binding.zig");
 const paint = @import("paint.zig");
 const cells_mod = @import("glyph_cells.zig");
+const text = @import("text.zig");
 
 const UiCtx = cb.UiCtx;
 const Node = cb.Node;
@@ -29,20 +32,19 @@ pub const State = cb.UiState.GlyphGridState;
 pub const Cells = cells_mod.Cells;
 pub const Clip = cells_mod.Clip;
 
-/// Give `node` the grid `cells`, drawn at `logical_px` with `palette[ink]` the color of an
-/// ink (a cell whose ink is past the palette draws nothing). Copies the cells into the
-/// node's pooled state, so the caller's buffer need not outlive the call, and sizes the
-/// node to the grid.
-pub fn attach(ctx: *UiCtx, node: *Node, cells: *const Cells, palette: []const cb.Color, logical_px: f32) void {
+/// Give `node` the grid `cells`, drawn at `logical_px` on lines `line_em` of that tall, with
+/// `palette[ink]` the color of an ink (a cell whose ink is past the palette draws nothing).
+/// Copies the cells into the node's pooled state, so the caller's buffer need not outlive
+/// the call, and sizes the node to the grid.
+pub fn attach(ctx: *UiCtx, node: *Node, cells: *const Cells, palette: []const cb.Color, logical_px: f32, line_em: f32) void {
     const st = node.state(ctx, State);
     st.cells = cells.*;
     st.palette_len = @intCast(@min(palette.len, State.palette_cap));
     @memcpy(st.palette[0..st.palette_len], palette[0..st.palette_len]);
     st.px = @import("../type.zig").toDevice(logical_px, ctx.res.view.scale);
 
-    const cell = cellSize(ctx, st.px);
-    st.cell_w = cell[0];
-    st.cell_h = cell[1];
+    st.cell_w = advance(ctx, st.px);
+    st.cell_h = st.px * line_em;
     node.size = ui.features.Size.initContent(
         st.cell_w * @as(f32, @floatFromInt(cells.cols)),
         st.cell_h * @as(f32, @floatFromInt(cells.rows)),
@@ -50,11 +52,11 @@ pub fn attach(ctx: *UiCtx, node: *Node, cells: *const Cells, palette: []const cb
     node.render_data.glyph_grid = .{};
 }
 
-/// A cell at `px`: the font's advance by its line skip. Zero when the font cannot be had.
-fn cellSize(ctx: *UiCtx, px: f32) struct { f32, f32 } {
-    const f = ctx.res.platform.font.at(px) catch return .{ 0, 0 };
-    const w, _ = f.getStringSize("M") catch return .{ 0, 0 };
-    return .{ @floatFromInt(w), @floatFromInt(f.getLineSkip()) };
+/// The font's advance at `px`, the width of a cell. Zero when the font cannot be had.
+fn advance(ctx: *UiCtx, px: f32) f32 {
+    const f = ctx.res.platform.font.at(px) catch return 0;
+    const w, _ = f.getStringSize("M") catch return 0;
+    return @floatFromInt(w);
 }
 
 /// Paint every filled cell: its glyph's texture, tinted its ink's color, at its place in
@@ -64,12 +66,19 @@ pub fn draw(u: *UiCtx, node: *Node, _: cb.GlyphGrid, opacity: f32) void {
     const r = paint.content(node) orelse return;
     if (st.cell_w <= 0 or st.cell_h <= 0) return;
 
-    // The glyph textures belong to one size and one renderer. A new size frees them; a
-    // renderer reset has already destroyed them, so they are dropped unfreed.
+    // The glyph textures belong to one size, one rasterizer and one renderer. A new size or
+    // TEXT setting frees them; a renderer reset has already destroyed them, so they are
+    // dropped unfreed.
     const generation = u.res.platform.generation;
-    if (st.tex_generation != generation) st.abandonGlyphs() else if (st.tex_px != st.px) st.deinit();
+    const smooth = u.res.view.text_smooth;
+    if (st.tex_generation != generation) {
+        st.abandonGlyphs();
+    } else if (st.tex_px != st.px or st.tex_smooth != smooth) {
+        st.deinit();
+    }
     st.tex_generation = generation;
     st.tex_px = st.px;
+    st.tex_smooth = smooth;
 
     const f = u.res.platform.font.at(st.px) catch return;
     const x0 = @floor(r.x);
@@ -82,9 +91,12 @@ pub fn draw(u: *UiCtx, node: *Node, _: cb.GlyphGrid, opacity: f32) void {
         const c = paint.applyOpacity(st.palette[ink], opacity);
         tex.setColorMod(c.r, c.g, c.b) catch {};
         tex.setAlphaMod(c.a) catch {};
+        // The glyph's box is centred on its line, as a CSS line box centres it, and both
+        // land on whole pixels.
+        const line_y = st.cell_h * @as(f32, @floatFromInt(i / cols));
         const dst: ui.Rect = .{
             .x = x0 + st.cell_w * @as(f32, @floatFromInt(i % cols)),
-            .y = y0 + st.cell_h * @as(f32, @floatFromInt(i / cols)),
+            .y = y0 + @round(line_y + (st.cell_h - g.h) / 2),
             .w = g.w,
             .h = g.h,
         };
@@ -104,8 +116,10 @@ fn glyph(u: *UiCtx, st: *State, f: sdl.ttf.Font, cp: u16) ?*State.Glyph {
 
     var buf: [4]u8 = undefined;
     const n = std.unicode.utf8Encode(cp, &buf) catch return g;
-    var surface = f.renderTextSolid(buf[0..n], .{ .r = 255, .g = 255, .b = 255, .a = 255 }) catch return g;
+    const white: sdl.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
+    var surface = (if (st.tex_smooth) f.renderTextBlended(buf[0..n], white) else f.renderTextSolid(buf[0..n], white)) catch return g;
     defer surface.deinit();
+    if (st.tex_smooth) text.liftCoverage(surface);
     const tex = u.res.platform.renderer.createTextureFromSurface(surface) catch return g;
     tex.setBlendMode(.blend) catch {};
     const w, const h = f.getStringSize(buf[0..n]) catch {

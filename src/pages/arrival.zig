@@ -1,6 +1,8 @@
 //! The arrival (`prototypes/arrival.html`): the scene between New game and Act I. Under a sky
 //! of twinkling stars a lone figure walks in from the left across an empty valley, stops once
-//! to catch breath, and sits down; then the two lines, and Begin starts the run.
+//! to catch breath, and sits down; then the two lines type themselves out. `BEGIN →` starts
+//! the run at any moment, `REPLAY` starts the scene over, and a click on the scene skips to
+//! its end.
 //!
 //! The scene is a pure function of how long it has been showing (`SceneState.seconds`), so a
 //! pinned time reproduces the frame. It is composed every frame onto the template's grid: the
@@ -41,9 +43,12 @@ const sit_s: f32 = stop_s + stand_s;
 const print_s: f32 = 22;
 
 const caption = [2][]const u8{ "Day 1.", "Alone, cold and starving." };
-/// When each caption line starts to fade in after the figure is down, and how long it takes.
-const caption_at_s = [2]f32{ 1.0, 2.4 };
-const caption_fade_s: f32 = 0.9;
+/// The caption begins this long after the figure is down, and the scene has played out
+/// this long after that.
+const caption_after_s: f32 = 1.0;
+const played_after_s: f32 = 5.0;
+const caption_s: f32 = sit_s + caption_after_s;
+const played_s: f32 = sit_s + played_after_s;
 
 const bare_tree = [_][]const u8{
     " \\   |   /",
@@ -99,14 +104,6 @@ fn leftAt(x: i32) f32 {
         enter_s + pace_s * @as(f32, @floatFromInt(x + 3))
     else
         resume_s + pace_s * @as(f32, @floatFromInt(x - rest_x + 1));
-}
-
-/// How far each caption line has faded in, 0 to 1.
-fn captionShown(seconds: f32) [2]f32 {
-    const sat = walker(seconds).sat_s;
-    var shown: [2]f32 = undefined;
-    for (&shown, caption_at_s) |*s, at| s.* = std.math.clamp((sat - at) / caption_fade_s, 0, 1);
-    return shown;
 }
 
 /// The generator `prototypes/scene.js` seeds its scenes with, so the valley here is the
@@ -248,26 +245,20 @@ fn figure(g: *Cells, who: Walker) void {
 }
 
 pub fn ui_arrival(ctx: *uic.UiCtx) !uic.Trees {
-    ctx.res.scene.seconds += ctx.res.game.time.real_dt;
-    const seconds = ctx.res.scene.seconds;
+    const clock = &ctx.res.scene.seconds;
+    clock.* += ctx.res.game.time.real_dt;
 
-    const regions = try t.shell(ctx, .{
-        .id = "arrival",
-        .act = .act_one,
-        .page_pad = ha.tokens.pad_page,
-        .section_gap = ha.tokens.gap.section,
-        // A scene centred in the window; it never scrolls.
-        .scroll = false,
-    });
-    const cells = compose(seconds);
-    const s = try t.scene(regions.body, "scene", .{
+    const cells = compose(clock.*);
+    const s = try t.scene(ctx, "arrival", .{
         .cells = &cells,
         .caption = caption,
-        .shown = captionShown(seconds),
-        .button = "Begin",
+        .caption_s = clock.* - caption_s,
+        .go = "BEGIN \u{2192}",
     });
-    if (s.clicked) title_page.beginRun(ctx);
-    return try uic.oneRoot(ctx.arena, regions.root.get());
+    if (s.skip) clock.* = @max(clock.*, played_s);
+    if (s.replay) clock.* = 0;
+    if (s.go) title_page.beginRun(ctx);
+    return try uic.oneRoot(ctx.arena, s.root);
 }
 
 const testing = std.testing;
@@ -336,12 +327,9 @@ test "arrival: the stars stay above the skyline" {
     try testing.expect(g.at(61, horizon - 8) == null and g.at(62, horizon - 8) == null);
 }
 
-test "arrival: the caption fades in after the figure is down, the first line first" {
-    try testing.expectEqual([2]f32{ 0, 0 }, captionShown(sit_s));
-    const mid = captionShown(sit_s + caption_at_s[0] + caption_fade_s + 0.01);
-    try testing.expectEqual(@as(f32, 1), mid[0]);
-    try testing.expect(mid[1] < 1);
-    try testing.expectEqual([2]f32{ 1, 1 }, captionShown(sit_s + 10));
+test "arrival: the caption begins after the figure is down and before the scene has played out" {
+    try testing.expect(caption_s > sit_s and caption_s < played_s);
+    try testing.expectEqual(Phase.sit, walker(played_s).phase);
 }
 
 test "arrival: the scene shows fewer distinct glyphs than a grid can cache" {

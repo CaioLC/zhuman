@@ -572,10 +572,12 @@ write outside the grid is dropped, so a sprite walks in from off the edge. An in
 into a palette given at attach, so whoever composes the grid names roles and the colors arrive
 with the theme; ink 0 is the empty cell. A grid past `Cells.cap` (4096) cells is refused whole,
 and a grid shows at most `glyph_cap` (128) distinct glyphs. `El.glyph_grid(id, cells, palette,
-px)` copies the cells into the state and sizes the node to the grid, a cell being the font's
-advance wide and its line skip tall. The glyph textures belong to one device size and one
-renderer generation: `draw` frees them on a new size and abandons them after a renderer reset,
-and the pool's eviction hook frees them when the node disappears.
+px, line_em)` copies the cells into the state and sizes the node to the grid, a cell being the
+font's advance wide and `line_em` of its size tall (a CSS `line-height`), the glyph centred on
+its line. The glyphs are rasterized as text is, one-bit or anti-aliased by the TEXT setting.
+The glyph textures belong to one device size, one rasterizer and one renderer generation:
+`draw` frees them on a new size or TEXT setting and abandons them after a renderer reset, and
+the pool's eviction hook frees them when the node disappears.
 
 Clipping is *not* a feature. It is `Layout.overflow` in the engine, because it is geometry
 two consumers read (the render walk and hit-testing), not a paint the backend

@@ -836,7 +836,7 @@ const coverage_lift: [256]u8 = blk: {
 /// Run every pixel's alpha of an anti-aliased glyph surface through `coverage_lift`, in
 /// place. The surface is SDL_ttf's blended output, ARGB8888 with coverage in alpha; any other
 /// format is left as it came.
-fn liftCoverage(surface: sdl.surface.Surface) void {
+pub fn liftCoverage(surface: sdl.surface.Surface) void {
     const format = surface.getFormat() orelse return;
     if (format != .packed_argb_8_8_8_8) return;
     const locked = surface.mustLock();

@@ -292,10 +292,16 @@ New game does not open on the HUD. It opens on a scene: a wide, empty valley und
 twinkling stars, a far range, low hills, a few trees, all drawn in ASCII in the theme's faintest
 inks. One small figure, the only thing in the foreground ink, walks in from the left edge,
 stops once to catch breath, and sits down just past the middle, its footprints fading behind
-it. Then two lines fade in under the scene (`Day 1.`, `Alone, cold and starving.`) over the
-one button, `Begin`, which starts the run. The button is there from the first frame, so the
-scene never has to be waited out. The emptiness is the point: the player should feel how
-little there is before the first number appears.
+it. The emptiness is the point: the player should feel how little there is before the first
+number appears.
+
+A scene's screen is the scene centred in its stage, a hairline, and a footer. The footer's
+left holds two caption lines that type themselves out once the scene has said its piece
+(`Day 1.`, then `Alone, cold and starving.`), the first dim and the second in the foreground
+ink. Its right holds two small text links on the same bottom edge: `REPLAY`, which starts the
+scene over, and the one that moves on (`BEGIN →` starts the run). The links are there from
+the first frame and a click on the scene skips to its end, so a scene never has to be waited
+out.
 
 ## The market strip and the trade dialog
 

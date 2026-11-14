@@ -556,8 +556,9 @@ pub const UiState = struct {
     /// cells and palette are inline POD, copied in at attach. The textures are **GPU
     /// resources**, so this declares `deinit` and the pool's eviction hook frees them when
     /// the node disappears, as it does `SvgState`'s raster. They belong to one device size
-    /// and one renderer generation (`tex_px`, `tex_generation`); the feature's `draw`
-    /// frees them on a new size and abandons them after a renderer reset.
+    /// one rasterizer and one renderer generation (`tex_px`, `tex_smooth`,
+    /// `tex_generation`); the feature's `draw` frees them on a new size or TEXT setting and
+    /// abandons them after a renderer reset.
     pub const GlyphGridState = struct {
         pub const Cells = @import("./features/glyph_cells.zig").Cells;
         /// Inks a palette holds, ink 0 included (it is the empty cell and is never drawn).
@@ -576,7 +577,7 @@ pub const UiState = struct {
         cells: Cells = .{},
         palette: [palette_cap]Color = undefined,
         palette_len: u8 = 0,
-        /// The device font size, and the cell it gives: the advance and the line skip.
+        /// The device font size, and the cell it gives: the advance wide, the line tall.
         px: f32 = 0,
         cell_w: f32 = 0,
         cell_h: f32 = 0,
@@ -584,6 +585,7 @@ pub const UiState = struct {
         glyphs: [glyph_cap]Glyph = undefined,
         glyph_len: usize = 0,
         tex_px: f32 = 0,
+        tex_smooth: bool = false,
         tex_generation: u32 = 0,
 
         /// Free every glyph texture (renderer alive): the eviction hook, and a size change.

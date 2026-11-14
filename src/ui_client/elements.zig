@@ -658,11 +658,12 @@ pub const El = struct {
     }
 
     /// A **grid of monospace cells**, one glyph and one ink each, drawn by the `glyph_grid`
-    /// feature at `logical_px`: `palette[ink]` is an ink's color. The surface for an ASCII
-    /// scene, where the cells change every frame. Sizes the node to the grid.
-    pub fn glyph_grid(self: El, id: []const u8, cells: *const feat.glyph_grid.Cells, palette: []const cb.Color, logical_px: f32) !El {
+    /// feature at `logical_px` on lines `line_em` of that tall: `palette[ink]` is an ink's
+    /// color. The surface for an ASCII scene, where the cells change every frame. Sizes the
+    /// node to the grid.
+    pub fn glyph_grid(self: El, id: []const u8, cells: *const feat.glyph_grid.Cells, palette: []const cb.Color, logical_px: f32, line_em: f32) !El {
         const node = try child(self, id);
-        feat.data_glyph_grid(self.ctx, node, cells, palette, logical_px);
+        feat.data_glyph_grid(self.ctx, node, cells, palette, logical_px, line_em);
         return .{ .ctx = self.ctx, .node = node };
     }
 };
