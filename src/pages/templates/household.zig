@@ -45,14 +45,25 @@ const Verdict = style.Verdict;
 
 /// One `label … value` line. `key` is its stable node id (a resource tag, a condition's name)
 /// so a line keeps its identity as the list around it changes. A set `verdict` (what the value
-/// means) paints the value instead of `tone`.
-pub const Line = struct { key: []const u8, label: []const u8, value: []const u8, tone: Tone = .dim, verdict: ?Verdict = null };
+/// means) paints the value instead of `tone`. A non-null `stock` is the amount held, printed
+/// in its own column after the value, in `fg` or its `stock_verdict`'s color; empty, it keeps
+/// the column for a line with nothing to hold.
+pub const Line = struct {
+    key: []const u8,
+    label: []const u8,
+    value: []const u8,
+    tone: Tone = .dim,
+    verdict: ?Verdict = null,
+    stock: ?[]const u8 = null,
+    stock_verdict: ?Verdict = null,
+};
 
 /// One BODY sentence: dim prose around one live value, in `verdict`'s color when set, else
 /// `tone`'s.
 pub const Sentence = struct { key: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, tone: Tone = .fg, verdict: ?Verdict = null };
 
-/// The SETTLEMENT panel: one list of aggregate lines under the title, with no sub-sections.
+/// The SETTLEMENT panel: one list of aggregate lines under the title, with no sub-sections. A
+/// line of a stock carries what is held after its value.
 pub const Settlement = struct {
     lines: []const Line,
 };
@@ -79,7 +90,14 @@ fn valueColor(ctx: *uic.UiCtx, tone: Tone, verdict: ?Verdict) uic.Color {
 
 fn lines(parent: El, id: []const u8, items: []const Line) !void {
     const col = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 4 }, .{});
-    for (items) |l| try readout.kv_line(col, l.key, l.label, l.value, valueColor(parent.ctx, l.tone, l.verdict));
+    for (items) |l| {
+        const color = valueColor(parent.ctx, l.tone, l.verdict);
+        if (l.stock) |stock| {
+            try readout.kv_stock_line(col, l.key, l.label, l.value, color, stock, valueColor(parent.ctx, .fg, l.stock_verdict));
+        } else {
+            try readout.kv_line(col, l.key, l.label, l.value, color);
+        }
+    }
 }
 
 fn panel(parent: El, id: []const u8, title: []const u8, title_gap: f32, col_w: f32) !El {

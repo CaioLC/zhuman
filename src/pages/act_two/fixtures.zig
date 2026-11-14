@@ -30,6 +30,8 @@ pub const FlowRecord = struct {
     /// The line's stable key and its label.
     key: []const u8,
     label: []const u8,
+    /// The stock the flow fills and drains; null for energy, which is not held.
+    resource: ?Resource = null,
     produced: f32,
     demanded: f32,
 
@@ -40,7 +42,7 @@ pub const FlowRecord = struct {
 };
 
 fn stock(r: Resource, produced: f32, demanded: f32) FlowRecord {
-    return .{ .key = @tagName(r), .label = r.labelIn(2), .produced = produced, .demanded = demanded };
+    return .{ .key = @tagName(r), .label = r.labelIn(2), .resource = r, .produced = produced, .demanded = demanded };
 }
 
 pub const flows = [_]FlowRecord{

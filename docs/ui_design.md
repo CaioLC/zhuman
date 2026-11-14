@@ -220,7 +220,9 @@ against the housing (`48/640`), then, in the same list with no heading of their 
 one line for energy and one per stock, each showing both sides of the day's flow
 (`Food +14 / −8`) rather than their difference, because what a settlement makes and what it
 uses are two facts and the net hides both. The value's color says the net: more produced
-than demanded a gain, less a penalty. One person is no settlement, so Act I builds no SETTLEMENT
+than demanded a gain, less a penalty. A stock's line ends on its stockpile, in a column of
+its own (`Food +14 / −8  22`), so the rate reads beside what it is filling or draining;
+energy is a flow and holds none. One person is no settlement, so Act I builds no SETTLEMENT
 panel and BODY leads the column; the panel appears at the curtain.
 
 **BODY** is the player's own condition, the numbers that inform the next decision, the same

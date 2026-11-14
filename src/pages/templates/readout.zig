@@ -57,6 +57,24 @@ pub fn kv_line(parent: El, id: []const u8, left: []const u8, right: []const u8, 
     try kv_line_in(try parent.div(id), left, right, right_color);
 }
 
+/// A readout line with a stock column after its value: the label on the left, then at the
+/// right the 11px `value` and, `stock_gap` on, the 11px `stock` right-aligned in a column
+/// `stock_width` wide, so the values of a list of these end on one edge and the stocks on
+/// another. An empty `stock` keeps the column.
+pub fn kv_stock_line(parent: El, id: []const u8, left: []const u8, value: []const u8, value_color: Color, stock: []const u8, stock_color: Color) !void {
+    const row = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .cross = .baseline } }, .{});
+    try row.label("label", left, .{ style.body, style.ink(.fg) });
+    const tail = try row.box("tail", .{ .anchor = .center_right, .flow = .{ .dir = .row, .cross = .baseline }, .gap = stock_gap }, .{});
+    try tail.label("value", value, .{Style{ .font = 11, .text = value_color }});
+    const cell = try tail.box("stock", .{ .w = .{ .fixed = stock_width }, .h = .fit_children, .flow = .{ .dir = .row, .main = .end } }, .{});
+    // An empty cell still carries a text line, so its row sits on the same baseline as the rest.
+    try cell.label("n", if (stock.len == 0) " " else stock, .{Style{ .font = 11, .text = stock_color }});
+}
+
+/// The stock column of `kv_stock_line`: room for four digits at 11px, and its gap from the value.
+const stock_width: f32 = 30;
+const stock_gap: f32 = 10;
+
 /// One sentence of dim 11px prose around a live value in `value_color`.
 pub fn sentence(parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: Color) !void {
     const row = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .baseline } }, .{});

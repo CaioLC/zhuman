@@ -173,6 +173,7 @@ pub const readout_heading = readout_mod.readout_heading;
 pub const section_label = readout_mod.section_label;
 pub const kv_line = readout_mod.kv_line;
 pub const kv_line_in = readout_mod.kv_line_in;
+pub const kv_stock_line = readout_mod.kv_stock_line;
 pub const sentence = readout_mod.sentence;
 pub const divider = readout_mod.divider;
 // Track tables
