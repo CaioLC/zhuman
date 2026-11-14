@@ -12,14 +12,14 @@
     <header class="hud-header">
       <div class="stockline compact" aria-label="Population and current stocks">
         <span class="stock-token"><span class="stock-label">PO:</span> <span class="stock-value" id="population-value" data-population-value>7/12</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">POPULATION: <span class="stock-value" data-population-value>7/12</span></span></span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">13/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">13/15</span></span></span></span><span class="sep" aria-hidden="true">|</span>
+        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">13/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">13.0/15</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value" data-resource-balance="food">23</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value" data-resource-balance="food">23</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">MA:</span> <span class="stock-value" data-resource-balance="materials">30</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MATERIALS: <span class="stock-value" data-resource-balance="materials">30</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">WA:</span> <span class="stock-value low" data-resource-balance="water">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">WATER: <span class="stock-value low" data-resource-balance="water">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">FU:</span> <span class="stock-value low" data-resource-balance="fuel">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FUEL: <span class="stock-value low" data-resource-balance="fuel">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">ME:</span> <span class="stock-value low" data-resource-balance="metal">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">METAL: <span class="stock-value low" data-resource-balance="metal">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
         <span class="stock-token"><span class="stock-label">MI:</span> <span class="stock-value low" data-resource-balance="minerals">0</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MINERALS: <span class="stock-value low" data-resource-balance="minerals">0</span></span></span></span><span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label">CO:</span> <span class="stock-value accent" data-coin-balance>42</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">COIN: <span class="stock-value accent" data-coin-balance>42</span></span></span></span>
+        <span class="stock-token"><span class="stock-label">CO:</span> <span class="stock-value accent" data-coin-balance>42</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">COIN: <span class="stock-value accent" data-coin-balance>42.0</span></span></span></span>
       </div>      <div class="runline"><span class="energy-rate" aria-label="Energy generated and consumed per day"><span aria-hidden="true">⚡</span><span class="energy-gen">+12</span><span aria-hidden="true">/</span><span class="energy-use">−9</span></span><span><span id="act-label">Act II</span> · <strong>Day 43</strong></span><span class="speed-stepper" id="speed-stepper" role="slider" tabindex="0" aria-label="Simulation speed" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1× speed"><button type="button" tabindex="-1" data-speed-step="-1" aria-label="Slower">&lt;&lt;</button><output id="speed-level">1×</output><button type="button" tabindex="-1" data-speed-step="1" aria-label="Faster">&gt;&gt;</button></span><button class="menu-button" type="button" aria-label="Open menu">MENU</button></div>
     </header>
 
@@ -54,7 +54,8 @@
           Population <strong class="positive" id="body-population">7</strong> under one roof.<br>
           Larder feeds all for <strong class="positive" id="food-coverage">10.3d</strong>.<br>
           Water runs short in <strong class="warn" id="water-runway">3.0d</strong>.<br>
-          Vigor across the hall: <strong class="warn" id="hall-vigor">weary</strong>.
+          Vigor across the hall: <strong class="warn" id="hall-vigor">weary</strong>.<br>
+          Work pace <strong id="work-pace">100%</strong>.
         </section>
 
         <section class="policy-tile" aria-labelledby="eating-policy-title">
@@ -68,8 +69,8 @@
         <nav class="surface-nav" aria-label="Act II surfaces">
           <button class="tab" id="tab-actions" type="button" role="tab" aria-selected="true" aria-controls="view-actions" data-view="actions">ACTIONS</button>
           <button class="tab" id="tab-build" type="button" role="tab" aria-selected="false" aria-controls="view-build" data-view="build">BUILD</button>
-          <button class="tab" id="tab-research" type="button" role="tab" aria-selected="false" aria-controls="view-research" data-view="research">RESEARCH</button>
           <button class="tab" id="tab-market" type="button" role="tab" aria-selected="false" aria-controls="view-market" data-view="market">MARKET</button>
+          <button class="tab" id="tab-research" type="button" role="tab" aria-selected="false" aria-controls="view-research" data-view="research">RESEARCH</button>
         </nav>
 
         <div class="merchant-strip" id="market-strip" role="status">
@@ -134,6 +135,10 @@
           </section>
         </section>
 
+        <section id="view-market" role="tabpanel" aria-labelledby="tab-market" hidden>
+          <iframe class="market-frame" id="market-frame" title="Neighbours" data-src="market.html?embed=1"></iframe>
+        </section>
+
         <section id="view-research" role="tabpanel" aria-labelledby="tab-research" hidden>
           <section class="structure-surface" aria-labelledby="structure-title">
             <header class="structure-topbar">
@@ -161,10 +166,6 @@
             <div class="board-hints"><span id="structure-status">Select an available or researched skill</span><span>Wheel zoom / drag pan</span><span>Arrows move · Esc clears</span></div>
           </footer>
         </section>
-
-        <section id="view-market" role="tabpanel" aria-labelledby="tab-market" hidden>
-          <iframe class="market-frame" id="market-frame" title="Neighbours" data-src="market.html?embed=1"></iframe>
-        </section>
       </section>
     </div>
 
@@ -184,12 +185,12 @@
       const views = {
         actions: document.querySelector('#view-actions'),
         build: document.querySelector('#view-build'),
-        research: document.querySelector('#view-research'),
-        market: document.querySelector('#view-market')
+        market: document.querySelector('#view-market'),
+        research: document.querySelector('#view-research')
       };
-      // RESEARCH and MARKET own the whole surface: the strips and the log step aside, and the
+      // MARKET and RESEARCH own the whole surface: the strips and the log step aside, and the
       // Household collapses on every entry without overwriting the other views' memory.
-      const focusViews = ['research', 'market'];
+      const focusViews = ['market', 'research'];
       const eventLog = document.querySelector('#event-log');
       const prototypeParams = new URLSearchParams(location.search);
       let logMinutes = 19 * 60 + 8; // the log's clock: the newest authored line, then +7 min per event
@@ -212,9 +213,13 @@
         const seeded = Number(prototypeParams.get(key));
         if (Number.isFinite(seeded)) resourceBalances[key] = Math.max(0, seeded);
       });
+      // A stock token's read form (`.stock-read`) shows the held amount floored to a tenth and
+      // always printed with one decimal (30.0, 23.6), so it never shows more than is held; the
+      // resting token prints the amount as it is.
+      const readTenth = value => (Math.floor(value * 10 + 1e-9) / 10).toFixed(1);
       function refreshPrototypeResources() {
         resourceKeys.forEach(key => document.querySelectorAll(`[data-resource-balance="${key}"]`).forEach(output => {
-          output.textContent = resourceBalances[key];
+          output.textContent = output.closest('.stock-read') ? readTenth(resourceBalances[key]) : resourceBalances[key];
           output.classList.toggle('low', resourceBalances[key] <= 0);
         }));
         dispatchEvent(new CustomEvent('prototype-resources-changed', { detail: { ...resourceBalances } }));
@@ -229,8 +234,8 @@
       const holdingsCollapsedByView = {
         actions: requestedHoldingsState === 'collapsed',
         build: requestedHoldingsState === 'collapsed',
-        research: requestedHoldingsState !== 'expanded',
-        market: requestedHoldingsState !== 'expanded'
+        market: requestedHoldingsState !== 'expanded',
+        research: requestedHoldingsState !== 'expanded'
       };
       let activeView = null;
       let holdingsCollapsed = false;
@@ -573,21 +578,39 @@
       ];
 
       const bodyConfig = { baseCoverage: 10.3, baseRecovery: 0.448 };
+      const workPaceOutput = document.querySelector('#work-pace');
+
+      // The sim's `Config.regen` and `Config.pace` (src/sim/res.zig), with its constants: how
+      // fast a body works at `rate` food of `quality`, as a share of the normal ration's pace.
+      // 1.0 at normal; the meagerest ration's pace for an unfed body or food of no quality.
+      const metabolismConfig = { regenFullPerDay: 10, regenAtNormal: 0.8, rateMin: 0.5, rateMax: 5 };
+      function regen(rate, quality) {
+        const fed = Math.min(metabolismConfig.rateMax, Math.max(metabolismConfig.rateMin, rate)) * quality;
+        return metabolismConfig.regenFullPerDay * (1 - Math.pow(1 - metabolismConfig.regenAtNormal, fed));
+      }
+      function workPace(rate, quality, fed) {
+        const slowest = regen(metabolismConfig.rateMin, 1);
+        const now = fed ? Math.max(regen(rate, quality), slowest) : slowest;
+        return now / (metabolismConfig.regenFullPerDay * metabolismConfig.regenAtNormal);
+      }
 
       function updateEatingPolicy(rawValue) {
         const value = Number(rawValue);
         const word = eatingWords.find(entry => value <= entry.max).word;
         const rate = 0.5 * Math.pow(4, value / 100);
         const coverage = bodyConfig.baseCoverage / rate;
+        const pace = Math.round(workPace(rate, 1, resourceBalances.food > 0) * 100);
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
         foodCoverage.textContent = `${coverage.toFixed(1)}d`;
+        workPaceOutput.textContent = `${pace}%`;
       }
 
       const seededEating = prototypeParams.get('eating');
       if (seededEating !== null) eatingSlider.value = String(Math.max(0, Math.min(100, Number(seededEating))));
       eatingSlider.addEventListener('input', event => updateEatingPolicy(event.currentTarget.value));
+      addEventListener('prototype-resources-changed', () => updateEatingPolicy(eatingSlider.value));
       updateEatingPolicy(eatingSlider.value);
 
       const activityStrip = document.querySelector('#activity-strip');
@@ -1005,9 +1028,11 @@
         document.querySelector('#exchange-ring-four').textContent = `${current.ringFour.length ? 1 : 0}/1`;
         document.querySelector('#exchange-ring-four').title = current.ringFour.join(', ') || 'No ring-4 skill researched';
         document.querySelector('#exchange-population').textContent = `${population}/501`;
-        document.querySelector('#exchange-materials').textContent = paid ? '80 paid' : `${resourceBalances.materials}/80`;
-        document.querySelector('#exchange-minerals').textContent = paid ? '40 paid' : `${resourceBalances.minerals}/40`;
-        document.querySelector('#exchange-metal').textContent = paid ? '24 paid' : `${resourceBalances.metal}/24`;
+        // A held amount reads floored to a whole, as the Shelter card's do (79.6 reads 79/80);
+        // `is-met` compares the real values.
+        document.querySelector('#exchange-materials').textContent = paid ? '80 paid' : `${Math.floor(resourceBalances.materials)}/80`;
+        document.querySelector('#exchange-minerals').textContent = paid ? '40 paid' : `${Math.floor(resourceBalances.minerals)}/40`;
+        document.querySelector('#exchange-metal').textContent = paid ? '24 paid' : `${Math.floor(resourceBalances.metal)}/24`;
         const requirementStates = paid
           ? [true, true, true, true, true]
           : [current.researchMet, current.populationMet, resourceBalances.materials >= 80, resourceBalances.minerals >= 40, resourceBalances.metal >= 24];

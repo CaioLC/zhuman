@@ -11,11 +11,11 @@
   <main class="terminal act-one" aria-label="Human Action Act I interface prototype">
     <header class="hud-header">
       <div class="stockline" aria-label="Current stocks">
-        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">14/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value">14/15</span></span></span></span>
+        <span class="stock-token"><span class="stock-label">VI:</span> <span class="stock-value">14/15</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">VIGOR: <span class="stock-value" data-stock-read="vigor" data-stock-max="15">14.2/15</span></span></span></span>
         <span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value">11.6</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value">11.6</span></span></span></span>
+        <span class="stock-token"><span class="stock-label">FO:</span> <span class="stock-value">11.6</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">FOOD: <span class="stock-value" data-stock-read="food">11.6</span></span></span></span>
         <span class="sep" aria-hidden="true">|</span>
-        <span class="stock-token"><span class="stock-label">MA:</span> <span class="stock-value">31</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MATERIALS: <span class="stock-value">31</span></span></span></span>
+        <span class="stock-token"><span class="stock-label">MA:</span> <span class="stock-value">31</span><span class="stock-read" aria-hidden="true"><span class="stock-read-text">MATERIALS: <span class="stock-value" data-stock-read="materials">31.4</span></span></span></span>
       </div>
       <div class="runline">
         <span>Act I · <strong>Day 19</strong></span>
@@ -51,7 +51,8 @@
         <section class="panel side-note" aria-label="Current body policy and recovery">
           <span class="eyebrow">BODY</span><br>
           Food lasts <strong id="food-coverage">5.2d</strong>.<br>
-          Full vigor in <strong id="vigor-recovery">0.2d</strong>.
+          Full vigor in <strong id="vigor-recovery">0.2d</strong>.<br>
+          Work pace <strong id="work-pace">100%</strong>.
         </section>
 
         <section class="policy-tile" aria-labelledby="eating-policy-title">
@@ -199,14 +200,14 @@
 
           <section class="milestone-goal shelter-goal" id="shelter-goal" aria-labelledby="shelter-title" data-state="locked" data-open="false">
             <div class="milestone-bar">
-              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">locked · 2 conditions</span><span class="milestone-compact" id="shelter-compact">materials 31/120</span><span class="milestone-more">details ↓</span></button>
+              <button class="milestone-disclosure" id="shelter-toggle" type="button" aria-expanded="false" aria-controls="shelter-details"><strong id="shelter-title">Shelter</strong><span class="milestone-readiness" id="shelter-readiness">locked · 2 conditions</span><span class="milestone-compact" id="shelter-compact">materials 31/240</span><span class="milestone-more">details ↓</span></button>
               <button class="primary-action" id="raise-shelter" type="button" disabled>LOCKED</button>
             </div>
             <div class="milestone-details" id="shelter-details" hidden>
-              <div class="milestone-detail-head"><span class="milestone-kicker">A PLACE FOR OTHERS</span><span class="milestone-cost">120ma 8e · 6.0d</span></div>
+              <div class="milestone-detail-head"><span class="milestone-kicker">A PLACE FOR OTHERS</span><span class="milestone-cost" id="shelter-cost">240ma 8e · 6.0d</span></div>
               <p id="shelter-copy">a roof with room for four. you're not alone anymore.</p>
-              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/12</strong></span><span>FOOD <strong id="shelter-food">11.6/15</strong></span><span>GOODS <strong id="shelter-recipes">6/5</strong></span><span>ROPE BAG <strong id="shelter-ropebag">needed</strong></span><span>LEAF BED <strong id="shelter-leafbed">owned</strong></span><span>MATERIALS <strong id="shelter-materials">31/120</strong></span></div>
-              <div class="milestone-action-row"><span id="shelter-detail">Hold 120 materials with a settled body and five kinds of goods, a rope bag and a leaf bed among them.</span></div>
+              <div class="milestone-requirements" id="shelter-requirements" aria-label="Shelter conditions"><span>VIGOR <strong id="shelter-vigor">14/12</strong></span><span>FOOD <strong id="shelter-food">11/15</strong></span><span>GOODS <strong id="shelter-recipes">6/5</strong></span><span>ROPE BAG <strong id="shelter-ropebag">needed</strong></span><span>LEAF BED <strong id="shelter-leafbed">owned</strong></span><span>MATERIALS <strong id="shelter-materials">31/240</strong></span></div>
+              <div class="milestone-action-row"><span id="shelter-detail">Hold 240 materials with a settled body and five kinds of goods, a rope bag and a leaf bed among them.</span></div>
             </div>
           </section>
         </section>
@@ -488,24 +489,41 @@
       ];
 
       const bodyConfig = { baseCoverage: 5.2, baseRecovery: 0.224 };
+      const workPaceOutput = document.querySelector('#work-pace');
 
+      // The sim's `Config.regen` and `Config.pace` (src/sim/res.zig), with its constants: how
+      // fast a body works at `rate` food of `quality`, as a share of the normal ration's pace.
+      // 1.0 at normal; the meagerest ration's pace for an unfed body or food of no quality.
+      const metabolismConfig = { regenFullPerDay: 10, regenAtNormal: 0.8, rateMin: 0.5, rateMax: 5 };
+      function regen(rate, quality) {
+        const fed = Math.min(metabolismConfig.rateMax, Math.max(metabolismConfig.rateMin, rate)) * quality;
+        return metabolismConfig.regenFullPerDay * (1 - Math.pow(1 - metabolismConfig.regenAtNormal, fed));
+      }
+      function workPace(rate, quality, fed) {
+        const slowest = regen(metabolismConfig.rateMin, 1);
+        const now = fed ? Math.max(regen(rate, quality), slowest) : slowest;
+        return now / (metabolismConfig.regenFullPerDay * metabolismConfig.regenAtNormal);
+      }
+
+      // Reads the larder (`shelterStock.food`, below), so its first call waits for the stock.
       function updateEatingPolicy(rawValue) {
         const value = Number(rawValue);
         const word = eatingWords.find(entry => value <= entry.max).word;
         const rate = 0.5 * Math.pow(4, value / 100);
         const coverage = bodyConfig.baseCoverage / rate;
         const recovery = bodyConfig.baseRecovery / rate;
+        const pace = Math.round(workPace(rate, 1, shelterStock.food > 0) * 100);
         eatingSlider.style.setProperty('--ration-position', `${value}%`);
         eatingSlider.setAttribute('aria-valuetext', `${word}, ${rate.toFixed(2)} times normal`);
         eatingValue.textContent = `${word} · ${rate.toFixed(2)}×`;
         foodCoverage.textContent = `${coverage.toFixed(1)}d`;
         vigorRecovery.textContent = `${Math.max(0.1, recovery).toFixed(1)}d`;
+        workPaceOutput.textContent = `${pace}%`;
       }
 
       const seededEating = prototypeParams.get('eating');
       if (seededEating !== null) eatingSlider.value = String(Math.max(0, Math.min(100, Number(seededEating))));
       eatingSlider.addEventListener('input', event => updateEatingPolicy(event.currentTarget.value));
-      updateEatingPolicy(eatingSlider.value);
 
       const activityStrip = document.querySelector('#activity-strip');
       const activityKind = document.querySelector('#activity-kind');
@@ -837,24 +855,43 @@
       // starts the Spear unless `activity` names other work, building stands at 42%.
       const seededShelter = prototypeParams.get('shelter');
       const shelterSeedsStock = ['ready', 'busy'].includes(seededShelter);
-      const shelterNeeds = { vigor: 12, food: 15, kinds: 5, materials: 120 };
+      const shelterNeeds = { vigor: 12, food: 15, kinds: 5, materials: 240 };
       // Kinds of goods owned: sandals, hatchet, wire snares, garden bed, root cellar, leaf bed
       // (the goods in the MARKET inventory). The rope bag is a seventh once it is built, which the
       // ready and busy seeds assume.
       const ropeBagOwned = () => shelterSeedsStock || buildRecipes.find(recipe => recipe.name === 'Rope bag').state === 'owned';
       const kindsOwned = () => 6 + Number(ropeBagOwned());
       const shelterStock = window.prototypeStock = {
-        vigor: Number(prototypeParams.get('vigor') ?? (shelterSeedsStock ? shelterNeeds.vigor : 14)),
+        vigor: Number(prototypeParams.get('vigor') ?? (shelterSeedsStock ? shelterNeeds.vigor : 14.2)),
         food: Number(prototypeParams.get('food') ?? (shelterSeedsStock ? shelterNeeds.food : 11.6)),
-        materials: Number(prototypeParams.get('materials') ?? (shelterSeedsStock ? shelterNeeds.materials : 31))
+        materials: Number(prototypeParams.get('materials') ?? (shelterSeedsStock ? shelterNeeds.materials : 31.4))
       };
+      // A stock token's read form shows the held amount floored to a tenth and always printed
+      // with one decimal (14.2/15, 31.0, 11.6), so it never shows more than is held; a ceiling
+      // after the slash reads as authored. The resting token is static markup.
+      const readTenth = value => (Math.floor(value * 10 + 1e-9) / 10).toFixed(1);
+      function refreshStockReads() {
+        document.querySelectorAll('[data-stock-read]').forEach(output => {
+          const held = readTenth(shelterStock[output.dataset.stockRead]);
+          output.textContent = output.dataset.stockMax ? `${held}/${output.dataset.stockMax}` : held;
+        });
+      }
+      refreshStockReads();
+      updateEatingPolicy(eatingSlider.value);
       const shelterDays = 6.0;
+      const shelterEnergy = 8;
       const shelterAction = document.querySelector('#raise-shelter');
       const shelterDetail = document.querySelector('#shelter-detail');
-      const shelterDetailCopy = shelterDetail.textContent;
+      document.querySelector('#shelter-cost').textContent = `${shelterNeeds.materials}ma ${shelterEnergy}e · ${shelterDays.toFixed(1)}d`;
+      const shelterDetailCopy = `Hold ${shelterNeeds.materials} materials with a settled body and five kinds of goods, a rope bag and a leaf bed among them.`;
       let shelterDone = false;
       const shelterLeft = () => `${(shelterDays * (1 - shelterBuild)).toFixed(1)}d left`;
+      // A held amount reads floored, never rounded, so a counter never shows its target before
+      // the condition is met (239.6 materials read 239/240, 14.96 food 14/15); `met` compares the
+      // real values.
+      const floorWhole = value => Math.floor(value);
       function refreshShelter() {
+        refreshStockReads();
         const kinds = kindsOwned();
         const met = {
           vigor: shelterStock.vigor >= shelterNeeds.vigor,
@@ -878,12 +915,12 @@
         shelterGoal.classList.toggle('is-building', state === 'building');
         shelterGoal.classList.toggle('is-done', state === 'done');
         const values = {
-          vigor: `${shelterStock.vigor}/${shelterNeeds.vigor}`,
-          food: `${shelterStock.food}/${shelterNeeds.food}`,
+          vigor: `${floorWhole(shelterStock.vigor)}/${shelterNeeds.vigor}`,
+          food: `${floorWhole(shelterStock.food)}/${shelterNeeds.food}`,
           recipes: `${kinds}/${shelterNeeds.kinds}`,
           ropebag: met.ropebag || settled ? 'owned' : 'needed',
           leafbed: 'owned',
-          materials: settled ? `${shelterNeeds.materials} paid` : `${shelterStock.materials}/${shelterNeeds.materials}`
+          materials: settled ? `${shelterNeeds.materials} paid` : `${floorWhole(shelterStock.materials)}/${shelterNeeds.materials}`
         };
         Object.entries(values).forEach(([key, text]) => {
           const output = document.querySelector(`#shelter-${key}`);
@@ -894,7 +931,7 @@
         shelterAction.style.setProperty('--build-progress', percent);
         document.querySelector('#shelter-compact').textContent = state === 'building' ? percent
           : state === 'done' ? 'room for four'
-          : `materials ${shelterStock.materials}/${shelterNeeds.materials}`;
+          : `materials ${floorWhole(shelterStock.materials)}/${shelterNeeds.materials}`;
         document.querySelector('#shelter-readiness').textContent = {
           locked: `locked · ${unmet} condition${unmet === 1 ? '' : 's'}`,
           unfunded: 'inputs short',

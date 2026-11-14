@@ -131,6 +131,7 @@ const DIFFICULTIES = [
 
 let screen = 'menu';
 let flash = '';
+let overwriting = null; /* the filled slot the overwrite screen asks about */
 const bodyEl = document.querySelector('#menu-body');
 const titleEl = document.querySelector('#menu-title');
 const noteEl = document.querySelector('#menu-note');
@@ -167,16 +168,18 @@ function renderSlots(mode) {
     </div>`;
   bodyEl.querySelectorAll('[data-slot]').forEach(b => b.addEventListener('click', () => {
     const slot = SLOTS.find(s => s.id === Number(b.dataset.slot));
-    if (saving) {
-      Object.assign(slot, { empty: false, act: 'Act II', day: 43, people: 7, when: 'today · 20:09' });
-      flash = `Saved to slot ${slot.id}.`;
-    } else {
-      flash = `Loaded slot ${slot.id}.`;
-    }
+    if (saving && !slot.empty) { overwriting = slot; screen = 'overwrite'; render(); return; }
+    if (saving) saveTo(slot);
+    else flash = `Loaded slot ${slot.id}.`;
     screen = 'menu';
     render();
   }));
   wire();
+}
+
+function saveTo(slot) {
+  Object.assign(slot, { empty: false, act: 'Act II', day: 43, people: 7, when: 'today · 20:09' });
+  flash = `Saved to slot ${slot.id}.`;
 }
 
 function renderSettings() {
@@ -233,7 +236,7 @@ function renderSettings() {
   wire();
 }
 
-/* Leaving is the one destructive thing here, so it is the one thing that asks. */
+/* Leaving and overwriting a save are the destructive things here, so they are the ones that ask. */
 function renderQuit() {
   const last = SLOTS.filter(s => !s.empty).sort((a, b) => b.day - a.day)[0];
   titleEl.textContent = 'Quit to menu';
@@ -247,6 +250,28 @@ function renderQuit() {
       <button class="secondary-action" type="button" data-go="menu">CANCEL</button>
     </div>`;
   wire();
+}
+
+/* A filled slot is someone's earlier settlement; writing over it asks first. Focus starts on
+   CANCEL, the choice that loses nothing. */
+function renderOverwrite() {
+  const slot = overwriting;
+  titleEl.textContent = 'Overwrite save';
+  noteEl.textContent = '';
+  bodyEl.innerHTML = `
+    <p class="confirm-copy">Slot ${slot.id} holds <b>${describe(slot)}</b>.</p>
+    <div class="confirm-row">
+      <button class="danger-action" type="button" data-overwrite>OVERWRITE</button>
+      <button class="secondary-action" type="button" data-go="save">CANCEL</button>
+    </div>`;
+  bodyEl.querySelector('[data-overwrite]').addEventListener('click', () => {
+    saveTo(slot);
+    overwriting = null;
+    screen = 'menu';
+    render();
+  });
+  wire();
+  bodyEl.querySelector('[data-go="save"]').focus();
 }
 
 function wire() {
@@ -264,6 +289,7 @@ function render() {
   if (screen === 'save' || screen === 'load') renderSlots(screen);
   else if (screen === 'settings') renderSettings();
   else if (screen === 'quit') renderQuit();
+  else if (screen === 'overwrite' && overwriting) renderOverwrite();
   else renderMenu();
   flash = '';
 }
@@ -272,18 +298,21 @@ document.querySelectorAll('header [data-go]').forEach(b => b.addEventListener('c
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   e.preventDefault();
-  if (screen !== 'menu') { screen = 'menu'; render(); }
+  if (screen === 'overwrite') { screen = 'save'; render(); }
+  else if (screen !== 'menu') { screen = 'menu'; render(); }
 });
 
-/* Review controls: ?screen= picks the view; &brightness=80..140 and &tutorial=off seed settings. */
+/* Review controls: ?screen= picks the view (overwrite asks about the first filled slot); &brightness=80..140 and &tutorial=off seed settings. */
 const params = new URLSearchParams(location.search);
 screen = params.get('screen') || 'menu';
+if (screen === 'overwrite') overwriting = SLOTS.find(s => !s.empty);
 if (params.has('brightness')) settings.brightness = Math.min(140, Math.max(80, Math.round(Number(params.get('brightness')) / 5) * 5 || 100));
 if (params.get('tutorial') === 'off') settings.tutorial = 'off';
 applyBrightness();
 render();
 document.querySelector('#menu-dialog').showModal();
-bodyEl.focus();
+if (screen === 'overwrite') bodyEl.querySelector('[data-go="save"]').focus();
+else bodyEl.focus();
 </script>
 </body>
 </html>
