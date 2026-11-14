@@ -6,9 +6,8 @@
 //!
 //! The scene is a pure function of how long it has been showing (`SceneState.seconds`), so a
 //! pinned time reproduces the frame. It is composed every frame onto the template's grid: the
-//! backdrop (the far range, the near hills, the ground), the stars, the footprints, then the
-//! trees and the figure from the farthest ground row to the nearest. Every random choice
-//! comes from one seeded generator, so the valley is the same every time.
+//! valley (`valley.zig`), the footprints, then the trees and the figure from the farthest
+//! ground row to the nearest.
 
 const std = @import("std");
 const ha = @import("ha");
@@ -16,14 +15,11 @@ const ha = @import("ha");
 const uic = ha.ui_client;
 const t = @import("./templates/root.zig");
 const title_page = @import("./title.zig");
+const valley = @import("./valley.zig");
 
 const Cells = t.SceneCells;
 const Ink = t.SceneInk;
 
-const w: i32 = t.scene_cols;
-const h: i32 = t.scene_rows;
-/// The row the ground line sits on; the ground is every row below.
-const horizon: i32 = 21;
 /// The row the figure's feet are on.
 const actor_row: i32 = 27;
 /// Where the figure stops to catch breath, and where it gives up walking.
@@ -49,34 +45,6 @@ const caption_after_s: f32 = 1.0;
 const played_after_s: f32 = 5.0;
 const caption_s: f32 = sit_s + caption_after_s;
 const played_s: f32 = sit_s + played_after_s;
-
-const bare_tree = [_][]const u8{
-    " \\   |   /",
-    "  \\ \\|  / _/",
-    " __\\ | /_/",
-    "    \\|/",
-    "     |/",
-    "     |",
-    "     |",
-    "    /|\\",
-};
-const fir = [_][]const u8{ "   ^", "  /|\\", " /_|_\\", "  /|\\", " / | \\", "/__|__\\", "   |" };
-const far_fir = [_][]const u8{ " ^", "/|\\", "/|\\", " |" };
-
-/// A thing standing on a ground row. A lower row is nearer and is drawn over a higher one;
-/// the list is in that order, and the figure goes in at its own row.
-const Prop = struct { art: []const []const u8, x: i32, foot: i32, ink: Ink };
-const props = [_]Prop{
-    .{ .art = &far_fir, .x = 36, .foot = 22, .ink = .far },
-    .{ .art = &far_fir, .x = 92, .foot = 22, .ink = .far },
-    .{ .art = &far_fir, .x = 6, .foot = 23, .ink = .far },
-    .{ .art = &far_fir, .x = 40, .foot = 23, .ink = .far },
-    .{ .art = &fir, .x = 12, .foot = 25, .ink = .near },
-    .{ .art = &bare_tree, .x = 76, .foot = 29, .ink = .near },
-};
-
-/// The far range: straight-sided peaks, each an apex column and a height.
-const peaks = [_][2]i32{ .{ 9, 5 }, .{ 21, 9 }, .{ 31, 6 }, .{ 45, 4 }, .{ 62, 11 }, .{ 73, 6 }, .{ 87, 8 }, .{ 98, 4 } };
 
 const legs = [4][]const u8{ "/ \\", " |\\", " | ", "/| " };
 
@@ -106,100 +74,9 @@ fn leftAt(x: i32) f32 {
         resume_s + pace_s * @as(f32, @floatFromInt(x - rest_x + 1));
 }
 
-/// The generator `prototypes/scene.js` seeds its scenes with, so the valley here is the
-/// prototype's cell for cell.
-const Rng = struct {
-    seed: u32,
-
-    fn next(self: *Rng) f64 {
-        self.seed +%= 0x6D2B79F5;
-        var x: u32 = (self.seed ^ (self.seed >> 15)) *% (1 | self.seed);
-        x = (x +% ((x ^ (x >> 7)) *% (61 | x))) ^ x;
-        return @as(f64, @floatFromInt(x ^ (x >> 14))) / 4294967296.0;
-    }
-
-    fn below(self: *Rng, n: f64) i32 {
-        return @intFromFloat(@floor(self.next() * n));
-    }
-};
-
-/// A ridge is a height at every cell edge, each within one of its neighbour. A cell climbs,
-/// falls or runs flat between its two edges, and hides whatever stood behind it.
-fn ridge(g: *Cells, edge: *const [w + 1]i32, ink: Ink) void {
-    for (0..@intCast(w)) |i| {
-        const x: i32 = @intCast(i);
-        const a = edge[i];
-        const b = edge[i + 1];
-        const row = horizon - @min(a, b);
-        var y = row;
-        while (y <= horizon) : (y += 1) g.put(x, y, ' ', 0);
-        g.put(x, row, if (b > a) '/' else if (b < a) '\\' else '_', ink.id());
-    }
-}
-
 /// The scene `seconds` in.
 fn compose(seconds: f32) Cells {
-    var g = Cells.init(t.scene_cols, t.scene_rows);
-    var rng = Rng{ .seed = 1848 };
-
-    var far: [w + 1]i32 = undefined;
-    var near: [w + 1]i32 = undefined;
-    for (0..far.len) |i| {
-        const j: i32 = @intCast(i);
-        var top: i32 = 0;
-        for (peaks) |p| top = @max(top, p[1] - @as(i32, @intCast(@abs(j - p[0]))));
-        far[i] = top;
-
-        // The near hills: low and rolling, a step at a time.
-        const x: f64 = @floatFromInt(j);
-        const want: i32 = @intFromFloat(@max(0, @round(1.1 + 1.4 * @sin(x * 0.045 + 2.1) + 0.8 * @sin(x * 0.11 + 5))));
-        const prev = if (i == 0) want else near[i - 1];
-        near[i] = @max(prev - 1, @min(prev + 1, want));
-    }
-    ridge(&g, &far, .far);
-    ridge(&g, &near, .near);
-
-    // The ground: drifts, and what little grows on it.
-    for (0..9) |_| {
-        const y = horizon + 2 + rng.below(@floatFromInt(h - horizon - 3));
-        const x = rng.below(@floatFromInt(w));
-        const len = 4 + rng.below(9);
-        var i: i32 = 0;
-        while (i < len) : (i += 1) if (rng.next() < 0.7) g.put(x + i, y, '_', Ink.faint.id());
-    }
-    const tufts = [_]u21{ '.', '.', '.', ',', '\'', '"' };
-    var y: i32 = horizon + 1;
-    while (y < h) : (y += 1) {
-        var x: i32 = 0;
-        while (x < w) : (x += 1) {
-            if (rng.next() < 0.035) g.put(x, y, tufts[@intCast(rng.below(tufts.len))], Ink.far.id());
-        }
-    }
-
-    // The stars: thicker toward the top, none below the skyline or behind a tree. Most are
-    // faint, a few are bright, and each twinkles to its own period.
-    for (0..@intCast(w)) |i| {
-        const x: i32 = @intCast(i);
-        const skyline = horizon - @max(@max(far[i], far[i + 1]), @max(near[i], near[i + 1]));
-        var sy: i32 = 0;
-        while (sy < skyline) : (sy += 1) {
-            const thin = 1 - 0.6 * @as(f64, @floatFromInt(sy)) / @as(f64, @floatFromInt(horizon));
-            if (rng.next() >= 0.04 * thin) continue;
-            const pick = rng.next();
-            const period = 1.5 + rng.next() * 3.5;
-            const phase = rng.next() * std.math.pi * 2;
-            if (behindProp(x, sy)) continue;
-            const glow = @sin(@as(f64, seconds) * 2 * std.math.pi / period + phase);
-            if (pick < 0.7) {
-                g.put(x, sy, '.', (if (glow > 0.2) Ink.far else Ink.faint).id());
-            } else if (pick < 0.94) {
-                g.put(x, sy, 0xB7, (if (glow > 0.2) Ink.near else Ink.far).id());
-            } else {
-                const cp: u21 = if (glow > 0.5) '*' else if (glow > -0.3) '+' else 0xB7;
-                g.put(x, sy, cp, (if (glow > -0.3) Ink.near else Ink.far).id());
-            }
-        }
-    }
+    var g = valley.ground(seconds);
 
     // The footprints behind the figure, fading as the wind fills them in.
     const who = walker(seconds);
@@ -211,26 +88,10 @@ fn compose(seconds: f32) Cells {
     }
 
     // The trees and the figure, the farthest ground row first.
-    var placed = who.phase == .away;
-    for (props) |p| {
-        if (!placed and p.foot > actor_row) {
-            figure(&g, who);
-            placed = true;
-        }
-        g.stamp(p.art, p.x, p.foot, p.ink.id(), null);
-    }
-    if (!placed) figure(&g, who);
+    valley.trees(&g, 0, actor_row);
+    figure(&g, who);
+    valley.trees(&g, actor_row, valley.h);
     return g;
-}
-
-/// Whether a sky cell is inside a tree's box, where a star would show through its branches.
-fn behindProp(x: i32, y: i32) bool {
-    for (props) |p| {
-        const width: i32 = @intCast(p.art[0].len + 4);
-        const height: i32 = @intCast(p.art.len);
-        if (x >= p.x and x < p.x + width and y > p.foot - height and y <= p.foot) return true;
-    }
-    return false;
 }
 
 fn figure(g: *Cells, who: Walker) void {
@@ -289,13 +150,6 @@ test "arrival: the figure never steps backward, skips a column, or passes where 
     }
 }
 
-test "arrival: the scene is the same for the same time" {
-    const a = compose(9.3);
-    const b = compose(9.3);
-    try testing.expectEqualSlices(u8, a.ink[0..a.count()], b.ink[0..b.count()]);
-    for (a.ink[0..a.count()], 0..) |k, i| if (k != 0) try testing.expectEqual(a.glyph[i], b.glyph[i]);
-}
-
 test "arrival: the valley is empty until the figure enters, and the figure ends seated" {
     const before = compose(0.5);
     var bright: usize = 0;
@@ -316,15 +170,6 @@ test "arrival: the footprints trail the figure and fade once the wind has had th
     // Long after, the first print is filled in: the cell holds whatever the ground has.
     const late = compose(leftAt(0) + print_s + 1);
     if (late.at(0, actor_row)) |c| try testing.expect(c.ink != Ink.near.id());
-}
-
-test "arrival: the stars stay above the skyline" {
-    const g = compose(3);
-    // The tallest peak's apex is the two cells on row `horizon - 10`; two rows down, inside
-    // the mountain, there is nothing.
-    try testing.expectEqual(@as(?u21, '/'), glyphAt(&g, 61, horizon - 10));
-    try testing.expectEqual(@as(?u21, '\\'), glyphAt(&g, 62, horizon - 10));
-    try testing.expect(g.at(61, horizon - 8) == null and g.at(62, horizon - 8) == null);
 }
 
 test "arrival: the caption begins after the figure is down and before the scene has played out" {
