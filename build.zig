@@ -78,6 +78,12 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("ha", ha_mod);
     exe_mod.addImport("ecs", ecs_mod);
 
+    // `-Ddemo`: the Act I demo, which ends on the thank-you after the Act I curtain instead of
+    // crossing into Act II. The host reads it once into `Resources.demo`.
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "demo", b.option(bool, "demo", "Build the Act I demo: the game ends on the thank-you after Act I") orelse false);
+    exe_mod.addOptions("build_options", build_options);
+
     // Build for desktop.
     const exe = b.addExecutable(.{
         .name = "human_action",

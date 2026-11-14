@@ -303,6 +303,28 @@ scene over, and the one that moves on (`BEGIN →` starts the run). The links ar
 the first frame and a click on the scene skips to its end, so a scene never has to be waited
 out.
 
+## The shelter
+
+Raising the Shelter ends Act I on a second scene, and this one is about faces. It is set
+inside, at the fire, under the thatch, with the valley visible only through a doorway where it
+is still snowing. One face is there from the start. The others appear as small figures on the
+horizon in the doorway, walk up to the threshold, and then their faces come out of the dark
+into the firelight one at a time: an elder, a woman and a child, a man in a hat. Everyone
+blinks; the one who was alone looks up at each newcomer and smiles once the first is lit. The
+faces are drawn wide, with small eyes under brows and shoulders beneath them, so they read as
+people and not as masks. The caption is `The shelter stands.` and `You are no longer alone.`,
+and `CONTINUE →` crosses into Act II.
+
+## The thank-you
+
+The Act I demo ends one scene later. It is the valley of the arrival, seen from the same
+place, so it is recognised: the shelter stands where the figure sat down, smoke rises from its
+roof, its windows and door are lit, and the people are outside at a fire, the one who came
+alone waving now and then and the child running back and forth. `THANK YOU FOR PLAYING`, the
+game's one-line description, the credits (role and name either side of a middle dot) and the
+line about the book come up in the sky a line at a time, clearing the stars behind them. The
+caption says the demo ends here, and `TITLE →` goes back to the title screen.
+
 ## The market strip and the trade dialog
 
 One strip and one dialog serve every counterparty the game will have; an identity map supplies

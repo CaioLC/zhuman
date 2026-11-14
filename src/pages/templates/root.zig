@@ -138,6 +138,7 @@ pub const button_variant = button_mod.button_variant;
 pub const scene = @import("./scene.zig").scene;
 pub const SceneCells = @import("./scene.zig").Cells;
 pub const SceneInk = @import("./scene.zig").Ink;
+pub const SceneClip = @import("./scene.zig").Clip;
 pub const scene_cols = @import("./scene.zig").cols;
 pub const scene_rows = @import("./scene.zig").rows;
 pub const title_screen = @import("./title_screen.zig").title_screen;

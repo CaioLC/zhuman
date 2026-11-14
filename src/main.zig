@@ -202,6 +202,7 @@ const App = struct {
         // Resolve the reduced-motion policy once here: on only when `HA_REDUCED_MOTION`
         // asks for it. `build_ui` projects it onto `view.reduced_motion` each frame.
         self.resources.motion = ui_client.resolveMotionFromEnv(self.environ);
+        self.resources.demo = @import("build_options").demo;
         // The world is empty until a `NewRun` (the title's New game) or a load begins a run.
         self.world = try ha.sim.ecs.World.init(allocator);
         self.openSaves();

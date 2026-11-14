@@ -1,7 +1,7 @@
 //! `curtain` — the full-screen beat between runs and acts: a centered column of an optional
-//! figure, one headline, an optional note at prose measure, and one button. Game over and the
-//! Act I curtain both use it; the words, the figure and what the button does are the caller's.
-//! An optional `title` frames the column as a titled panel (the act curtain's `ACT I`).
+//! figure, one headline, an optional note at prose measure, and one button. Game over uses
+//! it; the words, the figure and what the button does are the caller's. An optional `title`
+//! frames the column as a titled panel.
 
 const ha = @import("ha");
 

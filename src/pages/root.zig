@@ -21,6 +21,7 @@ const p_debug = @import("./debug_page.zig").debug_page;
 const title_page = @import("./title.zig");
 const p_title = title_page.ui_title;
 const p_arrival = @import("./arrival.zig").ui_arrival;
+const p_thanks = @import("./thanks.zig").ui_thanks;
 const fixture = @import("./fixture.zig");
 const t = @import("./templates/root.zig");
 
@@ -74,14 +75,18 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     // The curtain is the UI's response to `ActEnded`, heard with its own cursor. The world has
     // crossed into the next act; the curtain holds it still while the player reads.
     var ended = ui_ctx.res.game.events.readerAt(ha.sim.events.ActEnded, &ui_ctx.res.curtain.heard);
-    while (ended.next()) |fact| if (fact.act == .act_one) ui_ctx.res.curtain.show(&ui_ctx.res.playback);
+    while (ended.next()) |fact| {
+        // The curtain's scene starts from its first frame.
+        if (fact.act == .act_one and ui_ctx.res.curtain.show(&ui_ctx.res.playback)) ui_ctx.res.scene = .{};
+    }
 
-    // Route on the state: the arrival scene between New game and the run, the title before a
-    // run (or when Quit to menu left one behind it),
+    // Route on the state: the arrival scene between New game and the run, the thank-you the
+    // demo ends on, the title before a run (or when Quit to menu left one behind it),
     // the curtain while it is open, the game-over screen once no player remains (the state
     // follows a tick after `despawn_dead`), then the act's page.
     const states = &ui_ctx.res.game.states;
     if (ui_ctx.res.route == .arrival) return try p_arrival(ui_ctx);
+    if (ui_ctx.res.route == .thanks) return try p_thanks(ui_ctx);
     if (ui_ctx.res.route == .title or states.in(.title)) return try p_title(ui_ctx, world);
     if (ui_ctx.res.curtain.open) {
         const trees = try withMenu(ui_ctx, try p_act_one_end(ui_ctx));
@@ -174,4 +179,7 @@ test {
     _ = @import("./player.zig");
     _ = @import("./title.zig");
     _ = @import("./arrival.zig");
+    _ = @import("./valley.zig");
+    _ = @import("./shelter.zig");
+    _ = @import("./thanks.zig");
 }

@@ -368,7 +368,7 @@ pub const catalog = [_]Spec{
     },
     .{
         .name = "act_one_end",
-        .about = "The Act I curtain's first beat, after the Shelter is built.",
+        .about = "The Act I curtain, after the Shelter is built: the shelter scene from its first frame.",
         .screen = .act_one_end,
     },
     .{
@@ -1246,7 +1246,7 @@ pub fn prepare(ctx: *uic.UiCtx, world: *World, name: []const u8) void {
             ctx.res.game.sim.log.push(.dim, run_sys.opening_line);
         }
         ctx.res.game.states = .{ .current = stateOf(spec) };
-        if (spec.screen == .act_one_end) ctx.res.curtain.show(&ctx.res.playback);
+        if (spec.screen == .act_one_end) _ = ctx.res.curtain.show(&ctx.res.playback);
     }
 
     const player = ecs.MaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };

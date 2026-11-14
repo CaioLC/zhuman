@@ -10,6 +10,7 @@ zig build test    # unit tests (the library, then the pages and templates)
 zig build test-ui # just the UI layer (engine + host binding, no game content)
 zig build test-sim # the simulation alone: src/ecs + the sim files, no UI host, no SDL
 zig build         # build only
+zig build -Ddemo  # the Act I demo: the game ends on the thank-you after Act I
 sh tools/boundary_check.sh   # composition boundary: no lifecycle wiring or geometry reads outside approved components, no painting in a page, no page or template taking a mutable world, and neither engine (src/ui, src/ecs) imports anything outside its own package
 (cd src/ui && zig build test)    # the UI engine package on its own
 (cd src/ecs && zig build test)   # the ECS engine package on its own
@@ -36,7 +37,7 @@ nothing else**.
 
 Today it plays Act I: a lone actor under scarcity, and a passing merchant for the first
 barter. No money. When the shelter stands it crosses into Act II live, where the population,
-coin, flows and energy are still stand-ins.
+coin, flows and energy are still stand-ins; the demo build (`-Ddemo`) ends there instead.
 
 ## Where the knowledge lives
 

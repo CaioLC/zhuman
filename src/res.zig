@@ -143,24 +143,23 @@ pub const MenuState = struct {
 /// restores the prior pause state, and the next frame routes to the live act.
 pub const CurtainState = struct {
     open: bool = false,
-    step: u8 = 0,
     restore_paused: bool = false,
     /// The `ActEnded` cursor: past the last fact the build heard.
     heard: u64 = 0,
 
-    /// Open on the first beat and pause, remembering the prior pause state. Open already: no-op.
-    pub fn show(self: *CurtainState, playback: *Playback) void {
-        if (self.open) return;
+    /// Open and pause, remembering the prior pause state. True when this call opened it;
+    /// open already is a no-op.
+    pub fn show(self: *CurtainState, playback: *Playback) bool {
+        if (self.open) return false;
         self.restore_paused = playback.paused;
         self.open = true;
-        self.step = 0;
         playback.paused = true;
+        return true;
     }
 
-    /// Close, rewind the beat, and restore the pause state `show` remembered.
+    /// Close and restore the pause state `show` remembered.
     pub fn dismiss(self: *CurtainState, playback: *Playback) void {
         self.open = false;
-        self.step = 0;
         playback.paused = self.restore_paused;
     }
 };
@@ -169,11 +168,12 @@ pub const CurtainState = struct {
 pub const MenuScreen = enum { menu, save, load, settings, quit, overwrite };
 
 /// Which top-level screen the host shows: the title screen before a run, the arrival scene
-/// between New game and the run, or the game.
-pub const Route = enum { title, arrival, game };
+/// between New game and the run, the game, or the thank-you the demo ends on.
+pub const Route = enum { title, arrival, game, thanks };
 
-/// A scene's clock: the real time it has been showing. The scene is a pure function of it,
-/// so a pinned time reproduces the frame.
+/// The clock of the scene that is showing (the arrival, the curtain's shelter, the
+/// thank-you): the real time it has been showing. A scene is a pure function of it, so a
+/// pinned time reproduces the frame.
 pub const SceneState = struct {
     seconds: f32 = 0,
 };
@@ -431,6 +431,9 @@ pub const Resources = struct {
     route: Route = .title,
     title: TitleState = .{},
     scene: SceneState = .{},
+    /// This build is the Act I demo (`zig build -Ddemo`): the Act I curtain leads to the
+    /// thank-you instead of to Act II.
+    demo: bool = false,
     settings: Settings = .{},
     saves: SaveSlots = .{},
     view: View = .{},
