@@ -1,5 +1,5 @@
 //! `title_screen` — the title screen's whole composition (`title.html`): the attract loop's
-//! receded HUD (stockline, merchant strip, work in progress, holdings, event log) around the
+//! receded HUD (stockline, merchant strip, work in progress, the settlement, event log) around the
 //! body, which is the wordmark over the shared menu list, or the shared settings panel, or the
 //! credits. Settings and credits replace the menu column; this is a screen, not a modal, so
 //! Escape on them steps back to the menu.
@@ -30,7 +30,7 @@ pub const Attract = struct {
     strip_signal: []const u8,
     strip_copy: []const u8,
     work: []const Work,
-    rail_count: []const u8,
+    /// The SETTLEMENT list's lines.
     rail: []const RailRow,
     /// Newest first.
     log: []const LogLine,
@@ -128,7 +128,7 @@ fn attractFoot(parent: El, a: Attract) !void {
     }
 }
 
-/// The work column and the holdings column, anchored at the screen's upper right.
+/// The work column and the settlement column, anchored at the screen's upper right.
 fn attractSide(parent: El, a: Attract) !void {
     const work = try parent.box("attract_work", .{
         .anchor = .top_right, .offset = .{ .x = -pad_x, .y = 108 }, .w = .{ .fixed = side_w },
@@ -159,8 +159,7 @@ fn attractSide(parent: El, a: Attract) !void {
     const head = try rail.box("head", .{
         .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .row, .main = .space_between },
     }, .{style.pad_each(0, 0, 4, 0)});
-    try head.label("title", "HOLDINGS", .{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
-    try head.label("count", a.rail_count, .{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
+    try head.label("title", "SETTLEMENT", .{Style{ .font = 10, .tracking = 0.07, .text = inks.head }});
     try hrule(rail, "head_rule", inks.rule);
     for (a.rail, 0..) |r, i| {
         const row = try rail.boxi("r", i, .{

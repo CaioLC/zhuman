@@ -2,7 +2,7 @@
 //! save; disabled while there is none), New game (the arrival scene, then the run), Settings,
 //! Credits and Quit. Behind it the
 //! attract loop shows the game receded: a ticking stockline, the merchant strip, work filling,
-//! holdings and an event log. The loop is canned (the prototype's own copy, its tick every
+//! the settlement's readout and an event log. The loop is canned (the prototype's own copy, its tick every
 //! 160ms, a log line every 3.4s) and a pure function of how long the title has been showing,
 //! so a fixture that pins the time reproduces the frame.
 
@@ -19,14 +19,13 @@ const log_s: f32 = 3.4;
 const Stock = struct { key: []const u8, value: f32, max: ?f32 = null, drift: f32 };
 const stocks = [_]Stock{
     .{ .key = "VI", .value = 13, .max = 15, .drift = 0.05 },
-    .{ .key = "PO", .value = 7, .drift = 0.004 },
-    .{ .key = "CO", .value = 42, .drift = 0.07 },
     .{ .key = "FO", .value = 23, .drift = 0.11 },
+    .{ .key = "MA", .value = 30, .drift = 0.13 },
     .{ .key = "WA", .value = 6, .drift = 0.05 },
     .{ .key = "FU", .value = 4, .drift = 0.04 },
     .{ .key = "ME", .value = 2, .drift = 0.02 },
     .{ .key = "MI", .value = 9, .drift = 0.04 },
-    .{ .key = "MA", .value = 30, .drift = 0.13 },
+    .{ .key = "CO", .value = 42, .drift = 0.07 },
 };
 
 const Work = struct { name: []const u8, at: f32, rate: f32 };
@@ -52,15 +51,17 @@ const log_lines = [_][]const u8{
     "Split wood finishes. The hatchet holds.",
 };
 
+/// The Status rail's SETTLEMENT list: the people, then production against demand.
 const rail = [_]t.TitleRailRow{
-    .{ .label = "Charcoal \u{00d7}14", .value = "trade stock" },
-    .{ .label = "Planks \u{00d7}8", .value = "trade stock" },
-    .{ .label = "Baskets \u{00d7}6", .value = "trade stock" },
-    .{ .label = "Rope \u{00d7}4", .value = "trade stock" },
-    .{ .label = "Sandals \u{00d7}2", .value = "forage costs less" },
-    .{ .label = "Root cellar \u{00d7}1", .value = "food keeps 2\u{00d7}" },
-    .{ .label = "Leaf bed \u{00d7}1", .value = "vigor ceiling +1" },
-    .{ .label = "Garden bed \u{00d7}1", .value = "grows food" },
+    .{ .label = "Population", .value = "7/12" },
+    .{ .label = "Energy", .value = "+7 / \u{2212}5" },
+    .{ .label = "Food", .value = "+14 / \u{2212}8" },
+    .{ .label = "Materials", .value = "+12 / \u{2212}10" },
+    .{ .label = "Water", .value = "+9 / \u{2212}12" },
+    .{ .label = "Fuel", .value = "+6 / \u{2212}4" },
+    .{ .label = "Metal", .value = "+2 / \u{2212}2" },
+    .{ .label = "Minerals", .value = "+3 / \u{2212}4" },
+    .{ .label = "Coin", .value = "+10 / \u{2212}6" },
 };
 
 /// The start of the run clock, in minutes of day 43 (19:08).
@@ -120,7 +121,6 @@ fn attract(arena: std.mem.Allocator, seconds: f32) !t.TitleAttract {
         .strip_signal = "MERCHANT",
         .strip_copy = "9 lots \u{00b7} salt, oil, nails, cloth, glass, tools",
         .work = bars,
-        .rail_count = "8 KINDS, 41",
         .rail = &rail,
         .log = lines,
     };

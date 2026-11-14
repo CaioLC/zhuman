@@ -281,7 +281,8 @@ Escape or × resumes. Speed is the header stepper's alone.
 ## Title screen
 
 Before a run, the title screen shows the game itself, receded: a ticking stockline, the merchant
-strip, work filling and an event log behind a wordmark and the menu list (Continue, New game,
+strip, work filling, the settlement's list (the people, then production against demand) and an
+event log behind a wordmark and the menu list (Continue, New game,
 Settings, Credits, Quit). Continue stays visible but disabled, saying there is no settlement to
 resume, because a hidden control teaches nothing.
 
