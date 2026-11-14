@@ -36,12 +36,12 @@ The implementation is not a browser port and must not grow a CSS or DOM interpre
 - Act I has Vigor, Food, and Materials; Act II has Vigor, Population, Coin, Food, Water, Fuel, Metal, Minerals, and Materials. Materials is one stock in both acts (the sim's `biomass`), shown as "materials" throughout.
 - At the Act I curtain, Food and Materials carry unchanged. Built goods remain built. Same-named Act I and Act II materials costs remain numerically equal.
 - Energy is a flow/rate in the runline, never a stockline balance.
-- Act I has ACTIONS and BUILD. Act II has ACTIONS, BUILD, RESEARCH (the board, formerly STRUCTURE), and MARKET (the neighbours view). ACTIONS lists the held generator verbs after the labor verbs; Act II's lists the union of the Act I and Act II generators held.
+- Act I has ACTIONS, BUILD, and MARKET. Act II has ACTIONS, BUILD, MARKET (the neighbours view), and RESEARCH (the board, formerly STRUCTURE). ACTIONS lists the held generator verbs after the labor verbs; Act II's lists the union of the Act I and Act II generators held.
 - ACTIONS is one pane in both acts: it searches, sorts and hides its tiles. Act I's tiles are at the regular density, Act II's compact.
 - BUILD uses one data-generated six-column recipe catalog in both acts. Act I lists the recipes whose gates pass, so a gated recipe (the chicken coop) appears once the good before it is owned, and dims the ones short; Act II lists its complete shelf, research-gated rows dimmed. Newly eligible recipes appear with an event-log announcement.
 - Recipe states visible to the player are `ready`, `reach`, `owned`, and `building`; milestone states are `locked`, `unfunded`, `ready`, and `done` (`built`/`standing` copy is act-specific).
 - Shelter and Exchange share one milestone component. Passerby, Merchant, and Exchange share one market-strip/trade-dialog skeleton with identity-specific wording.
-- Holdings collapse is remembered separately for ACTIONS and BUILD. Entering a focus view (RESEARCH, MARKET) forces collapse each time without overwriting those memories.
+- Holdings collapse is remembered separately for ACTIONS and BUILD. Entering a focus view (MARKET, RESEARCH) forces collapse each time without overwriting those memories.
 - ACTIONS and BUILD retain the four-line event log and the merchant/activity strips. The focus views hide them.
 - **Parity rule.** Zig reproduces the prototypes visually and functionally; only content (goods, prices, names) may differ. A screen whose backend does not exist yet is built against a stub or fixture, never omitted.
 - The Act II board contains one noninteractive ring-0 foundation plus exactly 60 technology tiles in rings 1–4. It does not reserve Act III rings.

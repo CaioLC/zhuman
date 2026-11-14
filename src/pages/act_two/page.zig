@@ -3,7 +3,7 @@
 //!
 //! It fills the one shared `shell` with Act II's descriptors: the stockline PO, VI, FO, BI, WA,
 //! FU, ME, MI, CO in its compact form, a runline carrying the energy rate, `Act II` and the day,
-//! and the surface's four-view nav — ACTIONS / BUILD / RESEARCH / MARKET. RESEARCH and MARKET
+//! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
 //! the page, not the strips. The Household column (holdings, BODY, the eating policy) rides the
@@ -61,12 +61,12 @@ const a2_holdings = @import("./holdings.zig");
 const coin_merchant = @import("./coin_merchant.zig").coin_merchant;
 
 /// The surface's views, in tab order.
-pub const View = enum(usize) { actions, build, research, market };
-const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "RESEARCH", "MARKET" };
-/// RESEARCH and MARKET own the whole surface: no strips, no log, the Household collapsed.
-const focus_views = [_]usize{ @intFromEnum(View.research), @intFromEnum(View.market) };
+pub const View = enum(usize) { actions, build, market, research };
+const view_labels = [_][]const u8{ "ACTIONS", "BUILD", "MARKET", "RESEARCH" };
+/// MARKET and RESEARCH own the whole surface: no strips, no log, the Household collapsed.
+const focus_views = [_]usize{ @intFromEnum(View.market), @intFromEnum(View.research) };
 /// Each view keys its own rail, so each remembers its collapse.
-const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_research", "a2_rail_market" };
+const rail_ids = [_][]const u8{ "a2_rail_actions", "a2_rail_build", "a2_rail_market", "a2_rail_research" };
 
 /// The stocks the stockline reads from the ledger, in its order after Vigor. Biomass follows
 /// food, so it holds the slot Act I's materials hold.
@@ -212,8 +212,8 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
             _ = try t.build_section(s.view, world, e, "a2_build", shelf, s.catalog, s.owner, s.scroll);
             if (raised) _ = ctx.res.game.events.writer(ha.sim.events.RaiseExchange).push(.{ .agent = e });
         },
-        .research => try researchView(ctx, world, e, s, opts.research),
         .market => try market(ctx, world, e, s, opts.market),
+        .research => try researchView(ctx, world, e, s, opts.research),
     } else {
         _ = try t.empty_state(s.view, "a2_nobody", "No settlement", "There is no one here to act.");
     }

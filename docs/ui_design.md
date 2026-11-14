@@ -24,8 +24,8 @@ surface's subheading states its answer as a statement, not a question.
 | **ACTIONS** | Work available to you. | a searchable, bounded grid of compact verbs |
 | **BUILD** | Recipes available to you. | a sorted, filtered list of rows |
 | **HOLDINGS** | none: it shows what you own and what it is doing for you | a persistent panel |
-| **RESEARCH** | Specialize your skills. | a board |
 | **MARKET** | Neighbours, what they offer and what they want. | a list of people (or goods) and a deal slip |
+| **RESEARCH** | Specialize your skills. | a board |
 
 ## Grammar
 
