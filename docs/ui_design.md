@@ -216,8 +216,8 @@ energy rate is a header item, so a collapsed rail (and a focus view, which colla
 neither.
 
 **SETTLEMENT** is the aggregates, what the population is and does as a whole: how many people
-against the housing (`48/640`), then a **PRODUCTION / DEMAND**
-section, one line for energy and one per stock, each showing both sides of the day's flow
+against the housing (`48/640`), then, in the same list with no heading of their own,
+one line for energy and one per stock, each showing both sides of the day's flow
 (`Food +14 / −8`) rather than their difference, because what a settlement makes and what it
 uses are two facts and the net hides both. The value's color says the net: more produced
 than demanded a gain, less a penalty. One person is no settlement, so Act I builds no SETTLEMENT

@@ -1,5 +1,5 @@
 //! `household` — the rail's whole column, the same template in every act: a SETTLEMENT panel of
-//! aggregates (the people, the energy, what the settlement makes and uses), a BODY panel of the
+//! aggregates (the people, then what the settlement makes and uses), a BODY panel of the
 //! player's own condition 12px below it, then the eating policy at their foot, aligned to the
 //! panels. An act with no settlement (Act I, one person) builds no SETTLEMENT panel and BODY
 //! leads the column. The policy is not a verb, so it lives with the body whose projections it
@@ -52,11 +52,9 @@ pub const Line = struct { key: []const u8, label: []const u8, value: []const u8,
 /// `tone`'s.
 pub const Sentence = struct { key: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, tone: Tone = .fg, verdict: ?Verdict = null };
 
-/// The SETTLEMENT panel: the aggregate lines, then one titled section of per-day lines.
+/// The SETTLEMENT panel: one list of aggregate lines under the title, with no sub-sections.
 pub const Settlement = struct {
     lines: []const Line,
-    section_title: []const u8,
-    section: []const Line,
 };
 
 /// The BODY panel: the player's own condition. `sentences` project it forward, `lines` are
@@ -93,9 +91,6 @@ fn panel(parent: El, id: []const u8, title: []const u8, title_gap: f32, col_w: f
 fn settlementPanel(parent: El, s: Settlement, col_w: f32) !void {
     const p = try panel(parent, "settlement", "SETTLEMENT", settlement_title_gap, col_w);
     try lines(p, "lines", s.lines);
-    try readout.divider(p, "divider", 9, 7);
-    (try readout.section_label(p, "section_title", s.section_title)).set(.{ .margin = .{ .after = 8 } }, .{});
-    try lines(p, "section", s.section);
 }
 
 fn bodyPanel(parent: El, b: Body, col_w: f32) !void {
