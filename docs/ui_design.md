@@ -216,10 +216,12 @@ energy rate is a header item, so a collapsed rail (and a focus view, which colla
 neither.
 
 **SETTLEMENT** is the aggregates, what the population is and does as a whole: how many people
-against the housing (`48/640`), the energy generated and consumed (`+7 / −5`, colored by the
-net), how long the larder feeds everyone at the eating policy's rate, when water runs short at
-its flow, and the hall's vigor; then a **FLOWS / DAY** section, one line per stock, an inflow
-a gain and a deficit a penalty. One person is no settlement, so Act I builds no SETTLEMENT
+against the housing (`48/640`), how long the larder feeds everyone at the eating policy's
+rate, when water runs short at its flow, and the hall's vigor; then a **PRODUCTION / DEMAND**
+section, one line for energy and one per stock, each showing both sides of the day's flow
+(`Food +14 / −8`) rather than their difference, because what a settlement makes and what it
+uses are two facts and the net hides both. The value's color says the net: more produced
+than demanded a gain, less a penalty. One person is no settlement, so Act I builds no SETTLEMENT
 panel and BODY leads the column; the panel appears at the curtain.
 
 **BODY** is the player's own condition, the numbers that inform the next decision. Its

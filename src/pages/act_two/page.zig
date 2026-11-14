@@ -12,7 +12,7 @@
 //! The page reads the player. Its stocks fill the stockline, its work
 //! the activity strip; the two browsers list the verbs it holds and the act's recipes from the
 //! catalog, and write the labor and build intents as Act I does. What no system models
-//! (population, coin, the energy rate, flows and body projections) comes from `fixtures.zig`.
+//! (population, coin, production and demand) comes from `fixtures.zig`.
 //!
 //! Each catalog view owns a persistent `CatalogState`, search editor and scroll offset on an
 //! always-built owner node, so switching views keeps each view's query, sort and position where

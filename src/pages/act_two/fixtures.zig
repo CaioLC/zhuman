@@ -1,6 +1,6 @@
 //! `act_two/fixtures` — the authored stand-ins for what the Act II simulation does not model:
-//! the coin readout, the energy rate, the merchant's days left, the settlement's housing, its
-//! per-day flows and its ration; the population stand-in is `Sim.population`. Everything the
+//! the coin readout, the merchant's days left, the settlement's housing, what it produces and
+//! demands a day and its ration; the population stand-in is `Sim.population`. Everything the
 //! catalog and the world can say (the verbs, the recipes, the stocks, the goods owned) comes
 //! from them, not from here. The stand-ins are listed in `docs/roadmap.md`.
 const std = @import("std");
@@ -24,19 +24,39 @@ pub const exchange_meta = "STANDING FLOOR";
 // —— SETTLEMENT ——————————————————————————————————————————————————————————————————
 // What the rail's SETTLEMENT panel reads beside the live stocks.
 
-/// Act-specific per-day flow margins (generated vs consumed), authored stand-ins for a
-/// production model. A positive flow reads `good`, a deficit `danger`.
-pub const FlowRecord = struct { resource: Resource, per_day: f32 };
-pub const flows = [_]FlowRecord{
-    .{ .resource = .food, .per_day = 6 },
-    .{ .resource = .water, .per_day = -3 },
-    .{ .resource = .fuel, .per_day = 2 },
-    .{ .resource = .coin, .per_day = 4 },
+/// What the settlement produces and demands of one thing a day, authored stand-ins for a
+/// production model: energy first, then every stock in the header's order.
+pub const FlowRecord = struct {
+    /// The line's stable key and its label.
+    key: []const u8,
+    label: []const u8,
+    produced: f32,
+    demanded: f32,
+
+    /// Production less demand: positive fills the stock, negative drains it.
+    pub fn net(f: FlowRecord) f32 {
+        return f.produced - f.demanded;
+    }
 };
 
-/// The authored flow of `r`, or 0 when none is authored.
+fn stock(r: Resource, produced: f32, demanded: f32) FlowRecord {
+    return .{ .key = @tagName(r), .label = r.labelIn(2), .produced = produced, .demanded = demanded };
+}
+
+pub const flows = [_]FlowRecord{
+    .{ .key = "energy", .label = "Energy", .produced = 7, .demanded = 5 },
+    stock(.food, 14, 8),
+    stock(.biomass, 12, 10),
+    stock(.water, 9, 12),
+    stock(.fuel, 6, 4),
+    stock(.metal, 2, 2),
+    stock(.minerals, 3, 4),
+    stock(.coin, 10, 6),
+};
+
+/// The authored net flow of `r` a day, or 0 when none is authored.
 pub fn flowOf(r: Resource) f32 {
-    for (flows) |f| if (f.resource == r) return f.per_day;
+    for (flows) |f| if (std.mem.eql(u8, f.key, @tagName(r))) return f.net();
     return 0;
 }
 
@@ -49,7 +69,3 @@ pub fn capacityOf(people: f32) f32 {
 /// Food one person eats a day at the normal ration (`23` food feeding `7` people `10.3d`), a
 /// stand-in for a per-person metabolism.
 pub const ration_per_person: f32 = 0.32;
-
-/// The energy the settlement generates and consumes (per unit), SETTLEMENT's `Energy` line.
-pub const energy_gen: f32 = 7.2;
-pub const energy_consumed: f32 = 5.4;
