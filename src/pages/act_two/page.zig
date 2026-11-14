@@ -6,7 +6,7 @@
 //! and the surface's four-view nav — ACTIONS / BUILD / MARKET / RESEARCH. MARKET and RESEARCH
 //! are focus views: the Merchant and Activity strips and the event log step aside
 //! there and the Household collapses, yet the strips' state is never lost because it lives in
-//! the page, not the strips. The Household column (SETTLEMENT and BODY, the eating policy in it) rides the
+//! the page, not the strips. The Household column (SETTLEMENT and PLAYER, the eating policy in it) rides the
 //! shell rail; the event log rides the shell footer.
 //!
 //! The page reads the player. Its stocks fill the stockline, its work
@@ -109,7 +109,7 @@ pub fn ui_act_two(ctx: *UiCtx, world: *const World, opts: Options) !uic.Trees {
     const player = ecs.ConstMaybeSingle(.{ Entity, comp.Vigor, ecs.With(tag.Player) }){ .world = world };
     const agent: ?Entity = if (player.get()) |a| a[0] else null;
 
-    // The shared act page with a shell rail (SETTLEMENT/BODY) and the log footer.
+    // The shared act page with a shell rail (SETTLEMENT/PLAYER) and the log footer.
     const page = try t.act_page(ctx, .{ .id = "act2", .act = .act_two, .rail = true });
     const regions = page.regions;
     // --- header: VI..CO, then the runline (Act II, day) --------------------------------------

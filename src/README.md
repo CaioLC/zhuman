@@ -65,12 +65,12 @@ values and emits nothing new, and a test says so.
   apart; a generator's collection (the player's through `capital.collect_generator`, or an
   `auto` generator's own) refreshes for the same reason, since a collection's energy can
   outweigh the vigor it restores. Every crossing the writer reports is the metabolism's.
-- `comp.Outlook` is the BODY projection: the days the larder lasts at the current rate
+- `comp.Outlook` is the PLAYER projection: the days the larder lasts at the current rate
   (`food_days`) and a tagged `Recovery`, `at_ceiling`, `no_food`, `no_quality`,
   `partial { days, restored }` or `recovering { days }`. The `outlook` system computes it with
   the same terms `metabolize` applies (`base_rate × rate`, `Config.regen`), and publishes the
   pace the body works at (`pace`), which the tiles and rows divide a job's hours and time left by, so
-  the projection and the loop agree by construction; the rail's BODY sentences read it in
+  the projection and the loop agree by construction; the rail's PLAYER sentences read it in
   both acts.
 - `comp.Quotes` is what each verb, recipe and generator would answer right now: per verb the
   standing and the quality a begin would lock, per recipe the standing, the count owned and the
@@ -88,7 +88,7 @@ which runs after the tick, brings all three current after it sets a world by han
 (`fixture.derive`); a seeded band is set, not reached, so it is written without a
 `BandCrossed`. The debug page's pokes are intents, applied before the writers run.
 
-`eating.zig` is the slider's side of the BODY: `rate(value, band)` over a `0..100` slider, two
+`eating.zig` is the slider's side of the PLAYER: `rate(value, band)` over a `0..100` slider, two
 exponential halves meeting at normal whose ends are the config's band (`Band.of`), its inverse
 `valueFromRate`, the policy word ladder (meager … lavish), and the per-act coverage/recovery
 constants; it imports nothing and serves the template.
@@ -827,7 +827,7 @@ transition durations re-exported from `ui_client` so every finalized number has 
 |---|---|
 | `tick.zig` | the tick systems, in tick order |
 | `condition.zig` | the `condition` system, the one writer of `comp.Condition` |
-| `outlook.zig` | the `outlook` system, the one writer of `comp.Outlook`, and the BODY projection's pure math (`project`) |
+| `outlook.zig` | the `outlook` system, the one writer of `comp.Outlook`, and the PLAYER projection's pure math (`project`) |
 | `quotes.zig` | the `quotes` system, the one writer of `comp.Quotes`, and `fill`, one agent's quotes |
 | `labor.zig` | the `BeginLabor` handler |
 | `build.zig` | the `BeginBuild` and `CancelBuild` handlers |

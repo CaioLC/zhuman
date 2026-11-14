@@ -1,7 +1,7 @@
 //! `readout` — the primitives of a **readout panel** (`docs/ui_design.md`, *The Household rail*): the
-//! bordered, solid-outlined, padded column that SETTLEMENT and BODY are made of; its eyebrow
+//! bordered, solid-outlined, padded column that SETTLEMENT and PLAYER are made of; its eyebrow
 //! section label and the heading row that pairs one with a count; the two-ended
-//! `label … value` line; the dim-prose sentence around one live value; and the hairline
+//! `label … value` line and its form with a stock column; and the hairline
 //! divider between blocks. The `household` template composes these, so an act's rail content
 //! styles no node of its own.
 
@@ -74,14 +74,6 @@ pub fn kv_stock_line(parent: El, id: []const u8, left: []const u8, value: []cons
 /// The stock column of `kv_stock_line`: room for four digits at 11px, and its gap from the value.
 const stock_width: f32 = 30;
 const stock_gap: f32 = 10;
-
-/// One sentence of dim 11px prose around a live value in `value_color`.
-pub fn sentence(parent: El, id: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, value_color: Color) !void {
-    const row = try parent.box(id, .{ .flow = .{ .dir = .row, .cross = .baseline } }, .{});
-    try row.label("prefix", prefix, .{style.note});
-    try row.label("value", value, .{Style{ .font = 11, .text = value_color }});
-    try row.label("suffix", suffix, .{style.note});
-}
 
 /// A 1px hairline across the panel, `above` px under the block before it and `below` px over
 /// the next.

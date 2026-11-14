@@ -17,7 +17,7 @@
 //!
 //! The derived components' writers close both of an act's sets just before `log`: `condition`,
 //! then `outlook` and `quotes`, so an intent a handler applies while the run is paused, or a build
-//! that finished this tick, shows in the band, the BODY lines and the tiles the next frame reads,
+//! that finished this tick, shows in the band, the PLAYER lines and the tiles the next frame reads,
 //! and the metabolism's crossing is a fact in the tick it happens. Nothing between `metabolize`
 //! and the writers reads the band, so one run per set is enough.
 

@@ -1,7 +1,7 @@
-//! `eating` — the **shared EatingPolicy/BODY math**, pure and deterministic so every
+//! `eating` — the **shared EatingPolicy/PLAYER math**, pure and deterministic so every
 //! caller computes the *same* numbers from one place.
 //! The eating policy is a `0..100` slider value; this module maps it to the consumption rate
-//! and the derived BODY projections. Leaf module — imports only `std`, no UI, no sim — so it is
+//! and the derived PLAYER projections. Leaf module — imports only `std`, no UI, no sim — so it is
 //! fully unit-tested and callable from both the template and a system.
 //!
 //! Contract (exact, from the prototype):

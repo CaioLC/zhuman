@@ -3,8 +3,8 @@
 //! the settlement produces and demands a day of energy and of every stock (`+14 / −8`; more
 //! produced than demanded reads `better`, less `worse`, even `flat`), each stock followed by
 //! the stockpile, floored to a whole number (`22`; `low` at zero). Energy is not held and
-//! shows none. BODY is the
-//! player's own condition, the same projection as Act I's (`pages/body.zig`).
+//! shows none. PLAYER is the
+//! player's own condition, the same projection as Act I's (`pages/player.zig`).
 //!
 //! The stockpile is the player's ledger, the same balances as the header's stockline. The
 //! population is `Sim.population`'s stand-in, and the housing and the production and demand
@@ -22,7 +22,7 @@ const World = ha.sim.ecs.World;
 const Entity = ha.sim.ecs.Entity;
 
 const t = @import("../templates/root.zig");
-const body = @import("../body.zig");
+const player = @import("../player.zig");
 const Line = t.HouseholdLine;
 
 /// Production against demand as the rail prints it: `+14 / −8`.
@@ -62,7 +62,7 @@ fn settlement(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdSettl
 
 /// Project agent `e` and its settlement into the rail's content for this frame.
 pub fn content(ctx: *uic.UiCtx, world: *const World, e: Entity) !t.HouseholdContent {
-    return .{ .settlement = try settlement(ctx, world, e), .body = try body.project(ctx.arena, world, e) };
+    return .{ .settlement = try settlement(ctx, world, e), .player = try player.project(ctx.arena, world, e) };
 }
 
 test "SETTLEMENT is the population against its housing, then both sides of energy and every stock" {
@@ -103,7 +103,7 @@ test "SETTLEMENT is the population against its housing, then both sides of energ
     }
 }
 
-test "BODY is the player's own, the projection Act I shows" {
+test "PLAYER is the player's own, the projection Act I shows" {
     var res = uic.replay.headlessResources();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -114,8 +114,8 @@ test "BODY is the player's own, the projection Act I shows" {
     const e = w.spawn(.{comp.Outlook{ .food_days = 5.2, .recovery = .at_ceiling, .pace = 1 }});
 
     const c = try content(&ctx, &w, e);
-    try std.testing.expectEqual(@as(usize, 3), c.body.sentences.len);
-    try std.testing.expectEqualStrings("coverage", c.body.sentences[0].key);
-    try std.testing.expectEqualStrings("5.2d", c.body.sentences[0].value);
-    try std.testing.expectEqualStrings("pace", c.body.sentences[2].key);
+    try std.testing.expectEqual(@as(usize, 3), c.player.lines.len);
+    try std.testing.expectEqualStrings("coverage", c.player.lines[0].key);
+    try std.testing.expectEqualStrings("5.2d", c.player.lines[0].value);
+    try std.testing.expectEqualStrings("pace", c.player.lines[2].key);
 }

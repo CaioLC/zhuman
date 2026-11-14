@@ -1,4 +1,4 @@
-//! `eating_policy` — the eating policy as a block of BODY: a `label … value` line (`Eating
+//! `eating_policy` — the eating policy as a block of PLAYER: a `label … value` line (`Eating
 //! policy`, `{word} · {rate}×`), the range input, and the endpoint scale. It has no frame of
 //! its own; the panel it sits in is its frame. Domain math remains in `pages/eating.zig`; the
 //! nested `slider` owns only range interaction/chrome. The caller supplies and receives the
@@ -17,7 +17,7 @@ const eating = @import("../eating.zig");
 
 const slider_mod = @import("./slider.zig");
 
-/// Build the policy block at the full width of its parent (the rail's BODY panel, under its
+/// Build the policy block at the full width of its parent (the rail's PLAYER panel, under its
 /// sentences). The returned policy value is live; callers map it to their persisted metabolism
 /// rate.
 pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32 {
@@ -54,12 +54,13 @@ pub fn eating_policy(parent: El, id: []const u8, value: f32, enabled: bool) !f32
     const rate = eating.rate(new_value, eating.Band.of(ctx.res.game.config));
     const word = eating.word(new_value);
 
-    // The line reads as the panel's other lines do: the name in the body ink, the value small.
+    // The line reads as the panel's other lines do: the name in the body ink, the value small
+    // in the value ink.
     try head.label("title", "Eating policy", .{ style.body, style.ink(.fg) });
 
     var output_buf: [48]u8 = undefined;
     const output = std.mem.print(&output_buf, "{s} \u{00B7} {d:.2}\u{00D7}", .{ word, rate }) catch word;
-    try head.label("value", output, .{ Style{ .font = 11, .ink = .acc, .verdict = style.verdict.when(!enabled, .inactive) } });
+    try head.label("value", output, .{ Style{ .font = 11, .ink = .fg, .verdict = style.verdict.when(!enabled, .inactive) } });
 
     try scale_row.label("min", "meager", .{ Style{ .font = 9, .ink = .line2 } });
     try scale_row.label("max", "lavish", .{ Style{ .font = 9, .ink = .line2 } });

@@ -167,6 +167,6 @@ test {
     _ = @import("./fixture.zig");
     _ = @import("./act_two/page.zig");
     _ = @import("./act_one/household.zig");
-    _ = @import("./body.zig");
+    _ = @import("./player.zig");
     _ = @import("./title.zig");
 }

@@ -70,9 +70,8 @@ pub const ActActivity = act_surface_mod.Activity;
 pub const activityOf = act_surface_mod.activity;
 pub const HouseholdContent = household_mod.Content;
 pub const HouseholdSettlement = household_mod.Settlement;
-pub const HouseholdBody = household_mod.Body;
+pub const HouseholdPlayer = household_mod.Player;
 pub const HouseholdLine = household_mod.Line;
-pub const HouseholdSentence = household_mod.Sentence;
 pub const HouseholdTone = household_mod.Tone;
 pub const build_list = build_list_mod.build_list;
 pub const BuildShelf = build_list_mod.Shelf;
@@ -166,7 +165,7 @@ pub const ActOneWorkspaceOptions = act_one_workspace_mod.Options;
 pub const TradeResult = trade_dialog_mod.Result;
 // Board-level primitives
 pub const empty_state = board_primitives_mod.empty_state;
-// Readout panels (SETTLEMENT / BODY)
+// Readout panels (SETTLEMENT / PLAYER)
 pub const ReadoutPad = readout_mod.Pad;
 pub const readout_panel = readout_mod.readout_panel;
 pub const readout_heading = readout_mod.readout_heading;
@@ -174,7 +173,6 @@ pub const section_label = readout_mod.section_label;
 pub const kv_line = readout_mod.kv_line;
 pub const kv_line_in = readout_mod.kv_line_in;
 pub const kv_stock_line = readout_mod.kv_stock_line;
-pub const sentence = readout_mod.sentence;
 pub const divider = readout_mod.divider;
 // Track tables
 pub const table_header_cell = table_mod.header_cell;

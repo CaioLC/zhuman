@@ -205,7 +205,7 @@ pub const Condition = struct {
 
 /// The body's outlook at the current eating rate, written by the `outlook` system
 /// (`systems/outlook.zig`) from the vigor, the larder and the metabolism: how many days the
-/// larder lasts, and whether and how fast the vigor recovers. The BODY lines read it.
+/// larder lasts, and whether and how fast the vigor recovers. The PLAYER lines read it.
 pub const Outlook = struct {
     /// The recovery outcome: a tagged result, never a bare number, so a reader renders the
     /// right copy for each state instead of guessing from a sentinel.

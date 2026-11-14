@@ -219,7 +219,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         if (r.body) |rb| _ = try rb.text("rb", "rail body");
     } else if (eq(name, "household")) {
         if (player.get()) |a| {
-            // Act I's column: BODY, ending on the eating policy, on a lean ration below the
+            // Act I's column: PLAYER, ending on the eating policy, on a lean ration below the
             // ceiling. The values are ordinary live ECS data.
             poke(ctx, a[0], .{ .food = 7.8 });
             poke(ctx, a[0], .{ .vigor = .{ .v = 14.4, .max = 15 } });
@@ -590,14 +590,15 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
     } else if (eq(name, "empty_state")) {
         _ = try t.empty_state(stage, "es", "Nothing here yet.", "Try widening the filter.");
     } else if (eq(name, "readout")) {
-        // The readout panel with every primitive inside it, as SETTLEMENT and BODY compose them.
+        // The readout panel with every primitive inside it, as SETTLEMENT and PLAYER compose them.
         const p = try t.readout_panel(stage, "rp", 220, .{ .up = 9, .right = 10, .down = 9, .left = 10 });
         (try t.readout_heading(p, "heading", "SETTLEMENT", "DAY 41")).set(.{ .margin = .{ .after = 8 } }, .{});
         try t.kv_line(p, "population", "Population", "48/640", th.fg);
         try t.kv_line(p, "energy", "Energy", "+7 / \u{2212}5", th.good);
         try t.kv_line(p, "food", "Food", "+14 / \u{2212}8", th.good);
+        try t.kv_stock_line(p, "water", "Water", "+9 / \u{2212}12", th.danger, "9", th.fg);
         try t.divider(p, "divider", 9, 7);
-        try t.sentence(p, "coverage", "Food lasts ", "3.2d", ".", th.fg);
+        try t.kv_line(p, "coverage", "Food lasts", "3.2d", th.fg);
     } else if (eq(name, "table")) {
         // The pieces BUILD's table composes: a header row of labels, and body rows of cells.
         const demo = try stage.div("table_demo");

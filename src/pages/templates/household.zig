@@ -1,14 +1,16 @@
 //! `household` — the rail's whole column, the same template in every act: a SETTLEMENT panel of
 //! aggregates (the people, then what the settlement makes, uses and holds) and, 12px below it,
-//! a BODY panel of the player's own condition, which ends on the eating policy. An act with no
-//! settlement (Act I, one person) builds no SETTLEMENT panel and BODY leads the column. The
-//! policy is not a verb, so it lives in the body whose projections it moves rather than in
+//! a PLAYER panel of the player's own condition, which ends on the eating policy. The two are
+//! one grammar: the same padding, a title, then `label … value` lines on one rhythm, the label
+//! in the body ink and the value small at the panel's right edge. An act with no
+//! settlement (Act I, one person) builds no SETTLEMENT panel and PLAYER leads the column. The
+//! policy is not a verb, so it lives in the panel whose lines it moves rather than in
 //! the action catalog; it collapses with the rail because the rail only builds this while
 //! expanded. Rail collapse chrome remains the rail template's responsibility.
 //!
 //! The panels own presentation only. Each act projects its own domain state into a `Content`
 //! (`pages/act_one/household.zig`, `pages/act_two/household.zig`); the strings are the act's and
-//! the tones and verdicts are semantic. The one world read is BODY's eating policy, which
+//! the tones and verdicts are semantic. The one world read is PLAYER's eating policy, which
 //! reads the agent's metabolism and writes the ration intent.
 
 const std = @import("std");
@@ -32,12 +34,11 @@ const column_width: f32 = 240;
 const panel_pad: readout.Pad = .{ .up = 9, .right = 10, .down = 9, .left = 10 };
 const panel_content_width: f32 = 220; // 240 - 10 left - 10 right
 const panel_gap: f32 = 12;
-/// Under SETTLEMENT's title. The rail's collapse control covers the leading panel's upper-right
+/// Under a panel's title. The rail's collapse control covers the leading panel's upper-right
 /// corner, 26px down, and this gap starts the first line, whose value sits at that edge, below it.
-const settlement_title_gap: f32 = 8;
-/// Under BODY's title (`.body-panel`): its sentences start at the left and stop short of the
-/// control when BODY leads the column.
-const body_title_gap: f32 = 1;
+const title_gap: f32 = 8;
+/// Between a panel's lines, and between PLAYER's last line and the eating policy's.
+const line_gap: f32 = 4;
 
 /// A value's semantic color. Labels stay `fg`/`dim`; only the value carries the tone.
 pub const Tone = enum { fg, dim, good, warn, danger };
@@ -58,27 +59,23 @@ pub const Line = struct {
     stock_verdict: ?Verdict = null,
 };
 
-/// One BODY sentence: dim prose around one live value, in `verdict`'s color when set, else
-/// `tone`'s.
-pub const Sentence = struct { key: []const u8, prefix: []const u8, value: []const u8, suffix: []const u8, tone: Tone = .fg, verdict: ?Verdict = null };
-
 /// The SETTLEMENT panel: one list of aggregate lines under the title, with no sub-sections. A
 /// line of a stock carries what is held after its value.
 pub const Settlement = struct {
     lines: []const Line,
 };
 
-/// The BODY panel's projection: the player's own condition as sentences; `note` replaces them
+/// The PLAYER panel's projection: the player's own condition as lines; `note` replaces them
 /// when the agent has no projection. The panel adds the eating policy under them.
-pub const Body = struct {
-    sentences: []const Sentence = &.{},
+pub const Player = struct {
+    lines: []const Line = &.{},
     note: ?[]const u8 = null,
 };
 
 /// What one act shows in the column. A null `settlement` builds no SETTLEMENT panel.
 pub const Content = struct {
     settlement: ?Settlement = null,
-    body: Body,
+    player: Player,
 };
 
 /// A value's color: its verdict's through the view's table, else its tone's.
@@ -87,7 +84,7 @@ fn valueColor(ctx: *uic.UiCtx, tone: Tone, verdict: ?Verdict) uic.Color {
 }
 
 fn lines(parent: El, id: []const u8, items: []const Line) !void {
-    const col = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 4 }, .{});
+    const col = try parent.box(id, .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = line_gap }, .{});
     for (items) |l| {
         const color = valueColor(parent.ctx, l.tone, l.verdict);
         if (l.stock) |stock| {
@@ -98,39 +95,40 @@ fn lines(parent: El, id: []const u8, items: []const Line) !void {
     }
 }
 
-fn panel(parent: El, id: []const u8, title: []const u8, title_gap: f32, col_w: f32) !El {
+fn panel(parent: El, id: []const u8, title: []const u8, col_w: f32) !El {
     const p = try readout.readout_panel(parent, id, col_w - panel_pad.left - panel_pad.right, panel_pad);
     (try readout.section_label(p, "title", title)).set(.{ .margin = .{ .after = title_gap } }, .{});
     return p;
 }
 
 fn settlementPanel(parent: El, s: Settlement, col_w: f32) !void {
-    const p = try panel(parent, "settlement", "SETTLEMENT", settlement_title_gap, col_w);
+    const p = try panel(parent, "settlement", "SETTLEMENT", col_w);
     try lines(p, "lines", s.lines);
 }
 
-/// BODY: the sentences, a hairline, then the eating policy. When the slider's rate differs
+/// PLAYER: the lines, then the eating policy as the list's last line and its slider. When the slider's rate differs
 /// from agent `e`'s metabolism rate it writes `SetRation`, which the ration handler applies
 /// before the next build; only a change is written, so a still slider writes nothing. An agent
 /// with no metabolism shows the policy disabled at normal.
-fn bodyPanel(parent: El, world: *const World, e: Entity, b: Body, col_w: f32) !void {
+fn playerPanel(parent: El, world: *const World, e: Entity, b: Player, col_w: f32) !void {
     const ctx = parent.ctx;
-    const p = try panel(parent, "body", "BODY", body_title_gap, col_w);
+    const p = try panel(parent, "player", "PLAYER", col_w);
     if (b.note) |note| {
         try p.label("note", note, .{style.note});
     } else {
-        // `.body-panel` sets its sentences at 11px on a 1.35 line, no gap between them.
-        const list = try p.box("list", .{ .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 0 }, .{});
-        for (b.sentences) |s| try readout.sentence(list, s.key, s.prefix, s.value, s.suffix, valueColor(parent.ctx, s.tone, s.verdict));
+        try lines(p, "lines", b.lines);
     }
-    try readout.divider(p, "divider", 9, 7);
+    // The policy's line follows the others on the same rhythm.
+    const slot = try p.box("policy", .{
+        .w = .{ .pct_of_parent = 1.0 }, .h = .fit_children, .flow = .{ .dir = .column }, .margin = .{ .before = line_gap },
+    }, .{});
     if (world.get(e, comp.Metabolism)) |met| {
         const band = eating_mod.Band.of(ctx.res.game.config);
-        const value = try eating_policy_mod.eating_policy(p, "eating_policy", eating_mod.valueFromRate(met.rate, band), true);
+        const value = try eating_policy_mod.eating_policy(slot, "eating_policy", eating_mod.valueFromRate(met.rate, band), true);
         const rate = eating_mod.rate(value, band);
         if (rate != met.rate) _ = ctx.res.game.events.writer(ha.sim.events.SetRation).push(.{ .agent = e, .rate = rate });
     } else {
-        _ = try eating_policy_mod.eating_policy(p, "eating_policy", 50, false);
+        _ = try eating_policy_mod.eating_policy(slot, "eating_policy", 50, false);
     }
 }
 
@@ -158,7 +156,7 @@ pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, c: 
             .gap = if (sc.two_up) stacked_gap else panel_gap,
         }, .{});
         if (c.settlement) |s| try settlementPanel(row, s, sc.col_w);
-        try bodyPanel(row, world, e, c.body, sc.col_w);
+        try playerPanel(row, world, e, c.player, sc.col_w);
         return row;
     }
     const column = try parent.box(id, .{
@@ -166,7 +164,7 @@ pub fn household(parent: El, world: *const World, e: Entity, id: []const u8, c: 
         .gap = panel_gap,
     }, .{});
     if (c.settlement) |s| try settlementPanel(column, s, column_width);
-    try bodyPanel(column, world, e, c.body, column_width);
+    try playerPanel(column, world, e, c.player, column_width);
     return column;
 }
 

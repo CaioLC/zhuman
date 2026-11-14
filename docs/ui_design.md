@@ -48,7 +48,7 @@ rendering them as one grey is the single largest failure the interface can make.
 that hides a thing entirely is worse than a grey one — grey at least says the thing exists.
 
 **Derive, never restate.** A number shown beside a number the sim owns will drift from it.
-BODY reads its food days, recovery and pace from the `outlook` system, which runs the
+PLAYER reads its food days, recovery and pace from the `outlook` system, which runs the
 metabolism loop's own arithmetic, rather than repeating its constants. Where a baseline isn't reachable,
 show the current value and say so, rather than copying a constant.
 
@@ -96,12 +96,12 @@ without raising its ceiling. No generator transfers resources every frame. Selli
 that opens a generator stops its cycle where it stands; a second unit runs no second cycle.
 
 The action collection—not the whole play surface—scrolls on desktop. Eating Policy is not a verb,
-so it lives inside the Household rail's BODY panel in both acts, collapsing with it. It is a `0..100` slider, not a set of named
+so it lives inside the Household rail's PLAYER panel in both acts, collapsing with it. It is a `0..100` slider, not a set of named
 rations: the rate climbs exponentially from the meagerest ration to normal at `50` and from
 normal to the most lavish above it (the ends are the sim `Config`'s), and the slider's word (`meager`, `lean`, `modest`, `normal`,
 `hearty`, `generous`, `lavish`) steps every sixteen points. Its line reads
-`Eating policy` and `{word} · {rate}×`; the sentences above it project coverage (how long the larder lasts), recovery (days to
-full vigor) and the work pace (see the BODY block below) from the same arithmetic the metabolism loop runs; the simulation stores only
+`Eating policy` and `{word} · {rate}×`; the lines above it project coverage (how long the larder lasts), recovery (days to
+full vigor) and the work pace (see the PLAYER block below) from the same arithmetic the metabolism loop runs; the simulation stores only
 the resulting bounded multiplier. A count-only summary reports `<visible> of 20 actions
 shown`.
 
@@ -164,7 +164,7 @@ at full tone while older lines dim a step; a gain
 reads in the `good` tone. The feed keeps up to 64 lines; the footer is a four-row scroll region,
 so it rests on the newest four and the wheel, the scrollbar or the keyboard reaches older ones. RESEARCH and MARKET
 hide it to recover their height. At 760 px and below the fixed-height workspace is released: the page is one
-scroll, the Household rail sits above the surface (SETTLEMENT and BODY side by side at 760, stacked below 560),
+scroll, the Household rail sits above the surface (SETTLEMENT and PLAYER side by side at 760, stacked below 560),
 ACTIONS and BUILD take their natural height, narrow BUILD drops lower-priority columns, and the log
 remains at the end of the document. RESEARCH drops its detail under a 560 px board there.
 
@@ -223,20 +223,26 @@ uses are two facts and the net hides both. The value's color says the net: more 
 than demanded a gain, less a penalty. A stock's line ends on its stockpile, in a column of
 its own (`Food +14 / −8  22`), so the rate reads beside what it is filling or draining;
 energy is a flow and holds none. One person is no settlement, so Act I builds no SETTLEMENT
-panel and BODY leads the column; the panel appears at the curtain.
+panel and PLAYER leads the column; the panel appears at the curtain.
 
-**BODY** is the player's own condition, the numbers that inform the next decision, the same
+**PLAYER** is the player's own condition, the numbers that inform the next decision, the same
 panel in both acts. Its
-sentences project forward: how many days of food remain at the current appetite, and whether vigor is
-recovering, already full, starving, or stalled on food that feeds but does not restore. Its
-last sentence, in both acts, is the work pace, `Work pace {N}%.`: the
+lines project forward: how many days of food remain at the current appetite (`Food lasts`),
+and whether vigor is recovering (`Full vigor in`), already full, starving, or stalled on food
+that feeds but does not restore. The
+last of them, in both acts, is the work pace, `Work pace` and `{N}%`: the
 share of the normal ration's pace the body works at on its current ration, as a whole percentage
 (`100%` at normal, lower on a meager ration or an empty larder, a little higher on a feast), in
 the neutral value ink, since a job's hours on the tiles and rows are already divided by it.
-Under a hairline is the eating policy, the one control on the rail, in the panel whose
-sentences it moves: an `Eating policy` line with its word and rate, the slider, and the
+The list ends on the eating policy, the one control on the rail, in the panel whose
+lines it moves: an `Eating policy` line with its word and rate, then the slider and the
 `meager` / `lavish` scale. Every
 number comes from the simulation's own arithmetic, never a copied constant.
+
+The two panels are one grammar, so they read as one column: the same padding, a title, the
+same gap under it, then `label … value` lines on one rhythm, the label in the body ink and
+the value small at the panel's right edge. A value is in the value ink unless it means
+something: a gain, a penalty, a shortage.
 
 ## Playback controls
 
