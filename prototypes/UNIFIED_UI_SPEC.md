@@ -368,13 +368,16 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
   the shared menu list (Continue disabled with its reason while no settlement exists, New
   game, Settings, Credits, Quit).
 - **[decided]** Settings are one shared panel in both: DIFFICULTY, TUTORIAL, MUSIC, EFFECTS,
-  UI SCALE, BRIGHTNESS, CONTRAST, WINDOW — gameplay first, then sound, then display. A setting
+  UI SCALE, BRIGHTNESS, CONTRAST, TEXT, WINDOW — gameplay first, then sound, then display. A setting
   with no backend is stubbed (held, no effect), not omitted.
 - **[decided]** TUTORIAL is an ON/OFF pair, on by default: the first-run guidance in the log.
 - **[decided]** BRIGHTNESS is a slider from 80% to 140% in steps of 5, default 100%: one linear
   multiply of every painted colour (text, lines, fills and the ground), 100% being the palette
   as authored and channels clamping at white, for monitors on which the dark palette reads too
   dark. It acts live on the whole screen behind the panel as well as on the panel itself.
+- **[decided]** TEXT is a SHARP/SMOOTH pair, sharp by default: one-bit letters or anti-aliased
+  ones. The browser always smooths its text, so the prototypes hold the choice and show no
+  difference.
 
 ---
 
