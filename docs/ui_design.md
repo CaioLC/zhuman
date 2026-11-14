@@ -179,7 +179,9 @@ readiness and a compact line, a primary action enabled only when ready, and disc
 details (kicker, cost, copy, a live requirement row, an explanation). Its lifecycle is
 `locked → unfunded → ready → building → done`, with `busy` beside ready, and every requirement
 is recomputed from live state each frame and shown as `current/required`, so an unmet gate is a
-readable fact. Locked names the first good its gate still needs (`needs a rope bag`), else
+readable fact. The held side prints floored to a whole number, never rounded (239.6 of 240
+materials reads `239/240`, 14.96 food `14/15`), so a counter never reads its target before the
+condition is met; met or unmet compares the real amounts. Locked names the first good its gate still needs (`needs a rope bag`), else
 counts the standing conditions unmet (`locked · 1 condition`). `busy` is everything on hand
 with the hands on other work: the card stays danger-toned and reads `hands busy` /
 `HANDS BUSY`, never `inputs short`. In Act I this is

@@ -242,6 +242,7 @@ const nb = ha.sim.rules.neighbours;
 const neighbours = ha.sim.systems.neighbours;
 
 const exchange = ha.sim.systems.exchange;
+const held_whole = @import("../fmt.zig").held_whole;
 
 /// The settlement's population: a stand-in (`docs/roadmap.md`).
 fn population(ctx: *UiCtx) f32 {
@@ -249,7 +250,8 @@ fn population(ctx: *UiCtx) f32 {
 }
 
 /// The Exchange card: locked until a ring-4 skill is researched and the population passes 500,
-/// unfunded until the biomass, minerals and metal are held, ready, then standing.
+/// unfunded until the biomass, minerals and metal are held, ready, then standing. A held amount
+/// prints floored to a whole (`held_whole`), as the Shelter card's do.
 fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
     const a = ctx.arena;
     const standing = ctx.res.game.sim.exchange.standing;
@@ -272,7 +274,7 @@ fn exchangeGoal(ctx: *UiCtx, world: *const World, e: Entity) !t.MilestoneGoal {
         }
         try reqs.append(a, .{
             .label = try std.ascii.allocUpperString(a, word),
-            .value = if (standing) try a.print("{} paid", .{@as(u32, @intFromFloat(c[1]))}) else try a.print("{}/{}", .{ @as(i64, @intFromFloat(@floor(have))), @as(u32, @intFromFloat(c[1])) }),
+            .value = if (standing) try a.print("{} paid", .{@as(u32, @intFromFloat(c[1]))}) else try a.print("{}/{}", .{ held_whole(have), @as(u32, @intFromFloat(c[1])) }),
             .met = standing or have >= c[1],
         });
     }

@@ -51,6 +51,7 @@ const Kind = row_mod.Kind;
 const cc = @import("./catalog_controls.zig");
 const milestone_mod = @import("./milestone_goal.zig");
 const scroll_view_mod = @import("./scroll_view.zig");
+const held_whole = @import("../fmt.zig").held_whole;
 
 const Direction = uic.UiState.CatalogState.Direction;
 
@@ -480,7 +481,9 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     };
 
     // The compact bar and expanded requirement row read the same authoritative checks. Values
-    // are separate strings so the shared card can color each met/unmet output.
+    // are separate strings so the shared card can color each met/unmet output. A held amount
+    // prints floored to a whole (`held_whole`), so a counter never reads its target before the
+    // real comparison is met.
     const vigor_met = vigor.v >= u.vigor_abs;
     const food_met = food >= u.food;
     const recipes_met = kinds >= u.goods;
@@ -495,9 +498,9 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     var gate_labels: [max_gates][24]u8 = undefined;
     var requirements: [3 + max_gates + resources]milestone_mod.Requirement = undefined;
     var nreq: usize = 0;
-    requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d:.0}/{d:.0}", .{ vigor.v, u.vigor_abs }) catch "?", .met = settled or vigor_met };
+    requirements[nreq] = .{ .label = "VIGOR", .value = std.mem.print(&vigor_buf, "{d}/{d:.0}", .{ held_whole(vigor.v), u.vigor_abs }) catch "?", .met = settled or vigor_met };
     nreq += 1;
-    requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d:.1}/{d:.0}", .{ food, u.food }) catch "?", .met = settled or food_met };
+    requirements[nreq] = .{ .label = "FOOD", .value = std.mem.print(&food_buf, "{d}/{d:.0}", .{ held_whole(food), u.food }) catch "?", .met = settled or food_met };
     nreq += 1;
     requirements[nreq] = .{ .label = "GOODS", .value = std.mem.print(&recipes_buf, "{d}/{d}", .{ kinds, u.goods }) catch "?", .met = settled or recipes_met };
     nreq += 1;
@@ -522,10 +525,10 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
         const value = if (settled)
             std.mem.print(&order_bufs[li], "{d:.0} paid", .{n}) catch "?"
         else
-            std.mem.print(&order_bufs[li], "{d:.0}/{d:.0}", .{ have, n }) catch "?";
+            std.mem.print(&order_bufs[li], "{d}/{d:.0}", .{ held_whole(have), n }) catch "?";
         requirements[nreq] = .{ .label = label, .value = value, .met = settled or have >= n };
         nreq += 1;
-        if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d:.0}/{d:.0}", .{ word, have, n }) catch word;
+        if (li == 0) compact = std.mem.print(&compact_buf, "{s} {d}/{d:.0}", .{ word, held_whole(have), n }) catch word;
         li += 1;
     }
     // Raising, the bar reads the build's progress and time left, as the activity strip does.
