@@ -523,7 +523,7 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         try stage.label("note", "The session menu opens over this page; reselect the entry to reopen it.", .{});
     } else if (eq(name, "curtain")) {
         const demo = try stage.box("curtain_demo", .{ .w = .{ .fixed = 520 }, .h = .{ .fixed = 260 } }, .{});
-        _ = try t.curtain(demo, "c", .{ .title = "ACT I", .line = "You have a house to live in.", .note = "Room enough for four under one roof.", .button = "Continue" });
+        _ = try t.curtain(demo, "c", .{ .figure = t.fig_dead, .figure_color = th.danger, .line = "You perished, cold and starved.", .button = "Start over" });
     } else if (eq(name, "speed_stepper")) {
         _ = try t.speed_stepper(stage, "speed");
         try stage.label("hint", "<< / >> step PAUSE, 1x, 2x, 3x; arrows, Home and End when focused.", .{});
@@ -627,8 +627,8 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         _ = try t.button(grid.lanes[0], "c", "third tile, left again", true);
     } else if (eq(name, "copy")) {
         const demo = try stage.box("copy_demo", .{ .flow = .{ .dir = .column }, .gap = 6 }, .{});
-        _ = try t.headline(demo, "h", "Two others asked to move in.");
-        _ = try t.lede(demo, "l", "You are not alone here anymore. Act I ends, and the settlement begins with whoever walked in.", 320);
+        _ = try t.headline(demo, "h", "You perished, cold and starved.");
+        _ = try t.lede(demo, "l", "A headline says the one thing; the lede under it is the dim paragraph that wraps at a prose measure instead of stretching its panel.", 320);
         _ = try t.empty_line(demo, "e", "Nothing matches that search.");
     } else {
         try stage.label("unknown", "(unknown template)", .{});
