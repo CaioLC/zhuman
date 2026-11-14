@@ -61,6 +61,8 @@ pub const MilestoneCopy = struct {
     which: roster.Milestone,
     kicker: []const u8,
     copy: []const u8,
+    /// The explanation after the order it holds: the card leads with the record's price in the
+    /// act's words (`Hold 240 materials`, `holdSentence`) and follows it with this.
     explanation: []const u8,
     /// The explanation's lead while the build is under way (`The Shelter is going up.`); the
     /// card follows it with the price's resources, paid (`Materials are paid.`).
@@ -468,17 +470,8 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
 
     // The pace the body works at: the days a build takes and has left are its hours at it.
     const pace: f32 = (if (world.get(e, comp.Outlook)) |o| o.pace else 1);
-    // Cost/copy: `60m 6e · 6.0d` — the order, energy, days.
     var cbuf: [48]u8 = undefined;
-    const cost_txt = blk: {
-        var cw = std.Io.Writer.fixed(&cbuf);
-        for (std.enums.values(roster.Resource)) |r| {
-            const n = price.get(r);
-            if (n > 0) cw.print("{d:.0}{s} ", .{ n, @import("./action_info.zig").letterOf(act, r) }) catch {};
-        }
-        cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 / pace }) catch {};
-        break :blk cw.buffered();
-    };
+    const cost_txt = costText(&cbuf, price, act, pace);
 
     // The compact bar and expanded requirement row read the same authoritative checks. Values
     // are separate strings so the shared card can color each met/unmet output. A held amount
@@ -563,7 +556,7 @@ pub fn milestone_goal(parent: El, world: *const World, e: Entity, id: []const u8
     const explanation = switch (state) {
         .busy => words.waiting,
         .building => paidSentence(&explain_buf, words.building, price, act),
-        else => words.explanation,
+        else => holdSentence(&explain_buf, price, act, words.explanation),
     };
 
     const m = try milestone_mod.milestone_goal(parent, id, .{
@@ -599,6 +592,38 @@ pub fn milestoneLifecycle(standing: comp.Quotes.BuildStanding, raising: bool, on
         .energy, .short => .unfunded,
         .ready => .ready,
     };
+}
+
+/// The milestone's cost line, `240ma 8e · 6.0d`: the order of `price` in act `act`'s codes, the
+/// energy, and the days its hours take at `pace`.
+pub fn costText(buf: []u8, price: *const roster.Requires, act: u8, pace: f32) []const u8 {
+    var cw = std.Io.Writer.fixed(buf);
+    for (std.enums.values(roster.Resource)) |r| {
+        const n = price.get(r);
+        if (n > 0) cw.print("{d:.0}{s} ", .{ n, @import("./action_info.zig").letterOf(act, r) }) catch {};
+    }
+    cw.print("{d:.0}e \u{00B7} {d:.1}d", .{ price.energy, price.hours / 24.0 / pace }) catch {};
+    return cw.buffered();
+}
+
+/// `Hold 240 materials with a settled body…` — the order of `price` in act `act`'s words, each
+/// with its amount, joined, then `rest`; the numbers are the record's, so the sentence cannot
+/// drift from the price.
+pub fn holdSentence(buf: []u8, price: *const roster.Requires, act: u8, rest: []const u8) []const u8 {
+    var n: usize = 0;
+    for (std.enums.values(roster.Resource)) |r| n += @intFromBool(price.get(r) > 0);
+    var w = std.Io.Writer.fixed(buf);
+    w.writeAll("Hold") catch return rest;
+    var i: usize = 0;
+    for (std.enums.values(roster.Resource)) |r| {
+        const amount = price.get(r);
+        if (amount <= 0) continue;
+        const sep = if (i == 0) " " else if (i + 1 == n) " and " else ", ";
+        w.print("{s}{d:.0} {s}", .{ sep, amount, r.wordIn(act) }) catch return rest;
+        i += 1;
+    }
+    if (rest.len > 0) w.print(" {s}", .{rest}) catch return rest;
+    return w.buffered();
 }
 
 /// `The Shelter is going up. Materials are paid.` — `lead`, then the resources of `price` in
@@ -696,6 +721,31 @@ test "a raise under way names the price's resources paid, in the act's words" {
     try testing.expect(std.mem.startsWith(u8, got, "The Exchange is going up. "));
     try testing.expect(std.mem.endsWith(u8, got, " are paid."));
     try testing.expect(std.mem.indexOf(u8, got, ", ") != null and std.mem.indexOf(u8, got, " and ") != null);
+}
+
+test "the explanation holds the price's order, in the act's words, then the authored rest" {
+    var buf: [160]u8 = undefined;
+    const shelter: roster.Requires = .{ .energy = 8, .hours = 144, .biomass = 240 };
+    try testing.expectEqualStrings("Hold 240 materials with a settled body.", holdSentence(&buf, &shelter, 1, "with a settled body."));
+    const three: roster.Requires = .{ .energy = 8, .hours = 1, .biomass = 80, .minerals = 40, .metal = 24 };
+    const got = holdSentence(&buf, &three, 2, "now.");
+    try testing.expect(std.mem.startsWith(u8, got, "Hold 80 "));
+    try testing.expect(std.mem.endsWith(u8, got, " now."));
+    try testing.expect(std.mem.indexOf(u8, got, ", ") != null and std.mem.indexOf(u8, got, " and ") != null);
+    try testing.expectEqualStrings("240ma 8e \u{00B7} 6.0d", costText(&buf, &shelter, 1, 1));
+}
+
+test "the shipped Shelter's explanation reads its record's order" {
+    var cat = try roster.load(testing.allocator, roster.shipped, null);
+    defer cat.deinit();
+    const rec = &cat.goods[cat.goodIndex("shelter").?];
+    var buf: [160]u8 = undefined;
+    var want: [32]u8 = undefined;
+    const lead = try std.fmt.bufPrint(&want, "Hold {d:.0} materials ", .{rec.requires.biomass});
+    const rest = @import("./act_one_surface.zig").build_shelf.milestone.?.explanation;
+    const got = holdSentence(&buf, &rec.requires, 1, rest);
+    try testing.expect(std.mem.startsWith(u8, got, lead));
+    try testing.expect(std.mem.endsWith(u8, got, rest));
 }
 
 test "the authored total counts this shelf's recipes only" {

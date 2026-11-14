@@ -422,64 +422,89 @@ fn render_one(stage: El, world: *const World, name: []const u8, audit_trade: *ui
         _ = try t.catalog_controls(demo, "cc", t.recipes_placeholder, null, null);
         _ = try t.sort_chips(demo, "sort", "Sort actions", &t.actions_sort_keys, demo.state(uic.UiState.CatalogState));
     } else if (eq(name, "milestone_goal")) {
-        // The shelter locked, then going up at 42% and waiting on busy hands.
+        // The shelter locked, then going up at 42% and waiting on busy hands. The cost, the
+        // targets and the explanation's order are the shipped record's and the words Act I's
+        // BUILD pins; the held amounts are samples, floored as the live card floors them.
         const demo = try stage.box("milestone_demo", .{ .w = .{ .fixed = 608 }, .h = .fit_children, .flow = .{ .dir = .column }, .gap = 10 }, .{});
+        const cat = &ctx.res.game.catalog;
+        const gi = cat.goodIndex("shelter") orelse {
+            try stage.label("na", "(the roster has no shelter)", .{});
+            return null;
+        };
+        const rec = &cat.goods[gi];
+        const u = rec.unlock orelse return null;
+        const words = @import("./templates/act_one_surface.zig").build_shelf.milestone.?;
+        const bl = @import("./templates/build_list.zig");
+        const held_whole = @import("./fmt.zig").held_whole;
+        const word = ha.sim.data.roster.Resource.biomass.wordIn(act);
+        const order = rec.requires.biomass;
         var resource_label_buf: [16]u8 = undefined;
         const resource_label = std.ascii.upperString(&resource_label_buf, ha.sim.data.roster.Resource.biomass.labelIn(act));
-        const requirements = [_]t.MilestoneRequirement{
-            .{ .label = "VIGOR", .value = "14/15" },
-            .{ .label = "FOOD", .value = "11.6/12" },
-            .{ .label = "GOODS", .value = "4/5" },
-            .{ .label = resource_label, .value = "31/120" },
+        var cost_buf: [48]u8 = undefined;
+        const cost = bl.costText(&cost_buf, &rec.requires, act, 1);
+        const a = ctx.arena;
+        // `have/need` as the live card prints it: the held side floored to a whole.
+        const Count = struct {
+            fn of(arena: std.mem.Allocator, have: f32, need: f32) ![]const u8 {
+                return arena.print("{d}/{d:.0}", .{ held_whole(have), need });
+            }
         };
+
+        // Locked: vigor, food and goods short, the materials far off.
+        const requirements = [_]t.MilestoneRequirement{
+            .{ .label = "VIGOR", .value = try Count.of(a, 11.6, u.vigor_abs), .met = 11.6 >= u.vigor_abs },
+            .{ .label = "FOOD", .value = try Count.of(a, 11.6, u.food), .met = 11.6 >= u.food },
+            .{ .label = "GOODS", .value = try a.print("{d}/{d}", .{ u.goods -| 1, u.goods }) },
+            .{ .label = resource_label, .value = try Count.of(a, 31.4, order) },
+        };
+        var hold_buf: [160]u8 = undefined;
         _ = try t.milestone_goal(demo, "mg", .{
             .state = .locked,
-            .title = "Shelter",
-            .summary = try ctx.arena.print("{s} 31/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
-            .readiness = "locked \u{00B7} 1 condition",
-            .kicker = "A PLACE FOR OTHERS",
-            .cost = "120ma 8e \u{00B7} 6.0d",
-            .copy = "a roof with room for four. you're not alone anymore.",
+            .title = rec.name,
+            .summary = try a.print("{s} {d}/{d:.0}", .{ word, held_whole(31.4), order }),
+            .readiness = "locked \u{00B7} 3 conditions",
+            .kicker = words.kicker,
+            .cost = cost,
+            .copy = words.copy,
             .requirements = &requirements,
-            .explanation = try ctx.arena.print("Hold 120 {s} with a settled body and five kinds of goods, a rope bag and a leaf bed among them.", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
+            .explanation = bl.holdSentence(&hold_buf, &rec.requires, act, words.explanation),
             .action = "LOCKED",
         });
+        // Building: the order paid and the energy spent, every requirement read met.
         const paid = [_]t.MilestoneRequirement{
-            .{ .label = "VIGOR", .value = "14/15", .met = true },
-            .{ .label = "FOOD", .value = "11.6/12", .met = true },
-            .{ .label = "GOODS", .value = "5/5", .met = true },
-            .{ .label = resource_label, .value = "120 paid", .met = true },
+            .{ .label = "VIGOR", .value = try Count.of(a, 15 - rec.requires.energy, u.vigor_abs), .met = true },
+            .{ .label = "FOOD", .value = try Count.of(a, 16.4, u.food), .met = true },
+            .{ .label = "GOODS", .value = try a.print("{d}/{d}", .{ u.goods, u.goods }), .met = true },
+            .{ .label = resource_label, .value = try a.print("{d:.0} paid", .{order}), .met = true },
         };
         _ = try t.milestone_goal(demo, "mg_building", .{
             .state = .building,
-            .title = "Shelter",
+            .title = rec.name,
             .summary = "42%",
-            .readiness = "raising \u{00B7} 3.5d left",
-            .kicker = "A PLACE FOR OTHERS",
-            .cost = "120ma 8e \u{00B7} 6.0d",
+            .readiness = try a.print("building \u{00B7} {d:.1}d left", .{rec.requires.hours / 24.0 * 0.58}),
+            .kicker = words.kicker,
+            .cost = cost,
             .requirements = &paid,
-            .explanation = blk: {
-                const word = ha.sim.data.roster.Resource.biomass.wordIn(act);
-                break :blk try ctx.arena.print("The Shelter is going up. {c}{s} are paid.", .{ std.ascii.toUpper(word[0]), word[1..] });
-            },
+            .explanation = try a.print("{s} {c}{s} are paid.", .{ words.building, std.ascii.toUpper(word[0]), word[1..] }),
             .action = "\u{25A0} BUILDING",
             .progress = 0.42,
         });
+        // Hands busy: everything on hand.
         const on_hand = [_]t.MilestoneRequirement{
-            .{ .label = "VIGOR", .value = "15/15", .met = true },
-            .{ .label = "FOOD", .value = "16.0/12", .met = true },
-            .{ .label = "GOODS", .value = "5/5", .met = true },
-            .{ .label = resource_label, .value = "120/120", .met = true },
+            .{ .label = "VIGOR", .value = try Count.of(a, 15, u.vigor_abs), .met = true },
+            .{ .label = "FOOD", .value = try Count.of(a, 16.4, u.food), .met = true },
+            .{ .label = "GOODS", .value = try a.print("{d}/{d}", .{ u.goods, u.goods }), .met = true },
+            .{ .label = resource_label, .value = try Count.of(a, order + 9.6, order), .met = true },
         };
         _ = try t.milestone_goal(demo, "mg_busy", .{
             .state = .busy,
-            .title = "Shelter",
-            .summary = try ctx.arena.print("{s} 120/120", .{ha.sim.data.roster.Resource.biomass.wordIn(act)}),
+            .title = rec.name,
+            .summary = try a.print("{s} {d}/{d:.0}", .{ word, held_whole(order + 9.6), order }),
             .readiness = "hands busy",
-            .kicker = "A PLACE FOR OTHERS",
-            .cost = "120ma 8e \u{00B7} 6.0d",
+            .kicker = words.kicker,
+            .cost = cost,
             .requirements = &on_hand,
-            .explanation = "Everything is on hand; the Shelter waits for free hands.",
+            .explanation = words.waiting,
             .action = "HANDS BUSY",
         });
     } else if (eq(name, "market_strip")) {
