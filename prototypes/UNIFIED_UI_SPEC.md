@@ -381,7 +381,7 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 ### 7.3 Narrow widths and the keyboard
 
 - **[decided]** At 760px and below the page stacks: one page scroll, the rail above the
-  surface (SETTLEMENT | BODY side by side at 760, Act I's BODY | EATING POLICY there; stacked at 560 and below), every view at its
+  surface (SETTLEMENT | BODY side by side at 760; stacked at 560 and below), every view at its
   natural height, the stockline wrapping beside the run context. RESEARCH puts a 560px board
   above its detail.
 - **[decided]** A scroll region that overflows is a Tab stop; Up/Down, Page Up/Down and
@@ -392,18 +392,18 @@ Header (kicker + title + close) · direction tabs (+ lot search when busy) · bo
 
 - **[decided]** The rail is not an inventory: what the actor owns is MARKET's INVENTORY. It
   holds two kinds of information, **aggregates** and **personal condition**, in two panels,
-  SETTLEMENT and BODY, over the EATING POLICY. The collapsed restore label reads `HOUSEHOLD`
+  SETTLEMENT and BODY, and nothing else. The collapsed restore label reads `HOUSEHOLD`
   in both acts (one person in Act I, the settlement in Act II).
 - **[decided]** SETTLEMENT (Act II only; one person is no settlement): `Population 7/12`,
   then energy and every stock in the same list, each as produced against demanded a day
   (`Food +14 / −8`), colored by the net, each stock followed by its stockpile in a column of
   its own (`22`; energy holds none). SETTLEMENT and BODY are the rail's only headings. It appears at the Act I curtain.
 - **[decided]** BODY (the same in both acts) is the player's own condition: the sentences
-  (`Food lasts`, recovery, `Work pace`), then under a hairline the food's
-  spoilage and the vigor ceiling against their baselines. In Act I BODY leads the rail and
+  (`Food lasts`, recovery, `Work pace`), then under a hairline the eating policy. In Act I BODY leads the rail and
   carries the collapse control.
-- **[decided]** In both acts the **eating policy sits at the foot of the rail**, aligned to
-  the panels and collapsing with them.
+- **[decided]** In both acts the **eating policy is part of BODY**, not a tile of its own:
+  an `Eating policy` line with `{word} · {rate}×`, the slider, and the `meager` / `lavish`
+  scale, in the panel whose sentences it moves.
 
 - **[decided, item 17]** **Per-view collapse memory** (`holdingsCollapsedByView`) in both
   acts: ACTIONS and BUILD each remember their own collapse.

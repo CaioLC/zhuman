@@ -639,12 +639,6 @@ button:disabled {
   font-weight: 400;
 }
 
-/* BODY's lines under its sentences: what the body is working with, at the readout's size. */
-.side-note .margin-row span:first-child {
-  color: var(--fg);
-  font-size: var(--body);
-}
-
 .surface {
   min-width: 0;
   overflow-x: hidden;
@@ -849,14 +843,12 @@ button:disabled {
   text-align: right;
 }
 
+/* The eating policy, a block of BODY: its panel is its frame. */
 .policy-tile {
   display: grid;
   grid-template-rows: auto 18px auto;
   gap: 5px;
   min-width: 0;
-  min-height: 82px;
-  padding: 9px 10px 8px;
-  border: 1px dashed var(--line-2);
 }
 
 .policy-head,
@@ -869,16 +861,15 @@ button:disabled {
 
 .policy-kicker {
   margin: 0;
-  color: var(--dim);
-  font-size: 10px;
+  color: var(--fg);
+  font-size: var(--body);
   font-weight: 400;
-  letter-spacing: 0.06em;
 }
 
 .policy-value {
   overflow: hidden;
   color: var(--acc);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -939,17 +930,6 @@ button:disabled {
 
 .side-note strong.warn {
   color: var(--warn);
-}
-
-/* Both acts: the eating policy rides the rail under BODY, out of the action catalog. It
-   shares the panels' right margin, so all three edges line up, and collapses with them. */
-.side-rail .policy-tile {
-  flex: none;
-  margin-right: 10px;
-}
-
-.page-grid.is-holdings-collapsed .side-rail .policy-tile {
-  display: none;
 }
 
 /* ACTIONS cells: a tile with its `hide` corner at the top right; a generator's cell also
@@ -2892,11 +2872,6 @@ button:disabled {
     display: grid;
     grid-template-columns: 1fr 1fr;
     overflow: visible;
-  }
-
-  /* The policy keeps its own height beside Act I's BODY rather than stretching to it. */
-  .side-rail .policy-tile {
-    align-self: start;
   }
 
   .surface {

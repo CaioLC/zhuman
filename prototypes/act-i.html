@@ -35,16 +35,11 @@
           Full vigor in <strong id="vigor-recovery">0.2d</strong>.<br>
           Work pace <strong id="work-pace">100%</strong>.
           <hr class="holdings-divider">
-          <ul class="margin-list">
-            <li class="margin-row"><span>Food spoilage</span><span class="positive">10% → 5%/day</span></li>
-            <li class="margin-row"><span>Vigor ceiling</span><span>15</span></li>
-          </ul>
-        </section>
-
-        <section class="policy-tile" aria-labelledby="eating-policy-title">
-          <div class="policy-head"><h2 class="policy-kicker" id="eating-policy-title">EATING POLICY</h2><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
+          <div class="policy-tile" role="group" aria-labelledby="eating-policy-title">
+          <div class="policy-head"><span class="policy-kicker" id="eating-policy-title">Eating policy</span><output class="policy-value" id="eating-policy-value" for="eating-policy-range">normal · 1.00×</output></div>
           <input class="eating-slider" id="eating-policy-range" type="range" min="0" max="100" step="1" value="50" aria-label="Eating policy" aria-valuetext="normal, 1.00 times normal" style="--ration-position: 50%">
           <div class="policy-scale" aria-hidden="true"><span>meager</span><span>lavish</span></div>
+          </div>
         </section>
       </aside>
 
