@@ -303,6 +303,12 @@ scene over, and the one that moves on (`BEGIN →` starts the run). The links ar
 the first frame and a click on the scene skips to its end, so a scene never has to be waited
 out.
 
+A scene is never cut to or from. The screen darkens to the window's ground, the change happens
+in the dark, and the next screen comes up out of it: the title into the arrival, the arrival
+into the game, the shelter into Act II or the thank-you, the thank-you into the title. The one
+exception is the way into the shelter: the world has already crossed when the Shelter is
+raised, so the HUD goes dark at once and the scene comes up slowly.
+
 ## The shelter
 
 Raising the Shelter ends Act I on a second scene, and this one is about faces. It is set

@@ -171,6 +171,78 @@ pub const MenuScreen = enum { menu, save, load, settings, quit, overwrite };
 /// between New game and the run, the game, or the thank-you the demo ends on.
 pub const Route = enum { title, arrival, game, thanks };
 
+/// Where a fade leads: the screen change that happens in the dark.
+pub const Transition = enum {
+    /// The title's New game: to the arrival scene.
+    arrival,
+    /// The arrival's Begin: the run begins.
+    run,
+    /// The Act I curtain's Continue: into Act II.
+    act_two,
+    /// The Act I curtain's Continue in the demo: to the thank-you.
+    thanks,
+    /// The thank-you's Title: back to the title screen.
+    title,
+};
+
+/// The fade between a scene and what comes next. The screen darkens (`out`), the change it
+/// was leading to happens while it is dark, and the new screen comes up out of it (`in`).
+/// `level` is the depth, 0 clear to 1 dark. Real time, not simulation time: it runs while
+/// the world is paused.
+pub const FadeState = struct {
+    pub const Dir = enum { idle, out, in };
+    /// Seconds to darken, to clear, and to clear after the curtain's cut to dark.
+    pub const out_s: f32 = 0.4;
+    pub const in_s: f32 = 0.7;
+    pub const curtain_in_s: f32 = 1.2;
+
+    level: f32 = 0,
+    dir: Dir = .idle,
+    /// Seconds the current `in` takes.
+    clear_s: f32 = in_s,
+    pending: ?Transition = null,
+
+    /// Darken toward `next`. A fade already leading somewhere keeps its destination, so a
+    /// second click changes nothing; one that was clearing turns around from where it is.
+    pub fn to(self: *FadeState, next: Transition) void {
+        if (self.pending != null) return;
+        self.pending = next;
+        self.dir = .out;
+    }
+
+    /// Cut to dark and clear over `seconds`: for a change that has already happened.
+    pub fn dip(self: *FadeState, seconds: f32) void {
+        self.* = .{ .level = 1, .dir = .in, .clear_s = seconds };
+    }
+
+    /// Advance by `dt` real seconds. Returns the transition to make now, on the frame the
+    /// dark is whole; null otherwise. With `reduced_motion` there is no fade: a pending
+    /// transition is returned at once and the screen stays clear.
+    pub fn advance(self: *FadeState, dt: f32, reduced_motion: bool) ?Transition {
+        if (reduced_motion) {
+            const next = self.pending;
+            self.* = .{};
+            return next;
+        }
+        switch (self.dir) {
+            .idle => {},
+            .out => {
+                self.level += @max(0, dt) / out_s;
+                if (self.level >= 1) {
+                    const next = self.pending;
+                    self.* = .{ .level = 1, .dir = .in };
+                    return next;
+                }
+            },
+            .in => {
+                self.level -= @max(0, dt) / self.clear_s;
+                if (self.level <= 0) self.* = .{};
+            },
+        }
+        return null;
+    }
+};
+
 /// The clock of the scene that is showing (the arrival, the curtain's shelter, the
 /// thank-you): the real time it has been showing. A scene is a pure function of it, so a
 /// pinned time reproduces the frame.
@@ -431,6 +503,9 @@ pub const Resources = struct {
     route: Route = .title,
     title: TitleState = .{},
     scene: SceneState = .{},
+    /// The fade between a scene and what comes next; `build_ui` advances it and makes the
+    /// change it leads to.
+    fade: FadeState = .{},
     /// This build is the Act I demo (`zig build -Ddemo`): the Act I curtain leads to the
     /// thank-you instead of to Act II.
     demo: bool = false,
@@ -478,6 +553,45 @@ pub const Resources = struct {
         self.game.catalog.deinit();
     }
 };
+
+test "FadeState darkens, hands over its transition once in the dark, and clears" {
+    var f = FadeState{};
+    try std.testing.expectEqual(@as(?Transition, null), f.advance(1, false));
+    f.to(.run);
+    // A second request while leaving does not change where it leads.
+    f.to(.title);
+    try std.testing.expectEqual(@as(?Transition, null), f.advance(FadeState.out_s * 0.5, false));
+    try std.testing.expect(f.level > 0.4 and f.level < 0.6);
+    try std.testing.expectEqual(@as(?Transition, .run), f.advance(FadeState.out_s, false));
+    try std.testing.expectEqual(@as(f32, 1), f.level);
+    try std.testing.expectEqual(FadeState.Dir.in, f.dir);
+    // It is handed over once.
+    try std.testing.expectEqual(@as(?Transition, null), f.advance(FadeState.in_s * 0.5, false));
+    try std.testing.expect(f.level > 0.4 and f.level < 0.6);
+    try std.testing.expectEqual(@as(?Transition, null), f.advance(FadeState.in_s, false));
+    try std.testing.expectEqual(FadeState{}, f);
+}
+
+test "FadeState: a fade that was clearing turns around from where it is" {
+    var f = FadeState{};
+    f.dip(FadeState.curtain_in_s);
+    try std.testing.expectEqual(@as(f32, 1), f.level);
+    _ = f.advance(FadeState.curtain_in_s * 0.75, false);
+    const level = f.level;
+    f.to(.act_two);
+    try std.testing.expectEqual(level, f.level);
+    try std.testing.expectEqual(FadeState.Dir.out, f.dir);
+}
+
+test "FadeState: under reduced motion the transition is immediate and nothing darkens" {
+    var f = FadeState{};
+    f.to(.arrival);
+    try std.testing.expectEqual(@as(?Transition, .arrival), f.advance(0.016, true));
+    try std.testing.expectEqual(FadeState{}, f);
+    f.dip(1);
+    try std.testing.expectEqual(@as(?Transition, null), f.advance(0.016, true));
+    try std.testing.expectEqual(@as(f32, 0), f.level);
+}
 
 test "Playback stepper walks pause..3x and clamps at both ends" {
     var p = Playback{};

@@ -135,6 +135,7 @@ pub const menu_list = @import("./menu_list.zig").menu_list;
 pub const MenuItem = @import("./menu_list.zig").Item;
 pub const settings_panel = @import("./settings_panel.zig").settings_panel;
 pub const button_variant = button_mod.button_variant;
+pub const fade = @import("./fade.zig").fade;
 pub const scene = @import("./scene.zig").scene;
 pub const SceneCells = @import("./scene.zig").Cells;
 pub const SceneInk = @import("./scene.zig").Ink;
@@ -225,6 +226,7 @@ test {
     _ = tabs_mod;
     _ = curtain_mod;
     _ = @import("./scene.zig");
+    _ = @import("./fade.zig");
     _ = @import("./act_page.zig");
     _ = act_surface_mod;
     _ = status_mod;

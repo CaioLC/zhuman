@@ -16,7 +16,8 @@ const Entity = ha.sim.ecs.Entity;
 const p_act_one = @import("./play_game.zig").ui_playgame;
 const p_act_two = @import("./act_two/page.zig").ui_act_two;
 const p_gameover = @import("./gameover.zig").ui_gameover;
-const p_act_one_end = @import("./act_one_end.zig").ui_act_one_end;
+const act_one_end = @import("./act_one_end.zig");
+const p_act_one_end = act_one_end.ui_act_one_end;
 const p_debug = @import("./debug_page.zig").debug_page;
 const title_page = @import("./title.zig");
 const p_title = title_page.ui_title;
@@ -35,8 +36,30 @@ pub fn prepare(ui_ctx: *uic.UiCtx, world: *World) void {
     if (fixtureRequested(ui_ctx.res)) |name| fixture.prepare(ui_ctx, world, name);
 }
 
-/// Returns a flattened list of *Nodes for the render stage
+/// Returns a flattened list of *Nodes for the render stage: the routed screen's roots, and
+/// over them the fade while one is running.
 pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
+    const roots = try route(ui_ctx, world);
+    const dark = try t.fade(ui_ctx, ui_ctx.res.fade.level) orelse return roots;
+    var all = std.ArrayList(*uic.Node).empty;
+    try all.appendSlice(ui_ctx.arena, roots);
+    try all.append(ui_ctx.arena, dark);
+    return all.items;
+}
+
+/// Make the screen change a fade was leading to. Runs on the frame the dark is whole, before
+/// the route is read, so the new screen is the one that comes up out of it.
+fn arrive(ctx: *uic.UiCtx, next: ha.res.Transition) void {
+    switch (next) {
+        .arrival => title_page.openArrival(ctx),
+        .run => title_page.beginRun(ctx),
+        .act_two => ctx.res.curtain.dismiss(&ctx.res.playback),
+        .thanks => act_one_end.openThanks(ctx),
+        .title => title_page.openTitle(ctx),
+    }
+}
+
+fn route(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     ui_ctx.res.view.theme = ha.palette.theme;
     ui_ctx.res.view.ground = ha.palette.ground;
     ui_ctx.res.view.resources = ha.palette.resources;
@@ -56,6 +79,9 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
         ui_ctx.res.view.metrics = m;
         ui_ctx.res.view.scale = m.dpi_scale;
     }
+    // The fade runs on real time, and the change it leads to is made here, in the dark.
+    if (ui_ctx.res.fade.advance(ui_ctx.res.game.time.real_dt, ui_ctx.res.view.reduced_motion)) |next| arrive(ui_ctx, next);
+
     // Every page returns its roots in draw order (a dialog's root after the shell it covers).
     // The game is the normal route. The template audit harness is an explicit developer
     // opt-in via a truthy `HA_DEBUG_PAGE` value.
@@ -76,8 +102,12 @@ pub fn build_ui(ui_ctx: *uic.UiCtx, world: *const World) !uic.Trees {
     // crossed into the next act; the curtain holds it still while the player reads.
     var ended = ui_ctx.res.game.events.readerAt(ha.sim.events.ActEnded, &ui_ctx.res.curtain.heard);
     while (ended.next()) |fact| {
-        // The curtain's scene starts from its first frame.
-        if (fact.act == .act_one and ui_ctx.res.curtain.show(&ui_ctx.res.playback)) ui_ctx.res.scene = .{};
+        // The curtain's scene starts from its first frame, and comes up out of the dark: the
+        // world has already crossed, so there is no Act I screen left to fade from.
+        if (fact.act == .act_one and ui_ctx.res.curtain.show(&ui_ctx.res.playback)) {
+            ui_ctx.res.scene = .{};
+            ui_ctx.res.fade.dip(ha.res.FadeState.curtain_in_s);
+        }
     }
 
     // Route on the state: the arrival scene between New game and the run, the thank-you the

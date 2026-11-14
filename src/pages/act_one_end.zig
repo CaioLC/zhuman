@@ -5,9 +5,10 @@
 //!
 //! The curtain is a scene (`shelter.zig`): inside the shelter at the fire, the others walking
 //! up out of the snow and their faces coming into the light, then `The shelter stands.` and
-//! `You are no longer alone.` `CONTINUE \u{2192}` closes the curtain, restoring the prior pause
-//! state, and the next frame routes to the Act II page over the live, migrated world. In the
-//! demo (`Resources.demo`) it goes to the thank-you instead, and Act II is never shown.
+//! `You are no longer alone.` `CONTINUE \u{2192}` fades out; in the dark the curtain closes,
+//! restoring the prior pause state, and the Act II page comes up over the live, migrated
+//! world. In the demo (`Resources.demo`) the thank-you comes up instead, and Act II is never
+//! shown.
 //! `REPLAY` starts the scene over, and a click on the scene skips to its end.
 
 const ha = @import("ha");
@@ -30,14 +31,13 @@ pub fn ui_act_one_end(ctx: *uic.UiCtx) !uic.Trees {
     });
     if (s.skip) clock.* = @max(clock.*, shelter.played_s);
     if (s.replay) clock.* = 0;
-    if (s.go) {
-        if (ctx.res.demo) {
-            // The demo ends here: the thank-you, with the run held still behind it.
-            ctx.res.route = .thanks;
-            ctx.res.scene = .{};
-        } else {
-            ctx.res.curtain.dismiss(&ctx.res.playback);
-        }
-    }
+    // The demo ends here, on the thank-you; the game goes on into Act II.
+    if (s.go) ctx.res.fade.to(if (ctx.res.demo) .thanks else .act_two);
     return try uic.oneRoot(ctx.arena, s.root);
+}
+
+/// Open the thank-you from its first frame, the run held still behind it.
+pub fn openThanks(ctx: *uic.UiCtx) void {
+    ctx.res.route = .thanks;
+    ctx.res.scene = .{};
 }

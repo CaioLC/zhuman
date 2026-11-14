@@ -192,13 +192,7 @@ pub fn ui_thanks(ctx: *uic.UiCtx) !uic.Trees {
     });
     if (s.skip) clock.* = @max(clock.*, played_s);
     if (s.replay) clock.* = 0;
-    if (s.go) {
-        // Back to the title, the run left behind it and held still.
-        ctx.res.route = .title;
-        ctx.res.title = .{};
-        ctx.res.curtain = .{ .heard = ctx.res.curtain.heard };
-        ctx.res.playback.paused = true;
-    }
+    if (s.go) ctx.res.fade.to(.title);
     return try uic.oneRoot(ctx.arena, s.root);
 }
 

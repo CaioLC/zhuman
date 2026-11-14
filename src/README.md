@@ -190,7 +190,7 @@ fresh one), `config: Config` the tuning, `time: Time` this frame's real and simu
 lives beside them. Every field has a default, so
 a sim test builds `sim.Resources{}` whole. The host's `Resources` (`res.zig`) embeds it as the
 field `game` beside its own: the platform, input, the UI registries, playback, menu, route,
-title, scene, demo, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
+title, scene, fade, demo, settings, saves and view. The UI reads the simulation through `ctx.res.game.sim`,
 `ctx.res.game.config`, `ctx.res.game.catalog` directly and writes intents through
 `ctx.res.game.events.writer(T)`; it reads an outcome it waits on (a trade settled, a tile
 researched) as a fact, with a cursor of its own. `sim/root.zig` is the `sim` namespace,
@@ -382,7 +382,11 @@ playback the way the menu does, so the world, already crossed into Act II by `cr
 holds still while the player watches the curtain's scene (`pages/shelter.zig`). Its
 `CONTINUE →` closes the curtain and restores the pause state; the next frame routes to the Act II
 page over the live world. In the demo (`zig build -Ddemo`, read once into `Resources.demo`) it
-sets the `Route` to the thank-you instead, and Act II is never shown. `build_ui` routes on the
+sets the `Route` to the thank-you instead, and Act II is never shown. Each of these changes
+is made in the dark of a fade (`Resources.fade`, a `FadeState`): the page that asks for one
+calls `fade.to(transition)`, `build_ui` advances the fade on real time and makes the change on
+the frame the dark is whole, and the `fade` template draws the dark over whatever was routed.
+`build_ui` routes on the
 state: the arrival scene while the host's `Route` says so (New game sets it, and the scene's
 Begin writes `NewRun`), the thank-you while the `Route` says so, the title while the `Route` or the state says so (Quit to menu leaves a live run
 paused behind the title), the curtain while it is open, the game-over screen in `game_over` or

@@ -138,14 +138,26 @@ pub fn ui_title(ctx: *uic.UiCtx, world: *const World) !uic.Trees {
         .continue_game => if (latest) |i| {
             ctx.res.saves.request = .{ .load = @intCast(i) };
         },
-        // The arrival scene plays first; its Begin starts the run (`beginRun`).
-        .new_game => {
-            ctx.res.route = .arrival;
-            ctx.res.scene = .{};
-        },
+        // The arrival scene plays first (`openArrival`, once the screen has darkened); its
+        // Begin starts the run (`beginRun`).
+        .new_game => ctx.res.fade.to(.arrival),
         .quit => ctx.res.menu.quit_requested = true,
     }
     return try uic.oneRoot(ctx.arena, r.root);
+}
+
+/// Open the arrival scene from its first frame.
+pub fn openArrival(ctx: *uic.UiCtx) void {
+    ctx.res.route = .arrival;
+    ctx.res.scene = .{};
+}
+
+/// Leave for the title screen, the run left behind it and held still.
+pub fn openTitle(ctx: *uic.UiCtx) void {
+    ctx.res.route = .title;
+    ctx.res.title = .{};
+    ctx.res.curtain = .{ .heard = ctx.res.curtain.heard };
+    ctx.res.playback.paused = true;
 }
 
 /// Begin a new run. The schedule begins it from the intent; the route, the pause and the

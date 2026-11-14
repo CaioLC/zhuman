@@ -14,7 +14,6 @@ const ha = @import("ha");
 
 const uic = ha.ui_client;
 const t = @import("./templates/root.zig");
-const title_page = @import("./title.zig");
 const valley = @import("./valley.zig");
 
 const Cells = t.SceneCells;
@@ -118,7 +117,7 @@ pub fn ui_arrival(ctx: *uic.UiCtx) !uic.Trees {
     });
     if (s.skip) clock.* = @max(clock.*, played_s);
     if (s.replay) clock.* = 0;
-    if (s.go) title_page.beginRun(ctx);
+    if (s.go) ctx.res.fade.to(.run);
     return try uic.oneRoot(ctx.arena, s.root);
 }
 
