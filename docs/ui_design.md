@@ -327,9 +327,10 @@ The Act I demo ends one scene later. It is the valley of the arrival, seen from 
 place, so it is recognised: the shelter stands where the figure sat down, smoke rises from its
 roof, its windows and door are lit, and the people are outside at a fire, the one who came
 alone waving now and then and the child running back and forth. `THANK YOU FOR PLAYING`, the
-game's one-line description, the credits (role and name either side of a middle dot) and the
-line about the book come up in the sky a line at a time, clearing the stars behind them. The
-caption says the demo ends here, and `TITLE →` goes back to the title screen.
+game's one-line description, the credits (role and name either side of a middle dot, the
+last of them the AI disclosure) and the line naming Mises and Rothbard come up in the sky a
+line at a time, clearing the stars behind them. The caption says the demo ends here and where
+to subscribe, and `MAIN MENU →` goes back to the title screen.
 
 ## The market strip and the trade dialog
 

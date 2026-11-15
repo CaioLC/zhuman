@@ -188,11 +188,11 @@ fn credits(parent: El) !void {
     const wrap: f32 = 56 * 7.2;
     const copy = Style{ .font = 12, .ink = .dim };
     const col = try parent.box("credits", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 11 }, .{});
-    try col.label_fit("p1", "A game about what people do when they cannot have everything.", .{ .wrap = wrap }, .{copy});
-    const p2 = try col.box("p2", .{ .flow = .{ .dir = .column, .cross = .start }, .gap = 2 }, .{});
-    try p2.label_fit("a", "You begin alone, and every hour you spend is an hour you did not spend on something else. That is the whole difficulty. Later there are others, and you will find they are better than you at some things \u{2014}", .{ .wrap = wrap }, .{copy});
-    try p2.label_fit("em", "and that this turns out to be good news.", .{ .wrap = wrap }, .{Style{ .font = 12, .ink = .fg }});
-    try col.label_fit("p3", "Named after a long book by Ludwig von Mises. You don't have to read it.", .{ .wrap = wrap }, .{copy});
+    try col.label_fit("p1", "HUMAN ACTION, a game about human nature and ingenuity.", .{ .wrap = wrap }, .{copy});
+    try col.label_fit("p2", "We take the comforts of modern life for granted: the silent cooperation of thousands of people and their machines, each pursuing their own ends and making everyone's life better along the way.", .{ .wrap = wrap }, .{copy});
+    try col.label_fit("p3", "But what if you had to start from scratch? Not in the past, not in the future. Now. Alone.", .{ .wrap = wrap }, .{copy});
+    try col.label_fit("p4", "At first you will not survive. Then you build the first tools with your own hands, and those tools build the next. A better life draws others to you, and a community begins. Will it thrive or perish?", .{ .wrap = wrap }, .{copy});
+    try col.label_fit("p5", "Inspired by the smart brains of Professors Ludwig von Mises and Murray N. Rothbard.", .{ .wrap = wrap }, .{copy});
 
     // 1px over the column's 11px gap above the meta block, and 9px over the meta column's
     // 3px gap between its rule and the first row.
@@ -203,8 +203,8 @@ fn credits(parent: El) !void {
     try hrule(meta, "rule", th.line);
     const rows = [_][2][]const u8{
         .{ "Design and code", "Caio Lacerda de Castro" },
-        .{ "Built with", "Zig and SDL3, no engine" },
-        .{ "Typeface", "JetBrains Mono" },
+        .{ "Built from scratch with", "Zig and SDL3" },
+        .{ "Disclosure", "AI:W (see https://0rwx.com/)" },
     };
     for (rows, 0..) |r, i| {
         const row = try meta.boxi("m", i, .{

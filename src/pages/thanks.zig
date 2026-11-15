@@ -6,7 +6,7 @@
 //! credits come up in the sky a line at a time, clearing the stars behind them.
 //!
 //! The scene is a pure function of how long it has been showing (`SceneState.seconds`).
-//! `TITLE \u{2192}` goes back to the title screen, `REPLAY` starts the scene over, and a click on
+//! `MAIN MENU \u{2192}` goes back to the title screen, `REPLAY` starts the scene over, and a click on
 //! the scene skips to its end.
 
 const std = @import("std");
@@ -25,9 +25,10 @@ const hut_foot: i32 = 27;
 const fire_x: i32 = 36;
 const fire_foot: i32 = 29;
 
-const caption = [2][]const u8{ "Human Action \u{00b7} the Act I demo ends here.", "Thank you for testing it." };
+const caption = [2][]const u8{ "HUMAN ACTION \u{00b7} Act I demo ends here", "Like what you see? Subscribe to https://substack.com/@humanactiongame" };
 const caption_s: f32 = 16;
-const played_s: f32 = caption_s + 5;
+// Long enough after the caption starts for both of its lines to have typed themselves out.
+const played_s: f32 = caption_s + 6;
 
 // The shelter in three layers: its outline, the thatch, and what is lit from inside.
 const hut = [_][]const u8{
@@ -76,11 +77,11 @@ const SkyLine = struct {
 };
 const sky = [_]SkyLine{
     .{ .row = 2, .at = 2, .text = "T H A N K   Y O U   F O R   P L A Y I N G", .ink = .bright },
-    .{ .row = 4, .at = 5, .text = "A game about what people do when they cannot have everything.", .ink = .near },
+    .{ .row = 4, .at = 5, .text = "HUMAN ACTION, a game about human nature and ingenuity", .ink = .near },
     .{ .row = 6, .at = 8, .role = "Design and code", .name = "Caio Lacerda de Castro" },
-    .{ .row = 7, .at = 9, .role = "Built with", .name = "Zig and SDL3, no engine" },
-    .{ .row = 8, .at = 10, .role = "Typeface", .name = "JetBrains Mono" },
-    .{ .row = 10, .at = 13, .text = "Named after a long book by Ludwig von Mises. You don't have to read it.", .ink = .far },
+    .{ .row = 7, .at = 9, .role = "Built from scratch with", .name = "Zig and SDL3" },
+    .{ .row = 8, .at = 10, .role = "Disclosure", .name = "AI:W (see https://0rwx.com/)" },
+    .{ .row = 10, .at = 13, .text = "Inspired by the smart brains of Professors Ludwig von Mises and Murray N. Rothbard", .ink = .far },
 };
 
 /// Empty the cells a block of art covers, each row from its first mark to its last, so what
@@ -188,7 +189,7 @@ pub fn ui_thanks(ctx: *uic.UiCtx) !uic.Trees {
         .cells = &cells,
         .caption = caption,
         .caption_s = clock.* - caption_s,
-        .go = "TITLE \u{2192}",
+        .go = "MAIN MENU \u{2192}",
     });
     if (s.skip) clock.* = @max(clock.*, played_s);
     if (s.replay) clock.* = 0;
@@ -228,12 +229,14 @@ test "thanks: the sky is empty of words at first and holds every line at the end
     const late = compose(played_s);
     try testing.expect(std.mem.indexOf(u8, rowText(&late, 2, 0, &buf), "T H A N K   Y O U   F O R   P L A Y I N G") != null);
     try testing.expectEqual(Ink.bright.id(), late.at(29, 2).?.ink);
-    try testing.expect(std.mem.indexOf(u8, rowText(&late, 4, 0, &buf), "they cannot have everything.") != null);
+    try testing.expect(std.mem.indexOf(u8, rowText(&late, 4, 0, &buf), "human nature and ingenuity") != null);
     // A credit: the role ends before the middle dot, the name begins after it.
     try testing.expectEqualStrings("Design and code ? Caio Lacerda de Castro", std.mem.trim(u8, rowText(&late, 6, 33, &buf)[0..41], " "));
     try testing.expectEqual(Ink.far.id(), late.at(33, 6).?.ink);
     try testing.expectEqual(Ink.near.id(), late.at(51, 6).?.ink);
-    try testing.expect(std.mem.indexOf(u8, rowText(&late, 10, 0, &buf), "Ludwig von Mises") != null);
+    try testing.expectEqualStrings("Built from scratch with ? Zig and SDL3", rowText(&late, 7, 25, &buf)[0..38]);
+    try testing.expectEqualStrings("Disclosure ? AI:W (see https://0rwx.com/)", rowText(&late, 8, 38, &buf)[0..41]);
+    try testing.expect(std.mem.indexOf(u8, rowText(&late, 10, 0, &buf), "Professors Ludwig von Mises and Murray N. Rothbard") != null);
 }
 
 test "thanks: a line comes up out of the dark" {

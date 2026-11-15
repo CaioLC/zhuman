@@ -18,7 +18,7 @@
     <p class="scene-caption" aria-live="polite"><span id="cap-1"></span><span id="cap-2"></span></p>
     <div class="scene-controls">
       <button type="button" id="replay">REPLAY</button>
-      <a href="title.html">TITLE →</a>
+      <a href="title.html">MAIN MENU →</a>
     </div>
   </footer>
 </main>
@@ -79,11 +79,11 @@ const FLAMES = [
 // What comes up in the sky, and when. A credit is a role and a name either side of a dot.
 const SKY = [
   { row: 2, at: 2, text: 'T H A N K   Y O U   F O R   P L A Y I N G', ink: INK.bright },
-  { row: 4, at: 5, text: 'A game about what people do when they cannot have everything.', ink: INK.near },
+  { row: 4, at: 5, text: 'HUMAN ACTION, a game about human nature and ingenuity', ink: INK.near },
   { row: 6, at: 8, role: 'Design and code', name: 'Caio Lacerda de Castro' },
-  { row: 7, at: 9, role: 'Built with', name: 'Zig and SDL3, no engine' },
-  { row: 8, at: 10, role: 'Typeface', name: 'JetBrains Mono' },
-  { row: 10, at: 13, text: "Named after a long book by Ludwig von Mises. You don't have to read it.", ink: INK.far },
+  { row: 7, at: 9, role: 'Built from scratch with', name: 'Zig and SDL3' },
+  { row: 8, at: 10, role: 'Disclosure', name: 'AI:W (see https://0rwx.com/)' },
+  { row: 10, at: 13, text: 'Inspired by the smart brains of Professors Ludwig von Mises and Murray N. Rothbard', ink: INK.far },
 ];
 
 // Empty the cells a block of art covers, each row from its first mark to its last, so what
@@ -167,8 +167,8 @@ Scene.run({
   reset: () => ({ t: 0 }),
   step: (s, dt) => { s.t += dt; },
   compose,
-  done: (s) => s.t > CAPTION_AT + 5,
-  caption: ['Human Action · the Act I demo ends here.', 'Thank you for testing it.'],
+  done: (s) => s.t > CAPTION_AT + 6,
+  caption: ['HUMAN ACTION · Act I demo ends here', 'Like what you see? Subscribe to https://substack.com/@humanactiongame'],
   captionClock: (s) => s.t - CAPTION_AT,
 });
 </script>
